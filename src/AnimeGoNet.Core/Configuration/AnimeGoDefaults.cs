@@ -56,6 +56,7 @@ public static class AnimeGoDefaults
             },
             Metadata = new MetadataMatchingOptions
             {
+                Tmdb = new TmdbClientOptions(),
                 SeasonFailure = new SeasonFailureOptions(),
                 Ai = new AiMatchingOptions
                 {

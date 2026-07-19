@@ -71,7 +71,7 @@
 - [ ] 移植配置 `1.1.0` → `1.7.1` 升级链与备份。
 - [ ] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和独立季度 AI/后置 EP-AI 开关，全部默认 `false`；旧配置升级显式写入新默认值并生成阶段注释。
 - [ ] 增加 OpenAI-compatible AI 配置 DTO、环境变量、敏感值脱敏和 source-generated JSON 上下文。
-- [ ] 领域模型拆分来源字段与 TMDB 规范字段：`SourceEpisodeNumber`、`TmdbSeriesName`、`TmdbSeasonNumber`、`TmdbEpisodeNumber`、`TmdbEpisodeId`。
+- [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [ ] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段。
 - [ ] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器，不在兼容层擅加年份保护、歧义拒绝或E04/EP04扩展；另建 `FileEpisodeCandidateResolver` 安全层，只在 Mikan SourceProfile 决定是否形成逐文件 `file_episode_candidate`；增加 AI/TMDB 验证后的本地统一偏移计算器，结果不一致时只禁止缓存学习，不否定已验证的逐文件映射。
 - [ ] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同 EP。可信记录强制包含有效 `tmdb_id`、普通 `season` 和偏移；主程序在 AI 调用前命中后本地计算目标 EP，无候选、结果非正数或记录无效时回退正常流程。
@@ -104,7 +104,7 @@
 - [ ] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`；同 ID 的不同字幕组、标题和 Torrent 归入同一作品作用域。
 - [ ] 移植 Bangumi API。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
-- [ ] 移植 TMDB 搜索、相似度和季度匹配。
+- [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、zh-CN DTO、Series/Season/Episode 官方端点和三级身份验证已实现；去后缀、相似度选择、日期季度匹配与缓存待实现）。
 - [ ] 按 issue #15 实现 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：季度匹配失败时沿 Bangumi“前传”关系逐项回溯首播日期，重新匹配同一 TMDB 剧集的季度。
 - [ ] 实现 `TMDBFailUseAIMatchSeason` / `tmdb_fail_use_ai_match_season`（默认 `false`），每个下载任务只向大模型发送总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [ ] 实现 `TMDBFailEpUseAIMatchSeason` / `tmdb_failep_use_ai_match_season`（按指定拼写，默认 `false`）：非 AI 季度匹配成功后先验证来源 EP；存在不对应时按下载任务执行一次 AI EP 匹配。
@@ -121,8 +121,8 @@
 - [ ] 移植 Mikan → Bangumi → TMDB 编排与 fallback。
 - [ ] 自动编排之前应用 Mikan 作品级人工规则；按 `TmdbEpisodeNumber = SourceEpisodeNumber + EpisodeOffset` 映射普通正片并验证目标 TMDB Episode。
 - [ ] 人工规则无效时记录 `ManualOverrideInvalid` 并阻止静默自动覆盖；清除/禁用后才恢复自动策略链。
-- [ ] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误，并验证重试耗尽后的兜底边界。
-- [ ] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`；仅 `SemanticNoMatch && tmdb_access_confirmed` 可进入 `tmdbid=0`，旧网络错误恢复后必须重新请求TMDB。
+- [>] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误（客户端已稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；重试编排待实现）。
+- [>] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`（权威 404 仅产生 `SemanticNoMatch + access_confirmed`，其他客户端失败均禁止资格；SQLite 持久化与最终门禁待串联）。
 - [ ] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；重启后可查询。
 - [ ] 通过 fixture parity 和受控 live smoke。
 

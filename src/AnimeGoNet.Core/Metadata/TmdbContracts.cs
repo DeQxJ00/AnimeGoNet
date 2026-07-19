@@ -1,0 +1,76 @@
+namespace AnimeGoNet.Core.Metadata;
+
+public enum MetadataFailureKind
+{
+    SemanticNoMatch = 1,
+    Network = 2,
+    RemoteService = 3,
+    Authentication = 4,
+    Configuration = 5,
+    Protocol = 6,
+    InvalidInput = 7,
+    Ambiguous = 8,
+    Cancelled = 9,
+}
+
+public sealed record TmdbSeries(
+    int Id,
+    string Name,
+    string OriginalName,
+    DateOnly? FirstAirDate);
+
+public sealed record TmdbSeason(
+    int Id,
+    int SeriesId,
+    int SeasonNumber,
+    string Name,
+    DateOnly? AirDate,
+    int EpisodeCount);
+
+public sealed record TmdbEpisode(
+    int Id,
+    int SeriesId,
+    int SeasonNumber,
+    int EpisodeNumber,
+    string Name,
+    DateOnly? AirDate);
+
+public sealed record TmdbCanonicalEpisode(
+    TmdbSeries Series,
+    TmdbSeason Season,
+    TmdbEpisode Episode,
+    string CanonicalSeriesName);
+
+public sealed record MetadataFailure(
+    MetadataFailureKind Kind,
+    string Code,
+    bool TmdbAccessConfirmed);
+
+public sealed record TmdbValidationResult(
+    TmdbCanonicalEpisode? Value,
+    MetadataFailure? Failure)
+{
+    public bool IsSuccess => Value is not null && Failure is null;
+}
+
+public interface ITmdbClient
+{
+    Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+        string title,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbSeries?> GetSeriesAsync(
+        int seriesId,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbSeason?> GetSeasonAsync(
+        int seriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbEpisode?> GetEpisodeAsync(
+        int seriesId,
+        int seasonNumber,
+        int episodeNumber,
+        CancellationToken cancellationToken = default);
+}

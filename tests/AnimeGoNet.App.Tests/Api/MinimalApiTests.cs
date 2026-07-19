@@ -57,6 +57,25 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
+    public async Task StatusReportsConfiguredTmdbWithoutEchoingCredential()
+    {
+        await using var app = await RunningApp.StartAsync(configure: options => options with
+        {
+            Metadata = options.Metadata with
+            {
+                Tmdb = options.Metadata.Tmdb with { ReadAccessToken = "private-tmdb-token" },
+            },
+        });
+
+        using var response = await app.Client.GetAsync("/api/v1/status");
+        var body = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+
+        Assert.True(json.RootElement.GetProperty("capabilities").GetProperty("tmdb").GetBoolean());
+        Assert.DoesNotContain("private-tmdb-token", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProtectedApiAcceptsDirectAndLegacyHashedAccessKeys()
     {
         const string accessKey = "test-secret";

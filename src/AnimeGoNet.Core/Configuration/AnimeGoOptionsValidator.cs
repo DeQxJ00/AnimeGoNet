@@ -73,6 +73,26 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AI HTTP timeout must be positive.");
         }
 
+        if (!options.Metadata.Tmdb.BaseUrl.IsAbsoluteUri
+            || options.Metadata.Tmdb.BaseUrl.Scheme is not ("http" or "https")
+            || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.UserInfo)
+            || options.Metadata.Tmdb.BaseUrl.AbsolutePath != "/"
+            || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.Query)
+            || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.Fragment))
+        {
+            errors.Add("TMDB base URL must be an absolute HTTP(S) origin without credentials, query or fragment.");
+        }
+
+        if (options.Metadata.Tmdb.HttpTimeout <= TimeSpan.Zero)
+        {
+            errors.Add("TMDB HTTP timeout must be positive.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Metadata.Tmdb.Language))
+        {
+            errors.Add("TMDB language must not be empty.");
+        }
+
         if (options.TorrentFetch.Timeout <= TimeSpan.Zero)
         {
             errors.Add("Torrent fetch timeout must be positive.");

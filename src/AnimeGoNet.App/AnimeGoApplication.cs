@@ -2,10 +2,12 @@ using System.Security.Cryptography;
 using System.Text;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Sources;
@@ -90,6 +92,11 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(torrentStagingService);
         builder.Services.AddSingleton<StagedTorrentDispatcher>();
         builder.Services.AddSingleton<DownloadSnapshotSynchronizer>();
+        builder.Services.AddSingleton<ITmdbClient>(_ => new TmdbClient(
+            new HttpClient(),
+            options.Metadata.Tmdb,
+            ownsHttpClient: true));
+        builder.Services.AddSingleton<TmdbAuthority>();
         if (startBackgroundWorkers.Value)
         {
             builder.Services.AddHostedService<StagedTorrentDispatchWorker>();
@@ -138,6 +145,14 @@ public static class AnimeGoApplication
         return defaults with
         {
             Paths = paths,
+            Metadata = defaults.Metadata with
+            {
+                Tmdb = defaults.Metadata.Tmdb with
+                {
+                    ApiKey = configuration["tmdb_api_key"],
+                    ReadAccessToken = configuration["tmdb_read_access_token"],
+                },
+            },
             Downloaders = defaults.Downloaders.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value with { DownloadPath = PathBoundary.Combine(downloadPath, pair.Key) },

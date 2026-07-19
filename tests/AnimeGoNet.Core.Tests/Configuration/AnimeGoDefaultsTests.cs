@@ -31,6 +31,10 @@ public sealed class AnimeGoDefaultsTests
         Assert.False(options.Metadata.TmdbFailureUseBangumi);
         Assert.False(options.Metadata.MikanTrustedOffsetCacheEnabled);
         Assert.Equal(TimeSpan.FromSeconds(600), options.Metadata.Ai.HttpTimeout);
+        Assert.Equal(new Uri("https://api.themoviedb.org/"), options.Metadata.Tmdb.BaseUrl);
+        Assert.Equal("zh-CN", options.Metadata.Tmdb.Language);
+        Assert.Null(options.Metadata.Tmdb.ApiKey);
+        Assert.Null(options.Metadata.Tmdb.ReadAccessToken);
     }
 
     [Fact]

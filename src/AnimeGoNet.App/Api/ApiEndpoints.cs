@@ -57,7 +57,8 @@ public static class ApiEndpoints
                 UnifiedIngest: true,
                 RssRules: true,
                 Qbittorrent: true,
-                Tmdb: false,
+                Tmdb: !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ApiKey)
+                    || !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ReadAccessToken),
                 Organizer: false)));
     }
 

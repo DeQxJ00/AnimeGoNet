@@ -50,6 +50,8 @@ public sealed record QbittorrentInstanceOptions
 
 public sealed record MetadataMatchingOptions
 {
+    public required TmdbClientOptions Tmdb { get; init; }
+
     public required SeasonFailureOptions SeasonFailure { get; init; }
 
     public required AiMatchingOptions Ai { get; init; }
@@ -57,6 +59,19 @@ public sealed record MetadataMatchingOptions
     public bool TmdbFailureUseBangumi { get; init; }
 
     public bool MikanTrustedOffsetCacheEnabled { get; init; }
+}
+
+public sealed record TmdbClientOptions
+{
+    public Uri BaseUrl { get; init; } = new("https://api.themoviedb.org/");
+
+    public string? ApiKey { get; init; }
+
+    public string? ReadAccessToken { get; init; }
+
+    public string Language { get; init; } = "zh-CN";
+
+    public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(30);
 }
 
 public sealed record SeasonFailureOptions

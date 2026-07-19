@@ -70,6 +70,30 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Contains(errors, error => error.Contains("staging TTL", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RejectsInvalidTmdbTransportConfiguration()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Tmdb = defaults.Metadata.Tmdb with
+                {
+                    BaseUrl = new Uri("ftp://tmdb.invalid/"),
+                    HttpTimeout = TimeSpan.Zero,
+                    Language = " ",
+                },
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("TMDB base URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TMDB HTTP timeout", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TMDB language", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("/download/incomplete", "/download/incomplete/bt", true)]
     [InlineData("/download/incomplete", "/download/incomplete-other", false)]

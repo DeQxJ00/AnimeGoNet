@@ -28,7 +28,7 @@
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 待实现 | 5 个 RSS fixture parity |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 待实现 | Mikan fixtures + URL cases |
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 待实现 | Bangumi fixtures |
-| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 待实现 | TMDB fixtures + failure taxonomy |
+| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、AOT source-generated DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证和安全 failure taxonomy tests 已通过；后缀/相似度/日期季度/cache fixture parity 待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
 | 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、路由、逐项结果、legacy contract与安全Torrent staging已验证；worker自动调度待实现 |
 
