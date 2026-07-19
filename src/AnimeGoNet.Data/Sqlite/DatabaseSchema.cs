@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -11,6 +11,7 @@ public static class DatabaseSchema
         new SchemaMigration(3, "staged_ingest_lifecycle", StagedIngestLifecycle),
         new SchemaMigration(4, "staged_dispatch_lease", StagedDispatchLease),
         new SchemaMigration(5, "download_runtime_projection", DownloadRuntimeProjection),
+        new SchemaMigration(6, "metadata_resolution_lease", MetadataResolutionLease),
     ];
 
     private const string InitialBusinessSchema = """
@@ -347,5 +348,28 @@ public static class DatabaseSchema
 
         CREATE INDEX ix_download_jobs_active_instance
         ON download_jobs(downloader_id, state, updated_at_utc);
+        """;
+
+    private const string MetadataResolutionLease = """
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN lease_token TEXT;
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN lease_expires_at_utc TEXT;
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN attempt_number INTEGER NOT NULL DEFAULT 1 CHECK (attempt_number > 0);
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN tmdb_series_id INTEGER CHECK (tmdb_series_id > 0);
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN tmdb_season_number INTEGER CHECK (tmdb_season_number > 0);
+
+        CREATE UNIQUE INDEX ux_metadata_resolution_runs_active_task
+        ON metadata_resolution_runs(task_id) WHERE status = 'running';
+
+        CREATE INDEX ix_metadata_resolution_runs_lease
+        ON metadata_resolution_runs(status, lease_expires_at_utc);
         """;
 }
