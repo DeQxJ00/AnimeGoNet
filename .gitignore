@@ -36,3 +36,8 @@ obj/
 TestResults/
 artifacts/
 publish/
+
+# Local qBittorrent integration sandbox and secrets
+TestSpace/
+*.local-integration.json
+.env.integration
