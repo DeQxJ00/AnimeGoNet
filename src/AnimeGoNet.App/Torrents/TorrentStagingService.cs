@@ -137,13 +137,7 @@ public sealed class TorrentStagingService(
     public Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(stagingFileName)
-            || !string.Equals(stagingFileName, Path.GetFileName(stagingFileName), StringComparison.Ordinal)
-            || (!stagingFileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase)
-                && !stagingFileName.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new ArgumentException("Staging file name is invalid.", nameof(stagingFileName));
-        }
+        ValidateStagingFileName(stagingFileName, allowPart: true);
 
         var path = Path.Combine(layout.StagingPath, stagingFileName);
         if (!File.Exists(path))
@@ -153,6 +147,18 @@ public sealed class TorrentStagingService(
 
         File.Delete(path);
         return Task.FromResult(true);
+    }
+
+    public FileStream OpenRead(string stagingFileName)
+    {
+        ValidateStagingFileName(stagingFileName, allowPart: false);
+        return new FileStream(
+            Path.Combine(layout.StagingPath, stagingFileName),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
     }
 
     private async Task<IReadOnlyList<IPAddress>> ResolveAndValidateAsync(string host, CancellationToken cancellationToken)
@@ -300,6 +306,17 @@ public sealed class TorrentStagingService(
         }
         catch (DirectoryNotFoundException)
         {
+        }
+    }
+
+    private static void ValidateStagingFileName(string stagingFileName, bool allowPart)
+    {
+        if (string.IsNullOrWhiteSpace(stagingFileName)
+            || !string.Equals(stagingFileName, Path.GetFileName(stagingFileName), StringComparison.Ordinal)
+            || (!stagingFileName.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase)
+                && (!allowPart || !stagingFileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase))))
+        {
+            throw new ArgumentException("Staging file name is invalid.", nameof(stagingFileName));
         }
     }
 }

@@ -58,6 +58,8 @@ public interface ITorrentStagingService
 
     Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default);
 
+    FileStream OpenRead(string stagingFileName);
+
     Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default);
 }
 

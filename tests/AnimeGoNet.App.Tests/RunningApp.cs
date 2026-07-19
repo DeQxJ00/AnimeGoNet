@@ -38,7 +38,8 @@ public sealed class RunningApp : IAsyncDisposable
             [],
             options,
             accessKey,
-            torrentStagingService: stagingService);
+            torrentStagingService: stagingService,
+            startBackgroundWorkers: false);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();
         var server = app.Services.GetRequiredService<IServer>();
@@ -83,6 +84,8 @@ public sealed class RunningApp : IAsyncDisposable
             File.Delete(path);
             return Task.FromResult(existed);
         }
+
+        public FileStream OpenRead(string stagingFileName) => File.OpenRead(Path.Combine(stagingPath, stagingFileName));
 
         public Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default)
         {

@@ -17,3 +17,15 @@ public sealed record StagedIngestTaskRecord(
     int FileCount);
 
 public sealed record ExpiredStagedTorrentRecord(string TaskId, string StagingFileName);
+
+public sealed record ClaimedStagedTorrentRecord(
+    string TaskId,
+    string StagingFileName,
+    string InfoHash,
+    long TotalSizeBytes,
+    string DownloaderId,
+    string SourceId,
+    string Title,
+    string FileStrategy,
+    string LeaseToken,
+    int AttemptCount);

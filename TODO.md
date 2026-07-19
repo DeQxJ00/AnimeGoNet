@@ -154,6 +154,7 @@
 - [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、list、multipart add、stop/start/delete、状态映射与失败响应。
+- [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、qB确认、download job事务与确认后staging清理。
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；默认 CI 不启动该实例，也未创建 Torrent。
 - [ ] 建立隔离 Docker Compose 下载环境。
 - [ ] qBittorrent 通过 add/list/state/file-priority/pause/resume/delete/reconnect 真实容器测试。
@@ -162,8 +163,8 @@
 
 ## P8 — 下载、重命名、刮削
 
-- [ ] 移植下载管理状态机和 notifier。
-- [ ] 移植重启恢复、去重、失败重试和删除 callback。
+- [>] 移植下载管理状态机和 notifier（staged→dispatching→download_queued及安全重试已实现；下载/做种/整理 notifier 待实现）。
+- [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等与退避重试已实现；运行中快照恢复及删除回调待实现）。
 - [ ] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入；RSS 早期检查并在提交下载器前事务复查。
 - [ ] 移植 link/link_delete/move/wait_move。
 - [ ] `move` 安全编排：下载完成后暂停任务，移动/跨卷复制校验、重命名/NFO/目录库成功后才移除下载器任务（不再删除文件）并写完成记录；失败保留可重试源文件。
@@ -187,8 +188,8 @@
 - [ ] 实现 Bangumi/数据库/feed/plugin tasks。
 - [ ] 实现优雅退出和取消传播。
 - [ ] 移植 10 个 HTTP API。
-- [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，二者均完成安全 Torrent staging；`/api/rss` 与后台 qB dispatch 待接入。
-- [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、schema v3暂存记录与崩溃过期清理已实现；qB确认接收后删除与AI负向门禁待串联。
+- [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，二者均完成安全 staging 与后台 qB dispatch；`/api/rss` 待接入。
+- [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
 - [ ] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
 - [ ] 移植 WebSocket 日志 pause/resume。

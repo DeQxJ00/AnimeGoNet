@@ -5,6 +5,7 @@ using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
@@ -20,6 +21,8 @@ public static class AnimeGoApplication
         string? accessKey = null,
         bool? runningInContainer = null,
         ITorrentStagingService? torrentStagingService = null,
+        IDownloadClientRegistry? downloadClientRegistry = null,
+        bool startBackgroundWorkers = true,
         CancellationToken cancellationToken = default)
     {
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -69,14 +72,20 @@ public static class AnimeGoApplication
         }
 
         await torrentStagingService.CleanupExpiredAsync(cancellationToken).ConfigureAwait(false);
+        downloadClientRegistry ??= new QbittorrentClientRegistry(options);
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(ingestTasks);
-        builder.Services.AddSingleton(new QbittorrentClientRegistry(options));
+        builder.Services.AddSingleton(downloadClientRegistry);
         builder.Services.AddSingleton(torrentStagingService);
+        builder.Services.AddSingleton<StagedTorrentDispatcher>();
+        if (startBackgroundWorkers)
+        {
+            builder.Services.AddHostedService<StagedTorrentDispatchWorker>();
+        }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
 

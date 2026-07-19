@@ -124,6 +124,31 @@ public sealed class IngestTaskStoreTests
         Assert.Equal(0, reader.GetInt32(2));
     }
 
+    [Fact]
+    public async Task ConcurrentDispatchClaimsReturnEachStagedTaskAtMostOnce()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profileStore = new SourceProfileStore(fixture.Database);
+        await profileStore.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        var profile = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
+        var store = new IngestTaskStore(fixture.Database);
+        var task = await store.AddStagedAsync(
+            CreateNormalized(),
+            profile,
+            new TorrentMetadata("episode.mkv", new string('c', 40), 5, [new TorrentFile("episode.mkv", 5, false)]),
+            "claim-once.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(15));
+        var now = DateTimeOffset.UtcNow;
+
+        var claims = await Task.WhenAll(
+            store.TryClaimNextStagedAsync(now, TimeSpan.FromMinutes(1)),
+            store.TryClaimNextStagedAsync(now, TimeSpan.FromMinutes(1)));
+
+        var claim = Assert.Single(claims, item => item is not null);
+        Assert.Equal(task.Id, claim!.TaskId);
+        Assert.Equal(1, claim.AttemptCount);
+    }
+
     private static NormalizedIngestItem CreateNormalized() =>
         Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
             "mikan",

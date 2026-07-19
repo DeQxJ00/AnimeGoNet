@@ -216,6 +216,8 @@ public sealed class MinimalApiTests
         public Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 
+        public FileStream OpenRead(string stagingFileName) => throw new FileNotFoundException();
+
         public Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
     }

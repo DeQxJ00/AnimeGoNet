@@ -56,7 +56,7 @@ public sealed class SchemaMigrationTests
         command.CommandText = "SELECT COUNT(*), MAX(version) FROM schema_migrations;";
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(3, reader.GetInt32(0));
+        Assert.Equal(4, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
     }
 

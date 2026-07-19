@@ -33,3 +33,5 @@ Native smoke passed
 ## Explicitly deferred
 
 The adapter is registered but ingest does not dispatch to it yet. Torrent URL security validation, bencode parsing, staging, info-hash acquisition, episode claim/dedup, and durable download-job creation must precede dispatch. A separate external portable qBittorrent sandbox now covers local process/profile/port/username-password/list/path smoke without joining default CI; evidence is tracked in `2026-07-19-local-qbittorrent-sandbox.md`. Real qBittorrent container, reconnect, polling, and file-priority tests remain pending because Docker is unavailable on this host.
+
+This historical boundary was superseded by the staged qBittorrent dispatch increment. Secure staging, idempotent paused add, qB hash confirmation, and durable download-job creation are now connected; episode-level dedup, polling, file priority, and container E2E remain pending.

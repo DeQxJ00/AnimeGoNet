@@ -2,13 +2,14 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
         new SchemaMigration(1, "initial_business_schema", InitialBusinessSchema),
         new SchemaMigration(2, "source_torrent_host_allowlist", SourceTorrentHostAllowlist),
         new SchemaMigration(3, "staged_ingest_lifecycle", StagedIngestLifecycle),
+        new SchemaMigration(4, "staged_dispatch_lease", StagedDispatchLease),
     ];
 
     private const string InitialBusinessSchema = """
@@ -290,5 +291,32 @@ public static class DatabaseSchema
         ) STRICT;
 
         CREATE INDEX ix_staged_torrents_expiry ON staged_torrents(expires_at_utc);
+        """;
+
+    private const string StagedDispatchLease = """
+        ALTER TABLE staged_torrents
+        ADD COLUMN dispatch_state TEXT NOT NULL DEFAULT 'ready'
+        CHECK (dispatch_state IN ('ready', 'dispatching'));
+
+        ALTER TABLE staged_torrents
+        ADD COLUMN lease_token TEXT;
+
+        ALTER TABLE staged_torrents
+        ADD COLUMN lease_expires_at_utc TEXT;
+
+        ALTER TABLE staged_torrents
+        ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0
+        CHECK (attempt_count >= 0);
+
+        ALTER TABLE staged_torrents
+        ADD COLUMN next_attempt_at_utc TEXT;
+
+        ALTER TABLE staged_torrents
+        ADD COLUMN last_failure_code TEXT;
+
+        CREATE INDEX ix_staged_torrents_dispatch
+        ON staged_torrents(dispatch_state, next_attempt_at_utc, created_at_utc);
+
+        CREATE UNIQUE INDEX ux_download_jobs_task ON download_jobs(task_id);
         """;
 }
