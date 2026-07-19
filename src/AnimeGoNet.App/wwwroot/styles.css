@@ -1,0 +1,37 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #edf2ff;
+  background: #080b13;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #1d2740 0, #080b13 45%); }
+.topbar, main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 30px 0 18px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 0; font-size: clamp(1.5rem, 4vw, 2.2rem); }
+h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
+.eyebrow { color: #8da2c9; letter-spacing: .12em; text-transform: uppercase; font-size: .72rem; font-weight: 700; margin-bottom: 8px; }
+.muted { color: #aebbd3; line-height: 1.65; }
+.badge { border: 1px solid #344260; border-radius: 999px; padding: 8px 13px; font-size: .82rem; }
+.badge.ready { color: #78e5b8; border-color: #277055; background: #112a24; }
+.badge.error { color: #ff9f9f; border-color: #813f49; background: #2c1519; }
+.hero { display: grid; grid-template-columns: 1.5fr .8fr; gap: 30px; padding: 50px; border: 1px solid #27334c; border-radius: 28px; background: linear-gradient(145deg, rgba(30,43,70,.9), rgba(13,18,31,.88)); box-shadow: 0 25px 80px rgba(0,0,0,.28); }
+.runtime { display: grid; gap: 12px; margin: 0; }
+.runtime div { padding: 14px 16px; border-radius: 14px; background: rgba(5,8,16,.55); }
+.runtime dt { color: #8da2c9; font-size: .75rem; }
+.runtime dd { margin: 5px 0 0; word-break: break-word; font-weight: 650; }
+.section-heading { margin-top: 54px; display: flex; justify-content: space-between; align-items: end; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.module, .panels article { border: 1px solid #27334c; border-radius: 18px; padding: 20px; background: rgba(16,22,37,.88); }
+.module strong { display: block; margin-bottom: 8px; }
+.module span, .panels span { color: #8da2c9; font-size: .8rem; }
+.module.enabled { border-color: #315f58; }
+.panels { margin: 20px 0 70px; }
+.panels p { color: #aebbd3; min-height: 44px; line-height: 1.45; }
+
+@media (max-width: 760px) {
+  .hero { grid-template-columns: 1fr; padding: 30px 24px; }
+  .grid { grid-template-columns: 1fr; }
+}

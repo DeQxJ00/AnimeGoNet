@@ -50,14 +50,14 @@
 
 - [x] 安装并固定 .NET 10 SDK（当前主机为 SDK `10.0.302`，通过 `global.json` 固定 feature band）。
 - [x] 固化解决方案分层、核心数据聚合、SQLite 明确 SQL 规则与 NativeAOT 允许/禁止边界（见 `docs/ARCHITECTURE.md`）。
-- [>] 创建 solution、分层项目、测试项目（Core 与 Core.Tests 已完成；Data/App 按模块加入）。
+- [x] 创建 solution、Core/Data/App 分层项目及对应测试项目。
 - [x] 添加 `global.json`、`Directory.Build.props`、`Directory.Packages.props`。
 - [x] 启用 nullable、warnings-as-errors、deterministic、AOT/trim analyzer。
 - [ ] 建立 Windows/Linux CI。
-- [ ] 验证 Minimal API、WebSocket、静态文件 NativeAOT。
-- [ ] 验证 Microsoft.Data.Sqlite NativeAOT。
+- [>] 验证 Minimal API、WebSocket、静态文件 NativeAOT（Minimal API/静态文件已通过 win-x64 原生 smoke；WebSocket 待实现）。
+- [x] 验证 Microsoft.Data.Sqlite NativeAOT（win-x64 原生进程完成 migration、integrity 与状态读取）。
 - [ ] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT。
-- [ ] 建立 published-binary smoke 脚本。
+- [x] 建立 published-binary smoke 脚本（`eng/smoke-native.ps1`）。
 
 ## P2 — 领域与配置
 

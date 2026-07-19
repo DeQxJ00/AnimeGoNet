@@ -1,0 +1,22 @@
+using System.Net;
+
+namespace AnimeGoNet.App.Tests.WebUi;
+
+public sealed class StaticWebUiTests
+{
+    [Theory]
+    [InlineData("/", "text/html", "AnimeGoNet")]
+    [InlineData("/styles.css", "text/css", ".hero")]
+    [InlineData("/app.js", "text/javascript", "/api/v1/status")]
+    public async Task ServesStaticAssets(string path, string mediaType, string marker)
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var response = await app.Client.GetAsync(path);
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(mediaType, response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains(marker, content, StringComparison.Ordinal);
+    }
+}

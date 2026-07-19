@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>AnimeGoNet</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Anime library automation</p>
+      <h1>AnimeGoNet</h1>
+    </div>
+    <span id="health" class="badge pending">连接中</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">主程序迁移状态</p>
+        <h2>从统一导入到媒体库，每一步都可追踪。</h2>
+        <p class="muted">当前已启用配置/目录模型、SQLite schema、Minimal API 与静态 WebUI 骨架。</p>
+      </div>
+      <dl class="runtime">
+        <div><dt>数据库</dt><dd id="schema">—</dd></div>
+        <div><dt>运行模式</dt><dd id="runtime">—</dd></div>
+        <div><dt>数据目录</dt><dd id="data-path">—</dd></div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="modules-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Control plane</p>
+          <h2 id="modules-title">模块</h2>
+        </div>
+      </div>
+      <div id="modules" class="grid" aria-live="polite"></div>
+    </section>
+
+    <section class="grid panels" aria-label="管理入口">
+      <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>骨架已就绪</span></article>
+      <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>待实现</span></article>
+      <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>待实现</span></article>
+      <article><h3>动画库</h3><p>封面、季度、TMDB EP 与下载进度。</p><span>待实现</span></article>
+      <article><h3>待补全 TMDB</h3><p>查看失败分类、原因与重试入口。</p><span>待实现</span></article>
+      <article><h3>任务</h3><p>下载、匹配、整理和删除审计。</p><span>待实现</span></article>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

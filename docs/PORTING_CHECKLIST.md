@@ -80,7 +80,7 @@
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 待实现 | clock/cancel/startup tests |
-| `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 待实现 | HTTP contract snapshot |
+| `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
 | `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 待实现 | AnimeGoHelper unchanged test |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 待实现 | legacy response contract |
 | `/api/config` | typed deployment config | 保留+扩展 | 待实现 | auth/status/JSON tests |
@@ -88,7 +88,7 @@
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 待实现 | command equivalence tests |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
 | 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 待实现 | OpenAPI/integration tests |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 待实现 | DOM/Playwright/AOT smoke |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；完整管理 UI/浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 
