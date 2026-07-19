@@ -49,6 +49,18 @@ public interface ITorrentHttpTransport
         CancellationToken cancellationToken);
 }
 
+public interface ITorrentStagingService
+{
+    Task<StagedTorrent> StageAsync(
+        Uri secretUrl,
+        TorrentSourcePolicy sourcePolicy,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default);
+
+    Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default);
+}
+
 public sealed class TorrentHttpResponse(
     HttpStatusCode statusCode,
     Uri? redirectLocation,
@@ -77,6 +89,8 @@ public sealed class TorrentHttpResponse(
 public sealed class StagedTorrent(string filePath, TorrentMetadata metadata) : IAsyncDisposable
 {
     public string FilePath { get; } = filePath;
+
+    public string StagingFileName { get; } = Path.GetFileName(filePath);
 
     public TorrentMetadata Metadata { get; } = metadata;
 

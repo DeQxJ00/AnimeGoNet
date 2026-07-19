@@ -11,7 +11,7 @@ public sealed class TorrentStagingService(
     TorrentFetchOptions options,
     ITorrentDnsResolver dnsResolver,
     ITorrentHttpTransport transport,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null) : ITorrentStagingService
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -132,6 +132,27 @@ public sealed class TorrentStagingService(
         }
 
         return Task.FromResult(deleted);
+    }
+
+    public Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(stagingFileName)
+            || !string.Equals(stagingFileName, Path.GetFileName(stagingFileName), StringComparison.Ordinal)
+            || (!stagingFileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase)
+                && !stagingFileName.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Staging file name is invalid.", nameof(stagingFileName));
+        }
+
+        var path = Path.Combine(layout.StagingPath, stagingFileName);
+        if (!File.Exists(path))
+        {
+            return Task.FromResult(false);
+        }
+
+        File.Delete(path);
+        return Task.FromResult(true);
     }
 
     private async Task<IReadOnlyList<IPAddress>> ResolveAndValidateAsync(string host, CancellationToken cancellationToken)

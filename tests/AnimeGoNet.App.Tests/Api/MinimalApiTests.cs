@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.App.Tests.Api;
@@ -120,6 +121,9 @@ public sealed class MinimalApiTests
         Assert.Equal(1, json.RootElement.GetProperty("accepted_count").GetInt32());
         Assert.Equal(2, json.RootElement.GetProperty("rejected_count").GetInt32());
         Assert.Equal("bt", json.RootElement.GetProperty("items")[0].GetProperty("downloader_id").GetString());
+        Assert.Equal("staged", json.RootElement.GetProperty("items")[0].GetProperty("status").GetString());
+        Assert.Equal(40, json.RootElement.GetProperty("items")[0].GetProperty("info_hash").GetString()!.Length);
+        Assert.Equal(1, json.RootElement.GetProperty("items")[0].GetProperty("file_count").GetInt32());
         Assert.Equal("rejected", json.RootElement.GetProperty("items")[1].GetProperty("status").GetString());
         Assert.Equal("info is required", json.RootElement.GetProperty("items")[2].GetProperty("errors")[0].GetString());
         Assert.DoesNotContain("personal-passkey", body, StringComparison.Ordinal);
@@ -140,6 +144,35 @@ public sealed class MinimalApiTests
             new StringContent(u2Payload, Encoding.UTF8, "application/json"));
         using var u2Json = JsonDocument.Parse(await u2Response.Content.ReadAsStreamAsync());
         Assert.Equal("pt", u2Json.RootElement.GetProperty("items")[0].GetProperty("downloader_id").GetString());
+    }
+
+    [Fact]
+    public async Task StagingFailureIsPerItemAndDoesNotEchoSecretUrl()
+    {
+        await using var app = await RunningApp.StartAsync(stagingService: new RejectingStagingService());
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [
+                {
+                  "torrent": "https://mikanani.me/private-passkey/file.torrent?token=secret",
+                  "info": { "title": "Episode 1", "mikanid": 3951, "bgmid": 547888 }
+                }
+              ]
+            }
+            """;
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        var body = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+
+        Assert.Equal(0, json.RootElement.GetProperty("accepted_count").GetInt32());
+        Assert.Equal("rejected", json.RootElement.GetProperty("items")[0].GetProperty("status").GetString());
+        Assert.Contains("HostNotAllowed", json.RootElement.GetProperty("items")[0].GetProperty("errors")[0].GetString());
+        Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("token=secret", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -168,5 +201,22 @@ public sealed class MinimalApiTests
         var data = json.RootElement.GetProperty("data");
         Assert.Equal("bt", data.GetProperty("items")[0].GetProperty("downloader_id").GetString());
         Assert.Equal(1, data.GetProperty("accepted_count").GetInt32());
+    }
+
+    private sealed class RejectingStagingService : ITorrentStagingService
+    {
+        public Task<StagedTorrent> StageAsync(
+            Uri secretUrl,
+            TorrentSourcePolicy sourcePolicy,
+            CancellationToken cancellationToken = default) =>
+            throw new TorrentStagingException(
+                TorrentStagingFailureCode.HostNotAllowed,
+                "Torrent host is not allowed by the source profile.");
+
+        public Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 }

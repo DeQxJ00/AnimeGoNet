@@ -34,3 +34,5 @@ The AOT smoke posts a Mikan batch, requires one accepted item routed to `bt`, ch
 ## Explicitly deferred
 
 This increment does not fetch or parse the Torrent URL, invoke qBittorrent, parse `/api/rss`, persist editable rule definitions, or apply episode completion dedup to ingest. The stored task status is therefore `received`; it is not represented as downloaded or fully accepted by a downstream client. Passkey URL staging, host/redirect/DNS controls, bencode verification, and immediate cleanup are the next network boundary and must land before qBittorrent dispatch.
+
+This is a historical increment boundary. Secure staging and `status=staged` persistence were added later; qBittorrent dispatch, `/api/rss`, and completion dedup remain deferred.

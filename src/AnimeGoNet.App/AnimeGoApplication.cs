@@ -19,6 +19,7 @@ public static class AnimeGoApplication
         AnimeGoOptions? options = null,
         string? accessKey = null,
         bool? runningInContainer = null,
+        ITorrentStagingService? torrentStagingService = null,
         CancellationToken cancellationToken = default)
     {
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -51,20 +52,31 @@ public static class AnimeGoApplication
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var sourceProfiles = new SourceProfileStore(database);
         await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
+        var ingestTasks = new IngestTaskStore(database);
+        torrentStagingService ??= new TorrentStagingService(
+            layout,
+            options.TorrentFetch,
+            new SystemTorrentDnsResolver(),
+            new PinnedTorrentHttpTransport());
+        var expiredStaging = await ingestTasks
+            .ExpireStagedAsync(DateTimeOffset.UtcNow, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var expired in expiredStaging)
+        {
+            await torrentStagingService
+                .DeleteAsync(expired.StagingFileName, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await torrentStagingService.CleanupExpiredAsync(cancellationToken).ConfigureAwait(false);
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(sourceProfiles);
-        builder.Services.AddSingleton(new IngestTaskStore(database));
+        builder.Services.AddSingleton(ingestTasks);
         builder.Services.AddSingleton(new QbittorrentClientRegistry(options));
-        builder.Services.AddSingleton<ITorrentDnsResolver, SystemTorrentDnsResolver>();
-        builder.Services.AddSingleton<ITorrentHttpTransport, PinnedTorrentHttpTransport>();
-        builder.Services.AddSingleton(serviceProvider => new TorrentStagingService(
-            layout,
-            options.TorrentFetch,
-            serviceProvider.GetRequiredService<ITorrentDnsResolver>(),
-            serviceProvider.GetRequiredService<ITorrentHttpTransport>()));
+        builder.Services.AddSingleton(torrentStagingService);
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
 

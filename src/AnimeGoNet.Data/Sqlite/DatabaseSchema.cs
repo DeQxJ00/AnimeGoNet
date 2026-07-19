@@ -2,12 +2,13 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
         new SchemaMigration(1, "initial_business_schema", InitialBusinessSchema),
         new SchemaMigration(2, "source_torrent_host_allowlist", SourceTorrentHostAllowlist),
+        new SchemaMigration(3, "staged_ingest_lifecycle", StagedIngestLifecycle),
     ];
 
     private const string InitialBusinessSchema = """
@@ -275,5 +276,19 @@ public static class DatabaseSchema
         ALTER TABLE source_profiles
         ADD COLUMN allowed_torrent_hosts_json TEXT NOT NULL DEFAULT '[]'
         CHECK (json_valid(allowed_torrent_hosts_json) AND json_type(allowed_torrent_hosts_json) = 'array');
+        """;
+
+    private const string StagedIngestLifecycle = """
+        CREATE TABLE staged_torrents (
+            task_id TEXT NOT NULL PRIMARY KEY REFERENCES ingest_tasks(id) ON DELETE CASCADE,
+            staging_file_name TEXT NOT NULL UNIQUE,
+            info_hash TEXT NOT NULL CHECK (length(info_hash) = 40 AND info_hash = lower(info_hash)),
+            total_size_bytes INTEGER NOT NULL CHECK (total_size_bytes >= 0),
+            expires_at_utc TEXT NOT NULL,
+            created_at_utc TEXT NOT NULL,
+            CHECK (staging_file_name NOT LIKE '%/%' AND staging_file_name NOT LIKE '%\%')
+        ) STRICT;
+
+        CREATE INDEX ix_staged_torrents_expiry ON staged_torrents(expires_at_utc);
         """;
 }

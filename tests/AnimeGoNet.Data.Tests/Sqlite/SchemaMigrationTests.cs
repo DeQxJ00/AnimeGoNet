@@ -38,6 +38,7 @@ public sealed class SchemaMigrationTests
             "mikan_work_rules",
             "schema_migrations",
             "source_profiles",
+            "staged_torrents",
             "task_files",
             "tmdb_episodes",
         };
@@ -55,7 +56,7 @@ public sealed class SchemaMigrationTests
         command.CommandText = "SELECT COUNT(*), MAX(version) FROM schema_migrations;";
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(2, reader.GetInt32(0));
+        Assert.Equal(3, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
     }
 

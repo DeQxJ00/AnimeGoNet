@@ -1,5 +1,6 @@
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
 
@@ -37,4 +38,96 @@ public sealed class IngestTaskStoreTests
         Assert.Contains("\"file_strategy\":\"move\"", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task StagedIngestAtomicallyStoresSafeTorrentMetadataAndFiles()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profileStore = new SourceProfileStore(fixture.Database);
+        await profileStore.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        var profile = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
+        var normalized = CreateNormalized();
+        var metadata = new TorrentMetadata(
+            "Show",
+            new string('a', 40),
+            7,
+            [
+                new TorrentFile("Show/episode.mkv", 5, false),
+                new TorrentFile("Show/_____padding_file0", 2, true),
+            ]);
+
+        var task = await new IngestTaskStore(fixture.Database).AddStagedAsync(
+            normalized,
+            profile,
+            metadata,
+            "safe-random-name.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(15));
+
+        Assert.Equal("staged", task.Status);
+        Assert.Equal(2, task.FileCount);
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT ingest_tasks.status, staged_torrents.staging_file_name,
+                   staged_torrents.info_hash, COUNT(task_files.id),
+                   SUM(CASE WHEN task_files.disposition = 'ignored' THEN 1 ELSE 0 END)
+            FROM ingest_tasks
+            JOIN staged_torrents ON staged_torrents.task_id = ingest_tasks.id
+            JOIN task_files ON task_files.task_id = ingest_tasks.id
+            WHERE ingest_tasks.id = $id
+            GROUP BY ingest_tasks.id;
+            """;
+        command.Parameters.AddWithValue("$id", task.Id);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("staged", reader.GetString(0));
+        Assert.Equal("safe-random-name.torrent", reader.GetString(1));
+        Assert.Equal(new string('a', 40), reader.GetString(2));
+        Assert.Equal(2, reader.GetInt32(3));
+        Assert.Equal(1, reader.GetInt32(4));
+        var persisted = string.Join('|', Enumerable.Range(0, reader.FieldCount).Select(reader.GetValue));
+        Assert.DoesNotContain("personal-passkey", persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExpiredStagingBecomesFailedAndReturnsOnlySafeFileNameForCleanup()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profileStore = new SourceProfileStore(fixture.Database);
+        await profileStore.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        var profile = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
+        var store = new IngestTaskStore(fixture.Database);
+        var now = DateTimeOffset.UtcNow;
+        var task = await store.AddStagedAsync(
+            CreateNormalized(),
+            profile,
+            new TorrentMetadata("episode.mkv", new string('b', 40), 5, [new TorrentFile("episode.mkv", 5, false)]),
+            "expired.torrent",
+            now.AddSeconds(-1));
+
+        var expired = Assert.Single(await store.ExpireStagedAsync(now));
+
+        Assert.Equal(task.Id, expired.TaskId);
+        Assert.Equal("expired.torrent", expired.StagingFileName);
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT status, failure_kind,
+                   (SELECT COUNT(*) FROM staged_torrents WHERE task_id = $id)
+            FROM ingest_tasks WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", task.Id);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("failed", reader.GetString(0));
+        Assert.Equal("staging_expired", reader.GetString(1));
+        Assert.Equal(0, reader.GetInt32(2));
+    }
+
+    private static NormalizedIngestItem CreateNormalized() =>
+        Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
+            "mikan",
+            new IngestItemCommand(
+                "https://tracker.invalid/personal-passkey/file.torrent",
+                new IngestItemInfo("Episode 1", null, "item-1", "3951", null, null, 3951, 547888, null, null))).Item);
 }

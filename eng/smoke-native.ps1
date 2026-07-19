@@ -54,7 +54,7 @@ try {
     }
     $ingest = Invoke-RestMethod @ingestParameters
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
-    if ($status.database_schema_version -ne 2) {
+    if ($status.database_schema_version -ne 3) {
         throw "Unexpected schema version: $($status.database_schema_version)"
     }
 
@@ -66,8 +66,8 @@ try {
         throw 'Published process does not report the qBittorrent capability.'
     }
 
-    if (($ingest.accepted_count -ne 1) -or ($ingest.items[0].downloader_id -ne 'bt') -or ($ingest.items[0].torrent_url_fingerprint.Length -ne 64)) {
-        throw 'NativeAOT unified ingest smoke failed.'
+    if (($ingest.accepted_count -ne 0) -or ($ingest.rejected_count -ne 1) -or (-not $ingest.items[0].errors[0].Contains('HostNotAllowed'))) {
+        throw 'NativeAOT secure ingest rejection smoke failed.'
     }
 
     if ($index.StatusCode -ne 200 -or -not $index.Content.Contains('<title>AnimeGoNet</title>')) {

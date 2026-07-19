@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
@@ -62,12 +63,16 @@ public static class ApiEndpoints
         IngestBatchRequest request,
         SourceProfileStore profiles,
         IngestTaskStore tasks,
+        ITorrentStagingService staging,
+        AnimeGoOptions options,
         CancellationToken cancellationToken)
     {
         var response = await ProcessIngestAsync(
             request,
             profiles,
             tasks,
+            staging,
+            options.TorrentFetch.StagingTtl,
             requireModernMetadata: true,
             cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(response);
@@ -77,6 +82,8 @@ public static class ApiEndpoints
         IngestBatchRequest request,
         SourceProfileStore profiles,
         IngestTaskStore tasks,
+        ITorrentStagingService staging,
+        AnimeGoOptions options,
         CancellationToken cancellationToken)
     {
         var legacyData = (request.Data ?? []).Select(item =>
@@ -97,6 +104,8 @@ public static class ApiEndpoints
             request with { Data = legacyData },
             profiles,
             tasks,
+            staging,
+            options.TorrentFetch.StagingTtl,
             requireModernMetadata: false,
             cancellationToken).ConfigureAwait(false);
         var success = response.RejectedCount == 0;
@@ -113,6 +122,8 @@ public static class ApiEndpoints
         IngestBatchRequest request,
         SourceProfileStore profiles,
         IngestTaskStore tasks,
+        ITorrentStagingService staging,
+        TimeSpan stagingTtl,
         bool requireModernMetadata,
         CancellationToken cancellationToken)
     {
@@ -142,16 +153,45 @@ public static class ApiEndpoints
                 continue;
             }
 
-            var task = await tasks.AddAsync(normalized, profile, cancellationToken).ConfigureAwait(false);
-            responses.Add(new IngestItemResponse(
-                index,
-                task.Status,
-                task.Id,
-                task.SourceProfileId,
-                task.SourceProfileRevision,
-                task.DownloaderId,
-                normalized.TorrentUrlFingerprint,
-                []));
+            StagedTorrent? staged = null;
+            var ownershipTransferred = false;
+            try
+            {
+                staged = await staging.StageAsync(
+                    normalized.TorrentUrl,
+                    new TorrentSourcePolicy(profile.Id, profile.AllowedTorrentHosts),
+                    cancellationToken).ConfigureAwait(false);
+                var task = await tasks.AddStagedAsync(
+                    normalized,
+                    profile,
+                    staged.Metadata,
+                    staged.StagingFileName,
+                    DateTimeOffset.UtcNow + stagingTtl,
+                    cancellationToken).ConfigureAwait(false);
+                ownershipTransferred = true;
+                responses.Add(new IngestItemResponse(
+                    index,
+                    task.Status,
+                    task.Id,
+                    task.SourceProfileId,
+                    task.SourceProfileRevision,
+                    task.DownloaderId,
+                    normalized.TorrentUrlFingerprint,
+                    task.InfoHash,
+                    task.FileCount,
+                    []));
+            }
+            catch (TorrentStagingException exception)
+            {
+                responses.Add(Rejected(index, [$"torrent staging failed: {exception.Code}"]));
+            }
+            finally
+            {
+                if (!ownershipTransferred && staged is not null)
+                {
+                    await staged.DisposeAsync().ConfigureAwait(false);
+                }
+            }
         }
 
         var accepted = responses.Count(item => item.IngestId is not null);
@@ -178,5 +218,5 @@ public static class ApiEndpoints
                 request.Info.ImdbId));
 
     private static IngestItemResponse Rejected(int index, IReadOnlyList<string> errors) =>
-        new(index, "rejected", null, null, null, null, null, errors);
+        new(index, "rejected", null, null, null, null, null, null, null, errors);
 }

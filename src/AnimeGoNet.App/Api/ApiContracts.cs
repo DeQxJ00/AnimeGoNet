@@ -62,4 +62,6 @@ public sealed record IngestItemResponse(
     [property: JsonPropertyName("source_profile_revision")] long? SourceProfileRevision,
     [property: JsonPropertyName("downloader_id")] string? DownloaderId,
     [property: JsonPropertyName("torrent_url_fingerprint")] string? TorrentUrlFingerprint,
+    [property: JsonPropertyName("info_hash")] string? InfoHash,
+    [property: JsonPropertyName("file_count")] int? FileCount,
     [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);

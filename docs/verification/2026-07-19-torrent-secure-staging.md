@@ -31,3 +31,5 @@ The tests cover valid staging and disposal, original-info hashing, multi-file an
 ## Security and lifecycle boundary
 
 The service is registered in the application but is not yet scheduled by `/api/v1/ingest`. This increment therefore performs no live Torrent request and creates no qBittorrent task. The next worker increment must load the stored profile revision/allowlist snapshot, stage the URL while keeping it ephemeral, create file/episode claims, submit the staged stream to the selected qBittorrent instance, and dispose the staged file only after qB confirms receipt. AI inputs must be constructed only from the returned title/file-size projection and must never receive the staged bytes, announce fields, or secret URL.
+
+This historical boundary was superseded by `staged-ingest-lifecycle`: the unified and legacy ingest endpoints now invoke the service during the authenticated request and persist only the safe staged projection. qBittorrent dispatch remains deferred.
