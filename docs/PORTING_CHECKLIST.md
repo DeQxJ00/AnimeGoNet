@@ -52,14 +52,14 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 待实现 | TTL/并发/restart tests |
+| `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 进行中 | schema/migration 已验证；KV/TTL API 待实现 |
 | `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 例外 | migration report |
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 待实现 | scan/upsert/recovery tests |
 | 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 待实现 | model invariant tests |
-| TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 待实现 | 并发 claim/逐文件 tests |
-| TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 待实现 | 非网络门禁/NFO/UI tests |
+| TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 进行中 | SQLite 唯一约束与并发完成写入已验证；claim/逐文件待实现 |
+| TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 进行中 | schema 强制 bgmid/待补全；非网络门禁/NFO/UI 待实现 |
 | 元数据解析尝试 | failure kind/reason/timeline | 扩展 | 待实现 | persistence/retry tests |
-| 四类删除 | 业务/下载器任务/源文件/媒体文件 | 扩展 | 待实现 | preview/independent failure tests |
+| 四类删除 | 业务/下载器任务/源文件/媒体文件 | 扩展 | 进行中 | 四类独立 flags/schema 已建；preview/executor 待实现 |
 
 ## 下载、整理与通知
 

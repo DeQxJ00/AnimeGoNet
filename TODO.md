@@ -80,11 +80,12 @@
 
 ## P3 — 存储
 
+- [x] 建立 SQLite schema v1、幂等事务迁移器与显式 SQL 完成记录 store；启用 foreign key/WAL/busy timeout。
 - [ ] 实现 SQLite KV/TTL store。
 - [ ] 实现 bucket/list/get/delete 兼容接口。
 - [ ] 移植目录 JSON 数据库扫描/索引/写入。
-- [ ] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除；删除规范记录同时失效所有来源 alias，并保留来源/Torrent 审计字段。
-- [ ] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键：可靠 Bangumi Episode、Mikan `mikanid+来源EP`、其他来源作品+来源EP、最后退化到 source item/info-hash/文件指纹；提交下载器前事务占位，命中时逐文件等待/早停并明确非全局去重范围。
+- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键和并发 TryAdd 已完成；alias/delete repository 待实现）。
+- [>] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键（schema/约束已完成；事务 store 与早停编排待实现）。
 - [ ] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件。
 - [ ] 移植 `tvshow.nfo` 生成和更新。
 - [ ] 按需实现旧 Go 已知 bucket → JSON 导出及 .NET 幂等导入，不阻塞首版。

@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AnimeGoNet.Core/AnimeGoNet.Core.csproj" />
+    <Project Path="src/AnimeGoNet.Data/AnimeGoNet.Data.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AnimeGoNet.Core.Tests/AnimeGoNet.Core.Tests.csproj" />
+    <Project Path="tests/AnimeGoNet.Data.Tests/AnimeGoNet.Data.Tests.csproj" />
   </Folder>
 </Solution>
