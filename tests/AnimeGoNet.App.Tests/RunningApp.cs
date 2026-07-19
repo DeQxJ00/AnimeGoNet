@@ -1,6 +1,7 @@
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Torrents;
+using AnimeGoNet.Core.Metadata;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -27,7 +28,8 @@ public sealed class RunningApp : IAsyncDisposable
     public static async Task<RunningApp> StartAsync(
         string? accessKey = null,
         Func<AnimeGoOptions, AnimeGoOptions>? configure = null,
-        ITorrentStagingService? stagingService = null)
+        ITorrentStagingService? stagingService = null,
+        ITmdbClient? tmdbClient = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
@@ -39,6 +41,7 @@ public sealed class RunningApp : IAsyncDisposable
             options,
             accessKey,
             torrentStagingService: stagingService,
+            tmdbClient: tmdbClient,
             startBackgroundWorkers: false);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();

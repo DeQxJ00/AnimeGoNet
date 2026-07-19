@@ -119,8 +119,8 @@
 - [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。
 - [ ] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试。
 - [ ] 移植 Mikan → Bangumi → TMDB 编排与 fallback。
-- [ ] 自动编排之前应用 Mikan 作品级人工规则；按 `TmdbEpisodeNumber = SourceEpisodeNumber + EpisodeOffset` 映射普通正片并验证目标 TMDB Episode。
-- [ ] 人工规则无效时记录 `ManualOverrideInvalid` 并阻止静默自动覆盖；清除/禁用后才恢复自动策略链。
+- [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖已由专用 worker 优先领取并经 TMDB 权威验证，EP Offset 与 Episode 验证仍待串联。
+- [>] 人工规则无效时记录人工覆盖策略失败并阻止静默自动覆盖；清除/禁用后的显式重新匹配与自动策略重新入队仍待接入。
 - [>] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误（客户端已稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；重试编排待实现）。
 - [>] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`（权威 404 仅产生 `SemanticNoMatch + access_confirmed`，其他客户端失败均禁止资格；SQLite 持久化与最终门禁待串联）。
 - [ ] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；重启后可查询。

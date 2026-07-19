@@ -6,6 +6,8 @@ public sealed record MetadataTaskClaim(
     string RunId,
     string TaskId,
     string Title,
+    int? MikanId,
+    int? GroupId,
     int? BangumiSubjectId,
     int AttemptNumber,
     string LeaseToken);

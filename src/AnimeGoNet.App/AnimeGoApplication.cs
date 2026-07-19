@@ -10,6 +10,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
@@ -26,6 +27,7 @@ public static class AnimeGoApplication
         bool? runningInContainer = null,
         ITorrentStagingService? torrentStagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
+        ITmdbClient? tmdbClient = null,
         bool? startBackgroundWorkers = null,
         CancellationToken cancellationToken = default)
     {
@@ -90,21 +92,25 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
+        builder.Services.AddSingleton<MetadataResolutionStore>();
         builder.Services.AddSingleton(downloadClientRegistry);
         builder.Services.AddSingleton<DownloadClientOperationCoordinator>();
         builder.Services.AddSingleton(torrentStagingService);
         builder.Services.AddSingleton<StagedTorrentDispatcher>();
         builder.Services.AddSingleton<DownloadSnapshotSynchronizer>();
-        builder.Services.AddSingleton<ITmdbClient>(_ => new TmdbClient(
+        tmdbClient ??= new TmdbClient(
             new HttpClient(),
             options.Metadata.Tmdb,
-            ownsHttpClient: true));
+            ownsHttpClient: true);
+        builder.Services.AddSingleton(tmdbClient);
         builder.Services.AddSingleton<TmdbAuthority>();
         builder.Services.AddSingleton<TmdbSeriesResolver>();
+        builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();
         if (startBackgroundWorkers.Value)
         {
             builder.Services.AddHostedService<StagedTorrentDispatchWorker>();
             builder.Services.AddHostedService<DownloadSnapshotWorker>();
+            builder.Services.AddHostedService<ManualMetadataResolutionWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

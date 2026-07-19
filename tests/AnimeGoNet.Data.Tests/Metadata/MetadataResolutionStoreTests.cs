@@ -4,6 +4,7 @@ using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sources;
 
@@ -22,6 +23,26 @@ public sealed class MetadataResolutionStoreTests
             fixture.Store.TryClaimNextDownloadedAsync(now, TimeSpan.FromMinutes(1)));
 
         Assert.Single(claims, claim => claim is not null);
+    }
+
+    [Fact]
+    public async Task ManualClaimRequiresEnabledCompleteTmdbOverride()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.Null(await fixture.Store.TryClaimNextManualOverrideAsync(now, TimeSpan.FromMinutes(1)));
+        var rules = new MikanWorkMetadataRuleStore(fixture.Database);
+        await rules.SaveAsync(
+            new MikanWorkMetadataRuleUpdate(3951, 547888, 72517, 2, null),
+            expectedRevision: 0,
+            now);
+
+        var claim = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextManualOverrideAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        Assert.Equal(3951, claim.MikanId);
+        Assert.Equal(547888, claim.BangumiSubjectId);
     }
 
     [Fact]

@@ -7,10 +7,23 @@ namespace AnimeGoNet.Data.Metadata;
 
 public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 {
-    public async Task<MetadataTaskClaim?> TryClaimNextDownloadedAsync(
+    public Task<MetadataTaskClaim?> TryClaimNextDownloadedAsync(
         DateTimeOffset utcNow,
         TimeSpan leaseDuration,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        TryClaimAsync(utcNow, leaseDuration, requireManualOverride: false, cancellationToken);
+
+    public Task<MetadataTaskClaim?> TryClaimNextManualOverrideAsync(
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default) =>
+        TryClaimAsync(utcNow, leaseDuration, requireManualOverride: true, cancellationToken);
+
+    private async Task<MetadataTaskClaim?> TryClaimAsync(
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
+        bool requireManualOverride,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
         var now = Format(utcNow);
@@ -44,27 +57,38 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
         string? taskId = null;
         string? title = null;
+        int? mikanId = null;
+        int? groupId = null;
         int? bangumiSubjectId = null;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
             select.CommandText = """
-                SELECT id, title, bangumi_subject_id
-                FROM ingest_tasks
-                WHERE status = 'downloaded'
+                SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id
+                FROM ingest_tasks AS task
+                WHERE task.status = 'downloaded'
                   AND NOT EXISTS (
                     SELECT 1 FROM metadata_resolution_runs
-                    WHERE metadata_resolution_runs.task_id = ingest_tasks.id
+                    WHERE metadata_resolution_runs.task_id = task.id
                       AND metadata_resolution_runs.status = 'running')
-                ORDER BY updated_at_utc, id
+                  AND ($manual_override = 0 OR EXISTS (
+                    SELECT 1 FROM mikan_work_rules AS rule
+                    WHERE rule.mikanid = task.mikanid
+                      AND rule.enabled = 1
+                      AND rule.tmdb_series_id IS NOT NULL
+                      AND rule.tmdb_season_number IS NOT NULL))
+                ORDER BY task.updated_at_utc, task.id
                 LIMIT 1;
                 """;
+            select.Parameters.AddWithValue("$manual_override", requireManualOverride ? 1 : 0);
             await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 taskId = reader.GetString(0);
                 title = reader.GetString(1);
-                bangumiSubjectId = reader.IsDBNull(2) ? null : reader.GetInt32(2);
+                mikanId = reader.IsDBNull(2) ? null : reader.GetInt32(2);
+                groupId = reader.IsDBNull(3) ? null : reader.GetInt32(3);
+                bangumiSubjectId = reader.IsDBNull(4) ? null : reader.GetInt32(4);
             }
         }
 
@@ -121,7 +145,15 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new MetadataTaskClaim(runId, taskId, title!, bangumiSubjectId, attemptNumber, leaseToken);
+        return new MetadataTaskClaim(
+            runId,
+            taskId,
+            title!,
+            mikanId,
+            groupId,
+            bangumiSubjectId,
+            attemptNumber,
+            leaseToken);
     }
 
     public async Task RecordAttemptAsync(
