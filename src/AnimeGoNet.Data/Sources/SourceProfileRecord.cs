@@ -5,6 +5,7 @@ public sealed record SourceProfileRecord(
     string Adapter,
     string DownloaderId,
     string FileStrategy,
+    IReadOnlyList<string> AllowedTorrentHosts,
     bool RssFilterEnabled,
     bool RssPriorityEnabled,
     long Revision);

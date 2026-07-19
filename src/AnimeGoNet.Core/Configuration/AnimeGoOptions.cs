@@ -8,7 +8,20 @@ public sealed record AnimeGoOptions
 
     public required MetadataMatchingOptions Metadata { get; init; }
 
+    public required TorrentFetchOptions TorrentFetch { get; init; }
+
     public required IReadOnlyList<SourceProfileSeed> InitialSourceProfiles { get; init; }
+}
+
+public sealed record TorrentFetchOptions
+{
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    public long MaxResponseBytes { get; init; } = 16 * 1024 * 1024;
+
+    public int MaxRedirects { get; init; } = 3;
+
+    public TimeSpan StagingTtl { get; init; } = TimeSpan.FromMinutes(15);
 }
 
 public sealed record PathOptions
@@ -75,6 +88,8 @@ public sealed record SourceProfileSeed
     public required string DownloaderId { get; init; }
 
     public required FileStrategy FileStrategy { get; init; }
+
+    public required IReadOnlyList<string> AllowedTorrentHosts { get; init; }
 
     public bool RssFilterEnabled { get; init; }
 

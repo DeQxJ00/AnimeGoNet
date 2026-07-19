@@ -64,6 +64,7 @@ public static class AnimeGoDefaults
                 TmdbFailureUseBangumi = false,
                 MikanTrustedOffsetCacheEnabled = false,
             },
+            TorrentFetch = new TorrentFetchOptions(),
             InitialSourceProfiles =
             [
                 new SourceProfileSeed
@@ -72,6 +73,7 @@ public static class AnimeGoDefaults
                     Adapter = "mikan",
                     DownloaderId = "bt",
                     FileStrategy = FileStrategy.Move,
+                    AllowedTorrentHosts = ["mikanani.me"],
                     RssFilterEnabled = true,
                     RssPriorityEnabled = true,
                 },

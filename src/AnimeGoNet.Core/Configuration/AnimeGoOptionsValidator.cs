@@ -53,6 +53,19 @@ public static partial class AnimeGoOptionsValidator
             {
                 errors.Add($"Source profile '{profile.Id}' references missing downloader '{profile.DownloaderId}'.");
             }
+
+            if (profile.AllowedTorrentHosts.Count == 0)
+            {
+                errors.Add($"Source profile '{profile.Id}' requires at least one allowed Torrent host.");
+            }
+
+            foreach (var host in profile.AllowedTorrentHosts)
+            {
+                if (!IsValidTorrentHostPattern(host))
+                {
+                    errors.Add($"Source profile '{profile.Id}' has invalid Torrent host pattern '{host}'.");
+                }
+            }
         }
 
         if (options.Metadata.Ai.HttpTimeout <= TimeSpan.Zero)
@@ -60,7 +73,41 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AI HTTP timeout must be positive.");
         }
 
+        if (options.TorrentFetch.Timeout <= TimeSpan.Zero)
+        {
+            errors.Add("Torrent fetch timeout must be positive.");
+        }
+
+        if (options.TorrentFetch.MaxResponseBytes <= 0)
+        {
+            errors.Add("Torrent maximum response size must be positive.");
+        }
+
+        if (options.TorrentFetch.MaxRedirects is < 0 or > 10)
+        {
+            errors.Add("Torrent maximum redirects must be between 0 and 10.");
+        }
+
+        if (options.TorrentFetch.StagingTtl <= TimeSpan.Zero)
+        {
+            errors.Add("Torrent staging TTL must be positive.");
+        }
+
         return errors;
+    }
+
+    private static bool IsValidTorrentHostPattern(string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern) || !string.Equals(pattern, pattern.Trim(), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var host = pattern.StartsWith("*.", StringComparison.Ordinal) ? pattern[2..] : pattern;
+        return host.Length > 0
+            && !host.Contains('*', StringComparison.Ordinal)
+            && Uri.TryCreate($"https://{host}/", UriKind.Absolute, out var uri)
+            && string.Equals(uri.IdnHost, host, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void ValidateAbsolutePath(string path, string name, List<string> errors)

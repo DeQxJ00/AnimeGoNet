@@ -62,6 +62,13 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             writer.WriteNumber("revision", profile.Revision);
             writer.WriteString("downloader_id", profile.DownloaderId);
             writer.WriteString("file_strategy", profile.FileStrategy);
+            writer.WriteStartArray("allowed_torrent_hosts");
+            foreach (var host in profile.AllowedTorrentHosts)
+            {
+                writer.WriteStringValue(host);
+            }
+
+            writer.WriteEndArray();
             writer.WriteBoolean("rss_filter_enabled", profile.RssFilterEnabled);
             writer.WriteBoolean("rss_priority_enabled", profile.RssPriorityEnabled);
             writer.WriteEndObject();

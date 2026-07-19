@@ -1,5 +1,6 @@
 using System.Globalization;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Sources;
@@ -20,19 +21,26 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             command.CommandText = """
                 INSERT INTO source_profiles (
                     id, display_name, adapter, downloader_id, file_strategy,
-                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    allowed_torrent_hosts_json, rss_filter_enabled, rss_priority_enabled, revision, enabled,
                     created_at_utc, updated_at_utc)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
-                    $rss_filter_enabled, $rss_priority_enabled, 1, 1,
+                    $allowed_torrent_hosts_json, $rss_filter_enabled, $rss_priority_enabled, 1, 1,
                     $created_at_utc, $updated_at_utc)
-                ON CONFLICT(id) DO NOTHING;
+                ON CONFLICT(id) DO UPDATE SET
+                    allowed_torrent_hosts_json = excluded.allowed_torrent_hosts_json,
+                    revision = source_profiles.revision + 1,
+                    updated_at_utc = excluded.updated_at_utc
+                WHERE source_profiles.allowed_torrent_hosts_json = '[]';
                 """;
             command.Parameters.AddWithValue("$id", seed.Id);
             command.Parameters.AddWithValue("$display_name", seed.Id);
             command.Parameters.AddWithValue("$adapter", seed.Adapter);
             command.Parameters.AddWithValue("$downloader_id", seed.DownloaderId);
             command.Parameters.AddWithValue("$file_strategy", ToDatabaseValue(seed.FileStrategy));
+            command.Parameters.AddWithValue(
+                "$allowed_torrent_hosts_json",
+                System.Text.Json.JsonSerializer.Serialize(seed.AllowedTorrentHosts.ToArray(), DataJsonContext.Default.StringArray));
             command.Parameters.AddWithValue("$rss_filter_enabled", seed.RssFilterEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$rss_priority_enabled", seed.RssPriorityEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$created_at_utc", now);
@@ -51,7 +59,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, adapter, downloader_id, file_strategy,
-                   rss_filter_enabled, rss_priority_enabled, revision
+                   allowed_torrent_hosts_json, rss_filter_enabled, rss_priority_enabled, revision
             FROM source_profiles
             WHERE id = $id AND enabled = 1;
             """;
@@ -67,9 +75,10 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetString(1),
             reader.GetString(2),
             reader.GetString(3),
-            reader.GetInt64(4) != 0,
+            System.Text.Json.JsonSerializer.Deserialize(reader.GetString(4), DataJsonContext.Default.StringArray) ?? [],
             reader.GetInt64(5) != 0,
-            reader.GetInt64(6));
+            reader.GetInt64(6) != 0,
+            reader.GetInt64(7));
     }
 
     private static string ToDatabaseValue(FileStrategy strategy) => strategy switch

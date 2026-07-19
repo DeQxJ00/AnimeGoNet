@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -45,7 +46,7 @@ public sealed class MinimalApiTests
         Assert.True(
             json.RootElement.TryGetProperty("database_schema_version", out var schemaVersion),
             json.RootElement.GetRawText());
-        Assert.Equal(1, schemaVersion.GetInt32());
+        Assert.Equal(DatabaseSchema.CurrentVersion, schemaVersion.GetInt32());
         Assert.Equal(Path.Combine(app.RootPath, "data"), json.RootElement.GetProperty("paths").GetProperty("data_path").GetString());
         Assert.True(File.Exists(Path.Combine(app.RootPath, "data", "animegonet.db")));
     }
@@ -85,6 +86,7 @@ public sealed class MinimalApiTests
                     Adapter = "u2",
                     DownloaderId = "pt",
                     FileStrategy = FileStrategy.Link,
+                    AllowedTorrentHosts = ["u2.invalid"],
                 },
             ],
         });

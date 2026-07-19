@@ -2,11 +2,12 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
         new SchemaMigration(1, "initial_business_schema", InitialBusinessSchema),
+        new SchemaMigration(2, "source_torrent_host_allowlist", SourceTorrentHostAllowlist),
     ];
 
     private const string InitialBusinessSchema = """
@@ -268,5 +269,11 @@ public static class DatabaseSchema
             created_at_utc TEXT NOT NULL,
             completed_at_utc TEXT
         ) STRICT;
+        """;
+
+    private const string SourceTorrentHostAllowlist = """
+        ALTER TABLE source_profiles
+        ADD COLUMN allowed_torrent_hosts_json TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(allowed_torrent_hosts_json) AND json_type(allowed_torrent_hosts_json) = 'array');
         """;
 }

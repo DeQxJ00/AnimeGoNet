@@ -42,6 +42,34 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Contains(errors, error => error.Contains("unsupported type 'transmission'", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RejectsMissingOrMalformedTorrentSecurityLimits()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            TorrentFetch = defaults.TorrentFetch with
+            {
+                Timeout = TimeSpan.Zero,
+                MaxResponseBytes = 0,
+                MaxRedirects = 11,
+                StagingTtl = TimeSpan.Zero,
+            },
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with { AllowedTorrentHosts = ["https://mikanani.me/path"] },
+            ],
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("invalid Torrent host pattern", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("fetch timeout", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("response size", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("maximum redirects", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("staging TTL", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("/download/incomplete", "/download/incomplete/bt", true)]
     [InlineData("/download/incomplete", "/download/incomplete-other", false)]

@@ -3,6 +3,7 @@ using System.Text;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Serialization;
+using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
@@ -57,6 +58,13 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(new IngestTaskStore(database));
         builder.Services.AddSingleton(new QbittorrentClientRegistry(options));
+        builder.Services.AddSingleton<ITorrentDnsResolver, SystemTorrentDnsResolver>();
+        builder.Services.AddSingleton<ITorrentHttpTransport, PinnedTorrentHttpTransport>();
+        builder.Services.AddSingleton(serviceProvider => new TorrentStagingService(
+            layout,
+            options.TorrentFetch,
+            serviceProvider.GetRequiredService<ITorrentDnsResolver>(),
+            serviceProvider.GetRequiredService<ITorrentHttpTransport>()));
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
 

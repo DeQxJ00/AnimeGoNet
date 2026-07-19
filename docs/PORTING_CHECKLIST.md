@@ -24,13 +24,13 @@
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | `internal/pkg/request` | AOT-safe `HttpClient` pipeline | 保留 | 待实现 | host/proxy/retry fake-server tests |
-| `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 待实现 | 4 个 torrent fixture parity |
+| `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 进行中 | 严格v1 Bencode、原始info-hash、单/多文件与安全staging已验证；magnet和4个上游fixture parity待实现 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 待实现 | 5 个 RSS fixture parity |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 待实现 | Mikan fixtures + URL cases |
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 待实现 | Bangumi fixtures |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 待实现 | TMDB fixtures + failure taxonomy |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
-| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、路由、逐项结果与 legacy manager contract 已验证；Torrent staging 待实现 |
+| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、路由、逐项结果、legacy contract与安全Torrent staging已验证；worker自动调度待实现 |
 
 ## 解析、规则与元数据编排
 

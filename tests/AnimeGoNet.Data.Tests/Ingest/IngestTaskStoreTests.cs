@@ -16,6 +16,7 @@ public sealed class IngestTaskStoreTests
         await profileStore.EnsureSeedsAsync(options.InitialSourceProfiles);
         await profileStore.EnsureSeedsAsync(options.InitialSourceProfiles);
         var profile = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
+        Assert.Equal(["mikanani.me"], profile.AllowedTorrentHosts);
         var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
             "mikan",
             new IngestItemCommand(
@@ -34,5 +35,6 @@ public sealed class IngestTaskStoreTests
         Assert.Equal(64, reader.GetString(0).Length);
         Assert.DoesNotContain("personal-passkey", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"file_strategy\":\"move\"", reader.GetString(1), StringComparison.Ordinal);
+        Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);
     }
 }

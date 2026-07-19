@@ -93,6 +93,8 @@ AnimeGoNet.slnx
 - ASP.NET Core Request Delegate Generator 能静态分析的 typed Minimal API handlers。
 - 编译期 DI 注册；内置插件使用普通泛型/接口注册。
 - 显式 SQL reader ordinal → 构造函数映射。
+- Torrent v1 使用自有严格 Bencode reader，并对原始 `info` 字节计算协议规定的 SHA-1；不把 announce 或原始 metainfo 投影到业务 DTO。
+- passkey URL 抓取关闭自动 redirect，每跳重新校验 SourceProfile host 和全部 DNS 地址；`SocketsHttpHandler.ConnectCallback` 只连接本跳已校验 IP，避免校验后再次解析造成 DNS rebinding。
 - 静态 TypeScript 构建产物作为 content/embedded resource。
 
 禁止进入生产路径：

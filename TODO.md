@@ -95,7 +95,7 @@
 
 - [ ] 移植代理、超时、重试、Host redirect、Cookie/API key。
 - [ ] 移植 RSS 文件/URL/raw parse。
-- [ ] 实现 Bencode/torrent/magnet/info-hash。
+- [>] 实现 Bencode/torrent/magnet/info-hash（严格 v1 Bencode、原始 info 字节 SHA-1、单/多文件清单、padding/路径/数量/总量校验已完成；magnet 与上游 fixture parity 待实现）。
 - [ ] 通过本地 fixture HTTP、RSS、torrent parity tests。
 
 ## P5 — 数据源
@@ -152,7 +152,7 @@
 - [>] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话和实例隔离已实现，后台同步/熔断待实现。
 - [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、可配置 U2→`pt` 路由、revision/文件策略/规则开关快照已落库；U2/TTG 默认文件策略仍待确认，CRUD、category/tag/做种策略待实现。
 - [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
-- [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；正式接口与 Torrent 抓取待实现。
+- [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；安全 Torrent 抓取/staging 服务已实现但尚未由 ingest worker 自动调度。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、list、multipart add、stop/start/delete、状态映射与失败响应。
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；默认 CI 不启动该实例，也未创建 Torrent。
 - [ ] 建立隔离 Docker Compose 下载环境。
@@ -188,7 +188,7 @@
 - [ ] 实现优雅退出和取消传播。
 - [ ] 移植 10 个 HTTP API。
 - [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与安全 Torrent staging 待接入。
-- [ ] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：来源host白名单、逐跳redirect/DNS校验、限时限量、脱敏日志、受限 staging、确认接收后清理，禁止发送给AI。
+- [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、受限 staging、显式消费后删除和TTL清理已实现；ingest worker→qB确认接收生命周期与AI负向门禁待串联。
 - [ ] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
 - [ ] 移植 WebSocket 日志 pause/resume。
