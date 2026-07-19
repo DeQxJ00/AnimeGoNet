@@ -97,6 +97,7 @@ public static class AnimeGoApplication
             options.Metadata.Tmdb,
             ownsHttpClient: true));
         builder.Services.AddSingleton<TmdbAuthority>();
+        builder.Services.AddSingleton<TmdbSeriesResolver>();
         if (startBackgroundWorkers.Value)
         {
             builder.Services.AddHostedService<StagedTorrentDispatchWorker>();

@@ -104,7 +104,7 @@
 - [ ] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`；同 ID 的不同字幕组、标题和 Torrent 归入同一作品作用域。
 - [ ] 移植 Bangumi API。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
-- [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、zh-CN DTO、Series/Season/Episode 官方端点和三级身份验证已实现；去后缀、相似度选择、日期季度匹配与缓存待实现）。
+- [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；缓存和解析流水线持久化待实现）。
 - [ ] 按 issue #15 实现 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：季度匹配失败时沿 Bangumi“前传”关系逐项回溯首播日期，重新匹配同一 TMDB 剧集的季度。
 - [ ] 实现 `TMDBFailUseAIMatchSeason` / `tmdb_fail_use_ai_match_season`（默认 `false`），每个下载任务只向大模型发送总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [ ] 实现 `TMDBFailEpUseAIMatchSeason` / `tmdb_failep_use_ai_match_season`（按指定拼写，默认 `false`）：非 AI 季度匹配成功后先验证来源 EP；存在不对应时按下载任务执行一次 AI EP 匹配。
