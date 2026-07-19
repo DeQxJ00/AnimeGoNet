@@ -49,6 +49,7 @@
 ## P1 — .NET 10 / NativeAOT 工程骨架
 
 - [x] 安装并固定 .NET 10 SDK（当前主机为 SDK `10.0.302`，通过 `global.json` 固定 feature band）。
+- [x] 固化解决方案分层、核心数据聚合、SQLite 明确 SQL 规则与 NativeAOT 允许/禁止边界（见 `docs/ARCHITECTURE.md`）。
 - [ ] 创建 solution、分层项目、测试项目。
 - [ ] 添加 `global.json`、`Directory.Build.props`、`Directory.Packages.props`。
 - [ ] 启用 nullable、warnings-as-errors、deterministic、AOT/trim/single-file analyzer。
