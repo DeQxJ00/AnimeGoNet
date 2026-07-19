@@ -5,9 +5,11 @@ using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeGoNet.App.Api;
 
@@ -19,6 +21,9 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/downloads", Downloads);
+        app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}", GetMikanWorkRule);
+        app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
+        app.MapDelete("/api/v1/mikan/work-rules/{mikanId:int}", DeleteMikanWorkRule);
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
     }
@@ -90,6 +95,78 @@ public static class ApiEndpoints
             record.DownloaderConnected,
             record.DownloaderFailureCode,
             record.DownloaderLastSuccessAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> GetMikanWorkRule(
+        int mikanId,
+        MikanWorkMetadataRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        if (mikanId <= 0)
+        {
+            return TypedResults.BadRequest(Error("mikanid_invalid", "mikanid must be a positive integer."));
+        }
+
+        var rule = await rules.GetAsync(mikanId, cancellationToken).ConfigureAwait(false);
+        return rule is null
+            ? TypedResults.NotFound(Error("mikan_rule_not_found", "Mikan work metadata rule was not found."))
+            : TypedResults.Ok(ToResponse(rule));
+    }
+
+    private static async Task<IResult> PutMikanWorkRule(
+        int mikanId,
+        MikanWorkRuleRequest request,
+        MikanWorkMetadataRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var saved = await rules.SaveAsync(
+                new MikanWorkMetadataRuleUpdate(
+                    mikanId,
+                    request.BangumiSubjectId,
+                    request.TmdbSeriesId,
+                    request.TmdbSeasonNumber,
+                    request.EpisodeOffset,
+                    request.Enabled),
+                request.ExpectedRevision,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(saved));
+        }
+        catch (MikanWorkMetadataRuleRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "mikan_rule_revision_conflict",
+                "Mikan work metadata rule changed; reload it before saving."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_rule_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteMikanWorkRule(
+        int mikanId,
+        [FromQuery(Name = "expected_revision")] long expectedRevision,
+        MikanWorkMetadataRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await rules.DeleteAsync(mikanId, expectedRevision, cancellationToken).ConfigureAwait(false);
+            return TypedResults.NoContent();
+        }
+        catch (MikanWorkMetadataRuleRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "mikan_rule_revision_conflict",
+                "Mikan work metadata rule changed; reload it before deleting."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_rule_invalid", exception.Message));
+        }
     }
 
     private static async Task<Ok<IngestBatchResponse>> Ingest(
@@ -252,4 +329,18 @@ public static class ApiEndpoints
 
     private static IngestItemResponse Rejected(int index, IReadOnlyList<string> errors) =>
         new(index, "rejected", null, null, null, null, null, null, null, errors);
+
+    private static MikanWorkRuleResponse ToResponse(MikanWorkMetadataRule rule) =>
+        new(
+            rule.MikanId,
+            rule.BangumiSubjectId,
+            rule.TmdbSeriesId,
+            rule.TmdbSeasonNumber,
+            rule.EpisodeOffset,
+            rule.Enabled,
+            rule.Revision,
+            rule.CreatedAtUtc,
+            rule.UpdatedAtUtc);
+
+    private static ApiErrorResponse Error(string code, string message) => new(code, message);
 }

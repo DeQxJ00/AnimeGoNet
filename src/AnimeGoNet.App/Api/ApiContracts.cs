@@ -92,3 +92,26 @@ public sealed record DownloadListItem(
     [property: JsonPropertyName("downloader_connected")] bool DownloaderConnected,
     [property: JsonPropertyName("downloader_failure_code")] string? DownloaderFailureCode,
     [property: JsonPropertyName("downloader_last_success_at_utc")] DateTimeOffset? DownloaderLastSuccessAtUtc);
+
+public sealed record MikanWorkRuleRequest(
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("episode_offset")] int? EpisodeOffset,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+
+public sealed record MikanWorkRuleResponse(
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("episode_offset")] int? EpisodeOffset,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record ApiErrorResponse(
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("message")] string Message);

@@ -14,5 +14,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(IngestBatchResponse))]
 [JsonSerializable(typeof(LegacyApiResponse<IngestBatchResponse?>))]
 [JsonSerializable(typeof(DownloadListResponse))]
+[JsonSerializable(typeof(MikanWorkRuleRequest))]
+[JsonSerializable(typeof(MikanWorkRuleResponse))]
+[JsonSerializable(typeof(ApiErrorResponse))]
 [JsonSerializable(typeof(QbittorrentTorrentInfo[]))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;
