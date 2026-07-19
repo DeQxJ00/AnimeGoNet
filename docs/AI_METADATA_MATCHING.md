@@ -1,0 +1,189 @@
+# AI 辅助 TMDB 匹配
+
+## 1. 产品语义
+
+`TMDBFailUseAIMatchSeason` / `advanced.default.tmdb_fail_use_ai_match_season` 是独立的季度 AI 匹配开关，默认 `false`。确定性失败策略顺序为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；AI 不占该编号链，且输出必须经过 TMDB Series/Season/Episode 验证。
+
+AI 匹配以一个下载任务为单位，一次处理单文件或多文件。总标题和候选视频文件的名称/字节容量始终足够发起请求，不要求来源是 Mikan；`bgmid`、`anidbid` 和 `imdbid` 是可空的作品级辅助标识。非空 ID 已由调用方与当前下载任务的标题和 Torrent 文件组绑定，但不保证 Bangumi/AniDB/IMDb 与 TMDB 使用相同标题、季度拆分或 Episode 编号，也不表示具体文件已经完成 EP 对应。AI 返回 TMDB TV Series ID，以及每个文件对应的 Season/Episode 候选；正式名称和其他元数据由主程序重新请求 TMDB 获取。
+
+Mikan RSS 的 `pubDate` 可触发发布日期优先查找，但配置开关和运行时门禁分离。即使开关开启，也只有 Torrent 实际文件条目数恰好为 1、存在 `bgmid`、`pubDate` 合法、Bangumi 可用且主程序成功算出最近普通 Episode 时才生效。Torrent 可以是单文件模式，也可以有根目录但目录下只有一个文件；目录节点不计数。日期候选只是辅助证据，不直接决定 TMDB Episode。
+
+## 2. 配置
+
+```yaml
+advanced:
+  default:
+    tmdb_fail_skip: false
+    tmdb_fail_backtrace: false
+    tmdb_fail_use_ai_match_season: false
+    tmdb_fail_use_title_season: false
+    tmdb_fail_use_first_season: false
+    tmdb_failep_use_ai_match_season: false
+
+ai:
+  provider: openai_compatible
+  base_url: ""
+  api_key: ""
+  model: ""
+  timeout_second: 60
+  retry_count: 2
+  use_bangumi_pubdate_first: true
+```
+
+首版直接用 `HttpClient` 调用 OpenAI-compatible API，不依赖厂商 SDK。配置缺失时记录明确错误并继续较低优先级；密钥允许环境变量覆盖，Web UI 只显示是否已配置。
+
+## 3. 最小请求契约
+
+```json
+{
+  "title": "下载任务总标题",
+  "files": [
+    {
+      "name": "Season 1/01.mkv",
+      "size_bytes": 1234567890
+    }
+  ],
+  "bgmid": null,
+  "anidbid": null,
+  "imdbid": null,
+  "torrent_file_count": 1,
+  "published_at": null,
+  "bgm_episode_candidate": null,
+  "use_bangumi_pubdate_first": false
+}
+```
+
+- `title` 来自 RSS、torrent 或手工下载任务的总标题，不要求来自 Mikan。
+- `files` 只包含主程序筛选后的候选视频文件；单文件也使用数组。
+- `name` 使用下载任务内部的相对文件名或 basename，不发送宿主机绝对路径；允许保留任务内部目录以区分重名和季度。
+- `size_bytes` 是非负整数，只作为辅助线索。
+- `bgmid`、`anidbid` 只接受正整数或 `null`；`imdbid` 只接受规范 IMDb Title ID 字符串或 `null`；三者都为空时仍须正常匹配。
+- `torrent_file_count` 是解析 `.torrent` 后得到的实际文件条目数，必须大于0；单文件模式和“根目录下只有一个文件”都记为1。
+- `published_at` 只接受带偏移的 ISO 8601 时间或 `null`。Mikan 原始 `pubDate` 没有偏移时按 Mikan SourceProfile 的时区解析，默认 `Asia/Shanghai`，再规范为带偏移值；原始字符串另存审计，不原样交给模型。
+- `bgm_episode_candidate` 是主程序用 `published_at` 与 `bgmid` 对应 Subject 的普通 Episode 播出时间比较后得到的最近正整数集号；特别篇和附加条目不参与，查询失败或无法消歧时为 `null`。
+- 配置项 `ai.use_bangumi_pubdate_first` 是用户开关；请求中的 `use_bangumi_pubdate_first` 是程序计算的最终门禁：仅 `开关开启 && is_mikan && torrent_file_count == 1 && bgmid != null && published_at != null && bgm_episode_candidate != null && BGM查询成功` 时为 `true`。API调用方不能伪造最终门禁。
+- 非空 ID 表示调用方已经确认其与当前任务标题及文件组存在作品级关联；不得因为跨站标题字面不同而丢弃该上下文。
+- 该关联不证明具体 TMDB Series/Season/Episode，也不证明来源 Episode 与 TMDB Episode 同号。Bangumi/AniDB 的标题、别名、日期、集数和映射结果全部只是候选证据，最终结果仍须由 TMDB 数据验证。
+- 禁止内嵌发送 Bangumi详情、密钥、Cookie、Access Key、完整种子内容、日志和无关配置；Bangumi详情只通过本地 MCP 按需获取。
+
+## 4. 本地工具与调用顺序
+
+测试程序和主程序均不能把 `http://*.mcp.local` 作为远程 MCP URL 交给云端模型。程序在本地实现 Streamable HTTP MCP 客户端，将发现到的 MCP tools 转换为带命名空间的 function tools；模型发起 function call 后由本机执行，再把结果回传模型。工具清单和 endpoint schema 可按 MCP 地址/版本缓存，避免每次请求重复发现。
+
+- TMDB MCP：`http://tmdb.mcp.local/mcp`，始终启用，用于搜索和验证候选；最终结果还要由模型外的主程序通过 TMDB API 二次验证。
+- Bangumi MCP：`http://bgm.mcp.local/mcp`，仅 `bgmid != null` 时连接并注册工具。
+- AniDB映射：仅 `anidbid != null` 时注册本地查询工具；固定读取 `api/anidb/{anidbid}.json` 的 `tmdbtv` 字段，作为候选 TMDB TV ID。
+- IMDb：不注册任意 URL 工具；仅 `imdbid != null` 时允许模型通过既有 TMDB MCP external ID/find endpoint 查询该固定 ID，Movie 候选一律拒绝。
+- Web Search：只有适用 MCP 无结果、报错或信息不足后才可调用；不得作为第一数据源。
+
+两个 MCP 当前均实现 Streamable HTTP MCP `2025-03-26`，暴露 `list-api-endpoints`、`get-api-endpoint-schema`、`invoke-api-endpoint`。转换为模型函数时分别增加 `bgm__`、`tmdb__` 前缀，避免同名冲突。实现必须限制工具轮数、超时、参数/响应大小，并支持取消及 JSON/SSE 响应。
+
+AniDB映射 URL 固定为：
+
+```text
+https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json
+```
+
+映射数据约65%经过人工检验，未检验部分也不等于错误，但全量只能作为参考。`tmdbtv` 为空、无效、404或请求失败不能直接导致任务失败；非空候选必须由 TMDB MCP结合任务标题、完整文件组及作品结构验证后才能写入最终响应。不能把 AniDB/Bangumi Episode 编号直接当作 TMDB Episode Number。
+
+### 4.1 Mikan 单文件发布日期优先分支
+
+该分支由主程序预计算 Bangumi 日期候选、固定 Prompt 执行 TMDB 定向验证。主程序不预计算 TMDB 候选：
+
+1. 开关开启且基础条件满足后，主程序通过 Bangumi 客户端读取 `bgmid` 对应 Subject 的 Episode 列表。
+2. 只考虑有合法播出日期的普通正片，排除特别篇、OP/ED、PV 和其他附加条目；以 `published_at` 寻找日期最近者，同日优先，距离相同时优先不晚于发布时间的条目。结果写入 `bgm_episode_candidate`。
+3. 任一步失败、候选为空或日期明显不合理时，最终门禁为 false，Prompt 完全删除日期优先字段和指令，继续通用 AI 匹配。
+4. 门禁为 true 时，模型使用原始 `files[].name` 和 `bgm_episode_candidate` 定向查询 TMDB TV Series、普通 Season 和 Episode；任何来源集号都不得直接复制成 TMDB Episode Number。
+5. TMDB 定向验证失败时继续原通用 AI 匹配流程，不把它当成整个任务失败；最终仍必须通过 TMDB MCP和主程序二次验证。
+
+`use_bangumi_pubdate_first=false` 时不得把 `published_at` 或 `bgm_episode_candidate` 的日期优先区块发送给模型。即使 `bgmid` 非空，Bangumi MCP仍可按原通用流程提供作品标题、别名等上下文。人工规则和 Episode Offset 始终优先，命中时不调用 AI。
+
+主程序可按 `bgmid` 和数据版本缓存 Bangumi 普通 Episode 列表，但缓存必须遵守更新策略，不能导致新播 Episode 永久不可见。模型侧不再为日期候选重复调用 Bangumi 工具。
+
+## 5. 最小响应契约
+
+```json
+{
+  "matched": true,
+  "tmdb_id": 12345,
+  "files": [
+    {
+      "name": "Season 1/01.mkv",
+      "matched": true,
+      "season": 1,
+      "episode": 1,
+      "reason": null
+    }
+  ],
+  "reason": null
+}
+```
+
+输入文件必须在输出中按原顺序恰好出现一次，`name` 原样返回。无法确认 Episode 的文件使用 `matched=false`、`episode=null` 并给出具体原因；普通季度可靠时保留大于0的 `season`，季度也不确定时才使用 `season=null`。
+
+顶层 `matched` 表示整个任务是否已有明确落盘方案，不表示每个文件都是 TMDB Episode。Series 已确认，并且每个文件要么有经过验证的 Season/Episode，要么有大于0的已确认 Season 可进入 `Other` 时，顶层可以为 `true`。存在 Series 未确认、`season=null`、重复映射或目标冲突时才为 `false`。
+
+不要求模型返回动画名称、首播日期、Episode标题、置信度或复杂错误枚举。这些内容要么由主程序从 TMDB 获取，要么由主程序根据 HTTP/验证结果分类。
+
+唯一正式 Prompt 见 [`TMDB_AI_MATCH_PROMPT.md`](TMDB_AI_MATCH_PROMPT.md)。本次契约版本为 `tmdb-ai-match-v8`；实现不得维护第二份 Prompt，变更时更新 `prompt_version` 并通过 snapshot review。
+
+## 6. 未匹配文件与 Other
+
+- 不匹配 TMDB Season 0 或 Specials；AI 和主程序都拒绝 `season=0`。
+- Menu、特别篇、OVA、Summary、PV、CM、NCOP、NCED、Logo 或其他非正片文件返回 `matched=false`、`episode=null` 和具体原因。
+- 如果已经可靠确认该文件随任务所属的普通季度，可以保留大于0的 `season`；主程序将原文件名放入 `<TmdbSeriesName>/Sxx/Other/`。
+- 如果 Season 也无法确认，则文件留在下载目录等待重试或人工处理，不能放进猜测的季度。
+- `Other` 文件不使用 `Eyyy` 重命名，不伪装为已完成 TMDB Episode 匹配。
+
+## 7. 主程序二次验证
+
+模型结果只是候选。AnimeGoNet 必须：
+
+1. 验证 `tmdb_id` 是真实 TMDB TV Series ID。
+2. 用 `language=zh-CN` 获取正式名称，缺失时使用 TMDB `original_name`。
+3. 验证每个 Season 存在且大于0；Season 0 一律拒绝。
+4. 验证每个 Episode 在对应 Season 中存在。
+5. 检查输入/输出文件数量、顺序和名称完全一致。
+6. 拒绝重复主视频目标、缺失映射、伪造 ID 或字段越界。
+
+已确认 Episode 的视频正常进入 `Sxx/Eyyy.ext`；Series/Season 已确认但 Episode 未匹配的文件保留原名进入 `Sxx/Other/`。Series 或 Season 未确认、重复目标、目标冲突的文件不移动。网络错误、认证错误、AI 未匹配和 TMDB 验证失败由主程序写入元数据失败审计。
+
+所有请求/响应 DTO 使用 `System.Text.Json` source generation，确保 NativeAOT 可分析。
+
+## 8. Mikan 文件名 EP 与可信偏移
+
+`file_episode_candidate` 完全属于 Mikan RSS 本地状态。程序用上游 `Auto_Bangumi/raw_parser.py` 的 C# 移植规则从每个 Torrent 视频 basename 重新计算候选，调用方不能覆盖；AI Prompt、请求 DTO 和响应 DTO 都不包含该字段或 `episode_offset`。
+
+AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/Episode 二次验证，再对每个“已匹配正片且存在文件名候选”的文件计算 `episode_offset = TmdbEpisodeNumber - file_episode_candidate`。同一任务的偏移和普通季度均统一时才产生缓存学习证据；没有候选、偏移不一致或跨多个 TMDB 季度时不学习，但不因此否定已经验证成功的逐文件映射。
+
+可选的 `(mikanid,groupid)` 可信偏移缓存默认关闭，并且只由主程序管理，不属于 AI 测试程序。只有三个不同来源 EP 得到完全相同且已由 TMDB 验证的 `tmdb_id+season+episode_offset` 才可信；重复 EP 不计数，冲突重置或撤销可信。主程序在 AI 调用前命中有效可信记录时，直接用 `file_episode_candidate + episode_offset` 本地构造目标 Episode 映射并把本次 AI 请求数降为零，不再为该次命中逐集请求 TMDB。完整状态机、WebUI 和验收规则见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
+
+## 9. 后置 EP-AI
+
+`tmdb_failep_use_ai_match_season` 不是第六档季度策略。非 AI 季度成功但一个或多个 Episode 无法确定时，以同一个任务标题和完整候选视频列表执行一次任务级 AI 匹配。
+
+主程序不把已确认的 TMDB ID/Season 加进 AI 业务输入；响应返回后在模型外检查：
+
+- `tmdb_id` 必须等于已确认 Series。
+- 已确认季度范围内的文件不得被 AI 改到其他季度。
+- 每个 Episode 必须由 TMDB API 验证。
+- 季度 AI 已经执行过的任务不再执行 EP-AI，避免同一任务重复请求。
+
+## 10. 验证门禁
+
+- 请求 snapshot 严格只有 `title`、`files[].name/size_bytes`、可空 `bgmid`/`anidbid`/`imdbid`、`torrent_file_count`、可空 `published_at/bgm_episode_candidate` 和程序计算的 `use_bangumi_pubdate_first`。
+- 开关关闭时门禁必须为假；开关开启也只有 Mikan Torrent实际文件条目数恰好为1、`bgmid/pubDate` 有效、BGM查询成功且普通Episode候选非空时才为真。
+- 门禁为真时 Prompt 直接以文件名EP和主程序计算的Bangumi日期EP定向查TMDB；失败后继续通用流程。任何Bangumi集号都不能直接成为最终TMDB集号。
+- 断言MCP endpoint/schema跨请求缓存；记录优先分支的Bangumi/TMDB工具次数及转入通用流程的原因。
+- `bgmid=null` 时不得连接或注册 Bangumi MCP；`anidbid=null` 时不得注册 AniDB映射工具；TMDB MCP始终可用。
+- `bgmid`/`anidbid` 非空时确认其作品级任务绑定被保留；跨站标题不一致不能单独判定失败，来源 Episode 同号也不能单独判定成功。
+- `imdbid` 非空时必须先经 TMDB external ID/find 查询并验证 TV 类型；不能采用 Movie ID，也不能直接推导 Season/Episode。
+- AniDB `tmdbtv` 候选未经 TMDB MCP验证不得成为最终 `tmdb_id`。
+- 断言适用 MCP 先于 Web Search；MCP充分时 Web Search调用数为0。
+- 单文件、多文件和跨季度包均使用一次任务级请求，特别篇不映射 Season 0。
+- 正片全部映射、其余视频均有普通季度可进入 `Other` 时，顶层 `matched=true`；只有存在无法确定季度的文件或冲突时才为 `false`。
+- 无 Bangumi/Mikan 信息时仍可请求和匹配。
+- 输入/输出数量、顺序或名称不一致时拒绝整个响应。
+- fake AI 覆盖超时、429、5xx、取消、非 JSON、超长响应和部分文件失败。
+- fake TMDB 覆盖真实/伪造 TV ID、普通季度、Season 0 拒绝、Episode 缺失、季度 `Other` 和重复目标。
+- NativeAOT 发布二进制完成 fake AI → fake TMDB → 规范重命名 smoke。
