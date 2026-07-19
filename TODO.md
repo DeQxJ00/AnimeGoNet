@@ -74,7 +74,7 @@
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
 - [ ] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器，不在兼容层擅加年份保护、歧义拒绝或E04/EP04扩展；另建 `FileEpisodeCandidateResolver` 安全层，只在 Mikan SourceProfile 决定是否形成逐文件 `file_episode_candidate`；增加 AI/TMDB 验证后的本地统一偏移计算器，结果不一致时只禁止缓存学习，不否定已验证的逐文件映射。
-- [ ] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同 EP。可信记录强制包含有效 `tmdb_id`、普通 `season` 和偏移；主程序在 AI 调用前命中后本地计算目标 EP，无候选、结果非正数或记录无效时回退正常流程。
+- [>] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；数据层已按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中可安全计算目标 EP，主程序 AI 前置接入仍待串联。
 - [ ] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用。
 - [ ] 通过全部配置/模型 parity tests。
 
