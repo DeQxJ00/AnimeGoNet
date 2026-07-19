@@ -3,6 +3,8 @@ using System.Text;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.Json;
 
@@ -45,10 +47,14 @@ public static class AnimeGoApplication
         layout.CreateDataDirectories();
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var sourceProfiles = new SourceProfileStore(database);
+        await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(database);
+        builder.Services.AddSingleton(sourceProfiles);
+        builder.Services.AddSingleton(new IngestTaskStore(database));
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
 
@@ -89,17 +95,13 @@ public static class AnimeGoApplication
             SavePath = savePath,
         };
 
-        var defaultDownloader = defaults.Downloaders["bt"];
         return defaults with
         {
             Paths = paths,
-            Downloaders = new Dictionary<string, QbittorrentInstanceOptions>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["bt"] = defaultDownloader with
-                {
-                    DownloadPath = PathBoundary.Combine(downloadPath, "bt"),
-                },
-            },
+            Downloaders = defaults.Downloaders.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value with { DownloadPath = PathBoundary.Combine(downloadPath, pair.Key) },
+                StringComparer.OrdinalIgnoreCase),
         };
     }
 

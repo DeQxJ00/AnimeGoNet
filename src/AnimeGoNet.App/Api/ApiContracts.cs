@@ -27,3 +27,39 @@ public sealed record RuntimeCapabilities(
     [property: JsonPropertyName("qbittorrent")] bool Qbittorrent,
     [property: JsonPropertyName("tmdb")] bool Tmdb,
     [property: JsonPropertyName("organizer")] bool Organizer);
+
+public sealed record IngestBatchRequest(
+    [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("data")] IReadOnlyList<IngestItemRequest?>? Data);
+
+public sealed record IngestItemRequest(
+    [property: JsonPropertyName("torrent")] string? Torrent,
+    [property: JsonPropertyName("info")] IngestItemInfoRequest? Info);
+
+public sealed record IngestItemInfoRequest(
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("source_item_id")] string? SourceItemId,
+    [property: JsonPropertyName("source_work_id")] string? SourceWorkId,
+    [property: JsonPropertyName("mikan_url")] string? MikanUrl,
+    [property: JsonPropertyName("url")] string? Url,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiId,
+    [property: JsonPropertyName("anidbid")] int? AniDbId,
+    [property: JsonPropertyName("imdbid")] string? ImdbId);
+
+public sealed record IngestBatchResponse(
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("accepted_count")] int AcceptedCount,
+    [property: JsonPropertyName("rejected_count")] int RejectedCount,
+    [property: JsonPropertyName("items")] IReadOnlyList<IngestItemResponse> Items);
+
+public sealed record IngestItemResponse(
+    [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("ingest_id")] string? IngestId,
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("source_profile_revision")] long? SourceProfileRevision,
+    [property: JsonPropertyName("downloader_id")] string? DownloaderId,
+    [property: JsonPropertyName("torrent_url_fingerprint")] string? TorrentUrlFingerprint,
+    [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);

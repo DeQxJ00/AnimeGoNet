@@ -30,7 +30,7 @@
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 待实现 | Bangumi fixtures |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 待实现 | TMDB fixtures + failure taxonomy |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
-| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 待实现 | contract/equivalence tests |
+| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、路由、逐项结果与 legacy manager contract 已验证；Torrent staging 待实现 |
 
 ## 解析、规则与元数据编排
 
@@ -41,7 +41,7 @@
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 待实现 | legacy differential tests |
-| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 待实现 | lowercase/短路/stable-order tests |
+| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | blacklist-first、whitelist、lowercase、旁路、短路和 stable-order tests 已通过；RSS 编排/持久化待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 待实现 | 最高优先级/共享 tests |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 待实现 | 3 个不同 EP/冲突撤销 tests |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 待实现 | 策略 timeline tests |
@@ -55,7 +55,7 @@
 | `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 进行中 | schema/migration 已验证；KV/TTL API 待实现 |
 | `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 例外 | migration report |
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 待实现 | scan/upsert/recovery tests |
-| 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 待实现 | model invariant tests |
+| 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 进行中 | ingest command/response 和 JSON context 已验证；其余模型待实现 |
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 进行中 | SQLite 唯一约束与并发完成写入已验证；claim/逐文件待实现 |
 | TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 进行中 | schema 强制 bgmid/待补全；非网络门禁/NFO/UI 待实现 |
 | 元数据解析尝试 | failure kind/reason/timeline | 扩展 | 待实现 | persistence/retry tests |
@@ -85,9 +85,9 @@
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 待实现 | legacy response contract |
 | `/api/config` | typed deployment config | 保留+扩展 | 待实现 | auth/status/JSON tests |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
-| `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 待实现 | command equivalence tests |
+| `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 待实现 | OpenAPI/integration tests |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status 与统一 ingest 已实现；CRUD/delete/OpenAPI 待实现 |
 | `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；完整管理 UI/浏览器 E2E 待实现 |
 
 ## 构建、发布与平台

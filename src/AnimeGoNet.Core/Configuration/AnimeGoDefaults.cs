@@ -13,7 +13,10 @@ public static class AnimeGoDefaults
             SavePath = "/download/anime",
         };
 
-        return Create(paths, new Uri("http://qbittorrent:8080"));
+        return Create(
+            paths,
+            new Uri("http://qbittorrent-bt:8080"),
+            new Uri("http://qbittorrent-pt:8080"));
     }
 
     public static AnimeGoOptions CreateNative(string rootPath)
@@ -27,10 +30,13 @@ public static class AnimeGoDefaults
             SavePath = Path.Combine(root, "download", "anime"),
         };
 
-        return Create(paths, new Uri("http://127.0.0.1:8080"));
+        return Create(
+            paths,
+            new Uri("http://127.0.0.1:8080"),
+            new Uri("http://127.0.0.1:8081"));
     }
 
-    private static AnimeGoOptions Create(PathOptions paths, Uri downloaderBaseUrl)
+    private static AnimeGoOptions Create(PathOptions paths, Uri btDownloaderBaseUrl, Uri ptDownloaderBaseUrl)
     {
         return new AnimeGoOptions
         {
@@ -39,8 +45,13 @@ public static class AnimeGoDefaults
             {
                 ["bt"] = new()
                 {
-                    BaseUrl = downloaderBaseUrl,
+                    BaseUrl = btDownloaderBaseUrl,
                     DownloadPath = PathBoundary.Combine(paths.DownloadPath, "bt"),
+                },
+                ["pt"] = new()
+                {
+                    BaseUrl = ptDownloaderBaseUrl,
+                    DownloadPath = PathBoundary.Combine(paths.DownloadPath, "pt"),
                 },
             },
             Metadata = new MetadataMatchingOptions

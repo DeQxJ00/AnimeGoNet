@@ -9,4 +9,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(LegacyApiResponse<PingData>))]
 [JsonSerializable(typeof(LegacyApiResponse<string>))]
 [JsonSerializable(typeof(RuntimeStatus))]
+[JsonSerializable(typeof(IngestBatchRequest))]
+[JsonSerializable(typeof(IngestBatchResponse))]
+[JsonSerializable(typeof(LegacyApiResponse<IngestBatchResponse?>))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;

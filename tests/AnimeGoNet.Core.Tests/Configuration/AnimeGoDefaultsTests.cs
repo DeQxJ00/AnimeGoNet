@@ -13,6 +13,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal("/download/incomplete", options.Paths.DownloadPath);
         Assert.Equal("/download/anime", options.Paths.SavePath);
         Assert.Equal("/download/incomplete/bt", options.Downloaders["bt"].DownloadPath);
+        Assert.Equal("/download/incomplete/pt", options.Downloaders["pt"].DownloadPath);
         Assert.Empty(AnimeGoOptionsValidator.Validate(options));
     }
 
@@ -43,6 +44,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(FileStrategy.Move, profile.FileStrategy);
         Assert.True(profile.RssFilterEnabled);
         Assert.True(profile.RssPriorityEnabled);
+        Assert.Equal(2, options.Downloaders.Count);
         Assert.All(options.Downloaders.Values, downloader => Assert.Equal("qbittorrent", downloader.Type));
     }
 }

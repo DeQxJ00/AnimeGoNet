@@ -20,7 +20,7 @@ services:
     networks:
       - animegonet
 
-  qbittorrent:
+  qbittorrent-bt:
     image: lscr.io/linuxserver/qbittorrent:latest
     restart: unless-stopped
     environment:
@@ -29,10 +29,26 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       WEBUI_PORT: "8080"
     volumes:
-      - ./qbittorrent:/config
+      - ./qbittorrent/bt:/config
       - ./download:/download
     ports:
       - "8080:8080"
+    networks:
+      - animegonet
+
+  qbittorrent-pt:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Shanghai}
+      WEBUI_PORT: "8080"
+    volumes:
+      - ./qbittorrent/pt:/config
+      - ./download:/download
+    ports:
+      - "8081:8080"
     networks:
       - animegonet
 

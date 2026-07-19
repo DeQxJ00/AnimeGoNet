@@ -46,7 +46,7 @@ jobs:
         if: startsWith(matrix.rid, 'linux-')
         run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
       - name: Restore RID graph
-        run: dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime ${{ matrix.rid }}
+        run: dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime ${{ matrix.rid }} -p:PublishAot=true
       - name: Publish NativeAOT
         run: dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/publish/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
       - name: Smoke published binary

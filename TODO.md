@@ -63,7 +63,7 @@
 
 - [ ] 移植所有领域模型、枚举和错误类型。
 - [x] 建立首阶段强类型配置/目录模型与校验：Docker 三路径、命名 qBittorrent、Mikan `move` 默认、AI 600 秒和高风险 fallback 默认关闭。
-- [ ] 固化 JSON source-generation context。
+- [>] 固化 JSON source-generation context（状态、统一导入和 legacy manager DTO 已覆盖；后续 API DTO 持续加入）。
 - [ ] 移植 hash、name、path、时间等纯函数。
 - [ ] 移植默认 YAML 与注释。
 - [ ] 移植环境变量覆盖。
@@ -132,12 +132,12 @@
 - [ ] C# 移植 builtin feed/parser/filter/rename/schedule；默认运行不加载 Python。
 - [ ] 实现内置 C# MikanTool 五级黑白名单规则，默认启用；精确复现 `Filiter0`～`Filiter4` 作用域、`1>2>3`、最终 AND、大小写敏感子串和多个 `Filiter0` 的 legacy 顺序行为。
 - [ ] 为默认 Mikan SourceProfile 增加 `mikan_rss_filter_enabled` 总开关（默认 `true`）；关闭时 AnimeGoHelper `/api/rss` 记录 `SkippedByConfiguration` 后继续流水线，规则保留，进行中任务使用原快照。
-- [ ] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（新安装默认 `true`）；在同一次RSS中按可靠 `(mikanid, 来源EP类型, 来源EP)` 分组，缺失/歧义时旁路而不误筛。
-- [ ] 实现完全可配置的 `priority_groups[]`：组可增删/排序，每组包含可增删/排序的 `{name, values[]}` 具名数组；标题与 values 全部 lowercase 后匹配，按组和组内数组顺序逐级淘汰。
-- [ ] 优选组资格过滤后只有一个候选时记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，全部执行后仍并列则按原RSS顺序稳定选择。
-- [ ] 预置字幕语言、字幕封装、编码、分辨率四组，但不写死组数或内容；name仅展示，values才参与匹配。
-- [ ] 实现优选阶段具名 `{name, values[]}` 白名单/黑名单数组；黑名单优先，默认启用 `720p=[1280x720,720p]` 黑名单，禁用后 720p 才能作为低优先级候选。
-- [ ] RSS loser 记录 `SuppressedByHigherPriority`，不获取Torrent、不调用AI、不创建下载任务；首版winner后续失败只按原任务重试，不隐式晋级loser。
+- [>] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（默认 profile 已启用，分组引擎已实现；SQLite 规则版本/批次编排待接入）。
+- [>] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；持久化 CRUD 待实现。
+- [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
+- [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
+- [>] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；SQLite CRUD/审计待实现。
+- [>] RSS loser 产生 `SuppressedByHigherPriority` 决策且 winner 不隐式晋级；与 Torrent 获取/AI/任务创建的编排门禁待接入。
 - [ ] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载。
 - [ ] 实现外部 C# 插件进程的 manifest、JSON Lines 协议、超时、取消、健康检查和退出隔离。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
@@ -150,9 +150,9 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [ ] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；首版同机可配置多个 qBittorrent，连接、会话、熔断和状态隔离。
-- [ ] 实现 `SourceProfile` 和不可变路由快照：输入源绑定下载器、metadata ID schema、规则 profile、category/tag、文件策略和做种策略；全局 TMDB Episode 去重不可被 profile 覆盖。
+- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、可配置 U2→`pt` 路由、revision/文件策略/规则开关快照已落库；U2/TTG 默认文件策略仍待确认，CRUD、category/tag/做种策略待实现。
 - [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
-- [ ] 新增强类型 `IInputSourceAdapter`；内置 Mikan/U2/TTG 输入校验和作品键规范化，明确不实现站点账号/Cookie登录抓取。
+- [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；正式接口与 Torrent 抓取待实现。
 - [ ] 实现 qBittorrent adapter 和 fake-server contract tests。
 - [ ] 建立隔离 Docker Compose 下载环境。
 - [ ] qBittorrent 通过 add/list/state/file-priority/pause/resume/delete/reconnect 真实容器测试。
@@ -186,10 +186,10 @@
 - [ ] 实现 Bangumi/数据库/feed/plugin tasks。
 - [ ] 实现优雅退出和取消传播。
 - [ ] 移植 10 个 HTTP API。
-- [ ] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 Mikan `/api/rss`、`/api/download/manager` 转换到同一 command，不复制流水线。
+- [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与安全 Torrent staging 待接入。
 - [ ] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：来源host白名单、逐跳redirect/DNS校验、限时限量、脱敏日志、受限 staging、确认接收后清理，禁止发送给AI。
 - [ ] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API。
-- [ ] 移植 access-key、响应 envelope、参数错误。
+- [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
 - [ ] 移植 WebSocket 日志 pause/resume。
 - [ ] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key`。
 - [ ] 将旧插件名 `filter/mikan_tool.py` 映射到 SQLite 过滤规则，不要求实际 Python 文件存在。

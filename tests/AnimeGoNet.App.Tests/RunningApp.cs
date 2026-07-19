@@ -21,10 +21,13 @@ public sealed class RunningApp : IAsyncDisposable
 
     public string RootPath { get; }
 
-    public static async Task<RunningApp> StartAsync(string? accessKey = null)
+    public static async Task<RunningApp> StartAsync(
+        string? accessKey = null,
+        Func<AnimeGoOptions, AnimeGoOptions>? configure = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
+        options = configure?.Invoke(options) ?? options;
         var app = await AnimeGoApplication.BuildAsync([], options, accessKey);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();

@@ -32,7 +32,7 @@
 
 ## 验证状态
 
-2026-07-19 本机已通过 25 项测试、win-x64 NativeAOT publish 与 published-binary smoke；所有新增 YAML 可解析，容器 smoke shell 脚本通过语法检查。本机没有 Docker CLI，其余四个 RID 和双架构容器由 GitHub Actions 首次运行完成最终验收。
+2026-07-19 本机已通过 38 项测试、win-x64 NativeAOT publish 与 published-binary smoke；smoke 也会真实 POST 统一导入端点，验证 source-generated JSON、默认路由和 URL 指纹。所有新增 YAML 可解析，容器 smoke shell 脚本通过语法检查。本机没有 Docker CLI，其余四个 RID 和双架构容器由 GitHub Actions 首次运行完成最终验收。
 
 ## 参考版本
 

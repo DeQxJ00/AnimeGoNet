@@ -16,7 +16,7 @@ RUN case "$TARGETARCH" in \
       arm64) rid=linux-arm64 ;; \
       *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
-    && dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime "$rid"
+    && dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime "$rid" -p:PublishAot=true
 
 COPY src/ src/
 RUN case "$TARGETARCH" in \

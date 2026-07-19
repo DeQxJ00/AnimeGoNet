@@ -44,6 +44,15 @@ try {
     }
 
     $status = Invoke-RestMethod -Uri "$baseUrl/api/v1/status" -TimeoutSec 5
+    $ingestPayload = '{"source":"mikan","data":[{"torrent":"https://tracker.invalid/passkey/smoke.torrent","info":{"title":"NativeAOT smoke","mikanid":3951,"bgmid":547888}}]}'
+    $ingestParameters = @{
+        Uri = "$baseUrl/api/v1/ingest"
+        Method = 'Post'
+        ContentType = 'application/json'
+        Body = $ingestPayload
+        TimeoutSec = 5
+    }
+    $ingest = Invoke-RestMethod @ingestParameters
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
     if ($status.database_schema_version -ne 1) {
         throw "Unexpected schema version: $($status.database_schema_version)"
@@ -51,6 +60,10 @@ try {
 
     if (-not $status.native_aot) {
         throw 'Published process does not report NativeAOT.'
+    }
+
+    if (($ingest.accepted_count -ne 1) -or ($ingest.items[0].downloader_id -ne 'bt') -or ($ingest.items[0].torrent_url_fingerprint.Length -ne 64)) {
+        throw 'NativeAOT unified ingest smoke failed.'
     }
 
     if ($index.StatusCode -ne 200 -or -not $index.Content.Contains('<title>AnimeGoNet</title>')) {
