@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AnimeGoNet.App.Api;
+using AnimeGoNet.App.Downloads;
 
 namespace AnimeGoNet.App.Serialization;
 
@@ -12,4 +13,5 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(IngestBatchRequest))]
 [JsonSerializable(typeof(IngestBatchResponse))]
 [JsonSerializable(typeof(LegacyApiResponse<IngestBatchResponse?>))]
+[JsonSerializable(typeof(QbittorrentTorrentInfo[]))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;

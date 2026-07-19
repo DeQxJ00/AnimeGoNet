@@ -53,7 +53,7 @@ public static class ApiEndpoints
                 Sqlite: true,
                 UnifiedIngest: true,
                 RssRules: true,
-                Qbittorrent: false,
+                Qbittorrent: true,
                 Tmdb: false,
                 Organizer: false)));
     }

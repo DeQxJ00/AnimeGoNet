@@ -62,6 +62,10 @@ try {
         throw 'Published process does not report NativeAOT.'
     }
 
+    if (-not $status.capabilities.qbittorrent) {
+        throw 'Published process does not report the qBittorrent capability.'
+    }
+
     if (($ingest.accepted_count -ne 1) -or ($ingest.items[0].downloader_id -ne 'bt') -or ($ingest.items[0].torrent_url_fingerprint.Length -ne 64)) {
         throw 'NativeAOT unified ingest smoke failed.'
     }

@@ -65,7 +65,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 待实现 | fake + container contract |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | fake-handler login/list/add/stop/start/delete 与状态映射已验证；真实容器/reconnect 待实现 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 例外 | migration diagnostic test |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 待实现 | restart/retry/progress tests |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 待实现 | notifier parity tests |

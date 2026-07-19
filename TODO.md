@@ -149,11 +149,11 @@
 
 ## P7 — 首版 qBittorrent 下载客户端
 
-- [ ] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；首版同机可配置多个 qBittorrent，连接、会话、熔断和状态隔离。
+- [>] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话和实例隔离已实现，后台同步/熔断待实现。
 - [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、可配置 U2→`pt` 路由、revision/文件策略/规则开关快照已落库；U2/TTG 默认文件策略仍待确认，CRUD、category/tag/做种策略待实现。
 - [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；正式接口与 Torrent 抓取待实现。
-- [ ] 实现 qBittorrent adapter 和 fake-server contract tests。
+- [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、list、multipart add、stop/start/delete、状态映射与失败响应。
 - [ ] 建立隔离 Docker Compose 下载环境。
 - [ ] qBittorrent 通过 add/list/state/file-priority/pause/resume/delete/reconnect 真实容器测试。
 - [ ] 同时启动 `bt`/`pt` 两个 qBittorrent 实例，验证 Mikan→bt、U2/TTG→pt，修改绑定不影响进行中任务。
