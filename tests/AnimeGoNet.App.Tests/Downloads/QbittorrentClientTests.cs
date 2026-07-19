@@ -47,6 +47,18 @@ public sealed class QbittorrentClientTests
     }
 
     [Fact]
+    public async Task LoginAcceptsQbittorrent52NoContentResponse()
+    {
+        using var handler = new RecordingHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.NoContent));
+        using var httpClient = new HttpClient(handler);
+
+        await CreateClient(httpClient).ConnectAsync();
+
+        Assert.Equal("/api/v2/auth/login", Assert.Single(handler.Requests).Path);
+    }
+
+    [Fact]
     public async Task ListUsesSourceGeneratedJsonAndCanonicalState()
     {
         const string json = """

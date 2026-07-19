@@ -23,6 +23,11 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
         request.Headers.Referrer = options.BaseUrl;
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+        {
+            return;
+        }
+
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!string.Equals(body.Trim(), "Ok.", StringComparison.Ordinal))
         {
