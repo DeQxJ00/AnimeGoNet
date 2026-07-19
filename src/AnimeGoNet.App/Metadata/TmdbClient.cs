@@ -54,6 +54,11 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
 
     public async Task<TmdbSeries?> GetSeriesAsync(
         int seriesId,
+        CancellationToken cancellationToken = default) =>
+        (await GetSeriesDetailsAsync(seriesId, cancellationToken).ConfigureAwait(false))?.Series;
+
+    public async Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+        int seriesId,
         CancellationToken cancellationToken = default)
     {
         ValidatePositive(seriesId, "tmdb_series_id_invalid");
@@ -72,7 +77,11 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             throw Failure(MetadataFailureKind.Protocol, "tmdb_series_identity_mismatch");
         }
 
-        return MapSeries(response);
+        var series = MapSeries(response);
+        var seasons = response.Seasons?
+            .Select(season => MapSeason(seriesId, season))
+            .ToArray() ?? [];
+        return new TmdbSeriesDetails(series, seasons);
     }
 
     public async Task<TmdbSeason?> GetSeasonAsync(
@@ -97,13 +106,7 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             throw Failure(MetadataFailureKind.Protocol, "tmdb_season_identity_mismatch");
         }
 
-        return new TmdbSeason(
-            response.Id,
-            seriesId,
-            response.SeasonNumber,
-            response.Name?.Trim() ?? string.Empty,
-            ParseDate(response.AirDate),
-            response.Episodes?.Length ?? 0);
+        return MapSeason(seriesId, response);
     }
 
     public async Task<TmdbEpisode?> GetEpisodeAsync(
@@ -236,6 +239,22 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             response.Name?.Trim() ?? string.Empty,
             response.OriginalName?.Trim() ?? string.Empty,
             ParseDate(response.FirstAirDate));
+    }
+
+    private static TmdbSeason MapSeason(int seriesId, TmdbSeasonDto response)
+    {
+        if (response.Id <= 0 || response.SeasonNumber < 0 || response.EpisodeCount < 0)
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_season_invalid");
+        }
+
+        return new TmdbSeason(
+            response.Id,
+            seriesId,
+            response.SeasonNumber,
+            response.Name?.Trim() ?? string.Empty,
+            ParseDate(response.AirDate),
+            response.Episodes?.Length ?? response.EpisodeCount);
     }
 
     private static DateOnly? ParseDate(string? value)

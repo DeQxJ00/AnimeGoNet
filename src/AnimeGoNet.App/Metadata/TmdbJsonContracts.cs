@@ -10,13 +10,15 @@ internal sealed record TmdbSeriesDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("original_name")] string? OriginalName,
-    [property: JsonPropertyName("first_air_date")] string? FirstAirDate);
+    [property: JsonPropertyName("first_air_date")] string? FirstAirDate,
+    [property: JsonPropertyName("seasons")] TmdbSeasonDto[]? Seasons);
 
 internal sealed record TmdbSeasonDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("season_number")] int SeasonNumber,
     [property: JsonPropertyName("air_date")] string? AirDate,
+    [property: JsonPropertyName("episode_count")] int EpisodeCount,
     [property: JsonPropertyName("episodes")] TmdbEpisodeDto[]? Episodes);
 
 internal sealed record TmdbEpisodeDto(

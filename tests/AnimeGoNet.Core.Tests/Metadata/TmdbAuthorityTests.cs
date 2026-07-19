@@ -76,6 +76,14 @@ public sealed class TmdbAuthorityTests
             return Task.FromResult<TmdbSeries?>(new TmdbSeries(seriesId, "Series", "Original", null));
         }
 
+        public async Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default)
+        {
+            var series = await GetSeriesAsync(seriesId, cancellationToken);
+            return series is null ? null : new TmdbSeriesDetails(series, []);
+        }
+
         public Task<TmdbSeason?> GetSeasonAsync(
             int seriesId,
             int seasonNumber,

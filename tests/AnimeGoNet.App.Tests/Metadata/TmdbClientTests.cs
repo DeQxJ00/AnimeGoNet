@@ -54,6 +54,33 @@ public sealed class TmdbClientTests
     }
 
     [Fact]
+    public async Task SeriesDetailsExposeOrdinarySeasonSummariesForDateMatching()
+    {
+        const string json = """
+            {"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07","seasons":[
+              {"id":100,"name":"Specials","season_number":0,"air_date":"2017-01-01","episode_count":3},
+              {"id":204984,"name":"烈日的黄金乡","season_number":2,"air_date":"2022-07-06","episode_count":12}
+            ]}
+            """;
+        using var handler = new RecordingHandler(_ => Json(json));
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+
+        var details = Assert.IsType<TmdbSeriesDetails>(await client.GetSeriesDetailsAsync(72517));
+
+        Assert.Equal(72517, details.Series.Id);
+        Assert.Collection(
+            details.Seasons,
+            season => Assert.Equal(0, season.SeasonNumber),
+            season =>
+            {
+                Assert.Equal(2, season.SeasonNumber);
+                Assert.Equal(12, season.EpisodeCount);
+                Assert.Equal(new DateOnly(2022, 7, 6), season.AirDate);
+            });
+    }
+
+    [Fact]
     public async Task AuthorityValidatesSeriesSeasonAndEpisodeUsingOfficialEndpoints()
     {
         using var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch

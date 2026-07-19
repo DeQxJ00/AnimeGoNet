@@ -93,6 +93,11 @@ public sealed class TmdbSeriesResolverTests
         public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<TmdbSeason?> GetSeasonAsync(
             int seriesId,
             int seasonNumber,

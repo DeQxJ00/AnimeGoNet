@@ -35,6 +35,10 @@ public sealed record TmdbEpisode(
     string Name,
     DateOnly? AirDate);
 
+public sealed record TmdbSeriesDetails(
+    TmdbSeries Series,
+    IReadOnlyList<TmdbSeason> Seasons);
+
 public sealed record TmdbCanonicalEpisode(
     TmdbSeries Series,
     TmdbSeason Season,
@@ -60,6 +64,10 @@ public interface ITmdbClient
         CancellationToken cancellationToken = default);
 
     Task<TmdbSeries?> GetSeriesAsync(
+        int seriesId,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
         int seriesId,
         CancellationToken cancellationToken = default);
 
