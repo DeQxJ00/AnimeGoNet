@@ -30,3 +30,9 @@ modules/proxy/
 note_*.*
 .vscode/
 dist/
+bin/
+obj/
+.vs/
+TestResults/
+artifacts/
+publish/

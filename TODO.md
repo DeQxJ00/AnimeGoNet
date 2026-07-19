@@ -50,9 +50,9 @@
 
 - [x] 安装并固定 .NET 10 SDK（当前主机为 SDK `10.0.302`，通过 `global.json` 固定 feature band）。
 - [x] 固化解决方案分层、核心数据聚合、SQLite 明确 SQL 规则与 NativeAOT 允许/禁止边界（见 `docs/ARCHITECTURE.md`）。
-- [ ] 创建 solution、分层项目、测试项目。
-- [ ] 添加 `global.json`、`Directory.Build.props`、`Directory.Packages.props`。
-- [ ] 启用 nullable、warnings-as-errors、deterministic、AOT/trim/single-file analyzer。
+- [>] 创建 solution、分层项目、测试项目（Core 与 Core.Tests 已完成；Data/App 按模块加入）。
+- [x] 添加 `global.json`、`Directory.Build.props`、`Directory.Packages.props`。
+- [x] 启用 nullable、warnings-as-errors、deterministic、AOT/trim analyzer。
 - [ ] 建立 Windows/Linux CI。
 - [ ] 验证 Minimal API、WebSocket、静态文件 NativeAOT。
 - [ ] 验证 Microsoft.Data.Sqlite NativeAOT。
@@ -62,6 +62,7 @@
 ## P2 — 领域与配置
 
 - [ ] 移植所有领域模型、枚举和错误类型。
+- [x] 建立首阶段强类型配置/目录模型与校验：Docker 三路径、命名 qBittorrent、Mikan `move` 默认、AI 600 秒和高风险 fallback 默认关闭。
 - [ ] 固化 JSON source-generation context。
 - [ ] 移植 hash、name、path、时间等纯函数。
 - [ ] 移植默认 YAML 与注释。

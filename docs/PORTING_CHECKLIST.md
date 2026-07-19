@@ -10,8 +10,8 @@
 |---|---|---:|---:|---|
 | `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 待实现 | 进程 smoke、SIGTERM/CTRL+C |
 | `cmd/plugin` | C# 内置插件测试与未来 `PluginTool` | 替换 | 待实现 | 协议/fixture tests |
-| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 待实现 | 默认配置 golden |
-| `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 待实现 | 临时目录/非法路径 tests |
+| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
+| `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 待实现 | 12 份历史 YAML golden |
 | `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 待实现 | precedence/redaction tests |
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 待实现 | published binary smoke |
