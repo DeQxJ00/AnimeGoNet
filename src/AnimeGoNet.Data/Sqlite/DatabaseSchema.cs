@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -10,6 +10,7 @@ public static class DatabaseSchema
         new SchemaMigration(2, "source_torrent_host_allowlist", SourceTorrentHostAllowlist),
         new SchemaMigration(3, "staged_ingest_lifecycle", StagedIngestLifecycle),
         new SchemaMigration(4, "staged_dispatch_lease", StagedDispatchLease),
+        new SchemaMigration(5, "download_runtime_projection", DownloadRuntimeProjection),
     ];
 
     private const string InitialBusinessSchema = """
@@ -318,5 +319,33 @@ public static class DatabaseSchema
         ON staged_torrents(dispatch_state, next_attempt_at_utc, created_at_utc);
 
         CREATE UNIQUE INDEX ux_download_jobs_task ON download_jobs(task_id);
+        """;
+
+    private const string DownloadRuntimeProjection = """
+        ALTER TABLE download_jobs
+        ADD COLUMN seeds INTEGER NOT NULL DEFAULT 0 CHECK (seeds >= 0);
+
+        ALTER TABLE download_jobs
+        ADD COLUMN peers INTEGER NOT NULL DEFAULT 0 CHECK (peers >= 0);
+
+        ALTER TABLE download_jobs
+        ADD COLUMN snapshot_at_utc TEXT;
+
+        ALTER TABLE download_jobs
+        ADD COLUMN is_stale INTEGER NOT NULL DEFAULT 0 CHECK (is_stale IN (0, 1));
+
+        ALTER TABLE download_jobs
+        ADD COLUMN revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0);
+
+        CREATE TABLE downloader_runtime_state (
+            downloader_id TEXT NOT NULL PRIMARY KEY,
+            connected INTEGER NOT NULL CHECK (connected IN (0, 1)),
+            failure_code TEXT,
+            last_success_at_utc TEXT,
+            updated_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_download_jobs_active_instance
+        ON download_jobs(downloader_id, state, updated_at_utc);
         """;
 }

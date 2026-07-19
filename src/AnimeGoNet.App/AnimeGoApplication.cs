@@ -7,6 +7,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.Json;
@@ -22,7 +23,7 @@ public static class AnimeGoApplication
         bool? runningInContainer = null,
         ITorrentStagingService? torrentStagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
-        bool startBackgroundWorkers = true,
+        bool? startBackgroundWorkers = null,
         CancellationToken cancellationToken = default)
     {
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -37,6 +38,9 @@ public static class AnimeGoApplication
             builder.Configuration["DOTNET_RUNNING_IN_CONTAINER"],
             "true",
             StringComparison.OrdinalIgnoreCase);
+        startBackgroundWorkers ??= !bool.TryParse(
+            builder.Configuration["background_workers_enabled"],
+            out var configuredWorkers) || configuredWorkers;
         options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
         accessKey ??= builder.Configuration["access_key"];
         if (runningInContainer.Value && string.IsNullOrWhiteSpace(accessKey))
@@ -56,6 +60,7 @@ public static class AnimeGoApplication
         var sourceProfiles = new SourceProfileStore(database);
         await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
         var ingestTasks = new IngestTaskStore(database);
+        var downloadJobs = new DownloadJobStore(database);
         torrentStagingService ??= new TorrentStagingService(
             layout,
             options.TorrentFetch,
@@ -79,12 +84,16 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(ingestTasks);
+        builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton(downloadClientRegistry);
+        builder.Services.AddSingleton<DownloadClientOperationCoordinator>();
         builder.Services.AddSingleton(torrentStagingService);
         builder.Services.AddSingleton<StagedTorrentDispatcher>();
-        if (startBackgroundWorkers)
+        builder.Services.AddSingleton<DownloadSnapshotSynchronizer>();
+        if (startBackgroundWorkers.Value)
         {
             builder.Services.AddHostedService<StagedTorrentDispatchWorker>();
+            builder.Services.AddHostedService<DownloadSnapshotWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

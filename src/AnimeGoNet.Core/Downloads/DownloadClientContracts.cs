@@ -39,7 +39,9 @@ public sealed record DownloadTaskSnapshot(
     long DownloadedBytes,
     long TotalBytes,
     long DownloadSpeedBytesPerSecond,
-    long? EtaSeconds);
+    long? EtaSeconds,
+    int Seeds = 0,
+    int Peers = 0);
 
 public enum DownloadTaskState
 {

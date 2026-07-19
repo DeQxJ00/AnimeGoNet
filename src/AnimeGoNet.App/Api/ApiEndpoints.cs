@@ -4,6 +4,7 @@ using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -17,6 +18,7 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapGet("/api/v1/downloads", Downloads);
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
     }
@@ -57,6 +59,36 @@ public static class ApiEndpoints
                 Qbittorrent: true,
                 Tmdb: false,
                 Organizer: false)));
+    }
+
+    private static async Task<Ok<DownloadListResponse>> Downloads(
+        DownloadJobStore jobs,
+        CancellationToken cancellationToken)
+    {
+        var records = await jobs.ListAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new DownloadListResponse(records.Select(record => new DownloadListItem(
+            record.JobId,
+            record.TaskId,
+            record.Title,
+            record.SourceId,
+            record.DownloaderId,
+            record.InfoHash,
+            record.State,
+            record.BusinessStatus,
+            record.Progress,
+            record.DownloadedBytes,
+            record.TotalBytes,
+            record.SpeedBytesPerSecond,
+            record.EtaSeconds,
+            record.Seeds,
+            record.Peers,
+            record.IsStale,
+            record.Revision,
+            record.SnapshotAtUtc,
+            record.UpdatedAtUtc,
+            record.DownloaderConnected,
+            record.DownloaderFailureCode,
+            record.DownloaderLastSuccessAtUtc)).ToArray()));
     }
 
     private static async Task<Ok<IngestBatchResponse>> Ingest(

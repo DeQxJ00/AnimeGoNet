@@ -149,7 +149,7 @@
 
 ## P7 — 首版 qBittorrent 下载客户端
 
-- [>] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话和实例隔离已实现，后台同步/熔断待实现。
+- [>] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作和失败隔离同步已实现；指数退避/熔断待实现。
 - [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、可配置 U2→`pt` 路由、revision/文件策略/规则开关快照已落库；U2/TTG 默认文件策略仍待确认，CRUD、category/tag/做种策略待实现。
 - [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
@@ -163,8 +163,8 @@
 
 ## P8 — 下载、重命名、刮削
 
-- [>] 移植下载管理状态机和 notifier（staged→dispatching→download_queued及安全重试已实现；下载/做种/整理 notifier 待实现）。
-- [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等与退避重试已实现；运行中快照恢复及删除回调待实现）。
+- [>] 移植下载管理状态机和 notifier（staged→dispatching→download_queued→downloading/downloaded 及安全重试已实现；做种/整理 notifier 待实现）。
+- [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试已实现；删除回调待实现）。
 - [ ] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入；RSS 早期检查并在提交下载器前事务复查。
 - [ ] 移植 link/link_delete/move/wait_move。
 - [ ] `move` 安全编排：下载完成后暂停任务，移动/跨卷复制校验、重命名/NFO/目录库成功后才移除下载器任务（不再删除文件）并写完成记录；失败保留可重试源文件。
@@ -200,10 +200,10 @@
 - [ ] 移植静态页并生成 OpenAPI。
 - [ ] 通过 API/WS 契约差分测试。
 - [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。
-- [ ] 实现仪表盘和下载器/任务状态。
-- [ ] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet解析/移动/重命名/字幕/NFO/数据库阶段分离，qB 100%不得提前标业务完成。
-- [ ] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、熔断隔离、离线保留stale快照、重启按实例+hash恢复。
-- [ ] 实现下载列表/详情/文件级priority与wanted进度、筛选搜索分页和状态时间线；多文件总进度仅统计wanted文件，metadata未知时使用不确定态。
+- [>] 实现仪表盘和下载器/任务状态（下载状态卡片、进度和实例离线提示已实现；汇总指标与管理视图待实现）。
+- [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；解析/移动/重命名/字幕/NFO阶段待串联。
+- [>] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、实例失败隔离、离线保留stale快照、重启按实例+hash恢复已完成；指数退避/熔断待实现。
+- [>] 实现下载列表/详情/文件级priority与wanted进度、筛选搜索分页和状态时间线（只读列表 API/WebUI 与规范快照已实现；详情、文件级、筛选分页和时间线待实现）。
 - [ ] 实现暂停、恢复和AnimeGoNet业务重试；删除只跳转四类删除中心。首版不复刻Tracker/Peer明细、piece图、限速、强制校验/汇报和qB全局设置。
 - [ ] 实现多下载器页面：实例 CRUD、连接状态、路径/硬链接探测、来源引用和任务数量。
 - [ ] 实现输入源页面：下载器绑定、ID字段规则、过滤/匹配 profile、category/tag、文件/做种策略、重复命中通知和路由预览。

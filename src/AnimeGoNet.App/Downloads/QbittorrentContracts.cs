@@ -10,4 +10,6 @@ public sealed record QbittorrentTorrentInfo(
     [property: JsonPropertyName("downloaded")] long Downloaded,
     [property: JsonPropertyName("size")] long Size,
     [property: JsonPropertyName("dlspeed")] long DownloadSpeed,
-    [property: JsonPropertyName("eta")] long Eta);
+    [property: JsonPropertyName("eta")] long Eta,
+    [property: JsonPropertyName("num_seeds")] int Seeds,
+    [property: JsonPropertyName("num_leechs")] int Peers);

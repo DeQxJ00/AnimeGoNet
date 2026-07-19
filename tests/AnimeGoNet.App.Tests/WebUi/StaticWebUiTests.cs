@@ -7,7 +7,7 @@ public sealed class StaticWebUiTests
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
     [InlineData("/styles.css", "text/css", ".hero")]
-    [InlineData("/app.js", "text/javascript", "/api/v1/status")]
+    [InlineData("/app.js", "text/javascript", "/api/v1/downloads")]
     public async Task ServesStaticAssets(string path, string mediaType, string marker)
     {
         await using var app = await RunningApp.StartAsync();

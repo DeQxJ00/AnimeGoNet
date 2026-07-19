@@ -3,8 +3,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -171,6 +175,53 @@ public sealed class MinimalApiTests
         Assert.Equal(0, json.RootElement.GetProperty("accepted_count").GetInt32());
         Assert.Equal("rejected", json.RootElement.GetProperty("items")[0].GetProperty("status").GetString());
         Assert.Contains("HostNotAllowed", json.RootElement.GetProperty("items")[0].GetProperty("errors")[0].GetString());
+        Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("token=secret", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DownloadListReturnsCanonicalSnapshotWithoutSecretPaths()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/file.torrent?token=secret",
+                "info": { "title": "Episode 1", "mikanid": 3951, "bgmid": 547888 }
+              }]
+            }
+            """;
+        using var ingestResponse = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var ingestJson = JsonDocument.Parse(await ingestResponse.Content.ReadAsStreamAsync());
+        var hash = ingestJson.RootElement.GetProperty("items")[0].GetProperty("info_hash").GetString()!;
+        var tasks = app.App.Services.GetRequiredService<IngestTaskStore>();
+        var claim = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+        await tasks.CompleteDispatchAsync(
+            claim,
+            new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
+            DateTimeOffset.UtcNow);
+        await app.App.Services.GetRequiredService<DownloadJobStore>().ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Downloading, 0.4, 40, 100, 8, 7, 2, 4)],
+            DateTimeOffset.UtcNow);
+
+        using var response = await app.Client.GetAsync("/api/v1/downloads");
+        var body = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+
+        var item = json.RootElement.GetProperty("items")[0];
+        Assert.Equal("Episode 1", item.GetProperty("title").GetString());
+        Assert.Equal("bt", item.GetProperty("downloader_id").GetString());
+        Assert.Equal("downloading", item.GetProperty("state").GetString());
+        Assert.Equal(0.4, item.GetProperty("progress").GetDouble());
+        Assert.Equal(2, item.GetProperty("seeds").GetInt32());
+        Assert.Equal(4, item.GetProperty("peers").GetInt32());
+        Assert.False(item.GetProperty("is_stale").GetBoolean());
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
         Assert.DoesNotContain("token=secret", body, StringComparison.Ordinal);
     }

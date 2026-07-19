@@ -30,6 +30,14 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .module.enabled { border-color: #315f58; }
 .panels { margin: 20px 0 70px; }
 .panels p { color: #aebbd3; min-height: 44px; line-height: 1.45; }
+.downloads { display: grid; gap: 12px; }
+.download-card { border: 1px solid #315f58; border-radius: 18px; padding: 18px 20px; background: rgba(16,22,37,.88); }
+.download-card.stale { border-color: #813f49; }
+.download-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.download-heading strong { overflow-wrap: anywhere; }
+.download-card progress { width: 100%; height: 9px; margin: 16px 0 10px; accent-color: #59d3a5; }
+.download-details { margin: 0; color: #aebbd3; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
+.empty { border: 1px dashed #344260; border-radius: 18px; padding: 22px; }
 
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding: 30px 24px; }

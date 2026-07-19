@@ -383,11 +383,13 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 INSERT INTO download_jobs (
                     id, task_id, downloader_id, info_hash, state, progress,
                     downloaded_bytes, total_bytes, speed_bytes_per_second,
-                    eta_seconds, failure_reason, created_at_utc, updated_at_utc)
+                    eta_seconds, failure_reason, created_at_utc, updated_at_utc,
+                    seeds, peers, snapshot_at_utc, is_stale, revision)
                 VALUES (
                     $id, $task_id, $downloader_id, $info_hash, $state, $progress,
                     $downloaded_bytes, $total_bytes, $speed_bytes_per_second,
-                    $eta_seconds, NULL, $created_at_utc, $updated_at_utc);
+                    $eta_seconds, NULL, $created_at_utc, $updated_at_utc,
+                    $seeds, $peers, $snapshot_at_utc, 0, 1);
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
@@ -399,6 +401,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$total_bytes", snapshot.TotalBytes);
             insert.Parameters.AddWithValue("$speed_bytes_per_second", snapshot.DownloadSpeedBytesPerSecond);
             insert.Parameters.AddWithValue("$eta_seconds", (object?)snapshot.EtaSeconds ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$seeds", Math.Max(0, snapshot.Seeds));
+            insert.Parameters.AddWithValue("$peers", Math.Max(0, snapshot.Peers));
+            insert.Parameters.AddWithValue("$snapshot_at_utc", now);
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

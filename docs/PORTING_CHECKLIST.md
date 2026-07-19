@@ -65,9 +65,9 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、同hash幂等、确认接收、download job与租约恢复已验证；portable v5.2.3 登录/list/路径 smoke 已通过，真实容器/file-priority/reconnect 待实现 |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、同hash幂等、确认接收、download job、租约恢复、按实例单在途轮询和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过，真实容器/file-priority/reconnect 待实现 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 例外 | migration diagnostic test |
-| `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 待实现 | restart/retry/progress tests |
+| `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v5 持久化 qB 规范状态、进度、容量、速度、ETA、Seeds/Peers、stale/revision；实例故障隔离和恢复 tests 已通过，整理阶段待实现 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 待实现 | notifier parity tests |
 | `renamer` 与 rename Python | C# 整理器 | 替换 | 待实现 | upstream rename fixtures |
 | `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 待实现 | FS integration/rollback tests |
@@ -87,8 +87,8 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status 与统一 ingest 已实现；CRUD/delete/OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；完整管理 UI/浏览器 E2E 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest 与只读 downloads 投影已实现；CRUD/delete/OpenAPI 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载状态卡片使用安全 DOM API 展示进度和实例离线状态，完整管理 UI/浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

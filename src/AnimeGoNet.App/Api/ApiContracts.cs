@@ -65,3 +65,30 @@ public sealed record IngestItemResponse(
     [property: JsonPropertyName("info_hash")] string? InfoHash,
     [property: JsonPropertyName("file_count")] int? FileCount,
     [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);
+
+public sealed record DownloadListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<DownloadListItem> Items);
+
+public sealed record DownloadListItem(
+    [property: JsonPropertyName("job_id")] string JobId,
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("downloader_id")] string DownloaderId,
+    [property: JsonPropertyName("info_hash")] string InfoHash,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("business_status")] string BusinessStatus,
+    [property: JsonPropertyName("progress")] double Progress,
+    [property: JsonPropertyName("downloaded_bytes")] long DownloadedBytes,
+    [property: JsonPropertyName("total_bytes")] long TotalBytes,
+    [property: JsonPropertyName("speed_bytes_per_second")] long SpeedBytesPerSecond,
+    [property: JsonPropertyName("eta_seconds")] long? EtaSeconds,
+    [property: JsonPropertyName("seeds")] int Seeds,
+    [property: JsonPropertyName("peers")] int Peers,
+    [property: JsonPropertyName("is_stale")] bool IsStale,
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("snapshot_at_utc")] DateTimeOffset? SnapshotAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
+    [property: JsonPropertyName("downloader_connected")] bool DownloaderConnected,
+    [property: JsonPropertyName("downloader_failure_code")] string? DownloaderFailureCode,
+    [property: JsonPropertyName("downloader_last_success_at_utc")] DateTimeOffset? DownloaderLastSuccessAtUtc);

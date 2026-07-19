@@ -12,6 +12,7 @@ $smokeRoot = Join-Path ([IO.Path]::GetTempPath()) ("animegonet-smoke-" + [Guid]:
 $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'
+$env:background_workers_enabled = 'false'
 $baseUrl = "http://127.0.0.1:$Port"
 $startParameters = @{
     FilePath = $resolvedExecutable
@@ -54,7 +55,7 @@ try {
     }
     $ingest = Invoke-RestMethod @ingestParameters
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
-    if ($status.database_schema_version -ne 4) {
+    if ($status.database_schema_version -ne 5) {
         throw "Unexpected schema version: $($status.database_schema_version)"
     }
 

@@ -15,7 +15,7 @@ public enum StagedDispatchResult
 public sealed class StagedTorrentDispatcher(
     IngestTaskStore tasks,
     ITorrentStagingService staging,
-    IDownloadClientRegistry clients,
+    DownloadClientOperationCoordinator clients,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
@@ -45,24 +45,10 @@ public sealed class StagedTorrentDispatcher(
                 throw new DispatchFailureException("downloader_unavailable");
             }
 
-            var client = clients.GetRequired(claim.DownloaderId);
-            await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
-            var snapshot = FindByHash(await client.ListAsync(cancellationToken).ConfigureAwait(false), claim.InfoHash);
-            if (snapshot is null)
-            {
-                await using var torrent = staging.OpenRead(claim.StagingFileName);
-                await client.AddTorrentAsync(
-                    new AddTorrentCommand(
-                        torrent,
-                        claim.StagingFileName,
-                        downloader.DownloadPath,
-                        Rename: null,
-                        Category: "animegonet",
-                        Tags: [claim.SourceId, claim.FileStrategy],
-                        StartPaused: true),
-                    cancellationToken).ConfigureAwait(false);
-                snapshot = await ConfirmAsync(client, claim.InfoHash, cancellationToken).ConfigureAwait(false);
-            }
+            var snapshot = await clients.ExecuteAsync(
+                claim.DownloaderId,
+                (client, token) => DispatchToClientAsync(client, claim, downloader, token),
+                cancellationToken).ConfigureAwait(false);
 
             if (snapshot is null)
             {
@@ -103,6 +89,33 @@ public sealed class StagedTorrentDispatcher(
                 cancellationToken).ConfigureAwait(false);
             return StagedDispatchResult.RetryScheduled;
         }
+    }
+
+    private async Task<DownloadTaskSnapshot?> DispatchToClientAsync(
+        IDownloadClient client,
+        ClaimedStagedTorrentRecord claim,
+        QbittorrentInstanceOptions downloader,
+        CancellationToken cancellationToken)
+    {
+        await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+        var snapshot = FindByHash(await client.ListAsync(cancellationToken).ConfigureAwait(false), claim.InfoHash);
+        if (snapshot is not null)
+        {
+            return snapshot;
+        }
+
+        await using var torrent = staging.OpenRead(claim.StagingFileName);
+        await client.AddTorrentAsync(
+            new AddTorrentCommand(
+                torrent,
+                claim.StagingFileName,
+                downloader.DownloadPath,
+                Rename: null,
+                Category: "animegonet",
+                Tags: [claim.SourceId, claim.FileStrategy],
+                StartPaused: true),
+            cancellationToken).ConfigureAwait(false);
+        return await ConfirmAsync(client, claim.InfoHash, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<DownloadTaskSnapshot?> ConfirmAsync(

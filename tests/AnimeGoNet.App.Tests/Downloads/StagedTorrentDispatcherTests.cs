@@ -236,7 +236,7 @@ public sealed class StagedTorrentDispatcherTests
         public StagedTorrentDispatcher CreateDispatcher(IDownloadClient client) => new(
             Store,
             new FileStagingService(Path.GetDirectoryName(StagingFilePath)!),
-            new FakeRegistry(client),
+            new DownloadClientOperationCoordinator(new FakeRegistry(client)),
             Options);
 
         public async Task<LifecycleState> ReadLifecycleAsync()
