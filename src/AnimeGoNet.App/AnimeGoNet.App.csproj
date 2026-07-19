@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <PublishAot>true</PublishAot>
+    <PublishAot Condition="'$(RuntimeIdentifier)' != ''">true</PublishAot>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>full</TrimMode>
     <InvariantGlobalization>false</InvariantGlobalization>

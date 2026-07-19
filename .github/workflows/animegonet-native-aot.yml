@@ -1,0 +1,60 @@
+name: AnimeGoNet NativeAOT
+
+on:
+  push:
+    branches: [main, develop, "codex/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: animegonet-aot-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            rid: win-x64
+            executable: AnimeGoNet.App.exe
+          - runner: windows-11-arm
+            rid: win-arm64
+            executable: AnimeGoNet.App.exe
+          - runner: ubuntu-24.04
+            rid: linux-x64
+            executable: AnimeGoNet.App
+          - runner: ubuntu-24.04-arm
+            rid: linux-arm64
+            executable: AnimeGoNet.App
+          - runner: macos-15
+            rid: osx-arm64
+            executable: AnimeGoNet.App
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          architecture: ${{ endsWith(matrix.rid, 'arm64') && 'arm64' || 'x64' }}
+      - name: Install Linux NativeAOT prerequisites
+        if: startsWith(matrix.rid, 'linux-')
+        run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
+      - name: Restore RID graph
+        run: dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime ${{ matrix.rid }}
+      - name: Publish NativeAOT
+        run: dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/publish/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
+      - name: Smoke published binary
+        shell: pwsh
+        run: ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: animegonet-${{ matrix.rid }}
+          path: artifacts/publish/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 14

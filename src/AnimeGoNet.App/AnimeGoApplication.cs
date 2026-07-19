@@ -14,6 +14,7 @@ public static class AnimeGoApplication
         string[] args,
         AnimeGoOptions? options = null,
         string? accessKey = null,
+        bool? runningInContainer = null,
         CancellationToken cancellationToken = default)
     {
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -24,8 +25,16 @@ public static class AnimeGoApplication
             WebRootPath = webRootPath,
         });
 
-        options ??= LoadOptions(builder.Configuration);
+        runningInContainer ??= string.Equals(
+            builder.Configuration["DOTNET_RUNNING_IN_CONTAINER"],
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
         accessKey ??= builder.Configuration["access_key"];
+        if (runningInContainer.Value && string.IsNullOrWhiteSpace(accessKey))
+        {
+            throw new InvalidOperationException("Docker mode requires a non-empty access_key.");
+        }
         var errors = AnimeGoOptionsValidator.Validate(options);
         if (errors.Count > 0)
         {
@@ -64,12 +73,8 @@ public static class AnimeGoApplication
         return app;
     }
 
-    private static AnimeGoOptions LoadOptions(ConfigurationManager configuration)
+    private static AnimeGoOptions LoadOptions(ConfigurationManager configuration, bool inContainer)
     {
-        var inContainer = string.Equals(
-            configuration["DOTNET_RUNNING_IN_CONTAINER"],
-            "true",
-            StringComparison.OrdinalIgnoreCase);
         var defaults = inContainer
             ? AnimeGoDefaults.CreateDocker()
             : AnimeGoDefaults.CreateNative(AppContext.BaseDirectory);

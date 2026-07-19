@@ -2,21 +2,34 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Executable,
 
-    [int]$Port = 53271
+    [int]$Port = 0
 )
 
 $ErrorActionPreference = 'Stop'
+$Port = if ($Port -eq 0) { Get-Random -Minimum 20000 -Maximum 60000 } else { $Port }
 $resolvedExecutable = (Resolve-Path -LiteralPath $Executable).Path
-$smokeRoot = Join-Path $PWD ("artifacts/smoke-" + [Guid]::NewGuid().ToString('N'))
+$smokeRoot = Join-Path ([IO.Path]::GetTempPath()) ("animegonet-smoke-" + [Guid]::NewGuid().ToString('N'))
 $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'
 $baseUrl = "http://127.0.0.1:$Port"
-$process = Start-Process -FilePath $resolvedExecutable -ArgumentList @('--urls', $baseUrl) -PassThru -WindowStyle Hidden
+$startParameters = @{
+    FilePath = $resolvedExecutable
+    ArgumentList = @('--urls', $baseUrl)
+    PassThru = $true
+}
+if ($IsWindows) {
+    $startParameters.WindowStyle = 'Hidden'
+}
+$process = Start-Process @startParameters
 
 try {
     $ping = $null
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
+        if ($process.HasExited) {
+            throw "Published process exited before becoming ready (exit code $($process.ExitCode))."
+        }
+
         try {
             $ping = Invoke-RestMethod -Uri "$baseUrl/ping" -TimeoutSec 2
             break
@@ -52,4 +65,7 @@ try {
 }
 finally {
     Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $smokeRoot) {
+        [IO.Directory]::Delete($smokeRoot, $true)
+    }
 }

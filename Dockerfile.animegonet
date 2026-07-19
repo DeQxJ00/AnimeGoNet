@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1.7
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+
+ARG TARGETARCH
+WORKDIR /src
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends clang zlib1g-dev libstdc++-12-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY global.json Directory.Build.props Directory.Packages.props AnimeGoNet.slnx ./
+COPY src/AnimeGoNet.Core/AnimeGoNet.Core.csproj src/AnimeGoNet.Core/
+COPY src/AnimeGoNet.Data/AnimeGoNet.Data.csproj src/AnimeGoNet.Data/
+COPY src/AnimeGoNet.App/AnimeGoNet.App.csproj src/AnimeGoNet.App/
+RUN case "$TARGETARCH" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime "$rid"
+
+COPY src/ src/
+RUN case "$TARGETARCH" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj \
+      --configuration Release \
+      --runtime "$rid" \
+      --self-contained true \
+      --no-restore \
+      --output /out \
+      -p:PublishAot=true \
+      -p:ContinuousIntegrationBuild=true
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble AS runtime
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 animegonet \
+    && useradd --uid 10001 --gid animegonet --no-create-home animegonet \
+    && mkdir --parents /app /data /download/incomplete /download/anime \
+    && chown --recursive animegonet:animegonet /app /data /download
+
+WORKDIR /app
+COPY --from=build --chown=animegonet:animegonet /out/ ./
+
+ENV ASPNETCORE_URLS=http://+:7991 \
+    ASPNETCORE_ENVIRONMENT=Container \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    data_path=/data \
+    download_path=/download/incomplete \
+    save_path=/download/anime
+
+VOLUME ["/data", "/download"]
+EXPOSE 7991
+USER 10001:10001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["curl", "--fail", "--silent", "http://127.0.0.1:7991/ping"]
+ENTRYPOINT ["/app/AnimeGoNet.App"]

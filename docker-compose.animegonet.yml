@@ -1,0 +1,41 @@
+services:
+  animegonet:
+    build:
+      context: .
+      dockerfile: Dockerfile.animegonet
+    image: animegonet:local
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Container
+      DOTNET_RUNNING_IN_CONTAINER: "true"
+      access_key: ${ANIMEGONET_ACCESS_KEY:?ANIMEGONET_ACCESS_KEY is required}
+      data_path: /data
+      download_path: /download/incomplete
+      save_path: /download/anime
+    ports:
+      - "7991:7991"
+    volumes:
+      - ./data:/data
+      - ./download:/download
+    networks:
+      - animegonet
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Shanghai}
+      WEBUI_PORT: "8080"
+    volumes:
+      - ./qbittorrent:/config
+      - ./download:/download
+    ports:
+      - "8080:8080"
+    networks:
+      - animegonet
+
+networks:
+  animegonet:
+    driver: bridge

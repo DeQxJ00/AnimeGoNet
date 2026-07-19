@@ -1,0 +1,40 @@
+name: AnimeGoNet CI
+
+on:
+  push:
+    branches: [main, develop, "codex/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: animegonet-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Restore dependencies
+        run: dotnet restore AnimeGoNet.slnx
+      - name: Build
+        run: dotnet build AnimeGoNet.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
+      - name: Test
+        run: dotnet test AnimeGoNet.slnx --configuration Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ matrix.runner }}
+          path: TestResults
+          if-no-files-found: ignore
+          retention-days: 14

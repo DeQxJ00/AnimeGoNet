@@ -8,13 +8,13 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 待实现 | 进程 smoke、SIGTERM/CTRL+C |
+| `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | JIT/Kestrel 与 win-x64 NativeAOT 进程 smoke 已通过；SIGTERM/CTRL+C 待验证 |
 | `cmd/plugin` | C# 内置插件测试与未来 `PluginTool` | 替换 | 待实现 | 协议/fixture tests |
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 待实现 | 12 份历史 YAML golden |
 | `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 待实现 | precedence/redaction tests |
-| `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 待实现 | published binary smoke |
+| `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `internal/constant`、`exceptions` | 强类型常量、稳定错误码 | 保留 | 待实现 | domain tests |
 | `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 待实现 | redaction/stream tests |
@@ -73,7 +73,7 @@
 | `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 待实现 | FS integration/rollback tests |
 | Mikan 默认整理 | `move` | 扩展默认 | 待实现 | config + completed flow |
 | 字幕整理 | EP 绑定、重命名、保留语言后缀 | 扩展 | 待实现 | ass/srt/idx/sub cases |
-| Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 待实现 | compose shared-volume tests |
+| Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 进行中 | 容器配置、Compose 共享卷和 CI smoke 已建立；Docker runner 实跑待验收 |
 
 ## 调度、HTTP API 与 WebUI
 
@@ -94,11 +94,11 @@
 
 | 上游行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| Go release workflows | .NET 10 build/test | 替换 | 待实现 | GitHub Actions |
-| 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 待实现 | 五 RID NativeAOT publish |
+| Go release workflows | .NET 10 build/test | 替换 | 进行中 | Windows/Linux/macOS Actions 已建立且 YAML 通过解析；远端运行待验收 |
+| 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 进行中 | 五 RID NativeAOT 矩阵已建立；win-x64 本机 publish/smoke 已通过 |
 | MIPS/386/macOS x64 | 不在首版 RID | 例外 | 例外 | 文档化 |
-| Go Dockerfile | NativeAOT runtime image | 替换 | 待实现 | `docker build` CI |
-| 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 待实现 | published binary smoke |
+| Go Dockerfile | NativeAOT runtime image | 替换 | 进行中 | amd64/arm64 Buildx 与容器 smoke 已建立；本机无 Docker，待 CI 实跑 |
+| 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 已验证 | win-x64 published binary 静态 WebUI smoke |
 
 ## 提交门禁
 

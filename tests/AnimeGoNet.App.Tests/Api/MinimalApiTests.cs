@@ -8,6 +8,18 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class MinimalApiTests
 {
     [Fact]
+    public async Task DockerModeRequiresAccessKey()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
+        var options = AnimeGoNet.Core.Configuration.AnimeGoDefaults.CreateNative(rootPath);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => AnimeGoApplication.BuildAsync([], options, accessKey: null, runningInContainer: true));
+
+        Assert.Contains("requires a non-empty access_key", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PingPreservesLegacyEnvelope()
     {
         await using var app = await RunningApp.StartAsync();

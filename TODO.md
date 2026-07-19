@@ -53,7 +53,7 @@
 - [x] 创建 solution、Core/Data/App 分层项目及对应测试项目。
 - [x] 添加 `global.json`、`Directory.Build.props`、`Directory.Packages.props`。
 - [x] 启用 nullable、warnings-as-errors、deterministic、AOT/trim analyzer。
-- [ ] 建立 Windows/Linux CI。
+- [x] 建立 Windows/Linux/macOS build/test CI，并对工作流 YAML 做本地语法校验。
 - [>] 验证 Minimal API、WebSocket、静态文件 NativeAOT（Minimal API/静态文件已通过 win-x64 原生 smoke；WebSocket 待实现）。
 - [x] 验证 Microsoft.Data.Sqlite NativeAOT（win-x64 原生进程完成 migration、integrity 与状态读取）。
 - [ ] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT。
@@ -229,12 +229,12 @@
 ## P10 — 组合与发布
 
 - [ ] 完成 Host DI 和 CLI 行为。
-- [ ] 完成 Docker NativeAOT 镜像。
+- [>] 完成 Docker NativeAOT 镜像（双架构 Dockerfile、Buildx CI 和容器 smoke 已建立；本机无 Docker CLI，待 GitHub runner 实跑）。
 - [ ] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证。
 - [ ] 添加连接外部下载器和内置 Compose 下载器的部署示例。
-- [ ] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
-- [ ] 提供写有上述绝对路径的 Docker 默认 YAML；Compose 卷与 YAML 逐项一致，不依赖隐藏环境变量修正路径。
-- [ ] 官方 Compose 将 AnimeGoNet 与下载器的同一宿主媒体目录统一挂载到 `/download`，验证硬链接不跨卷。
+- [x] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
+- [x] 提供写有上述绝对路径的 Docker 容器配置；Compose 卷与配置逐项一致，不依赖隐藏路径修正。
+- [>] 官方 Compose 将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`；配置和 smoke 断言已建立，真实容器验证待 CI。
 - [ ] 验证外部下载器 `client.download_path` 路径转换与错误诊断。
 - [ ] 构建并实机验证 `linux/amd64`，按确认结果验证 `linux/arm64`。
 - [ ] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退。
