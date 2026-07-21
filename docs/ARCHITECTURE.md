@@ -81,7 +81,7 @@ AnimeGoNet.slnx
 ## 4. SQLite 规则
 
 - 只使用 `Microsoft.Data.Sqlite`、参数化命令和显式 SQL，不使用 EF Core、运行时实体映射或反射 migration。
-- schema migration 是按版本排序的编译期常量；启动时在单事务执行并记录 `schema_migrations(version, name, applied_at_utc)`。
+- schema migration 是按版本排序的编译期常量；启动时在单事务执行并记录 `schema_migrations(version, name, applied_at_utc)`。schema v10 起 media organization 使用 job 级租约，逐文件 `file_operations` 每个 task file 唯一，并把文件完成与下载器 cleanup 作为两个可独立恢复阶段。
 - 启用 `PRAGMA foreign_keys=ON`、WAL、busy timeout；每个写入工作流使用短事务。
 - 枚举按稳定小写字符串或显式整数存储，禁止依赖 .NET 类型名。
 - 所有时间使用 UTC ISO-8601；所有比较 ID（source/profile/downloader）在入口转小写 invariant。

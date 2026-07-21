@@ -409,13 +409,15 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     eta_seconds, failure_reason, created_at_utc, updated_at_utc,
                     seeds, peers, snapshot_at_utc, is_stale, revision,
                     preparation_state, preparation_attempt_count,
-                    download_root_path, save_root_path)
+                    download_root_path, save_root_path,
+                    organization_state, organization_attempt_count)
                 VALUES (
                     $id, $task_id, $downloader_id, $info_hash, $state, $progress,
                     $downloaded_bytes, $total_bytes, $speed_bytes_per_second,
                     $eta_seconds, NULL, $created_at_utc, $updated_at_utc,
                     $seeds, $peers, $snapshot_at_utc, 0, 1,
-                    'pending', 0, $download_root_path, $save_root_path);
+                    'pending', 0, $download_root_path, $save_root_path,
+                    $organization_state, 0);
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
@@ -432,6 +434,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$snapshot_at_utc", now);
             insert.Parameters.AddWithValue("$download_root_path", downloadRootPath);
             insert.Parameters.AddWithValue("$save_root_path", saveRootPath);
+            insert.Parameters.AddWithValue(
+                "$organization_state",
+                string.Equals(claim.FileStrategy, "move", StringComparison.Ordinal) ? "pending" : "not_required");
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

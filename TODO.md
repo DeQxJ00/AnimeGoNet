@@ -166,10 +166,10 @@
 
 - [>] 移植下载管理状态机和 notifier（staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded、持久化准备租约及安全重试已实现；做种/整理 notifier 待实现）。
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
-- [ ] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入；RSS 早期检查并在提交下载器前事务复查。
+- [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：schema v10 组织租约、逐文件 operation 完成门禁、完成记录/episode claim 同事务及独立 qB cleanup 阶段已实现；NFO 与实际 worker 接入后才启用该完成事务，RSS早期复查待实现。
 - [ ] 移植 link/link_delete/move/wait_move。
 - [>] `move` 安全编排：TMDB规范目标路径规划、跨平台名称清洗、路径越界/符号链接拒绝、同卷原子移动、跨卷 copy+SHA-256 校验、目标冲突保全和崩溃后同内容恢复基础件已实现；下载完成后暂停、持久化逐文件执行、NFO/目录库、`deleteFiles=false` 清理和完成记录事务待串联。
-- [ ] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态，避免上游 `DeleteFile=true` 完成回调导致 `link` 提前停止做种。
+- [>] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：move 文件操作与 qB cleanup 已用 `pending/organizing/cleanup/completed` 分阶段并独立重试，cleanup 只允许后续 `deleteFiles=false`；做种目标与四类删除执行仍待实现。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
 - [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [ ] 实现字幕识别与唯一绑定：同 stem、多语言/默认/强制/SDH 后缀、按来源 EP 唯一匹配、`.idx/.sub` 成对处理；匹配后继承 TMDB EP，未匹配进入季度 `Other`。

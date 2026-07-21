@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 10;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -15,6 +15,7 @@ public static class DatabaseSchema
         new SchemaMigration(7, "metadata_resolution_stages", MetadataResolutionStages),
         new SchemaMigration(8, "download_file_preparation", DownloadFilePreparation),
         new SchemaMigration(9, "download_path_snapshot", DownloadPathSnapshot),
+        new SchemaMigration(10, "media_organization_lease", MediaOrganizationLease),
     ];
 
     private const string InitialBusinessSchema = """
@@ -446,5 +447,24 @@ public static class DatabaseSchema
 
         ALTER TABLE download_jobs
         ADD COLUMN save_root_path TEXT;
+        """;
+
+    private const string MediaOrganizationLease = """
+        ALTER TABLE download_jobs
+        ADD COLUMN organization_state TEXT NOT NULL DEFAULT 'not_required'
+        CHECK (organization_state IN ('not_required', 'pending', 'organizing', 'cleanup', 'completed'));
+
+        ALTER TABLE download_jobs ADD COLUMN organization_lease_token TEXT;
+        ALTER TABLE download_jobs ADD COLUMN organization_lease_expires_at_utc TEXT;
+        ALTER TABLE download_jobs ADD COLUMN organization_attempt_count INTEGER NOT NULL DEFAULT 0
+        CHECK (organization_attempt_count >= 0);
+        ALTER TABLE download_jobs ADD COLUMN organization_next_attempt_at_utc TEXT;
+        ALTER TABLE download_jobs ADD COLUMN organization_failure_code TEXT;
+
+        CREATE INDEX ix_download_jobs_organization
+        ON download_jobs(organization_state, organization_next_attempt_at_utc, updated_at_utc);
+
+        CREATE UNIQUE INDEX ux_file_operations_task_file
+        ON file_operations(task_file_id);
         """;
 }
