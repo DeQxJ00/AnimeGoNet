@@ -37,6 +37,29 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-heading strong { overflow-wrap: anywhere; }
 .download-card progress { width: 100%; height: 9px; margin: 16px 0 10px; accent-color: #59d3a5; }
 .download-details { margin: 0; color: #aebbd3; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
+.download-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.delete-button, .secondary-button, .danger-button, .icon-button { border-radius: 10px; padding: 9px 12px; cursor: pointer; font: inherit; }
+.delete-button { border: 1px solid #6d4950; color: #ffb4b4; background: #2b171b; }
+.delete-button:hover, .danger-button:hover { border-color: #c35c69; }
+#delete-dialog { width: min(760px, calc(100% - 28px)); max-height: calc(100vh - 40px); padding: 0; color: #edf2ff; border: 1px solid #813f49; border-radius: 22px; background: #101625; box-shadow: 0 30px 100px rgba(0,0,0,.65); }
+#delete-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
+.delete-panel { padding: 24px; }
+.delete-heading, .delete-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.delete-heading h2 { margin-bottom: 0; font-size: 1.6rem; }
+.icon-button { border: 0; color: #aebbd3; background: transparent; font-size: 1.6rem; }
+.delete-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.delete-option { display: flex; gap: 11px; padding: 13px; border: 1px solid #344260; border-radius: 13px; background: rgba(5,8,16,.45); }
+.delete-option input { margin-top: 3px; accent-color: #e35d6a; }
+.delete-option strong, .delete-option small { display: block; }
+.delete-option small { margin-top: 4px; color: #8da2c9; line-height: 1.4; }
+.delete-targets { max-height: 260px; overflow: auto; display: grid; gap: 10px; }
+.delete-targets section { padding: 12px 14px; border-radius: 12px; background: rgba(5,8,16,.55); }
+.delete-targets h3 { margin-bottom: 8px; font-size: .9rem; }
+.delete-targets ul { margin: 0; padding-left: 20px; color: #aebbd3; font-size: .78rem; overflow-wrap: anywhere; }
+.delete-message { min-height: 24px; margin: 15px 0; color: #ffb4b4; font-size: .84rem; }
+.secondary-button { border: 1px solid #344260; color: #edf2ff; background: #151d2f; }
+.danger-button { border: 1px solid #924854; color: white; background: #8f3340; }
+.danger-button:disabled { cursor: not-allowed; opacity: .45; }
 .empty { border: 1px dashed #344260; border-radius: 18px; padding: 22px; }
 .metadata-tasks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .metadata-card { border: 1px solid #344260; border-radius: 18px; padding: 20px; background: rgba(16,22,37,.88); }
@@ -59,4 +82,5 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .grid { grid-template-columns: 1fr; }
   .metadata-tasks { grid-template-columns: 1fr; }
   .metadata-stages { grid-template-columns: 1fr; }
+  .delete-options { grid-template-columns: 1fr; }
 }

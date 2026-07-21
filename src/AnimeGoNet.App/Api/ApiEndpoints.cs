@@ -5,12 +5,14 @@ using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Deletion;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 
 namespace AnimeGoNet.App.Api;
 
@@ -22,6 +24,9 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/downloads", Downloads);
+        app.MapGet("/api/v1/delete/tasks/{taskId}/preview", DeletePreview);
+        app.MapPost("/api/v1/delete/tasks/{taskId}", CreateDeleteExecution);
+        app.MapGet("/api/v1/delete/executions/{executionId}", DeleteExecutionStatus);
         app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}", GetMikanWorkRule);
         app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
         app.MapDelete("/api/v1/mikan/work-rules/{mikanId:int}", DeleteMikanWorkRule);
@@ -67,7 +72,8 @@ public static class ApiEndpoints
                 Qbittorrent: true,
                 Tmdb: !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ApiKey)
                     || !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ReadAccessToken),
-                Organizer: false)));
+                Organizer: true,
+                Deletion: true)));
     }
 
     private static async Task<Ok<DownloadListResponse>> Downloads(
@@ -98,6 +104,80 @@ public static class ApiEndpoints
             record.DownloaderConnected,
             record.DownloaderFailureCode,
             record.DownloaderLastSuccessAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> DeletePreview(
+        string taskId,
+        DeletePlanStore plans,
+        CancellationToken cancellationToken)
+    {
+        var preview = await plans.GetPreviewAsync(taskId, cancellationToken).ConfigureAwait(false);
+        return preview is null
+            ? TypedResults.NotFound(Error("delete_task_not_found", "Delete task was not found."))
+            : TypedResults.Ok(new DeletePreviewResponse(
+                preview.TaskId, preview.TaskTitle, preview.TaskStatus, preview.Fingerprint,
+                preview.BusinessRecords.Select(ToResponse).ToArray(),
+                preview.DownloaderTasks.Select(ToResponse).ToArray(),
+                preview.SourceFiles.Select(ToResponse).ToArray(),
+                preview.MediaFiles.Select(ToResponse).ToArray()));
+    }
+
+    private static async Task<IResult> CreateDeleteExecution(
+        string taskId,
+        CreateDeleteExecutionRequest request,
+        DeletePlanStore plans,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var plan = await plans.CreateAsync(
+                taskId,
+                request.Fingerprint ?? string.Empty,
+                new DeleteSelection(
+                    request.DeleteBusinessRecord,
+                    request.DeleteDownloaderTask,
+                    request.DeleteSourceFiles,
+                    request.DeleteMediaFiles),
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Accepted(
+                $"/api/v1/delete/executions/{plan.ExecutionId}",
+                new CreateDeleteExecutionResponse(
+                    plan.ExecutionId, plan.TaskId, plan.State, plan.Targets.Count));
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error("delete_task_not_found", "Delete task was not found."));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return TypedResults.Conflict(Error("delete_preview_stale", exception.Message));
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            return TypedResults.Conflict(Error(
+                "delete_execution_active", "This task already has an active delete execution."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("delete_request_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteExecutionStatus(
+        string executionId,
+        DeleteExecutionStore executions,
+        CancellationToken cancellationToken)
+    {
+        var execution = await executions.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
+        return execution is null
+            ? TypedResults.NotFound(Error("delete_execution_not_found", "Delete execution was not found."))
+            : TypedResults.Ok(new DeleteExecutionStatusResponse(
+                execution.ExecutionId, execution.TaskId, execution.State, execution.FailureReason,
+                execution.AttemptCount, execution.CreatedAtUtc, execution.CompletedAtUtc,
+                execution.Items.Select(item => new DeleteTargetResponse(
+                    item.ItemKind, item.TargetKey, item.RootPath, item.DownloaderId,
+                    item.DisplayValue, item.State)).ToArray()));
     }
 
     private static async Task<IResult> GetMikanWorkRule(
@@ -407,4 +487,7 @@ public static class ApiEndpoints
             rule.UpdatedAtUtc);
 
     private static ApiErrorResponse Error(string code, string message) => new(code, message);
+
+    private static DeleteTargetResponse ToResponse(DeletePlanTarget target) =>
+        new(target.ItemKind, target.TargetKey, target.RootPath, target.DownloaderId, target.DisplayValue);
 }

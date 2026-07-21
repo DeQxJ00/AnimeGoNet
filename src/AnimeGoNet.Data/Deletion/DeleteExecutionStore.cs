@@ -6,6 +6,63 @@ namespace AnimeGoNet.Data.Deletion;
 
 public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
 {
+    public async Task<DeleteExecutionStatus?> GetAsync(
+        string executionId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executionId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string taskId;
+        string state;
+        string? failureReason;
+        int attemptCount;
+        DateTimeOffset createdAt;
+        DateTimeOffset? completedAt;
+        await using (var execution = connection.CreateCommand())
+        {
+            execution.CommandText = """
+                SELECT task_id, state, failure_reason, attempt_count, created_at_utc, completed_at_utc
+                FROM delete_executions WHERE id = $id;
+                """;
+            execution.Parameters.AddWithValue("$id", executionId);
+            await using var reader = await execution.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            taskId = reader.GetString(0);
+            state = reader.GetString(1);
+            failureReason = reader.IsDBNull(2) ? null : reader.GetString(2);
+            attemptCount = reader.GetInt32(3);
+            createdAt = DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture);
+            completedAt = reader.IsDBNull(5)
+                ? null
+                : DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture);
+        }
+
+        var items = new List<DeleteExecutionItem>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT id, item_kind, target_key, root_path, downloader_id, display_value, state
+                FROM delete_execution_items WHERE execution_id = $id ORDER BY ordinal, id;
+                """;
+            query.Parameters.AddWithValue("$id", executionId);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                items.Add(new DeleteExecutionItem(
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), reader.GetString(6)));
+            }
+        }
+
+        return new DeleteExecutionStatus(
+            executionId, taskId, state, failureReason, attemptCount, createdAt, completedAt, items);
+    }
+
     public async Task<DeleteExecutionClaim?> TryClaimNextAsync(
         DateTimeOffset utcNow,
         TimeSpan leaseDuration,
@@ -80,7 +137,7 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         {
             query.Transaction = transaction;
             query.CommandText = """
-                SELECT id, item_kind, target_key, root_path, downloader_id, state
+                SELECT id, item_kind, target_key, root_path, downloader_id, display_value, state
                 FROM delete_execution_items
                 WHERE execution_id = $id AND state IN ('pending', 'failed')
                 ORDER BY CASE item_kind
@@ -97,7 +154,7 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
                 items.Add(new DeleteExecutionItem(
                     reader.GetString(0), reader.GetString(1), reader.GetString(2),
                     reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5)));
+                    reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), reader.GetString(6)));
             }
         }
 

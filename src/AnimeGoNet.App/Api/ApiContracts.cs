@@ -26,7 +26,8 @@ public sealed record RuntimeCapabilities(
     [property: JsonPropertyName("rss_rules")] bool RssRules,
     [property: JsonPropertyName("qbittorrent")] bool Qbittorrent,
     [property: JsonPropertyName("tmdb")] bool Tmdb,
-    [property: JsonPropertyName("organizer")] bool Organizer);
+    [property: JsonPropertyName("organizer")] bool Organizer,
+    [property: JsonPropertyName("deletion")] bool Deletion);
 
 public sealed record IngestBatchRequest(
     [property: JsonPropertyName("source")] string? Source,
@@ -142,3 +143,44 @@ public sealed record MetadataTaskListItem(
 public sealed record ApiErrorResponse(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message);
+
+public sealed record DeleteTargetResponse(
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("target")] string Target,
+    [property: JsonPropertyName("root_path")] string? RootPath,
+    [property: JsonPropertyName("downloader_id")] string? DownloaderId,
+    [property: JsonPropertyName("display_value")] string DisplayValue,
+    [property: JsonPropertyName("state")] string? State = null);
+
+public sealed record DeletePreviewResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("task_status")] string TaskStatus,
+    [property: JsonPropertyName("fingerprint")] string Fingerprint,
+    [property: JsonPropertyName("business_records")] IReadOnlyList<DeleteTargetResponse> BusinessRecords,
+    [property: JsonPropertyName("downloader_tasks")] IReadOnlyList<DeleteTargetResponse> DownloaderTasks,
+    [property: JsonPropertyName("source_files")] IReadOnlyList<DeleteTargetResponse> SourceFiles,
+    [property: JsonPropertyName("media_files")] IReadOnlyList<DeleteTargetResponse> MediaFiles);
+
+public sealed record CreateDeleteExecutionRequest(
+    [property: JsonPropertyName("fingerprint")] string? Fingerprint,
+    [property: JsonPropertyName("delete_business_record")] bool DeleteBusinessRecord,
+    [property: JsonPropertyName("delete_downloader_task")] bool DeleteDownloaderTask,
+    [property: JsonPropertyName("delete_source_files")] bool DeleteSourceFiles,
+    [property: JsonPropertyName("delete_media_files")] bool DeleteMediaFiles);
+
+public sealed record CreateDeleteExecutionResponse(
+    [property: JsonPropertyName("execution_id")] string ExecutionId,
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("selected_target_count")] int SelectedTargetCount);
+
+public sealed record DeleteExecutionStatusResponse(
+    [property: JsonPropertyName("execution_id")] string ExecutionId,
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("failure_reason")] string? FailureReason,
+    [property: JsonPropertyName("attempt_count")] int AttemptCount,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
+    [property: JsonPropertyName("items")] IReadOnlyList<DeleteTargetResponse> Items);

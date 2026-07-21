@@ -74,6 +74,26 @@
     </section>
   </main>
 
+  <dialog id="delete-dialog" aria-labelledby="delete-title">
+    <form method="dialog" class="delete-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Auditable delete</p>
+          <h2 id="delete-title">删除预览</h2>
+        </div>
+        <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+      </div>
+      <p id="delete-summary" class="muted"></p>
+      <div id="delete-options" class="delete-options"></div>
+      <div id="delete-targets" class="delete-targets"></div>
+      <p id="delete-message" class="delete-message" aria-live="polite"></p>
+      <div class="delete-actions">
+        <button value="cancel" class="secondary-button">取消</button>
+        <button id="delete-confirm" value="default" type="button" class="danger-button">确认创建删除任务</button>
+      </div>
+    </form>
+  </dialog>
+
   <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -63,6 +63,7 @@ public sealed record DeleteExecutionItem(
     string TargetKey,
     string? RootPath,
     string? DownloaderId,
+    string DisplayValue,
     string State);
 
 public sealed record DeleteExecutionClaim(
@@ -70,4 +71,14 @@ public sealed record DeleteExecutionClaim(
     string TaskId,
     string LeaseToken,
     int AttemptCount,
+    IReadOnlyList<DeleteExecutionItem> Items);
+
+public sealed record DeleteExecutionStatus(
+    string ExecutionId,
+    string TaskId,
+    string State,
+    string? FailureReason,
+    int AttemptCount,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
     IReadOnlyList<DeleteExecutionItem> Items);
