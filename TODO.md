@@ -85,7 +85,7 @@
 - [ ] 实现 SQLite KV/TTL store。
 - [ ] 实现 bucket/list/get/delete 兼容接口。
 - [ ] 移植目录 JSON 数据库扫描/索引/写入。
-- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；删除中心已能预览并冻结精确完成记录 ID，实际删除/claim 释放与 alias repository 待实现）。
+- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；删除执行器已按精确记录 ID 事务删除 completion/alias 并释放对应 completed claim，通用 alias repository 待实现）。
 - [>] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键（schema/约束已完成；事务 store 与早停编排待实现）。
 - [ ] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件。
 - [ ] 移植 `tvshow.nfo` 生成和更新。
@@ -169,7 +169,7 @@
 - [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：move worker 已在所有文件及原子 `tvshow.nfo` 成功后才执行完成记录/episode claim 事务，qB cleanup 独立在后；完整目录库和 RSS 早期事务复查待实现。
 - [ ] 移植 link/link_delete/move/wait_move。
 - [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 与完整目录库待验收。
-- [>] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：move 文件操作与 qB cleanup 已用 `pending/organizing/cleanup/completed` 分阶段并独立重试，cleanup 只允许后续 `deleteFiles=false`；做种目标与四类删除执行仍待实现。
+- [>] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：move 文件操作与 qB cleanup 已分阶段；四类删除已按逐项目标独立持久化、租约执行和失败重试，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束；做种目标待实现。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
 - [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [x] 实现字幕识别与唯一绑定：同目录同 stem 优先、语言/default/forced/SDH 后缀原样保留、不同 stem 按来源 EP 唯一匹配、`.idx/.sub` 分别绑定并保留扩展；匹配后只复用视频的已验证 TMDB EP/claim/priority，未匹配或歧义进入已确认季度 `Other`，整理不产生重复完成记录。
@@ -219,7 +219,7 @@
 - [ ] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态。
 - [ ] 增加 Mikan 作品规则 CRUD：按 `mikanid` 编辑 Bgm/TMDB Series/Season/EP Offset，预览影响范围，支持禁用、清除和显式重新匹配；已完成文件不自动移动。
 - [>] 作品详情展示 Series/Season/Episode 的 TMDB 获取阶段、验证状态、人工偏移和最后解析时间（任务状态投影已展示最近成功策略和更新时间；季度详情、人工偏移与逐次验证时间线待实现）。
-- [>] 实现四类删除命令及组合删除计划：schema v12 已按业务记录 ID、下载器实例+hash、捕获根目录内源/媒体绝对路径生成只读预览，以 SHA-256 指纹防止过期确认，并将选中目标逐项冻结审计；实际执行、路径约束、部分失败重试和 WebUI 待实现。
+- [>] 实现四类删除命令及组合删除计划：schema v12 已完成指纹预览、逐项冻结、租约恢复、稳定失败码和部分失败重试；执行顺序为 qB 任务（永不带文件）→源文件→媒体文件→业务记录/claim，文件只允许捕获根目录内精确普通文件且不递归删目录；API/WebUI 待实现。
 - [>] Web UI 支持按失败阶段、错误码、可重试性和处理状态筛选；提供安全的“重新匹配”，并区分待自动重试、需配置修复、需人工处理、已跳过和已兜底（失败任务显式重新匹配与脱敏失败原因已实现；筛选、错误码/可重试性投影及完整分类待实现）。
 - [ ] 对环境变量覆盖字段显示有效值和只读锁定状态，禁止 Web 保存造成“已修改但不生效”的假象。
 - [ ] 实现插件分类、启停、args/vars 和校验视图。

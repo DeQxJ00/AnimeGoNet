@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Serialization;
@@ -11,6 +12,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Deletion;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
@@ -95,6 +97,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloadPreparationStore>();
         builder.Services.AddSingleton<MediaOrganizationStore>();
+        builder.Services.AddSingleton<DeletePlanStore>();
+        builder.Services.AddSingleton<DeleteExecutionStore>();
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
@@ -108,6 +112,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<SafeFileMover>();
         builder.Services.AddSingleton<TvShowNfoWriter>();
         builder.Services.AddSingleton<MediaOrganizationProcessor>();
+        builder.Services.AddSingleton<SafeFileDeleter>();
+        builder.Services.AddSingleton<DeleteExecutionProcessor>();
         tmdbClient ??= new TmdbClient(
             new HttpClient(),
             options.Metadata.Tmdb,
@@ -130,6 +136,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<EpisodeMetadataResolutionWorker>();
             builder.Services.AddHostedService<DownloadPreparationWorker>();
             builder.Services.AddHostedService<MediaOrganizationWorker>();
+            builder.Services.AddHostedService<DeleteExecutionWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

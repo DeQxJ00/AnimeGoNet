@@ -56,3 +56,18 @@ public sealed record DeleteExecutionPlan(
     string State,
     IReadOnlyList<DeletePlanTarget> Targets,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record DeleteExecutionItem(
+    string ItemId,
+    string ItemKind,
+    string TargetKey,
+    string? RootPath,
+    string? DownloaderId,
+    string State);
+
+public sealed record DeleteExecutionClaim(
+    string ExecutionId,
+    string TaskId,
+    string LeaseToken,
+    int AttemptCount,
+    IReadOnlyList<DeleteExecutionItem> Items);
