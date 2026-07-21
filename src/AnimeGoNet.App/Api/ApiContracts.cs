@@ -112,6 +112,10 @@ public sealed record MikanWorkRuleResponse(
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MetadataRetryResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("status")] string Status);
+
 public sealed record ApiErrorResponse(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message);

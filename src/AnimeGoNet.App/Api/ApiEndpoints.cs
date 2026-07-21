@@ -6,6 +6,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Mikan;
+using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -24,6 +25,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}", GetMikanWorkRule);
         app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
         app.MapDelete("/api/v1/mikan/work-rules/{mikanId:int}", DeleteMikanWorkRule);
+        app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
     }
@@ -167,6 +169,35 @@ public static class ApiEndpoints
         {
             return TypedResults.BadRequest(Error("mikan_rule_invalid", exception.Message));
         }
+    }
+
+    private static async Task<IResult> RetryMetadataTask(
+        string taskId,
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return TypedResults.BadRequest(Error("metadata_task_id_invalid", "Metadata task ID is required."));
+        }
+
+        var result = await resolutions.RetryFailedAsync(
+            taskId,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return result switch
+        {
+            MetadataRetryResult.Retried => TypedResults.Ok(new MetadataRetryResponse(taskId, "downloaded")),
+            MetadataRetryResult.NotFound => TypedResults.NotFound(Error(
+                "metadata_task_not_found",
+                "Metadata task was not found.")),
+            MetadataRetryResult.ActiveLease => TypedResults.Conflict(Error(
+                "metadata_task_active",
+                "Metadata task has an active resolution lease.")),
+            _ => TypedResults.Conflict(Error(
+                "metadata_task_not_failed",
+                "Only failed metadata tasks can be retried.")),
+        };
     }
 
     private static async Task<Ok<IngestBatchResponse>> Ingest(

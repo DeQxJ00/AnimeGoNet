@@ -33,3 +33,11 @@ public sealed record MetadataRunProjection(
     MetadataFailureKind? FailureKind,
     bool FallbackEligible,
     string? FallbackDenialReason);
+
+public enum MetadataRetryResult
+{
+    Retried,
+    NotFound,
+    InvalidState,
+    ActiveLease,
+}

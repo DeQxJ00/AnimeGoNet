@@ -366,6 +366,79 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<MetadataRetryResult> RetryFailedAsync(
+        string taskId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        string? status = null;
+        var hasActiveLease = false;
+        await using (var select = connection.CreateCommand())
+        {
+            select.Transaction = transaction;
+            select.CommandText = """
+                SELECT task.status, EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id AND run.status = 'running')
+                FROM ingest_tasks AS task
+                WHERE task.id = $task_id;
+                """;
+            select.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                status = reader.GetString(0);
+                hasActiveLease = reader.GetInt64(1) != 0;
+            }
+        }
+
+        if (status is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return MetadataRetryResult.NotFound;
+        }
+
+        if (hasActiveLease)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return MetadataRetryResult.ActiveLease;
+        }
+
+        if (!string.Equals(status, "metadata_failed", StringComparison.Ordinal))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return MetadataRetryResult.InvalidState;
+        }
+
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE ingest_tasks
+            SET status = 'downloaded', failure_kind = NULL,
+                failure_reason = NULL, updated_at_utc = $now
+            WHERE id = $task_id AND status = 'metadata_failed'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM metadata_resolution_runs
+                WHERE task_id = $task_id AND status = 'running');
+            """;
+        update.Parameters.AddWithValue("$task_id", taskId);
+        update.Parameters.AddWithValue("$now", now);
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException("Metadata task retry state changed concurrently.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return MetadataRetryResult.Retried;
+    }
+
     public async Task<MetadataRunProjection?> GetLatestAsync(
         string taskId,
         CancellationToken cancellationToken = default)

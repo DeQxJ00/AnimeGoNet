@@ -114,6 +114,47 @@ public sealed class ManualMetadataResolutionProcessorTests
         Assert.Equal("downloaded", await command.ExecuteScalarAsync());
     }
 
+    [Fact]
+    public async Task DisablingInvalidManualOverrideThenRetryReturnsTaskToAutomaticQueue()
+    {
+        await using var app = await RunningApp.StartAsync(tmdbClient: new FakeTmdbClient { Series = null });
+        await AddManualRuleAsync(app);
+        var taskId = await AddDownloadedTaskAsync(app);
+        var processor = app.App.Services.GetRequiredService<ManualMetadataResolutionProcessor>();
+        Assert.True(await processor.RunOnceAsync());
+
+        var rules = app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>();
+        var current = Assert.IsType<MikanWorkMetadataRule>(await rules.GetAsync(3951));
+        await rules.SaveAsync(
+            new MikanWorkMetadataRuleUpdate(
+                current.MikanId,
+                current.BangumiSubjectId,
+                current.TmdbSeriesId,
+                current.TmdbSeasonNumber,
+                current.EpisodeOffset,
+                Enabled: false),
+            current.Revision,
+            DateTimeOffset.UtcNow);
+
+        using var response = await app.Client.PostAsync($"/api/v1/metadata/tasks/{taskId}/retry", null);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(taskId, json.RootElement.GetProperty("task_id").GetString());
+        Assert.Equal("downloaded", json.RootElement.GetProperty("status").GetString());
+        Assert.False(await processor.RunOnceAsync());
+
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT status, failure_kind, failure_reason FROM ingest_tasks WHERE id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("downloaded", reader.GetString(0));
+        Assert.True(reader.IsDBNull(1));
+        Assert.True(reader.IsDBNull(2));
+    }
+
     private static async Task AddManualRuleAsync(RunningApp app)
     {
         await app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>().SaveAsync(

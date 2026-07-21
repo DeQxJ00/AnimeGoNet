@@ -136,6 +136,58 @@ public sealed class MetadataResolutionStoreTests
         Assert.False(run.TmdbAccessConfirmed);
     }
 
+    [Fact]
+    public async Task FailedTaskCanBeRetriedWithoutDeletingResolutionHistory()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var first = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        await fixture.Store.FailAsync(
+            first,
+            new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_series_not_found", true),
+            fallbackEligible: false,
+            "manual_override_active",
+            now);
+
+        Assert.Equal(MetadataRetryResult.Retried, await fixture.Store.RetryFailedAsync(
+            fixture.TaskId,
+            now.AddSeconds(1)));
+        var second = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now.AddSeconds(2),
+            TimeSpan.FromMinutes(1)));
+
+        Assert.Equal(2, second.AttemptNumber);
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM metadata_resolution_runs WHERE task_id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", fixture.TaskId);
+        Assert.Equal(2L, await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task RetryRejectsTaskThatIsNotFailed()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+
+        Assert.Equal(MetadataRetryResult.InvalidState, await fixture.Store.RetryFailedAsync(
+            fixture.TaskId,
+            DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public async Task RetryRejectsTaskWithActiveResolutionLease()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        Assert.NotNull(await fixture.Store.TryClaimNextDownloadedAsync(now, TimeSpan.FromMinutes(1)));
+
+        Assert.Equal(MetadataRetryResult.ActiveLease, await fixture.Store.RetryFailedAsync(
+            fixture.TaskId,
+            now.AddSeconds(1)));
+    }
+
     private sealed class MetadataFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _databaseFixture;
