@@ -831,6 +831,77 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(9) ? null : reader.GetString(9));
     }
 
+    public async Task<IReadOnlyList<MetadataTaskListProjection>> ListTasksAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 500);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT task.id, task.title, task.source_id, task.status,
+                   task.mikanid, task.bangumi_subject_id,
+                   (SELECT run.tmdb_series_id FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id AND run.tmdb_series_id IS NOT NULL
+                    ORDER BY run.attempt_number DESC LIMIT 1),
+                   (SELECT run.tmdb_season_number FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id AND run.tmdb_season_number IS NOT NULL
+                    ORDER BY run.attempt_number DESC LIMIT 1),
+                   (SELECT attempt.strategy
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id AND attempt.stage = 'series' AND attempt.result = 'matched'
+                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT attempt.strategy
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id AND attempt.stage = 'season' AND attempt.result = 'matched'
+                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT attempt.strategy
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id AND attempt.stage = 'episode' AND attempt.result = 'matched'
+                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   task.failure_kind, task.failure_reason,
+                   SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
+                   task.updated_at_utc
+            FROM ingest_tasks AS task
+            LEFT JOIN task_files AS file ON file.task_id = task.id
+            GROUP BY task.id
+            ORDER BY task.updated_at_utc DESC, task.id DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$limit", limit);
+        var items = new List<MetadataTaskListProjection>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            items.Add(new MetadataTaskListProjection(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetString(12),
+                reader.GetInt32(13),
+                reader.GetInt32(14),
+                reader.GetInt32(15),
+                DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
+        }
+
+        return items;
+    }
+
     private static string CanonicalName(TmdbSeries series) =>
         !string.IsNullOrWhiteSpace(series.Name) ? series.Name.Trim() : series.OriginalName.Trim();
 

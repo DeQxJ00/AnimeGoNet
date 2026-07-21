@@ -87,8 +87,8 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest 与只读 downloads 投影已实现；CRUD/delete/OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载状态卡片使用安全 DOM API 展示进度和实例离线状态，完整管理 UI/浏览器 E2E 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、只读 downloads 与脱敏 metadata task 投影已实现；CRUD/delete/OpenAPI 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载状态卡片和元数据阶段/失败/文件归类/显式重试面板使用安全 DOM API，完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

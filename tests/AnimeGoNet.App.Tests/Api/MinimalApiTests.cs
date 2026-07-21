@@ -76,6 +76,38 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
+    public async Task MetadataTaskListShowsPipelineStateWithoutSecretTorrentUrl()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/metadata-list.torrent",
+                "info": { "title": "Metadata list", "mikanid": 3951, "bgmid": 547888 }
+              }]
+            }
+            """;
+        using var ingest = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, ingest.StatusCode);
+
+        using var response = await app.Client.GetAsync("/api/v1/metadata/tasks");
+        var body = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Metadata list", item.GetProperty("title").GetString());
+        Assert.Equal("staged", item.GetProperty("status").GetString());
+        Assert.Equal(3951, item.GetProperty("mikanid").GetInt32());
+        Assert.Equal(1, item.GetProperty("pending_file_count").GetInt32());
+        Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("metadata-list.torrent", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProtectedApiAcceptsDirectAndLegacyHashedAccessKeys()
     {
         const string accessKey = "test-secret";

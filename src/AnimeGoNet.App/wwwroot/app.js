@@ -87,3 +87,119 @@ async function loadDownloads() {
 
 void loadDownloads();
 window.setInterval(() => void loadDownloads(), 5000);
+
+const statusLabels = {
+  received: "已接收",
+  staged: "种子已暂存",
+  dispatching: "正在提交下载器",
+  downloading: "下载中",
+  downloaded: "等待元数据匹配",
+  metadata_resolving: "正在匹配 Series / Season",
+  metadata_season_resolved: "季度已确认",
+  metadata_episode_resolving: "正在验证 Episode",
+  metadata_resolved: "元数据已确认",
+  metadata_failed: "元数据失败",
+};
+
+function textOrDash(value) {
+  return value === null || value === undefined || value === "" ? "—" : String(value);
+}
+
+async function retryMetadataTask(taskId, button) {
+  button.disabled = true;
+  button.textContent = "重新入队中…";
+  try {
+    const response = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/retry`, {
+      method: "POST",
+      headers,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.message ?? `HTTP ${response.status}`);
+    }
+    await loadMetadataTasks();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = error instanceof Error ? error.message : "重试失败";
+  }
+}
+
+async function loadMetadataTasks() {
+  const container = document.querySelector("#metadata-tasks");
+  try {
+    const response = await fetch("/api/v1/metadata/tasks", { headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const body = await response.json();
+    if (body.items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted empty";
+      empty.textContent = "暂无元数据任务";
+      container.replaceChildren(empty);
+      return;
+    }
+
+    container.replaceChildren(...body.items.map(item => {
+      const card = document.createElement("article");
+      card.className = `metadata-card ${item.status === "metadata_failed" ? "failed" : ""}`;
+      const heading = document.createElement("div");
+      heading.className = "metadata-heading";
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const state = document.createElement("span");
+      state.className = `badge ${item.status === "metadata_failed" ? "error" : "ready"}`;
+      state.textContent = statusLabels[item.status] ?? item.status;
+      heading.append(title, state);
+
+      const identity = document.createElement("p");
+      identity.className = "metadata-identity";
+      identity.textContent = `${item.source} · mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)} · TMDB ${textOrDash(item.tmdb_series_id)} / S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`;
+
+      const stages = document.createElement("dl");
+      stages.className = "metadata-stages";
+      for (const [label, value] of [
+        ["Series", item.series_strategy],
+        ["Season", item.season_strategy],
+        ["Episode", item.episode_strategy],
+      ]) {
+        const group = document.createElement("div");
+        const term = document.createElement("dt");
+        term.textContent = label;
+        const description = document.createElement("dd");
+        description.textContent = textOrDash(value);
+        group.append(term, description);
+        stages.append(group);
+      }
+
+      const files = document.createElement("p");
+      files.className = "metadata-files";
+      files.textContent = `已确认 ${item.episode_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
+      card.append(heading, identity, stages, files);
+
+      if (item.failure_kind || item.failure_reason) {
+        const failure = document.createElement("p");
+        failure.className = "metadata-failure";
+        failure.textContent = `${textOrDash(item.failure_kind)} · ${textOrDash(item.failure_reason)}`;
+        card.append(failure);
+      }
+
+      if (item.status === "metadata_failed") {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "retry-button";
+        retry.textContent = "显式重新匹配";
+        retry.addEventListener("click", () => void retryMetadataTask(item.task_id, retry));
+        card.append(retry);
+      }
+
+      return card;
+    }));
+  } catch (error) {
+    const failed = document.createElement("p");
+    failed.className = "muted empty";
+    failed.textContent = error instanceof Error ? `元数据状态读取失败：${error.message}` : "元数据状态读取失败";
+    container.replaceChildren(failed);
+  }
+}
+
+void loadMetadataTasks();
+window.setInterval(() => void loadMetadataTasks(), 5000);

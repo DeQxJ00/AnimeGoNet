@@ -17,6 +17,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MikanWorkRuleRequest))]
 [JsonSerializable(typeof(MikanWorkRuleResponse))]
 [JsonSerializable(typeof(MetadataRetryResponse))]
+[JsonSerializable(typeof(MetadataTaskListResponse))]
 [JsonSerializable(typeof(ApiErrorResponse))]
 [JsonSerializable(typeof(QbittorrentTorrentInfo[]))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;

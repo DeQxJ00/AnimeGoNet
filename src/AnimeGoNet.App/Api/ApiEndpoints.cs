@@ -26,6 +26,7 @@ public static class ApiEndpoints
         app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
         app.MapDelete("/api/v1/mikan/work-rules/{mikanId:int}", DeleteMikanWorkRule);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
+        app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
     }
@@ -198,6 +199,31 @@ public static class ApiEndpoints
                 "metadata_task_not_failed",
                 "Only failed metadata tasks can be retried.")),
         };
+    }
+
+    private static async Task<Ok<MetadataTaskListResponse>> MetadataTasks(
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        var items = await resolutions.ListTasksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new MetadataTaskListResponse(items.Select(item => new MetadataTaskListItem(
+            item.TaskId,
+            item.Title,
+            item.SourceId,
+            item.Status,
+            item.MikanId,
+            item.BangumiSubjectId,
+            item.TmdbSeriesId,
+            item.TmdbSeasonNumber,
+            item.SeriesStrategy,
+            item.SeasonStrategy,
+            item.EpisodeStrategy,
+            item.FailureKind,
+            item.FailureReason,
+            item.EpisodeFileCount,
+            item.OtherFileCount,
+            item.PendingFileCount,
+            item.UpdatedAtUtc)).ToArray()));
     }
 
     private static async Task<Ok<IngestBatchResponse>> Ingest(

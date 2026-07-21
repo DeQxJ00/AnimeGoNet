@@ -38,8 +38,25 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-card progress { width: 100%; height: 9px; margin: 16px 0 10px; accent-color: #59d3a5; }
 .download-details { margin: 0; color: #aebbd3; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
 .empty { border: 1px dashed #344260; border-radius: 18px; padding: 22px; }
+.metadata-tasks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.metadata-card { border: 1px solid #344260; border-radius: 18px; padding: 20px; background: rgba(16,22,37,.88); }
+.metadata-card.failed { border-color: #813f49; }
+.metadata-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.metadata-heading strong { overflow-wrap: anywhere; }
+.metadata-identity, .metadata-files, .metadata-failure { color: #aebbd3; font-size: .84rem; line-height: 1.55; overflow-wrap: anywhere; }
+.metadata-identity { margin: 15px 0; }
+.metadata-files { margin: 15px 0 0; }
+.metadata-failure { color: #ffb0b0; margin: 12px 0 0; }
+.metadata-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.metadata-stages div { min-width: 0; padding: 10px; border-radius: 12px; background: rgba(5,8,16,.55); }
+.metadata-stages dt { color: #8da2c9; font-size: .72rem; }
+.metadata-stages dd { margin: 5px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
+.retry-button { margin-top: 15px; border: 1px solid #6c526f; border-radius: 10px; padding: 9px 12px; color: #f2d9ff; background: #2a1d32; cursor: pointer; }
+.retry-button:disabled { cursor: wait; opacity: .7; }
 
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding: 30px 24px; }
   .grid { grid-template-columns: 1fr; }
+  .metadata-tasks { grid-template-columns: 1fr; }
+  .metadata-stages { grid-template-columns: 1fr; }
 }

@@ -60,3 +60,22 @@ public sealed record MetadataEpisodeFileResolution(
     TmdbEpisode? Episode,
     string Disposition,
     string? OtherReason);
+
+public sealed record MetadataTaskListProjection(
+    string TaskId,
+    string Title,
+    string SourceId,
+    string Status,
+    int? MikanId,
+    int? BangumiSubjectId,
+    int? TmdbSeriesId,
+    int? TmdbSeasonNumber,
+    string? SeriesStrategy,
+    string? SeasonStrategy,
+    string? EpisodeStrategy,
+    string? FailureKind,
+    string? FailureReason,
+    int EpisodeFileCount,
+    int OtherFileCount,
+    int PendingFileCount,
+    DateTimeOffset UpdatedAtUtc);

@@ -116,6 +116,28 @@ public sealed record MetadataRetryResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("status")] string Status);
 
+public sealed record MetadataTaskListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<MetadataTaskListItem> Items);
+
+public sealed record MetadataTaskListItem(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("series_strategy")] string? SeriesStrategy,
+    [property: JsonPropertyName("season_strategy")] string? SeasonStrategy,
+    [property: JsonPropertyName("episode_strategy")] string? EpisodeStrategy,
+    [property: JsonPropertyName("failure_kind")] string? FailureKind,
+    [property: JsonPropertyName("failure_reason")] string? FailureReason,
+    [property: JsonPropertyName("episode_file_count")] int EpisodeFileCount,
+    [property: JsonPropertyName("other_file_count")] int OtherFileCount,
+    [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
 public sealed record ApiErrorResponse(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message);
