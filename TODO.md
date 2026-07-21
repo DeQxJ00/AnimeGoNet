@@ -133,8 +133,8 @@
 - [ ] C# 移植 builtin feed/parser/filter/rename/schedule；默认运行不加载 Python。
 - [ ] 实现内置 C# MikanTool 五级黑白名单规则，默认启用；精确复现 `Filiter0`～`Filiter4` 作用域、`1>2>3`、最终 AND、大小写敏感子串和多个 `Filiter0` 的 legacy 顺序行为。
 - [ ] 为默认 Mikan SourceProfile 增加 `mikan_rss_filter_enabled` 总开关（默认 `true`）；关闭时 AnimeGoHelper `/api/rss` 记录 `SkippedByConfiguration` 后继续流水线，规则保留，进行中任务使用原快照。
-- [>] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（默认 profile 已启用，schema v13 规则版本和默认规则初始化已接入；批次编排待接入）。
-- [>] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 显式 SQL store 已支持全快照 revision 保存和顺序恢复，API/细粒度 CRUD 待实现。
+- [>] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（默认 profile 已启用，schema v13 规则版本、默认初始化与预览 API 已接入；禁用时预览逐项记录 `SkippedByConfiguration` 且不清空规则，真实批次编排待接入）。
+- [>] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 已支持增删/排序，细粒度 CRUD/WebUI 待实现。
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
 - [>] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；SQLite CRUD/审计待实现。
@@ -197,7 +197,7 @@
 - [ ] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key`。
 - [ ] 将旧插件名 `filter/mikan_tool.py` 映射到 SQLite 过滤规则，不要求实际 Python 文件存在。
 - [ ] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停、关键词编辑、服务端样例预览、旧 JSON 导入导出、revision 冲突、快照回滚和过滤决策详情。
-- [ ] 实现 Mikan RSS 优选 Web UI：独立开关、优先级组与具名数组的增删/拖动、values数组、具名黑白名单、默认720p黑名单、批次预览、决胜原因、revision与回滚。
+- [>] 实现 Mikan RSS 优选 Web UI：服务端已提供 GET/PUT 规则快照和批次 preview（名单结果、winner、实际执行组、revision 冲突）；独立开关编辑、组/数组拖动、回滚与页面待实现。
 - [ ] 移植静态页并生成 OpenAPI。
 - [ ] 通过 API/WS 契约差分测试。
 - [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。

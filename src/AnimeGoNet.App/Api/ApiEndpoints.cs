@@ -2,12 +2,14 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
+using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -24,6 +26,9 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/downloads", Downloads);
+        app.MapGet("/api/v1/rss-rules/{sourceProfileId}", GetRssRules);
+        app.MapPut("/api/v1/rss-rules/{sourceProfileId}", PutRssRules);
+        app.MapPost("/api/v1/rss-rules/{sourceProfileId}/preview", PreviewRssRules);
         app.MapGet("/api/v1/delete/tasks/{taskId}/preview", DeletePreview);
         app.MapPost("/api/v1/delete/tasks/{taskId}", CreateDeleteExecution);
         app.MapGet("/api/v1/delete/executions/{executionId}", DeleteExecutionStatus);
@@ -104,6 +109,104 @@ public static class ApiEndpoints
             record.DownloaderConnected,
             record.DownloaderFailureCode,
             record.DownloaderLastSuccessAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> GetRssRules(
+        string sourceProfileId,
+        SourceProfileStore profiles,
+        MikanRssRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        var profile = await profiles.GetEnabledAsync(sourceProfileId.Trim().ToLowerInvariant(), cancellationToken)
+            .ConfigureAwait(false);
+        var snapshot = await rules.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
+        return profile is null || snapshot is null
+            ? TypedResults.NotFound(Error("rss_rule_set_not_found", "RSS rule set was not found."))
+            : TypedResults.Ok(ToResponse(profile, snapshot));
+    }
+
+    private static async Task<IResult> PutRssRules(
+        string sourceProfileId,
+        RssRuleSetRequest request,
+        SourceProfileStore profiles,
+        MikanRssRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var profileId = sourceProfileId.Trim().ToLowerInvariant();
+            var profile = await profiles.GetEnabledAsync(profileId, cancellationToken).ConfigureAwait(false);
+            if (profile is null)
+            {
+                return TypedResults.NotFound(Error("rss_rule_set_not_found", "RSS source profile was not found."));
+            }
+
+            var saved = await rules.SaveAsync(
+                profileId, ToRuleSet(request), request.ExpectedRevision,
+                DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(profile, saved));
+        }
+        catch (MikanRssRuleRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "rss_rule_revision_conflict", "RSS rules changed; reload before saving."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("rss_rule_set_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> PreviewRssRules(
+        string sourceProfileId,
+        RssRulePreviewRequest request,
+        SourceProfileStore profiles,
+        MikanRssRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var profileId = sourceProfileId.Trim().ToLowerInvariant();
+            var profile = await profiles.GetEnabledAsync(profileId, cancellationToken).ConfigureAwait(false);
+            var snapshot = await rules.GetAsync(profileId, cancellationToken).ConfigureAwait(false);
+            if (profile is null || snapshot is null)
+            {
+                return TypedResults.NotFound(Error("rss_rule_set_not_found", "RSS rule set was not found."));
+            }
+
+            var candidates = (request.Candidates ?? []).Select((candidate, index) =>
+            {
+                if (candidate is null
+                    || string.IsNullOrWhiteSpace(candidate.Id)
+                    || string.IsNullOrWhiteSpace(candidate.Title))
+                {
+                    throw new ArgumentException($"Candidate {index} requires id and title.");
+                }
+
+                return new MikanRssCandidate(
+                    candidate.Id.Trim(), candidate.Title, candidate.MikanId,
+                    candidate.SourceEpisodeKind, candidate.SourceEpisode);
+            }).ToArray();
+            if (candidates.Select(candidate => candidate.Id).Distinct(StringComparer.Ordinal).Count() != candidates.Length)
+            {
+                throw new ArgumentException("Candidate ids must be unique.");
+            }
+
+            var decisions = profile.RssPriorityEnabled
+                ? MikanRssRuleEngine.Evaluate(candidates, snapshot.Rules)
+                : candidates.Select(candidate => new MikanRssDecision(
+                    candidate.Id, MikanRssDecisionKind.Winner, "SkippedByConfiguration",
+                    candidate.Id, [])).ToArray();
+            return TypedResults.Ok(new RssRulePreviewResponse(
+                profile.Id, snapshot.Revision, profile.RssPriorityEnabled,
+                decisions.Select(decision => new RssRuleDecisionResponse(
+                    decision.CandidateId, ToApiValue(decision.Kind), decision.Reason,
+                    decision.WinnerId, decision.EvaluatedPriorityGroups)).ToArray()));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("rss_rule_preview_invalid", exception.Message));
+        }
     }
 
     private static async Task<IResult> DeletePreview(
@@ -490,4 +593,59 @@ public static class ApiEndpoints
 
     private static DeleteTargetResponse ToResponse(DeletePlanTarget target) =>
         new(target.ItemKind, target.TargetKey, target.RootPath, target.DownloaderId, target.DisplayValue);
+
+    private static MikanRssRuleSet ToRuleSet(RssRuleSetRequest request) => new(
+        (request.Whitelist ?? []).Select((item, index) => ToArray(item, $"whitelist[{index}]")).ToArray(),
+        (request.Blacklist ?? []).Select((item, index) => ToArray(item, $"blacklist[{index}]")).ToArray(),
+        (request.PriorityGroups ?? []).Select((group, index) =>
+        {
+            if (group is null)
+            {
+                throw new ArgumentException($"priority_groups[{index}] is required.");
+            }
+
+            return new PriorityGroup(
+                group.Id ?? string.Empty,
+                group.Name ?? string.Empty,
+                (group.Arrays ?? []).Select((item, arrayIndex) =>
+                    ToArray(item, $"priority_groups[{index}].arrays[{arrayIndex}]")).ToArray());
+        }).ToArray());
+
+    private static NamedMatchArray ToArray(RssNamedArrayRequest? request, string path)
+    {
+        if (request is null)
+        {
+            throw new ArgumentException($"{path} is required.");
+        }
+
+        return new NamedMatchArray(
+            request.Id ?? string.Empty,
+            request.Name ?? string.Empty,
+            request.Enabled,
+            (request.Values ?? []).Select(value => value ?? string.Empty).ToArray());
+    }
+
+    private static RssRuleSetResponse ToResponse(
+        SourceProfileRecord profile,
+        MikanRssRuleSnapshot snapshot) =>
+        new(
+            snapshot.SourceProfileId, profile.RssFilterEnabled, profile.RssPriorityEnabled,
+            snapshot.Revision,
+            snapshot.Rules.Whitelist.Select(ToResponse).ToArray(),
+            snapshot.Rules.Blacklist.Select(ToResponse).ToArray(),
+            snapshot.Rules.PriorityGroups.Select(group => new RssPriorityGroupResponse(
+                group.Id, group.Name, group.Arrays.Select(ToResponse).ToArray())).ToArray(),
+            snapshot.CreatedAtUtc, snapshot.UpdatedAtUtc);
+
+    private static RssNamedArrayResponse ToResponse(NamedMatchArray array) =>
+        new(array.Id, array.Name, array.Enabled, array.Values);
+
+    private static string ToApiValue(MikanRssDecisionKind value) => value switch
+    {
+        MikanRssDecisionKind.Winner => "winner",
+        MikanRssDecisionKind.RejectedByBlacklist => "rejected_by_blacklist",
+        MikanRssDecisionKind.RejectedByWhitelist => "rejected_by_whitelist",
+        MikanRssDecisionKind.SuppressedByHigherPriority => "suppressed_by_higher_priority",
+        _ => throw new ArgumentOutOfRangeException(nameof(value)),
+    };
 }

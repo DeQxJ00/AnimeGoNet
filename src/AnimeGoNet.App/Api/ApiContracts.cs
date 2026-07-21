@@ -184,3 +184,65 @@ public sealed record DeleteExecutionStatusResponse(
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
     [property: JsonPropertyName("items")] IReadOnlyList<DeleteTargetResponse> Items);
+
+public sealed record RssNamedArrayRequest(
+    [property: JsonPropertyName("id")] string? Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("values")] IReadOnlyList<string?>? Values);
+
+public sealed record RssPriorityGroupRequest(
+    [property: JsonPropertyName("id")] string? Id,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("arrays")] IReadOnlyList<RssNamedArrayRequest?>? Arrays);
+
+public sealed record RssRuleSetRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("whitelist")] IReadOnlyList<RssNamedArrayRequest?>? Whitelist,
+    [property: JsonPropertyName("blacklist")] IReadOnlyList<RssNamedArrayRequest?>? Blacklist,
+    [property: JsonPropertyName("priority_groups")] IReadOnlyList<RssPriorityGroupRequest?>? PriorityGroups);
+
+public sealed record RssNamedArrayResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("values")] IReadOnlyList<string> Values);
+
+public sealed record RssPriorityGroupResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("arrays")] IReadOnlyList<RssNamedArrayResponse> Arrays);
+
+public sealed record RssRuleSetResponse(
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
+    [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("whitelist")] IReadOnlyList<RssNamedArrayResponse> Whitelist,
+    [property: JsonPropertyName("blacklist")] IReadOnlyList<RssNamedArrayResponse> Blacklist,
+    [property: JsonPropertyName("priority_groups")] IReadOnlyList<RssPriorityGroupResponse> PriorityGroups,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record RssPreviewCandidateRequest(
+    [property: JsonPropertyName("id")] string? Id,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("source_episode_kind")] string? SourceEpisodeKind,
+    [property: JsonPropertyName("source_episode")] string? SourceEpisode);
+
+public sealed record RssRulePreviewRequest(
+    [property: JsonPropertyName("candidates")] IReadOnlyList<RssPreviewCandidateRequest?>? Candidates);
+
+public sealed record RssRuleDecisionResponse(
+    [property: JsonPropertyName("candidate_id")] string CandidateId,
+    [property: JsonPropertyName("decision")] string Decision,
+    [property: JsonPropertyName("reason")] string Reason,
+    [property: JsonPropertyName("winner_id")] string? WinnerId,
+    [property: JsonPropertyName("evaluated_priority_groups")] IReadOnlyList<string> EvaluatedPriorityGroups);
+
+public sealed record RssRulePreviewResponse(
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("rule_revision")] long RuleRevision,
+    [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("decisions")] IReadOnlyList<RssRuleDecisionResponse> Decisions);
