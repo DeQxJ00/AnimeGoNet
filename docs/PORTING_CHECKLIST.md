@@ -41,7 +41,7 @@
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 待实现 | legacy differential tests |
-| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | blacklist-first、whitelist、lowercase、旁路、短路和 stable-order tests 已通过；RSS 编排/持久化待实现 |
+| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | blacklist-first、whitelist、lowercase、旁路、短路和 stable-order tests 已通过；schema v13 规范化表、revision store、默认初始化及编辑不覆盖已验证，RSS 批次编排/API 待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |

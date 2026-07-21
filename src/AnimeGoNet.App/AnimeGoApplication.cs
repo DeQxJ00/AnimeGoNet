@@ -10,12 +10,14 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
+using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Http.Json;
@@ -69,6 +71,9 @@ public static class AnimeGoApplication
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var sourceProfiles = new SourceProfileStore(database);
         await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
+        var rssRules = new MikanRssRuleStore(database);
+        await rssRules.EnsureDefaultAsync(
+            "mikan", MikanRssRuleDefaults.Create(), DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var ingestTasks = new IngestTaskStore(database);
         var downloadJobs = new DownloadJobStore(database);
         torrentStagingService ??= new TorrentStagingService(
@@ -93,6 +98,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(sourceProfiles);
+        builder.Services.AddSingleton(rssRules);
         builder.Services.AddSingleton(ingestTasks);
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloadPreparationStore>();

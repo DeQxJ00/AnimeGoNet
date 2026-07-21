@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 12;
+    public const int CurrentVersion = 13;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -18,6 +18,7 @@ public static class DatabaseSchema
         new SchemaMigration(10, "media_organization_lease", MediaOrganizationLease),
         new SchemaMigration(11, "subtitle_episode_association", SubtitleEpisodeAssociation),
         new SchemaMigration(12, "auditable_delete_plans", AuditableDeletePlans),
+        new SchemaMigration(13, "mikan_rss_rule_storage", MikanRssRuleStorage),
     ];
 
     private const string InitialBusinessSchema = """
@@ -509,5 +510,57 @@ public static class DatabaseSchema
 
         CREATE UNIQUE INDEX ux_delete_executions_active_task
         ON delete_executions(task_id) WHERE state IN ('pending', 'executing');
+        """;
+
+    private const string MikanRssRuleStorage = """
+        CREATE TABLE mikan_rss_rule_sets (
+            source_profile_id TEXT NOT NULL PRIMARY KEY REFERENCES source_profiles(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TABLE mikan_rss_priority_groups (
+            source_profile_id TEXT NOT NULL REFERENCES mikan_rss_rule_sets(source_profile_id) ON DELETE CASCADE,
+            id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY (source_profile_id, id),
+            UNIQUE (source_profile_id, position)
+        ) STRICT;
+
+        CREATE TABLE mikan_rss_match_arrays (
+            source_profile_id TEXT NOT NULL REFERENCES mikan_rss_rule_sets(source_profile_id) ON DELETE CASCADE,
+            id TEXT NOT NULL,
+            scope TEXT NOT NULL CHECK (scope IN ('whitelist', 'blacklist', 'priority')),
+            group_id TEXT,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+            position INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY (source_profile_id, id),
+            FOREIGN KEY (source_profile_id, group_id)
+                REFERENCES mikan_rss_priority_groups(source_profile_id, id) ON DELETE CASCADE,
+            CHECK ((scope = 'priority' AND group_id IS NOT NULL)
+                OR (scope IN ('whitelist', 'blacklist') AND group_id IS NULL))
+        ) STRICT;
+
+        CREATE UNIQUE INDEX ux_mikan_rss_match_arrays_list_position
+        ON mikan_rss_match_arrays(source_profile_id, scope, position)
+        WHERE group_id IS NULL;
+
+        CREATE UNIQUE INDEX ux_mikan_rss_match_arrays_group_position
+        ON mikan_rss_match_arrays(source_profile_id, group_id, position)
+        WHERE group_id IS NOT NULL;
+
+        CREATE TABLE mikan_rss_match_values (
+            source_profile_id TEXT NOT NULL,
+            array_id TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            value_lower TEXT NOT NULL CHECK (length(value_lower) > 0 AND value_lower = lower(value_lower)),
+            PRIMARY KEY (source_profile_id, array_id, position),
+            UNIQUE (source_profile_id, array_id, value_lower),
+            FOREIGN KEY (source_profile_id, array_id)
+                REFERENCES mikan_rss_match_arrays(source_profile_id, id) ON DELETE CASCADE
+        ) STRICT;
         """;
 }
