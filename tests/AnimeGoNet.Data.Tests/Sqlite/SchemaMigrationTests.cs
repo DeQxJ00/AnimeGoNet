@@ -57,8 +57,40 @@ public sealed class SchemaMigrationTests
         command.CommandText = "SELECT COUNT(*), MAX(version) FROM schema_migrations;";
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(6, reader.GetInt32(0));
+        Assert.Equal(7, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task MetadataAttemptStageMigrationAcceptsBangumiAndPreservesConstraints()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO source_profiles (
+                id, display_name, adapter, downloader_id, file_strategy,
+                rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                created_at_utc, updated_at_utc, allowed_torrent_hosts_json)
+            VALUES ('test', 'Test', 'test', 'bt', 'move', 0, 0, 1, 1, $now, $now, '[]');
+            INSERT INTO ingest_tasks (
+                id, source_profile_id, source_profile_revision, source_id, title,
+                torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                status, created_at_utc, updated_at_utc)
+            VALUES ('task', 'test', 1, 'test', 'Test', 'fingerprint', 'bt', '{}',
+                    'metadata_resolving', $now, $now);
+            INSERT INTO metadata_resolution_runs (
+                id, task_id, status, tmdb_access_confirmed, fallback_eligible,
+                started_at_utc, attempt_number)
+            VALUES ('run', 'task', 'running', 0, 0, $now, 1);
+            INSERT INTO metadata_resolution_attempts (
+                id, run_id, stage, strategy, result, retryable,
+                attempt_number, duration_ms, created_at_utc)
+            VALUES ('attempt', 'run', 'bangumi', 'bangumi_subject', 'matched', 0, 1, 0, $now);
+            """;
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+        Assert.Equal(4, await command.ExecuteNonQueryAsync());
     }
 
     [Fact]

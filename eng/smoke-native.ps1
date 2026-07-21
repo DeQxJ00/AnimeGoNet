@@ -55,7 +55,7 @@ try {
     }
     $ingest = Invoke-RestMethod @ingestParameters
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
-    if ($status.database_schema_version -ne 6) {
+    if ($status.database_schema_version -ne 7) {
         throw "Unexpected schema version: $($status.database_schema_version)"
     }
 

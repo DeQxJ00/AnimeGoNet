@@ -28,6 +28,7 @@ public static class AnimeGoApplication
         ITorrentStagingService? torrentStagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
+        IBangumiSubjectClient? bangumiSubjectClient = null,
         bool? startBackgroundWorkers = null,
         CancellationToken cancellationToken = default)
     {
@@ -105,12 +106,16 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(tmdbClient);
         builder.Services.AddSingleton<TmdbAuthority>();
         builder.Services.AddSingleton<TmdbSeriesResolver>();
+        bangumiSubjectClient ??= new BangumiSubjectClient(new HttpClient(), ownsHttpClient: true);
+        builder.Services.AddSingleton(bangumiSubjectClient);
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();
+        builder.Services.AddSingleton<AutomaticMetadataResolutionProcessor>();
         if (startBackgroundWorkers.Value)
         {
             builder.Services.AddHostedService<StagedTorrentDispatchWorker>();
             builder.Services.AddHostedService<DownloadSnapshotWorker>();
             builder.Services.AddHostedService<ManualMetadataResolutionWorker>();
+            builder.Services.AddHostedService<AutomaticMetadataResolutionWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

@@ -71,12 +71,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     SELECT 1 FROM metadata_resolution_runs
                     WHERE metadata_resolution_runs.task_id = task.id
                       AND metadata_resolution_runs.status = 'running')
-                  AND ($manual_override = 0 OR EXISTS (
+                  AND (($manual_override = 1 AND EXISTS (
                     SELECT 1 FROM mikan_work_rules AS rule
                     WHERE rule.mikanid = task.mikanid
                       AND rule.enabled = 1
                       AND rule.tmdb_series_id IS NOT NULL
                       AND rule.tmdb_season_number IS NOT NULL))
+                    OR ($manual_override = 0 AND NOT EXISTS (
+                    SELECT 1 FROM mikan_work_rules AS rule
+                    WHERE rule.mikanid = task.mikanid
+                      AND rule.enabled = 1
+                      AND rule.tmdb_series_id IS NOT NULL
+                      AND rule.tmdb_season_number IS NOT NULL)))
                 ORDER BY task.updated_at_utc, task.id
                 LIMIT 1;
                 """;

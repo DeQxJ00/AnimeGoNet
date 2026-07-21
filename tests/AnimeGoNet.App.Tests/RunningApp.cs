@@ -29,7 +29,8 @@ public sealed class RunningApp : IAsyncDisposable
         string? accessKey = null,
         Func<AnimeGoOptions, AnimeGoOptions>? configure = null,
         ITorrentStagingService? stagingService = null,
-        ITmdbClient? tmdbClient = null)
+        ITmdbClient? tmdbClient = null,
+        IBangumiSubjectClient? bangumiSubjectClient = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
@@ -42,6 +43,7 @@ public sealed class RunningApp : IAsyncDisposable
             accessKey,
             torrentStagingService: stagingService,
             tmdbClient: tmdbClient,
+            bangumiSubjectClient: bangumiSubjectClient,
             startBackgroundWorkers: false);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();

@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -12,6 +12,7 @@ public static class DatabaseSchema
         new SchemaMigration(4, "staged_dispatch_lease", StagedDispatchLease),
         new SchemaMigration(5, "download_runtime_projection", DownloadRuntimeProjection),
         new SchemaMigration(6, "metadata_resolution_lease", MetadataResolutionLease),
+        new SchemaMigration(7, "metadata_resolution_stages", MetadataResolutionStages),
     ];
 
     private const string InitialBusinessSchema = """
@@ -371,5 +372,35 @@ public static class DatabaseSchema
 
         CREATE INDEX ix_metadata_resolution_runs_lease
         ON metadata_resolution_runs(status, lease_expires_at_utc);
+        """;
+
+    private const string MetadataResolutionStages = """
+        ALTER TABLE metadata_resolution_attempts RENAME TO metadata_resolution_attempts_v6;
+
+        CREATE TABLE metadata_resolution_attempts (
+            id TEXT NOT NULL PRIMARY KEY,
+            run_id TEXT NOT NULL REFERENCES metadata_resolution_runs(id) ON DELETE CASCADE,
+            stage TEXT NOT NULL CHECK (stage IN (
+                'input', 'bangumi', 'series', 'season', 'episode',
+                'ai', 'validation', 'download_gate')),
+            strategy TEXT NOT NULL,
+            priority INTEGER,
+            result TEXT NOT NULL,
+            error_code TEXT,
+            reason TEXT,
+            retryable INTEGER NOT NULL CHECK (retryable IN (0, 1)),
+            attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),
+            duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0),
+            created_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        INSERT INTO metadata_resolution_attempts (
+            id, run_id, stage, strategy, priority, result, error_code,
+            reason, retryable, attempt_number, duration_ms, created_at_utc)
+        SELECT id, run_id, stage, strategy, priority, result, error_code,
+               reason, retryable, attempt_number, duration_ms, created_at_utc
+        FROM metadata_resolution_attempts_v6;
+
+        DROP TABLE metadata_resolution_attempts_v6;
         """;
 }
