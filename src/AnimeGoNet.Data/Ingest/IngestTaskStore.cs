@@ -4,6 +4,7 @@ using System.Text.Json;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 
@@ -107,6 +108,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
 
         foreach (var file in metadata.Files)
         {
+            var episode = file.IsPadding
+                ? null
+                : TorrentEpisodeCandidateParser.Parse(file.RelativePath);
             await using var fileCommand = connection.CreateCommand();
             fileCommand.Transaction = transaction;
             fileCommand.CommandText = """
@@ -115,13 +119,19 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     file_episode_candidate, tmdb_series_id, tmdb_season_number,
                     tmdb_episode_number, tmdb_episode_id, disposition, other_reason)
                 VALUES (
-                    $id, $task_id, $relative_path, $size_bytes, NULL,
-                    NULL, NULL, NULL, NULL, NULL, $disposition, $other_reason);
+                    $id, $task_id, $relative_path, $size_bytes,
+                    $source_episode, $file_episode_candidate, NULL, NULL, NULL, NULL, $disposition, $other_reason);
                 """;
             fileCommand.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             fileCommand.Parameters.AddWithValue("$task_id", id);
             fileCommand.Parameters.AddWithValue("$relative_path", file.RelativePath);
             fileCommand.Parameters.AddWithValue("$size_bytes", file.Size);
+            fileCommand.Parameters.AddWithValue("$source_episode", (object?)episode?.SourceEpisode ?? DBNull.Value);
+            fileCommand.Parameters.AddWithValue(
+                "$file_episode_candidate",
+                episode?.NormalEpisode is int normalEpisode
+                    ? normalEpisode.ToString(CultureInfo.InvariantCulture)
+                    : DBNull.Value);
             fileCommand.Parameters.AddWithValue("$disposition", file.IsPadding ? "ignored" : "pending");
             fileCommand.Parameters.AddWithValue("$other_reason", file.IsPadding ? "padding_file" : DBNull.Value);
             await fileCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

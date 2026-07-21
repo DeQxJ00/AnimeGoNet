@@ -90,6 +90,51 @@ public sealed class IngestTaskStoreTests
     }
 
     [Fact]
+    public async Task StagedIngestPersistsOnlyNormalIntegerEpisodeAsTmdbCandidate()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profileStore = new SourceProfileStore(fixture.Database);
+        await profileStore.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        var profile = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
+        var metadata = new TorrentMetadata(
+            "Show",
+            new string('f', 40),
+            15,
+            [
+                new TorrentFile("Show [04].mkv", 5, false),
+                new TorrentFile("Show [48.5].mkv", 5, false),
+                new TorrentFile("Show [SP01].mkv", 5, false),
+            ]);
+
+        var task = await new IngestTaskStore(fixture.Database).AddStagedAsync(
+            CreateNormalized(),
+            profile,
+            metadata,
+            "episode-candidates.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(15));
+
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT relative_path, source_episode, file_episode_candidate
+            FROM task_files
+            WHERE task_id = $task_id
+            ORDER BY relative_path;
+            """;
+        command.Parameters.AddWithValue("$task_id", task.Id);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("4", reader.GetString(1));
+        Assert.Equal("4", reader.GetString(2));
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("48.5", reader.GetString(1));
+        Assert.True(reader.IsDBNull(2));
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("sp01", reader.GetString(1));
+        Assert.True(reader.IsDBNull(2));
+    }
+
+    [Fact]
     public async Task ExpiredStagingBecomesFailedAndReturnsOnlySafeFileNameForCleanup()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

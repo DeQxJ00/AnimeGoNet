@@ -36,7 +36,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 待实现 | parser fixtures/golden |
+| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 进行中 | Go ParseEp 整数模式与安全小数/特别篇分类已由 NativeAOT C# parser 覆盖并在 Torrent 入库持久化；完整 parser fixtures/字幕组待实现 |
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 待实现 | Python differential fixtures |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
@@ -46,7 +46,7 @@
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |
 | AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 待实现 | fake server + TMDB 二次验证 |
-| 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 待实现 | 48.5/Specials fixture |
+| 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选；Season 确认后的 Other 提交待实现 |
 
 ## 存储与业务状态
 
