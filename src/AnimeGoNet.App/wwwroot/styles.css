@@ -58,6 +58,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .delete-targets ul { margin: 0; padding-left: 20px; color: #aebbd3; font-size: .78rem; overflow-wrap: anywhere; }
 .delete-message { min-height: 24px; margin: 15px 0; color: #ffb4b4; font-size: .84rem; }
 .secondary-button { border: 1px solid #344260; color: #edf2ff; background: #151d2f; }
+.primary-button { border: 1px solid #277055; border-radius: 10px; padding: 9px 12px; color: #d8fff0; background: #174638; cursor: pointer; font: inherit; }
 .danger-button { border: 1px solid #924854; color: white; background: #8f3340; }
 .danger-button:disabled { cursor: not-allowed; opacity: .45; }
 .empty { border: 1px dashed #344260; border-radius: 18px; padding: 22px; }
@@ -76,6 +77,32 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-stages dd { margin: 5px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
 .retry-button { margin-top: 15px; border: 1px solid #6c526f; border-radius: 10px; padding: 9px 12px; color: #f2d9ff; background: #2a1d32; cursor: pointer; }
 .retry-button:disabled { cursor: wait; opacity: .7; }
+.rss-heading { gap: 18px; }
+.rss-heading h2 { margin-bottom: 0; }
+.rss-actions { display: flex; gap: 9px; }
+.rss-list-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rss-rule-panel, .rss-preview-panel { border: 1px solid #344260; border-radius: 18px; padding: 18px; background: rgba(16,22,37,.88); }
+.rss-priority-panel { margin-top: 14px; }
+.rss-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rss-panel-heading h3 { margin: 0; }
+.rss-panel-heading button, .rss-array-actions button, .rss-group-actions button { border: 1px solid #344260; border-radius: 8px; padding: 6px 9px; color: #d9e4f8; background: #151d2f; cursor: pointer; }
+.rss-array-list, .rss-groups { display: grid; gap: 10px; margin-top: 13px; }
+.rss-array, .rss-group { border: 1px solid #27334c; border-radius: 13px; padding: 12px; background: rgba(5,8,16,.45); }
+.rss-array-fields { display: grid; grid-template-columns: minmax(90px,.7fr) minmax(100px,1fr) 2fr auto; gap: 8px; align-items: end; }
+.rss-array-fields label, .rss-preview-identity label { color: #8da2c9; font-size: .72rem; }
+.rss-array-fields input:not([type="checkbox"]), .rss-preview-identity input, #rss-preview-titles { width: 100%; margin-top: 5px; border: 1px solid #344260; border-radius: 8px; padding: 8px; color: #edf2ff; background: #090e19; font: inherit; }
+.rss-array-enabled { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; }
+.rss-array-actions, .rss-group-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.rss-group-heading { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; }
+.rss-group-heading label { color: #8da2c9; font-size: .72rem; }
+.rss-group-heading input { width: 100%; margin-top: 5px; border: 1px solid #344260; border-radius: 8px; padding: 8px; color: #edf2ff; background: #090e19; }
+.rss-preview-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+.rss-preview-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+#rss-preview-titles { resize: vertical; margin: 10px 0; line-height: 1.5; }
+.rss-preview-results { display: grid; align-content: start; gap: 8px; }
+.rss-decision { padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.55); color: #aebbd3; font-size: .82rem; overflow-wrap: anywhere; }
+.rss-decision.winner { border-left: 3px solid #59d3a5; }
+.rss-decision.rejected, .rss-decision.suppressed { border-left: 3px solid #e35d6a; }
 
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding: 30px 24px; }
@@ -83,4 +110,6 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .metadata-tasks { grid-template-columns: 1fr; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
+  .rss-list-columns, .rss-preview-panel { grid-template-columns: 1fr; }
+  .rss-array-fields, .rss-group-heading, .rss-preview-identity { grid-template-columns: 1fr; }
 }

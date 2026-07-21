@@ -123,6 +123,22 @@ public sealed class RssRuleApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task StaticWebUiContainsOrderedRuleEditorAndServerPreview()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var html = await app.Client.GetStringAsync("/");
+        var script = await app.Client.GetStringAsync("/app.js");
+
+        Assert.Contains("id=\"rss-whitelist\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"rss-blacklist\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"rss-priority-groups\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"rss-preview-run\"", html, StringComparison.Ordinal);
+        Assert.Contains("saveRssRules", script, StringComparison.Ordinal);
+        Assert.Contains("previewRssRules", script, StringComparison.Ordinal);
+        Assert.Contains("expected_revision", script, StringComparison.Ordinal);
+    }
+
     private static StringContent Json(object value) =>
         new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
 }

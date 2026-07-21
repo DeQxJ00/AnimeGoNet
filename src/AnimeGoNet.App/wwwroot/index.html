@@ -64,10 +64,52 @@
       </div>
     </section>
 
+    <section aria-labelledby="rss-rules-title">
+      <div class="section-heading rss-heading">
+        <div>
+          <p class="eyebrow">Mikan RSS</p>
+          <h2 id="rss-rules-title">候选规则</h2>
+        </div>
+        <div class="rss-actions">
+          <button id="rss-reload" type="button" class="secondary-button">重新载入</button>
+          <button id="rss-save" type="button" class="primary-button">保存规则</button>
+        </div>
+      </div>
+      <p id="rss-rule-status" class="muted">正在读取 Mikan 规则…</p>
+      <div class="rss-list-columns">
+        <section class="rss-rule-panel">
+          <div class="rss-panel-heading"><h3>白名单</h3><button id="rss-add-whitelist" type="button">添加</button></div>
+          <div id="rss-whitelist" class="rss-array-list"></div>
+        </section>
+        <section class="rss-rule-panel">
+          <div class="rss-panel-heading"><h3>黑名单</h3><button id="rss-add-blacklist" type="button">添加</button></div>
+          <div id="rss-blacklist" class="rss-array-list"></div>
+        </section>
+      </div>
+      <section class="rss-rule-panel rss-priority-panel">
+        <div class="rss-panel-heading"><h3>有序优先级组</h3><button id="rss-add-group" type="button">添加组</button></div>
+        <div id="rss-priority-groups" class="rss-groups"></div>
+      </section>
+      <section class="rss-preview-panel">
+        <div>
+          <h3>批次预览</h3>
+          <p class="muted">每行一个候选标题；同一 mikanid、来源类型和来源 EP 才会互相竞争。</p>
+          <div class="rss-preview-identity">
+            <label>mikanid <input id="rss-preview-mikanid" type="number" min="1" value="3951"></label>
+            <label>来源类型 <input id="rss-preview-kind" value="normal"></label>
+            <label>来源 EP <input id="rss-preview-episode" value="1"></label>
+          </div>
+          <textarea id="rss-preview-titles" rows="5" placeholder="[字幕组] 动画 简体 1080P&#10;[字幕组] 动画 繁体 1080P"></textarea>
+          <button id="rss-preview-run" type="button" class="secondary-button">服务端预览</button>
+        </div>
+        <div id="rss-preview-results" class="rss-preview-results" aria-live="polite"></div>
+      </section>
+    </section>
+
     <section class="grid panels" aria-label="管理入口">
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>骨架已就绪</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>待实现</span></article>
-      <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>待实现</span></article>
+      <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>管理与预览已接入</span></article>
       <article><h3>动画库</h3><p>封面、季度、TMDB EP 与下载进度。</p><span>待实现</span></article>
       <article><h3>待补全 TMDB</h3><p>查看失败分类、原因与重试入口。</p><span>待实现</span></article>
       <article><h3>任务</h3><p>下载、匹配、整理和删除审计。</p><span>下载状态已接入</span></article>

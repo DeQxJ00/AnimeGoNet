@@ -19,6 +19,8 @@ if (accessKey)
 const deleteDialog = element("#delete-dialog");
 const deleteConfirm = element("#delete-confirm");
 let activeDeletePreview = null;
+let activeRssRules = null;
+let ruleIdSequence = 0;
 const statusLabels = {
     received: "已接收",
     staged: "种子已暂存",
@@ -326,8 +328,224 @@ async function loadMetadataTasks() {
         container.replaceChildren(failed);
     }
 }
+function moveItem(items, index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= items.length)
+        return;
+    [items[index], items[target]] = [items[target], items[index]];
+}
+function nextRuleId(prefix) {
+    ruleIdSequence += 1;
+    return `${prefix}-${Date.now().toString(36)}-${ruleIdSequence.toString(36)}`;
+}
+function button(label, action) {
+    const result = document.createElement("button");
+    result.type = "button";
+    result.textContent = label;
+    result.addEventListener("click", action);
+    return result;
+}
+function renderArrayEditor(rule, index, count, onMove, onRemove) {
+    const card = document.createElement("article");
+    card.className = "rss-array";
+    const fields = document.createElement("div");
+    fields.className = "rss-array-fields";
+    const idLabel = document.createElement("label");
+    idLabel.textContent = "ID";
+    const id = document.createElement("input");
+    id.value = rule.id;
+    id.addEventListener("input", () => { rule.id = id.value; });
+    idLabel.append(id);
+    const nameLabel = document.createElement("label");
+    nameLabel.textContent = "名称";
+    const name = document.createElement("input");
+    name.value = rule.name;
+    name.addEventListener("input", () => { rule.name = name.value; });
+    nameLabel.append(name);
+    const valuesLabel = document.createElement("label");
+    valuesLabel.textContent = "匹配值（逗号分隔）";
+    const values = document.createElement("input");
+    values.value = rule.values.join(", ");
+    values.addEventListener("input", () => {
+        rule.values = values.value.split(/[,，\n]/u).map((value) => value.trim()).filter(Boolean);
+    });
+    valuesLabel.append(values);
+    const enabledLabel = document.createElement("label");
+    enabledLabel.className = "rss-array-enabled";
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox";
+    enabled.checked = rule.enabled;
+    enabled.addEventListener("change", () => { rule.enabled = enabled.checked; });
+    enabledLabel.append(enabled, "启用");
+    fields.append(idLabel, nameLabel, valuesLabel, enabledLabel);
+    const actions = document.createElement("div");
+    actions.className = "rss-array-actions";
+    const up = button("上移", () => onMove(-1));
+    up.disabled = index === 0;
+    const down = button("下移", () => onMove(1));
+    down.disabled = index + 1 === count;
+    actions.append(up, down, button("删除", onRemove));
+    card.append(fields, actions);
+    return card;
+}
+function renderArrayList(container, rules) {
+    container.replaceChildren(...rules.map((rule, index) => renderArrayEditor(rule, index, rules.length, (delta) => { moveItem(rules, index, delta); renderRssRules(); }, () => { rules.splice(index, 1); renderRssRules(); })));
+}
+function renderRssRules() {
+    if (!activeRssRules)
+        return;
+    element("#rss-rule-status").textContent =
+        `revision ${activeRssRules.revision} · 旧过滤 ${activeRssRules.rss_filter_enabled ? "开启" : "关闭"} · 批次优选 ${activeRssRules.rss_priority_enabled ? "开启" : "关闭"}`;
+    renderArrayList(element("#rss-whitelist"), activeRssRules.whitelist);
+    renderArrayList(element("#rss-blacklist"), activeRssRules.blacklist);
+    const groupContainer = element("#rss-priority-groups");
+    groupContainer.replaceChildren(...activeRssRules.priority_groups.map((group, groupIndex) => {
+        const card = document.createElement("article");
+        card.className = "rss-group";
+        const heading = document.createElement("div");
+        heading.className = "rss-group-heading";
+        const idLabel = document.createElement("label");
+        idLabel.textContent = "组 ID";
+        const id = document.createElement("input");
+        id.value = group.id;
+        id.addEventListener("input", () => { group.id = id.value; });
+        idLabel.append(id);
+        const nameLabel = document.createElement("label");
+        nameLabel.textContent = "组名称";
+        const name = document.createElement("input");
+        name.value = group.name;
+        name.addEventListener("input", () => { group.name = name.value; });
+        nameLabel.append(name);
+        const groupActions = document.createElement("div");
+        groupActions.className = "rss-group-actions";
+        const up = button("上移组", () => { moveItem(activeRssRules.priority_groups, groupIndex, -1); renderRssRules(); });
+        up.disabled = groupIndex === 0;
+        const down = button("下移组", () => { moveItem(activeRssRules.priority_groups, groupIndex, 1); renderRssRules(); });
+        down.disabled = groupIndex + 1 === activeRssRules.priority_groups.length;
+        groupActions.append(up, down, button("删除组", () => {
+            activeRssRules.priority_groups.splice(groupIndex, 1);
+            renderRssRules();
+        }));
+        heading.append(idLabel, nameLabel, groupActions);
+        const arrays = document.createElement("div");
+        arrays.className = "rss-array-list";
+        renderArrayList(arrays, group.arrays);
+        const add = button("添加组内数组", () => {
+            group.arrays.push({ id: nextRuleId("array"), name: "新数组", enabled: true, values: [] });
+            renderRssRules();
+        });
+        card.append(heading, arrays, add);
+        return card;
+    }));
+}
+async function loadRssRules() {
+    const status = element("#rss-rule-status");
+    status.textContent = "正在读取 Mikan 规则…";
+    try {
+        const response = await fetch("/api/v1/rss-rules/mikan", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        activeRssRules = await response.json();
+        renderRssRules();
+    }
+    catch (error) {
+        activeRssRules = null;
+        status.textContent = `规则读取失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function saveRssRules() {
+    if (!activeRssRules)
+        return;
+    const save = element("#rss-save");
+    const status = element("#rss-rule-status");
+    save.disabled = true;
+    status.textContent = "正在保存规则…";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch("/api/v1/rss-rules/mikan", {
+            method: "PUT",
+            headers: requestHeaders,
+            body: JSON.stringify({
+                expected_revision: activeRssRules.revision,
+                whitelist: activeRssRules.whitelist,
+                blacklist: activeRssRules.blacklist,
+                priority_groups: activeRssRules.priority_groups,
+            }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        activeRssRules = await response.json();
+        renderRssRules();
+        status.textContent = `保存成功 · revision ${activeRssRules.revision}`;
+    }
+    catch (error) {
+        status.textContent = `保存失败：${errorMessage(error, "未知错误")}；如有 revision 冲突请重新载入。`;
+    }
+    finally {
+        save.disabled = false;
+    }
+}
+async function previewRssRules() {
+    const results = element("#rss-preview-results");
+    const titles = element("#rss-preview-titles").value
+        .split(/\r?\n/u).map((title) => title.trim()).filter(Boolean);
+    if (titles.length === 0) {
+        results.textContent = "请先输入至少一个候选标题。";
+        return;
+    }
+    const mikanIdValue = element("#rss-preview-mikanid").valueAsNumber;
+    const kind = element("#rss-preview-kind").value.trim();
+    const episode = element("#rss-preview-episode").value.trim();
+    results.textContent = "正在执行服务端预览…";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch("/api/v1/rss-rules/mikan/preview", {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({ candidates: titles.map((title, index) => ({
+                    id: `candidate-${index + 1}`,
+                    title,
+                    mikanid: Number.isFinite(mikanIdValue) ? mikanIdValue : null,
+                    source_episode_kind: kind || null,
+                    source_episode: episode || null,
+                })) }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        results.replaceChildren(...body.decisions.map((decision, index) => {
+            const row = document.createElement("div");
+            row.className = `rss-decision ${decision.decision === "winner" ? "winner" : decision.decision.startsWith("rejected") ? "rejected" : "suppressed"}`;
+            const groups = decision.evaluated_priority_groups.length > 0
+                ? ` · groups ${decision.evaluated_priority_groups.join(" → ")}` : "";
+            row.textContent = `${titles[index]} · ${decision.decision} · ${decision.reason}${decision.winner_id ? ` · winner ${decision.winner_id}` : ""}${groups}`;
+            return row;
+        }));
+    }
+    catch (error) {
+        results.textContent = `预览失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+element("#rss-reload").addEventListener("click", () => void loadRssRules());
+element("#rss-save").addEventListener("click", () => void saveRssRules());
+element("#rss-add-whitelist").addEventListener("click", () => {
+    activeRssRules?.whitelist.push({ id: nextRuleId("whitelist"), name: "新白名单", enabled: true, values: [] });
+    renderRssRules();
+});
+element("#rss-add-blacklist").addEventListener("click", () => {
+    activeRssRules?.blacklist.push({ id: nextRuleId("blacklist"), name: "新黑名单", enabled: true, values: [] });
+    renderRssRules();
+});
+element("#rss-add-group").addEventListener("click", () => {
+    activeRssRules?.priority_groups.push({ id: nextRuleId("group"), name: "新优先级组", arrays: [] });
+    renderRssRules();
+});
+element("#rss-preview-run").addEventListener("click", () => void previewRssRules());
 void loadStatus();
 void loadDownloads();
 void loadMetadataTasks();
+void loadRssRules();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);

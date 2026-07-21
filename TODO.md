@@ -197,7 +197,7 @@
 - [ ] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key`。
 - [ ] 将旧插件名 `filter/mikan_tool.py` 映射到 SQLite 过滤规则，不要求实际 Python 文件存在。
 - [ ] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停、关键词编辑、服务端样例预览、旧 JSON 导入导出、revision 冲突、快照回滚和过滤决策详情。
-- [>] 实现 Mikan RSS 优选 Web UI：服务端已提供 GET/PUT 规则快照和批次 preview（名单结果、winner、实际执行组、revision 冲突）；独立开关编辑、组/数组拖动、回滚与页面待实现。
+- [>] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面已支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、expected-revision 保存和真实服务端批次 preview（名单结果、winner、实际执行组）；SourceProfile 独立开关写入、拖拽与历史回滚待实现。
 - [ ] 移植静态页并生成 OpenAPI。
 - [ ] 通过 API/WS 契约差分测试。
 - [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。
