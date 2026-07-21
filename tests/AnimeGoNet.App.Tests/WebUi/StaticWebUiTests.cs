@@ -12,6 +12,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "/api/v1/metadata/tasks")]
     [InlineData("/app.js", "text/javascript", "download_preparing")]
     [InlineData("/app.js", "text/javascript", "download_skipped_duplicate")]
+    [InlineData("/app.js", "text/javascript", "organizing_cleanup")]
+    [InlineData("/app.js", "text/javascript", "organized")]
     [InlineData("/", "text/html", "metadata-tasks")]
     public async Task ServesStaticAssets(string path, string mediaType, string marker)
     {

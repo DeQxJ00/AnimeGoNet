@@ -3,6 +3,7 @@ using System.Text;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Metadata;
+using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
@@ -93,6 +94,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(ingestTasks);
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloadPreparationStore>();
+        builder.Services.AddSingleton<MediaOrganizationStore>();
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
@@ -103,6 +105,9 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<StagedTorrentDispatcher>();
         builder.Services.AddSingleton<DownloadSnapshotSynchronizer>();
         builder.Services.AddSingleton<DownloadPreparationProcessor>();
+        builder.Services.AddSingleton<SafeFileMover>();
+        builder.Services.AddSingleton<TvShowNfoWriter>();
+        builder.Services.AddSingleton<MediaOrganizationProcessor>();
         tmdbClient ??= new TmdbClient(
             new HttpClient(),
             options.Metadata.Tmdb,
@@ -124,6 +129,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<AutomaticMetadataResolutionWorker>();
             builder.Services.AddHostedService<EpisodeMetadataResolutionWorker>();
             builder.Services.AddHostedService<DownloadPreparationWorker>();
+            builder.Services.AddHostedService<MediaOrganizationWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

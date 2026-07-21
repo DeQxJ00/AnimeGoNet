@@ -97,6 +97,8 @@ const statusLabels = {
   download_preparing: "等待下载前匹配",
   download_queued: "已允许下载",
   download_skipped_duplicate: "重复集已跳过",
+  organizing_cleanup: "整理完成，正在清理下载器任务",
+  organized: "已整理入库",
   downloading: "下载中",
   downloaded: "等待元数据匹配",
   metadata_resolving: "正在匹配 Series / Season",
