@@ -1,9 +1,11 @@
 using System.Text;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,6 +42,124 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         });
         Assert.Equal([4, 4], tmdb.EpisodeRequests);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        Assert.Equal(1, await CountEpisodeClaimsAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task CompletedEpisodeIsSkippedWithoutSuppressingAnotherEpisode()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var taskId = await PrepareFilesAsync(app, ("Show EP04.mkv", "4", "4"), ("Show EP05.mkv", "5", "5"));
+        var completions = app.App.Services.GetRequiredService<CompletionRecordStore>();
+        Assert.True(await completions.TryAddAsync(new CompletionRecord
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Episode = new TmdbEpisodeIdentity(72517, 2, 4),
+            SourceId = "u2",
+            SourceItemId = "completed-elsewhere",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        }));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Collection(
+            files,
+            file =>
+            {
+                Assert.Equal(4, file.EpisodeNumber);
+                Assert.Equal("duplicate", file.Disposition);
+                Assert.Equal("episode_already_completed", file.OtherReason);
+            },
+            file =>
+            {
+                Assert.Equal(5, file.EpisodeNumber);
+                Assert.Equal("episode", file.Disposition);
+                Assert.Null(file.OtherReason);
+            });
+        Assert.Equal(1, await CountEpisodeClaimsAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task CompletionFinalizesOwnedEpisodeClaim()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var taskId = await PrepareFilesAsync(app, ("Show EP04.mkv", "4", "4"));
+        await ResolveSeasonAsync(app);
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        var completions = app.App.Services.GetRequiredService<CompletionRecordStore>();
+        Assert.True(await completions.TryAddAsync(new CompletionRecord
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Episode = new TmdbEpisodeIdentity(72517, 2, 4),
+            SourceId = "mikan",
+            SourceItemId = taskId,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        }));
+
+        Assert.Equal("completed", await ReadEpisodeClaimStateAsync(app, file.FileId));
+        Assert.False(await completions.ReleaseClaimAsync(new TmdbEpisodeIdentity(72517, 2, 4), file.FileId));
+    }
+
+    [Fact]
+    public async Task ActiveClaimFromAnotherTaskSkipsOnlyMatchingEpisode()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var ownerTaskId = await PrepareFilesAsync(app, ("Owner EP04.mkv", "4", "4"));
+        await ResolveSeasonAsync(app);
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+        var competingTaskId = await CloneSeasonResolvedTaskAsync(app, ownerTaskId, "Competing EP04.mkv");
+
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var competingFile = Assert.Single(await ReadFilesAsync(app, competingTaskId));
+        Assert.Equal("duplicate", competingFile.Disposition);
+        Assert.Equal(4, competingFile.EpisodeNumber);
+        Assert.Equal("episode_claimed_by_another_task", competingFile.OtherReason);
+        Assert.Equal(1, await CountEpisodeClaimsAsync(app, ownerTaskId));
+        Assert.Equal(0, await CountEpisodeClaimsAsync(app, competingTaskId));
+    }
+
+    [Fact]
+    public async Task FailedOrganizerCanReleaseClaimForAnotherTask()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var taskId = await PrepareFilesAsync(app, ("Show EP04.mkv", "4", "4"));
+        await ResolveSeasonAsync(app);
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        var completions = app.App.Services.GetRequiredService<CompletionRecordStore>();
+        Assert.True(await completions.ReleaseClaimAsync(new TmdbEpisodeIdentity(72517, 2, 4), file.FileId));
+        Assert.Equal("released", await ReadEpisodeClaimStateAsync(app, file.FileId));
+
+        var nextTaskId = await CloneSeasonResolvedTaskAsync(app, taskId, "Retry elsewhere EP04.mkv");
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+        var nextFile = Assert.Single(await ReadFilesAsync(app, nextTaskId));
+        Assert.Equal("episode", nextFile.Disposition);
+        Assert.Null(nextFile.OtherReason);
+        Assert.Equal("active", await ReadEpisodeClaimStateAsync(app, nextFile.FileId));
+        Assert.Equal(0, await CountEpisodeClaimsAsync(app, taskId));
+        Assert.Equal(1, await CountEpisodeClaimsAsync(app, nextTaskId));
     }
 
     [Theory]
@@ -235,7 +355,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         await using var connection = await database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT relative_path, disposition, tmdb_episode_number, other_reason
+            SELECT id, relative_path, disposition, tmdb_episode_number, other_reason
             FROM task_files WHERE task_id = $task_id ORDER BY relative_path;
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
@@ -246,8 +366,9 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             values.Add(new FileState(
                 reader.GetString(0),
                 reader.GetString(1),
-                reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3)));
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
         }
 
         return values.ToArray();
@@ -263,7 +384,85 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
-    private sealed record FileState(string Path, string Disposition, int? EpisodeNumber, string? OtherReason);
+    private static async Task<string> CloneSeasonResolvedTaskAsync(
+        RunningApp app,
+        string sourceTaskId,
+        string relativePath)
+    {
+        var taskId = Guid.NewGuid().ToString("N");
+        var now = DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using (var task = connection.CreateCommand())
+        {
+            task.CommandText = """
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id, source_item_id,
+                    source_work_id, mikanid, groupid, bangumi_subject_id, anidb_id, imdb_id,
+                    title, torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                    status, failure_kind, failure_reason, created_at_utc, updated_at_utc)
+                SELECT $task_id, source_profile_id, source_profile_revision, source_id, $source_item_id,
+                       source_work_id, mikanid, groupid, bangumi_subject_id, anidb_id, imdb_id,
+                       'Competing task', $fingerprint, downloader_id, route_snapshot_json,
+                       'metadata_season_resolved', NULL, NULL, $now, $now
+                FROM ingest_tasks WHERE id = $source_task_id;
+                """;
+            task.Parameters.AddWithValue("$task_id", taskId);
+            task.Parameters.AddWithValue("$source_task_id", sourceTaskId);
+            task.Parameters.AddWithValue("$source_item_id", $"competing-{taskId}");
+            task.Parameters.AddWithValue("$fingerprint", $"competing-{taskId}");
+            task.Parameters.AddWithValue("$now", now);
+            Assert.Equal(1, await task.ExecuteNonQueryAsync());
+        }
+
+        await using (var file = connection.CreateCommand())
+        {
+            file.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    file_episode_candidate, tmdb_series_id, tmdb_season_number, disposition)
+                VALUES ($id, $task_id, $relative_path, 5, '4', '4', 72517, 2, 'pending');
+                """;
+            file.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            file.Parameters.AddWithValue("$task_id", taskId);
+            file.Parameters.AddWithValue("$relative_path", relativePath);
+            Assert.Equal(1, await file.ExecuteNonQueryAsync());
+        }
+
+        return taskId;
+    }
+
+    private static async Task<int> CountEpisodeClaimsAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM episode_claims AS claim
+            JOIN task_files AS file ON file.id = claim.task_file_id
+            WHERE file.task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<string> ReadEpisodeClaimStateAsync(RunningApp app, string taskFileId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT state FROM episode_claims WHERE task_file_id = $task_file_id;";
+        command.Parameters.AddWithValue("$task_file_id", taskFileId);
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private sealed record FileState(
+        string FileId,
+        string Path,
+        string Disposition,
+        int? EpisodeNumber,
+        string? OtherReason);
 
     private sealed class FakeTmdbClient : ITmdbClient
     {

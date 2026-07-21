@@ -172,7 +172,7 @@ async function loadMetadataTasks() {
 
       const files = document.createElement("p");
       files.className = "metadata-files";
-      files.textContent = `已确认 ${item.episode_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
+      files.textContent = `已确认 ${item.episode_file_count} · 已跳过重复 ${item.duplicate_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
       card.append(heading, identity, stages, files);
 
       if (item.failure_kind || item.failure_reason) {

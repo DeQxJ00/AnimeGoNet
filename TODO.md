@@ -85,7 +85,7 @@
 - [ ] 实现 SQLite KV/TTL store。
 - [ ] 实现 bucket/list/get/delete 兼容接口。
 - [ ] 移植目录 JSON 数据库扫描/索引/写入。
-- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键和并发 TryAdd 已完成；alias/delete repository 待实现）。
+- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；alias/delete repository 和提交 qB 前早停待实现）。
 - [>] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键（schema/约束已完成；事务 store 与早停编排待实现）。
 - [ ] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件。
 - [ ] 移植 `tvshow.nfo` 生成和更新。
@@ -177,7 +177,7 @@
 - [ ] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`。
 - [ ] 非 AI 季度结果依次执行同号 EP 快速校验、Bgm/TMDB 标题日期校验；失败且 `tmdb_failep_use_ai_match_season=true` 时进行一次 AI EP 映射，返回的 TMDB ID/Season 必须与已确认值相同。
 - [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。
-- [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending，以及季度已知时 `Other` 原因；全局重复映射/目标冲突门禁和实际落盘仍待实现。
+- [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；提交 qB 前文件 priority 和实际落盘仍待实现。
 - [ ] 增加 `advanced.default.tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败即沿用原失败流程，不继续下载/刮削且不生成 NFO。
 - [ ] 开关开启后，仅在权威TMDB访问成功且最终为确定性无匹配、已有有效 Bangumi Subject ID 且季度 fallback 成功时继续；动画根目录 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - [ ] 验证已取得 TMDB ID、仅季度匹配失败时仍走原季度 fallback，不误入 Bangumi 完全失败兜底。

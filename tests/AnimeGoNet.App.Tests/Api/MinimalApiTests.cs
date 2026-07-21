@@ -102,6 +102,7 @@ public sealed class MinimalApiTests
         Assert.Equal("Metadata list", item.GetProperty("title").GetString());
         Assert.Equal("staged", item.GetProperty("status").GetString());
         Assert.Equal(3951, item.GetProperty("mikanid").GetInt32());
+        Assert.Equal(0, item.GetProperty("duplicate_file_count").GetInt32());
         Assert.Equal(1, item.GetProperty("pending_file_count").GetInt32());
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
         Assert.DoesNotContain("metadata-list.torrent", body, StringComparison.Ordinal);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -535,6 +536,33 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 ?? throw new InvalidOperationException("Resolved TMDB Series projection was not found."));
         }
 
+        var episodeClaims = new Dictionary<TmdbEpisodeIdentity, EpisodeClaimDecision>();
+        foreach (var resolution in fileResolutions)
+        {
+            if (resolution.Episode is null)
+            {
+                continue;
+            }
+
+            var identity = new TmdbEpisodeIdentity(
+                resolution.Episode.SeriesId,
+                resolution.Episode.SeasonNumber,
+                resolution.Episode.EpisodeNumber);
+            if (!episodeClaims.ContainsKey(identity))
+            {
+                episodeClaims.Add(
+                    identity,
+                    await ClaimEpisodeAsync(
+                        connection,
+                        transaction,
+                        claim.Resolution.TaskId,
+                        resolution.FileId,
+                        identity,
+                        now,
+                        cancellationToken).ConfigureAwait(false));
+            }
+        }
+
         foreach (var resolution in fileResolutions)
         {
             if (resolution.Episode is not null)
@@ -567,6 +595,24 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 await upsertEpisode.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            var disposition = resolution.Disposition;
+            var otherReason = resolution.OtherReason;
+            if (resolution.Episode is not null)
+            {
+                var identity = new TmdbEpisodeIdentity(
+                    resolution.Episode.SeriesId,
+                    resolution.Episode.SeasonNumber,
+                    resolution.Episode.EpisodeNumber);
+                var decision = episodeClaims[identity];
+                if (decision != EpisodeClaimDecision.Owned)
+                {
+                    disposition = "duplicate";
+                    otherReason = decision == EpisodeClaimDecision.AlreadyCompleted
+                        ? "episode_already_completed"
+                        : "episode_claimed_by_another_task";
+                }
+            }
+
             await using var updateFile = connection.CreateCommand();
             updateFile.Transaction = transaction;
             updateFile.CommandText = """
@@ -588,8 +634,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 "$tmdb_episode_number",
                 (object?)resolution.Episode?.EpisodeNumber ?? DBNull.Value);
             updateFile.Parameters.AddWithValue("$tmdb_episode_id", (object?)resolution.Episode?.Id ?? DBNull.Value);
-            updateFile.Parameters.AddWithValue("$disposition", resolution.Disposition);
-            updateFile.Parameters.AddWithValue("$other_reason", (object?)resolution.OtherReason ?? DBNull.Value);
+            updateFile.Parameters.AddWithValue("$disposition", disposition);
+            updateFile.Parameters.AddWithValue("$other_reason", (object?)otherReason ?? DBNull.Value);
             if (await updateFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 throw new InvalidOperationException("Metadata Episode task file changed concurrently.");
@@ -624,6 +670,98 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<EpisodeClaimDecision> ClaimEpisodeAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string taskId,
+        string taskFileId,
+        TmdbEpisodeIdentity episode,
+        string claimedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using (var completed = connection.CreateCommand())
+        {
+            completed.Transaction = transaction;
+            completed.CommandText = """
+                SELECT EXISTS(
+                    SELECT 1 FROM completion_records
+                    WHERE tmdb_series_id = $series_id
+                      AND tmdb_season_number = $season_number
+                      AND tmdb_episode_number = $episode_number);
+                """;
+            completed.Parameters.AddWithValue("$series_id", episode.SeriesId);
+            completed.Parameters.AddWithValue("$season_number", episode.SeasonNumber);
+            completed.Parameters.AddWithValue("$episode_number", episode.EpisodeNumber);
+            if (Convert.ToInt64(
+                    await completed.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                    CultureInfo.InvariantCulture) == 1)
+            {
+                return EpisodeClaimDecision.AlreadyCompleted;
+            }
+        }
+
+        await using (var acquire = connection.CreateCommand())
+        {
+            acquire.Transaction = transaction;
+            acquire.CommandText = """
+                INSERT INTO episode_claims (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    task_file_id, state, claimed_at_utc, expires_at_utc)
+                VALUES (
+                    $id, $series_id, $season_number, $episode_number,
+                    $task_file_id, 'active', $claimed_at_utc, NULL)
+                ON CONFLICT(tmdb_series_id, tmdb_season_number, tmdb_episode_number)
+                DO UPDATE SET
+                    id = excluded.id,
+                    task_file_id = excluded.task_file_id,
+                    state = 'active',
+                    claimed_at_utc = excluded.claimed_at_utc,
+                    expires_at_utc = NULL
+                WHERE episode_claims.state = 'released';
+                """;
+            acquire.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            acquire.Parameters.AddWithValue("$series_id", episode.SeriesId);
+            acquire.Parameters.AddWithValue("$season_number", episode.SeasonNumber);
+            acquire.Parameters.AddWithValue("$episode_number", episode.EpisodeNumber);
+            acquire.Parameters.AddWithValue("$task_file_id", taskFileId);
+            acquire.Parameters.AddWithValue("$claimed_at_utc", claimedAtUtc);
+            if (await acquire.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+            {
+                return EpisodeClaimDecision.Owned;
+            }
+        }
+
+        await using var existing = connection.CreateCommand();
+        existing.Transaction = transaction;
+        existing.CommandText = """
+            SELECT file.task_id, claim.state
+            FROM episode_claims AS claim
+            JOIN task_files AS file ON file.id = claim.task_file_id
+            WHERE claim.tmdb_series_id = $series_id
+              AND claim.tmdb_season_number = $season_number
+              AND claim.tmdb_episode_number = $episode_number;
+            """;
+        existing.Parameters.AddWithValue("$series_id", episode.SeriesId);
+        existing.Parameters.AddWithValue("$season_number", episode.SeasonNumber);
+        existing.Parameters.AddWithValue("$episode_number", episode.EpisodeNumber);
+        await using var reader = await existing.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("TMDB Episode claim conflict disappeared during the transaction.");
+        }
+
+        var ownerTaskId = reader.GetString(0);
+        var state = reader.GetString(1);
+        if (string.Equals(ownerTaskId, taskId, StringComparison.Ordinal) && state == "active")
+        {
+            return EpisodeClaimDecision.Owned;
+        }
+
+        return state == "completed"
+            ? EpisodeClaimDecision.AlreadyCompleted
+            : EpisodeClaimDecision.ClaimedByAnotherTask;
     }
 
     public async Task FailEpisodesAsync(
@@ -866,6 +1004,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                    task.failure_kind, task.failure_reason,
                    SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
                    task.updated_at_utc
             FROM ingest_tasks AS task
@@ -896,10 +1035,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 reader.GetInt32(13),
                 reader.GetInt32(14),
                 reader.GetInt32(15),
-                DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
+                reader.GetInt32(16),
+                DateTimeOffset.Parse(reader.GetString(17), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
         }
 
         return items;
+    }
+
+    private enum EpisodeClaimDecision
+    {
+        Owned,
+        AlreadyCompleted,
+        ClaimedByAnotherTask,
     }
 
     private static string CanonicalName(TmdbSeries series) =>

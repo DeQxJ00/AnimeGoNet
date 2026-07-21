@@ -135,6 +135,7 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("failure_reason")] string? FailureReason,
     [property: JsonPropertyName("episode_file_count")] int EpisodeFileCount,
     [property: JsonPropertyName("other_file_count")] int OtherFileCount,
+    [property: JsonPropertyName("duplicate_file_count")] int DuplicateFileCount,
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 

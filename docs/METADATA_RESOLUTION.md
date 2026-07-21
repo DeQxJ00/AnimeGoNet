@@ -55,6 +55,10 @@
 
 多文件 Torrent 按文件级处理：已下载 Episode 对应的视频及其已绑定字幕标记为 unwanted，未下载 Episode 和对应字幕继续。qBittorrent 使用“暂停添加 → 等待/校验 metadata → 设置文件 priority → 恢复”；必须按相对路径和容量核对索引，不能仅按数组位置。所有正片 Episode 已完成且没有其他明确需要处理的文件时，才跳过整个 Torrent。
 
+当前实现已在 TMDB Episode 官方验证完成的同一 SQLite 事务中获取 `EpisodeClaim`：同一任务内映射到同一 Episode 的视频和字幕共享一个 claim；已有规范完成记录时标记 `episode_already_completed`，其他任务持有活动 claim 时标记 `episode_claimed_by_another_task`，并且只把对应 `task_files` 置为 `duplicate`，同任务其他 Episode 不受影响。整理全部成功写入 `CompletionRecord` 时 claim 原子转为 `completed`，整理失败可按 claim 所属 `task_file_id` 显式释放。claim 不按超时自动接管，崩溃恢复仍须核对下载器与文件状态。
+
+这一增量关闭了“验证完成到整理完成”之间的 SQLite 并发窗口，但当前元数据 worker 仍位于下载完成之后。把相同门禁前移到 qBittorrent 恢复下载之前、按路径和容量设置 unwanted/priority，仍属于下载编排模块，不能把当前 `duplicate` 标记误报成已节省网络下载。
+
 TMDB 完全失败、`tmdbid=0` 的 Bangumi 兜底没有规范 TMDB Episode 键，不能参与 TMDB 级全局去重，但不等于完全不记录下载历史。每个完整成功的兜底文件都必须原子写入 `FallbackCompletionRecord`，并按当前可证明的最强身份建立唯一键：
 
 1. 已可靠解析到 Bangumi Episode ID 时，使用 `(bgmid, bangumi_episode_id)`；这可以在持有同一可靠 Bangumi Episode 身份的来源之间去重，但不能把来源集号直接当 Bangumi Episode ID。

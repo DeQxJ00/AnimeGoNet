@@ -10,6 +10,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Sources;
@@ -94,6 +95,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
+        builder.Services.AddSingleton<CompletionRecordStore>();
         builder.Services.AddSingleton(downloadClientRegistry);
         builder.Services.AddSingleton<DownloadClientOperationCoordinator>();
         builder.Services.AddSingleton(torrentStagingService);

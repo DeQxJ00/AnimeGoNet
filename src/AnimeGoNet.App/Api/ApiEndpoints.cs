@@ -222,6 +222,7 @@ public static class ApiEndpoints
             item.FailureReason,
             item.EpisodeFileCount,
             item.OtherFileCount,
+            item.DuplicateFileCount,
             item.PendingFileCount,
             item.UpdatedAtUtc)).ToArray()));
     }

@@ -77,5 +77,6 @@ public sealed record MetadataTaskListProjection(
     string? FailureReason,
     int EpisodeFileCount,
     int OtherFileCount,
+    int DuplicateFileCount,
     int PendingFileCount,
     DateTimeOffset UpdatedAtUtc);

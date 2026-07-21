@@ -71,7 +71,7 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 ## 7. 当前任务状态投影
 
-在完整作品库落地前，首页提供只读的“匹配与整理状态”任务投影，用于观察统一导入到元数据解析的实际进度。`GET /api/v1/metadata/tasks` 当前返回标题、来源、任务状态、`mikanid`/Bangumi/TMDB Series/Season、最近成功的 Series/Season/Episode 策略、Episode/Other/Pending 文件计数、脱敏失败分类与原因，以及最后更新时间。
+在完整作品库落地前，首页提供只读的“匹配与整理状态”任务投影，用于观察统一导入到元数据解析的实际进度。`GET /api/v1/metadata/tasks` 当前返回标题、来源、任务状态、`mikanid`/Bangumi/TMDB Series/Season、最近成功的 Series/Season/Episode 策略、Episode/Duplicate/Other/Pending 文件计数、脱敏失败分类与原因，以及最后更新时间。
 
 该投影不返回 Torrent URL、passkey、下载器凭据或文件绝对路径。查询通过单条聚合 SQL 批量产生，避免逐任务读取策略或文件计数。只有已进入 `metadata_failed` 且没有活动租约的任务显示“显式重新匹配”，调用既有重试 API 后刷新状态；它不是自动重试开关，也不会覆盖人工规则。
 
