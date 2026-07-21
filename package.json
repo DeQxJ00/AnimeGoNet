@@ -1,0 +1,14 @@
+{
+  "name": "animegonet-webui",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "web:build": "tsc --project tsconfig.json",
+    "web:check": "tsc --project tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

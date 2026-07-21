@@ -30,6 +30,7 @@ modules/proxy/
 note_*.*
 .vscode/
 dist/
+node_modules/
 bin/
 obj/
 .vs/

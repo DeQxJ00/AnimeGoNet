@@ -14,6 +14,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  webui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install WebUI build dependencies
+        run: npm ci
+      - name: Type-check WebUI
+        run: npm run web:check
+      - name: Verify committed WebUI output
+        run: npm run web:build && git diff --exit-code -- src/AnimeGoNet.App/wwwroot/app.js
+
   build-test:
     strategy:
       fail-fast: false

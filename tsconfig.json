@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["DOM", "ES2023"],
+    "strict": true,
+    "noEmitOnError": true,
+    "rootDir": "src/AnimeGoNet.App/WebUI/src",
+    "outDir": "src/AnimeGoNet.App/wwwroot",
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/AnimeGoNet.App/WebUI/src/**/*.ts"]
+}

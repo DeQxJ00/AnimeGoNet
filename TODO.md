@@ -226,7 +226,7 @@
 - [ ] 实现缓存/数据库浏览和安全删除。
 - [ ] 实现实时日志过滤、暂停、恢复和断线重连。
 - [ ] 完成响应式布局、空/错/加载状态和基本可访问性。
-- [ ] 通过 TypeScript 类型检查、DOM 单元测试和 Playwright UI E2E。
+- [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；DOM 单元测试和 Playwright UI E2E 待实现。
 - [ ] 用 Tampermonkey + Mikan fixture 页验证“单集”“全集”“上传/获取过滤配置”。
 
 ## P10 — 组合与发布
