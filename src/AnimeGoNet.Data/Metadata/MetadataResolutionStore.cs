@@ -526,6 +526,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
                 ValidateIdentifier(resolution.OtherReason, nameof(fileResolutions));
             }
+
+            if (resolution.AssociatedFileId is not null
+                && !claim.Files.Any(file => file.FileId == resolution.AssociatedFileId))
+            {
+                throw new ArgumentException("Associated subtitle target must belong to the same task.", nameof(fileResolutions));
+            }
+
+            if (resolution.RenameSuffix is not null
+                && (resolution.RenameSuffix.Length is < 2 or > 128
+                    || resolution.RenameSuffix[0] != '.'
+                    || resolution.RenameSuffix.IndexOfAny(['/', '\\']) >= 0))
+            {
+                throw new ArgumentException("Subtitle rename suffix is invalid.", nameof(fileResolutions));
+            }
         }
 
         var now = Format(utcNow);
@@ -625,7 +639,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 SET tmdb_episode_number = $tmdb_episode_number,
                     tmdb_episode_id = $tmdb_episode_id,
                     disposition = $disposition,
-                    other_reason = $other_reason
+                    other_reason = $other_reason,
+                    associated_task_file_id = $associated_file_id,
+                    rename_suffix = $rename_suffix
                 WHERE id = $file_id AND task_id = $task_id
                   AND disposition = 'pending'
                   AND tmdb_series_id = $tmdb_series_id
@@ -641,6 +657,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             updateFile.Parameters.AddWithValue("$tmdb_episode_id", (object?)resolution.Episode?.Id ?? DBNull.Value);
             updateFile.Parameters.AddWithValue("$disposition", disposition);
             updateFile.Parameters.AddWithValue("$other_reason", (object?)otherReason ?? DBNull.Value);
+            updateFile.Parameters.AddWithValue("$associated_file_id", (object?)resolution.AssociatedFileId ?? DBNull.Value);
+            updateFile.Parameters.AddWithValue("$rename_suffix", (object?)resolution.RenameSuffix ?? DBNull.Value);
             if (await updateFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 throw new InvalidOperationException("Metadata Episode task file changed concurrently.");

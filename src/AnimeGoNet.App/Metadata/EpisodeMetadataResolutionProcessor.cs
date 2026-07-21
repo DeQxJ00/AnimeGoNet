@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
@@ -32,8 +33,15 @@ public sealed class EpisodeMetadataResolutionProcessor(
             && rule.TmdbSeasonNumber == claim.TmdbSeasonNumber
             ? rule.EpisodeOffset
             : null;
+        var associations = SubtitleAssociationResolver.Resolve(claim.Files.Select(file => new TorrentMediaFile(
+            file.FileId,
+            file.RelativePath,
+            int.TryParse(file.FileEpisodeCandidate, NumberStyles.None, CultureInfo.InvariantCulture, out var episode)
+                ? episode
+                : null)).ToArray());
+        var subtitleIds = associations.Select(association => association.SubtitleFileId).ToHashSet(StringComparer.Ordinal);
         var results = new List<MetadataEpisodeFileResolution>(claim.Files.Count);
-        foreach (var file in claim.Files)
+        foreach (var file in claim.Files.Where(file => !subtitleIds.Contains(file.FileId)))
         {
             if (!int.TryParse(file.FileEpisodeCandidate, NumberStyles.None, CultureInfo.InvariantCulture, out var sourceEpisode)
                 || sourceEpisode <= 0)
@@ -136,6 +144,40 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 ElapsedMilliseconds(started),
                 cancellationToken).ConfigureAwait(false);
             results.Add(new MetadataEpisodeFileResolution(file.FileId, episode, "episode", null));
+        }
+
+        foreach (var association in associations)
+        {
+            var video = association.VideoFileId is null
+                ? null
+                : results.SingleOrDefault(result => result.FileId == association.VideoFileId);
+            if (video?.Episode is not null)
+            {
+                await RecordAsync(
+                    claim, "subtitle_association", null, "matched", null,
+                    false, 0, cancellationToken).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    association.SubtitleFileId,
+                    video.Episode,
+                    "episode",
+                    null,
+                    association.VideoFileId,
+                    association.RenameSuffix));
+            }
+            else
+            {
+                var reason = association.UnmatchedReason ?? "subtitle_video_unmatched";
+                await RecordAsync(
+                    claim, "subtitle_association", null, "other", reason,
+                    false, 0, cancellationToken).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    association.SubtitleFileId,
+                    null,
+                    "other",
+                    reason,
+                    association.VideoFileId,
+                    association.RenameSuffix));
+            }
         }
 
         await resolutions.CompleteEpisodesAsync(

@@ -14,7 +14,9 @@ public sealed record MediaOrganizationFile(
     int TmdbSeriesId,
     int SeasonNumber,
     int? EpisodeNumber,
-    string CanonicalSeriesName);
+    string CanonicalSeriesName,
+    string? RenameSuffix,
+    string? AssociatedFileId);
 
 public sealed record MediaOrganizationClaim(
     string JobId,

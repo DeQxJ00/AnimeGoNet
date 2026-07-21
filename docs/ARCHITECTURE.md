@@ -72,7 +72,7 @@ AnimeGoNet.slnx
 - `FileOperation`：link/link_delete/move/wait_move 的逐步、可重试状态；Mikan 默认 `move`。
 - `DeletePlan` / `DeleteExecution`：业务记录、下载器任务、下载源文件、媒体库文件四类独立选择；已下载记录删除作为显式业务动作，组合执行前必须预览。
 
-字幕在能唯一关联视频 EP 时继承已验证 TMDB 目标并随视频改名，保留多语言/forced/SDH/轨道后缀；无法唯一关联但季度已确认时进入 `Other`。
+字幕只允许通过同目录同 stem（可附加多语言/default/forced/SDH/轨道 token）或唯一来源 EP 关联视频；它复用视频已经由 TMDB 验证的 Episode，不单独请求 TMDB、不单独占 claim 或写完成记录。`.idx/.sub` 分别保存关联并保留扩展。无法唯一关联但季度已确认时进入 `Other`；关联成功时目标为 `Eyyy.<原后缀>.<字幕扩展>`。
 
 媒体目标路径只由已持久化的 TMDB 规范名称、Season、Episode 和捕获的 save root 生成；所有跨平台非法字符、控制字符、Windows 保留名及尾随点/空格都做确定性清洗。实际 `move` 必须先验证源路径和目标路径仍位于捕获根目录内并拒绝符号链接穿越；同卷优先原子 rename，跨卷使用同目录 task-owned partial、SHA-256 双向校验、原子提交目标后才删除源。重试时目标已存在仅在容量与内容一致时清理源，否则保留双方并报告冲突。
 

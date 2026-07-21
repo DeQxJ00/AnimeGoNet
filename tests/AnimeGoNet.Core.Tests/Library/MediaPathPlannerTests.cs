@@ -30,6 +30,15 @@ public sealed class MediaPathPlannerTests
         Assert.Equal(Path.Combine("_CON", "S12", "Other", "PV_ 01_.mkv"), result);
     }
 
+    [Fact]
+    public void AssociatedSubtitleKeepsLanguageAndTrackSuffix()
+    {
+        var result = MediaPathPlanner.PlanRelativePath(new MediaPathInput(
+            "Series", 1, "episode", 3, "Anime - 03.zh-Hans.forced.ass", ".zh-Hans.forced.ass"));
+
+        Assert.Equal(Path.Combine("Series", "S01", "E003.zh-Hans.forced.ass"), result);
+    }
+
     [Theory]
     [InlineData("pending", 1)]
     [InlineData("duplicate", 1)]

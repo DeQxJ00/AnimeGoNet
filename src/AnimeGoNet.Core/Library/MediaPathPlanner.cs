@@ -9,7 +9,8 @@ public sealed record MediaPathInput(
     int SeasonNumber,
     string Disposition,
     int? EpisodeNumber,
-    string OriginalRelativePath);
+    string OriginalRelativePath,
+    string? RenameSuffix = null);
 
 public static class MediaPathPlanner
 {
@@ -86,15 +87,18 @@ public static class MediaPathPlanner
         }
 
         var originalName = GetFileName(input.OriginalRelativePath);
-        var extension = Path.GetExtension(originalName);
-        extension = extension.Length == 0 ? string.Empty : SanitizeExtension(extension);
+        var extension = input.RenameSuffix ?? Path.GetExtension(originalName);
+        extension = extension.Length == 0 ? string.Empty : SanitizeSuffix(extension);
         return $"E{input.EpisodeNumber.Value.ToString("000", CultureInfo.InvariantCulture)}{extension}";
     }
 
-    private static string SanitizeExtension(string extension)
+    private static string SanitizeSuffix(string extension)
     {
-        var value = SanitizeSegment(extension.TrimStart('.'));
-        return value == "_" ? string.Empty : "." + value;
+        var segments = extension.Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(SanitizeSegment)
+            .Where(segment => segment != "_")
+            .ToArray();
+        return segments.Length == 0 ? string.Empty : "." + string.Join('.', segments);
     }
 
     private static string GetFileName(string relativePath)

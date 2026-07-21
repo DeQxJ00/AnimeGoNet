@@ -59,7 +59,9 @@ public sealed record MetadataEpisodeFileResolution(
     string FileId,
     TmdbEpisode? Episode,
     string Disposition,
-    string? OtherReason);
+    string? OtherReason,
+    string? AssociatedFileId = null,
+    string? RenameSuffix = null);
 
 public sealed record MetadataTaskListProjection(
     string TaskId,

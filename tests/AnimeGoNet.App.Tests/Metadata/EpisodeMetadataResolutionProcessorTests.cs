@@ -40,7 +40,12 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             Assert.Equal(4, file.EpisodeNumber);
             Assert.Null(file.OtherReason);
         });
-        Assert.Equal([4, 4], tmdb.EpisodeRequests);
+        Assert.Equal([4], tmdb.EpisodeRequests);
+        var video = files.Single(file => file.Path.EndsWith(".mkv", StringComparison.Ordinal));
+        var subtitle = files.Single(file => file.Path.EndsWith(".ass", StringComparison.Ordinal));
+        Assert.Null(video.AssociatedFileId);
+        Assert.Equal(video.FileId, subtitle.AssociatedFileId);
+        Assert.Equal(".zh-Hans.ass", subtitle.RenameSuffix);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
         Assert.Equal(1, await CountEpisodeClaimsAsync(app, taskId));
     }
@@ -182,6 +187,23 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Equal("other", file.Disposition);
         Assert.Null(file.EpisodeNumber);
         Assert.Equal(expectedReason, file.OtherReason);
+        Assert.Empty(tmdb.EpisodeRequests);
+    }
+
+    [Fact]
+    public async Task OrphanSubtitleGoesToConfirmedSeasonOtherWithoutTmdbRequest()
+    {
+        var tmdb = new FakeTmdbClient();
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var taskId = await PrepareFilesAsync(app, ("orphan.zh-Hans.ass", "4", "4"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("other", file.Disposition);
+        Assert.Equal("subtitle_unmatched", file.OtherReason);
+        Assert.Equal(".ass", file.RenameSuffix);
         Assert.Empty(tmdb.EpisodeRequests);
     }
 
@@ -357,7 +379,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         await using var connection = await database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, relative_path, disposition, tmdb_episode_number, other_reason
+            SELECT id, relative_path, disposition, tmdb_episode_number, other_reason,
+                   associated_task_file_id, rename_suffix
             FROM task_files WHERE task_id = $task_id ORDER BY relative_path;
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
@@ -370,7 +393,9 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 reader.GetString(1),
                 reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetInt32(3),
-                reader.IsDBNull(4) ? null : reader.GetString(4)));
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
 
         return values.ToArray();
@@ -464,7 +489,9 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         string Path,
         string Disposition,
         int? EpisodeNumber,
-        string? OtherReason);
+        string? OtherReason,
+        string? AssociatedFileId,
+        string? RenameSuffix);
 
     private sealed class FakeTmdbClient : ITmdbClient
     {

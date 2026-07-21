@@ -43,6 +43,46 @@ public sealed class MediaOrganizationProcessorTests
         Assert.NotEmpty(client.Paused);
     }
 
+    [Fact]
+    public async Task AssociatedSubtitleMovesWithSuffixWithoutCreatingSecondCompletion()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        await AddAssociatedSubtitleAsync(app, taskId, paths);
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        Assert.True(File.Exists(Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv")));
+        Assert.Equal(
+            new byte[] { 6, 7, 8 },
+            await File.ReadAllBytesAsync(Path.Combine(paths.SavePath, "Series", "S01", "E001.zh-Hans.forced.ass")));
+        Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
+    }
+
+    private static async Task AddAssociatedSubtitleAsync(RunningApp app, string taskId, PathOptions paths)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO task_files (
+                id, task_id, relative_path, size_bytes, source_episode, file_episode_candidate,
+                tmdb_series_id, tmdb_season_number, tmdb_episode_number, tmdb_episode_id,
+                disposition, associated_task_file_id, rename_suffix, download_wanted)
+            SELECT 'subtitle', $task_id, 'episode.zh-Hans.forced.ass', 3, '1', '1',
+                   100, 1, 1, 1001, 'episode', id, '.zh-Hans.forced.ass', 1
+            FROM task_files WHERE task_id = $task_id AND relative_path = 'episode.mkv';
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        await File.WriteAllBytesAsync(
+            Path.Combine(paths.DownloadPath, "bt", "episode.zh-Hans.forced.ass"), [6, 7, 8]);
+    }
+
     private static async Task<string> PrepareDownloadedTaskAsync(RunningApp app, PathOptions paths)
     {
         const string payload = """

@@ -113,7 +113,7 @@ public sealed class MediaOrganizationProcessor(
         var sourceRelative = file.RelativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
         var targetRelative = MediaPathPlanner.PlanRelativePath(new MediaPathInput(
             file.CanonicalSeriesName, file.SeasonNumber, file.Disposition,
-            file.EpisodeNumber, file.RelativePath));
+            file.EpisodeNumber, file.RelativePath, file.RenameSuffix));
         var source = PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
         var target = PathBoundary.Combine(claim.SaveRootPath, targetRelative);
         return new MediaOperationPlan(file.TaskFileId, source, target);

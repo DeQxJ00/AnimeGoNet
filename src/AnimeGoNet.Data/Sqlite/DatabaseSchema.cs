@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 10;
+    public const int CurrentVersion = 11;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -16,6 +16,7 @@ public static class DatabaseSchema
         new SchemaMigration(8, "download_file_preparation", DownloadFilePreparation),
         new SchemaMigration(9, "download_path_snapshot", DownloadPathSnapshot),
         new SchemaMigration(10, "media_organization_lease", MediaOrganizationLease),
+        new SchemaMigration(11, "subtitle_episode_association", SubtitleEpisodeAssociation),
     ];
 
     private const string InitialBusinessSchema = """
@@ -466,5 +467,15 @@ public static class DatabaseSchema
 
         CREATE UNIQUE INDEX ux_file_operations_task_file
         ON file_operations(task_file_id);
+        """;
+
+    private const string SubtitleEpisodeAssociation = """
+        ALTER TABLE task_files
+        ADD COLUMN associated_task_file_id TEXT REFERENCES task_files(id) ON DELETE SET NULL;
+
+        ALTER TABLE task_files
+        ADD COLUMN rename_suffix TEXT;
+
+        CREATE INDEX ix_task_files_associated ON task_files(associated_task_file_id);
         """;
 }

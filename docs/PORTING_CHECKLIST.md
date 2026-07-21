@@ -72,7 +72,7 @@
 | `renamer` 与 rename Python | C# 整理器 | 替换 | 进行中 | C# TMDB canonical path planner、跨平台名称清洗和 Other 路径 tests 已通过；字幕/NFO/持久化 worker 待实现 |
 | `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 进行中 | move 的根目录/符号链接防逃逸、同卷原子 rename、跨卷 copy+SHA-256、冲突保全和幂等恢复 FS tests 已通过；其余策略与下载事件串联待实现 |
 | Mikan 默认整理 | `move` | 扩展默认 | 已验证 | 默认profile、paused preparation、真实临时文件 move/NFO/completion 与 fake-qB deleteFiles=false cleanup flow tests |
-| 字幕整理 | EP 绑定、重命名、保留语言后缀 | 扩展 | 待实现 | ass/srt/idx/sub cases |
+| 字幕整理 | EP 绑定、重命名、保留语言后缀 | 扩展 | 已验证 | 同stem/唯一来源EP、歧义Other、多语言/default/forced/SDH、ass/srt/idx/sub、单TMDB请求/claim/completion及真实临时文件move tests |
 | Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 进行中 | 容器配置、Compose 共享卷和 CI smoke 已建立；Docker runner 实跑待验收 |
 
 ## 调度、HTTP API 与 WebUI

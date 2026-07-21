@@ -159,7 +159,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             query.CommandText = """
                 SELECT file.id, file.relative_path, file.size_bytes, file.disposition,
                        file.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
-                       series.canonical_name
+                       series.canonical_name, file.rename_suffix, file.associated_task_file_id
                 FROM task_files AS file
                 JOIN anime_series AS series ON series.tmdb_series_id = file.tmdb_series_id
                 WHERE file.task_id = $task_id
@@ -174,7 +174,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 files.Add(new MediaOrganizationFile(
                     reader.GetString(0), reader.GetString(1), reader.GetInt64(2), reader.GetString(3),
                     reader.GetInt32(4), reader.GetInt32(5), reader.IsDBNull(6) ? null : reader.GetInt32(6),
-                    reader.GetString(7)));
+                    reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8),
+                    reader.IsDBNull(9) ? null : reader.GetString(9)));
             }
 
             if (files.Count == 0)
@@ -286,7 +287,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             throw new InvalidOperationException("All media operations must complete before business completion.");
         }
 
-        foreach (var file in claim.Files.Where(file => file.Disposition == "episode"))
+        foreach (var file in claim.Files.Where(file =>
+                     file.Disposition == "episode" && file.AssociatedFileId is null))
         {
             var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
             await using var insert = connection.CreateCommand();
