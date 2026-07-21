@@ -165,7 +165,7 @@
 ## P8 — 下载、重命名、刮削
 
 - [>] 移植下载管理状态机和 notifier（staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded、持久化准备租约及安全重试已实现；做种/整理 notifier 待实现）。
-- [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试已实现；删除回调待实现）。
+- [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
 - [ ] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入；RSS 早期检查并在提交下载器前事务复查。
 - [ ] 移植 link/link_delete/move/wait_move。
 - [ ] `move` 安全编排：下载完成后暂停任务，移动/跨卷复制校验、重命名/NFO/目录库成功后才移除下载器任务（不再删除文件）并写完成记录；失败保留可重试源文件。

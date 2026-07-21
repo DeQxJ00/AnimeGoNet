@@ -132,6 +132,8 @@ public sealed class DownloadJobStoreTests
             await tasks.CompleteDispatchAsync(
                 claim,
                 new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
+                "/download/incomplete/bt",
+                "/download/anime",
                 DateTimeOffset.UtcNow);
             await using (var connection = await databaseFixture.Database.OpenConnectionAsync())
             await using (var ready = connection.CreateCommand())

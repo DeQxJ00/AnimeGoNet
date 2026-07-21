@@ -57,8 +57,26 @@ public sealed class SchemaMigrationTests
         command.CommandText = "SELECT COUNT(*), MAX(version) FROM schema_migrations;";
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(8, reader.GetInt32(0));
+        Assert.Equal(9, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task DownloadJobsIncludeImmutablePathSnapshots()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA table_info(download_jobs);";
+        await using var reader = await command.ExecuteReaderAsync();
+        var columns = new HashSet<string>(StringComparer.Ordinal);
+        while (await reader.ReadAsync())
+        {
+            columns.Add(reader.GetString(1));
+        }
+
+        Assert.Contains("download_root_path", columns);
+        Assert.Contains("save_root_path", columns);
     }
 
     [Fact]

@@ -124,6 +124,8 @@ public sealed class DownloadPreparationProcessorTests
         await tasks.CompleteDispatchAsync(
             claim,
             new DownloadTaskSnapshot(hash, "Download preparation", DownloadTaskState.Paused, 0, 0, 5, 0, null),
+            Path.Combine(app.RootPath, "download", "bt"),
+            Path.Combine(app.RootPath, "save"),
             DateTimeOffset.UtcNow);
 
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();

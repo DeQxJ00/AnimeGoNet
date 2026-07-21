@@ -68,7 +68,7 @@ AnimeGoNet.slnx
 - `EpisodeClaim`：恢复暂停下载器前事务占位；规范唯一键 `(tmdb_series_id, season_number, episode_number)`。
 - `CompletionRecord`：只在下载、文件策略、整理和必要 NFO 全部成功后写入；同 TMDB+Season+EP 的后续输入直接跳过，其他 EP 不受影响。
 - `FallbackClaim` / `FallbackCompletionRecord`：只在完全兜底开关开启、TMDB 成功访问后确定性无匹配且有 bgmid 时使用；WebUI 列入“待补全 TMDB”，不显示伪造 EP 进度。
-- `DownloadJob`：qBittorrent hash/实例、下载状态、速度、容量、ETA 与错误；另存下载准备的 pending/preparing/completed 状态、租约、重试时间和安全失败码。
+- `DownloadJob`：qBittorrent hash/实例、下载状态、速度、容量、ETA 与错误；另存下载准备的 pending/preparing/completed 状态、租约、重试时间和安全失败码。qB 确认接收时同时固化该任务实际使用的 `download_root_path` 与 `save_root_path`，后续配置变化不得改写进行中任务的整理边界。
 - `FileOperation`：link/link_delete/move/wait_move 的逐步、可重试状态；Mikan 默认 `move`。
 - `DeletePlan` / `DeleteExecution`：业务记录、下载器任务、下载源文件、媒体库文件四类独立选择；已下载记录删除作为显式业务动作，组合执行前必须预览。
 

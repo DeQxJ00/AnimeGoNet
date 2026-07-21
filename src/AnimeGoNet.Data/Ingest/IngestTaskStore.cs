@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Downloads;
@@ -351,11 +352,23 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
     public async Task CompleteDispatchAsync(
         ClaimedStagedTorrentRecord claim,
         DownloadTaskSnapshot snapshot,
+        string downloadRootPath,
+        string saveRootPath,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(snapshot);
+        if (!PathBoundary.IsAbsolute(downloadRootPath))
+        {
+            throw new ArgumentException("Download root path must be absolute.", nameof(downloadRootPath));
+        }
+
+        if (!PathBoundary.IsAbsolute(saveRootPath))
+        {
+            throw new ArgumentException("Save root path must be absolute.", nameof(saveRootPath));
+        }
+
         if (!string.Equals(snapshot.Hash, claim.InfoHash, StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("Confirmed download hash does not match the staged Torrent.", nameof(snapshot));
@@ -395,13 +408,14 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     downloaded_bytes, total_bytes, speed_bytes_per_second,
                     eta_seconds, failure_reason, created_at_utc, updated_at_utc,
                     seeds, peers, snapshot_at_utc, is_stale, revision,
-                    preparation_state, preparation_attempt_count)
+                    preparation_state, preparation_attempt_count,
+                    download_root_path, save_root_path)
                 VALUES (
                     $id, $task_id, $downloader_id, $info_hash, $state, $progress,
                     $downloaded_bytes, $total_bytes, $speed_bytes_per_second,
                     $eta_seconds, NULL, $created_at_utc, $updated_at_utc,
                     $seeds, $peers, $snapshot_at_utc, 0, 1,
-                    'pending', 0);
+                    'pending', 0, $download_root_path, $save_root_path);
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
@@ -416,6 +430,8 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$seeds", Math.Max(0, snapshot.Seeds));
             insert.Parameters.AddWithValue("$peers", Math.Max(0, snapshot.Peers));
             insert.Parameters.AddWithValue("$snapshot_at_utc", now);
+            insert.Parameters.AddWithValue("$download_root_path", downloadRootPath);
+            insert.Parameters.AddWithValue("$save_root_path", saveRootPath);
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

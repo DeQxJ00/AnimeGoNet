@@ -58,6 +58,8 @@ public sealed class StagedTorrentDispatcher(
             await tasks.CompleteDispatchAsync(
                 claim,
                 snapshot,
+                downloader.DownloadPath,
+                options.Paths.SavePath,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
             try

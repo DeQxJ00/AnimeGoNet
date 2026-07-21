@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -14,6 +14,7 @@ public static class DatabaseSchema
         new SchemaMigration(6, "metadata_resolution_lease", MetadataResolutionLease),
         new SchemaMigration(7, "metadata_resolution_stages", MetadataResolutionStages),
         new SchemaMigration(8, "download_file_preparation", DownloadFilePreparation),
+        new SchemaMigration(9, "download_path_snapshot", DownloadPathSnapshot),
     ];
 
     private const string InitialBusinessSchema = """
@@ -437,5 +438,13 @@ public static class DatabaseSchema
 
         CREATE INDEX ix_download_jobs_preparation
         ON download_jobs(preparation_state, preparation_next_attempt_at_utc, updated_at_utc);
+        """;
+
+    private const string DownloadPathSnapshot = """
+        ALTER TABLE download_jobs
+        ADD COLUMN download_root_path TEXT;
+
+        ALTER TABLE download_jobs
+        ADD COLUMN save_root_path TEXT;
         """;
 }

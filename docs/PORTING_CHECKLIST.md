@@ -67,7 +67,7 @@
 |---|---|---:|---:|---|
 | `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过，真实容器 file-priority/reconnect 待实现 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 例外 | migration diagnostic test |
-| `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v8 持久化 qB 规范状态、进度、容量、速度、ETA、Seeds/Peers、stale/revision，以及 paused download preparation 租约/重试/逐文件 priority；实例故障隔离和恢复 tests 已通过，整理阶段待实现 |
+| `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v9 持久化 qB 规范状态、进度、容量、速度、ETA、Seeds/Peers、stale/revision、paused download preparation 租约/重试/逐文件 priority，以及不可变 download/save root；实例故障隔离和恢复 tests 已通过，整理执行阶段待实现 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 待实现 | notifier parity tests |
 | `renamer` 与 rename Python | C# 整理器 | 替换 | 待实现 | upstream rename fixtures |
 | `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 待实现 | FS integration/rollback tests |

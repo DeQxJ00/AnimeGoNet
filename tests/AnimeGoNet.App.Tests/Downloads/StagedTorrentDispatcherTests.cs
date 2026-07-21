@@ -35,6 +35,8 @@ public sealed class StagedTorrentDispatcherTests
         Assert.Equal(0, state.StagedCount);
         Assert.Equal(1, state.DownloadJobCount);
         Assert.Equal(fixture.InfoHash, state.JobHash);
+        Assert.Equal(fixture.Options.Downloaders["bt"].DownloadPath, state.DownloadRootPath);
+        Assert.Equal(fixture.Options.Paths.SavePath, state.SaveRootPath);
     }
 
     [Fact]
@@ -72,6 +74,25 @@ public sealed class StagedTorrentDispatcherTests
         Assert.Equal(1, state.AttemptCount);
         Assert.Equal(0, state.DownloadJobCount);
         Assert.DoesNotContain("private-password", state.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RelativeOrganizationRootRejectsDispatchTransactionAndKeepsStage()
+    {
+        await using var fixture = await DispatchFixture.CreateAsync();
+        var client = new FakeDownloadClient(fixture.InfoHash);
+        var invalidOptions = fixture.Options with
+        {
+            Paths = fixture.Options.Paths with { SavePath = "relative-library" },
+        };
+
+        var result = await fixture.CreateDispatcher(client, invalidOptions).DispatchNextAsync();
+
+        Assert.Equal(StagedDispatchResult.RetryScheduled, result);
+        Assert.True(File.Exists(fixture.StagingFilePath));
+        var state = await fixture.ReadLifecycleAsync();
+        Assert.Equal(0, state.DownloadJobCount);
+        Assert.Null(state.SaveRootPath);
     }
 
     private sealed class FakeRegistry(IDownloadClient client) : IDownloadClientRegistry
@@ -252,11 +273,13 @@ public sealed class StagedTorrentDispatcherTests
             return new DispatchFixture(root, options, database, store, task.Id, stagingFilePath, infoHash);
         }
 
-        public StagedTorrentDispatcher CreateDispatcher(IDownloadClient client) => new(
+        public StagedTorrentDispatcher CreateDispatcher(
+            IDownloadClient client,
+            AnimeGoOptions? options = null) => new(
             Store,
             new FileStagingService(Path.GetDirectoryName(StagingFilePath)!),
             new DownloadClientOperationCoordinator(new FakeRegistry(client)),
-            Options);
+            options ?? Options);
 
         public async Task<LifecycleState> ReadLifecycleAsync()
         {
@@ -268,7 +291,9 @@ public sealed class StagedTorrentDispatcherTests
                        COALESCE(staged_torrents.attempt_count, 0),
                        (SELECT COUNT(*) FROM staged_torrents WHERE task_id = $task_id),
                        (SELECT COUNT(*) FROM download_jobs WHERE task_id = $task_id),
-                       (SELECT info_hash FROM download_jobs WHERE task_id = $task_id)
+                       (SELECT info_hash FROM download_jobs WHERE task_id = $task_id),
+                       (SELECT download_root_path FROM download_jobs WHERE task_id = $task_id),
+                       (SELECT save_root_path FROM download_jobs WHERE task_id = $task_id)
                 FROM ingest_tasks
                 LEFT JOIN staged_torrents ON staged_torrents.task_id = ingest_tasks.id
                 WHERE ingest_tasks.id = $task_id;
@@ -283,7 +308,9 @@ public sealed class StagedTorrentDispatcherTests
                 reader.GetInt32(3),
                 reader.GetInt32(4),
                 reader.GetInt32(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6));
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8));
         }
 
         public ValueTask DisposeAsync()
@@ -304,5 +331,7 @@ public sealed class StagedTorrentDispatcherTests
         int AttemptCount,
         int StagedCount,
         int DownloadJobCount,
-        string? JobHash);
+        string? JobHash,
+        string? DownloadRootPath,
+        string? SaveRootPath);
 }

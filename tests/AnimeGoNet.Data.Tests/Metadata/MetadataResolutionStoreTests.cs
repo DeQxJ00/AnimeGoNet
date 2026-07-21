@@ -256,6 +256,8 @@ public sealed class MetadataResolutionStoreTests
             await tasks.CompleteDispatchAsync(
                 dispatch,
                 new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
+                "/download/incomplete/bt",
+                "/download/anime",
                 DateTimeOffset.UtcNow);
             await new AnimeGoNet.Data.Downloads.DownloadJobStore(databaseFixture.Database).ApplyInstanceSnapshotAsync(
                 "bt",

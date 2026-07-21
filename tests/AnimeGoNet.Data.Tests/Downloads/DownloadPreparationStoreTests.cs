@@ -106,6 +106,8 @@ public sealed class DownloadPreparationStoreTests
             await tasks.CompleteDispatchAsync(
                 dispatch,
                 new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Paused, 0, 0, 5, 0, null),
+                "/download/incomplete/bt",
+                "/download/anime",
                 DateTimeOffset.UtcNow);
             await using var connection = await database.Database.OpenConnectionAsync();
             await using var ready = connection.CreateCommand();

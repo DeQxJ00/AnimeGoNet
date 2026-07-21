@@ -256,6 +256,8 @@ public sealed class MinimalApiTests
         await tasks.CompleteDispatchAsync(
             claim,
             new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
+            Path.Combine(app.RootPath, "download", "bt"),
+            Path.Combine(app.RootPath, "save"),
             DateTimeOffset.UtcNow);
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
         await using (var connection = await database.OpenConnectionAsync())
