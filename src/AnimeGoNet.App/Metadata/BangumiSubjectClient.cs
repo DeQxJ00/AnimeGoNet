@@ -76,6 +76,66 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IDisposable
         }
     }
 
+    public async Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+        int subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        if (subjectId <= 0)
+        {
+            throw Failure(MetadataFailureKind.InvalidInput, "bangumi_subject_id_invalid");
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri(BaseUrl, $"v0/subjects/{subjectId}/subjects"));
+        request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(RequestTimeout);
+            using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                throw Failure(MetadataFailureKind.SemanticNoMatch, "bangumi_relations_not_found");
+            }
+
+            ThrowForStatus(response.StatusCode);
+            var values = await response.Content.ReadFromJsonAsync(
+                BangumiJsonContext.Default.BangumiSubjectRelationDtoArray,
+                timeout.Token).ConfigureAwait(false)
+                ?? throw Failure(MetadataFailureKind.Protocol, "bangumi_empty_response");
+            if (values.Any(value => value.Id <= 0
+                || string.IsNullOrWhiteSpace(value.Name)
+                || string.IsNullOrWhiteSpace(value.Relation)))
+            {
+                throw Failure(MetadataFailureKind.Protocol, "bangumi_relations_invalid");
+            }
+
+            return values.Select(value => new BangumiSubjectRelation(
+                value.Id,
+                value.Type,
+                value.Name!.Trim(),
+                value.ChineseName?.Trim() ?? string.Empty,
+                value.Relation!.Trim())).ToArray();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw Failure(MetadataFailureKind.Network, "bangumi_timeout");
+        }
+        catch (HttpRequestException)
+        {
+            throw Failure(MetadataFailureKind.Network, "bangumi_network_error");
+        }
+        catch (JsonException)
+        {
+            throw Failure(MetadataFailureKind.Protocol, "bangumi_invalid_json");
+        }
+    }
+
     private static DateOnly? ParseDate(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

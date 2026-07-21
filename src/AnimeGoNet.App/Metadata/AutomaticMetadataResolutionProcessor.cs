@@ -7,6 +7,7 @@ namespace AnimeGoNet.App.Metadata;
 public sealed class AutomaticMetadataResolutionProcessor(
     MetadataResolutionStore resolutions,
     IBangumiSubjectClient bangumi,
+    BangumiSeasonBacktraceResolver backtrace,
     TmdbSeriesResolver seriesResolver,
     ITmdbClient tmdb,
     AnimeGoOptions options,
@@ -121,7 +122,35 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return true;
         }
 
-        if (!policy.Backtrace && policy.UseTitleSeason)
+        if (policy.Backtrace && claim.BangumiSubjectId is not null)
+        {
+            var started = _timeProvider.GetTimestamp();
+            try
+            {
+                var result = await backtrace.ResolveAsync(
+                    claim.BangumiSubjectId.Value,
+                    details.Seasons,
+                    cancellationToken).ConfigureAwait(false);
+                await RecordAsync(claim, "season", "backtrace", 3,
+                    result.IsSuccess ? "matched" : "not_matched",
+                    result.Failure?.Code,
+                    false, started, cancellationToken).ConfigureAwait(false);
+                if (result.IsSuccess)
+                {
+                    await resolutions.CompleteSeasonAsync(
+                        claim, details.Series, result.Season!, _timeProvider.GetUtcNow(), cancellationToken)
+                        .ConfigureAwait(false);
+                    return true;
+                }
+            }
+            catch (BangumiClientException exception)
+            {
+                await RecordAsync(claim, "season", "backtrace", 3, "error", exception.SafeCode,
+                    IsRetryable(exception.Kind), started, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        if (policy.UseTitleSeason)
         {
             var started = _timeProvider.GetTimestamp();
             var season = TmdbSeasonFallbackSelector.SelectTitleSeason(claim.Title, details.Seasons);
@@ -137,7 +166,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             }
         }
 
-        if (!policy.Backtrace && policy.UseFirstSeason)
+        if (policy.UseFirstSeason)
         {
             var started = _timeProvider.GetTimestamp();
             var season = TmdbSeasonFallbackSelector.SelectFirstSeason(details.Seasons);
@@ -153,10 +182,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             }
         }
 
-        var finalFailure = policy.Backtrace
-            ? new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_backtrace_pending", true)
-            : direct.Failure!;
-        await FailAsync(claim, finalFailure, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
+        await FailAsync(claim, direct.Failure!, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
         return true;
     }
 

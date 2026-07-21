@@ -107,6 +107,98 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task BacktraceMatchesBeforeTitleAndFirstFallbacks()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
+        var bangumi = new GraphBangumiClient(
+            new Dictionary<int, BangumiSubject>
+            {
+                [547888] = new(547888, "Current", "来自深渊", new DateOnly(2020, 1, 1), 12),
+                [1000] = new(1000, "Previous", "来自深渊前作", new DateOnly(2022, 7, 6), 12),
+            },
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>
+            {
+                [547888] = [new BangumiSubjectRelation(1000, 2, "Previous", "来自深渊前作", "前传")],
+            });
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    SeasonFailure = options.Metadata.SeasonFailure with
+                    {
+                        Backtrace = true,
+                        UseTitleSeason = true,
+                        UseFirstSeason = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 Season 1");
+
+        Assert.True(await app.App.Services.GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal(2, run.TmdbSeasonNumber);
+        var strategies = await ReadStrategiesAsync(app, taskId);
+        Assert.Contains("backtrace", strategies);
+        Assert.DoesNotContain("title_season", strategies);
+        Assert.DoesNotContain("first_season", strategies);
+    }
+
+    [Fact]
+    public async Task BacktraceNetworkErrorIsAuditedThenTitleFallbackContinues()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
+        var bangumi = new GraphBangumiClient(
+            new Dictionary<int, BangumiSubject>
+            {
+                [547888] = new(547888, "Current", "来自深渊", new DateOnly(2020, 1, 1), 12),
+            },
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>(),
+            new BangumiClientException(MetadataFailureKind.Network, "bangumi_network_error"));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    SeasonFailure = options.Metadata.SeasonFailure with
+                    {
+                        Backtrace = true,
+                        UseTitleSeason = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 Season 2");
+
+        Assert.True(await app.App.Services.GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal(2, run.TmdbSeasonNumber);
+        var strategies = await ReadStrategiesAsync(app, taskId);
+        Assert.Contains("backtrace", strategies);
+        Assert.Contains("title_season", strategies);
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT retryable, result, error_code
+            FROM metadata_resolution_attempts
+            WHERE strategy = 'backtrace';
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1, reader.GetInt64(0));
+        Assert.Equal("error", reader.GetString(1));
+        Assert.Equal("bangumi_network_error", reader.GetString(2));
+    }
+
+    [Fact]
     public async Task AutomaticProcessorCannotClaimTaskWithCompleteManualOverride()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
@@ -221,6 +313,11 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             _exception is null
                 ? Task.FromResult(_subject)
                 : Task.FromException<BangumiSubject?>(_exception);
+
+        public Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<BangumiSubjectRelation>>([]);
     }
 
     private sealed class FakeTmdbClient(TmdbSeries series, IReadOnlyList<TmdbSeason> seasons) : ITmdbClient
@@ -244,5 +341,23 @@ public sealed class AutomaticMetadataResolutionProcessorTests
 
         public Task<TmdbEpisode?> GetEpisodeAsync(int seriesId, int seasonNumber, int episodeNumber, CancellationToken cancellationToken = default) =>
             Task.FromResult<TmdbEpisode?>(null);
+    }
+
+    private sealed class GraphBangumiClient(
+        IReadOnlyDictionary<int, BangumiSubject> subjects,
+        IReadOnlyDictionary<int, IReadOnlyList<BangumiSubjectRelation>> relations,
+        Exception? relationFailure = null) : IBangumiSubjectClient
+    {
+        public Task<BangumiSubject?> GetSubjectAsync(int subjectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(subjects.TryGetValue(subjectId, out var subject) ? subject : null);
+
+        public Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            relationFailure is null
+                ? Task.FromResult(relations.TryGetValue(subjectId, out var values)
+                    ? values
+                    : (IReadOnlyList<BangumiSubjectRelation>)[])
+                : Task.FromException<IReadOnlyList<BangumiSubjectRelation>>(relationFailure);
     }
 }

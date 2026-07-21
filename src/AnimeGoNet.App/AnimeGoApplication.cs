@@ -108,6 +108,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<TmdbSeriesResolver>();
         bangumiSubjectClient ??= new BangumiSubjectClient(new HttpClient(), ownsHttpClient: true);
         builder.Services.AddSingleton(bangumiSubjectClient);
+        builder.Services.AddSingleton<BangumiSeasonBacktraceResolver>();
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();
         builder.Services.AddSingleton<AutomaticMetadataResolutionProcessor>();
         if (startBackgroundWorkers.Value)

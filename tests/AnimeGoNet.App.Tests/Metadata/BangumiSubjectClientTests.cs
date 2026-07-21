@@ -49,6 +49,28 @@ public sealed class BangumiSubjectClientTests
         Assert.DoesNotContain("private-date", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RelatedSubjectsMapsOfficialRelationContract()
+    {
+        using var handler = new RecordingHandler(_ => Json("""
+            [{
+              "id": 253047,
+              "type": 2,
+              "name": "前作",
+              "name_cn": "前作中文名",
+              "relation": "前传"
+            }]
+            """));
+        using var client = new BangumiSubjectClient(new HttpClient(handler));
+
+        var relation = Assert.Single(await client.GetRelatedSubjectsAsync(371546));
+
+        Assert.Equal(253047, relation.Id);
+        Assert.Equal(2, relation.Type);
+        Assert.Equal("前传", relation.Relation);
+        Assert.Equal("https://api.bgm.tv/v0/subjects/371546/subjects", handler.RequestUri?.AbsoluteUri);
+    }
+
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),

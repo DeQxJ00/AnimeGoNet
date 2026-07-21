@@ -102,10 +102,10 @@
 
 - [ ] 移植 Mikan。
 - [ ] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`；同 ID 的不同字幕组、标题和 Torrent 归入同一作品作用域。
-- [>] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}` 实现 AOT-safe Subject 客户端、固定 User-Agent、日期/身份校验和稳定网络/协议失败分类；Episode、关系/前传与缓存仍待实现。
+- [>] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}` 与官方 `/v0/subjects/{bgmid}/subjects` 实现 AOT-safe Subject/关系客户端、固定 User-Agent、日期/身份校验和稳定网络/协议失败分类；Episode 与缓存仍待实现。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
 - [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；Bangumi Subject → TMDB Series/Season 自动 worker 与运行审计已接入，缓存和 Episode 流水线待实现）。
-- [ ] 按 issue #15 实现 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：季度匹配失败时沿 Bangumi“前传”关系逐项回溯首播日期，重新匹配同一 TMDB 剧集的季度。
+- [>] 按 issue #15 实现 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：已接入 Bangumi“前传”多层回溯、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；网络重试策略与受控 live fixture 仍待实现。
 - [ ] 实现 `TMDBFailUseAIMatchSeason` / `tmdb_fail_use_ai_match_season`（默认 `false`），每个下载任务只向大模型发送总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [ ] 实现 `TMDBFailEpUseAIMatchSeason` / `tmdb_failep_use_ai_match_season`（按指定拼写，默认 `false`）：非 AI 季度匹配成功后先验证来源 EP；存在不对应时按下载任务执行一次 AI EP 匹配。
 - [ ] 实现 Mikan 单文件发布日期Prompt门禁和显式开关：保留完整 `pubDate`，无偏移时按SourceProfile时区解析；即使开关开启也仅在Torrent实际文件条目数1、bgmid/日期有效且主程序成功计算 `bgm_episode_candidate` 时为真，Prompt直接结合文件名EP定向查TMDB，失败回通用流程。
@@ -115,7 +115,7 @@
 - [ ] 实现可空 `anidbid` → `tmdbtv` 候选查询；固定URL、限制响应并阻止SSRF，候选未经 TMDB MCP验证不得采用。
 - [ ] 实现可空 `imdbid` 规范化和 TMDB MCP external ID/find 候选查询；拒绝 Movie，最终 TV Series/Season/Episode 逐级验证。
 - [ ] AI 和确定性匹配均拒绝 Season 0；Series/Season 已确认但 Episode 未匹配的文件保留原名放入 `<TmdbName>/Sxx/Other/`，并保存原因。
-- [>] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；Skip/标题季度/第一季已按优先级接入并验证早停，Backtrace 与独立 AI 阶段仍待实现。
+- [>] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立 AI 阶段仍待实现且结果必须经 TMDB 验证。
 - [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。
 - [ ] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试。
 - [>] 移植 Mikan → Bangumi → TMDB 编排与 fallback：携带 `bgmid` 的已下载任务已由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Mikan 页面自动发现 bgmid、Backtrace、AI、Bangumi 完全兜底仍待实现。
