@@ -74,6 +74,8 @@ AnimeGoNet.slnx
 
 字幕在能唯一关联视频 EP 时继承已验证 TMDB 目标并随视频改名，保留多语言/forced/SDH/轨道后缀；无法唯一关联但季度已确认时进入 `Other`。
 
+媒体目标路径只由已持久化的 TMDB 规范名称、Season、Episode 和捕获的 save root 生成；所有跨平台非法字符、控制字符、Windows 保留名及尾随点/空格都做确定性清洗。实际 `move` 必须先验证源路径和目标路径仍位于捕获根目录内并拒绝符号链接穿越；同卷优先原子 rename，跨卷使用同目录 task-owned partial、SHA-256 双向校验、原子提交目标后才删除源。重试时目标已存在仅在容量与内容一致时清理源，否则保留双方并报告冲突。
+
 下载前门禁固定为：安全暂存并解析 Torrent → qB paused add/同 hash 接管并再次显式暂停 → `download_preparing` 下完成 Series/Season/Episode 与逐集 claim → 再次暂停并精确核对 qB 文件 index/path/size → duplicate/ignored 设 priority 0、episode/other 设 priority 1 → 仅存在 wanted 文件时恢复并进入 `download_queued`。若全部文件均被逐集去重，则保持不恢复、持久化 `download_skipped_duplicate`，并仅允许 `deleteFiles=false` 清除下载器任务；核对失败按持久化租约重试，不能启动下载。
 
 ## 4. SQLite 规则

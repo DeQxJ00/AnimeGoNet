@@ -168,13 +168,13 @@
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
 - [ ] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入；RSS 早期检查并在提交下载器前事务复查。
 - [ ] 移植 link/link_delete/move/wait_move。
-- [ ] `move` 安全编排：下载完成后暂停任务，移动/跨卷复制校验、重命名/NFO/目录库成功后才移除下载器任务（不再删除文件）并写完成记录；失败保留可重试源文件。
+- [>] `move` 安全编排：TMDB规范目标路径规划、跨平台名称清洗、路径越界/符号链接拒绝、同卷原子移动、跨卷 copy+SHA-256 校验、目标冲突保全和崩溃后同内容恢复基础件已实现；下载完成后暂停、持久化逐文件执行、NFO/目录库、`deleteFiles=false` 清理和完成记录事务待串联。
 - [ ] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态，避免上游 `DeleteFile=true` 完成回调导致 `link` 提前停止做种。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
 - [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [ ] 实现字幕识别与唯一绑定：同 stem、多语言/默认/强制/SDH 后缀、按来源 EP 唯一匹配、`.idx/.sub` 成对处理；匹配后继承 TMDB EP，未匹配进入季度 `Other`。
 - [ ] 串联媒体目录 DB 与 NFO。
-- [ ] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`。
+- [>] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`：确定性 planner 和跨平台安全清洗已实现并测试，持久化 worker 串联待实现。
 - [ ] 非 AI 季度结果依次执行同号 EP 快速校验、Bgm/TMDB 标题日期校验；失败且 `tmdb_failep_use_ai_match_season=true` 时进行一次 AI EP 映射，返回的 TMDB ID/Season 必须与已确认值相同。
 - [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。
 - [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；已串联 paused qB 的逐文件 priority 与恢复门禁，实际下载/落盘及字幕绑定待实现。
