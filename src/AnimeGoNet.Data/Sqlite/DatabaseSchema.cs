@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 11;
+    public const int CurrentVersion = 12;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -17,6 +17,7 @@ public static class DatabaseSchema
         new SchemaMigration(9, "download_path_snapshot", DownloadPathSnapshot),
         new SchemaMigration(10, "media_organization_lease", MediaOrganizationLease),
         new SchemaMigration(11, "subtitle_episode_association", SubtitleEpisodeAssociation),
+        new SchemaMigration(12, "auditable_delete_plans", AuditableDeletePlans),
     ];
 
     private const string InitialBusinessSchema = """
@@ -477,5 +478,36 @@ public static class DatabaseSchema
         ADD COLUMN rename_suffix TEXT;
 
         CREATE INDEX ix_task_files_associated ON task_files(associated_task_file_id);
+        """;
+
+    private const string AuditableDeletePlans = """
+        ALTER TABLE delete_executions ADD COLUMN plan_fingerprint TEXT;
+        ALTER TABLE delete_executions ADD COLUMN lease_token TEXT;
+        ALTER TABLE delete_executions ADD COLUMN lease_expires_at_utc TEXT;
+        ALTER TABLE delete_executions ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0
+        CHECK (attempt_count >= 0);
+        ALTER TABLE delete_executions ADD COLUMN next_attempt_at_utc TEXT;
+
+        CREATE TABLE delete_execution_items (
+            id TEXT NOT NULL PRIMARY KEY,
+            execution_id TEXT NOT NULL REFERENCES delete_executions(id) ON DELETE CASCADE,
+            item_kind TEXT NOT NULL CHECK (item_kind IN (
+                'business_record', 'downloader_task', 'source_file', 'media_file')),
+            target_key TEXT NOT NULL,
+            root_path TEXT,
+            downloader_id TEXT,
+            display_value TEXT NOT NULL,
+            ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+            state TEXT NOT NULL CHECK (state IN ('pending', 'completed', 'skipped', 'failed')),
+            failure_code TEXT,
+            completed_at_utc TEXT,
+            UNIQUE (execution_id, item_kind, target_key)
+        ) STRICT;
+
+        CREATE INDEX ix_delete_execution_items_pending
+        ON delete_execution_items(execution_id, state, ordinal);
+
+        CREATE UNIQUE INDEX ux_delete_executions_active_task
+        ON delete_executions(task_id) WHERE state IN ('pending', 'executing');
         """;
 }

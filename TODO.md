@@ -85,7 +85,7 @@
 - [ ] 实现 SQLite KV/TTL store。
 - [ ] 实现 bucket/list/get/delete 兼容接口。
 - [ ] 移植目录 JSON 数据库扫描/索引/写入。
-- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；alias/delete repository 和提交 qB 前早停待实现）。
+- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；删除中心已能预览并冻结精确完成记录 ID，实际删除/claim 释放与 alias repository 待实现）。
 - [>] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键（schema/约束已完成；事务 store 与早停编排待实现）。
 - [ ] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件。
 - [ ] 移植 `tvshow.nfo` 生成和更新。
@@ -219,7 +219,7 @@
 - [ ] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态。
 - [ ] 增加 Mikan 作品规则 CRUD：按 `mikanid` 编辑 Bgm/TMDB Series/Season/EP Offset，预览影响范围，支持禁用、清除和显式重新匹配；已完成文件不自动移动。
 - [>] 作品详情展示 Series/Season/Episode 的 TMDB 获取阶段、验证状态、人工偏移和最后解析时间（任务状态投影已展示最近成功策略和更新时间；季度详情、人工偏移与逐次验证时间线待实现）。
-- [ ] 实现四类删除命令及组合删除计划：业务记录、下载器任务、下载源文件、媒体库文件；逐项确认、路径约束、部分失败重试和审计。
+- [>] 实现四类删除命令及组合删除计划：schema v12 已按业务记录 ID、下载器实例+hash、捕获根目录内源/媒体绝对路径生成只读预览，以 SHA-256 指纹防止过期确认，并将选中目标逐项冻结审计；实际执行、路径约束、部分失败重试和 WebUI 待实现。
 - [>] Web UI 支持按失败阶段、错误码、可重试性和处理状态筛选；提供安全的“重新匹配”，并区分待自动重试、需配置修复、需人工处理、已跳过和已兜底（失败任务显式重新匹配与脱敏失败原因已实现；筛选、错误码/可重试性投影及完整分类待实现）。
 - [ ] 对环境变量覆盖字段显示有效值和只读锁定状态，禁止 Web 保存造成“已修改但不生效”的假象。
 - [ ] 实现插件分类、启停、args/vars 和校验视图。
