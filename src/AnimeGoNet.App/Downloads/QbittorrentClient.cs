@@ -74,6 +74,58 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<IReadOnlyList<DownloadFileSnapshot>> ListFilesAsync(
+        string hash,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateHash(hash);
+        using var response = await _httpClient.GetAsync(
+            $"api/v2/torrents/files?hash={Uri.EscapeDataString(hash)}",
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var files = await response.Content.ReadFromJsonAsync(
+            ApiJsonContext.Default.QbittorrentTorrentFileArray,
+            cancellationToken).ConfigureAwait(false) ?? [];
+        return files.Select(file => new DownloadFileSnapshot(
+            file.Index,
+            file.Name.Replace('\\', '/'),
+            file.Size,
+            Math.Clamp(file.Progress, 0, 1),
+            file.Priority)).ToArray();
+    }
+
+    public async Task SetFilePriorityAsync(
+        string hash,
+        IReadOnlyList<int> fileIndexes,
+        int priority,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateHash(hash);
+        ArgumentNullException.ThrowIfNull(fileIndexes);
+        if (fileIndexes.Count == 0)
+        {
+            throw new ArgumentException("At least one file index is required.", nameof(fileIndexes));
+        }
+
+        if (fileIndexes.Any(index => index < 0) || fileIndexes.Distinct().Count() != fileIndexes.Count)
+        {
+            throw new ArgumentException("File indexes must be unique non-negative integers.", nameof(fileIndexes));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfLessThan(priority, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(priority, 7);
+        using var response = await _httpClient.PostAsync(
+            "api/v2/torrents/filePrio",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["hash"] = hash,
+                ["id"] = string.Join('|', fileIndexes),
+                ["priority"] = priority.ToString(CultureInfo.InvariantCulture),
+            }),
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
     public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
         PostHashesAsync("api/v2/torrents/stop", hashes, null, cancellationToken);
 
@@ -118,6 +170,15 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
         if (!string.IsNullOrWhiteSpace(value))
         {
             content.Add(new StringContent(value), name);
+        }
+    }
+
+    private static void ValidateHash(string hash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+        if (hash.Length is not (40 or 64) || hash.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new ArgumentException("Torrent hash must be a hexadecimal v1 or v2 info hash.", nameof(hash));
         }
     }
 

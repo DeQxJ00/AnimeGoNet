@@ -102,6 +102,65 @@ public sealed class QbittorrentClientTests
     }
 
     [Fact]
+    public async Task ListsFilesWithStableIndexesPathsAndPriorities()
+    {
+        const string json = """
+            [
+              {"index":3,"name":"Show\\EP01.mkv","size":100,"progress":0.25,"priority":1},
+              {"index":7,"name":"Show/EP01.zh-Hans.ass","size":5,"progress":1.0,"priority":0}
+            ]
+            """;
+        using var handler = new RecordingHandler(_ => Text(json, "application/json"));
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+        var hash = new string('a', 40);
+
+        var files = await client.ListFilesAsync(hash);
+
+        Assert.Collection(
+            files,
+            file => Assert.Equal(new DownloadFileSnapshot(3, "Show/EP01.mkv", 100, 0.25, 1), file),
+            file =>
+            {
+                Assert.Equal(new DownloadFileSnapshot(7, "Show/EP01.zh-Hans.ass", 5, 1, 0), file);
+                Assert.False(file.Wanted);
+            });
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("/api/v2/torrents/files", request.Path);
+        Assert.Equal($"?hash={hash}", request.Query);
+    }
+
+    [Fact]
+    public async Task SetsFilePriorityWithExplicitIndexes()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+        var hash = new string('b', 40);
+
+        await client.SetFilePriorityAsync(hash, [7, 3], 0);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("/api/v2/torrents/filePrio", request.Path);
+        Assert.Equal($"hash={hash}&id=7%7C3&priority=0", request.Body);
+    }
+
+    [Fact]
+    public async Task FileOperationsRejectUnsafeIdentityBeforeHttp()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.ListFilesAsync("not-a-hash"));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.SetFilePriorityAsync(new string('a', 40), [1, 1], 0));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            client.SetFilePriorityAsync(new string('a', 40), [1], 8));
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task StopStartAndDeleteUseHashForms()
     {
         using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
@@ -148,6 +207,7 @@ public sealed class QbittorrentClientTests
             Requests.Add(new RecordedRequest(
                 request.Method,
                 request.RequestUri!.AbsolutePath,
+                request.RequestUri.Query,
                 body,
                 request.Content?.Headers.ContentType?.ToString() ?? string.Empty,
                 request.Headers.Referrer?.AbsoluteUri));
@@ -158,6 +218,7 @@ public sealed class QbittorrentClientTests
     private sealed record RecordedRequest(
         HttpMethod Method,
         string Path,
+        string Query,
         string Body,
         string ContentType,
         string? Referrer);

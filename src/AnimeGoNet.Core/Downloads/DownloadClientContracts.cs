@@ -8,6 +8,16 @@ public interface IDownloadClient
 
     Task AddTorrentAsync(AddTorrentCommand command, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<DownloadFileSnapshot>> ListFilesAsync(
+        string hash,
+        CancellationToken cancellationToken = default);
+
+    Task SetFilePriorityAsync(
+        string hash,
+        IReadOnlyList<int> fileIndexes,
+        int priority,
+        CancellationToken cancellationToken = default);
+
     Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default);
 
     Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default);
@@ -42,6 +52,16 @@ public sealed record DownloadTaskSnapshot(
     long? EtaSeconds,
     int Seeds = 0,
     int Peers = 0);
+
+public sealed record DownloadFileSnapshot(
+    int Index,
+    string RelativePath,
+    long SizeBytes,
+    double Progress,
+    int Priority)
+{
+    public bool Wanted => Priority > 0;
+}
 
 public enum DownloadTaskState
 {

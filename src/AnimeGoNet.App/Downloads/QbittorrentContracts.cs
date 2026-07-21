@@ -13,3 +13,10 @@ public sealed record QbittorrentTorrentInfo(
     [property: JsonPropertyName("eta")] long Eta,
     [property: JsonPropertyName("num_seeds")] int Seeds,
     [property: JsonPropertyName("num_leechs")] int Peers);
+
+public sealed record QbittorrentTorrentFile(
+    [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("progress")] double Progress,
+    [property: JsonPropertyName("priority")] int Priority);

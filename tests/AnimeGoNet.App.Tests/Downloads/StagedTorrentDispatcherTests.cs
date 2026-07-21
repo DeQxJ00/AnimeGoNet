@@ -118,6 +118,18 @@ public sealed class StagedTorrentDispatcherTests
             _exists = true;
         }
 
+        public Task<IReadOnlyList<DownloadFileSnapshot>> ListFilesAsync(
+            string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<DownloadFileSnapshot>>([]);
+
+        public Task SetFilePriorityAsync(
+            string hash,
+            IReadOnlyList<int> fileIndexes,
+            int priority,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
