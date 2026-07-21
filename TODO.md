@@ -74,7 +74,7 @@
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
 - [ ] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器，不在兼容层擅加年份保护、歧义拒绝或E04/EP04扩展；另建 `FileEpisodeCandidateResolver` 安全层，只在 Mikan SourceProfile 决定是否形成逐文件 `file_episode_candidate`；增加 AI/TMDB 验证后的本地统一偏移计算器，结果不一致时只禁止缓存学习，不否定已验证的逐文件映射。
-- [>] 已建立 NativeAOT-safe Torrent 文件 EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，并明确把小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 分类为非普通整数；入库仅为普通正整数写 `file_episode_candidate`，raw_parser.py differential 与 TMDB Episode 验证仍待实现。
+- [>] 已建立 NativeAOT-safe Torrent 文件 EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，并明确把小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 分类为非普通整数；入库仅为普通正整数写 `file_episode_candidate`，已在确认 Season 内逐文件经 TMDB Episode API 验证，raw_parser.py differential 仍待实现。
 - [>] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；数据层已按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中可安全计算目标 EP，主程序 AI 前置接入仍待串联。
 - [ ] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用。
 - [ ] 通过全部配置/模型 parity tests。
@@ -105,7 +105,7 @@
 - [ ] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`；同 ID 的不同字幕组、标题和 Torrent 归入同一作品作用域。
 - [>] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}` 与官方 `/v0/subjects/{bgmid}/subjects` 实现 AOT-safe Subject/关系客户端、固定 User-Agent、日期/身份校验和稳定网络/协议失败分类；Episode 与缓存仍待实现。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
-- [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；Bangumi Subject → TMDB Series/Season 自动 worker 与运行审计已接入，缓存和 Episode 流水线待实现）。
+- [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；Bangumi Subject → TMDB Series/Season 与逐文件 Episode worker/运行审计已接入，缓存和 Bangumi Episode 确定性匹配待实现）。
 - [>] 按 issue #15 实现 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：已接入 Bangumi“前传”多层回溯、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；网络重试策略与受控 live fixture 仍待实现。
 - [ ] 实现 `TMDBFailUseAIMatchSeason` / `tmdb_fail_use_ai_match_season`（默认 `false`），每个下载任务只向大模型发送总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [ ] 实现 `TMDBFailEpUseAIMatchSeason` / `tmdb_failep_use_ai_match_season`（按指定拼写，默认 `false`）：非 AI 季度匹配成功后先验证来源 EP；存在不对应时按下载任务执行一次 AI EP 匹配。
@@ -115,12 +115,12 @@
 - [ ] 实现 AOT-safe 本地 Streamable HTTP MCP客户端和 function-calling工具循环；为 BGM/TMDB同名工具添加命名空间，并覆盖 JSON/SSE、会话、超时、取消和失败隔离。
 - [ ] 实现可空 `anidbid` → `tmdbtv` 候选查询；固定URL、限制响应并阻止SSRF，候选未经 TMDB MCP验证不得采用。
 - [ ] 实现可空 `imdbid` 规范化和 TMDB MCP external ID/find 候选查询；拒绝 Movie，最终 TV Series/Season/Episode 逐级验证。
-- [ ] AI 和确定性匹配均拒绝 Season 0；Series/Season 已确认但 Episode 未匹配的文件保留原名放入 `<TmdbName>/Sxx/Other/`，并保存原因。
+- [>] AI 和确定性匹配均拒绝 Season 0；确定性流程已拒绝 Season 0，Series/Season 已确认但 Episode 未匹配的文件已持久化 `Other` 及稳定原因，实际整理到 `<TmdbName>/Sxx/Other/` 与 AI 门禁仍待实现。
 - [>] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立 AI 阶段仍待实现且结果必须经 TMDB 验证。
 - [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。
 - [ ] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试。
 - [>] 移植 Mikan → Bangumi → TMDB 编排与 fallback：携带 `bgmid` 的已下载任务已由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Mikan 页面自动发现 bgmid、Backtrace、AI、Bangumi 完全兜底仍待实现。
-- [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖已由专用 worker 优先领取并经 TMDB 权威验证，EP Offset 与 Episode 验证仍待串联。
+- [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖由专用 worker 优先领取并权威验证，EP Offset 已在逐文件 TMDB Episode 验证前应用且无效时阻断静默回退；可信自动 offset 与字幕绑定仍待串联。
 - [x] 人工规则无效时记录人工覆盖策略失败并阻止静默自动覆盖；清除/禁用后可通过 `POST /api/v1/metadata/tasks/{taskId}/retry` 显式重新匹配，事务性恢复自动策略队列且保留历史运行记录，并拒绝活动租约/非失败状态。
 - [>] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误（客户端已稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；重试编排待实现）。
 - [>] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`（权威 404 仅产生 `SemanticNoMatch + access_confirmed`，其他客户端失败均禁止资格；SQLite 持久化与最终门禁待串联）。
@@ -177,7 +177,7 @@
 - [ ] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`。
 - [ ] 非 AI 季度结果依次执行同号 EP 快速校验、Bgm/TMDB 标题日期校验；失败且 `tmdb_failep_use_ai_match_season=true` 时进行一次 AI EP 映射，返回的 TMDB ID/Season 必须与已确认值相同。
 - [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。
-- [ ] 多文件任务逐集验证 TMDB Episode；已确认 Episode 的正片正常落盘，Series/Season 已确认但 Episode 未匹配的文件进入季度 `Other`；Series/Season 未确认、重复映射或目标冲突时对应文件不落盘并可重试。
+- [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending，以及季度已知时 `Other` 原因；全局重复映射/目标冲突门禁和实际落盘仍待实现。
 - [ ] 增加 `advanced.default.tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败即沿用原失败流程，不继续下载/刮削且不生成 NFO。
 - [ ] 开关开启后，仅在权威TMDB访问成功且最终为确定性无匹配、已有有效 Bangumi Subject ID 且季度 fallback 成功时继续；动画根目录 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - [ ] 验证已取得 TMDB ID、仅季度匹配失败时仍走原季度 fallback，不误入 Bangumi 完全失败兜底。

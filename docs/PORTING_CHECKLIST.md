@@ -28,7 +28,7 @@
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 待实现 | 5 个 RSS fixture parity |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 待实现 | Mikan fixtures + URL cases |
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系 v0 AOT DTO、User-Agent、身份/日期校验、安全失败分类、前传稳定遍历与自动编排 fake tests 已通过；Episode 与缓存待实现 |
-| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy 与自动 Series/Season worker tests 已通过；cache/Episode 持久化待实现 |
+| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy 与自动 Series/Season/Episode worker tests 已通过；cache/Bangumi Episode 确定性匹配待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
 | 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、路由、逐项结果、legacy contract与安全Torrent staging已验证；worker自动调度待实现 |
 
@@ -42,11 +42,11 @@
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 待实现 | legacy differential tests |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | blacklist-first、whitelist、lowercase、旁路、短路和 stable-order tests 已通过；RSS 编排/持久化待实现 |
-| Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 TMDB 验证、无效阻断与显式重试 tests 已通过；EP Offset 应用待实现 |
+| Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |
 | AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 待实现 | fake server + TMDB 二次验证 |
-| 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选；Season 确认后的 Other 提交待实现 |
+| 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选，并在 Season 确认后持久化 Other 原因；实际整理路径待实现 |
 
 ## 存储与业务状态
 

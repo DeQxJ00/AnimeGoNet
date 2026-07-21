@@ -41,3 +41,22 @@ public enum MetadataRetryResult
     InvalidState,
     ActiveLease,
 }
+
+public sealed record MetadataTaskFileProjection(
+    string FileId,
+    string RelativePath,
+    long SizeBytes,
+    string? SourceEpisode,
+    string? FileEpisodeCandidate);
+
+public sealed record MetadataEpisodeTaskClaim(
+    MetadataTaskClaim Resolution,
+    int TmdbSeriesId,
+    int TmdbSeasonNumber,
+    IReadOnlyList<MetadataTaskFileProjection> Files);
+
+public sealed record MetadataEpisodeFileResolution(
+    string FileId,
+    TmdbEpisode? Episode,
+    string Disposition,
+    string? OtherReason);

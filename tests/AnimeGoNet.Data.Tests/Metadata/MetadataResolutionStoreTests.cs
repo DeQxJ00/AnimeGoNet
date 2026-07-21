@@ -188,6 +188,31 @@ public sealed class MetadataResolutionStoreTests
             now.AddSeconds(1)));
     }
 
+    [Fact]
+    public async Task ConcurrentEpisodeClaimsReturnSeasonResolvedTaskAtMostOnce()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var seasonClaim = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        await fixture.Store.CompleteSeasonAsync(
+            seasonClaim,
+            new TmdbSeries(72517, "来自深渊", "メイドインアビス", new DateOnly(2017, 7, 7)),
+            new TmdbSeason(204984, 72517, 2, "烈日的黄金乡", new DateOnly(2022, 7, 6), 12),
+            now);
+
+        var claims = await Task.WhenAll(
+            fixture.Store.TryClaimNextSeasonResolvedAsync(now, TimeSpan.FromMinutes(1)),
+            fixture.Store.TryClaimNextSeasonResolvedAsync(now, TimeSpan.FromMinutes(1)));
+
+        var episodeClaim = Assert.Single(claims, value => value is not null)!;
+        Assert.Equal(72517, episodeClaim.TmdbSeriesId);
+        Assert.Equal(2, episodeClaim.TmdbSeasonNumber);
+        Assert.Single(episodeClaim.Files);
+        Assert.Equal(2, episodeClaim.Resolution.AttemptNumber);
+    }
+
     private sealed class MetadataFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _databaseFixture;

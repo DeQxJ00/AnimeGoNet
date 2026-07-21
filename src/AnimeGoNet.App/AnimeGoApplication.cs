@@ -111,12 +111,14 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<BangumiSeasonBacktraceResolver>();
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();
         builder.Services.AddSingleton<AutomaticMetadataResolutionProcessor>();
+        builder.Services.AddSingleton<EpisodeMetadataResolutionProcessor>();
         if (startBackgroundWorkers.Value)
         {
             builder.Services.AddHostedService<StagedTorrentDispatchWorker>();
             builder.Services.AddHostedService<DownloadSnapshotWorker>();
             builder.Services.AddHostedService<ManualMetadataResolutionWorker>();
             builder.Services.AddHostedService<AutomaticMetadataResolutionWorker>();
+            builder.Services.AddHostedService<EpisodeMetadataResolutionWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
