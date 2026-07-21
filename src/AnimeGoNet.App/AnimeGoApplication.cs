@@ -92,6 +92,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(ingestTasks);
         builder.Services.AddSingleton(downloadJobs);
+        builder.Services.AddSingleton<DownloadPreparationStore>();
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
@@ -101,6 +102,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(torrentStagingService);
         builder.Services.AddSingleton<StagedTorrentDispatcher>();
         builder.Services.AddSingleton<DownloadSnapshotSynchronizer>();
+        builder.Services.AddSingleton<DownloadPreparationProcessor>();
         tmdbClient ??= new TmdbClient(
             new HttpClient(),
             options.Metadata.Tmdb,
@@ -121,6 +123,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<ManualMetadataResolutionWorker>();
             builder.Services.AddHostedService<AutomaticMetadataResolutionWorker>();
             builder.Services.AddHostedService<EpisodeMetadataResolutionWorker>();
+            builder.Services.AddHostedService<DownloadPreparationWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

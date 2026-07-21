@@ -287,3 +287,11 @@ Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access
 26. Menu、OVA、PV、NCOP、NCED 等文件不应用 EP 偏移；季度已由人工规则确认时按既定 `Other` 规则处理。
 27. 修改人工规则只影响新任务和显式重新匹配；已完成媒体不会被静默移动。清除或禁用规则后，新解析恢复自动策略链。
 28. Web 作品详情分别显示 Series/Season/Episode 的获取阶段；覆盖 Manual、直接匹配、Backtrace、AI、TitleSeason、FirstSeason、EP 偏移、确定性 EP 匹配、Other 和 Bangumi 完全兜底场景。
+
+## 8. 当前已接通的暂停下载门禁
+
+qBittorrent 确认接收 Torrent 后，任务进入 `download_preparing`，而不是直接开始传输。dispatcher 对新添加和已存在的同 hash 任务都显式调用暂停；Series/Season/Episode worker 在该阶段完成 TMDB 验证、`Other` 分类和逐集 claim。元数据全部完成后，download preparation worker 再次暂停任务，并要求 qB 返回的文件数量、唯一 index、规范化相对路径和容量与暂存时解析的清单逐项一致。
+
+`duplicate` 与 `ignored` 文件设置为 priority 0，`episode` 与 `other` 文件设置为 priority 1；只有至少一个 wanted 文件时才恢复任务并进入 `download_queued`。全部文件都被去重时不调用恢复，持久化 `download_skipped_duplicate`，并以 `deleteFiles=false` 尝试移除 qB 任务。文件元数据尚未就绪、清单不一致、下载器离线或请求失败均保留 paused 语义，通过 SQLite preparation lease、attempt 和 next-attempt 安全重试；进程崩溃后的过期租约可恢复。
+
+默认单元/集成测试只使用 fake client 和临时 SQLite，不接触 portable qBittorrent。真实 `filePrio`、恢复、全重复清理和跨容器路径 E2E 仍必须使用明确的可丢弃 Torrent fixture、可识别 category/tag 和书面清理步骤后显式运行。

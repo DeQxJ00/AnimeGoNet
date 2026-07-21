@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Metadata;
@@ -29,6 +30,7 @@ public sealed class RunningApp : IAsyncDisposable
         string? accessKey = null,
         Func<AnimeGoOptions, AnimeGoOptions>? configure = null,
         ITorrentStagingService? stagingService = null,
+        IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
         IBangumiSubjectClient? bangumiSubjectClient = null)
     {
@@ -42,6 +44,7 @@ public sealed class RunningApp : IAsyncDisposable
             options,
             accessKey,
             torrentStagingService: stagingService,
+            downloadClientRegistry: downloadClientRegistry,
             tmdbClient: tmdbClient,
             bangumiSubjectClient: bangumiSubjectClient,
             startBackgroundWorkers: false);

@@ -205,7 +205,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 WHERE status = 'running' AND lease_expires_at_utc <= $now;
 
                 UPDATE ingest_tasks
-                SET status = 'downloaded', failure_kind = 'metadata_retry',
+                SET status = CASE WHEN EXISTS (
+                        SELECT 1 FROM download_jobs
+                        WHERE download_jobs.task_id = ingest_tasks.id
+                          AND download_jobs.preparation_state IN ('pending', 'preparing'))
+                    THEN 'download_preparing' ELSE 'downloaded' END,
+                    failure_kind = 'metadata_retry',
                     failure_reason = 'metadata_lease_expired', updated_at_utc = $now
                 WHERE status = 'metadata_resolving'
                   AND NOT EXISTS (
@@ -228,7 +233,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             select.CommandText = """
                 SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id
                 FROM ingest_tasks AS task
-                WHERE task.status = 'downloaded'
+                WHERE task.status IN ('download_preparing', 'downloaded')
                   AND NOT EXISTS (
                     SELECT 1 FROM metadata_resolution_runs
                     WHERE metadata_resolution_runs.task_id = task.id
@@ -302,7 +307,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 UPDATE ingest_tasks
                 SET status = 'metadata_resolving', failure_kind = NULL,
                     failure_reason = NULL, updated_at_utc = $now
-                WHERE id = $task_id AND status = 'downloaded';
+                WHERE id = $task_id AND status IN ('download_preparing', 'downloaded');
                 """;
             update.Parameters.AddWithValue("$task_id", taskId);
             update.Parameters.AddWithValue("$now", now);
@@ -915,7 +920,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         update.Transaction = transaction;
         update.CommandText = """
             UPDATE ingest_tasks
-            SET status = 'downloaded', failure_kind = NULL,
+            SET status = CASE WHEN EXISTS (
+                    SELECT 1 FROM download_jobs
+                    WHERE download_jobs.task_id = ingest_tasks.id
+                      AND download_jobs.preparation_state IN ('pending', 'preparing'))
+                THEN 'download_preparing' ELSE 'downloaded' END,
+                failure_kind = NULL,
                 failure_reason = NULL, updated_at_utc = $now
             WHERE id = $task_id AND status = 'metadata_failed'
               AND NOT EXISTS (
@@ -932,6 +942,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return MetadataRetryResult.Retried;
+    }
+
+    public async Task<string?> GetTaskStatusAsync(
+        string taskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT status FROM ingest_tasks WHERE id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
     }
 
     public async Task<MetadataRunProjection?> GetLatestAsync(

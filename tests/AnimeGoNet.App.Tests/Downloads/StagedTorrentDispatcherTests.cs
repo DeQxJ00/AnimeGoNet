@@ -28,9 +28,10 @@ public sealed class StagedTorrentDispatcherTests
         Assert.Equal(fixture.Options.Downloaders["bt"].DownloadPath, command.SavePath);
         Assert.Contains("mikan", command.Tags);
         Assert.Contains("move", command.Tags);
+        Assert.Equal([fixture.InfoHash], client.PausedHashes);
         Assert.False(File.Exists(fixture.StagingFilePath));
         var state = await fixture.ReadLifecycleAsync();
-        Assert.Equal("download_queued", state.TaskStatus);
+        Assert.Equal("download_preparing", state.TaskStatus);
         Assert.Equal(0, state.StagedCount);
         Assert.Equal(1, state.DownloadJobCount);
         Assert.Equal(fixture.InfoHash, state.JobHash);
@@ -46,6 +47,7 @@ public sealed class StagedTorrentDispatcherTests
 
         Assert.Equal(StagedDispatchResult.Completed, result);
         Assert.Empty(client.Added);
+        Assert.Equal([fixture.InfoHash], client.PausedHashes);
         Assert.Equal(1, (await fixture.ReadLifecycleAsync()).DownloadJobCount);
     }
 
@@ -90,6 +92,8 @@ public sealed class StagedTorrentDispatcherTests
 
         public List<AddedCommand> Added { get; } = [];
 
+        public List<string> PausedHashes { get; } = [];
+
         public Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             ConnectCalls++;
@@ -130,8 +134,11 @@ public sealed class StagedTorrentDispatcherTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
+        {
+            PausedHashes.AddRange(hashes);
+            return Task.CompletedTask;
+        }
 
         public Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
@@ -145,7 +152,7 @@ public sealed class StagedTorrentDispatcherTests
         private DownloadTaskSnapshot Snapshot() => new(
             infoHash,
             "Episode",
-            DownloadTaskState.Paused,
+            DownloadTaskState.Downloading,
             0,
             0,
             5,

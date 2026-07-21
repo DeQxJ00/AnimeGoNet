@@ -133,6 +133,20 @@ public sealed class DownloadJobStoreTests
                 claim,
                 new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
                 DateTimeOffset.UtcNow);
+            await using (var connection = await databaseFixture.Database.OpenConnectionAsync())
+            await using (var ready = connection.CreateCommand())
+            {
+                ready.CommandText = """
+                    UPDATE download_jobs
+                    SET preparation_state = 'completed'
+                    WHERE task_id = $task_id;
+                    UPDATE ingest_tasks
+                    SET status = 'download_queued'
+                    WHERE id = $task_id;
+                    """;
+                ready.Parameters.AddWithValue("$task_id", claim.TaskId);
+                Assert.Equal(2, await ready.ExecuteNonQueryAsync());
+            }
             return new DownloadJobFixture(databaseFixture, new DownloadJobStore(databaseFixture.Database), hash);
         }
 

@@ -15,7 +15,7 @@ AnimeGoNet.slnx
 
 依赖只允许从外向内：`App → Data → Core`；内置插件依赖 `Core` 契约，由 `App` 显式注册。Core 不引用 ASP.NET、SQLite、文件系统或下载器实现。
 
-上游 Go 源码保留在仓库原路径，作为差分 fixture 和业务行为索引，不参与 .NET 发布。移植完成前不得用批量删除上游目录的方式表示进度。
+上游 Go 源码位于独立的 `AnimeGo` 目录和 Git 仓库，仅作为差分 fixture 与业务行为索引；本仓库只保存 `DotnetProject` 的 C# 主程序、测试、文档和交付资产，两边不共享 Git 历史。
 
 ## 2. 配置、数据与目录真相源
 
@@ -65,14 +65,16 @@ AnimeGoNet.slnx
 
 - `IngestTask`：接受一个统一导入 item 后的总任务，保存来源/路由/规则快照。
 - `TaskFile`：Torrent 内可信文件路径、容量、来源 EP 候选、规范 TMDB 目标或 `Other` 原因。
-- `EpisodeClaim`：提交下载器前事务占位；规范唯一键 `(tmdb_series_id, season_number, episode_number)`。
+- `EpisodeClaim`：恢复暂停下载器前事务占位；规范唯一键 `(tmdb_series_id, season_number, episode_number)`。
 - `CompletionRecord`：只在下载、文件策略、整理和必要 NFO 全部成功后写入；同 TMDB+Season+EP 的后续输入直接跳过，其他 EP 不受影响。
 - `FallbackClaim` / `FallbackCompletionRecord`：只在完全兜底开关开启、TMDB 成功访问后确定性无匹配且有 bgmid 时使用；WebUI 列入“待补全 TMDB”，不显示伪造 EP 进度。
-- `DownloadJob`：qBittorrent hash/实例、下载状态、速度、容量、ETA 与错误。
+- `DownloadJob`：qBittorrent hash/实例、下载状态、速度、容量、ETA 与错误；另存下载准备的 pending/preparing/completed 状态、租约、重试时间和安全失败码。
 - `FileOperation`：link/link_delete/move/wait_move 的逐步、可重试状态；Mikan 默认 `move`。
 - `DeletePlan` / `DeleteExecution`：业务记录、下载器任务、下载源文件、媒体库文件四类独立选择；已下载记录删除作为显式业务动作，组合执行前必须预览。
 
 字幕在能唯一关联视频 EP 时继承已验证 TMDB 目标并随视频改名，保留多语言/forced/SDH/轨道后缀；无法唯一关联但季度已确认时进入 `Other`。
+
+下载前门禁固定为：安全暂存并解析 Torrent → qB paused add/同 hash 接管并再次显式暂停 → `download_preparing` 下完成 Series/Season/Episode 与逐集 claim → 再次暂停并精确核对 qB 文件 index/path/size → duplicate/ignored 设 priority 0、episode/other 设 priority 1 → 仅存在 wanted 文件时恢复并进入 `download_queued`。若全部文件均被逐集去重，则保持不恢复、持久化 `download_skipped_duplicate`，并仅允许 `deleteFiles=false` 清除下载器任务；核对失败按持久化租约重试，不能启动下载。
 
 ## 4. SQLite 规则
 

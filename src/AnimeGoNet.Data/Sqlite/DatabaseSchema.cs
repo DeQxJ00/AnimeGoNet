@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -13,6 +13,7 @@ public static class DatabaseSchema
         new SchemaMigration(5, "download_runtime_projection", DownloadRuntimeProjection),
         new SchemaMigration(6, "metadata_resolution_lease", MetadataResolutionLease),
         new SchemaMigration(7, "metadata_resolution_stages", MetadataResolutionStages),
+        new SchemaMigration(8, "download_file_preparation", DownloadFilePreparation),
     ];
 
     private const string InitialBusinessSchema = """
@@ -402,5 +403,39 @@ public static class DatabaseSchema
         FROM metadata_resolution_attempts_v6;
 
         DROP TABLE metadata_resolution_attempts_v6;
+        """;
+
+    private const string DownloadFilePreparation = """
+        ALTER TABLE download_jobs
+        ADD COLUMN preparation_state TEXT NOT NULL DEFAULT 'not_required'
+        CHECK (preparation_state IN ('not_required', 'pending', 'preparing', 'completed'));
+
+        ALTER TABLE download_jobs
+        ADD COLUMN preparation_lease_token TEXT;
+
+        ALTER TABLE download_jobs
+        ADD COLUMN preparation_lease_expires_at_utc TEXT;
+
+        ALTER TABLE download_jobs
+        ADD COLUMN preparation_attempt_count INTEGER NOT NULL DEFAULT 0
+        CHECK (preparation_attempt_count >= 0);
+
+        ALTER TABLE download_jobs
+        ADD COLUMN preparation_next_attempt_at_utc TEXT;
+
+        ALTER TABLE download_jobs
+        ADD COLUMN preparation_failure_code TEXT;
+
+        ALTER TABLE task_files
+        ADD COLUMN download_file_index INTEGER CHECK (download_file_index >= 0);
+
+        ALTER TABLE task_files
+        ADD COLUMN download_priority INTEGER CHECK (download_priority BETWEEN 0 AND 7);
+
+        ALTER TABLE task_files
+        ADD COLUMN download_wanted INTEGER CHECK (download_wanted IN (0, 1));
+
+        CREATE INDEX ix_download_jobs_preparation
+        ON download_jobs(preparation_state, preparation_next_attempt_at_utc, updated_at_utc);
         """;
 }

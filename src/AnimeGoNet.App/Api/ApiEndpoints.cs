@@ -186,9 +186,15 @@ public static class ApiEndpoints
             taskId,
             DateTimeOffset.UtcNow,
             cancellationToken).ConfigureAwait(false);
+        if (result == MetadataRetryResult.Retried)
+        {
+            var status = await resolutions.GetTaskStatusAsync(taskId, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Retried metadata task disappeared.");
+            return TypedResults.Ok(new MetadataRetryResponse(taskId, status));
+        }
+
         return result switch
         {
-            MetadataRetryResult.Retried => TypedResults.Ok(new MetadataRetryResponse(taskId, "downloaded")),
             MetadataRetryResult.NotFound => TypedResults.NotFound(Error(
                 "metadata_task_not_found",
                 "Metadata task was not found.")),

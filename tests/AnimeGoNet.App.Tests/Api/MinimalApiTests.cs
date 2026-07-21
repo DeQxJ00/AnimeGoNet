@@ -257,6 +257,17 @@ public sealed class MinimalApiTests
             claim,
             new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
             DateTimeOffset.UtcNow);
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var ready = connection.CreateCommand())
+        {
+            ready.CommandText = """
+                UPDATE download_jobs SET preparation_state = 'completed' WHERE task_id = $task_id;
+                UPDATE ingest_tasks SET status = 'download_queued' WHERE id = $task_id;
+                """;
+            ready.Parameters.AddWithValue("$task_id", claim.TaskId);
+            Assert.Equal(2, await ready.ExecuteNonQueryAsync());
+        }
         await app.App.Services.GetRequiredService<DownloadJobStore>().ApplyInstanceSnapshotAsync(
             "bt",
             [new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Downloading, 0.4, 40, 100, 8, 7, 2, 4)],

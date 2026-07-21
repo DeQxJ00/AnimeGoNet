@@ -155,7 +155,7 @@
 - [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add、file priority、stop/start/delete、状态映射、严格 hash/index/priority 校验与失败响应。
-- [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、qB确认、download job事务与确认后staging清理。
+- [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、已有/新增任务显式再暂停、qB确认、download job事务与确认后staging清理。
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；默认 CI 不启动该实例，也未创建 Torrent。
 - [ ] 建立隔离 Docker Compose 下载环境。
 - [ ] qBittorrent 通过 add/list/state/file-priority/pause/resume/delete/reconnect 真实容器测试。
@@ -164,20 +164,20 @@
 
 ## P8 — 下载、重命名、刮削
 
-- [>] 移植下载管理状态机和 notifier（staged→dispatching→download_queued→downloading/downloaded 及安全重试已实现；做种/整理 notifier 待实现）。
+- [>] 移植下载管理状态机和 notifier（staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded、持久化准备租约及安全重试已实现；做种/整理 notifier 待实现）。
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试已实现；删除回调待实现）。
 - [ ] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入；RSS 早期检查并在提交下载器前事务复查。
 - [ ] 移植 link/link_delete/move/wait_move。
 - [ ] `move` 安全编排：下载完成后暂停任务，移动/跨卷复制校验、重命名/NFO/目录库成功后才移除下载器任务（不再删除文件）并写完成记录；失败保留可重试源文件。
 - [ ] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态，避免上游 `DeleteFile=true` 完成回调导致 `link` 提前停止做种。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
-- [ ] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加后设置文件 priority；重复 EP 视频及绑定字幕不下载，其余 EP 正常继续。
+- [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [ ] 实现字幕识别与唯一绑定：同 stem、多语言/默认/强制/SDH 后缀、按来源 EP 唯一匹配、`.idx/.sub` 成对处理；匹配后继承 TMDB EP，未匹配进入季度 `Other`。
 - [ ] 串联媒体目录 DB 与 NFO。
 - [ ] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`。
 - [ ] 非 AI 季度结果依次执行同号 EP 快速校验、Bgm/TMDB 标题日期校验；失败且 `tmdb_failep_use_ai_match_season=true` 时进行一次 AI EP 映射，返回的 TMDB ID/Season 必须与已确认值相同。
 - [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。
-- [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；提交 qB 前文件 priority 和实际落盘仍待实现。
+- [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；已串联 paused qB 的逐文件 priority 与恢复门禁，实际下载/落盘及字幕绑定待实现。
 - [ ] 增加 `advanced.default.tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败即沿用原失败流程，不继续下载/刮削且不生成 NFO。
 - [ ] 开关开启后，仅在权威TMDB访问成功且最终为确定性无匹配、已有有效 Bangumi Subject ID 且季度 fallback 成功时继续；动画根目录 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - [ ] 验证已取得 TMDB ID、仅季度匹配失败时仍走原季度 fallback，不误入 Bangumi 完全失败兜底。
@@ -201,7 +201,7 @@
 - [ ] 移植静态页并生成 OpenAPI。
 - [ ] 通过 API/WS 契约差分测试。
 - [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。
-- [>] 实现仪表盘和下载器/任务状态（下载状态卡片、进度、实例离线提示，以及元数据 Series/Season/Episode 阶段、失败原因、文件归类计数和显式重新匹配入口已实现；汇总指标与完整管理视图待实现）。
+- [>] 实现仪表盘和下载器/任务状态（下载状态卡片、进度、实例离线提示，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、文件归类计数和显式重新匹配入口已实现；准备失败详情、汇总指标与完整管理视图待实现）。
 - [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；解析/移动/重命名/字幕/NFO阶段待串联。
 - [>] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、实例失败隔离、离线保留stale快照、重启按实例+hash恢复已完成；指数退避/熔断待实现。
 - [>] 实现下载列表/详情/文件级priority与wanted进度、筛选搜索分页和状态时间线（只读列表 API/WebUI 与规范快照已实现；详情、文件级、筛选分页和时间线待实现）。

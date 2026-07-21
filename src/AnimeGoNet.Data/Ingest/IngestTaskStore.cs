@@ -394,12 +394,14 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     id, task_id, downloader_id, info_hash, state, progress,
                     downloaded_bytes, total_bytes, speed_bytes_per_second,
                     eta_seconds, failure_reason, created_at_utc, updated_at_utc,
-                    seeds, peers, snapshot_at_utc, is_stale, revision)
+                    seeds, peers, snapshot_at_utc, is_stale, revision,
+                    preparation_state, preparation_attempt_count)
                 VALUES (
                     $id, $task_id, $downloader_id, $info_hash, $state, $progress,
                     $downloaded_bytes, $total_bytes, $speed_bytes_per_second,
                     $eta_seconds, NULL, $created_at_utc, $updated_at_utc,
-                    $seeds, $peers, $snapshot_at_utc, 0, 1);
+                    $seeds, $peers, $snapshot_at_utc, 0, 1,
+                    'pending', 0);
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
@@ -424,7 +426,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             finish.Transaction = transaction;
             finish.CommandText = """
                 UPDATE ingest_tasks
-                SET status = 'download_queued', failure_kind = NULL, failure_reason = NULL, updated_at_utc = $now
+                SET status = 'download_preparing', failure_kind = NULL, failure_reason = NULL, updated_at_utc = $now
                 WHERE id = $task_id AND status = 'dispatching';
 
                 DELETE FROM staged_torrents

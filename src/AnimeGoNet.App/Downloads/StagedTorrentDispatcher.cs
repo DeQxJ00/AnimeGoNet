@@ -101,7 +101,8 @@ public sealed class StagedTorrentDispatcher(
         var snapshot = FindByHash(await client.ListAsync(cancellationToken).ConfigureAwait(false), claim.InfoHash);
         if (snapshot is not null)
         {
-            return snapshot;
+            await client.PauseAsync([claim.InfoHash], cancellationToken).ConfigureAwait(false);
+            return AsPaused(snapshot);
         }
 
         await using var torrent = staging.OpenRead(claim.StagingFileName);
@@ -115,7 +116,14 @@ public sealed class StagedTorrentDispatcher(
                 Tags: [claim.SourceId, claim.FileStrategy],
                 StartPaused: true),
             cancellationToken).ConfigureAwait(false);
-        return await ConfirmAsync(client, claim.InfoHash, cancellationToken).ConfigureAwait(false);
+        snapshot = await ConfirmAsync(client, claim.InfoHash, cancellationToken).ConfigureAwait(false);
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        await client.PauseAsync([claim.InfoHash], cancellationToken).ConfigureAwait(false);
+        return AsPaused(snapshot);
     }
 
     private async Task<DownloadTaskSnapshot?> ConfirmAsync(
@@ -144,6 +152,13 @@ public sealed class StagedTorrentDispatcher(
         IReadOnlyList<DownloadTaskSnapshot> snapshots,
         string infoHash) =>
         snapshots.FirstOrDefault(snapshot => string.Equals(snapshot.Hash, infoHash, StringComparison.OrdinalIgnoreCase));
+
+    private static DownloadTaskSnapshot AsPaused(DownloadTaskSnapshot snapshot) => snapshot with
+    {
+        State = DownloadTaskState.Paused,
+        DownloadSpeedBytesPerSecond = 0,
+        EtaSeconds = null,
+    };
 
     private static string Classify(Exception exception) => exception switch
     {

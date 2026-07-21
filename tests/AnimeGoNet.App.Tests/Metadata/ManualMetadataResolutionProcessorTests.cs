@@ -111,7 +111,7 @@ public sealed class ManualMetadataResolutionProcessorTests
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT status FROM ingest_tasks WHERE id = $task_id;";
         command.Parameters.AddWithValue("$task_id", taskId);
-        Assert.Equal("downloaded", await command.ExecuteScalarAsync());
+        Assert.Equal("download_preparing", await command.ExecuteScalarAsync());
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class ManualMetadataResolutionProcessorTests
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
         Assert.Equal(taskId, json.RootElement.GetProperty("task_id").GetString());
-        Assert.Equal("downloaded", json.RootElement.GetProperty("status").GetString());
+        Assert.Equal("download_preparing", json.RootElement.GetProperty("status").GetString());
         Assert.False(await processor.RunOnceAsync());
 
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
@@ -150,7 +150,7 @@ public sealed class ManualMetadataResolutionProcessorTests
         command.Parameters.AddWithValue("$task_id", taskId);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal("downloaded", reader.GetString(0));
+        Assert.Equal("download_preparing", reader.GetString(0));
         Assert.True(reader.IsDBNull(1));
         Assert.True(reader.IsDBNull(2));
     }

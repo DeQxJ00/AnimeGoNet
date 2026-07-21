@@ -112,7 +112,9 @@ async function loadDownloads(): Promise<void> {
       title.textContent = item.title;
       const state = document.createElement("span");
       state.className = `badge ${item.is_stale ? "error" : "ready"}`;
-      state.textContent = item.is_stale ? `快照过期 · ${item.downloader_failure_code ?? "离线"}` : item.business_status;
+      state.textContent = item.is_stale
+        ? `快照过期 · ${item.downloader_failure_code ?? "离线"}`
+        : statusLabels[item.business_status] ?? item.business_status;
       heading.append(title, state);
       const progress = document.createElement("progress");
       progress.max = 1;
@@ -138,6 +140,9 @@ const statusLabels: Record<string, string> = {
   received: "已接收",
   staged: "种子已暂存",
   dispatching: "正在提交下载器",
+  download_preparing: "等待下载前匹配",
+  download_queued: "已允许下载",
+  download_skipped_duplicate: "重复集已跳过",
   downloading: "下载中",
   downloaded: "等待元数据匹配",
   metadata_resolving: "正在匹配 Series / Season",
