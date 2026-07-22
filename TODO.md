@@ -131,7 +131,7 @@
 
 - [ ] 实现 `AnimeGo.Plugin.Abstractions` 和 source/feed/parser/filter/rename/schedule 六类强类型 C# 插件契约。
 - [ ] C# 移植 builtin feed/parser/filter/rename/schedule；默认运行不加载 Python。
-- [ ] 实现内置 C# MikanTool 五级黑白名单规则，默认启用；精确复现 `Filiter0`～`Filiter4` 作用域、`1>2>3`、最终 AND、大小写敏感子串和多个 `Filiter0` 的 legacy 顺序行为。
+- [>] 实现内置 C# MikanTool 五级黑白名单规则：纯 C# 引擎已精确复现 `Filiter0`～`Filiter4`、大小写敏感子串、白黑组合、多个 `Filiter0` 后项覆盖、`1>2>3` if/elif、最终 AND、首括号 group 和身份缺失丢弃；SQLite 配置、Mikan 页面 mikanid/groupid 获取、RSS 前置接入与 AnimeGoHelper API 待实现。
 - [ ] 为默认 Mikan SourceProfile 增加 `mikan_rss_filter_enabled` 总开关（默认 `true`）；关闭时 AnimeGoHelper `/api/rss` 记录 `SkippedByConfiguration` 后继续流水线，规则保留，进行中任务使用原快照。
 - [>] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（默认 profile 已启用，schema v13 规则版本、默认初始化与预览 API 已接入；禁用时预览逐项记录 `SkippedByConfiguration` 且不清空规则，真实批次编排待接入）。
 - [>] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 已支持增删/排序，细粒度 CRUD/WebUI 待实现。
