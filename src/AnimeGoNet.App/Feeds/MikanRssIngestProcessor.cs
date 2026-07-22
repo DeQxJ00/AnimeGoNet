@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Ingest;
@@ -19,7 +20,7 @@ public sealed record MikanRssIngestItemResult(
 
 public sealed record MikanRssIngestResult(
     string BatchId,
-    int? MikanId,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
     long RuleRevision,
     IReadOnlyList<MikanRssIngestItemResult> Items);
 

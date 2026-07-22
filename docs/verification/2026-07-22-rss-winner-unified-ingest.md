@@ -17,4 +17,4 @@ winner 的 task、task_files、staged_torrents 与 batch entry=`ingested`/ingest
 - `dotnet test AnimeGoNet.slnx -c Release --no-restore --verbosity minimal`：Core 137、Data 57、App 130，共 324/324 通过。
 - `dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj -c Release -r win-x64 -p:PublishAot=true --no-restore -o artifacts/rss-winner-unified-ingest-win-x64`：NativeAOT 发布通过，无裁剪警告。
 
-本模块尚未公开 `/api/rss`；下一提交只增加兼容 HTTP 契约、source-generated JSON 响应和 raw XML 请求边界，内部直接调用本处理器。
+后续提交已公开兼容 `/api/rss`，使用 source-generated JSON 和安全 URL RSS 获取，内部直接调用本处理器；legacy MikanTool `Filiter0..4` 仍是下一业务边界。

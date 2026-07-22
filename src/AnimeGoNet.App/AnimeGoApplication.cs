@@ -38,6 +38,8 @@ public static class AnimeGoApplication
         IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
         IBangumiSubjectClient? bangumiSubjectClient = null,
+        ITorrentDnsResolver? rssDnsResolver = null,
+        ITorrentHttpTransport? rssHttpTransport = null,
         bool? startBackgroundWorkers = null,
         CancellationToken cancellationToken = default)
     {
@@ -106,6 +108,11 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<UnifiedIngestProcessor>();
         builder.Services.AddSingleton<MikanRssBatchStore>();
         builder.Services.AddSingleton<MikanRssIngestProcessor>();
+        rssDnsResolver ??= new SystemTorrentDnsResolver();
+        rssHttpTransport ??= new PinnedTorrentHttpTransport();
+        builder.Services.AddSingleton<IRssFeedHttpClient>(new ProfileBoundRssFeedHttpClient(
+            sourceProfiles, rssDnsResolver, rssHttpTransport));
+        builder.Services.AddSingleton<RssFeedReader>();
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloadPreparationStore>();
         builder.Services.AddSingleton<MediaOrganizationStore>();

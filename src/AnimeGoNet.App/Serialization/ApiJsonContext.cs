@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.App.Feeds;
 
 namespace AnimeGoNet.App.Serialization;
 
@@ -11,6 +12,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(LegacyApiResponse<string>))]
 [JsonSerializable(typeof(RuntimeStatus))]
 [JsonSerializable(typeof(IngestBatchRequest))]
+[JsonSerializable(typeof(LegacyRssRequest))]
+[JsonSerializable(typeof(LegacyApiResponse<MikanRssIngestResult?>))]
 [JsonSerializable(typeof(IngestBatchResponse))]
 [JsonSerializable(typeof(LegacyApiResponse<IngestBatchResponse?>))]
 [JsonSerializable(typeof(DownloadListResponse))]

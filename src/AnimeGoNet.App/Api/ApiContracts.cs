@@ -2,6 +2,15 @@ using System.Text.Json.Serialization;
 
 namespace AnimeGoNet.App.Api;
 
+public sealed record LegacyRssRequest(
+    [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("rss")] LegacyRssLocation? Rss,
+    [property: JsonPropertyName("is_select_ep")] bool IsSelectEp,
+    [property: JsonPropertyName("ep_links")] IReadOnlyList<string>? EpLinks);
+
+public sealed record LegacyRssLocation(
+    [property: JsonPropertyName("url")] string? Url);
+
 public sealed record LegacyApiResponse<T>(int Code, string Msg, T Data);
 
 public sealed record PingData(string Version, long Time);

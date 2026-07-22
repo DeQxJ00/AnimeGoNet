@@ -81,7 +81,7 @@
 |---|---|---:|---:|---|
 | `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 待实现 | clock/cancel/startup tests |
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
-| `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 待实现 | AnimeGoHelper unchanged test |
+| `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 进行中 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 URL 获取和 winner 原子 staging Kestrel tests 已通过；AnimeGoHelper unchanged + MikanTool filter/config 待实现 |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 待实现 | legacy response contract |
 | `/api/config` | typed deployment config | 保留+扩展 | 待实现 | auth/status/JSON tests |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |

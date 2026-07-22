@@ -5,6 +5,8 @@ using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
+using AnimeGoNet.App.Feeds;
+using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
@@ -39,6 +41,7 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapPost("/api/v1/ingest", Ingest);
+        app.MapPost("/api/rss", LegacyRss);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
     }
 
@@ -428,6 +431,42 @@ public static class ApiEndpoints
             requireModernMetadata: true,
             cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(response);
+    }
+
+    private static async Task<Ok<LegacyApiResponse<MikanRssIngestResult?>>> LegacyRss(
+        LegacyRssRequest request,
+        RssFeedReader reader,
+        MikanRssIngestProcessor processor,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.Source?.Trim(), "mikan", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(request.Rss?.Url))
+        {
+            return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
+                300, "source and rss.url are required", null));
+        }
+
+        try
+        {
+            var feed = await reader.ParseUrlAsync(request.Rss.Url, cancellationToken).ConfigureAwait(false);
+            if (request.IsSelectEp)
+            {
+                var selected = new HashSet<string>(request.EpLinks ?? [], StringComparer.Ordinal);
+                feed = feed with
+                {
+                    Items = feed.Items.Where(item => selected.Contains(item.MikanUrl)).ToArray(),
+                };
+            }
+
+            var result = await processor.ProcessAsync(feed, "mikan", cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
+                200, $"开始处理{feed.Items.Count}个下载项", result));
+        }
+        catch (RssFeedException exception)
+        {
+            return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
+                300, $"RSS processing failed: {exception.Code}", null));
+        }
     }
 
     private static async Task<Ok<LegacyApiResponse<IngestBatchResponse?>>> LegacyDownloadManager(

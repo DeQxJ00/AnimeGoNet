@@ -32,7 +32,9 @@ public sealed class RunningApp : IAsyncDisposable
         ITorrentStagingService? stagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
-        IBangumiSubjectClient? bangumiSubjectClient = null)
+        IBangumiSubjectClient? bangumiSubjectClient = null,
+        ITorrentDnsResolver? rssDnsResolver = null,
+        ITorrentHttpTransport? rssHttpTransport = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
@@ -47,6 +49,8 @@ public sealed class RunningApp : IAsyncDisposable
             downloadClientRegistry: downloadClientRegistry,
             tmdbClient: tmdbClient,
             bangumiSubjectClient: bangumiSubjectClient,
+            rssDnsResolver: rssDnsResolver,
+            rssHttpTransport: rssHttpTransport,
             startBackgroundWorkers: false);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();
