@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 14;
+    public const int CurrentVersion = 15;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -20,6 +20,7 @@ public static class DatabaseSchema
         new SchemaMigration(12, "auditable_delete_plans", AuditableDeletePlans),
         new SchemaMigration(13, "mikan_rss_rule_storage", MikanRssRuleStorage),
         new SchemaMigration(14, "mikan_rss_batch_audit", MikanRssBatchAudit),
+        new SchemaMigration(15, "legacy_mikan_filter_storage", LegacyMikanFilterStorage),
     ];
 
     private const string InitialBusinessSchema = """
@@ -623,5 +624,47 @@ public static class DatabaseSchema
 
         CREATE INDEX ix_mikan_rss_entries_effect
         ON mikan_rss_batch_entries(effect_state, claim_expires_at_utc, batch_id, ordinal);
+        """;
+
+    private const string LegacyMikanFilterStorage = """
+        CREATE TABLE legacy_mikan_filter_sets (
+            source_profile_id TEXT NOT NULL PRIMARY KEY REFERENCES source_profiles(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            updated_source TEXT NOT NULL CHECK (updated_source IN ('migration', 'legacy_api', 'web', 'rollback')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TABLE legacy_mikan_filter_rules (
+            source_profile_id TEXT NOT NULL REFERENCES legacy_mikan_filter_sets(source_profile_id) ON DELETE CASCADE,
+            tier INTEGER NOT NULL CHECK (tier BETWEEN 0 AND 4),
+            legacy_key TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            whitelist_enabled INTEGER NOT NULL CHECK (whitelist_enabled IN (0, 1)),
+            blacklist_enabled INTEGER NOT NULL CHECK (blacklist_enabled IN (0, 1)),
+            PRIMARY KEY (source_profile_id, tier, legacy_key),
+            UNIQUE (source_profile_id, tier, position)
+        ) STRICT;
+
+        CREATE TABLE legacy_mikan_filter_values (
+            source_profile_id TEXT NOT NULL,
+            tier INTEGER NOT NULL,
+            legacy_key TEXT NOT NULL,
+            list_kind TEXT NOT NULL CHECK (list_kind IN ('whitelist', 'blacklist')),
+            position INTEGER NOT NULL CHECK (position >= 0),
+            value TEXT NOT NULL,
+            PRIMARY KEY (source_profile_id, tier, legacy_key, list_kind, position),
+            FOREIGN KEY (source_profile_id, tier, legacy_key)
+                REFERENCES legacy_mikan_filter_rules(source_profile_id, tier, legacy_key) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE TABLE legacy_mikan_filter_snapshots (
+            source_profile_id TEXT NOT NULL REFERENCES legacy_mikan_filter_sets(source_profile_id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            config_json TEXT NOT NULL CHECK (json_valid(config_json) AND json_type(config_json) = 'object'),
+            updated_source TEXT NOT NULL CHECK (updated_source IN ('migration', 'legacy_api', 'web', 'rollback')),
+            created_at_utc TEXT NOT NULL,
+            PRIMARY KEY (source_profile_id, revision)
+        ) STRICT;
         """;
 }

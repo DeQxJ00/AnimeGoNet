@@ -79,6 +79,8 @@ public static class AnimeGoApplication
         var rssRules = new MikanRssRuleStore(database);
         await rssRules.EnsureDefaultAsync(
             "mikan", MikanRssRuleDefaults.Create(), DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        var legacyMikanFilters = new LegacyMikanFilterStore(database);
+        await legacyMikanFilters.EnsureDefaultAsync("mikan", DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var ingestTasks = new IngestTaskStore(database);
         var downloadJobs = new DownloadJobStore(database);
         torrentStagingService ??= new TorrentStagingService(
@@ -104,6 +106,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);
+        builder.Services.AddSingleton(legacyMikanFilters);
         builder.Services.AddSingleton(ingestTasks);
         builder.Services.AddSingleton<UnifiedIngestProcessor>();
         builder.Services.AddSingleton<MikanRssBatchStore>();
