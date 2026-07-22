@@ -13,6 +13,17 @@ public sealed record LegacyRssLocation(
 
 public sealed record LegacyApiResponse<T>(int Code, string Msg, T Data);
 
+public sealed record LegacyPluginConfigUploadRequest(
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("data")] string? Data);
+
+public sealed record LegacyPluginResponse(
+    [property: JsonPropertyName("name")] string Name);
+
+public sealed record LegacyPluginConfigResponse(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("data")] string Data);
+
 public sealed record PingData(string Version, long Time);
 
 public sealed record RuntimeStatus(

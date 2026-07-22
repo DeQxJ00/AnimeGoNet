@@ -81,8 +81,8 @@
 |---|---|---:|---:|---|
 | `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 待实现 | clock/cancel/startup tests |
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
-| `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 进行中 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 URL 获取和 winner 原子 staging Kestrel tests 已通过；AnimeGoHelper unchanged + MikanTool filter/config 待实现 |
-| `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 待实现 | legacy response contract |
+| `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 进行中 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 URL 获取和 winner 原子 staging Kestrel tests 已通过；MikanTool filter 前置接入待实现 |
+| `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
 | `/api/config` | typed deployment config | 保留+扩展 | 待实现 | auth/status/JSON tests |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |

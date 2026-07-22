@@ -43,6 +43,8 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/rss", LegacyRss);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
+        app.MapPost("/api/plugin/config", LegacyPluginConfigPost);
+        app.MapGet("/api/plugin/config", LegacyPluginConfigGet);
     }
 
     private static Ok<LegacyApiResponse<PingData>> Ping()
@@ -59,6 +61,97 @@ public static class ApiEndpoints
         var hash = Convert.ToHexStringLower(
             System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(accessKey)));
         return TypedResults.Ok(new LegacyApiResponse<string>(200, "Access-Key", hash));
+    }
+
+    private static async Task<Ok<LegacyApiResponse<LegacyPluginResponse?>>> LegacyPluginConfigPost(
+        LegacyPluginConfigUploadRequest request,
+        LegacyMikanFilterStore store,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveLegacyMikanPlugin(request.Name, out var responseName))
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyPluginResponse?>(
+                300, "不支持的插件配置", null));
+        }
+        if (!TryDecodeLegacyPluginConfig(request.Data, out var config))
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyPluginResponse?>(
+                300, "配置解析错误", null));
+        }
+
+        const int maxAttempts = 32;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await store.SaveLegacyAsync(
+                    "mikan", config!, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                return TypedResults.Ok(new LegacyApiResponse<LegacyPluginResponse?>(
+                    200, "写入插件配置文件成功", new LegacyPluginResponse(responseName)));
+            }
+            catch (LegacyMikanFilterRevisionException) when (attempt < maxAttempts)
+            {
+                // The legacy client has no revision field. Retrying preserves its last-full-upload-wins contract.
+            }
+        }
+    }
+
+    private static async Task<Ok<LegacyApiResponse<LegacyPluginConfigResponse?>>> LegacyPluginConfigGet(
+        string? name,
+        LegacyMikanFilterStore store,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveLegacyMikanPlugin(name, out var responseName))
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyPluginConfigResponse?>(
+                300, "不支持的插件配置", null));
+        }
+        var snapshot = await store.GetAsync("mikan", cancellationToken).ConfigureAwait(false);
+        if (snapshot is null)
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyPluginConfigResponse?>(
+                300, "读取插件配置文件失败", null));
+        }
+        var data = Convert.ToBase64String(LegacyMikanFilterCodec.Encode(snapshot.Config));
+        return TypedResults.Ok(new LegacyApiResponse<LegacyPluginConfigResponse?>(
+            200,
+            "读取插件配置文件成功",
+            new LegacyPluginConfigResponse(responseName, data)));
+    }
+
+    private static bool TryResolveLegacyMikanPlugin(string? value, out string responseName)
+    {
+        responseName = value ?? string.Empty;
+        var normalized = responseName.Trim().Replace('\\', '/').TrimStart('/');
+        if (normalized.StartsWith("plugin/", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized["plugin/".Length..];
+        }
+        return normalized is "filter/mikan_tool.py" or "filter/mikan_tool"
+            or "mikan_tool.py" or "mikan_tool";
+    }
+
+    private static bool TryDecodeLegacyPluginConfig(
+        string? value,
+        out LegacyMikanFilterConfig? config)
+    {
+        config = null;
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 1_400_000) return false;
+        try
+        {
+            var bytes = Convert.FromBase64String(value);
+            if (bytes.Length is 0 or > 1_048_576) return false;
+            config = LegacyMikanFilterCodec.Parse(bytes);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     private static Ok<RuntimeStatus> Status(AnimeGoOptions options)
