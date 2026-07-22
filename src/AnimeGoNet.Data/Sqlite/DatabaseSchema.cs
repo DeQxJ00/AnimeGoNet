@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 13;
+    public const int CurrentVersion = 14;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -19,6 +19,7 @@ public static class DatabaseSchema
         new SchemaMigration(11, "subtitle_episode_association", SubtitleEpisodeAssociation),
         new SchemaMigration(12, "auditable_delete_plans", AuditableDeletePlans),
         new SchemaMigration(13, "mikan_rss_rule_storage", MikanRssRuleStorage),
+        new SchemaMigration(14, "mikan_rss_batch_audit", MikanRssBatchAudit),
     ];
 
     private const string InitialBusinessSchema = """
@@ -562,5 +563,65 @@ public static class DatabaseSchema
             FOREIGN KEY (source_profile_id, array_id)
                 REFERENCES mikan_rss_match_arrays(source_profile_id, id) ON DELETE CASCADE
         ) STRICT;
+        """;
+
+    private const string MikanRssBatchAudit = """
+        CREATE TABLE mikan_rss_batches (
+            id TEXT NOT NULL PRIMARY KEY,
+            source_profile_id TEXT NOT NULL REFERENCES source_profiles(id),
+            rule_revision INTEGER NOT NULL CHECK (rule_revision > 0),
+            fingerprint TEXT NOT NULL UNIQUE CHECK (
+                length(fingerprint) = 64 AND fingerprint = lower(fingerprint)),
+            mikanid INTEGER CHECK (mikanid > 0),
+            priority_enabled INTEGER NOT NULL CHECK (priority_enabled IN (0, 1)),
+            entry_count INTEGER NOT NULL CHECK (entry_count >= 0),
+            created_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TABLE mikan_rss_batch_entries (
+            batch_id TEXT NOT NULL REFERENCES mikan_rss_batches(id) ON DELETE CASCADE,
+            candidate_id TEXT NOT NULL,
+            ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+            title TEXT NOT NULL,
+            mikan_url TEXT NOT NULL,
+            torrent_url_fingerprint TEXT NOT NULL CHECK (
+                length(torrent_url_fingerprint) = 64 AND torrent_url_fingerprint = lower(torrent_url_fingerprint)),
+            content_type TEXT NOT NULL,
+            length_bytes INTEGER NOT NULL CHECK (length_bytes >= 0),
+            published_date TEXT,
+            source_episode_kind TEXT CHECK (source_episode_kind IN ('normal', 'fractional', 'special')),
+            source_episode TEXT,
+            decision_kind TEXT NOT NULL CHECK (decision_kind IN (
+                'Winner', 'RejectedByBlacklist', 'RejectedByWhitelist', 'SuppressedByHigherPriority')),
+            decision_reason TEXT NOT NULL,
+            winner_candidate_id TEXT,
+            effect_state TEXT NOT NULL CHECK (effect_state IN ('blocked', 'ready', 'claimed', 'ingested')),
+            claim_token TEXT,
+            claim_expires_at_utc TEXT,
+            ingest_task_id TEXT REFERENCES ingest_tasks(id),
+            PRIMARY KEY (batch_id, candidate_id),
+            UNIQUE (batch_id, ordinal),
+            CHECK ((source_episode_kind IS NULL AND source_episode IS NULL)
+                OR (source_episode_kind IS NOT NULL AND source_episode IS NOT NULL)),
+            CHECK ((decision_kind = 'Winner' AND effect_state IN ('ready', 'claimed', 'ingested'))
+                OR (decision_kind <> 'Winner' AND effect_state = 'blocked')),
+            CHECK ((effect_state = 'claimed' AND claim_token IS NOT NULL AND claim_expires_at_utc IS NOT NULL)
+                OR (effect_state <> 'claimed' AND claim_token IS NULL AND claim_expires_at_utc IS NULL)),
+            CHECK ((effect_state = 'ingested' AND ingest_task_id IS NOT NULL)
+                OR (effect_state <> 'ingested' AND ingest_task_id IS NULL))
+        ) STRICT;
+
+        CREATE TABLE mikan_rss_decision_groups (
+            batch_id TEXT NOT NULL,
+            candidate_id TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            group_id TEXT NOT NULL,
+            PRIMARY KEY (batch_id, candidate_id, position),
+            FOREIGN KEY (batch_id, candidate_id)
+                REFERENCES mikan_rss_batch_entries(batch_id, candidate_id) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX ix_mikan_rss_entries_effect
+        ON mikan_rss_batch_entries(effect_state, claim_expires_at_utc, batch_id, ordinal);
         """;
 }

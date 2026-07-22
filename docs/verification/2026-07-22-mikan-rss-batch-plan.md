@@ -19,4 +19,4 @@
 - `dotnet test AnimeGoNet.slnx -c Release --no-restore --verbosity minimal`：Core 137、Data 53、App 127，共 317/317 通过。
 - `dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj -c Release -r win-x64 -p:PublishAot=true --no-restore -o artifacts/mikan-rss-batch-plan-win-x64`：NativeAOT 发布通过，无裁剪警告。
 
-本模块不读取网络/文件、不访问 SQLite、不获取 Torrent、不创建 unified ingest task，也不调用 TMDB/AI/qBittorrent。下一提交将增加 batch/entry/decision 显式 SQL 模型和原子持久化，再以 winner 决策作为昂贵副作用的唯一入口。
+本模块不读取网络/文件、不访问 SQLite、不获取 Torrent、不创建 unified ingest task，也不调用 TMDB/AI/qBittorrent。后续 schema v14 提交已增加 batch/entry/decision 显式 SQL 模型、幂等持久化和 winner 租约；实际 unified ingest 完成事务仍是下一边界。

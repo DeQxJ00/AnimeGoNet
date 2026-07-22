@@ -11,7 +11,7 @@ schema v13 新增 `mikan_rss_rule_sets`、`mikan_rss_priority_groups`、`mikan_r
 - 全快照保存要求 `expected_revision`，失败事务不改变现有规则；
 - Mikan 默认 720p blacklist 和四个 priority group 只在首次启动写入，重启不会覆盖用户编辑。
 
-本模块只关闭规则持久化边界。后续提交已经完成有界 RSS XML 输入、来源 EP 分类和无副作用的纯批次 winner/loser 计划；`/api/rss`、决策落库、winner unified ingest 及昂贵副作用门禁仍未完成，运行能力不得据此宣称 RSS 流水线已闭环。
+本模块只关闭规则持久化边界。后续提交已经完成有界 RSS XML、来源 EP、纯批次计划和 schema v14 决策审计/winner 租约；`/api/rss`、legacy filter、winner unified ingest 完成事务仍未完成，运行能力不得据此宣称 RSS 流水线已闭环。
 
 ## 验收
 

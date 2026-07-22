@@ -36,6 +36,9 @@ public sealed class SchemaMigrationTests
             "metadata_resolution_attempts",
             "metadata_resolution_runs",
             "mikan_offset_evidence",
+            "mikan_rss_batches",
+            "mikan_rss_batch_entries",
+            "mikan_rss_decision_groups",
             "mikan_rss_match_arrays",
             "mikan_rss_match_values",
             "mikan_rss_priority_groups",
@@ -62,7 +65,7 @@ public sealed class SchemaMigrationTests
         command.CommandText = "SELECT COUNT(*), MAX(version) FROM schema_migrations;";
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(13, reader.GetInt32(0));
+        Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
     }
 
