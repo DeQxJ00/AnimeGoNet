@@ -26,7 +26,7 @@
 | `internal/pkg/request` | AOT-safe `HttpClient` pipeline | 保留 | 待实现 | host/proxy/retry fake-server tests |
 | `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 进行中 | 严格v1 Bencode、原始info-hash、单/多文件与安全staging已验证；magnet和4个上游fixture parity待实现 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 已验证 | 5 MiB 有界 raw/file/可注入 URL 读取、首个 enclosure、缺失跳过、非法 length=0、Mikan pubDate、稳定失败码与安全 XML tests 已通过；尚未接 `/api/rss` |
-| `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 进行中 | RSS source URL/channel link 的 path/query 正整数 mikanid cases 已通过；页面、groupid、持久化仍待实现 |
+| `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 进行中 | RSS source URL/channel link 的 path/query 正整数 mikanid cases，以及 Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid` 上游 fixture、容错与失败码已通过；安全抓取、缓存、持久化待实现 |
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系 v0 AOT DTO、User-Agent、身份/日期校验、安全失败分类、前传稳定遍历与自动编排 fake tests 已通过；Episode 与缓存待实现 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy 与自动 Series/Season/Episode worker tests 已通过；cache/Bangumi Episode 确定性匹配待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
@@ -40,7 +40,7 @@
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 待实现 | Python differential fixtures |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
-| `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential + schema v15 强类型存储/canonical 快照/revision/rollback 已验证，空词/重复/顺序无损；配置 API、Mikan 页面身份与 RSS 接入待实现 |
+| `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential + schema v15 强类型存储/canonical 快照/revision/rollback + legacy config API + Mikan Episode `bangumiId/subgroupid` parser 已验证，空词/重复/顺序无损；安全页面抓取与 RSS 接入待实现 |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14 审计及 winner→统一 staging 原子事务已验证；legacy filter 与 `/api/rss` 待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
