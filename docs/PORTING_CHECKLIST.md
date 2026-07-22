@@ -36,7 +36,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 进行中 | Go ParseEp 整数模式与安全小数/特别篇分类已由 NativeAOT C# parser 覆盖并在 Torrent 入库持久化；完整 parser fixtures/字幕组待实现 |
+| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 进行中 | Go ParseEp 整数模式与安全小数/特别篇分类已由 NativeAOT C# parser 覆盖；Torrent 文件入库和 Mikan RSS title 最后可靠标记均有独立 tests，完整 parser fixtures/字幕组待实现 |
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 待实现 | Python differential fixtures |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |

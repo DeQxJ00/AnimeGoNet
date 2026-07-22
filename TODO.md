@@ -74,7 +74,7 @@
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
 - [ ] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器，不在兼容层擅加年份保护、歧义拒绝或E04/EP04扩展；另建 `FileEpisodeCandidateResolver` 安全层，只在 Mikan SourceProfile 决定是否形成逐文件 `file_episode_candidate`；增加 AI/TMDB 验证后的本地统一偏移计算器，结果不一致时只禁止缓存学习，不否定已验证的逐文件映射。
-- [>] 已建立 NativeAOT-safe Torrent 文件 EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，并明确把小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 分类为非普通整数；入库仅为普通正整数写 `file_episode_candidate`，已在确认 Season 内逐文件经 TMDB Episode API 验证，raw_parser.py differential 仍待实现。
+- [>] 已建立 NativeAOT-safe Torrent 文件和 Mikan RSS title EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，RSS title 另支持不受扩展名截断的最后可靠标记；小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 均不形成普通整数。入库仅为普通正整数写 `file_episode_candidate`，已在确认 Season 内逐文件经 TMDB Episode API 验证；RSS 批次串联与 raw_parser.py 严格 differential 仍待实现。
 - [>] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；数据层已按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中可安全计算目标 EP，主程序 AI 前置接入仍待串联。
 - [ ] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用。
 - [ ] 通过全部配置/模型 parity tests。
@@ -138,7 +138,7 @@
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
 - [>] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；SQLite CRUD/审计待实现。
-- [>] RSS loser 产生 `SuppressedByHigherPriority` 决策且 winner 不隐式晋级；与 Torrent 获取/AI/任务创建的编排门禁待接入。
+- [>] RSS loser 产生 `SuppressedByHigherPriority` 决策且 winner 不隐式晋级；Mikan RSS title 的可靠普通/小数/特别篇/未知来源 EP 分类已实现，与规则引擎、Torrent 获取/AI/任务创建的编排门禁待接入。
 - [ ] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载。
 - [ ] 实现外部 C# 插件进程的 manifest、JSON Lines 协议、超时、取消、健康检查和退出隔离。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
