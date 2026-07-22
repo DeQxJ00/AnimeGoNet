@@ -7,6 +7,7 @@ using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sources;
+using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Ingest;
@@ -62,7 +63,29 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
         TorrentMetadata metadata,
         string stagingFileName,
         DateTimeOffset expiresAtUtc,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await AddStagedCoreAsync(
+            item, profile, metadata, stagingFileName, expiresAtUtc, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<StagedIngestTaskRecord> AddStagedForRssWinnerAsync(
+        NormalizedIngestItem item,
+        SourceProfileRecord profile,
+        TorrentMetadata metadata,
+        string stagingFileName,
+        DateTimeOffset expiresAtUtc,
+        MikanRssWinnerLease winnerLease,
+        CancellationToken cancellationToken = default) =>
+        await AddStagedCoreAsync(
+            item, profile, metadata, stagingFileName, expiresAtUtc, winnerLease, cancellationToken).ConfigureAwait(false);
+
+    private async Task<StagedIngestTaskRecord> AddStagedCoreAsync(
+        NormalizedIngestItem item,
+        SourceProfileRecord profile,
+        TorrentMetadata metadata,
+        string stagingFileName,
+        DateTimeOffset expiresAtUtc,
+        MikanRssWinnerLease? winnerLease,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(profile);
@@ -158,6 +181,27 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 expiresAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
             stagingCommand.Parameters.AddWithValue("$created_at_utc", now);
             await stagingCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (winnerLease is not null)
+        {
+            await using var winner = connection.CreateCommand();
+            winner.Transaction = transaction;
+            winner.CommandText = """
+                UPDATE mikan_rss_batch_entries
+                SET effect_state = 'ingested', claim_token = NULL, claim_expires_at_utc = NULL,
+                    ingest_task_id = $task
+                WHERE batch_id = $batch AND candidate_id = $candidate
+                  AND effect_state = 'claimed' AND claim_token = $token;
+                """;
+            winner.Parameters.AddWithValue("$task", id);
+            winner.Parameters.AddWithValue("$batch", winnerLease.BatchId);
+            winner.Parameters.AddWithValue("$candidate", winnerLease.CandidateId);
+            winner.Parameters.AddWithValue("$token", winnerLease.LeaseToken);
+            if (await winner.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException("rss_winner_lease_lost");
+            }
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

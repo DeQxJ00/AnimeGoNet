@@ -23,7 +23,8 @@ public sealed record MikanRssBatchEntryRecord(
     string? SourceEpisodeKind,
     string? SourceEpisode,
     MikanRssDecision Decision,
-    string EffectState);
+    string EffectState,
+    string? IngestTaskId);
 
 public sealed record MikanRssWinnerLease(
     string BatchId,

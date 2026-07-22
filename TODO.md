@@ -138,14 +138,14 @@
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
 - [>] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；SQLite CRUD/审计待实现。
-- [>] RSS loser 产生 `SuppressedByHigherPriority` 决策且 winner 不隐式晋级；schema v14 已原子保存 batch/entry/完整决策/执行组和规则 revision，Torrent URL 仅存 SHA-256，数据库约束强制非 winner=`blocked`，仅 winner 可原子领取可恢复短租约；winner unified ingest 完成确认及 Torrent/AI/qB 昂贵副作用串联待实现。
+- [>] RSS loser 产生 `SuppressedByHigherPriority` 决策且 winner 不隐式晋级；winner 已在租约后复用统一 staging，并在创建 ingest task/files/staged_torrent 的同一 SQLite 事务绑定 batch entry=`ingested`，token 失效整笔回滚；名单/优选 loser staging 调用为 0，网络/取消/意外失败释放租约，重复批次返回原 task。`/api/rss` 兼容入口与 legacy MikanTool 前置过滤仍待实现。
 - [ ] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载。
 - [ ] 实现外部 C# 插件进程的 manifest、JSON Lines 协议、超时、取消、健康检查和退出隔离。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
 - [ ] 实现 `AnimeGo.PluginTool`。
 - [ ] 移植 parser manager。
 - [ ] 移植 ordered filter manager。
-- [>] 移植 feed → filter → parse → download pipeline：有界 RSS feed、Mikan title 来源 EP、纯批次计划和 schema v14 审计/幂等/租约门禁已串联；legacy filter、winner unified ingest 完成事务、download worker 仍待实现。
+- [>] 移植 feed → filter → parse → download pipeline：有界 feed、来源 EP、批次计划、schema v14 审计/幂等/租约以及 winner→统一 staging 原子事务已串联；legacy filter、`/api/rss` 契约和后续 download worker 全链验收仍待实现。
 - [ ] 通过上游所有插件/parser/filter fixture，以及外部 C# 插件协议故障注入测试。
 
 ## P7 — 首版 qBittorrent 下载客户端

@@ -91,6 +91,17 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             : null;
     }
 
+    public Task<bool> CompleteWinnerAsync(
+        MikanRssWinnerLease lease,
+        string ingestTaskId,
+        CancellationToken cancellationToken = default) =>
+        FinishLeaseAsync(lease, "ingested", ingestTaskId, cancellationToken);
+
+    public Task<bool> ReleaseWinnerAsync(
+        MikanRssWinnerLease lease,
+        CancellationToken cancellationToken = default) =>
+        FinishLeaseAsync(lease, "ready", null, cancellationToken);
+
     public async Task<MikanRssBatchRecord?> GetAsync(string batchId, CancellationToken cancellationToken = default)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -101,6 +112,31 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await ReadAsync(connection, "fingerprint", fingerprint, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> FinishLeaseAsync(
+        MikanRssWinnerLease lease,
+        string targetState,
+        string? ingestTaskId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        if (targetState == "ingested") ArgumentException.ThrowIfNullOrWhiteSpace(ingestTaskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE mikan_rss_batch_entries
+            SET effect_state = $state, claim_token = NULL, claim_expires_at_utc = NULL,
+                ingest_task_id = $task
+            WHERE batch_id = $batch AND candidate_id = $candidate
+              AND effect_state = 'claimed' AND claim_token = $token;
+            """;
+        command.Parameters.AddWithValue("$state", targetState);
+        command.Parameters.AddWithValue("$task", (object?)ingestTaskId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$batch", lease.BatchId);
+        command.Parameters.AddWithValue("$candidate", lease.CandidateId);
+        command.Parameters.AddWithValue("$token", lease.LeaseToken);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
 
     private static async Task InsertEntryAsync(
@@ -188,7 +224,7 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             query.CommandText = """
                 SELECT candidate_id, title, mikan_url, torrent_url_fingerprint, content_type,
                        length_bytes, published_date, source_episode_kind, source_episode,
-                       decision_kind, decision_reason, winner_candidate_id, effect_state
+                   decision_kind, decision_reason, winner_candidate_id, effect_state, ingest_task_id
                 FROM mikan_rss_batch_entries WHERE batch_id = $batch ORDER BY ordinal;
                 """;
             query.Parameters.AddWithValue("$batch", id);
@@ -200,7 +236,7 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
                     rows.GetInt64(5), rows.IsDBNull(6) ? null : rows.GetString(6),
                     rows.IsDBNull(7) ? null : rows.GetString(7), rows.IsDBNull(8) ? null : rows.GetString(8),
                     rows.GetString(9), rows.GetString(10), rows.IsDBNull(11) ? null : rows.GetString(11),
-                    rows.GetString(12)));
+                    rows.GetString(12), rows.IsDBNull(13) ? null : rows.GetString(13)));
             }
         }
 
@@ -214,7 +250,7 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             entries.Add(new MikanRssBatchEntryRecord(
                 row.CandidateId, row.Title, row.MikanUrl, row.TorrentUrlFingerprint,
                 row.ContentType, row.LengthBytes, row.PublishedDate, row.SourceEpisodeKind,
-                row.SourceEpisode, decision, row.EffectState));
+                row.SourceEpisode, decision, row.EffectState, row.IngestTaskId));
         }
 
         return new MikanRssBatchRecord(id, profile, revision, fingerprint, mikanId, enabled, created, entries);
@@ -265,5 +301,6 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         string DecisionKind,
         string DecisionReason,
         string? WinnerCandidateId,
-        string EffectState);
+        string EffectState,
+        string? IngestTaskId);
 }

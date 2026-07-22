@@ -19,4 +19,4 @@
 - `dotnet test AnimeGoNet.slnx -c Release --no-restore --verbosity minimal`：Core 137、Data 55、App 127，共 319/319 通过。
 - `dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj -c Release -r win-x64 -p:PublishAot=true --no-restore -o artifacts/mikan-rss-batch-storage-win-x64-final`：NativeAOT 发布通过，无裁剪警告。
 
-本提交还不获取 Torrent、不创建 ingest task，也不调用 TMDB/AI/qBittorrent。下一层必须先持有 winner lease，使用仍在内存中的原始 URL 调统一 ingest，并在同一业务收尾中把 lease 标记为 ingested；失败只允许显式释放或租约到期重试。
+本提交本身还不获取 Torrent、不创建 ingest task，也不调用 TMDB/AI/qBittorrent。后续应用编排已要求先持有 winner lease，并在创建 task/files/staged_torrent 的同一 SQLite 事务把 entry 标记为 ingested；失败显式释放，崩溃仍可由租约到期恢复。

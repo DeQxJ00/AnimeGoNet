@@ -4,6 +4,7 @@ using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
@@ -418,18 +419,12 @@ public static class ApiEndpoints
 
     private static async Task<Ok<IngestBatchResponse>> Ingest(
         IngestBatchRequest request,
-        SourceProfileStore profiles,
-        IngestTaskStore tasks,
-        ITorrentStagingService staging,
-        AnimeGoOptions options,
+        UnifiedIngestProcessor processor,
         CancellationToken cancellationToken)
     {
         var response = await ProcessIngestAsync(
             request,
-            profiles,
-            tasks,
-            staging,
-            options.TorrentFetch.StagingTtl,
+            processor,
             requireModernMetadata: true,
             cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(response);
@@ -437,10 +432,7 @@ public static class ApiEndpoints
 
     private static async Task<Ok<LegacyApiResponse<IngestBatchResponse?>>> LegacyDownloadManager(
         IngestBatchRequest request,
-        SourceProfileStore profiles,
-        IngestTaskStore tasks,
-        ITorrentStagingService staging,
-        AnimeGoOptions options,
+        UnifiedIngestProcessor processor,
         CancellationToken cancellationToken)
     {
         var legacyData = (request.Data ?? []).Select(item =>
@@ -459,10 +451,7 @@ public static class ApiEndpoints
         }).ToArray();
         var response = await ProcessIngestAsync(
             request with { Data = legacyData },
-            profiles,
-            tasks,
-            staging,
-            options.TorrentFetch.StagingTtl,
+            processor,
             requireModernMetadata: false,
             cancellationToken).ConfigureAwait(false);
         var success = response.RejectedCount == 0;
@@ -477,10 +466,7 @@ public static class ApiEndpoints
 
     private static async Task<IngestBatchResponse> ProcessIngestAsync(
         IngestBatchRequest request,
-        SourceProfileStore profiles,
-        IngestTaskStore tasks,
-        ITorrentStagingService staging,
-        TimeSpan stagingTtl,
+        UnifiedIngestProcessor processor,
         bool requireModernMetadata,
         CancellationToken cancellationToken)
     {
@@ -495,60 +481,15 @@ public static class ApiEndpoints
             }
 
             var command = ToCommand(data[index]!);
-            var validation = IngestCommandNormalizer.Normalize(request.Source ?? string.Empty, command, requireModernMetadata);
-            if (!validation.IsValid)
-            {
-                responses.Add(Rejected(index, validation.Errors));
-                continue;
-            }
-
-            var normalized = validation.Item!;
-            var profile = await profiles.GetEnabledAsync(normalized.Source, cancellationToken).ConfigureAwait(false);
-            if (profile is null)
-            {
-                responses.Add(Rejected(index, ["no enabled source profile is configured"]));
-                continue;
-            }
-
-            StagedTorrent? staged = null;
-            var ownershipTransferred = false;
-            try
-            {
-                staged = await staging.StageAsync(
-                    normalized.TorrentUrl,
-                    new TorrentSourcePolicy(profile.Id, profile.AllowedTorrentHosts),
-                    cancellationToken).ConfigureAwait(false);
-                var task = await tasks.AddStagedAsync(
-                    normalized,
-                    profile,
-                    staged.Metadata,
-                    staged.StagingFileName,
-                    DateTimeOffset.UtcNow + stagingTtl,
-                    cancellationToken).ConfigureAwait(false);
-                ownershipTransferred = true;
-                responses.Add(new IngestItemResponse(
-                    index,
-                    task.Status,
-                    task.Id,
-                    task.SourceProfileId,
-                    task.SourceProfileRevision,
-                    task.DownloaderId,
-                    normalized.TorrentUrlFingerprint,
-                    task.InfoHash,
-                    task.FileCount,
-                    []));
-            }
-            catch (TorrentStagingException exception)
-            {
-                responses.Add(Rejected(index, [$"torrent staging failed: {exception.Code}"]));
-            }
-            finally
-            {
-                if (!ownershipTransferred && staged is not null)
-                {
-                    await staged.DisposeAsync().ConfigureAwait(false);
-                }
-            }
+            var result = await processor.ProcessAsync(
+                request.Source ?? string.Empty,
+                command,
+                requireModernMetadata,
+                cancellationToken).ConfigureAwait(false);
+            responses.Add(new IngestItemResponse(
+                index, result.Status, result.IngestId, result.SourceProfileId,
+                result.SourceProfileRevision, result.DownloaderId, result.TorrentUrlFingerprint,
+                result.InfoHash, result.FileCount, result.Errors));
         }
 
         var accepted = responses.Count(item => item.IngestId is not null);

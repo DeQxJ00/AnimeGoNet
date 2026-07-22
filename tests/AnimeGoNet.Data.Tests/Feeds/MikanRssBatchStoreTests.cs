@@ -1,7 +1,10 @@
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Feeds;
+using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Rules;
+using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Feeds;
+using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
 
 namespace AnimeGoNet.Data.Tests.Feeds;
@@ -64,6 +67,74 @@ public sealed class MikanRssBatchStoreTests
         command.Parameters.AddWithValue("$batch", stored.Id);
         command.Parameters.AddWithValue("$candidate", loser.CandidateId);
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => command.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
+    public async Task LeaseTokenControlsReleaseAndCompletionRequiresRealIngestTask()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var now = DateTimeOffset.Parse("2026-07-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var stored = await fixture.Store.SaveAsync("mikan", 1, true, Plan(), now);
+        var winner = stored.Entries.Single(entry => entry.Decision.Kind == MikanRssDecisionKind.Winner);
+        var lease = Assert.IsType<MikanRssWinnerLease>(await fixture.Store.TryClaimWinnerAsync(
+            stored.Id, winner.CandidateId, now, TimeSpan.FromMinutes(5)));
+        var wrong = lease with { LeaseToken = Guid.NewGuid().ToString("N") };
+
+        Assert.False(await fixture.Store.ReleaseWinnerAsync(wrong));
+        Assert.True(await fixture.Store.ReleaseWinnerAsync(lease));
+        var second = Assert.IsType<MikanRssWinnerLease>(await fixture.Store.TryClaimWinnerAsync(
+            stored.Id, winner.CandidateId, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
+        var profile = Assert.IsType<AnimeGoNet.Data.Sources.SourceProfileRecord>(
+            await new SourceProfileStore(fixture.Database.Database).GetEnabledAsync("mikan"));
+        var task = await new IngestTaskStore(fixture.Database.Database).AddAsync(
+            new NormalizedIngestItem(
+                "mikan", new Uri("https://example.invalid/a.torrent"), new string('a', 64),
+                "Show [03]", winner.CandidateId, "3951", 3951, null, null, null),
+            profile);
+
+        Assert.False(await fixture.Store.CompleteWinnerAsync(wrong, task.Id));
+        Assert.True(await fixture.Store.CompleteWinnerAsync(second, task.Id));
+        Assert.Null(await fixture.Store.TryClaimWinnerAsync(
+            stored.Id, winner.CandidateId, now.AddMinutes(2), TimeSpan.FromMinutes(5)));
+        var after = Assert.IsType<MikanRssBatchRecord>(await fixture.Store.GetAsync(stored.Id));
+        Assert.Equal("ingested", after.Entries.Single(entry => entry.CandidateId == winner.CandidateId).EffectState);
+    }
+
+    [Fact]
+    public async Task LostWinnerLeaseRollsBackTaskFilesAndStagedTorrentTogether()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var now = DateTimeOffset.Parse("2026-07-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var stored = await fixture.Store.SaveAsync("mikan", 1, true, Plan(), now);
+        var winner = stored.Entries.Single(entry => entry.Decision.Kind == MikanRssDecisionKind.Winner);
+        var lease = Assert.IsType<MikanRssWinnerLease>(await fixture.Store.TryClaimWinnerAsync(
+            stored.Id, winner.CandidateId, now, TimeSpan.FromMinutes(5)));
+        var wrong = lease with { LeaseToken = Guid.NewGuid().ToString("N") };
+        var profile = Assert.IsType<AnimeGoNet.Data.Sources.SourceProfileRecord>(
+            await new SourceProfileStore(fixture.Database.Database).GetEnabledAsync("mikan"));
+        var metadata = TorrentMetainfoParser.Parse(System.Text.Encoding.UTF8.GetBytes(
+            "d8:announce20:https://secret/token4:infod6:lengthi5e4:name11:episode.mkv12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee"));
+        var item = new NormalizedIngestItem(
+            "mikan", new Uri("https://example.invalid/a.torrent"), new string('a', 64),
+            "Show [03]", winner.CandidateId, "3951", 3951, null, null, null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new IngestTaskStore(fixture.Database.Database).AddStagedForRssWinnerAsync(
+                item, profile, metadata, "lost-lease.torrent", now.AddHours(1), wrong));
+
+        await using var connection = await fixture.Database.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM ingest_tasks),
+                (SELECT COUNT(*) FROM task_files),
+                (SELECT COUNT(*) FROM staged_torrents);
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0, reader.GetInt32(0));
+        Assert.Equal(0, reader.GetInt32(1));
+        Assert.Equal(0, reader.GetInt32(2));
     }
 
     private static MikanRssBatchPlan Plan()
