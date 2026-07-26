@@ -29,6 +29,11 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/downloads", Downloads);
+        app.MapGet("/api/v1/sources", ListSourceProfiles);
+        app.MapGet("/api/v1/sources/{sourceProfileId}", GetSourceProfile);
+        app.MapPost("/api/v1/sources", CreateSourceProfile);
+        app.MapPut("/api/v1/sources/{sourceProfileId}", UpdateSourceProfile);
+        app.MapDelete("/api/v1/sources/{sourceProfileId}", DeleteSourceProfile);
         app.MapGet("/api/v1/rss-rules/{sourceProfileId}", GetRssRules);
         app.MapPut("/api/v1/rss-rules/{sourceProfileId}", PutRssRules);
         app.MapPost("/api/v1/rss-rules/{sourceProfileId}/preview", PreviewRssRules);
@@ -206,6 +211,151 @@ public static class ApiEndpoints
             record.DownloaderConnected,
             record.DownloaderFailureCode,
             record.DownloaderLastSuccessAtUtc)).ToArray()));
+    }
+
+    private static async Task<Ok<SourceProfileListResponse>> ListSourceProfiles(
+        SourceProfileStore profiles,
+        CancellationToken cancellationToken)
+    {
+        var records = await profiles.ListAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new SourceProfileListResponse(records.Select(ToResponse).ToArray()));
+    }
+
+    private static async Task<IResult> GetSourceProfile(
+        string sourceProfileId,
+        SourceProfileStore profiles,
+        CancellationToken cancellationToken)
+    {
+        var record = await profiles.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
+        return record is null
+            ? TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."))
+            : TypedResults.Ok(ToResponse(record));
+    }
+
+    private static async Task<IResult> CreateSourceProfile(
+        SourceProfileCreateRequest request,
+        AnimeGoOptions options,
+        SourceProfileStore profiles,
+        MikanRssRuleStore rules,
+        LegacyMikanFilterStore legacyFilters,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(request.Id, "id");
+            var definition = ToDefinition(
+                request.DisplayName,
+                request.Adapter,
+                request.DownloaderId,
+                request.FileStrategy,
+                request.AllowedTorrentHosts,
+                request.RssFilterEnabled,
+                request.RssPriorityEnabled,
+                request.Enabled,
+                options);
+            var now = DateTimeOffset.UtcNow;
+            var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
+            await rules.EnsureDefaultAsync(
+                id, MikanRssRuleDefaults.Create(), now, cancellationToken).ConfigureAwait(false);
+            if (definition.Adapter == "mikan")
+            {
+                await legacyFilters.EnsureDefaultAsync(id, now, cancellationToken).ConfigureAwait(false);
+            }
+            return TypedResults.Created($"/api/v1/sources/{id}", ToResponse(created));
+        }
+        catch (SourceProfileDuplicateException)
+        {
+            return TypedResults.Conflict(Error(
+                "source_profile_duplicate", "A source profile with this id already exists."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("source_profile_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> UpdateSourceProfile(
+        string sourceProfileId,
+        SourceProfileUpdateRequest request,
+        AnimeGoOptions options,
+        SourceProfileStore profiles,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(sourceProfileId, "source profile id");
+            var current = await profiles.GetAsync(id, cancellationToken).ConfigureAwait(false);
+            if (current is null)
+            {
+                return TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."));
+            }
+            if (request.ExpectedRevision < 1)
+            {
+                throw new ArgumentException("expected_revision must be at least 1.");
+            }
+            var definition = ToDefinition(
+                request.DisplayName,
+                current.Adapter,
+                request.DownloaderId,
+                request.FileStrategy,
+                request.AllowedTorrentHosts,
+                request.RssFilterEnabled,
+                request.RssPriorityEnabled,
+                request.Enabled,
+                options);
+            var saved = await profiles.UpdateAsync(
+                id, definition, request.ExpectedRevision, DateTimeOffset.UtcNow, cancellationToken)
+                .ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(saved));
+        }
+        catch (SourceProfileRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "source_profile_revision_conflict", "Source profile changed; reload before saving."));
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("source_profile_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteSourceProfile(
+        string sourceProfileId,
+        [FromQuery(Name = "expected_revision")] long expectedRevision,
+        SourceProfileStore profiles,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(sourceProfileId, "source profile id");
+            if (expectedRevision < 1)
+            {
+                throw new ArgumentException("expected_revision must be at least 1.");
+            }
+            await profiles.DeleteAsync(id, expectedRevision, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new SourceProfileDeleteResponse(id, true));
+        }
+        catch (SourceProfileRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "source_profile_revision_conflict", "Source profile changed; reload before deleting."));
+        }
+        catch (SourceProfileConflictException exception)
+        {
+            return TypedResults.Conflict(Error("source_profile_in_use", exception.Message));
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("source_profile_invalid", exception.Message));
+        }
     }
 
     private static async Task<IResult> GetRssRules(
@@ -661,6 +811,97 @@ public static class ApiEndpoints
             rule.Revision,
             rule.CreatedAtUtc,
             rule.UpdatedAtUtc);
+
+    private static SourceProfileResponse ToResponse(SourceProfileAdminRecord profile) =>
+        new(
+            profile.Id,
+            profile.DisplayName,
+            profile.Adapter,
+            profile.DownloaderId,
+            profile.FileStrategy,
+            profile.AllowedTorrentHosts,
+            profile.RssFilterEnabled,
+            profile.RssPriorityEnabled,
+            profile.Enabled,
+            profile.Revision,
+            profile.IngestTaskCount,
+            profile.RssBatchCount,
+            profile.Id == "mikan",
+            profile.FileStrategy == "move"
+                ? "move transfers completed files and does not preserve seeding."
+                : null,
+            profile.CreatedAtUtc,
+            profile.UpdatedAtUtc);
+
+    private static SourceProfileDefinition ToDefinition(
+        string? displayName,
+        string? adapter,
+        string? downloaderId,
+        string? fileStrategy,
+        IReadOnlyList<string?>? allowedTorrentHosts,
+        bool rssFilterEnabled,
+        bool rssPriorityEnabled,
+        bool enabled,
+        AnimeGoOptions options)
+    {
+        var name = displayName?.Trim() ?? string.Empty;
+        if (name.Length is < 1 or > 128)
+        {
+            throw new ArgumentException("display_name must contain 1 to 128 characters.");
+        }
+        var normalizedAdapter = adapter?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (normalizedAdapter is not ("mikan" or "u2" or "ttg"))
+        {
+            throw new ArgumentException("adapter must be mikan, u2 or ttg.");
+        }
+        var normalizedDownloader = RequireCanonicalStableId(downloaderId, "downloader_id");
+        if (!options.Downloaders.TryGetValue(normalizedDownloader, out var downloader)
+            || !downloader.Enabled
+            || downloader.Type != DownloaderTypes.Qbittorrent)
+        {
+            throw new ArgumentException(
+                "downloader_id must reference an enabled configured qBittorrent instance.");
+        }
+        var normalizedStrategy = fileStrategy?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (normalizedStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
+        {
+            throw new ArgumentException("file_strategy must be link, link_delete, move or wait_move.");
+        }
+        if (allowedTorrentHosts is null || allowedTorrentHosts.Count is < 1 or > 32)
+        {
+            throw new ArgumentException("allowed_torrent_hosts must contain 1 to 32 host patterns.");
+        }
+        var hosts = allowedTorrentHosts
+            .Select(host => host?.Trim().ToLowerInvariant() ?? string.Empty)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (hosts.Any(host => !AnimeGoOptionsValidator.IsValidTorrentHostPattern(host)))
+        {
+            throw new ArgumentException(
+                "allowed_torrent_hosts contains an invalid DNS host or wildcard pattern.");
+        }
+        return new SourceProfileDefinition(
+            name,
+            normalizedAdapter,
+            normalizedDownloader,
+            normalizedStrategy,
+            hosts,
+            rssFilterEnabled,
+            rssPriorityEnabled,
+            enabled);
+    }
+
+    private static string RequireCanonicalStableId(string? value, string name)
+    {
+        var candidate = value ?? string.Empty;
+        if (!AnimeGoOptionsValidator.IsStableId(candidate)
+            || !candidate.Equals(candidate.Trim().ToLowerInvariant(), StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"{name} must already be lowercase and contain only letters, digits, '.', '_' or '-'.");
+        }
+        return candidate;
+    }
 
     private static ApiErrorResponse Error(string code, string message) => new(code, message);
 

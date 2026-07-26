@@ -151,8 +151,8 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [>] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作和失败隔离同步已实现；指数退避/熔断待实现。
-- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、可配置 U2→`pt` 路由、revision/文件策略/规则开关快照已落库；U2/TTG 默认文件策略仍待确认，CRUD、category/tag/做种策略待实现。
-- [ ] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；Web改动只进入新任务快照，保存时明确提示该模式不做种。
+- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、乐观并发和任务/RSS引用保护 API 已完成；历史任务保留原 revision/下载器快照。category/tag/做种策略、路由预览和 WebUI 待实现。
+- [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add、file priority、stop/start/delete、状态映射、严格 hash/index/priority 校验与失败响应。
 - [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、已有/新增任务显式再暂停、qB确认、download job事务与确认后staging清理。
@@ -191,7 +191,7 @@
 - [ ] 移植 10 个 HTTP API。
 - [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，二者均完成安全 staging 与后台 qB dispatch；`/api/rss` 待接入。
 - [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
-- [ ] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API。
+- [>] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile 的 list/get/create/update/delete、revision 冲突、默认 Mikan 保护、不可变任务/RSS 引用保护及新来源 RSS 默认规则初始化已完成；下载器实例持久化 CRUD、连接测试、路由预览和跨实体引用计数待实现。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
 - [ ] 移植 WebSocket 日志 pause/resume。
 - [>] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖；Kestrel 契约已验证配置上传立即影响 RSS、快速下载仍跳过过滤。原油猴脚本浏览器 E2E 待验收。

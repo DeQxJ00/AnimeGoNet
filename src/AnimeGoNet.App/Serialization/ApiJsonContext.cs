@@ -33,6 +33,11 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(RssRuleSetResponse))]
 [JsonSerializable(typeof(RssRulePreviewRequest))]
 [JsonSerializable(typeof(RssRulePreviewResponse))]
+[JsonSerializable(typeof(SourceProfileCreateRequest))]
+[JsonSerializable(typeof(SourceProfileUpdateRequest))]
+[JsonSerializable(typeof(SourceProfileResponse))]
+[JsonSerializable(typeof(SourceProfileListResponse))]
+[JsonSerializable(typeof(SourceProfileDeleteResponse))]
 [JsonSerializable(typeof(QbittorrentTorrentInfo[]))]
 [JsonSerializable(typeof(QbittorrentTorrentFile[]))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;

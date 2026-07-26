@@ -30,7 +30,7 @@
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系 v0 AOT DTO、User-Agent、身份/日期校验、安全失败分类、前传稳定遍历与自动编排 fake tests 已通过；Episode 与缓存待实现 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy 与自动 Series/Season/Episode worker tests 已通过；cache/Bangumi Episode 确定性匹配待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
-| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、路由、逐项结果、legacy contract与安全Torrent staging已验证；worker自动调度待实现 |
+| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；真实双实例/container E2E待实现 |
 
 ## 解析、规则与元数据编排
 
@@ -41,7 +41,7 @@
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit，以及安全页面抓取/批内缓存/真实 RSS 前置执行已验证；WebUI 管理与原油猴浏览器 E2E 待实现 |
-| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14 审计及 winner→统一 staging 原子事务已验证；legacy filter 与 `/api/rss` 待实现 |
+| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss` 及 winner→统一 staging 已验证；过滤 WebUI历史/回滚待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |
@@ -87,7 +87,7 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、只读 downloads 与脱敏 metadata task 投影已实现；CRUD/delete/OpenAPI 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、只读 downloads、脱敏 metadata task、SourceProfile 版本化 CRUD/引用保护以及四类删除 API 已实现；downloader/anime CRUD、路由预览与 OpenAPI 待实现 |
 | `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载状态卡片和元数据阶段/失败/文件归类/显式重试面板使用安全 DOM API，完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台

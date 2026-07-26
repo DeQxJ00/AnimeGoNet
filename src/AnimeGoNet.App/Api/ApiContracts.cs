@@ -266,3 +266,49 @@ public sealed record RssRulePreviewResponse(
     [property: JsonPropertyName("rule_revision")] long RuleRevision,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("decisions")] IReadOnlyList<RssRuleDecisionResponse> Decisions);
+
+public sealed record SourceProfileCreateRequest(
+    [property: JsonPropertyName("id")] string? Id,
+    [property: JsonPropertyName("display_name")] string? DisplayName,
+    [property: JsonPropertyName("adapter")] string? Adapter,
+    [property: JsonPropertyName("downloader_id")] string? DownloaderId,
+    [property: JsonPropertyName("file_strategy")] string? FileStrategy,
+    [property: JsonPropertyName("allowed_torrent_hosts")] IReadOnlyList<string?>? AllowedTorrentHosts,
+    [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
+    [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("enabled")] bool Enabled);
+
+public sealed record SourceProfileUpdateRequest(
+    [property: JsonPropertyName("display_name")] string? DisplayName,
+    [property: JsonPropertyName("downloader_id")] string? DownloaderId,
+    [property: JsonPropertyName("file_strategy")] string? FileStrategy,
+    [property: JsonPropertyName("allowed_torrent_hosts")] IReadOnlyList<string?>? AllowedTorrentHosts,
+    [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
+    [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+
+public sealed record SourceProfileResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("adapter")] string Adapter,
+    [property: JsonPropertyName("downloader_id")] string DownloaderId,
+    [property: JsonPropertyName("file_strategy")] string FileStrategy,
+    [property: JsonPropertyName("allowed_torrent_hosts")] IReadOnlyList<string> AllowedTorrentHosts,
+    [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
+    [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("ingest_task_count")] long IngestTaskCount,
+    [property: JsonPropertyName("rss_batch_count")] long RssBatchCount,
+    [property: JsonPropertyName("is_default")] bool IsDefault,
+    [property: JsonPropertyName("file_strategy_warning")] string? FileStrategyWarning,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record SourceProfileListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<SourceProfileResponse> Items);
+
+public sealed record SourceProfileDeleteResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("deleted")] bool Deleted);

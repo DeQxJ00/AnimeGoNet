@@ -149,6 +149,19 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 
 ## 6. Web UI
 
+### 当前 SourceProfile 管理 API
+
+首版服务端已经提供下列 NativeAOT 安全的 JSON 接口：
+
+- `GET /api/v1/sources`、`GET /api/v1/sources/{id}`；
+- `POST /api/v1/sources`；
+- `PUT /api/v1/sources/{id}`，请求必须带 `expected_revision`；
+- `DELETE /api/v1/sources/{id}?expected_revision=...`。
+
+创建 ID 必须已经是稳定小写 ID，adapter 只接受编译期注册的 `mikan`、`u2`、`ttg`，绑定只能指向当前部署配置中已启用的 qBittorrent 实例。Host 白名单统一转小写并校验 DNS host/`*.` 通配形式。adapter 创建后不可修改；修改下载器、文件策略、白名单或规则开关会增加 revision，只影响之后创建的任务。API 返回不可变任务和 RSS batch 引用计数；存在引用时拒绝删除，默认 `mikan` profile 始终拒绝删除。新 profile 自动初始化独立的有序 RSS 规则集，Mikan adapter 还会初始化内置 legacy filter 空配置。
+
+当前下载器连接仍来自部署级 `AnimeGoOptions.Downloaders`，因此本阶段 SourceProfile API 不保存或返回 qB 密码，也不能创建新的连接实例。下载器持久化 CRUD、凭据只写、连接测试与路由预览属于下一独立模块。
+
 ### 下载器页面
 
 - 多实例 CRUD、连接测试、客户端版本、延迟、当前任务数和最近错误。

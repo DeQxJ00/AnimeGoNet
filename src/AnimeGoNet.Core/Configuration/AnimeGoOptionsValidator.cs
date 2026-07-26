@@ -21,7 +21,7 @@ public static partial class AnimeGoOptionsValidator
         foreach (var (rawId, downloader) in options.Downloaders)
         {
             var id = rawId.ToLowerInvariant();
-            if (!rawId.Equals(id, StringComparison.Ordinal) || !StableId().IsMatch(id))
+            if (!rawId.Equals(id, StringComparison.Ordinal) || !IsStableId(id))
             {
                 errors.Add($"Downloader id '{rawId}' must already be lowercase and contain only letters, digits, '.', '_' or '-'.");
             }
@@ -44,7 +44,7 @@ public static partial class AnimeGoOptionsValidator
 
         foreach (var profile in options.InitialSourceProfiles)
         {
-            if (!profile.Id.Equals(profile.Id.ToLowerInvariant(), StringComparison.Ordinal) || !StableId().IsMatch(profile.Id))
+            if (!profile.Id.Equals(profile.Id.ToLowerInvariant(), StringComparison.Ordinal) || !IsStableId(profile.Id))
             {
                 errors.Add($"Source profile id '{profile.Id}' is not a stable lowercase id.");
             }
@@ -116,7 +116,10 @@ public static partial class AnimeGoOptionsValidator
         return errors;
     }
 
-    private static bool IsValidTorrentHostPattern(string pattern)
+    public static bool IsStableId(string value) =>
+        !string.IsNullOrWhiteSpace(value) && StableId().IsMatch(value);
+
+    public static bool IsValidTorrentHostPattern(string pattern)
     {
         if (string.IsNullOrWhiteSpace(pattern) || !string.Equals(pattern, pattern.Trim(), StringComparison.Ordinal))
         {

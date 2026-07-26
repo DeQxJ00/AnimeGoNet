@@ -2,6 +2,7 @@ using System.Globalization;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Sources;
 
@@ -79,6 +80,201 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetInt64(5) != 0,
             reader.GetInt64(6) != 0,
             reader.GetInt64(7));
+    }
+
+    public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = AdminSelect + " ORDER BY p.id;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var records = new List<SourceProfileAdminRecord>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadAdmin(reader));
+        return records;
+    }
+
+    public async Task<SourceProfileAdminRecord?> GetAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeId(id);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = AdminSelect + " WHERE p.id = $id;";
+        command.Parameters.AddWithValue("$id", normalized);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? ReadAdmin(reader) : null;
+    }
+
+    public async Task<SourceProfileAdminRecord> CreateAsync(
+        string id,
+        SourceProfileDefinition definition,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeId(id);
+        ArgumentNullException.ThrowIfNull(definition);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO source_profiles (
+                id, display_name, adapter, downloader_id, file_strategy,
+                allowed_torrent_hosts_json, rss_filter_enabled, rss_priority_enabled,
+                revision, enabled, created_at_utc, updated_at_utc)
+            VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts, $filter, $priority,
+                    1, $enabled, $now, $now);
+            """;
+        BindDefinition(command, normalized, definition, utcNow);
+        try
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new SourceProfileDuplicateException();
+        }
+        return (await GetAsync(normalized, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    public async Task<SourceProfileAdminRecord> UpdateAsync(
+        string id,
+        SourceProfileDefinition definition,
+        long expectedRevision,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeId(id);
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentOutOfRangeException.ThrowIfLessThan(expectedRevision, 1);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET display_name = $name, downloader_id = $downloader, file_strategy = $strategy,
+                allowed_torrent_hosts_json = $hosts, rss_filter_enabled = $filter,
+                rss_priority_enabled = $priority, enabled = $enabled,
+                revision = revision + 1, updated_at_utc = $now
+            WHERE id = $id AND adapter = $adapter AND revision = $expected;
+            """;
+        BindDefinition(command, normalized, definition, utcNow);
+        command.Parameters.AddWithValue("$expected", expectedRevision);
+        if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            if (await ExistsAsync(connection, normalized, cancellationToken).ConfigureAwait(false))
+                throw new SourceProfileRevisionException();
+            throw new KeyNotFoundException("Source profile was not found.");
+        }
+        return (await GetAsync(normalized, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    public async Task DeleteAsync(
+        string id,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeId(id);
+        ArgumentOutOfRangeException.ThrowIfLessThan(expectedRevision, 1);
+        if (normalized == "mikan")
+            throw new SourceProfileConflictException("The default Mikan source profile cannot be deleted.");
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        long revision;
+        long references;
+        await using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = """
+                SELECT p.revision,
+                       (SELECT COUNT(*) FROM ingest_tasks i WHERE i.source_profile_id = p.id)
+                     + (SELECT COUNT(*) FROM mikan_rss_batches b WHERE b.source_profile_id = p.id)
+                FROM source_profiles p WHERE p.id = $id;
+                """;
+            read.Parameters.AddWithValue("$id", normalized);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                throw new KeyNotFoundException("Source profile was not found.");
+            revision = reader.GetInt64(0);
+            references = reader.GetInt64(1);
+        }
+        if (revision != expectedRevision) throw new SourceProfileRevisionException();
+        if (references > 0)
+            throw new SourceProfileConflictException($"Source profile has {references} immutable task or RSS batch reference(s).");
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.Transaction = transaction;
+            delete.CommandText = "DELETE FROM source_profiles WHERE id = $id AND revision = $revision;";
+            delete.Parameters.AddWithValue("$id", normalized);
+            delete.Parameters.AddWithValue("$revision", expectedRevision);
+            if (await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                throw new SourceProfileRevisionException();
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private const string AdminSelect = """
+        SELECT p.id, p.display_name, p.adapter, p.downloader_id, p.file_strategy,
+               p.allowed_torrent_hosts_json, p.rss_filter_enabled, p.rss_priority_enabled,
+               p.enabled, p.revision,
+               (SELECT COUNT(*) FROM ingest_tasks i WHERE i.source_profile_id = p.id),
+               (SELECT COUNT(*) FROM mikan_rss_batches b WHERE b.source_profile_id = p.id),
+               p.created_at_utc, p.updated_at_utc
+        FROM source_profiles p
+        """;
+
+    private static SourceProfileAdminRecord ReadAdmin(SqliteDataReader reader) => new(
+        reader.GetString(0),
+        reader.GetString(1),
+        reader.GetString(2),
+        reader.GetString(3),
+        reader.GetString(4),
+        System.Text.Json.JsonSerializer.Deserialize(reader.GetString(5), DataJsonContext.Default.StringArray) ?? [],
+        reader.GetBoolean(6),
+        reader.GetBoolean(7),
+        reader.GetBoolean(8),
+        reader.GetInt64(9),
+        reader.GetInt64(10),
+        reader.GetInt64(11),
+        DateTimeOffset.Parse(reader.GetString(12), CultureInfo.InvariantCulture),
+        DateTimeOffset.Parse(reader.GetString(13), CultureInfo.InvariantCulture));
+
+    private static void BindDefinition(
+        SqliteCommand command,
+        string id,
+        SourceProfileDefinition definition,
+        DateTimeOffset utcNow)
+    {
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$name", definition.DisplayName);
+        command.Parameters.AddWithValue("$adapter", definition.Adapter);
+        command.Parameters.AddWithValue("$downloader", definition.DownloaderId);
+        command.Parameters.AddWithValue("$strategy", definition.FileStrategy);
+        command.Parameters.AddWithValue(
+            "$hosts",
+            System.Text.Json.JsonSerializer.Serialize(
+                definition.AllowedTorrentHosts.ToArray(), DataJsonContext.Default.StringArray));
+        command.Parameters.AddWithValue("$filter", definition.RssFilterEnabled);
+        command.Parameters.AddWithValue("$priority", definition.RssPriorityEnabled);
+        command.Parameters.AddWithValue("$enabled", definition.Enabled);
+        command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+    }
+
+    private static async Task<bool> ExistsAsync(
+        SqliteConnection connection,
+        string id,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM source_profiles WHERE id = $id);";
+        command.Parameters.AddWithValue("$id", id);
+        return (long)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! == 1;
+    }
+
+    private static string NormalizeId(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        return value.Trim().ToLowerInvariant();
     }
 
     private static string ToDatabaseValue(FileStrategy strategy) => strategy switch
