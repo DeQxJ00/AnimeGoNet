@@ -95,6 +95,66 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
+    public void RejectsMalformedAiTransportAndToolConfiguration()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Ai = defaults.Metadata.Ai with
+                {
+                    UseEpisodeMatch = true,
+                    RetryCount = 11,
+                    TmdbMcpUrl = new Uri("ftp://tmdb.invalid/mcp"),
+                    AniDbMappingUrlTemplate = "https://mapping.invalid/no-placeholder.json",
+                },
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("retry count", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TMDB MCP URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("'{anidbid}'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EnabledAiWithoutEndpointDoesNotPreventApplicationStartup()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Ai = defaults.Metadata.Ai with { UseEpisodeMatch = true },
+            },
+        };
+
+        Assert.Empty(AnimeGoOptionsValidator.Validate(options));
+    }
+
+    [Fact]
+    public void AcceptsConfiguredOpenAiCompatibleProviderWithoutRequiringApiKey()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Ai = defaults.Metadata.Ai with
+                {
+                    BaseUrl = new Uri("http://local-model.invalid/api/"),
+                    Model = "local-model",
+                    UseSeasonMatch = true,
+                },
+            },
+        };
+
+        Assert.Empty(AnimeGoOptionsValidator.Validate(options));
+    }
+
+    [Fact]
     public void RejectsInvalidSourceDownloadPolicy()
     {
         var defaults = AnimeGoDefaults.CreateDocker();

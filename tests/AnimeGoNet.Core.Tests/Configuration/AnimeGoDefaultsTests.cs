@@ -28,9 +28,17 @@ public sealed class AnimeGoDefaultsTests
         Assert.False(options.Metadata.SeasonFailure.UseFirstSeason);
         Assert.False(options.Metadata.Ai.UseSeasonMatch);
         Assert.False(options.Metadata.Ai.UseEpisodeMatch);
+        Assert.Equal("openai_compatible", options.Metadata.Ai.Provider);
+        Assert.Null(options.Metadata.Ai.BaseUrl);
+        Assert.Null(options.Metadata.Ai.ApiKey);
+        Assert.Null(options.Metadata.Ai.Model);
         Assert.False(options.Metadata.TmdbFailureUseBangumi);
         Assert.False(options.Metadata.MikanTrustedOffsetCacheEnabled);
         Assert.Equal(TimeSpan.FromSeconds(600), options.Metadata.Ai.HttpTimeout);
+        Assert.Equal(2, options.Metadata.Ai.RetryCount);
+        Assert.True(options.Metadata.Ai.UseBangumiPubDateFirst);
+        Assert.Equal(new Uri("http://tmdb.mcp.local/mcp"), options.Metadata.Ai.TmdbMcpUrl);
+        Assert.Equal(new Uri("http://bgm.mcp.local/mcp"), options.Metadata.Ai.BangumiMcpUrl);
         Assert.Equal(new Uri("https://api.themoviedb.org/"), options.Metadata.Tmdb.BaseUrl);
         Assert.Equal("zh-CN", options.Metadata.Tmdb.Language);
         Assert.Null(options.Metadata.Tmdb.ApiKey);

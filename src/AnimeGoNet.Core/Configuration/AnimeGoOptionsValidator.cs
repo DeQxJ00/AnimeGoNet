@@ -93,6 +93,51 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AI HTTP timeout must be positive.");
         }
 
+        var ai = options.Metadata.Ai;
+        if (!string.Equals(ai.Provider, "openai_compatible", StringComparison.Ordinal))
+        {
+            errors.Add("AI provider must be 'openai_compatible'.");
+        }
+
+        if (ai.BaseUrl is not null && !IsHttpEndpoint(ai.BaseUrl))
+        {
+            errors.Add("AI base URL must be an absolute HTTP(S) URL without credentials.");
+        }
+
+        if (ai.Model is not null
+            && (string.IsNullOrWhiteSpace(ai.Model)
+                || !string.Equals(ai.Model, ai.Model.Trim(), StringComparison.Ordinal)
+                || ai.Model.Length > 256))
+        {
+            errors.Add("AI model must contain 1 to 256 trimmed characters when configured.");
+        }
+
+        if (ai.RetryCount is < 0 or > 10)
+        {
+            errors.Add("AI retry count must be between 0 and 10.");
+        }
+
+        if (!IsHttpEndpoint(ai.TmdbMcpUrl))
+        {
+            errors.Add("TMDB MCP URL must be an absolute HTTP(S) URL without credentials.");
+        }
+
+        if (!IsHttpEndpoint(ai.BangumiMcpUrl))
+        {
+            errors.Add("Bangumi MCP URL must be an absolute HTTP(S) URL without credentials.");
+        }
+
+        if (string.IsNullOrWhiteSpace(ai.AniDbMappingUrlTemplate)
+            || !ai.AniDbMappingUrlTemplate.Contains("{anidbid}", StringComparison.Ordinal)
+            || !Uri.TryCreate(
+                ai.AniDbMappingUrlTemplate.Replace("{anidbid}", "1", StringComparison.Ordinal),
+                UriKind.Absolute,
+                out var aniDbMappingUri)
+            || !IsHttpEndpoint(aniDbMappingUri))
+        {
+            errors.Add("AniDB mapping URL template must be an absolute HTTP(S) URL containing '{anidbid}'.");
+        }
+
         if (!options.Metadata.Tmdb.BaseUrl.IsAbsoluteUri
             || options.Metadata.Tmdb.BaseUrl.Scheme is not ("http" or "https")
             || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.UserInfo)
@@ -160,6 +205,12 @@ public static partial class AnimeGoOptionsValidator
             errors.Add($"{name} must be an absolute path.");
         }
     }
+
+    private static bool IsHttpEndpoint(Uri uri) =>
+        uri.IsAbsoluteUri
+        && uri.Scheme is "http" or "https"
+        && string.IsNullOrEmpty(uri.UserInfo)
+        && string.IsNullOrEmpty(uri.Fragment);
 
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]*$")]
     private static partial Regex StableId();

@@ -87,11 +87,30 @@ public sealed record SeasonFailureOptions
 
 public sealed record AiMatchingOptions
 {
+    public string Provider { get; init; } = "openai_compatible";
+
+    public Uri? BaseUrl { get; init; }
+
+    public string? ApiKey { get; init; }
+
+    public string? Model { get; init; }
+
     public bool UseSeasonMatch { get; init; }
 
     public bool UseEpisodeMatch { get; init; }
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(600);
+
+    public int RetryCount { get; init; } = 2;
+
+    public bool UseBangumiPubDateFirst { get; init; } = true;
+
+    public Uri TmdbMcpUrl { get; init; } = new("http://tmdb.mcp.local/mcp");
+
+    public Uri BangumiMcpUrl { get; init; } = new("http://bgm.mcp.local/mcp");
+
+    public string AniDbMappingUrlTemplate { get; init; } =
+        "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
 }
 
 public sealed record SourceProfileSeed

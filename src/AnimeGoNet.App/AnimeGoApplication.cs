@@ -234,6 +234,43 @@ public static class AnimeGoApplication
                     ApiKey = configuration["tmdb_api_key"],
                     ReadAccessToken = configuration["tmdb_read_access_token"],
                 },
+                Ai = defaults.Metadata.Ai with
+                {
+                    Provider = NormalizeOptional(configuration["ai_provider"])
+                        ?? defaults.Metadata.Ai.Provider,
+                    BaseUrl = ParseOptionalAbsoluteUri(configuration["ai_base_url"], "ai_base_url"),
+                    ApiKey = configuration["ai_api_key"],
+                    Model = NormalizeOptional(configuration["ai_model"]),
+                    UseSeasonMatch = ParseOptionalBool(
+                        configuration["ai_use_season_match"],
+                        defaults.Metadata.Ai.UseSeasonMatch,
+                        "ai_use_season_match"),
+                    UseEpisodeMatch = ParseOptionalBool(
+                        configuration["ai_use_episode_match"],
+                        defaults.Metadata.Ai.UseEpisodeMatch,
+                        "ai_use_episode_match"),
+                    HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
+                        configuration["ai_timeout_second"],
+                        defaults.Metadata.Ai.HttpTimeout.TotalSeconds,
+                        "ai_timeout_second")),
+                    RetryCount = ParseOptionalInt(
+                        configuration["ai_retry_count"],
+                        defaults.Metadata.Ai.RetryCount,
+                        "ai_retry_count"),
+                    UseBangumiPubDateFirst = ParseOptionalBool(
+                        configuration["ai_use_bangumi_pubdate_first"],
+                        defaults.Metadata.Ai.UseBangumiPubDateFirst,
+                        "ai_use_bangumi_pubdate_first"),
+                    TmdbMcpUrl = ParseOptionalAbsoluteUri(
+                        configuration["ai_tmdb_mcp_url"],
+                        "ai_tmdb_mcp_url") ?? defaults.Metadata.Ai.TmdbMcpUrl,
+                    BangumiMcpUrl = ParseOptionalAbsoluteUri(
+                        configuration["ai_bangumi_mcp_url"],
+                        "ai_bangumi_mcp_url") ?? defaults.Metadata.Ai.BangumiMcpUrl,
+                    AniDbMappingUrlTemplate = NormalizeOptional(
+                        configuration["ai_anidb_mapping_url_template"])
+                        ?? defaults.Metadata.Ai.AniDbMappingUrlTemplate,
+                },
             },
             Downloaders = defaults.Downloaders.ToDictionary(
                 pair => pair.Key,
@@ -241,6 +278,82 @@ public static class AnimeGoApplication
                 StringComparer.OrdinalIgnoreCase),
         };
     }
+
+    private static Uri? ParseOptionalAbsoluteUri(string? value, string name)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidOperationException($"{name} must be an absolute URL.");
+        }
+
+        return uri;
+    }
+
+    private static int ParseOptionalInt(string? value, int defaultValue, string name)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is null)
+        {
+            return defaultValue;
+        }
+
+        if (!int.TryParse(
+            normalized,
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var parsed))
+        {
+            throw new InvalidOperationException($"{name} must be an integer.");
+        }
+
+        return parsed;
+    }
+
+    private static double ParseOptionalDouble(string? value, double defaultValue, string name)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is null)
+        {
+            return defaultValue;
+        }
+
+        if (!double.TryParse(
+            normalized,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var parsed)
+            || !double.IsFinite(parsed))
+        {
+            throw new InvalidOperationException($"{name} must be a finite number.");
+        }
+
+        return parsed;
+    }
+
+    private static bool ParseOptionalBool(string? value, bool defaultValue, string name)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is null)
+        {
+            return defaultValue;
+        }
+
+        if (!bool.TryParse(normalized, out var parsed))
+        {
+            throw new InvalidOperationException($"{name} must be true or false.");
+        }
+
+        return parsed;
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static AnimeGoOptions ApplyDownloaderOverrides(
         AnimeGoOptions options,

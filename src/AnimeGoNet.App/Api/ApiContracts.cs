@@ -134,9 +134,17 @@ public sealed record SeasonFailureConfigurationResponse(
     [property: JsonPropertyName("use_first_season")] bool UseFirstSeason);
 
 public sealed record AiConfigurationResponse(
+    [property: JsonPropertyName("provider")] string Provider,
+    [property: JsonPropertyName("base_url")] string? BaseUrl,
+    [property: JsonPropertyName("model")] string? Model,
+    [property: JsonPropertyName("api_key_configured")] bool ApiKeyConfigured,
     [property: JsonPropertyName("use_season_match")] bool UseSeasonMatch,
     [property: JsonPropertyName("use_episode_match")] bool UseEpisodeMatch,
-    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds);
+    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
+    [property: JsonPropertyName("retry_count")] int RetryCount,
+    [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
+    [property: JsonPropertyName("tmdb_mcp_url")] string TmdbMcpUrl,
+    [property: JsonPropertyName("bangumi_mcp_url")] string BangumiMcpUrl);
 
 public sealed record TorrentFetchConfigurationResponse(
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,

@@ -331,9 +331,17 @@ public static class ApiEndpoints
                     season.UseTitleSeason,
                     season.UseFirstSeason),
                 new AiConfigurationResponse(
+                    ai.Provider,
+                    ai.BaseUrl?.AbsoluteUri,
+                    ai.Model,
+                    !string.IsNullOrWhiteSpace(ai.ApiKey),
                     ai.UseSeasonMatch,
                     ai.UseEpisodeMatch,
-                    ai.HttpTimeout.TotalSeconds),
+                    ai.HttpTimeout.TotalSeconds,
+                    ai.RetryCount,
+                    ai.UseBangumiPubDateFirst,
+                    ai.TmdbMcpUrl.AbsoluteUri,
+                    ai.BangumiMcpUrl.AbsoluteUri),
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.MikanTrustedOffsetCacheEnabled),
             new TorrentFetchConfigurationResponse(

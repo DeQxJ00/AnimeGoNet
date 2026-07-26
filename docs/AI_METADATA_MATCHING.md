@@ -32,6 +32,15 @@ ai:
 
 首版直接用 `HttpClient` 调用 OpenAI-compatible API，不依赖厂商 SDK。配置缺失时记录明确错误并继续较低优先级；密钥允许环境变量覆盖，Web UI 只显示是否已配置。
 
+当前主程序部署层使用扁平键
+`ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model`、
+`ai_use_season_match`、`ai_use_episode_match`、`ai_timeout_second`、
+`ai_retry_count`、`ai_use_bangumi_pubdate_first`、
+`ai_tmdb_mcp_url`、`ai_bangumi_mcp_url` 和
+`ai_anidb_mapping_url_template`；环境变量由 ASP.NET Core 配置系统按同名键覆盖。
+硬性默认超时为 600 秒。AI API key 只保存在服务端配置中，配置 API/WebUI
+仅返回 `api_key_configured`。
+
 ## 3. 最小请求契约
 
 ```json

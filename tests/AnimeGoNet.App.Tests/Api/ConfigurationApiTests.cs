@@ -33,6 +33,9 @@ public sealed class ConfigurationApiTests
                     },
                     Ai = options.Metadata.Ai with
                     {
+                        BaseUrl = new Uri("https://ai.test.invalid/compatible/"),
+                        ApiKey = "ai-api-secret",
+                        Model = "test-model",
                         UseSeasonMatch = true,
                         UseEpisodeMatch = false,
                     },
@@ -74,11 +77,26 @@ public sealed class ConfigurationApiTests
         Assert.False(metadata.GetProperty("ai").GetProperty("use_episode_match").GetBoolean());
         Assert.Equal(600, metadata.GetProperty("ai").GetProperty("http_timeout_seconds").GetDouble());
         Assert.Equal(
+            "openai_compatible",
+            metadata.GetProperty("ai").GetProperty("provider").GetString());
+        Assert.Equal(
+            "https://ai.test.invalid/compatible/",
+            metadata.GetProperty("ai").GetProperty("base_url").GetString());
+        Assert.Equal("test-model", metadata.GetProperty("ai").GetProperty("model").GetString());
+        Assert.True(metadata.GetProperty("ai").GetProperty("api_key_configured").GetBoolean());
+        Assert.Equal(2, metadata.GetProperty("ai").GetProperty("retry_count").GetInt32());
+        Assert.True(metadata.GetProperty("ai")
+            .GetProperty("use_bangumi_pubdate_first").GetBoolean());
+        Assert.Equal(
+            "http://tmdb.mcp.local/mcp",
+            metadata.GetProperty("ai").GetProperty("tmdb_mcp_url").GetString());
+        Assert.Equal(
             123456,
             json.RootElement.GetProperty("torrent_fetch").GetProperty("max_response_bytes").GetInt64());
         Assert.DoesNotContain("local-access-secret", text, StringComparison.Ordinal);
         Assert.DoesNotContain("tmdb-api-secret", text, StringComparison.Ordinal);
         Assert.DoesNotContain("tmdb-bearer-secret", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ai-api-secret", text, StringComparison.Ordinal);
     }
 
     [Fact]

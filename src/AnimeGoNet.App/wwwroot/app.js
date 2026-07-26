@@ -146,6 +146,17 @@ async function loadConfiguration() {
                     + `EP ${enabledLabel(config.metadata.ai.use_episode_match)} · `
                     + `${config.metadata.ai.http_timeout_seconds} 秒`,
             ],
+            [
+                "AI Provider",
+                `${config.metadata.ai.provider} · `
+                    + `${config.metadata.ai.model || "未配置模型"} · `
+                    + `${config.metadata.ai.api_key_configured ? "密钥已配置（值已隐藏）" : "未配置密钥"}`,
+            ],
+            [
+                "AI 工具",
+                `TMDB MCP ${config.metadata.ai.tmdb_mcp_url} · `
+                    + `Bangumi MCP ${config.metadata.ai.bangumi_mcp_url}`,
+            ],
             ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
             [
                 "Torrent HTTP",
