@@ -40,7 +40,7 @@
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 待实现 | Python differential fixtures |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 待实现 | 原脚本 differential tests |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
-| `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential + schema v15 规则/快照 + legacy config API + Episode identity parser + schema v16 逐候选 filter audit/优选隔离已验证；安全页面抓取与真实 RSS 执行待实现 |
+| `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit，以及安全页面抓取/批内缓存/真实 RSS 前置执行已验证；WebUI 管理与原油猴浏览器 E2E 待实现 |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14 审计及 winner→统一 staging 原子事务已验证；legacy filter 与 `/api/rss` 待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
@@ -81,7 +81,7 @@
 |---|---|---:|---:|---|
 | `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 待实现 | clock/cancel/startup tests |
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
-| `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 进行中 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 URL 获取和 winner 原子 staging Kestrel tests 已通过；MikanTool filter 前置接入待实现 |
+| `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 已验证 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 feed/Episode 获取、Filiter0..4、批内 identity cache、失败隔离、新优选和 winner 原子 staging Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
 | `/api/config` | typed deployment config | 保留+扩展 | 待实现 | auth/status/JSON tests |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |

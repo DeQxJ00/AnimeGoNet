@@ -11,23 +11,34 @@ using AnimeGoNet.Data.Sources;
 namespace AnimeGoNet.App.Feeds;
 
 public sealed record MikanRssIngestItemResult(
-    string CandidateId,
+    [property: JsonPropertyName("candidate_id")] string CandidateId,
+    [property: JsonPropertyName("decision_kind"), JsonConverter(typeof(JsonStringEnumConverter<MikanRssDecisionKind>))]
     MikanRssDecisionKind DecisionKind,
-    string DecisionReason,
-    string Status,
-    string? IngestTaskId,
-    IReadOnlyList<string> Errors);
+    [property: JsonPropertyName("decision_reason")] string DecisionReason,
+    [property: JsonPropertyName("legacy_filter_state"), JsonConverter(typeof(JsonStringEnumConverter<MikanLegacyFilterState>))]
+    MikanLegacyFilterState LegacyFilterState,
+    [property: JsonPropertyName("legacy_filter_reason")] string LegacyFilterReason,
+    [property: JsonPropertyName("legacy_filter_scope")] string? LegacyFilterScope,
+    [property: JsonPropertyName("legacy_filter_key")] string? LegacyFilterKey,
+    [property: JsonPropertyName("identity_mikanid")] int? IdentityMikanId,
+    [property: JsonPropertyName("identity_groupid")] int? IdentityGroupId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("ingest_task_id")] string? IngestTaskId,
+    [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);
 
 public sealed record MikanRssIngestResult(
-    string BatchId,
+    [property: JsonPropertyName("batch_id")] string BatchId,
     [property: JsonPropertyName("mikanid")] int? MikanId,
-    long RuleRevision,
-    IReadOnlyList<MikanRssIngestItemResult> Items);
+    [property: JsonPropertyName("rule_revision")] long RuleRevision,
+    [property: JsonPropertyName("legacy_filter_revision")] long LegacyFilterRevision,
+    [property: JsonPropertyName("legacy_filter_enabled")] bool LegacyFilterEnabled,
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanRssIngestItemResult> Items);
 
 public sealed class MikanRssIngestProcessor(
     SourceProfileStore profiles,
     MikanRssRuleStore rules,
     MikanRssBatchStore batches,
+    MikanLegacyFilterProcessor legacyFilter,
     UnifiedIngestProcessor ingest)
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
@@ -48,7 +59,14 @@ public sealed class MikanRssIngestProcessor(
 
         var ruleSnapshot = await rules.GetAsync(profile.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new RssFeedException("rss_rules_missing", "RSS rules were not initialized.");
-        var plan = MikanRssBatchPlanner.Create(feed, ruleSnapshot.Rules, profile.RssPriorityEnabled);
+        var legacy = await legacyFilter.EvaluateAsync(feed, profile, cancellationToken).ConfigureAwait(false);
+        var plan = MikanRssBatchPlanner.Create(
+            feed,
+            ruleSnapshot.Rules,
+            profile.RssPriorityEnabled,
+            legacy.Audits,
+            legacy.Revision,
+            legacy.Enabled);
         var stored = await batches.SaveAsync(
             profile.Id, ruleSnapshot.Revision, profile.RssPriorityEnabled,
             plan, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
@@ -105,7 +123,13 @@ public sealed class MikanRssIngestProcessor(
                 item, outcome.Status, outcome.IngestId, outcome.Errors));
         }
 
-        return new MikanRssIngestResult(stored.Id, feed.MikanId, ruleSnapshot.Revision, results);
+        return new MikanRssIngestResult(
+            stored.Id,
+            feed.MikanId,
+            ruleSnapshot.Revision,
+            legacy.Revision,
+            legacy.Enabled,
+            results);
     }
 
     private static MikanRssIngestItemResult Result(
@@ -113,5 +137,17 @@ public sealed class MikanRssIngestProcessor(
         string status,
         string? ingestTaskId,
         IReadOnlyList<string> errors) =>
-        new(item.Candidate.Id, item.Decision.Kind, item.Decision.Reason, status, ingestTaskId, errors);
+        new(
+            item.Candidate.Id,
+            item.Decision.Kind,
+            item.Decision.Reason,
+            item.LegacyFilterAudit.State,
+            item.LegacyFilterAudit.Reason,
+            item.LegacyFilterAudit.MatchedScope,
+            item.LegacyFilterAudit.MatchedKey,
+            item.LegacyFilterAudit.IdentityMikanId,
+            item.LegacyFilterAudit.IdentityGroupId,
+            status,
+            ingestTaskId,
+            errors);
 }

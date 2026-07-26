@@ -131,21 +131,21 @@
 
 - [ ] 实现 `AnimeGo.Plugin.Abstractions` 和 source/feed/parser/filter/rename/schedule 六类强类型 C# 插件契约。
 - [ ] C# 移植 builtin feed/parser/filter/rename/schedule；默认运行不加载 Python。
-- [>] 实现内置 C# MikanTool 五级黑白名单规则：纯 C# 引擎已复现上游语义；schema v15 已规范化保存规则/快照，legacy `/api/plugin/config` 已映射到 SQLite，Mikan Episode `bangumiId/subgroupid` parser 已内置；schema v16 已为每个 RSS 候选保存 filter revision/开关/状态/原因/scope/key/页面身份，并将 legacy 拒绝与身份失败排除在优选竞争之外。安全页面抓取、真实 RSS 前置执行和 WebUI 待实现。
-- [ ] 为默认 Mikan SourceProfile 增加 `mikan_rss_filter_enabled` 总开关（默认 `true`）；关闭时 AnimeGoHelper `/api/rss` 记录 `SkippedByConfiguration` 后继续流水线，规则保留，进行中任务使用原快照。
+- [>] 实现内置 C# MikanTool 五级黑白名单规则：纯 C# 引擎、schema v15 规则/快照、legacy `/api/plugin/config`、Episode identity parser、schema v16 逐候选审计，以及 `/api/rss` 的安全页面抓取/批内缓存/Filiter0..4 前置执行均已串联；被拒绝或身份失败的候选不进入新优选与 staging。WebUI CRUD/预览/回滚待实现。
+- [>] 默认 Mikan SourceProfile 的 `mikan_rss_filter_enabled` 已默认 `true` 并真实控制 `/api/rss`；关闭时零页面请求、逐项记录 `SkippedByConfiguration`、继续优选/staging且规则不变。来源 CRUD/UI 改动与“已有任务保持原快照”的跨请求并发验收待实现。
 - [>] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（默认 profile 已启用，schema v13 规则版本、默认初始化与预览 API 已接入；禁用时预览逐项记录 `SkippedByConfiguration` 且不清空规则，真实批次编排待接入）。
 - [>] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 已支持增删/排序，细粒度 CRUD/WebUI 待实现。
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
 - [>] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；SQLite CRUD/审计待实现。
-- [>] RSS loser 产生 `SuppressedByHigherPriority` 决策且 winner 不隐式晋级；winner 原子统一 staging 已完成，`POST /api/rss` 已兼容上游 source/rss.url/is_select_ep/ep_links、HTTP 200 + code 200/300 和成功消息，并使用 allowlist、每跳重校验、DNS 公网校验与固定地址 transport。AnimeGoHelper 配置接口已完成，legacy MikanTool `Filiter0..4` RSS 前置过滤仍待接入。
+- [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
 - [ ] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载。
 - [ ] 实现外部 C# 插件进程的 manifest、JSON Lines 协议、超时、取消、健康检查和退出隔离。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
 - [ ] 实现 `AnimeGo.PluginTool`。
 - [ ] 移植 parser manager。
 - [ ] 移植 ordered filter manager。
-- [>] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、来源 EP、批次计划、审计/租约和 winner→统一 staging 已串联；legacy MikanTool filter 与 download worker 全链验收仍待实现。
+- [>] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约和 winner→统一 staging 已串联；download worker 到最终整理的真实 qB/container 全链验收仍待实现。
 - [ ] 通过上游所有插件/parser/filter fixture，以及外部 C# 插件协议故障注入测试。
 
 ## P7 — 首版 qBittorrent 下载客户端
@@ -194,7 +194,7 @@
 - [ ] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
 - [ ] 移植 WebSocket 日志 pause/resume。
-- [>] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 的请求/响应契约已覆盖；原脚本驱动的真实 RSS 过滤闭环待验收。
+- [>] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖；Kestrel 契约已验证配置上传立即影响 RSS、快速下载仍跳过过滤。原油猴脚本浏览器 E2E 待验收。
 - [x] 将旧插件名 `filter/mikan_tool.py` 及等价别名映射到 SQLite 过滤规则；Base64 JSON 可无损同构往返、并发 legacy 上传完整提交，不查找、不创建且不执行 Python 文件。
 - [ ] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停、关键词编辑、服务端样例预览、旧 JSON 导入导出、revision 冲突、快照回滚和过滤决策详情。
 - [>] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面已支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、expected-revision 保存和真实服务端批次 preview（名单结果、winner、实际执行组）；SourceProfile 独立开关写入、拖拽与历史回滚待实现。

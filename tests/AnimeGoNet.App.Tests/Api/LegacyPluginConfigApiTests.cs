@@ -157,4 +157,51 @@ public sealed class LegacyPluginConfigApiTests
         Assert.Equal(9, snapshot!.Revision);
         Assert.Single(snapshot.Config.Filiter0);
     }
+
+    [Fact]
+    public async Task LegacyDownloadManagerBypassesConfiguredMikanFilter()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string rejectAll = """
+            {
+              "Filiter0": {
+                "reject-all": {
+                  "is_enable_whitelist": true,
+                  "whitelist": ["never-match"],
+                  "is_enable_blacklist": false,
+                  "blacklist": []
+                }
+              },
+              "Filiter1": {}, "Filiter2": {}, "Filiter3": {}, "Filiter4": {}
+            }
+            """;
+        var upload = JsonSerializer.Serialize(new
+        {
+            name = "filter/mikan_tool.py",
+            data = Convert.ToBase64String(Encoding.UTF8.GetBytes(rejectAll)),
+        });
+        using var uploaded = await app.Client.PostAsync(
+            "/api/plugin/config",
+            new StringContent(upload, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+        const string request = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/Download/fast.torrent",
+                "info": { "name": "Fast download", "url": "https://mikanani.me/Home/Bangumi/3951" }
+              }]
+            }
+            """;
+
+        using var response = await app.Client.PostAsync(
+            "/api/download/manager",
+            new StringContent(request, Encoding.UTF8, "application/json"));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(200, json.RootElement.GetProperty("code").GetInt32());
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetProperty("accepted_count").GetInt32());
+        Assert.Equal("staged", json.RootElement.GetProperty("data").GetProperty("items")[0]
+            .GetProperty("status").GetString());
+    }
 }

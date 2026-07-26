@@ -68,6 +68,61 @@ public sealed class LegacyRssApiTests
         Assert.Single(transport.Requests);
     }
 
+    [Fact]
+    public async Task AnimeGoHelperConfigUploadImmediatelyFiltersLegacyRss()
+    {
+        var transport = new StaticTransport(_ => Response(HttpStatusCode.OK, FeedXml));
+        await using var app = await RunningApp.StartAsync(
+            rssDnsResolver: new PublicDnsResolver(), rssHttpTransport: transport);
+        const string legacyConfig = """
+            {
+              "Filiter0": {
+                "drop-04": {
+                  "is_enable_whitelist": false,
+                  "whitelist": [],
+                  "is_enable_blacklist": true,
+                  "blacklist": ["[04]"]
+                }
+              },
+              "Filiter1": {}, "Filiter2": {}, "Filiter3": {}, "Filiter4": {}
+            }
+            """;
+        var upload = JsonSerializer.Serialize(new
+        {
+            name = "filter/mikan_tool.py",
+            data = Convert.ToBase64String(Encoding.UTF8.GetBytes(legacyConfig)),
+        });
+        using var uploadResponse = await app.Client.PostAsync(
+            "/api/plugin/config",
+            new StringContent(upload, Encoding.UTF8, "application/json"));
+        using var uploadJson = JsonDocument.Parse(await uploadResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(200, uploadJson.RootElement.GetProperty("code").GetInt32());
+        const string request = """
+            { "source": "mikan", "rss": { "url": "https://mikanani.me/RSS?bangumiId=3951" } }
+            """;
+
+        using var response = await app.Client.PostAsync(
+            "/api/rss", new StringContent(request, Encoding.UTF8, "application/json"));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(200, json.RootElement.GetProperty("code").GetInt32());
+        var data = json.RootElement.GetProperty("data");
+        Assert.True(data.TryGetProperty("legacy_filter_revision", out var legacyRevision), data.GetRawText());
+        Assert.Equal(2, legacyRevision.GetInt64());
+        Assert.True(data.GetProperty("legacy_filter_enabled").GetBoolean());
+        Assert.Equal("staged", data.GetProperty("items")[0].GetProperty("status").GetString());
+        Assert.Equal("blocked", data.GetProperty("items")[1].GetProperty("status").GetString());
+        Assert.Equal(
+            "RejectedByLegacyFilter",
+            data.GetProperty("items")[1].GetProperty("decision_kind").GetString());
+        Assert.Equal(
+            "RejectedByLegacyMikanTool",
+            data.GetProperty("items")[1].GetProperty("legacy_filter_reason").GetString());
+        Assert.Equal("Filiter0", data.GetProperty("items")[1].GetProperty("legacy_filter_scope").GetString());
+        Assert.Single(transport.Requests);
+    }
+
     private static TorrentHttpResponse Response(HttpStatusCode status, string body)
     {
         var bytes = Encoding.UTF8.GetBytes(body);
