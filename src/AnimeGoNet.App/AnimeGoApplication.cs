@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AnimeGoNet.App.Api;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Metadata;
@@ -59,6 +60,11 @@ public static class AnimeGoApplication
             builder.Configuration["background_workers_enabled"],
             out var configuredWorkers) || configuredWorkers;
         options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
+        var layout = DirectoryLayout.From(options.Paths);
+        layout.CreateDataDirectories();
+        var downloaderOverrides = new DownloaderOverrideStore(layout.ConfigurationPath);
+        var downloaderOverrideSnapshot = await downloaderOverrides.LoadAsync(cancellationToken).ConfigureAwait(false);
+        options = ApplyDownloaderOverrides(options, downloaderOverrideSnapshot);
         accessKey ??= builder.Configuration["access_key"];
         if (runningInContainer.Value && string.IsNullOrWhiteSpace(accessKey))
         {
@@ -70,8 +76,6 @@ public static class AnimeGoApplication
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
         }
 
-        var layout = DirectoryLayout.From(options.Paths);
-        layout.CreateDataDirectories();
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var sourceProfiles = new SourceProfileStore(database);
@@ -103,6 +107,9 @@ public static class AnimeGoApplication
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(layout);
+        builder.Services.AddSingleton(downloaderOverrides);
+        builder.Services.AddSingleton(
+            new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);
@@ -218,6 +225,33 @@ public static class AnimeGoApplication
                 pair => pair.Value with { DownloadPath = PathBoundary.Combine(downloadPath, pair.Key) },
                 StringComparer.OrdinalIgnoreCase),
         };
+    }
+
+    private static AnimeGoOptions ApplyDownloaderOverrides(
+        AnimeGoOptions options,
+        DownloaderOverrideSnapshot snapshot)
+    {
+        if (snapshot.Downloaders.Count == 0) return options;
+        var downloaders = new Dictionary<string, QbittorrentInstanceOptions>(
+            options.Downloaders, StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, entry) in snapshot.Downloaders)
+        {
+            if (!Uri.TryCreate(entry.BaseUrl, UriKind.Absolute, out var baseUrl))
+            {
+                throw new InvalidOperationException(
+                    $"Downloader private configuration '{id}' has an invalid base URL.");
+            }
+            downloaders[id] = new QbittorrentInstanceOptions
+            {
+                Type = DownloaderTypes.Qbittorrent,
+                BaseUrl = baseUrl,
+                Username = entry.Username,
+                Password = entry.Password,
+                DownloadPath = entry.DownloadPath,
+                Enabled = entry.Enabled,
+            };
+        }
+        return options with { Downloaders = downloaders };
     }
 
     private static bool HasValidAccessKey(HttpRequest request, string configuredKey)

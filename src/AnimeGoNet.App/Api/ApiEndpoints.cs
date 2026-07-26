@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
@@ -31,6 +32,8 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/downloads", Downloads);
         app.MapGet("/api/v1/downloaders", ListDownloaders);
+        app.MapPut("/api/v1/downloaders/{downloaderId}", PutDownloader);
+        app.MapDelete("/api/v1/downloaders/{downloaderId}", DeleteDownloaderOverride);
         app.MapPost("/api/v1/downloaders/{downloaderId}/test", TestDownloader);
         app.MapGet("/api/v1/sources", ListSourceProfiles);
         app.MapGet("/api/v1/sources/{sourceProfileId}", GetSourceProfile);
@@ -220,15 +223,140 @@ public static class ApiEndpoints
     private static async Task<Ok<DownloaderInstanceListResponse>> ListDownloaders(
         AnimeGoOptions options,
         DownloaderAdminStore admin,
+        DownloaderOverrideStore overrides,
+        DownloaderConfigurationRuntimeState runtimeState,
         CancellationToken cancellationToken)
     {
+        var snapshot = await overrides.LoadAsync(cancellationToken).ConfigureAwait(false);
+        var restartRequired = snapshot.Revision != runtimeState.AppliedRevision;
         var items = new List<DownloaderInstanceResponse>();
-        foreach (var (id, downloader) in options.Downloaders.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        var ids = options.Downloaders.Keys
+            .Concat(snapshot.Downloaders.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal);
+        foreach (var id in ids)
         {
+            snapshot.Downloaders.TryGetValue(id, out var pending);
+            var downloader = pending is null
+                ? options.Downloaders[id]
+                : ToOptions(pending);
             var usage = await admin.GetUsageAsync(id, cancellationToken).ConfigureAwait(false);
-            items.Add(ToResponse(id, downloader, usage));
+            items.Add(ToResponse(
+                id, downloader, usage,
+                pending is null ? "deployment" : "private_override",
+                pending?.Revision,
+                restartRequired));
         }
-        return TypedResults.Ok(new DownloaderInstanceListResponse(items));
+        return TypedResults.Ok(new DownloaderInstanceListResponse(
+            snapshot.Revision, runtimeState.AppliedRevision, restartRequired, items));
+    }
+
+    private static async Task<IResult> PutDownloader(
+        string downloaderId,
+        DownloaderInstanceUpsertRequest request,
+        AnimeGoOptions options,
+        DownloaderAdminStore admin,
+        DownloaderOverrideStore overrides,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(downloaderId, "downloader id");
+            if (request.ExpectedConfigurationRevision < 0)
+                throw new ArgumentException("expected_configuration_revision must not be negative.");
+            var snapshot = await overrides.LoadAsync(cancellationToken).ConfigureAwait(false);
+            snapshot.Downloaders.TryGetValue(id, out var currentOverride);
+            options.Downloaders.TryGetValue(id, out var currentRuntime);
+            if (!request.Enabled)
+            {
+                var usage = await admin.GetUsageAsync(id, cancellationToken).ConfigureAwait(false);
+                if (usage.SourceProfileCount + usage.IngestTaskCount + usage.DownloadJobCount > 0)
+                {
+                    return TypedResults.Conflict(Error(
+                        "downloader_in_use", "Referenced downloader instances cannot be disabled."));
+                }
+            }
+            var baseUrl = ValidateDownloaderBaseUrl(request.BaseUrl);
+            var downloadPath = request.DownloadPath?.Trim() ?? string.Empty;
+            if (!PathBoundary.IsAbsolute(downloadPath)
+                || !PathBoundary.IsWithin(options.Paths.DownloadPath, downloadPath))
+            {
+                throw new ArgumentException("download_path must be inside the configured download root.");
+            }
+            if (request.ClearPassword && request.Password is not null)
+                throw new ArgumentException("password and clear_password cannot be supplied together.");
+            var password = request.ClearPassword
+                ? null
+                : request.Password ?? currentOverride?.Password ?? currentRuntime?.Password;
+            var username = request.Username is null
+                ? currentOverride?.Username ?? currentRuntime?.Username
+                : string.IsNullOrWhiteSpace(request.Username) ? null : request.Username.Trim();
+            if (password?.Length > 1024)
+                throw new ArgumentException("password must not exceed 1024 characters.");
+            var saved = await overrides.UpsertAsync(
+                id,
+                new DownloaderOverrideEntry(
+                    baseUrl.AbsoluteUri,
+                    username,
+                    password,
+                    downloadPath,
+                    request.Enabled,
+                    0,
+                    DateTimeOffset.UtcNow),
+                request.ExpectedConfigurationRevision,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new DownloaderConfigurationWriteResponse(
+                id, saved.Revision, saved.Downloaders[id].Revision, true, false));
+        }
+        catch (DownloaderOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "downloader_configuration_revision_conflict",
+                "Downloader configuration changed; reload before saving."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("downloader_configuration_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteDownloaderOverride(
+        string downloaderId,
+        [FromQuery(Name = "expected_configuration_revision")] long expectedConfigurationRevision,
+        AnimeGoOptions options,
+        DownloaderAdminStore admin,
+        DownloaderOverrideStore overrides,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(downloaderId, "downloader id");
+            var usage = await admin.GetUsageAsync(id, cancellationToken).ConfigureAwait(false);
+            if (usage.SourceProfileCount + usage.IngestTaskCount + usage.DownloadJobCount > 0)
+            {
+                return TypedResults.Conflict(Error(
+                    "downloader_in_use", "Referenced downloader overrides cannot be removed."));
+            }
+            var saved = await overrides.DeleteAsync(
+                id, expectedConfigurationRevision, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new DownloaderConfigurationWriteResponse(
+                id, saved.Revision, null, true, options.Downloaders.ContainsKey(id)));
+        }
+        catch (DownloaderOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "downloader_configuration_revision_conflict",
+                "Downloader configuration changed; reload before deleting."));
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error(
+                "downloader_override_not_found", "Downloader private override was not found."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("downloader_configuration_invalid", exception.Message));
+        }
     }
 
     private static async Task<IResult> TestDownloader(
@@ -974,7 +1102,10 @@ public static class ApiEndpoints
     private static DownloaderInstanceResponse ToResponse(
         string id,
         QbittorrentInstanceOptions downloader,
-        DownloaderUsageRecord usage)
+        DownloaderUsageRecord usage,
+        string configurationSource,
+        long? overrideRevision,
+        bool restartRequired)
     {
         var safeUrl = new UriBuilder(downloader.BaseUrl)
         {
@@ -990,6 +1121,9 @@ public static class ApiEndpoints
             downloader.DownloadPath,
             downloader.Enabled,
             !string.IsNullOrWhiteSpace(downloader.Username) && !string.IsNullOrWhiteSpace(downloader.Password),
+            configurationSource,
+            overrideRevision,
+            restartRequired,
             usage.SourceProfileCount,
             usage.IngestTaskCount,
             usage.DownloadJobCount,
@@ -997,6 +1131,30 @@ public static class ApiEndpoints
             usage.FailureCode,
             usage.LastSuccessAtUtc,
             usage.UpdatedAtUtc);
+    }
+
+    private static QbittorrentInstanceOptions ToOptions(DownloaderOverrideEntry entry) => new()
+    {
+        Type = DownloaderTypes.Qbittorrent,
+        BaseUrl = new Uri(entry.BaseUrl, UriKind.Absolute),
+        Username = entry.Username,
+        Password = entry.Password,
+        DownloadPath = entry.DownloadPath,
+        Enabled = entry.Enabled,
+    };
+
+    private static Uri ValidateDownloaderBaseUrl(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https")
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new ArgumentException(
+                "base_url must be an absolute HTTP(S) URL without credentials, query or fragment.");
+        }
+        return new UriBuilder(uri) { Path = uri.AbsolutePath.TrimEnd('/') + "/" }.Uri;
     }
 
     private static SourceProfileDefinition ToDefinition(

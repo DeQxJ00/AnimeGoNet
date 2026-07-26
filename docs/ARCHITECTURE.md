@@ -20,7 +20,7 @@ AnimeGoNet.slnx
 ## 2. 配置、数据与目录真相源
 
 - 部署配置文件保存监听地址、Access Key、`data_path`、`download_path`、`save_path`、命名 qBittorrent 实例、路径映射、TMDB/AI 连接与更新策略。
-- 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。
+- 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。Web 写入的 qB 覆盖位于 `data_path/config/downloaders.private.json`，采用 source-generated JSON、全局/实例 revision、同目录临时文件原子替换；Unix 权限为 `0600`。该文件属于部署 secret，必须随 data_path 一起保护且不得提交。
 - SQLite 保存来源 profile、规则、动画、任务、匹配尝试、下载/整理状态、完成记录和审计，不复制密码等部署配置。
 - Docker 默认路径固定为 `data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。Compose 必须把 AnimeGoNet 与 qBittorrent 的共同宿主父目录映射为同一容器内 `/download`。
 
@@ -43,7 +43,7 @@ AnimeGoNet.slnx
 ### 来源与路由
 
 - `SourceProfile`：稳定小写 ID、adapter、下载器实例 ID、元数据字段 schema、规则 revision、文件策略、category/tag、路径与做种策略。
-- `DownloaderInstance`：部署配置中的命名 qBittorrent 连接；任务只保存实例 ID 和不可变路由快照，不保存明文密码。
+- `DownloaderInstance`：部署配置或 data_path 私有覆盖中的命名 qBittorrent 连接；API 只回显安全 URL/路径和“凭据是否配置”，密码只写。任务只保存实例 ID 和不可变路由快照，不保存明文密码。
 - `IngestBatch` / `IngestItem`：统一导入命令；保存 title、脱敏 Torrent URL 指纹、source item/work ID、`mikanid`、`groupid`、可选 bgmid/anidbid/imdbid。
 
 ### 人工规则与 Mikan offset

@@ -148,6 +148,9 @@ interface DownloaderInstance {
   download_path: string;
   enabled: boolean;
   credentials_configured: boolean;
+  configuration_source: string;
+  override_revision: number | null;
+  restart_required: boolean;
   source_profile_count: number;
   ingest_task_count: number;
   download_job_count: number;
@@ -157,6 +160,9 @@ interface DownloaderInstance {
 }
 
 interface DownloaderInstanceList {
+  configuration_revision: number;
+  applied_configuration_revision: number;
+  restart_required: boolean;
   items: DownloaderInstance[];
 }
 
@@ -196,10 +202,14 @@ const headers = new Headers();
 if (accessKey) headers.set("Access-Key", accessKey);
 const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
+const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-dialog");
 let activeDeletePreview: DeletePreview | null = null;
 let activeRssRules: RssRuleSnapshot | null = null;
 let sourceProfiles: SourceProfile[] = [];
 let activeSourceId: string | null = null;
+let downloaderInstances: DownloaderInstance[] = [];
+let downloaderConfigurationRevision = 0;
+let activeDownloaderId: string | null = null;
 let ruleIdSequence = 0;
 
 const statusLabels: Record<string, string> = {
@@ -533,6 +543,78 @@ async function testDownloader(id: string, button: HTMLButtonElement): Promise<vo
   }
 }
 
+function openDownloaderConfig(instance: DownloaderInstance | null): void {
+  activeDownloaderId = instance?.id ?? null;
+  const id = element<HTMLInputElement>("#downloader-config-id");
+  id.disabled = instance !== null;
+  id.value = instance?.id ?? "";
+  element<HTMLInputElement>("#downloader-config-url").value = instance?.base_url ?? "http://127.0.0.1:8080/";
+  element<HTMLInputElement>("#downloader-config-username").value = "";
+  element<HTMLInputElement>("#downloader-config-password").value = "";
+  element<HTMLInputElement>("#downloader-config-path").value = instance?.download_path ?? "";
+  element<HTMLInputElement>("#downloader-config-enabled").checked = instance?.enabled ?? true;
+  element<HTMLInputElement>("#downloader-config-clear-password").checked = false;
+  element<HTMLButtonElement>("#downloader-config-delete").disabled =
+    instance?.configuration_source !== "private_override";
+  element<HTMLElement>("#downloader-config-message").textContent =
+    instance?.credentials_configured
+      ? "已有凭据已配置；密码字段留空会保留，且不会从服务端读回。"
+      : "当前没有已配置凭据。";
+  downloaderConfigDialog.showModal();
+}
+
+async function saveDownloaderConfig(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const id = activeDownloaderId ?? element<HTMLInputElement>("#downloader-config-id").value;
+  const save = element<HTMLButtonElement>("#downloader-config-save");
+  const message = element<HTMLElement>("#downloader-config-message");
+  save.disabled = true;
+  message.textContent = "正在原子写入私有配置…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(`/api/v1/downloaders/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        base_url: element<HTMLInputElement>("#downloader-config-url").value,
+        username: element<HTMLInputElement>("#downloader-config-username").value || null,
+        password: element<HTMLInputElement>("#downloader-config-password").value || null,
+        clear_password: element<HTMLInputElement>("#downloader-config-clear-password").checked,
+        download_path: element<HTMLInputElement>("#downloader-config-path").value,
+        enabled: element<HTMLInputElement>("#downloader-config-enabled").checked,
+        expected_configuration_revision: downloaderConfigurationRevision,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    message.textContent = "已保存；请重启主程序以应用新客户端配置。";
+    await loadDownloaders();
+    window.setTimeout(() => downloaderConfigDialog.close(), 1000);
+  } catch (error) {
+    message.textContent = `保存失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    save.disabled = false;
+  }
+}
+
+async function deleteDownloaderOverride(): Promise<void> {
+  const instance = downloaderInstances.find((item) => item.id === activeDownloaderId);
+  if (!instance || instance.configuration_source !== "private_override") return;
+  if (!window.confirm(`移除 ${instance.id} 的私有覆盖？服务端会拒绝仍有引用的实例。`)) return;
+  const message = element<HTMLElement>("#downloader-config-message");
+  try {
+    const response = await fetch(
+      `/api/v1/downloaders/${encodeURIComponent(instance.id)}?expected_configuration_revision=${downloaderConfigurationRevision}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadDownloaders();
+    downloaderConfigDialog.close();
+  } catch (error) {
+    message.textContent = `移除失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
 async function loadDownloaders(): Promise<void> {
   const status = element<HTMLElement>("#downloader-status");
   const list = element<HTMLElement>("#downloader-list");
@@ -541,7 +623,9 @@ async function loadDownloaders(): Promise<void> {
     const response = await fetch("/api/v1/downloaders", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as DownloaderInstanceList;
-    list.replaceChildren(...body.items.map((instance) => {
+    downloaderInstances = body.items;
+    downloaderConfigurationRevision = body.configuration_revision;
+    list.replaceChildren(...downloaderInstances.map((instance) => {
       const card = document.createElement("article");
       card.className = `downloader-card ${instance.connected === true ? "connected" : instance.connected === false ? "failed" : ""}`;
       const heading = document.createElement("div");
@@ -572,13 +656,16 @@ async function loadDownloaders(): Promise<void> {
       endpoint.textContent = `${instance.base_url} · ${instance.download_path}${instance.failure_code ? ` · ${instance.failure_code}` : ""}`;
       const actions = document.createElement("div");
       actions.className = "downloader-actions";
+      const edit = button("配置", () => openDownloaderConfig(instance));
       const test = button("测试连接", () => void testDownloader(instance.id, test));
       test.disabled = !instance.enabled;
-      actions.append(test);
+      actions.append(edit, test);
       card.append(heading, facts, endpoint, actions);
       return card;
     }));
-    status.textContent = `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
+    status.textContent = body.restart_required
+      ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
+      : `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
   } catch (error) {
     const failed = document.createElement("p");
     failed.className = "muted empty";
@@ -1034,6 +1121,10 @@ element<HTMLButtonElement>("#source-delete").addEventListener("click", () => voi
 element<HTMLSelectElement>("#source-strategy").addEventListener("change", updateSourceWarning);
 element<HTMLButtonElement>("#route-preview-run").addEventListener("click", () => void previewSourceRoute());
 element<HTMLButtonElement>("#downloader-reload").addEventListener("click", () => void loadDownloaders());
+element<HTMLButtonElement>("#downloader-new").addEventListener("click", () => openDownloaderConfig(null));
+element<HTMLButtonElement>("#downloader-config-close").addEventListener("click", () => downloaderConfigDialog.close());
+element<HTMLFormElement>("#downloader-config-form").addEventListener("submit", (event) => void saveDownloaderConfig(event));
+element<HTMLButtonElement>("#downloader-config-delete").addEventListener("click", () => void deleteDownloaderOverride());
 
 void loadStatus();
 void loadDownloads();

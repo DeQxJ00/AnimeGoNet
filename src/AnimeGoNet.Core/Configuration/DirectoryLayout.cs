@@ -16,6 +16,8 @@ public sealed record DirectoryLayout
 
     public required string PluginsPath { get; init; }
 
+    public required string ConfigurationPath { get; init; }
+
     public static DirectoryLayout From(PathOptions paths)
     {
         ArgumentNullException.ThrowIfNull(paths);
@@ -28,6 +30,7 @@ public sealed record DirectoryLayout
             LogsPath = PathBoundary.Combine(paths.DataPath, "logs"),
             BackupsPath = PathBoundary.Combine(paths.DataPath, "backups"),
             PluginsPath = PathBoundary.Combine(paths.DataPath, "plugins"),
+            ConfigurationPath = PathBoundary.Combine(paths.DataPath, "config"),
         };
     }
 
@@ -39,5 +42,6 @@ public sealed record DirectoryLayout
         Directory.CreateDirectory(LogsPath);
         Directory.CreateDirectory(BackupsPath);
         Directory.CreateDirectory(PluginsPath);
+        Directory.CreateDirectory(ConfigurationPath);
     }
 }

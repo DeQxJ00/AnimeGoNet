@@ -320,6 +320,9 @@ public sealed record DownloaderInstanceResponse(
     [property: JsonPropertyName("download_path")] string DownloadPath,
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("credentials_configured")] bool CredentialsConfigured,
+    [property: JsonPropertyName("configuration_source")] string ConfigurationSource,
+    [property: JsonPropertyName("override_revision")] long? OverrideRevision,
+    [property: JsonPropertyName("restart_required")] bool RestartRequired,
     [property: JsonPropertyName("source_profile_count")] long SourceProfileCount,
     [property: JsonPropertyName("ingest_task_count")] long IngestTaskCount,
     [property: JsonPropertyName("download_job_count")] long DownloadJobCount,
@@ -329,6 +332,9 @@ public sealed record DownloaderInstanceResponse(
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset? UpdatedAtUtc);
 
 public sealed record DownloaderInstanceListResponse(
+    [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
+    [property: JsonPropertyName("applied_configuration_revision")] long AppliedConfigurationRevision,
+    [property: JsonPropertyName("restart_required")] bool RestartRequired,
     [property: JsonPropertyName("items")] IReadOnlyList<DownloaderInstanceResponse> Items);
 
 public sealed record DownloaderConnectionTestResponse(
@@ -338,6 +344,22 @@ public sealed record DownloaderConnectionTestResponse(
     [property: JsonPropertyName("latency_ms")] long LatencyMs,
     [property: JsonPropertyName("failure_code")] string? FailureCode,
     [property: JsonPropertyName("message")] string Message);
+
+public sealed record DownloaderInstanceUpsertRequest(
+    [property: JsonPropertyName("base_url")] string? BaseUrl,
+    [property: JsonPropertyName("username")] string? Username,
+    [property: JsonPropertyName("password")] string? Password,
+    [property: JsonPropertyName("clear_password")] bool ClearPassword,
+    [property: JsonPropertyName("download_path")] string? DownloadPath,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision);
+
+public sealed record DownloaderConfigurationWriteResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
+    [property: JsonPropertyName("instance_revision")] long? InstanceRevision,
+    [property: JsonPropertyName("restart_required")] bool RestartRequired,
+    [property: JsonPropertyName("reverted_to_deployment_default")] bool RevertedToDeploymentDefault);
 
 public sealed record SourceRoutePreviewRequest(
     [property: JsonPropertyName("title")] string? Title,

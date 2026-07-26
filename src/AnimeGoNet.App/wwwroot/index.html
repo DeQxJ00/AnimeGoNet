@@ -70,7 +70,10 @@
           <p class="eyebrow">qBittorrent instances</p>
           <h2 id="downloaders-title">下载器</h2>
         </div>
-        <button id="downloader-reload" type="button" class="secondary-button">刷新状态</button>
+        <div class="downloader-heading-actions">
+          <button id="downloader-reload" type="button" class="secondary-button">刷新状态</button>
+          <button id="downloader-new" type="button" class="primary-button">新增实例</button>
+        </div>
       </div>
       <p id="downloader-status" class="muted">正在读取下载器实例…</p>
       <div id="downloader-list" class="downloader-list" aria-live="polite"></div>
@@ -209,6 +212,32 @@
       <div class="delete-actions">
         <button value="cancel" class="secondary-button">取消</button>
         <button id="delete-confirm" value="default" type="button" class="danger-button">确认创建删除任务</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="downloader-config-dialog" aria-labelledby="downloader-config-title">
+    <form id="downloader-config-form" class="downloader-config-panel">
+      <div class="delete-heading">
+        <div><p class="eyebrow">Private deployment override</p><h2 id="downloader-config-title">下载器配置</h2></div>
+        <button id="downloader-config-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <div class="source-form-grid">
+        <label>稳定 ID<input id="downloader-config-id" required pattern="[a-z0-9][a-z0-9._-]*"></label>
+        <label>Base URL<input id="downloader-config-url" type="url" required></label>
+        <label>用户名<input id="downloader-config-username" autocomplete="username"></label>
+        <label>新密码<input id="downloader-config-password" type="password" autocomplete="new-password" placeholder="留空则保留现有密码"></label>
+        <label class="source-hosts">下载目录<input id="downloader-config-path" required></label>
+      </div>
+      <div class="source-switches">
+        <label><input id="downloader-config-enabled" type="checkbox">启用实例</label>
+        <label><input id="downloader-config-clear-password" type="checkbox">清除已有密码</label>
+      </div>
+      <p class="muted">密码只写入 data_path 私有配置文件，API 不回显。保存后需重启主程序才替换当前客户端。</p>
+      <p id="downloader-config-message" class="delete-message" aria-live="polite"></p>
+      <div class="source-form-actions">
+        <button id="downloader-config-delete" type="button" class="delete-button">移除私有覆盖</button>
+        <button id="downloader-config-save" type="submit" class="primary-button">保存并等待重启</button>
       </div>
     </form>
   </dialog>
