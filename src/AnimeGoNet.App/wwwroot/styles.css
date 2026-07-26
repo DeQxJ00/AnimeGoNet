@@ -77,6 +77,20 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-stages dd { margin: 5px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
 .retry-button { margin-top: 15px; border: 1px solid #6c526f; border-radius: 10px; padding: 9px 12px; color: #f2d9ff; background: #2a1d32; cursor: pointer; }
 .retry-button:disabled { cursor: wait; opacity: .7; }
+.downloader-heading { gap: 18px; }
+.downloader-heading h2 { margin-bottom: 0; }
+.downloader-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.downloader-card { border: 1px solid #344260; border-radius: 18px; padding: 18px; background: rgba(16,22,37,.88); }
+.downloader-card.connected { border-color: #315f58; }
+.downloader-card.failed { border-color: #813f49; }
+.downloader-card-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.downloader-card-heading h3 { margin: 0; }
+.downloader-card dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 15px 0; }
+.downloader-card dl div { padding: 9px; border-radius: 10px; background: rgba(5,8,16,.5); min-width: 0; }
+.downloader-card dt { color: #8da2c9; font-size: .7rem; }
+.downloader-card dd { margin: 5px 0 0; font-size: .8rem; overflow-wrap: anywhere; }
+.downloader-card .downloader-path { color: #aebbd3; font-size: .75rem; overflow-wrap: anywhere; }
+.downloader-actions { display: flex; justify-content: flex-end; }
 .source-heading { gap: 18px; }
 .source-heading h2 { margin-bottom: 0; }
 .source-workspace { display: grid; grid-template-columns: minmax(230px,.7fr) minmax(0,1.6fr); gap: 14px; }
@@ -130,6 +144,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .hero { grid-template-columns: 1fr; padding: 30px 24px; }
   .grid { grid-template-columns: 1fr; }
   .metadata-tasks { grid-template-columns: 1fr; }
+  .downloader-list { grid-template-columns: 1fr; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
   .source-workspace, .source-form-grid { grid-template-columns: 1fr; }

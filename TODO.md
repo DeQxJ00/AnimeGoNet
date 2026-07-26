@@ -191,7 +191,7 @@
 - [ ] 移植 10 个 HTTP API。
 - [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，二者均完成安全 staging 与后台 qB dispatch；`/api/rss` 待接入。
 - [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
-- [>] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile 的 list/get/create/update/delete、revision 冲突、默认 Mikan 保护、不可变任务/RSS 引用保护及新来源 RSS 默认规则初始化已完成；下载器实例持久化 CRUD、连接测试、路由预览和跨实体引用计数待实现。
+- [>] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile CRUD/引用保护已完成；下载器已提供脱敏部署投影、来源/导入/下载任务计数、显式 qB 登录+list 连接测试及持久化健康状态。下载器凭据只写 CRUD、路由预览和删除引用保护待实现。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
 - [ ] 移植 WebSocket 日志 pause/resume。
 - [>] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖；Kestrel 契约已验证配置上传立即影响 RSS、快速下载仍跳过过滤。原油猴脚本浏览器 E2E 待验收。
@@ -206,7 +206,7 @@
 - [>] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、实例失败隔离、离线保留stale快照、重启按实例+hash恢复已完成；指数退避/熔断待实现。
 - [>] 实现下载列表/详情/文件级priority与wanted进度、筛选搜索分页和状态时间线（只读列表 API/WebUI 与规范快照已实现；详情、文件级、筛选分页和时间线待实现）。
 - [>] 实现暂停、恢复和AnimeGoNet业务重试；下载任务卡片已只跳转四类删除中心并执行预览/确认，暂停、恢复和业务重试待实现。首版不复刻Tracker/Peer明细、piece图、限速、强制校验/汇报和qB全局设置。
-- [ ] 实现多下载器页面：实例 CRUD、连接状态、路径/硬链接探测、来源引用和任务数量。
+- [>] 实现多下载器页面：原生 TypeScript 已展示命名实例、脱敏端点、下载路径、凭据是否配置、连接状态/失败码、来源引用和任务数量，并可显式测试 qB 登录与 list；实例凭据只写 CRUD、客户端版本、路径/硬链接探测待实现。
 - [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile 列表、新增/编辑/启停/删除、下载器绑定、Host 白名单、两个规则开关、四种文件策略、revision 冲突与 move 不做种提示；下载器实例下拉的完整部署投影、ID字段规则、category/tag、做种策略、重复命中通知和路由预览待实现。
 - [ ] 实现手动 RSS/下载提交与操作结果。
 - [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。

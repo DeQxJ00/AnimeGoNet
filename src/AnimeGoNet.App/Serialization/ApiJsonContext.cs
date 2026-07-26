@@ -38,6 +38,9 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(SourceProfileResponse))]
 [JsonSerializable(typeof(SourceProfileListResponse))]
 [JsonSerializable(typeof(SourceProfileDeleteResponse))]
+[JsonSerializable(typeof(DownloaderInstanceResponse))]
+[JsonSerializable(typeof(DownloaderInstanceListResponse))]
+[JsonSerializable(typeof(DownloaderConnectionTestResponse))]
 [JsonSerializable(typeof(QbittorrentTorrentInfo[]))]
 [JsonSerializable(typeof(QbittorrentTorrentFile[]))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;

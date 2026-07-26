@@ -118,6 +118,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<RssFeedReader>();
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
         builder.Services.AddSingleton(downloadJobs);
+        builder.Services.AddSingleton<DownloaderAdminStore>();
         builder.Services.AddSingleton<DownloadPreparationStore>();
         builder.Services.AddSingleton<MediaOrganizationStore>();
         builder.Services.AddSingleton<DeletePlanStore>();

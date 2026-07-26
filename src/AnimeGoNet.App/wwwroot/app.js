@@ -295,7 +295,7 @@ async function loadMetadataTasks() {
             ]) {
                 const group = document.createElement("div");
                 const term = document.createElement("dt");
-                term.textContent = label;
+                term.textContent = String(label);
                 const description = document.createElement("dd");
                 description.textContent = textOrDash(value);
                 group.append(term, description);
@@ -328,6 +328,87 @@ async function loadMetadataTasks() {
         failed.className = "muted empty";
         failed.textContent = `元数据状态读取失败：${errorMessage(error, "未知错误")}`;
         container.replaceChildren(failed);
+    }
+}
+async function testDownloader(id, button) {
+    const status = element("#downloader-status");
+    button.disabled = true;
+    button.textContent = "测试中…";
+    try {
+        const response = await fetch(`/api/v1/downloaders/${encodeURIComponent(id)}/test`, {
+            method: "POST",
+            headers,
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        status.textContent = result.connected
+            ? `${id} 连接成功 · ${result.task_count ?? 0} 个任务 · ${result.latency_ms} ms`
+            : `${id} 连接失败 · ${result.failure_code ?? "unknown"} · ${result.message}`;
+        await loadDownloaders();
+    }
+    catch (error) {
+        status.textContent = `${id} 测试失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
+        button.textContent = "测试连接";
+    }
+}
+async function loadDownloaders() {
+    const status = element("#downloader-status");
+    const list = element("#downloader-list");
+    status.textContent = "正在读取下载器实例…";
+    try {
+        const response = await fetch("/api/v1/downloaders", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        list.replaceChildren(...body.items.map((instance) => {
+            const card = document.createElement("article");
+            card.className = `downloader-card ${instance.connected === true ? "connected" : instance.connected === false ? "failed" : ""}`;
+            const heading = document.createElement("div");
+            heading.className = "downloader-card-heading";
+            const title = document.createElement("h3");
+            title.textContent = instance.id;
+            const state = document.createElement("span");
+            state.className = `badge ${instance.connected === true ? "ready" : instance.connected === false ? "error" : "pending"}`;
+            state.textContent = !instance.enabled ? "已停用" : instance.connected === true ? "已连接" : instance.connected === false ? "连接失败" : "未测试";
+            heading.append(title, state);
+            const facts = document.createElement("dl");
+            for (const [label, value] of [
+                ["类型", instance.type],
+                ["凭据", instance.credentials_configured ? "已配置" : "未配置"],
+                ["来源引用", instance.source_profile_count],
+                ["任务 / 下载", `${instance.ingest_task_count} / ${instance.download_job_count}`],
+            ]) {
+                const group = document.createElement("div");
+                const term = document.createElement("dt");
+                term.textContent = String(label);
+                const detail = document.createElement("dd");
+                detail.textContent = String(value);
+                group.append(term, detail);
+                facts.append(group);
+            }
+            const endpoint = document.createElement("p");
+            endpoint.className = "downloader-path";
+            endpoint.textContent = `${instance.base_url} · ${instance.download_path}${instance.failure_code ? ` · ${instance.failure_code}` : ""}`;
+            const actions = document.createElement("div");
+            actions.className = "downloader-actions";
+            const test = button("测试连接", () => void testDownloader(instance.id, test));
+            test.disabled = !instance.enabled;
+            actions.append(test);
+            card.append(heading, facts, endpoint, actions);
+            return card;
+        }));
+        status.textContent = `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
+    }
+    catch (error) {
+        const failed = document.createElement("p");
+        failed.className = "muted empty";
+        failed.textContent = `下载器读取失败：${errorMessage(error, "未知错误")}`;
+        list.replaceChildren(failed);
+        status.textContent = failed.textContent;
     }
 }
 function activeSource() {
@@ -704,9 +785,11 @@ element("#source-new").addEventListener("click", () => populateSourceForm(null))
 element("#source-form").addEventListener("submit", (event) => void saveSource(event));
 element("#source-delete").addEventListener("click", () => void deleteSource());
 element("#source-strategy").addEventListener("change", updateSourceWarning);
+element("#downloader-reload").addEventListener("click", () => void loadDownloaders());
 void loadStatus();
 void loadDownloads();
 void loadMetadataTasks();
+void loadDownloaders();
 void loadSources();
 void loadRssRules();
 window.setInterval(() => void loadDownloads(), 5000);

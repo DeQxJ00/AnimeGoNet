@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
@@ -29,6 +30,8 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/downloads", Downloads);
+        app.MapGet("/api/v1/downloaders", ListDownloaders);
+        app.MapPost("/api/v1/downloaders/{downloaderId}/test", TestDownloader);
         app.MapGet("/api/v1/sources", ListSourceProfiles);
         app.MapGet("/api/v1/sources/{sourceProfileId}", GetSourceProfile);
         app.MapPost("/api/v1/sources", CreateSourceProfile);
@@ -211,6 +214,85 @@ public static class ApiEndpoints
             record.DownloaderConnected,
             record.DownloaderFailureCode,
             record.DownloaderLastSuccessAtUtc)).ToArray()));
+    }
+
+    private static async Task<Ok<DownloaderInstanceListResponse>> ListDownloaders(
+        AnimeGoOptions options,
+        DownloaderAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        var items = new List<DownloaderInstanceResponse>();
+        foreach (var (id, downloader) in options.Downloaders.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var usage = await admin.GetUsageAsync(id, cancellationToken).ConfigureAwait(false);
+            items.Add(ToResponse(id, downloader, usage));
+        }
+        return TypedResults.Ok(new DownloaderInstanceListResponse(items));
+    }
+
+    private static async Task<IResult> TestDownloader(
+        string downloaderId,
+        AnimeGoOptions options,
+        IDownloadClientRegistry registry,
+        DownloaderAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        var id = downloaderId.Trim().ToLowerInvariant();
+        if (!options.Downloaders.TryGetValue(id, out var optionsForInstance))
+        {
+            return TypedResults.NotFound(Error("downloader_not_found", "Downloader instance was not found."));
+        }
+        if (!optionsForInstance.Enabled)
+        {
+            return TypedResults.Conflict(Error("downloader_disabled", "Downloader instance is disabled."));
+        }
+
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var client = registry.GetRequired(id);
+            await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            var tasks = await client.ListAsync(cancellationToken).ConfigureAwait(false);
+            timer.Stop();
+            await admin.RecordConnectionTestAsync(
+                id, true, null, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new DownloaderConnectionTestResponse(
+                id, true, tasks.Count, timer.ElapsedMilliseconds, null,
+                "qBittorrent authentication and task listing succeeded."));
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return await FailedDownloaderTest(
+                id, "timeout", "qBittorrent connection test timed out.", timer, admin, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            return await FailedDownloaderTest(
+                id, "authentication_failed", "qBittorrent authentication failed.", timer, admin, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return await FailedDownloaderTest(
+                id, "connection_failed", "qBittorrent could not be reached or returned an HTTP error.",
+                timer, admin, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<IResult> FailedDownloaderTest(
+        string id,
+        string failureCode,
+        string message,
+        System.Diagnostics.Stopwatch timer,
+        DownloaderAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        timer.Stop();
+        await admin.RecordConnectionTestAsync(
+            id, false, failureCode, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new DownloaderConnectionTestResponse(
+            id, false, null, timer.ElapsedMilliseconds, failureCode, message));
     }
 
     private static async Task<Ok<SourceProfileListResponse>> ListSourceProfiles(
@@ -832,6 +914,34 @@ public static class ApiEndpoints
                 : null,
             profile.CreatedAtUtc,
             profile.UpdatedAtUtc);
+
+    private static DownloaderInstanceResponse ToResponse(
+        string id,
+        QbittorrentInstanceOptions downloader,
+        DownloaderUsageRecord usage)
+    {
+        var safeUrl = new UriBuilder(downloader.BaseUrl)
+        {
+            UserName = string.Empty,
+            Password = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty,
+        }.Uri.AbsoluteUri.TrimEnd('/');
+        return new DownloaderInstanceResponse(
+            id,
+            downloader.Type,
+            safeUrl,
+            downloader.DownloadPath,
+            downloader.Enabled,
+            !string.IsNullOrWhiteSpace(downloader.Username) && !string.IsNullOrWhiteSpace(downloader.Password),
+            usage.SourceProfileCount,
+            usage.IngestTaskCount,
+            usage.DownloadJobCount,
+            usage.Connected,
+            usage.FailureCode,
+            usage.LastSuccessAtUtc,
+            usage.UpdatedAtUtc);
+    }
 
     private static SourceProfileDefinition ToDefinition(
         string? displayName,

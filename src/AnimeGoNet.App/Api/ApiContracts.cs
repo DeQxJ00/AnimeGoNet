@@ -312,3 +312,29 @@ public sealed record SourceProfileListResponse(
 public sealed record SourceProfileDeleteResponse(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("deleted")] bool Deleted);
+
+public sealed record DownloaderInstanceResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("base_url")] string BaseUrl,
+    [property: JsonPropertyName("download_path")] string DownloadPath,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("credentials_configured")] bool CredentialsConfigured,
+    [property: JsonPropertyName("source_profile_count")] long SourceProfileCount,
+    [property: JsonPropertyName("ingest_task_count")] long IngestTaskCount,
+    [property: JsonPropertyName("download_job_count")] long DownloadJobCount,
+    [property: JsonPropertyName("connected")] bool? Connected,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("last_success_at_utc")] DateTimeOffset? LastSuccessAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset? UpdatedAtUtc);
+
+public sealed record DownloaderInstanceListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<DownloaderInstanceResponse> Items);
+
+public sealed record DownloaderConnectionTestResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("connected")] bool Connected,
+    [property: JsonPropertyName("task_count")] int? TaskCount,
+    [property: JsonPropertyName("latency_ms")] long LatencyMs,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("message")] string Message);
