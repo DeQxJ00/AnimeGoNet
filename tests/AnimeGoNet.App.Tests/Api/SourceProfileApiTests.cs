@@ -185,10 +185,79 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-downloader\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-hosts\"", html, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);
         Assert.Contains("loadSources", script, StringComparison.Ordinal);
+        Assert.Contains("previewSourceRoute", script, StringComparison.Ordinal);
         Assert.Contains("expected_revision", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/sources/", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RoutePreviewAndIngestUseAdapterBehindCustomProfileId()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-anime",
+            display_name = "U2 Anime",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = "link",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            enabled = true,
+        }));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/sources/u2-anime/route-preview",
+            Json(new { title = "U2 route preview", source_work_id = "u2-work", anidbid = 42 }));
+        using var route = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.True(route.RootElement.GetProperty("valid").GetBoolean());
+        Assert.Equal("u2-anime", route.RootElement.GetProperty("source_profile_id").GetString());
+        Assert.Equal("u2", route.RootElement.GetProperty("adapter").GetString());
+        Assert.Equal("pt", route.RootElement.GetProperty("downloader_id").GetString());
+        Assert.Equal(1, route.RootElement.GetProperty("rss_rule_revision").GetInt64());
+
+        using var ingest = await app.Client.PostAsync("/api/v1/ingest", Json(new
+        {
+            source = "u2-anime",
+            data = new[]
+            {
+                new
+                {
+                    torrent = "https://u2.invalid/passkey/custom-profile.torrent",
+                    info = new { title = "U2 route preview", source_work_id = "u2-work", anidbid = 42 },
+                },
+            },
+        }));
+        using var accepted = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        var item = accepted.RootElement.GetProperty("items")[0];
+        Assert.Equal("staged", item.GetProperty("status").GetString());
+        Assert.Equal("u2-anime", item.GetProperty("source_profile_id").GetString());
+        Assert.Equal("pt", item.GetProperty("downloader_id").GetString());
+    }
+
+    [Fact]
+    public async Task RoutePreviewReturnsRealAdapterValidationWithoutSideEffects()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/sources/mikan/route-preview",
+            Json(new { title = "Missing Mikan identity" }));
+        using var route = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.False(route.RootElement.GetProperty("valid").GetBoolean());
+        var errors = route.RootElement.GetProperty("errors").EnumerateArray()
+            .Select(item => item.GetString()).ToArray();
+        Assert.Contains(errors, error => error!.Contains("mikanid", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error!.Contains("bgmid", StringComparison.Ordinal));
+
+        using var tasks = await app.Client.GetAsync("/api/v1/metadata/tasks");
+        using var taskList = JsonDocument.Parse(await tasks.Content.ReadAsStreamAsync());
+        Assert.Empty(taskList.RootElement.GetProperty("items").EnumerateArray());
     }
 
     private static StringContent Json(object value) =>

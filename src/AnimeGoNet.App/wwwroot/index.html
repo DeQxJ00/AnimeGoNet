@@ -119,6 +119,19 @@
             <label><input id="source-filter-enabled" type="checkbox">执行旧 Mikan 过滤</label>
             <label><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
           </div>
+          <details class="route-preview">
+            <summary>路由预览</summary>
+            <p class="muted">只执行当前 adapter 字段校验和路由计算，不抓 Torrent、不写任务、不连接 qB。</p>
+            <div class="route-preview-fields">
+              <label>作品 ID<input id="route-source-work-id" autocomplete="off"></label>
+              <label>mikanid<input id="route-mikanid" type="number" min="1"></label>
+              <label>bgmid<input id="route-bgmid" type="number" min="1"></label>
+              <label>anidbid<input id="route-anidbid" type="number" min="1"></label>
+              <label>imdbid<input id="route-imdbid" placeholder="tt1234567" autocomplete="off"></label>
+            </div>
+            <button id="route-preview-run" type="button" class="secondary-button">计算路由</button>
+            <pre id="route-preview-result" aria-live="polite">选择已保存来源后可预览。</pre>
+          </details>
           <p id="source-warning" class="source-warning"></p>
           <div class="source-form-actions">
             <button id="source-delete" type="button" class="delete-button">删除来源</button>

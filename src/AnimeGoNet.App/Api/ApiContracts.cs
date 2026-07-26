@@ -338,3 +338,28 @@ public sealed record DownloaderConnectionTestResponse(
     [property: JsonPropertyName("latency_ms")] long LatencyMs,
     [property: JsonPropertyName("failure_code")] string? FailureCode,
     [property: JsonPropertyName("message")] string Message);
+
+public sealed record SourceRoutePreviewRequest(
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("source_item_id")] string? SourceItemId,
+    [property: JsonPropertyName("source_work_id")] string? SourceWorkId,
+    [property: JsonPropertyName("mikan_url")] string? MikanUrl,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiId,
+    [property: JsonPropertyName("anidbid")] int? AniDbId,
+    [property: JsonPropertyName("imdbid")] string? ImdbId);
+
+public sealed record SourceRoutePreviewResponse(
+    [property: JsonPropertyName("valid")] bool Valid,
+    [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors,
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("source_profile_revision")] long Revision,
+    [property: JsonPropertyName("adapter")] string Adapter,
+    [property: JsonPropertyName("downloader_id")] string DownloaderId,
+    [property: JsonPropertyName("downloader_enabled")] bool DownloaderEnabled,
+    [property: JsonPropertyName("download_path")] string? DownloadPath,
+    [property: JsonPropertyName("save_path")] string SavePath,
+    [property: JsonPropertyName("file_strategy")] string FileStrategy,
+    [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
+    [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("rss_rule_revision")] long? RssRuleRevision);

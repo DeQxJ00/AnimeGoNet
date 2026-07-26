@@ -48,18 +48,20 @@ public sealed class UnifiedIngestProcessor(
         MikanRssWinnerLease? winnerLease,
         CancellationToken cancellationToken)
     {
-        var validation = IngestCommandNormalizer.Normalize(source, command, requireModernMetadata);
+        var profileId = (source ?? string.Empty).Trim().ToLowerInvariant();
+        var profile = await profiles.GetEnabledAsync(profileId, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            return Rejected(["no enabled source profile is configured"]);
+        }
+
+        var validation = IngestCommandNormalizer.Normalize(profile.Adapter, command, requireModernMetadata);
         if (!validation.IsValid)
         {
             return Rejected(validation.Errors);
         }
 
-        var normalized = validation.Item!;
-        var profile = await profiles.GetEnabledAsync(normalized.Source, cancellationToken).ConfigureAwait(false);
-        if (profile is null)
-        {
-            return Rejected(["no enabled source profile is configured"]);
-        }
+        var normalized = validation.Item! with { Source = profile.Id };
 
         StagedTorrent? staged = null;
         var ownershipTransferred = false;

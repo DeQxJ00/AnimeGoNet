@@ -438,6 +438,10 @@ function populateSourceForm(profile) {
     const remove = element("#source-delete");
     remove.disabled = profile === null || profile.is_default;
     remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
+    element("#route-preview-run").disabled = profile === null;
+    element("#route-preview-result").textContent = profile === null
+        ? "请先保存来源，再按持久化 revision 计算路由。"
+        : `${profile.id} revision ${profile.revision}，等待预览。`;
     updateSourceWarning();
     renderSourceList();
 }
@@ -467,6 +471,52 @@ function renderSourceList() {
         card.addEventListener("click", () => populateSourceForm(profile));
         return card;
     }));
+}
+function optionalPositiveNumber(selector) {
+    const input = element(selector);
+    return input.value === "" || !Number.isFinite(input.valueAsNumber) ? null : input.valueAsNumber;
+}
+async function previewSourceRoute() {
+    const current = activeSource();
+    if (!current)
+        return;
+    const output = element("#route-preview-result");
+    const run = element("#route-preview-run");
+    run.disabled = true;
+    output.textContent = "正在计算路由…";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch(`/api/v1/sources/${encodeURIComponent(current.id)}/route-preview`, {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({
+                title: element("#source-name").value.trim(),
+                source_work_id: element("#route-source-work-id").value.trim() || null,
+                mikanid: optionalPositiveNumber("#route-mikanid"),
+                bgmid: optionalPositiveNumber("#route-bgmid"),
+                anidbid: optionalPositiveNumber("#route-anidbid"),
+                imdbid: element("#route-imdbid").value.trim() || null,
+            }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const route = await response.json();
+        output.textContent = route.valid
+            ? [
+                `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter})`,
+                `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
+                `媒体库 ${route.save_path}`,
+                `策略 ${route.file_strategy} · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
+            ].join("\n")
+            : `无效\n${route.errors.map((error) => `• ${error}`).join("\n")}`;
+    }
+    catch (error) {
+        output.textContent = `预览失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        run.disabled = false;
+    }
 }
 async function loadSources(selectedId) {
     const status = element("#source-status");
@@ -785,6 +835,7 @@ element("#source-new").addEventListener("click", () => populateSourceForm(null))
 element("#source-form").addEventListener("submit", (event) => void saveSource(event));
 element("#source-delete").addEventListener("click", () => void deleteSource());
 element("#source-strategy").addEventListener("change", updateSourceWarning);
+element("#route-preview-run").addEventListener("click", () => void previewSourceRoute());
 element("#downloader-reload").addEventListener("click", () => void loadDownloaders());
 void loadStatus();
 void loadDownloads();

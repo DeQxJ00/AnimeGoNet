@@ -37,6 +37,7 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/sources", CreateSourceProfile);
         app.MapPut("/api/v1/sources/{sourceProfileId}", UpdateSourceProfile);
         app.MapDelete("/api/v1/sources/{sourceProfileId}", DeleteSourceProfile);
+        app.MapPost("/api/v1/sources/{sourceProfileId}/route-preview", PreviewSourceRoute);
         app.MapGet("/api/v1/rss-rules/{sourceProfileId}", GetRssRules);
         app.MapPut("/api/v1/rss-rules/{sourceProfileId}", PutRssRules);
         app.MapPost("/api/v1/rss-rules/{sourceProfileId}/preview", PreviewRssRules);
@@ -438,6 +439,61 @@ public static class ApiEndpoints
         {
             return TypedResults.BadRequest(Error("source_profile_invalid", exception.Message));
         }
+    }
+
+    private static async Task<IResult> PreviewSourceRoute(
+        string sourceProfileId,
+        SourceRoutePreviewRequest request,
+        AnimeGoOptions options,
+        SourceProfileStore profiles,
+        MikanRssRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        var profile = await profiles.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            return TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."));
+        }
+
+        var host = profile.AllowedTorrentHosts.Count > 0
+            ? profile.AllowedTorrentHosts[0]
+            : "preview.invalid";
+        if (host.StartsWith("*.", StringComparison.Ordinal))
+        {
+            host = host[2..];
+        }
+        var command = new IngestItemCommand(
+            $"https://{host}/animegonet-route-preview.torrent",
+            new IngestItemInfo(
+                request.Title, null, request.SourceItemId, request.SourceWorkId,
+                request.MikanUrl, null, request.MikanId, request.BangumiId,
+                request.AniDbId, request.ImdbId));
+        var validation = IngestCommandNormalizer.Normalize(profile.Adapter, command, requireModernMetadata: true);
+        var errors = validation.Errors.ToList();
+        if (!profile.Enabled)
+        {
+            errors.Add("source profile is disabled");
+        }
+        var downloaderExists = options.Downloaders.TryGetValue(profile.DownloaderId, out var downloader);
+        if (!downloaderExists || !downloader!.Enabled)
+        {
+            errors.Add("bound downloader is missing or disabled");
+        }
+        var ruleRevision = (await rules.GetAsync(profile.Id, cancellationToken).ConfigureAwait(false))?.Revision;
+        return TypedResults.Ok(new SourceRoutePreviewResponse(
+            errors.Count == 0,
+            errors,
+            profile.Id,
+            profile.Revision,
+            profile.Adapter,
+            profile.DownloaderId,
+            downloaderExists && downloader!.Enabled,
+            downloaderExists ? downloader!.DownloadPath : null,
+            options.Paths.SavePath,
+            profile.FileStrategy,
+            profile.RssFilterEnabled,
+            profile.RssPriorityEnabled,
+            ruleRevision));
     }
 
     private static async Task<IResult> GetRssRules(

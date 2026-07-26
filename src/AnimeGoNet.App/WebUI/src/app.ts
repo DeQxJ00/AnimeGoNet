@@ -125,6 +125,22 @@ interface SourceProfileList {
   items: SourceProfile[];
 }
 
+interface SourceRoutePreview {
+  valid: boolean;
+  errors: string[];
+  source_profile_id: string;
+  source_profile_revision: number;
+  adapter: string;
+  downloader_id: string;
+  downloader_enabled: boolean;
+  download_path: string | null;
+  save_path: string;
+  file_strategy: string;
+  rss_filter_enabled: boolean;
+  rss_priority_enabled: boolean;
+  rss_rule_revision: number | null;
+}
+
 interface DownloaderInstance {
   id: string;
   type: string;
@@ -601,6 +617,10 @@ function populateSourceForm(profile: SourceProfile | null): void {
   const remove = element<HTMLButtonElement>("#source-delete");
   remove.disabled = profile === null || profile.is_default;
   remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
+  element<HTMLButtonElement>("#route-preview-run").disabled = profile === null;
+  element<HTMLElement>("#route-preview-result").textContent = profile === null
+    ? "请先保存来源，再按持久化 revision 计算路由。"
+    : `${profile.id} revision ${profile.revision}，等待预览。`;
   updateSourceWarning();
   renderSourceList();
 }
@@ -631,6 +651,53 @@ function renderSourceList(): void {
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
   }));
+}
+
+function optionalPositiveNumber(selector: string): number | null {
+  const input = element<HTMLInputElement>(selector);
+  return input.value === "" || !Number.isFinite(input.valueAsNumber) ? null : input.valueAsNumber;
+}
+
+async function previewSourceRoute(): Promise<void> {
+  const current = activeSource();
+  if (!current) return;
+  const output = element<HTMLElement>("#route-preview-result");
+  const run = element<HTMLButtonElement>("#route-preview-run");
+  run.disabled = true;
+  output.textContent = "正在计算路由…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(
+      `/api/v1/sources/${encodeURIComponent(current.id)}/route-preview`,
+      {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify({
+          title: element<HTMLInputElement>("#source-name").value.trim(),
+          source_work_id: element<HTMLInputElement>("#route-source-work-id").value.trim() || null,
+          mikanid: optionalPositiveNumber("#route-mikanid"),
+          bgmid: optionalPositiveNumber("#route-bgmid"),
+          anidbid: optionalPositiveNumber("#route-anidbid"),
+          imdbid: element<HTMLInputElement>("#route-imdbid").value.trim() || null,
+        }),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const route = await response.json() as SourceRoutePreview;
+    output.textContent = route.valid
+      ? [
+          `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter})`,
+          `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
+          `媒体库 ${route.save_path}`,
+          `策略 ${route.file_strategy} · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
+        ].join("\n")
+      : `无效\n${route.errors.map((error) => `• ${error}`).join("\n")}`;
+  } catch (error) {
+    output.textContent = `预览失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    run.disabled = false;
+  }
 }
 
 async function loadSources(selectedId?: string): Promise<void> {
@@ -965,6 +1032,7 @@ element<HTMLButtonElement>("#source-new").addEventListener("click", () => popula
 element<HTMLFormElement>("#source-form").addEventListener("submit", (event) => void saveSource(event));
 element<HTMLButtonElement>("#source-delete").addEventListener("click", () => void deleteSource());
 element<HTMLSelectElement>("#source-strategy").addEventListener("change", updateSourceWarning);
+element<HTMLButtonElement>("#route-preview-run").addEventListener("click", () => void previewSourceRoute());
 element<HTMLButtonElement>("#downloader-reload").addEventListener("click", () => void loadDownloaders());
 
 void loadStatus();
