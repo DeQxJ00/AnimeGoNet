@@ -31,6 +31,7 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapGet("/api/v1/config", Configuration);
         app.MapGet("/api/v1/downloads", Downloads);
         app.MapGet("/api/v1/downloaders", ListDownloaders);
         app.MapPut("/api/v1/downloaders/{downloaderId}", PutDownloader);
@@ -190,6 +191,49 @@ public static class ApiEndpoints
                     || !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ReadAccessToken),
                 Organizer: true,
                 Deletion: true)));
+    }
+
+    private static Ok<ConfigurationResponse> Configuration(
+        AnimeGoOptions options,
+        RuntimeConfigurationState runtime)
+    {
+        var tmdb = options.Metadata.Tmdb;
+        var season = options.Metadata.SeasonFailure;
+        var ai = options.Metadata.Ai;
+        var fetch = options.TorrentFetch;
+        return TypedResults.Ok(new ConfigurationResponse(
+            new RuntimePaths(
+                options.Paths.DataPath,
+                options.Paths.DownloadPath,
+                options.Paths.SavePath),
+            new DeploymentConfigurationResponse(
+                runtime.RunningInContainer,
+                runtime.BackgroundWorkersEnabled,
+                runtime.AccessKeyConfigured,
+                PathsRestartRequired: true),
+            new MetadataConfigurationResponse(
+                new TmdbConfigurationResponse(
+                    tmdb.BaseUrl.AbsoluteUri,
+                    tmdb.Language,
+                    tmdb.HttpTimeout.TotalSeconds,
+                    !string.IsNullOrWhiteSpace(tmdb.ApiKey),
+                    !string.IsNullOrWhiteSpace(tmdb.ReadAccessToken)),
+                new SeasonFailureConfigurationResponse(
+                    season.Skip,
+                    season.Backtrace,
+                    season.UseTitleSeason,
+                    season.UseFirstSeason),
+                new AiConfigurationResponse(
+                    ai.UseSeasonMatch,
+                    ai.UseEpisodeMatch,
+                    ai.HttpTimeout.TotalSeconds),
+                options.Metadata.TmdbFailureUseBangumi,
+                options.Metadata.MikanTrustedOffsetCacheEnabled),
+            new TorrentFetchConfigurationResponse(
+                fetch.Timeout.TotalSeconds,
+                fetch.MaxResponseBytes,
+                fetch.MaxRedirects,
+                fetch.StagingTtl.TotalSeconds)));
     }
 
     private static async Task<Ok<DownloadListResponse>> Downloads(

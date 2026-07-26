@@ -30,6 +30,15 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .module.enabled { border-color: #315f58; }
 .panels { margin: 20px 0 70px; }
 .panels p { color: #aebbd3; min-height: 44px; line-height: 1.45; }
+.configuration-heading { gap: 18px; }
+.configuration-heading h2 { margin-bottom: 0; }
+.configuration-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.configuration-card { border: 1px solid #344260; border-radius: 18px; padding: 18px; background: rgba(16,22,37,.88); }
+.configuration-card h3 { margin-bottom: 13px; }
+.configuration-card dl { display: grid; gap: 8px; margin: 0; }
+.configuration-card dl div { min-width: 0; padding: 9px 11px; border-radius: 10px; background: rgba(5,8,16,.5); }
+.configuration-card dt { color: #8da2c9; font-size: .7rem; }
+.configuration-card dd { margin: 5px 0 0; color: #dbe6fa; font-size: .82rem; overflow-wrap: anywhere; }
 .downloads { display: grid; gap: 12px; }
 .download-card { border: 1px solid #315f58; border-radius: 18px; padding: 18px 20px; background: rgba(16,22,37,.88); }
 .download-card.stale { border-color: #813f49; }
@@ -158,6 +167,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .grid { grid-template-columns: 1fr; }
   .metadata-tasks { grid-template-columns: 1fr; }
   .downloader-list { grid-template-columns: 1fr; }
+  .configuration-grid { grid-template-columns: 1fr; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
   .source-workspace, .source-form-grid { grid-template-columns: 1fr; }

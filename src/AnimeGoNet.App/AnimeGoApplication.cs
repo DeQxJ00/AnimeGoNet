@@ -107,6 +107,10 @@ public static class AnimeGoApplication
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(layout);
+        builder.Services.AddSingleton(new RuntimeConfigurationState(
+            runningInContainer.Value,
+            startBackgroundWorkers.Value,
+            !string.IsNullOrWhiteSpace(accessKey)));
         builder.Services.AddSingleton(downloaderOverrides);
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));

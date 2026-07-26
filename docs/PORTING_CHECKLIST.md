@@ -83,12 +83,12 @@
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
 | `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 已验证 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 feed/Episode 获取、Filiter0..4、批内 identity cache、失败隔离、新优选和 winner 原子 staging Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
-| `/api/config` | typed deployment config | 保留+扩展 | 待实现 | auth/status/JSON tests |
+| `/api/config` | typed deployment config | 保留+扩展 | 进行中 | 当前生效路径、容器/worker/Access-Key 状态、TMDB/季度失败链/AI/offset/Torrent 配置的脱敏 typed JSON 与鉴权 tests 已通过；私密覆盖写入和配置来源/环境变量 precedence 待实现 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
 | 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载/元数据面板及 SourceProfile 版本化 CRUD 编辑器使用安全 DOM API，下载器/作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；脱敏运行配置、下载/元数据面板、SourceProfile 版本化 CRUD 与下载器编辑器使用安全 DOM API，作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

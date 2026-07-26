@@ -49,6 +49,49 @@ public sealed record RuntimeCapabilities(
     [property: JsonPropertyName("organizer")] bool Organizer,
     [property: JsonPropertyName("deletion")] bool Deletion);
 
+public sealed record ConfigurationResponse(
+    [property: JsonPropertyName("paths")] RuntimePaths Paths,
+    [property: JsonPropertyName("deployment")] DeploymentConfigurationResponse Deployment,
+    [property: JsonPropertyName("metadata")] MetadataConfigurationResponse Metadata,
+    [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch);
+
+public sealed record DeploymentConfigurationResponse(
+    [property: JsonPropertyName("running_in_container")] bool RunningInContainer,
+    [property: JsonPropertyName("background_workers_enabled")] bool BackgroundWorkersEnabled,
+    [property: JsonPropertyName("access_key_configured")] bool AccessKeyConfigured,
+    [property: JsonPropertyName("paths_restart_required")] bool PathsRestartRequired);
+
+public sealed record MetadataConfigurationResponse(
+    [property: JsonPropertyName("tmdb")] TmdbConfigurationResponse Tmdb,
+    [property: JsonPropertyName("season_failure")] SeasonFailureConfigurationResponse SeasonFailure,
+    [property: JsonPropertyName("ai")] AiConfigurationResponse Ai,
+    [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
+    [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled);
+
+public sealed record TmdbConfigurationResponse(
+    [property: JsonPropertyName("base_url")] string BaseUrl,
+    [property: JsonPropertyName("language")] string Language,
+    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
+    [property: JsonPropertyName("api_key_configured")] bool ApiKeyConfigured,
+    [property: JsonPropertyName("read_access_token_configured")] bool ReadAccessTokenConfigured);
+
+public sealed record SeasonFailureConfigurationResponse(
+    [property: JsonPropertyName("skip")] bool Skip,
+    [property: JsonPropertyName("backtrace")] bool Backtrace,
+    [property: JsonPropertyName("use_title_season")] bool UseTitleSeason,
+    [property: JsonPropertyName("use_first_season")] bool UseFirstSeason);
+
+public sealed record AiConfigurationResponse(
+    [property: JsonPropertyName("use_season_match")] bool UseSeasonMatch,
+    [property: JsonPropertyName("use_episode_match")] bool UseEpisodeMatch,
+    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds);
+
+public sealed record TorrentFetchConfigurationResponse(
+    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
+    [property: JsonPropertyName("max_response_bytes")] long MaxResponseBytes,
+    [property: JsonPropertyName("max_redirects")] int MaxRedirects,
+    [property: JsonPropertyName("staging_ttl_seconds")] double StagingTtlSeconds);
+
 public sealed record IngestBatchRequest(
     [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("data")] IReadOnlyList<IngestItemRequest?>? Data);

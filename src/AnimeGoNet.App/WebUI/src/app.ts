@@ -6,6 +6,48 @@ interface RuntimeStatus {
   capabilities: Record<string, boolean>;
 }
 
+interface RuntimeConfiguration {
+  paths: {
+    data_path: string;
+    download_path: string;
+    save_path: string;
+  };
+  deployment: {
+    running_in_container: boolean;
+    background_workers_enabled: boolean;
+    access_key_configured: boolean;
+    paths_restart_required: boolean;
+  };
+  metadata: {
+    tmdb: {
+      base_url: string;
+      language: string;
+      http_timeout_seconds: number;
+      api_key_configured: boolean;
+      read_access_token_configured: boolean;
+    };
+    season_failure: {
+      skip: boolean;
+      backtrace: boolean;
+      use_title_season: boolean;
+      use_first_season: boolean;
+    };
+    ai: {
+      use_season_match: boolean;
+      use_episode_match: boolean;
+      http_timeout_seconds: number;
+    };
+    tmdb_failure_use_bangumi: boolean;
+    mikan_trusted_offset_cache_enabled: boolean;
+  };
+  torrent_fetch: {
+    http_timeout_seconds: number;
+    max_response_bytes: number;
+    max_redirects: number;
+    staging_ttl_seconds: number;
+  };
+}
+
 interface DownloadItem {
   task_id: string;
   title: string;
@@ -285,6 +327,88 @@ async function loadStatus(): Promise<void> {
   } catch (error) {
     health.textContent = errorMessage(error, "连接失败");
     health.className = "badge error";
+  }
+}
+
+function configurationCard(title: string, fields: Array<[string, string]>): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "configuration-card";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const list = document.createElement("dl");
+  list.replaceChildren(...fields.map(([label, value]) => {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    row.append(term, detail);
+    return row;
+  }));
+  card.append(heading, list);
+  return card;
+}
+
+function enabledLabel(value: boolean): string {
+  return value ? "已启用" : "已关闭";
+}
+
+async function loadConfiguration(): Promise<void> {
+  const status = element<HTMLElement>("#configuration-status");
+  const container = element<HTMLElement>("#configuration");
+  status.textContent = "正在读取脱敏后的生效配置…";
+  try {
+    const response = await fetch("/api/v1/config", { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const config = await response.json() as RuntimeConfiguration;
+    const tmdbCredential = config.metadata.tmdb.api_key_configured
+      || config.metadata.tmdb.read_access_token_configured;
+    container.replaceChildren(
+      configurationCard("目录", [
+        ["data_path", config.paths.data_path],
+        ["download_path", config.paths.download_path],
+        ["save_path", config.paths.save_path],
+        ["修改生效", config.deployment.paths_restart_required ? "需要重启" : "即时生效"],
+      ]),
+      configurationCard("部署与安全", [
+        ["容器模式", enabledLabel(config.deployment.running_in_container)],
+        ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
+        ["Access-Key", config.deployment.access_key_configured ? "已配置（值已隐藏）" : "未配置"],
+      ]),
+      configurationCard("TMDB 与季度失败链", [
+        ["TMDB", tmdbCredential ? "凭据已配置（值已隐藏）" : "未配置凭据"],
+        ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
+        ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
+        [
+          "失败优先级",
+          `Skip ${enabledLabel(config.metadata.season_failure.skip)} · `
+          + `Backtrace ${enabledLabel(config.metadata.season_failure.backtrace)} · `
+          + `文件名季度 ${enabledLabel(config.metadata.season_failure.use_title_season)} · `
+          + `第一季 ${enabledLabel(config.metadata.season_failure.use_first_season)}`,
+        ],
+        ["Bangumi 完全兜底", enabledLabel(config.metadata.tmdb_failure_use_bangumi)],
+      ]),
+      configurationCard("AI、偏移与 Torrent", [
+        [
+          "AI 匹配",
+          `季度 ${enabledLabel(config.metadata.ai.use_season_match)} · `
+          + `EP ${enabledLabel(config.metadata.ai.use_episode_match)} · `
+          + `${config.metadata.ai.http_timeout_seconds} 秒`,
+        ],
+        ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
+        [
+          "Torrent HTTP",
+          `${config.torrent_fetch.http_timeout_seconds} 秒 · `
+          + `${config.torrent_fetch.max_redirects} 次跳转 · `
+          + `${config.torrent_fetch.max_response_bytes} bytes`,
+        ],
+        ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
+      ]),
+    );
+    status.textContent = "当前进程的生效值；凭据永不回传。";
+  } catch (error) {
+    container.replaceChildren();
+    status.textContent = `配置读取失败：${errorMessage(error, "未知错误")}`;
   }
 }
 
@@ -1179,6 +1303,7 @@ async function previewRssRules(): Promise<void> {
 }
 
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());
+element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => void loadConfiguration());
 element<HTMLButtonElement>("#rss-save").addEventListener("click", () => void saveRssRules());
 element<HTMLButtonElement>("#rss-add-whitelist").addEventListener("click", () => {
   activeRssRules?.whitelist.push({ id: nextRuleId("whitelist"), name: "新白名单", enabled: true, values: [] });
@@ -1205,6 +1330,7 @@ element<HTMLFormElement>("#downloader-config-form").addEventListener("submit", (
 element<HTMLButtonElement>("#downloader-config-delete").addEventListener("click", () => void deleteDownloaderOverride());
 
 void loadStatus();
+void loadConfiguration();
 void loadDownloads();
 void loadMetadataTasks();
 void loadDownloaders();
