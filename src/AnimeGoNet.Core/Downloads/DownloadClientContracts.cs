@@ -46,7 +46,8 @@ public sealed record AddTorrentCommand(
     string? Rename,
     string? Category,
     IReadOnlyList<string> Tags,
-    bool StartPaused = true);
+    bool StartPaused = true,
+    int SeedingTimeMinutes = 0);
 
 public sealed record DownloadTaskSnapshot(
     string Hash,

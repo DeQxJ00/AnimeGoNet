@@ -21,6 +21,9 @@ public sealed class SourceProfileApiTests
             downloader_id = "pt",
             file_strategy = "link",
             allowed_torrent_hosts = new List<string> { "U2.INVALID", "*.u2.invalid" },
+            category = "Anime/U2",
+            tags = new List<string> { "PT", "Web" },
+            seeding_time_minutes = 1440,
             rss_filter_enabled = true,
             rss_priority_enabled = true,
             enabled = true,
@@ -29,6 +32,9 @@ public sealed class SourceProfileApiTests
         using var created = JsonDocument.Parse(await create.Content.ReadAsStreamAsync());
         Assert.Equal(1, created.RootElement.GetProperty("revision").GetInt64());
         Assert.Equal("u2.invalid", created.RootElement.GetProperty("allowed_torrent_hosts")[0].GetString());
+        Assert.Equal("Anime/U2", created.RootElement.GetProperty("category").GetString());
+        Assert.Equal(2, created.RootElement.GetProperty("tags").GetArrayLength());
+        Assert.Equal(1440, created.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.Equal("/api/v1/sources/u2", create.Headers.Location?.OriginalString);
 
         using var rules = await app.Client.GetAsync("/api/v1/rss-rules/u2");
@@ -63,6 +69,9 @@ public sealed class SourceProfileApiTests
             downloader_id = "bt",
             file_strategy = "move",
             allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            category = "Anime/Move",
+            tags = new List<string> { "Moved" },
+            seeding_time_minutes = 0,
             rss_filter_enabled = false,
             rss_priority_enabled = false,
             enabled = true,
@@ -72,6 +81,8 @@ public sealed class SourceProfileApiTests
         using var updated = JsonDocument.Parse(await update.Content.ReadAsStreamAsync());
         Assert.Equal(2, updated.RootElement.GetProperty("revision").GetInt64());
         Assert.Equal("bt", updated.RootElement.GetProperty("downloader_id").GetString());
+        Assert.Equal("Anime/Move", updated.RootElement.GetProperty("category").GetString());
+        Assert.Equal(0, updated.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.Contains(
             "does not preserve seeding",
             updated.RootElement.GetProperty("file_strategy_warning").GetString(),
@@ -84,11 +95,18 @@ public sealed class SourceProfileApiTests
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                SELECT downloader_id || ':' || source_profile_revision
+                SELECT downloader_id, source_profile_revision, route_snapshot_json
                 FROM ingest_tasks WHERE id = $id;
                 """;
             command.Parameters.AddWithValue("$id", taskId);
-            Assert.Equal("pt:1", await command.ExecuteScalarAsync());
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("pt", reader.GetString(0));
+            Assert.Equal(1, reader.GetInt64(1));
+            using var route = JsonDocument.Parse(reader.GetString(2));
+            Assert.Equal("Anime/U2", route.RootElement.GetProperty("category").GetString());
+            Assert.Equal("PT", route.RootElement.GetProperty("tags")[0].GetString());
+            Assert.Equal(1440, route.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         }
 
         using var stale = await app.Client.PutAsync("/api/v1/sources/u2", Json(new
@@ -116,6 +134,8 @@ public sealed class SourceProfileApiTests
         var mikan = Assert.Single(listed.RootElement.GetProperty("items").EnumerateArray());
         Assert.True(mikan.GetProperty("is_default").GetBoolean());
         Assert.Equal("move", mikan.GetProperty("file_strategy").GetString());
+        Assert.Equal("animegonet", mikan.GetProperty("category").GetString());
+        Assert.Equal(0, mikan.GetProperty("seeding_time_minutes").GetInt32());
 
         using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
         {
@@ -173,6 +193,87 @@ public sealed class SourceProfileApiTests
         Assert.Equal("source_profile_invalid", body.RootElement.GetProperty("code").GetString());
     }
 
+    [Theory]
+    [InlineData("bad,category", "ok", 0, "move")]
+    [InlineData("anime", "bad,tag", 60, "link")]
+    [InlineData("anime", "ok", -2, "link")]
+    [InlineData("anime", "ok", 1, "move")]
+    public async Task InvalidDownloadPolicyIsRejected(
+        string category,
+        string tag,
+        int seedingTimeMinutes,
+        string strategy)
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var response = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-policy",
+            display_name = "U2 Policy",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = strategy,
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            category,
+            tags = new List<string> { tag },
+            seeding_time_minutes = seedingTimeMinutes,
+            enabled = true,
+        }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("source_profile_invalid", body.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task LegacyUpdateOmissionPreservesPolicyAndStrategyChangeGetsSafeSeedDefault()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-legacy",
+            display_name = "U2 Legacy",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = "link",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            category = "Anime/Legacy",
+            tags = new List<string> { "PT" },
+            seeding_time_minutes = 60,
+            enabled = true,
+        }));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+
+        using var preserve = await app.Client.PutAsync("/api/v1/sources/u2-legacy", Json(new
+        {
+            display_name = "U2 Legacy Updated",
+            downloader_id = "pt",
+            file_strategy = "link",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            enabled = true,
+            expected_revision = 1,
+        }));
+        using var preserved = JsonDocument.Parse(await preserve.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
+        Assert.Equal("Anime/Legacy", preserved.RootElement.GetProperty("category").GetString());
+        Assert.Equal("PT", preserved.RootElement.GetProperty("tags")[0].GetString());
+        Assert.Equal(60, preserved.RootElement.GetProperty("seeding_time_minutes").GetInt32());
+
+        using var move = await app.Client.PutAsync("/api/v1/sources/u2-legacy", Json(new
+        {
+            display_name = "U2 Legacy Move",
+            downloader_id = "pt",
+            file_strategy = "move",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            enabled = true,
+            expected_revision = 2,
+        }));
+        using var moved = JsonDocument.Parse(await move.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, move.StatusCode);
+        Assert.Equal("Anime/Legacy", moved.RootElement.GetProperty("category").GetString());
+        Assert.Equal("PT", moved.RootElement.GetProperty("tags")[0].GetString());
+        Assert.Equal(0, moved.RootElement.GetProperty("seeding_time_minutes").GetInt32());
+    }
+
     [Fact]
     public async Task StaticWebUiContainsVersionedSourceProfileEditor()
     {
@@ -184,6 +285,9 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-downloader\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-hosts\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-category\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-tags\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-seeding-time\"", html, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);
@@ -219,6 +323,8 @@ public sealed class SourceProfileApiTests
         Assert.Equal("u2-anime", route.RootElement.GetProperty("source_profile_id").GetString());
         Assert.Equal("u2", route.RootElement.GetProperty("adapter").GetString());
         Assert.Equal("pt", route.RootElement.GetProperty("downloader_id").GetString());
+        Assert.Equal("animegonet", route.RootElement.GetProperty("category").GetString());
+        Assert.Equal(0, route.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.Equal(1, route.RootElement.GetProperty("rss_rule_revision").GetInt64());
 
         using var ingest = await app.Client.PostAsync("/api/v1/ingest", Json(new

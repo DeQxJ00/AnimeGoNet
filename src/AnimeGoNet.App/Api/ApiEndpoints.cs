@@ -562,9 +562,13 @@ public static class ApiEndpoints
                 request.DownloaderId,
                 request.FileStrategy,
                 request.AllowedTorrentHosts,
+                request.Category,
+                request.Tags,
+                request.SeedingTimeMinutes,
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
                 request.Enabled,
+                current: null,
                 options);
             var now = DateTimeOffset.UtcNow;
             var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
@@ -612,9 +616,13 @@ public static class ApiEndpoints
                 request.DownloaderId,
                 request.FileStrategy,
                 request.AllowedTorrentHosts,
+                request.Category,
+                request.Tags,
+                request.SeedingTimeMinutes,
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
                 request.Enabled,
+                current,
                 options);
             var saved = await profiles.UpdateAsync(
                 id, definition, request.ExpectedRevision, DateTimeOffset.UtcNow, cancellationToken)
@@ -721,6 +729,9 @@ public static class ApiEndpoints
             downloaderExists ? downloader!.DownloadPath : null,
             options.Paths.SavePath,
             profile.FileStrategy,
+            profile.Category,
+            profile.Tags,
+            profile.SeedingTimeMinutes,
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
             ruleRevision));
@@ -1188,6 +1199,9 @@ public static class ApiEndpoints
             profile.DownloaderId,
             profile.FileStrategy,
             profile.AllowedTorrentHosts,
+            profile.Category,
+            profile.Tags,
+            profile.SeedingTimeMinutes,
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
             profile.Enabled,
@@ -1275,9 +1289,13 @@ public static class ApiEndpoints
         string? downloaderId,
         string? fileStrategy,
         IReadOnlyList<string?>? allowedTorrentHosts,
+        string? category,
+        IReadOnlyList<string?>? tags,
+        int? seedingTimeMinutes,
         bool rssFilterEnabled,
         bool rssPriorityEnabled,
         bool enabled,
+        SourceProfileAdminRecord? current,
         AnimeGoOptions options)
     {
         var name = displayName?.Trim() ?? string.Empty;
@@ -1316,12 +1334,25 @@ public static class ApiEndpoints
             throw new ArgumentException(
                 "allowed_torrent_hosts contains an invalid DNS host or wildcard pattern.");
         }
+        var normalizedCategory = SourceDownloadPolicy.NormalizeCategory(
+            category ?? current?.Category ?? "animegonet");
+        var normalizedTags = SourceDownloadPolicy.NormalizeTags(
+            tags ?? current?.Tags.Select(value => (string?)value) ?? []);
+        var normalizedSeedingTime = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
+            normalizedStrategy,
+            seedingTimeMinutes
+                ?? (current is not null && current.FileStrategy == normalizedStrategy
+                    ? current.SeedingTimeMinutes
+                    : 0));
         return new SourceProfileDefinition(
             name,
             normalizedAdapter,
             normalizedDownloader,
             normalizedStrategy,
             hosts,
+            normalizedCategory,
+            normalizedTags,
+            normalizedSeedingTime,
             rssFilterEnabled,
             rssPriorityEnabled,
             enabled);

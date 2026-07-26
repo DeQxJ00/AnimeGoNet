@@ -114,9 +114,13 @@ public sealed class StagedTorrentDispatcher(
                 claim.StagingFileName,
                 downloader.DownloadPath,
                 Rename: null,
-                Category: "animegonet",
-                Tags: [claim.SourceId, claim.FileStrategy],
-                StartPaused: true),
+                Category: claim.Category,
+                Tags: new[] { "animegonet", claim.SourceId, claim.FileStrategy }
+                    .Concat(claim.Tags)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                StartPaused: true,
+                SeedingTimeMinutes: claim.SeedingTimeMinutes),
             cancellationToken).ConfigureAwait(false);
         snapshot = await ConfirmAsync(client, claim.InfoHash, cancellationToken).ConfigureAwait(false);
         if (snapshot is null)

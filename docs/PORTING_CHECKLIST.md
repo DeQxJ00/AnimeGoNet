@@ -65,7 +65,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过，真实容器 file-priority/reconnect 待实现 |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过，动态元数据 tag 与真实容器 file-priority/reconnect 待实现 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 例外 | migration diagnostic test |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v10 另含 media organization job租约、逐文件operation、独立cleanup重试与完成记录事务门禁；qB状态/paused preparation/不可变路径/实例故障恢复 tests 已通过，实际整理 worker 待接入 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB完成→暂停→move/NFO/completion→独立deleteFiles=false cleanup 的持久化 worker 与恢复 tests 已通过；link/做种事件待实现 |
@@ -87,7 +87,7 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 待实现 | response contract tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、downloads、metadata task、SourceProfile CRUD/引用保护、下载器脱敏投影/连接测试及四类删除 API 已实现；downloader写入/anime CRUD、路由预览与 OpenAPI 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
 | `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载/元数据面板及 SourceProfile 版本化 CRUD 编辑器使用安全 DOM API，下载器/作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台

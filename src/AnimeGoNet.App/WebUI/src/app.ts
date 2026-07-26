@@ -111,6 +111,9 @@ interface SourceProfile {
   downloader_id: string;
   file_strategy: "link" | "link_delete" | "move" | "wait_move";
   allowed_torrent_hosts: string[];
+  category: string;
+  tags: string[];
+  seeding_time_minutes: number;
   rss_filter_enabled: boolean;
   rss_priority_enabled: boolean;
   enabled: boolean;
@@ -136,6 +139,9 @@ interface SourceRoutePreview {
   download_path: string | null;
   save_path: string;
   file_strategy: string;
+  category: string;
+  tags: string[];
+  seeding_time_minutes: number;
   rss_filter_enabled: boolean;
   rss_priority_enabled: boolean;
   rss_rule_revision: number | null;
@@ -662,6 +668,7 @@ async function loadDownloaders(): Promise<void> {
     const body = await response.json() as DownloaderInstanceList;
     downloaderInstances = body.items;
     downloaderConfigurationRevision = body.configuration_revision;
+    refreshSourceDownloaderOptions();
     list.replaceChildren(...downloaderInstances.map((instance) => {
       const card = document.createElement("article");
       card.className = `downloader-card ${instance.connected === true ? "connected" : instance.connected === false ? "failed" : ""}`;
@@ -725,11 +732,28 @@ function activeSource(): SourceProfile | null {
   return sourceProfiles.find((profile) => profile.id === activeSourceId) ?? null;
 }
 
+function refreshSourceDownloaderOptions(): void {
+  const ids = [...new Set([
+    ...downloaderInstances.filter((instance) => instance.enabled).map((instance) => instance.id),
+    ...sourceProfiles.map((profile) => profile.downloader_id),
+  ])].sort();
+  element<HTMLDataListElement>("#source-downloader-options").replaceChildren(
+    ...ids.map((id) => {
+      const option = document.createElement("option");
+      option.value = id;
+      return option;
+    }),
+  );
+}
+
 function updateSourceWarning(): void {
   const strategy = element<HTMLSelectElement>("#source-strategy").value;
+  const seeding = element<HTMLInputElement>("#source-seeding-time");
+  if (strategy === "move") seeding.value = "0";
+  seeding.disabled = strategy === "move";
   element<HTMLElement>("#source-warning").textContent = strategy === "move"
-    ? "move 会在下载完成后移动源文件，无法继续做种；修改只影响之后创建的任务。"
-    : "修改只影响之后创建的任务；历史任务继续使用原 revision 路由快照。";
+    ? "move 会在下载完成后移动源文件，做种分钟固定为 0；修改只影响之后创建的任务。"
+    : "做种分钟：-1 无限、0 不做种、正数为上限；历史任务继续使用原 revision 路由快照。";
 }
 
 function populateSourceForm(profile: SourceProfile | null): void {
@@ -743,6 +767,10 @@ function populateSourceForm(profile: SourceProfile | null): void {
   adapter.value = profile?.adapter ?? "u2";
   element<HTMLInputElement>("#source-downloader").value = profile?.downloader_id ?? "pt";
   element<HTMLSelectElement>("#source-strategy").value = profile?.file_strategy ?? "link";
+  element<HTMLInputElement>("#source-category").value = profile?.category ?? "animegonet";
+  element<HTMLInputElement>("#source-tags").value = profile?.tags.join(", ") ?? "";
+  element<HTMLInputElement>("#source-seeding-time").value =
+    String(profile?.seeding_time_minutes ?? 0);
   element<HTMLTextAreaElement>("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
   element<HTMLInputElement>("#source-enabled").checked = profile?.enabled ?? true;
   element<HTMLInputElement>("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
@@ -779,7 +807,7 @@ function renderSourceList(): void {
     revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
     heading.append(name, revision);
     const route = document.createElement("p");
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 做种 ${profile.seeding_time_minutes} 分钟 · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
@@ -823,7 +851,8 @@ async function previewSourceRoute(): Promise<void> {
           `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter})`,
           `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
           `媒体库 ${route.save_path}`,
-          `策略 ${route.file_strategy} · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
+          `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
+          `做种 ${route.seeding_time_minutes} 分钟 · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
         ].join("\n")
       : `无效\n${route.errors.map((error) => `• ${error}`).join("\n")}`;
   } catch (error) {
@@ -841,14 +870,7 @@ async function loadSources(selectedId?: string): Promise<void> {
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as SourceProfileList;
     sourceProfiles = body.items;
-    const downloaders = [...new Set(sourceProfiles.map((profile) => profile.downloader_id))].sort();
-    element<HTMLDataListElement>("#source-downloader-options").replaceChildren(
-      ...downloaders.map((downloader) => {
-        const option = document.createElement("option");
-        option.value = downloader;
-        return option;
-      }),
-    );
+    refreshSourceDownloaderOptions();
     const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
       ?? sourceProfiles[0]
       ?? null;
@@ -869,6 +891,13 @@ function sourceHosts(): string[] {
     .filter(Boolean);
 }
 
+function sourceTags(): string[] {
+  return element<HTMLInputElement>("#source-tags").value
+    .split(/[\r\n,，]+/u)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
 async function saveSource(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const current = activeSource();
@@ -878,6 +907,9 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     display_name: element<HTMLInputElement>("#source-name").value.trim(),
     downloader_id: element<HTMLInputElement>("#source-downloader").value.trim(),
     file_strategy: element<HTMLSelectElement>("#source-strategy").value,
+    category: element<HTMLInputElement>("#source-category").value.trim(),
+    tags: sourceTags(),
+    seeding_time_minutes: element<HTMLInputElement>("#source-seeding-time").valueAsNumber,
     allowed_torrent_hosts: sourceHosts(),
     rss_filter_enabled: element<HTMLInputElement>("#source-filter-enabled").checked,
     rss_priority_enabled: element<HTMLInputElement>("#source-priority-enabled").checked,

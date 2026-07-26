@@ -113,6 +113,12 @@
                 <option value="wait_move">wait_move</option>
               </select>
             </label>
+            <label>qB 分类<input id="source-category" required maxlength="64" autocomplete="off"></label>
+            <label>附加 Tags<input id="source-tags" maxlength="512" placeholder="web, 追番" autocomplete="off"></label>
+            <label>做种分钟
+              <input id="source-seeding-time" type="number" min="-1" max="5256000" required>
+              <small>-1 无限，0 不做种，正数为分钟</small>
+            </label>
             <label class="source-hosts">允许的 Torrent Host
               <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
             </label>

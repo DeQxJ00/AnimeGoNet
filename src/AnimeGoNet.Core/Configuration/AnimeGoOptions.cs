@@ -106,6 +106,12 @@ public sealed record SourceProfileSeed
 
     public required IReadOnlyList<string> AllowedTorrentHosts { get; init; }
 
+    public string Category { get; init; } = "animegonet";
+
+    public IReadOnlyList<string> Tags { get; init; } = [];
+
+    public int SeedingTimeMinutes { get; init; }
+
     public bool RssFilterEnabled { get; init; }
 
     public bool RssPriorityEnabled { get; init; }

@@ -94,6 +94,28 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Contains(errors, error => error.Contains("TMDB language", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RejectsInvalidSourceDownloadPolicy()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    Category = "bad,category",
+                    Tags = ["valid", "bad,tag"],
+                    SeedingTimeMinutes = 1,
+                },
+            ],
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("download policy", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("/download/incomplete", "/download/incomplete/bt", true)]
     [InlineData("/download/incomplete", "/download/incomplete-other", false)]

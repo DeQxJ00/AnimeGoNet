@@ -27,5 +27,8 @@ public sealed record ClaimedStagedTorrentRecord(
     string SourceId,
     string Title,
     string FileStrategy,
+    string Category,
+    IReadOnlyList<string> Tags,
+    int SeedingTimeMinutes,
     string LeaseToken,
     int AttemptCount);

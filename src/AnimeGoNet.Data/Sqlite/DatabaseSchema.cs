@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 16;
+    public const int CurrentVersion = 17;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -22,6 +22,7 @@ public static class DatabaseSchema
         new SchemaMigration(14, "mikan_rss_batch_audit", MikanRssBatchAudit),
         new SchemaMigration(15, "legacy_mikan_filter_storage", LegacyMikanFilterStorage),
         new SchemaMigration(16, "mikan_legacy_filter_audit", MikanLegacyFilterAudit),
+        new SchemaMigration(17, "source_download_policy", SourceDownloadPolicy),
     ];
 
     private const string InitialBusinessSchema = """
@@ -752,5 +753,20 @@ public static class DatabaseSchema
 
         CREATE INDEX ix_mikan_rss_entries_effect
         ON mikan_rss_batch_entries(effect_state, claim_expires_at_utc, batch_id, ordinal);
+        """;
+
+    private const string SourceDownloadPolicy = """
+        ALTER TABLE source_profiles
+        ADD COLUMN category TEXT NOT NULL DEFAULT 'animegonet'
+            CHECK (length(category) BETWEEN 1 AND 64);
+
+        ALTER TABLE source_profiles
+        ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'
+            CHECK (json_valid(tags_json) AND json_type(tags_json) = 'array');
+
+        ALTER TABLE source_profiles
+        ADD COLUMN seeding_time_minutes INTEGER NOT NULL DEFAULT 0
+            CHECK (seeding_time_minutes BETWEEN -1 AND 5256000
+                AND (file_strategy <> 'move' OR seeding_time_minutes = 0));
         """;
 }

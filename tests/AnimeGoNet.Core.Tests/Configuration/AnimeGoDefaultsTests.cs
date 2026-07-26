@@ -47,6 +47,9 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal("bt", profile.DownloaderId);
         Assert.Equal(FileStrategy.Move, profile.FileStrategy);
         Assert.Contains("mikanani.me", profile.AllowedTorrentHosts);
+        Assert.Equal("animegonet", profile.Category);
+        Assert.Empty(profile.Tags);
+        Assert.Equal(0, profile.SeedingTimeMinutes);
         Assert.True(profile.RssFilterEnabled);
         Assert.True(profile.RssPriorityEnabled);
         Assert.Equal(2, options.Downloaders.Count);

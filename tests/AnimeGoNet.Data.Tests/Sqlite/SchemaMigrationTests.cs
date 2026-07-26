@@ -111,6 +111,50 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task SourceDownloadPolicyMigrationPreservesProfilesWithSafeDefaults()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 16))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc, allowed_torrent_hosts_json)
+                VALUES ('mikan', 'Mikan', 'mikan', 'bt', 'move', 1, 1, 3, 1, $now, $now, '["mikanani.me"]');
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-07-26T10:00:00.0000000+00:00");
+            Assert.Equal(1, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration17 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 17);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration17.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT category, tags_json, seeding_time_minutes, revision
+            FROM source_profiles WHERE id = 'mikan';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("animegonet", reader.GetString(0));
+        Assert.Equal("[]", reader.GetString(1));
+        Assert.Equal(0, reader.GetInt32(2));
+        Assert.Equal(3, reader.GetInt64(3));
+    }
+
+    [Fact]
     public async Task LegacyFilterAuditMigrationPreservesSchema15BatchDataAndForeignKeys()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

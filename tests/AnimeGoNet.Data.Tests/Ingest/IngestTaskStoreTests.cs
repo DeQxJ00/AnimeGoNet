@@ -36,6 +36,9 @@ public sealed class IngestTaskStoreTests
         Assert.Equal(64, reader.GetString(0).Length);
         Assert.DoesNotContain("personal-passkey", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"file_strategy\":\"move\"", reader.GetString(1), StringComparison.Ordinal);
+        Assert.Contains("\"category\":\"animegonet\"", reader.GetString(1), StringComparison.Ordinal);
+        Assert.Contains("\"tags\":[]", reader.GetString(1), StringComparison.Ordinal);
+        Assert.Contains("\"seeding_time_minutes\":0", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);
     }
 
@@ -192,6 +195,9 @@ public sealed class IngestTaskStoreTests
         var claim = Assert.Single(claims, item => item is not null);
         Assert.Equal(task.Id, claim!.TaskId);
         Assert.Equal(1, claim.AttemptCount);
+        Assert.Equal("animegonet", claim.Category);
+        Assert.Empty(claim.Tags);
+        Assert.Equal(0, claim.SeedingTimeMinutes);
     }
 
     private static NormalizedIngestItem CreateNormalized() =>

@@ -467,6 +467,7 @@ async function loadDownloaders() {
         const body = await response.json();
         downloaderInstances = body.items;
         downloaderConfigurationRevision = body.configuration_revision;
+        refreshSourceDownloaderOptions();
         list.replaceChildren(...downloaderInstances.map((instance) => {
             const card = document.createElement("article");
             card.className = `downloader-card ${instance.connected === true ? "connected" : instance.connected === false ? "failed" : ""}`;
@@ -529,11 +530,26 @@ async function loadDownloaders() {
 function activeSource() {
     return sourceProfiles.find((profile) => profile.id === activeSourceId) ?? null;
 }
+function refreshSourceDownloaderOptions() {
+    const ids = [...new Set([
+            ...downloaderInstances.filter((instance) => instance.enabled).map((instance) => instance.id),
+            ...sourceProfiles.map((profile) => profile.downloader_id),
+        ])].sort();
+    element("#source-downloader-options").replaceChildren(...ids.map((id) => {
+        const option = document.createElement("option");
+        option.value = id;
+        return option;
+    }));
+}
 function updateSourceWarning() {
     const strategy = element("#source-strategy").value;
+    const seeding = element("#source-seeding-time");
+    if (strategy === "move")
+        seeding.value = "0";
+    seeding.disabled = strategy === "move";
     element("#source-warning").textContent = strategy === "move"
-        ? "move 会在下载完成后移动源文件，无法继续做种；修改只影响之后创建的任务。"
-        : "修改只影响之后创建的任务；历史任务继续使用原 revision 路由快照。";
+        ? "move 会在下载完成后移动源文件，做种分钟固定为 0；修改只影响之后创建的任务。"
+        : "做种分钟：-1 无限、0 不做种、正数为上限；历史任务继续使用原 revision 路由快照。";
 }
 function populateSourceForm(profile) {
     activeSourceId = profile?.id ?? null;
@@ -546,6 +562,10 @@ function populateSourceForm(profile) {
     adapter.value = profile?.adapter ?? "u2";
     element("#source-downloader").value = profile?.downloader_id ?? "pt";
     element("#source-strategy").value = profile?.file_strategy ?? "link";
+    element("#source-category").value = profile?.category ?? "animegonet";
+    element("#source-tags").value = profile?.tags.join(", ") ?? "";
+    element("#source-seeding-time").value =
+        String(profile?.seeding_time_minutes ?? 0);
     element("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
     element("#source-enabled").checked = profile?.enabled ?? true;
     element("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
@@ -581,7 +601,7 @@ function renderSourceList() {
         revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
         heading.append(name, revision);
         const route = document.createElement("p");
-        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 做种 ${profile.seeding_time_minutes} 分钟 · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
         card.append(heading, route);
         card.addEventListener("click", () => populateSourceForm(profile));
         return card;
@@ -622,7 +642,8 @@ async function previewSourceRoute() {
                 `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter})`,
                 `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
                 `媒体库 ${route.save_path}`,
-                `策略 ${route.file_strategy} · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
+                `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
+                `做种 ${route.seeding_time_minutes} 分钟 · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
             ].join("\n")
             : `无效\n${route.errors.map((error) => `• ${error}`).join("\n")}`;
     }
@@ -642,12 +663,7 @@ async function loadSources(selectedId) {
             throw new Error(await responseError(response));
         const body = await response.json();
         sourceProfiles = body.items;
-        const downloaders = [...new Set(sourceProfiles.map((profile) => profile.downloader_id))].sort();
-        element("#source-downloader-options").replaceChildren(...downloaders.map((downloader) => {
-            const option = document.createElement("option");
-            option.value = downloader;
-            return option;
-        }));
+        refreshSourceDownloaderOptions();
         const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
             ?? sourceProfiles[0]
             ?? null;
@@ -667,6 +683,12 @@ function sourceHosts() {
         .map((host) => host.trim().toLowerCase())
         .filter(Boolean);
 }
+function sourceTags() {
+    return element("#source-tags").value
+        .split(/[\r\n,，]+/u)
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+}
 async function saveSource(event) {
     event.preventDefault();
     const current = activeSource();
@@ -676,6 +698,9 @@ async function saveSource(event) {
         display_name: element("#source-name").value.trim(),
         downloader_id: element("#source-downloader").value.trim(),
         file_strategy: element("#source-strategy").value,
+        category: element("#source-category").value.trim(),
+        tags: sourceTags(),
+        seeding_time_minutes: element("#source-seeding-time").valueAsNumber,
         allowed_torrent_hosts: sourceHosts(),
         rss_filter_enabled: element("#source-filter-enabled").checked,
         rss_priority_enabled: element("#source-priority-enabled").checked,

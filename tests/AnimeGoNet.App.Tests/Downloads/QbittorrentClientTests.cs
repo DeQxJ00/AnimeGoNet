@@ -113,7 +113,8 @@ public sealed class QbittorrentClientTests
             "/download/incomplete/bt",
             "Episode",
             "animegonet",
-            ["mikan", "move"]));
+            ["mikan", "move"],
+            SeedingTimeMinutes: 120));
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal("/api/v2/torrents/add", request.Path);
@@ -122,6 +123,26 @@ public sealed class QbittorrentClientTests
         Assert.Contains("/download/incomplete/bt", request.Body, StringComparison.Ordinal);
         Assert.Contains("name=stopped", request.Body, StringComparison.Ordinal);
         Assert.Contains("true", request.Body, StringComparison.Ordinal);
+        Assert.Contains("name=seedingTimeLimit", request.Body, StringComparison.Ordinal);
+        Assert.Contains("120", request.Body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(-2)]
+    [InlineData(5_256_001)]
+    public async Task AddRejectsInvalidSeedingTimeBeforeHttp(int minutes)
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+        await using var torrent = new MemoryStream([1, 2, 3]);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.AddTorrentAsync(
+            new AddTorrentCommand(
+                torrent, "item.torrent", "/download/incomplete/bt", null, "animegonet", [],
+                SeedingTimeMinutes: minutes)));
+
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]

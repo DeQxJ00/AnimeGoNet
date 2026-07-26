@@ -66,6 +66,26 @@ public static partial class AnimeGoOptionsValidator
                     errors.Add($"Source profile '{profile.Id}' has invalid Torrent host pattern '{host}'.");
                 }
             }
+
+            try
+            {
+                _ = SourceDownloadPolicy.NormalizeCategory(profile.Category);
+                _ = SourceDownloadPolicy.NormalizeTags(profile.Tags);
+                _ = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
+                    profile.FileStrategy switch
+                    {
+                        FileStrategy.Link => "link",
+                        FileStrategy.LinkDelete => "link_delete",
+                        FileStrategy.Move => "move",
+                        FileStrategy.WaitMove => "wait_move",
+                        _ => string.Empty,
+                    },
+                    profile.SeedingTimeMinutes);
+            }
+            catch (ArgumentException exception)
+            {
+                errors.Add($"Source profile '{profile.Id}' download policy is invalid: {exception.Message}");
+            }
         }
 
         if (options.Metadata.Ai.HttpTimeout <= TimeSpan.Zero)

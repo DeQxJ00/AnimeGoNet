@@ -73,6 +73,10 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
 
     public async Task AddTorrentAsync(AddTorrentCommand command, CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(command.SeedingTimeMinutes, -1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            command.SeedingTimeMinutes,
+            SourceDownloadPolicy.MaximumSeedingTimeMinutes);
         using var content = new MultipartFormDataContent();
         content.Add(new StreamContent(command.Torrent), "torrents", command.FileName);
         content.Add(new StringContent(command.SavePath), "savepath");
@@ -82,6 +86,9 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
         {
             content.Add(new StringContent(string.Join(',', command.Tags)), "tags");
         }
+        content.Add(
+            new StringContent(command.SeedingTimeMinutes.ToString(CultureInfo.InvariantCulture)),
+            "seedingTimeLimit");
 
         var paused = command.StartPaused.ToString(CultureInfo.InvariantCulture).ToLowerInvariant();
         content.Add(new StringContent(paused), "stopped");

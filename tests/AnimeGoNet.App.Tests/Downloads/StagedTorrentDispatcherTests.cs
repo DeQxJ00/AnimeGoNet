@@ -26,8 +26,11 @@ public sealed class StagedTorrentDispatcherTests
         var command = Assert.Single(client.Added);
         Assert.True(command.StartPaused);
         Assert.Equal(fixture.Options.Downloaders["bt"].DownloadPath, command.SavePath);
+        Assert.Equal("animegonet", command.Category);
+        Assert.Contains("animegonet", command.Tags);
         Assert.Contains("mikan", command.Tags);
         Assert.Contains("move", command.Tags);
+        Assert.Equal(0, command.SeedingTimeMinutes);
         Assert.Equal([fixture.InfoHash], client.PausedHashes);
         Assert.False(File.Exists(fixture.StagingFilePath));
         var state = await fixture.ReadLifecycleAsync();
@@ -139,6 +142,7 @@ public sealed class StagedTorrentDispatcherTests
                 command.Category,
                 command.Tags,
                 command.StartPaused,
+                command.SeedingTimeMinutes,
                 buffer.ToArray()));
             _exists = true;
         }
@@ -187,6 +191,7 @@ public sealed class StagedTorrentDispatcherTests
         string? Category,
         IReadOnlyList<string> Tags,
         bool StartPaused,
+        int SeedingTimeMinutes,
         byte[] Bytes);
 
     private sealed class FileStagingService(string stagingPath) : ITorrentStagingService

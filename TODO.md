@@ -151,10 +151,10 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [x] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作、失败隔离、可选客户端版本/默认保存路径诊断，以及按实例 2～120 秒指数退避/熔断均已实现。
-- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、乐观并发和任务/RSS引用保护 API 已完成；历史任务保留原 revision/下载器快照。category/tag/做种策略、路由预览和 WebUI 待实现。
+- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成；历史任务保留原 revision/下载器/下载策略快照。依赖 TMDB/Bangumi 日期与 EP 的上游动态 tag 模板待元数据后置赋值模块实现。
 - [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
-- [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add、file priority、stop/start/delete、状态映射、严格 hash/index/priority 校验与失败响应。
+- [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add（category/tags/seedingTimeLimit）、file priority、stop/start/delete、状态映射、严格 hash/index/priority/做种分钟校验与失败响应。
 - [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、已有/新增任务显式再暂停、qB确认、download job事务与确认后staging清理。
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；默认 CI 不启动该实例，也未创建 Torrent。
 - [x] 实现下载器路径可见性与硬链接能力探测：仅在显式 API/WebUI 操作时向实例 `download_path` 和全局 `save_path` 写入同名随机临时文件，验证后尽力清理；缺目录、权限、跨文件系统/挂载和平台不支持均返回稳定脱敏错误码，Windows/Linux/macOS 使用 AOT-safe 原生调用。
@@ -208,7 +208,7 @@
 - [>] 实现下载列表/详情/文件级priority与wanted进度、筛选搜索分页和状态时间线（只读列表 API/WebUI 与规范快照已实现；详情、文件级、筛选分页和时间线待实现）。
 - [>] 实现暂停、恢复和AnimeGoNet业务重试；下载任务卡片已只跳转四类删除中心并执行预览/确认，暂停、恢复和业务重试待实现。首版不复刻Tracker/Peer明细、piece图、限速、强制校验/汇报和qB全局设置。
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
-- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、下载器绑定、Host 白名单、规则开关、文件策略、revision 冲突、move 提示，以及复用真实 adapter 校验且不产生副作用的路由预览；完整下载器下拉、ID字段规则、category/tag、做种策略和重复通知待实现。
+- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、做种分钟、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；动态 tag 模板和重复命中通知待实现。
 - [ ] 实现手动 RSS/下载提交与操作结果。
 - [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。
 - [ ] 配置页显式展示五个季度失败开关及独立 EP-AI 开关，说明优先级/触发阶段和 Backtrace/AI 前置条件，AI 密钥只写不回显。

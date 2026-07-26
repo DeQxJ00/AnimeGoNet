@@ -8,6 +8,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Feeds;
+using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Ingest;
@@ -346,7 +347,10 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 SELECT staged_torrents.task_id, staged_torrents.staging_file_name,
                        staged_torrents.info_hash, staged_torrents.total_size_bytes,
                        ingest_tasks.downloader_id, ingest_tasks.source_id, ingest_tasks.title,
-                       json_extract(ingest_tasks.route_snapshot_json, '$.file_strategy')
+                       json_extract(ingest_tasks.route_snapshot_json, '$.file_strategy'),
+                       json_extract(ingest_tasks.route_snapshot_json, '$.category'),
+                       json_extract(ingest_tasks.route_snapshot_json, '$.tags'),
+                       json_extract(ingest_tasks.route_snapshot_json, '$.seeding_time_minutes')
                 FROM staged_torrents
                 JOIN ingest_tasks ON ingest_tasks.id = staged_torrents.task_id
                 WHERE staged_torrents.task_id = $task_id
@@ -369,6 +373,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 reader.GetString(5),
                 reader.GetString(6),
                 reader.GetString(7),
+                reader.GetString(8),
+                JsonSerializer.Deserialize(reader.GetString(9), DataJsonContext.Default.StringArray) ?? [],
+                reader.GetInt32(10),
                 leaseToken,
                 attemptCount);
         }
@@ -567,6 +574,15 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             writer.WriteNumber("revision", profile.Revision);
             writer.WriteString("downloader_id", profile.DownloaderId);
             writer.WriteString("file_strategy", profile.FileStrategy);
+            writer.WriteString("category", profile.Category);
+            writer.WriteStartArray("tags");
+            foreach (var tag in profile.Tags)
+            {
+                writer.WriteStringValue(tag);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteNumber("seeding_time_minutes", profile.SeedingTimeMinutes);
             writer.WriteStartArray("allowed_torrent_hosts");
             foreach (var host in profile.AllowedTorrentHosts)
             {

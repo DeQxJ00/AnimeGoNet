@@ -55,9 +55,10 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - filter/rule profile、TMDB/AI策略 profile。
 - 对 Mikan RSS profile 保存 `mikan_rss_filter_enabled`，默认 `true`；AnimeGoHelper legacy `/api/rss` 使用默认 Mikan profile 的当前 revision，开关和规则随任务路由快照固化。
 - 对 Mikan RSS profile 另存独立的 `mikan_rss_priority_enabled` 和版本化优选规则；新安装默认启用，在同批次按可靠 `mikanid+来源EP` 聚合重复RSS选项并逐组淘汰，规则结构见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
-- category、tag 模板和下载子目录。
+- qB category、静态附加 tags；AnimeGoNet 总会额外加入 `animegonet`、来源 ID 和文件策略三个可识别系统 tag。
 - `file_strategy`：`link`、`link_delete`、`move`、`wait_move`。
-- 做种目标/保留策略；PT 来源可以要求长期做种并禁止自动删除源。
+- `seeding_time_minutes` 沿用上游 qB 语义：`0` 不做种、`-1` 无限做种、正数为分钟上限；`move` 必须为 `0`，因为下载完成后移动源文件。
+- 依赖 TMDB/Bangumi 日期或 EP 的上游 `{year}/{quarter}/{ep}` 动态 tag 模板不能在暂停 dispatch 阶段求值；它将由后置元数据模块验证后再赋值，本阶段不会把未展开模板原样发送给 qB。
 - 去重范围固定为全局媒体库，不允许 source profile 改成来源内去重；规范键为 TMDB Series/Season/Episode。profile 只可配置发现重复后的日志/通知，不可绕过完成记录。
 
 配置优先级固定为：作品级人工规则 > 输入源 profile > 全局默认。人工规则命中失败时显式报错，不能静默落到较低层覆盖。
@@ -179,7 +180,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - “路由预览”：输入模拟 title/IDs 后显示会命中哪个下载器、哪些规则以及路径。
 - 修改只影响新任务；进行中任务保持原快照，可由用户显式重新路由。
 
-当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略和规则开关。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
+当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、category、tags、做种分钟和规则开关。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
 
 ### 任务/作品详情
 

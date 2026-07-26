@@ -35,6 +35,9 @@ public sealed class SourceProfileStoreAdminTests
         Assert.Equal(2, updated.Revision);
         Assert.Equal("bt", updated.DownloaderId);
         Assert.Equal("move", updated.FileStrategy);
+        Assert.Equal("animegonet", updated.Category);
+        Assert.Equal(["source-test"], updated.Tags);
+        Assert.Equal(0, updated.SeedingTimeMinutes);
         Assert.Equal(1, listed.IngestTaskCount);
         Assert.Equal("pt", task.DownloaderId);
         Assert.Equal(1, task.SourceProfileRevision);
@@ -72,13 +75,39 @@ public sealed class SourceProfileStoreAdminTests
         await Assert.ThrowsAsync<KeyNotFoundException>(() => store.DeleteAsync("missing", 1));
     }
 
+    [Fact]
+    public async Task StoreEnforcesDownloadPolicyWithoutApiLayer()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+
+        var invalid = Definition("U2", "u2", "pt", "move", ["u2.invalid"]) with
+        {
+            SeedingTimeMinutes = 1,
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CreateAsync("u2", invalid, At(10)));
+    }
+
     private static SourceProfileDefinition Definition(
         string name,
         string adapter,
         string downloader,
         string strategy,
         IReadOnlyList<string> hosts) =>
-        new(name, adapter, downloader, strategy, hosts, false, false, true);
+        new(
+            name,
+            adapter,
+            downloader,
+            strategy,
+            hosts,
+            "animegonet",
+            ["source-test"],
+            strategy == "move" ? 0 : -1,
+            false,
+            false,
+            true);
 
     private static DateTimeOffset At(int hour) =>
         DateTimeOffset.Parse(
