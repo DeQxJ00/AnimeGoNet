@@ -43,6 +43,8 @@ public sealed class MetadataResolutionStoreTests
             TimeSpan.FromMinutes(1)));
         Assert.Equal(3951, claim.MikanId);
         Assert.Equal(547888, claim.BangumiSubjectId);
+        Assert.Equal(999, claim.AniDbAnimeId);
+        Assert.Equal("tt1234567", claim.ImdbTitleId);
     }
 
     [Fact]
@@ -211,6 +213,8 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(2, episodeClaim.TmdbSeasonNumber);
         Assert.Single(episodeClaim.Files);
         Assert.Equal(2, episodeClaim.Resolution.AttemptNumber);
+        Assert.Equal(999, episodeClaim.Resolution.AniDbAnimeId);
+        Assert.Equal("tt1234567", episodeClaim.Resolution.ImdbTitleId);
     }
 
     private sealed class MetadataFixture : IAsyncDisposable
@@ -241,7 +245,17 @@ public sealed class MetadataResolutionStoreTests
                 "mikan",
                 new IngestItemCommand(
                     "https://mikanani.me/passkey/file.torrent",
-                    new IngestItemInfo("Episode", null, "one", "3951", null, null, 3951, 547888, null, null))).Item);
+                    new IngestItemInfo(
+                        "Episode",
+                        null,
+                        "one",
+                        "3951",
+                        null,
+                        null,
+                        3951,
+                        547888,
+                        999,
+                        "tt1234567"))).Item);
             var hash = new string('e', 40);
             var tasks = new IngestTaskStore(databaseFixture.Database);
             var staged = await tasks.AddStagedAsync(

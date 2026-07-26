@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
@@ -10,6 +11,9 @@ public sealed class EpisodeMetadataResolutionProcessor(
     MetadataResolutionStore resolutions,
     MikanWorkMetadataRuleStore rules,
     ITmdbClient tmdb,
+    IAiMetadataMatcher aiMatcher,
+    AiMetadataResultValidator aiValidator,
+    AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -146,6 +150,22 @@ public sealed class EpisodeMetadataResolutionProcessor(
             results.Add(new MetadataEpisodeFileResolution(file.FileId, episode, "episode", null));
         }
 
+        if (manualOffset is null
+            && options.Metadata.Ai.UseEpisodeMatch
+            && results.Any(result => result.Episode is null
+                && claim.Files.Any(file => file.FileId == result.FileId
+                    && SubtitleAssociationResolver.IsVideo(file.RelativePath))))
+        {
+            var shouldStop = await TryApplyAiAsync(
+                claim,
+                results,
+                cancellationToken).ConfigureAwait(false);
+            if (shouldStop)
+            {
+                return true;
+            }
+        }
+
         foreach (var association in associations)
         {
             var video = association.VideoFileId is null
@@ -186,6 +206,184 @@ public sealed class EpisodeMetadataResolutionProcessor(
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    private async Task<bool> TryApplyAiAsync(
+        MetadataEpisodeTaskClaim claim,
+        List<MetadataEpisodeFileResolution> results,
+        CancellationToken cancellationToken)
+    {
+        var videos = claim.Files
+            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            .ToArray();
+        if (videos.Length == 0)
+        {
+            return false;
+        }
+
+        var input = new AiMetadataMatchInput(
+            claim.Resolution.Title,
+            videos.Select(file => new AiMetadataFileInput(
+                file.RelativePath,
+                file.SizeBytes)).ToArray(),
+            claim.Resolution.BangumiSubjectId,
+            claim.Resolution.AniDbAnimeId,
+            claim.Resolution.ImdbTitleId,
+            claim.Files.Count,
+            PublishedAt: null,
+            BangumiEpisodeCandidate: null,
+            UseBangumiPubDateFirst: false);
+        var started = _timeProvider.GetTimestamp();
+        AiMetadataMatchCandidate candidate;
+        try
+        {
+            candidate = await aiMatcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            var failure = new MetadataFailure(exception.Kind, exception.SafeCode, false);
+            return await HandleAiFailureAsync(
+                claim,
+                results,
+                failure,
+                started,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var validated = await aiValidator.ValidateAsync(
+            input,
+            candidate,
+            claim.TmdbSeriesId,
+            claim.TmdbSeasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (!validated.IsSuccess)
+        {
+            return await HandleAiFailureAsync(
+                claim,
+                results,
+                validated.Failure!,
+                started,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var validatedByPath = validated.Value!.Files.ToDictionary(
+            file => file.Input.Name,
+            StringComparer.Ordinal);
+        foreach (var existing in results.Where(result => result.Episode is not null))
+        {
+            var path = claim.Files.Single(file => file.FileId == existing.FileId).RelativePath;
+            var aiFile = validatedByPath[path];
+            if (aiFile.Episode is null
+                || aiFile.Episode.EpisodeNumber != existing.Episode!.EpisodeNumber)
+            {
+                var failure = new MetadataFailure(
+                    MetadataFailureKind.Protocol,
+                    "ai_confirmed_episode_changed",
+                    TmdbAccessConfirmed: true);
+                await RecordAsync(
+                    claim,
+                    "ai_episode",
+                    null,
+                    "error",
+                    failure.Code,
+                    false,
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                AnnotateUnresolvedAiFailure(claim, results, failure.Code);
+                return false;
+            }
+        }
+
+        for (var index = 0; index < results.Count; index++)
+        {
+            var existing = results[index];
+            if (existing.Episode is not null)
+            {
+                continue;
+            }
+
+            var file = claim.Files.Single(candidateFile => candidateFile.FileId == existing.FileId);
+            if (!SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            {
+                continue;
+            }
+
+            var aiFile = validatedByPath[file.RelativePath];
+            results[index] = aiFile.Episode is null
+                ? existing with
+                {
+                    OtherReason = aiFile.OtherReason ?? existing.OtherReason,
+                }
+                : new MetadataEpisodeFileResolution(
+                    existing.FileId,
+                    aiFile.Episode,
+                    "episode",
+                    null);
+        }
+
+        await RecordAsync(
+            claim,
+            "ai_episode",
+            null,
+            "matched",
+            null,
+            false,
+            ElapsedMilliseconds(started),
+            cancellationToken).ConfigureAwait(false);
+        return false;
+    }
+
+    private async Task<bool> HandleAiFailureAsync(
+        MetadataEpisodeTaskClaim claim,
+        List<MetadataEpisodeFileResolution> results,
+        MetadataFailure failure,
+        long started,
+        CancellationToken cancellationToken)
+    {
+        if (IsRetryable(failure.Kind))
+        {
+            await RecordFailureAndStopAsync(
+                claim,
+                "ai_episode",
+                null,
+                failure,
+                ElapsedMilliseconds(started),
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        AnnotateUnresolvedAiFailure(claim, results, failure.Code);
+        await RecordAsync(
+            claim,
+            "ai_episode",
+            null,
+            failure.Kind == MetadataFailureKind.SemanticNoMatch ? "not_matched" : "error",
+            failure.Code,
+            false,
+            ElapsedMilliseconds(started),
+            cancellationToken).ConfigureAwait(false);
+        return false;
+    }
+
+    private static void AnnotateUnresolvedAiFailure(
+        MetadataEpisodeTaskClaim claim,
+        List<MetadataEpisodeFileResolution> results,
+        string code)
+    {
+        for (var index = 0; index < results.Count; index++)
+        {
+            var result = results[index];
+            if (result.Episode is not null)
+            {
+                continue;
+            }
+
+            var file = claim.Files.Single(candidate => candidate.FileId == result.FileId);
+            if (SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            {
+                results[index] = result with { OtherReason = code };
+            }
+        }
     }
 
     private async Task RecordFailureAndStopAsync(

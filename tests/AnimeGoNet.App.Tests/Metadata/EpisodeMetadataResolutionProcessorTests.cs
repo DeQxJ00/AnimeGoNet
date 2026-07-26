@@ -296,9 +296,207 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Equal([13], tmdb.EpisodeRequests);
     }
 
-    private static async Task<RunningApp> StartSeasonResolvedTaskAsync(FakeTmdbClient tmdb, int? episodeOffset)
+    [Fact]
+    public async Task EpisodeAiResolvesUnparsedVideoAndPreservesWorkLevelIds()
     {
-        var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number,
+                72517,
+                2,
+                number,
+                $"Episode {number}",
+                null),
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    2,
+                    7,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Show unknown.mkv", null, null),
+            ("Show unknown.zh-Hans.ass", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Equal(2, files.Length);
+        Assert.All(files, file =>
+        {
+            Assert.Equal("episode", file.Disposition);
+            Assert.Equal(7, file.EpisodeNumber);
+        });
+        var video = files.Single(file => file.Path.EndsWith(".mkv", StringComparison.Ordinal));
+        var subtitle = files.Single(file => file.Path.EndsWith(".ass", StringComparison.Ordinal));
+        Assert.Equal(video.FileId, subtitle.AssociatedFileId);
+        Assert.Equal(".zh-Hans.ass", subtitle.RenameSuffix);
+        var request = Assert.Single(ai.Requests);
+        Assert.Equal(547888, request.BangumiSubjectId);
+        Assert.Equal(999, request.AniDbAnimeId);
+        Assert.Equal("tt1234567", request.ImdbTitleId);
+        Assert.Equal(2, request.TorrentFileCount);
+        Assert.Single(request.Files);
+        Assert.False(request.UseBangumiPubDateFirst);
+        Assert.Null(request.PublishedAt);
+        Assert.Equal([7], tmdb.EpisodeRequests);
+    }
+
+    [Fact]
+    public async Task EpisodeAiCannotChangeDeterministicallyConfirmedEpisode()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number,
+                72517,
+                2,
+                number,
+                $"Episode {number}",
+                null),
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                [
+                    new(input.Files[0].Name, true, 2, 9, null),
+                    new(input.Files[1].Name, true, 2, 5, null),
+                ],
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("A EP04.mkv", "4", "4"),
+            ("B unknown.mkv", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Equal(4, files[0].EpisodeNumber);
+        Assert.Equal("other", files[1].Disposition);
+        Assert.Equal([4, 9, 5], tmdb.EpisodeRequests);
+        Assert.Equal(
+            "ai_confirmed_episode_changed",
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_episode"));
+    }
+
+    [Fact]
+    public async Task EpisodeAiConfigurationFailureFallsThroughToConfirmedSeasonOther()
+    {
+        var ai = new FakeAiMetadataMatcher
+        {
+            Failure = new AiMetadataMatcherException(
+                MetadataFailureKind.Configuration,
+                "ai_provider_not_configured"),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            new FakeTmdbClient(),
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(app, ("Show unknown.mkv", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("other", file.Disposition);
+        Assert.Equal("ai_provider_not_configured", file.OtherReason);
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        Assert.Equal(
+            "ai_provider_not_configured",
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_episode"));
+    }
+
+    [Fact]
+    public async Task EpisodeAiNetworkFailureKeepsFilesPendingForRetry()
+    {
+        var ai = new FakeAiMetadataMatcher
+        {
+            Failure = new AiMetadataMatcherException(
+                MetadataFailureKind.Network,
+                "ai_network_error"),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            new FakeTmdbClient(),
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(app, ("Show unknown.mkv", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("pending", file.Disposition);
+        Assert.Equal("metadata_failed", await ReadTaskStatusAsync(app, taskId));
+        Assert.Equal(
+            "ai_network_error",
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_episode"));
+    }
+
+    [Fact]
+    public async Task ManualOffsetRuleSuppressesEpisodeAi()
+    {
+        var ai = new FakeAiMetadataMatcher();
+        await using var app = await StartSeasonResolvedTaskAsync(
+            new FakeTmdbClient(),
+            episodeOffset: 12,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(app, ("Show unknown.mkv", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Empty(ai.Requests);
+        Assert.Equal("other", Assert.Single(await ReadFilesAsync(app, taskId)).Disposition);
+    }
+
+    private static async Task<RunningApp> StartSeasonResolvedTaskAsync(
+        FakeTmdbClient tmdb,
+        int? episodeOffset,
+        IAiMetadataMatcher? aiMatcher = null,
+        bool enableEpisodeAi = false)
+    {
+        var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Ai = options.Metadata.Ai with { UseEpisodeMatch = enableEpisodeAi },
+                },
+            },
+            tmdbClient: tmdb,
+            aiMetadataMatcher: aiMatcher);
         await app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>().SaveAsync(
             new MikanWorkMetadataRuleUpdate(3951, 547888, 72517, 2, episodeOffset),
             expectedRevision: 0,
@@ -315,7 +513,13 @@ public sealed class EpisodeMetadataResolutionProcessorTests
               "source": "mikan",
               "data": [{
                 "torrent": "https://mikanani.me/passkey/episode-resolution.torrent",
-                "info": { "title": "Episode resolution", "mikanid": 3951, "bgmid": 547888 }
+                "info": {
+                  "title": "Episode resolution",
+                  "mikanid": 3951,
+                  "bgmid": 547888,
+                  "anidbid": 999,
+                  "imdbid": "tt1234567"
+                }
               }]
             }
             """;
@@ -409,6 +613,28 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         command.CommandText = "SELECT status FROM ingest_tasks WHERE id = $task_id;";
         command.Parameters.AddWithValue("$task_id", taskId);
         return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<string?> ReadLatestAttemptErrorAsync(
+        RunningApp app,
+        string taskId,
+        string strategy)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT attempt.error_code
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            WHERE run.task_id = $task_id AND attempt.strategy = $strategy
+            ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue("$strategy", strategy);
+        return await command.ExecuteScalarAsync() as string;
     }
 
     private static async Task<string> CloneSeasonResolvedTaskAsync(
@@ -523,6 +749,30 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             return EpisodeFailure is null
                 ? Task.FromResult(EpisodeFactory(episodeNumber))
                 : Task.FromException<TmdbEpisode?>(EpisodeFailure);
+        }
+    }
+
+    private sealed class FakeAiMetadataMatcher : IAiMetadataMatcher
+    {
+        public Func<AiMetadataMatchInput, AiMetadataMatchCandidate>? ResultFactory { get; init; }
+
+        public AiMetadataMatcherException? Failure { get; init; }
+
+        public List<AiMetadataMatchInput> Requests { get; } = [];
+
+        public Task<AiMetadataMatchCandidate> MatchAsync(
+            AiMetadataMatchInput input,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(input);
+            if (Failure is not null)
+            {
+                return Task.FromException<AiMetadataMatchCandidate>(Failure);
+            }
+
+            return Task.FromResult(
+                ResultFactory?.Invoke(input)
+                ?? new AiMetadataMatchCandidate(false, null, [], "not configured"));
         }
     }
 }

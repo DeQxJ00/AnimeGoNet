@@ -10,7 +10,9 @@ public sealed record MetadataTaskClaim(
     int? GroupId,
     int? BangumiSubjectId,
     int AttemptNumber,
-    string LeaseToken);
+    string LeaseToken,
+    int? AniDbAnimeId = null,
+    string? ImdbTitleId = null);
 
 public sealed record MetadataAttempt(
     string Stage,

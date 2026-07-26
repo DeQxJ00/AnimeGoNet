@@ -59,6 +59,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         int? mikanId = null;
         int? groupId = null;
         int? bangumiSubjectId = null;
+        int? aniDbAnimeId = null;
+        string? imdbTitleId = null;
         var tmdbSeriesId = 0;
         var tmdbSeasonNumber = 0;
         await using (var select = connection.CreateCommand())
@@ -66,6 +68,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             select.Transaction = transaction;
             select.CommandText = """
                 SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id,
+                       task.anidb_id, task.imdb_id,
                        MIN(file.tmdb_series_id), MIN(file.tmdb_season_number)
                 FROM ingest_tasks AS task
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -90,8 +93,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 mikanId = reader.IsDBNull(2) ? null : reader.GetInt32(2);
                 groupId = reader.IsDBNull(3) ? null : reader.GetInt32(3);
                 bangumiSubjectId = reader.IsDBNull(4) ? null : reader.GetInt32(4);
-                tmdbSeriesId = reader.GetInt32(5);
-                tmdbSeasonNumber = reader.GetInt32(6);
+                aniDbAnimeId = reader.IsDBNull(5) ? null : reader.GetInt32(5);
+                imdbTitleId = reader.IsDBNull(6) ? null : reader.GetString(6);
+                tmdbSeriesId = reader.GetInt32(7);
+                tmdbSeasonNumber = reader.GetInt32(8);
             }
         }
 
@@ -175,7 +180,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new MetadataEpisodeTaskClaim(
             new MetadataTaskClaim(
-                runId, taskId, title!, mikanId, groupId, bangumiSubjectId, attemptNumber, leaseToken),
+                runId, taskId, title!, mikanId, groupId, bangumiSubjectId, attemptNumber, leaseToken,
+                aniDbAnimeId, imdbTitleId),
             tmdbSeriesId,
             tmdbSeasonNumber,
             files);
@@ -227,11 +233,14 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         int? mikanId = null;
         int? groupId = null;
         int? bangumiSubjectId = null;
+        int? aniDbAnimeId = null;
+        string? imdbTitleId = null;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
             select.CommandText = """
-                SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id
+                SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id,
+                       task.anidb_id, task.imdb_id
                 FROM ingest_tasks AS task
                 WHERE task.status IN ('download_preparing', 'downloaded')
                   AND NOT EXISTS (
@@ -262,6 +271,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 mikanId = reader.IsDBNull(2) ? null : reader.GetInt32(2);
                 groupId = reader.IsDBNull(3) ? null : reader.GetInt32(3);
                 bangumiSubjectId = reader.IsDBNull(4) ? null : reader.GetInt32(4);
+                aniDbAnimeId = reader.IsDBNull(5) ? null : reader.GetInt32(5);
+                imdbTitleId = reader.IsDBNull(6) ? null : reader.GetString(6);
             }
         }
 
@@ -326,7 +337,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             groupId,
             bangumiSubjectId,
             attemptNumber,
-            leaseToken);
+            leaseToken,
+            aniDbAnimeId,
+            imdbTitleId);
     }
 
     public async Task RecordAttemptAsync(
