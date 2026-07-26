@@ -329,7 +329,10 @@ public sealed record DownloaderInstanceResponse(
     [property: JsonPropertyName("connected")] bool? Connected,
     [property: JsonPropertyName("failure_code")] string? FailureCode,
     [property: JsonPropertyName("last_success_at_utc")] DateTimeOffset? LastSuccessAtUtc,
-    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset? UpdatedAtUtc);
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset? UpdatedAtUtc,
+    [property: JsonPropertyName("circuit_state")] string? CircuitState,
+    [property: JsonPropertyName("circuit_failure_count")] int CircuitFailureCount,
+    [property: JsonPropertyName("circuit_retry_at_utc")] DateTimeOffset? CircuitRetryAtUtc);
 
 public sealed record DownloaderInstanceListResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,

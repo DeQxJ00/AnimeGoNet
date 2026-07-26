@@ -52,6 +52,7 @@ public sealed class DownloadSnapshotSynchronizer(
 
     private static string Classify(Exception exception) => exception switch
     {
+        DownloadClientCircuitOpenException => "qbittorrent_circuit_open",
         KeyNotFoundException => "downloader_unavailable",
         HttpRequestException => "qbittorrent_http_error",
         TaskCanceledException => "qbittorrent_timeout",

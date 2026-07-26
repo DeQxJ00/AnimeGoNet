@@ -227,6 +227,7 @@ public static class ApiEndpoints
         DownloaderAdminStore admin,
         DownloaderOverrideStore overrides,
         DownloaderConfigurationRuntimeState runtimeState,
+        DownloadClientOperationCoordinator clients,
         CancellationToken cancellationToken)
     {
         var snapshot = await overrides.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -247,7 +248,8 @@ public static class ApiEndpoints
                 id, downloader, usage,
                 pending is null ? "deployment" : "private_override",
                 pending?.Revision,
-                restartRequired));
+                restartRequired,
+                clients.GetCircuitSnapshot(id)));
         }
         return TypedResults.Ok(new DownloaderInstanceListResponse(
             snapshot.Revision, runtimeState.AppliedRevision, restartRequired, items));
@@ -364,7 +366,7 @@ public static class ApiEndpoints
     private static async Task<IResult> TestDownloader(
         string downloaderId,
         AnimeGoOptions options,
-        IDownloadClientRegistry registry,
+        DownloadClientOperationCoordinator clients,
         DownloaderAdminStore admin,
         CancellationToken cancellationToken)
     {
@@ -381,23 +383,29 @@ public static class ApiEndpoints
         var timer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var client = registry.GetRequired(id);
-            await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
-            var tasks = await client.ListAsync(cancellationToken).ConfigureAwait(false);
-            var version = client is IDownloadClientDiagnostics diagnostics
-                ? await diagnostics.GetVersionAsync(cancellationToken).ConfigureAwait(false)
-                : null;
-            var defaultSavePath = client is IDownloadClientDiagnostics pathDiagnostics
-                ? await pathDiagnostics.GetDefaultSavePathAsync(cancellationToken).ConfigureAwait(false)
-                : null;
+            var probe = await clients.ExecuteProbeAsync(
+                id,
+                async (client, token) =>
+                {
+                    await client.ConnectAsync(token).ConfigureAwait(false);
+                    var tasks = await client.ListAsync(token).ConfigureAwait(false);
+                    var version = client is IDownloadClientDiagnostics diagnostics
+                        ? await diagnostics.GetVersionAsync(token).ConfigureAwait(false)
+                        : null;
+                    var defaultSavePath = client is IDownloadClientDiagnostics pathDiagnostics
+                        ? await pathDiagnostics.GetDefaultSavePathAsync(token).ConfigureAwait(false)
+                        : null;
+                    return (TaskCount: tasks.Count, Version: version, DefaultSavePath: defaultSavePath);
+                },
+                cancellationToken).ConfigureAwait(false);
             timer.Stop();
             await admin.RecordConnectionTestAsync(
                 id, true, null, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new DownloaderConnectionTestResponse(
-                id, true, tasks.Count, timer.ElapsedMilliseconds, null,
+                id, true, probe.TaskCount, timer.ElapsedMilliseconds, null,
                 "qBittorrent authentication and task listing succeeded.",
-                version,
-                defaultSavePath));
+                probe.Version,
+                probe.DefaultSavePath));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -1199,7 +1207,8 @@ public static class ApiEndpoints
         DownloaderUsageRecord usage,
         string configurationSource,
         long? overrideRevision,
-        bool restartRequired)
+        bool restartRequired,
+        DownloadClientCircuitSnapshot? circuit)
     {
         var safeUrl = new UriBuilder(downloader.BaseUrl)
         {
@@ -1224,7 +1233,16 @@ public static class ApiEndpoints
             usage.Connected,
             usage.FailureCode,
             usage.LastSuccessAtUtc,
-            usage.UpdatedAtUtc);
+            usage.UpdatedAtUtc,
+            circuit?.Status switch
+            {
+                DownloadClientCircuitStatus.Closed => "closed",
+                DownloadClientCircuitStatus.Open => "open",
+                DownloadClientCircuitStatus.HalfOpen => "half_open",
+                _ => null,
+            },
+            circuit?.ConsecutiveFailures ?? 0,
+            circuit?.RetryAtUtc);
     }
 
     private static QbittorrentInstanceOptions ToOptions(DownloaderOverrideEntry entry) => new()

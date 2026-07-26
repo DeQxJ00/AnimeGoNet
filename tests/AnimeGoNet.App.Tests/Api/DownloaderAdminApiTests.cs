@@ -65,8 +65,9 @@ public sealed class DownloaderAdminApiTests
     [Fact]
     public async Task AuthenticationFailureIsSafeAndUnknownInstanceIsNotFound()
     {
+        var client = new FakeDownloadClient(failAuthentication: true);
         await using var app = await RunningApp.StartAsync(
-            downloadClientRegistry: new FakeRegistry(new FakeDownloadClient(failAuthentication: true)));
+            downloadClientRegistry: new FakeRegistry(client));
 
         using var failed = await app.Client.PostAsync("/api/v1/downloaders/bt/test", null);
         var text = await failed.Content.ReadAsStringAsync();
@@ -75,6 +76,27 @@ public sealed class DownloaderAdminApiTests
         Assert.False(json.RootElement.GetProperty("connected").GetBoolean());
         Assert.Equal("authentication_failed", json.RootElement.GetProperty("failure_code").GetString());
         Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
+
+        using var listWhileOpen = await app.Client.GetAsync("/api/v1/downloaders");
+        using var openJson = JsonDocument.Parse(await listWhileOpen.Content.ReadAsStreamAsync());
+        var openBt = Assert.Single(
+            openJson.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("id").GetString() == "bt");
+        Assert.Equal("open", openBt.GetProperty("circuit_state").GetString());
+        Assert.Equal(1, openBt.GetProperty("circuit_failure_count").GetInt32());
+        Assert.Equal(JsonValueKind.String, openBt.GetProperty("circuit_retry_at_utc").ValueKind);
+
+        client.FailAuthentication = false;
+        using var recovered = await app.Client.PostAsync("/api/v1/downloaders/bt/test", null);
+        Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+        using var listAfterProbe = await app.Client.GetAsync("/api/v1/downloaders");
+        using var closedJson = JsonDocument.Parse(await listAfterProbe.Content.ReadAsStreamAsync());
+        var closedBt = Assert.Single(
+            closedJson.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("id").GetString() == "bt");
+        Assert.Equal("closed", closedBt.GetProperty("circuit_state").GetString());
+        Assert.Equal(0, closedBt.GetProperty("circuit_failure_count").GetInt32());
+        Assert.Equal(JsonValueKind.Null, closedBt.GetProperty("circuit_retry_at_utc").ValueKind);
 
         using var missing = await app.Client.PostAsync("/api/v1/downloaders/missing/test", null);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
@@ -99,6 +121,7 @@ public sealed class DownloaderAdminApiTests
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.Contains("probeDownloaderPath", script, StringComparison.Ordinal);
         Assert.Contains("client_default_save_path", script, StringComparison.Ordinal);
+        Assert.Contains("circuit_retry_at_utc", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -239,6 +262,8 @@ public sealed class DownloaderAdminApiTests
         IDownloadClient,
         IDownloadClientDiagnostics
     {
+        public bool FailAuthentication { get; set; } = failAuthentication;
+
         public int ConnectCount { get; private set; }
         public int ListCount { get; private set; }
 
@@ -246,7 +271,7 @@ public sealed class DownloaderAdminApiTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             ConnectCount++;
-            return failAuthentication
+            return FailAuthentication
                 ? Task.FromException(new InvalidOperationException("secret"))
                 : Task.CompletedTask;
         }

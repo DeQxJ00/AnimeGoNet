@@ -157,6 +157,9 @@ interface DownloaderInstance {
   connected: boolean | null;
   failure_code: string | null;
   last_success_at_utc: string | null;
+  circuit_state: string | null;
+  circuit_failure_count: number;
+  circuit_retry_at_utc: string | null;
 }
 
 interface DownloaderInstanceList {
@@ -676,6 +679,13 @@ async function loadDownloaders(): Promise<void> {
         ["凭据", instance.credentials_configured ? "已配置" : "未配置"],
         ["来源引用", instance.source_profile_count],
         ["任务 / 下载", `${instance.ingest_task_count} / ${instance.download_job_count}`],
+        ["熔断", instance.circuit_state === "closed"
+          ? "关闭"
+          : instance.circuit_state === "open"
+            ? `开启 · 失败 ${instance.circuit_failure_count} 次`
+            : instance.circuit_state === "half_open"
+              ? "等待半开探测"
+              : "未运行"],
       ]) {
         const group = document.createElement("div");
         const term = document.createElement("dt");
@@ -687,7 +697,7 @@ async function loadDownloaders(): Promise<void> {
       }
       const endpoint = document.createElement("p");
       endpoint.className = "downloader-path";
-      endpoint.textContent = `${instance.base_url} · ${instance.download_path}${instance.failure_code ? ` · ${instance.failure_code}` : ""}`;
+      endpoint.textContent = `${instance.base_url} · ${instance.download_path}${instance.failure_code ? ` · ${instance.failure_code}` : ""}${instance.circuit_retry_at_utc ? ` · 下次尝试 ${new Date(instance.circuit_retry_at_utc).toLocaleString()}` : ""}`;
       const actions = document.createElement("div");
       actions.className = "downloader-actions";
       const edit = button("配置", () => openDownloaderConfig(instance));

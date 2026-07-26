@@ -164,6 +164,8 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 
 `POST /api/v1/downloaders/{id}/test` 依次验证 Cookie 登录、任务列表、客户端版本和 qB 默认保存路径；响应不包含凭据。`POST /api/v1/downloaders/{id}/path-probe` 不连接 qB，只验证 AnimeGoNet 进程是否同时看见实例 `download_path` 与全局 `save_path`，并用随机隐藏临时文件实际创建一次硬链接。探测总是显式触发，结束后尽力清理；返回 `directory_missing`、`permission_denied`、`hard_link_unavailable`、`platform_not_supported` 或验证失败等稳定错误码，不回传异常细节。
 
+所有后台 qB 操作通过同一个按实例串行协调器。每个实例拥有独立内存熔断状态；网络、超时、I/O 或认证失败开启 2 秒等待窗，后续半开失败按指数增加到最多 120 秒。熔断期间后台操作直接得到稳定的 `qbittorrent_circuit_open`，不会重复访问 qB；其他实例继续运行。显式连接测试绕过等待窗做一次人工探测，仍遵守单实例串行约束，成功后立即复位。
+
 ### 下载器页面
 
 - 多实例 CRUD、连接测试、客户端版本、qB 默认保存路径、延迟、当前任务数和最近错误。
