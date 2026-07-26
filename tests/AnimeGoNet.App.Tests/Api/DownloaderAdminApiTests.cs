@@ -48,6 +48,8 @@ public sealed class DownloaderAdminApiTests
         Assert.Equal(HttpStatusCode.OK, test.StatusCode);
         Assert.True(tested.RootElement.GetProperty("connected").GetBoolean());
         Assert.Equal(1, tested.RootElement.GetProperty("task_count").GetInt32());
+        Assert.Equal("v5.2.3", tested.RootElement.GetProperty("client_version").GetString());
+        Assert.Equal("/downloads", tested.RootElement.GetProperty("client_default_save_path").GetString());
         Assert.Equal(1, client.ConnectCount);
         Assert.Equal(1, client.ListCount);
 
@@ -95,6 +97,45 @@ public sealed class DownloaderAdminApiTests
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/downloaders/", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+        Assert.Contains("probeDownloaderPath", script, StringComparison.Ordinal);
+        Assert.Contains("client_default_save_path", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PathProbeCreatesAndCleansTemporaryHardLink()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var downloadPath = Path.Combine(app.RootPath, "download", "incomplete", "bt");
+        var savePath = Path.Combine(app.RootPath, "download", "anime");
+        Directory.CreateDirectory(downloadPath);
+        Directory.CreateDirectory(savePath);
+
+        using var response = await app.Client.PostAsync("/api/v1/downloaders/bt/path-probe", null);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("hard_link_supported").GetBoolean());
+        Assert.Equal(downloadPath, json.RootElement.GetProperty("download_path").GetString());
+        Assert.Equal(savePath, json.RootElement.GetProperty("save_path").GetString());
+        Assert.Empty(Directory.EnumerateFiles(downloadPath, ".animegonet-hardlink-*.tmp"));
+        Assert.Empty(Directory.EnumerateFiles(savePath, ".animegonet-hardlink-*.tmp"));
+    }
+
+    [Fact]
+    public async Task PathProbeReportsMissingDirectoriesWithoutCreatingThem()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var response = await app.Client.PostAsync("/api/v1/downloaders/bt/path-probe", null);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("hard_link_supported").GetBoolean());
+        Assert.Equal("directory_missing", json.RootElement.GetProperty("failure_code").GetString());
+        Assert.False(Directory.Exists(Path.Combine(app.RootPath, "download", "incomplete", "bt")));
+        Assert.False(Directory.Exists(Path.Combine(app.RootPath, "download", "anime")));
     }
 
     [Fact]
@@ -194,7 +235,9 @@ public sealed class DownloaderAdminApiTests
             instanceId is "bt" or "pt" ? client : throw new KeyNotFoundException();
     }
 
-    private sealed class FakeDownloadClient(bool failAuthentication = false) : IDownloadClient
+    private sealed class FakeDownloadClient(bool failAuthentication = false) :
+        IDownloadClient,
+        IDownloadClientDiagnostics
     {
         public int ConnectCount { get; private set; }
         public int ListCount { get; private set; }
@@ -233,6 +276,18 @@ public sealed class DownloaderAdminApiTests
         public Task DeleteAsync(
             IReadOnlyList<string> hashes, bool deleteFiles,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<string> GetVersionAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult("v5.2.3");
+        }
+
+        public Task<string> GetDefaultSavePathAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult("/downloads");
+        }
     }
 
     private static StringContent Json(object value) =>

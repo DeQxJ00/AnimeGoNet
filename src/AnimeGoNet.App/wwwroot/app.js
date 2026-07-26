@@ -347,7 +347,7 @@ async function testDownloader(id, button) {
             throw new Error(await responseError(response));
         const result = await response.json();
         status.textContent = result.connected
-            ? `${id} 连接成功 · ${result.task_count ?? 0} 个任务 · ${result.latency_ms} ms`
+            ? `${id} 连接成功 · ${textOrDash(result.client_version)} · ${result.task_count ?? 0} 个任务 · ${result.latency_ms} ms · qB 默认路径 ${textOrDash(result.client_default_save_path)}`
             : `${id} 连接失败 · ${result.failure_code ?? "unknown"} · ${result.message}`;
         await loadDownloaders();
     }
@@ -357,6 +357,30 @@ async function testDownloader(id, button) {
     finally {
         button.disabled = false;
         button.textContent = "测试连接";
+    }
+}
+async function probeDownloaderPath(id, button) {
+    const status = element("#downloader-status");
+    button.disabled = true;
+    button.textContent = "探测中…";
+    try {
+        const response = await fetch(`/api/v1/downloaders/${encodeURIComponent(id)}/path-probe`, {
+            method: "POST",
+            headers,
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        status.textContent = result.success
+            ? `${id} 路径可见且支持硬链接 · ${result.download_path} → ${result.save_path}`
+            : `${id} 路径探测失败 · ${result.failure_code ?? "unknown"} · ${result.message}`;
+    }
+    catch (error) {
+        status.textContent = `${id} 路径探测失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
+        button.textContent = "探测路径";
     }
 }
 function openDownloaderConfig(instance) {
@@ -476,8 +500,10 @@ async function loadDownloaders() {
             actions.className = "downloader-actions";
             const edit = button("配置", () => openDownloaderConfig(instance));
             const test = button("测试连接", () => void testDownloader(instance.id, test));
+            const probe = button("探测路径", () => void probeDownloaderPath(instance.id, probe));
             test.disabled = !instance.enabled;
-            actions.append(edit, test);
+            probe.disabled = !instance.enabled;
+            actions.append(edit, test, probe);
             card.append(heading, facts, endpoint, actions);
             return card;
         }));

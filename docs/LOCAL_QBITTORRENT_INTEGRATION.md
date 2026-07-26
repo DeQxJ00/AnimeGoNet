@@ -55,3 +55,12 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 真实下载必须由测试调用方提供明确、可合法分发的固定输入，禁止接入私人 RSS 或现有私人任务。未来的写入型测试统一使用 category `animegonet-integration`、tag `animegonet-test-<runid>` 和可辨识任务名；测试只清理同时带这些标记且 run ID 匹配的任务及其测试文件。
 
 当前 smoke 是只读的，不创建任何需要清理的 qBittorrent 对象。结束后只需清除当前 PowerShell 中的三个 `ANIMEGONET_QBIT_*` 认证变量；不要删除 portable profile。`animegonet_data` 是独立测试数据目录，可在确认 AnimeGoNet 测试进程已停止后按具体测试文档清理。
+
+## 主程序诊断 API
+
+主程序启动且下载器配置已指向本沙箱后，可在 WebUI“下载器实例”中分别执行：
+
+- “测试连接”：调用 `POST /api/v1/downloaders/{id}/test`，验证用户名/密码 Cookie 登录、任务列表、qB 客户端版本和默认保存路径。
+- “探测路径”：调用 `POST /api/v1/downloaders/{id}/path-probe`，验证 AnimeGoNet 进程能同时访问 `download_path` 与 `save_path`，并实际验证两者之间能否创建硬链接。
+
+路径探测会创建 `.animegonet-hardlink-<随机值>.tmp`，成功或失败后均尽力删除。它不会创建 Torrent、分类或 tag，也不读取现有任务内容。若进程意外终止，可仅在确认没有探测请求运行后，手工清理 `download_temp` 与 `jellyfin_data` 中这个固定前缀的残留临时文件；不得批量删除其他内容。

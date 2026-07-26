@@ -343,6 +343,17 @@ public sealed record DownloaderConnectionTestResponse(
     [property: JsonPropertyName("task_count")] int? TaskCount,
     [property: JsonPropertyName("latency_ms")] long LatencyMs,
     [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("client_version")] string? ClientVersion,
+    [property: JsonPropertyName("client_default_save_path")] string? ClientDefaultSavePath);
+
+public sealed record DownloaderPathProbeResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("hard_link_supported")] bool HardLinkSupported,
+    [property: JsonPropertyName("download_path")] string DownloadPath,
+    [property: JsonPropertyName("save_path")] string SavePath,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
     [property: JsonPropertyName("message")] string Message);
 
 public sealed record DownloaderInstanceUpsertRequest(

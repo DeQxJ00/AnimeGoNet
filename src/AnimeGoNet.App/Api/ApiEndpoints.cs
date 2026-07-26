@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Configuration;
+using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
@@ -35,6 +36,7 @@ public static class ApiEndpoints
         app.MapPut("/api/v1/downloaders/{downloaderId}", PutDownloader);
         app.MapDelete("/api/v1/downloaders/{downloaderId}", DeleteDownloaderOverride);
         app.MapPost("/api/v1/downloaders/{downloaderId}/test", TestDownloader);
+        app.MapPost("/api/v1/downloaders/{downloaderId}/path-probe", ProbeDownloaderPath);
         app.MapGet("/api/v1/sources", ListSourceProfiles);
         app.MapGet("/api/v1/sources/{sourceProfileId}", GetSourceProfile);
         app.MapPost("/api/v1/sources", CreateSourceProfile);
@@ -382,12 +384,20 @@ public static class ApiEndpoints
             var client = registry.GetRequired(id);
             await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
             var tasks = await client.ListAsync(cancellationToken).ConfigureAwait(false);
+            var version = client is IDownloadClientDiagnostics diagnostics
+                ? await diagnostics.GetVersionAsync(cancellationToken).ConfigureAwait(false)
+                : null;
+            var defaultSavePath = client is IDownloadClientDiagnostics pathDiagnostics
+                ? await pathDiagnostics.GetDefaultSavePathAsync(cancellationToken).ConfigureAwait(false)
+                : null;
             timer.Stop();
             await admin.RecordConnectionTestAsync(
                 id, true, null, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new DownloaderConnectionTestResponse(
                 id, true, tasks.Count, timer.ElapsedMilliseconds, null,
-                "qBittorrent authentication and task listing succeeded."));
+                "qBittorrent authentication and task listing succeeded.",
+                version,
+                defaultSavePath));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -421,7 +431,91 @@ public static class ApiEndpoints
         await admin.RecordConnectionTestAsync(
             id, false, failureCode, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(new DownloaderConnectionTestResponse(
-            id, false, null, timer.ElapsedMilliseconds, failureCode, message));
+            id, false, null, timer.ElapsedMilliseconds, failureCode, message, null, null));
+    }
+
+    private static IResult ProbeDownloaderPath(
+        string downloaderId,
+        AnimeGoOptions options)
+    {
+        var id = downloaderId.Trim().ToLowerInvariant();
+        if (!options.Downloaders.TryGetValue(id, out var downloader))
+        {
+            return TypedResults.NotFound(Error("downloader_not_found", "Downloader instance was not found."));
+        }
+        if (!downloader.Enabled)
+        {
+            return TypedResults.Conflict(Error("downloader_disabled", "Downloader instance is disabled."));
+        }
+        var downloadPath = downloader.DownloadPath;
+        var savePath = options.Paths.SavePath;
+        if (!Directory.Exists(downloadPath) || !Directory.Exists(savePath))
+        {
+            return TypedResults.Ok(new DownloaderPathProbeResponse(
+                id, false, false, downloadPath, savePath, "directory_missing",
+                "Both download_path and save_path must already exist and be visible to AnimeGoNet."));
+        }
+
+        var token = Guid.NewGuid().ToString("N");
+        var source = Path.Combine(downloadPath, $".animegonet-hardlink-{token}.tmp");
+        var target = Path.Combine(savePath, $".animegonet-hardlink-{token}-target.tmp");
+        try
+        {
+            File.WriteAllBytes(source, [0x41, 0x47, 0x4e]);
+            HardLinkCapability.Create(target, source);
+            var valid = File.Exists(target) && new FileInfo(target).Length == 3;
+            return TypedResults.Ok(new DownloaderPathProbeResponse(
+                id, valid, valid, downloadPath, savePath,
+                valid ? null : "hard_link_verification_failed",
+                valid
+                    ? "Temporary hard link creation and verification succeeded."
+                    : "The hard link target could not be verified."));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return PathProbeFailure(id, downloadPath, savePath, "permission_denied",
+                "AnimeGoNet cannot write probe files in one or both configured directories.");
+        }
+        catch (IOException)
+        {
+            return PathProbeFailure(id, downloadPath, savePath, "hard_link_unavailable",
+                "Hard links are unavailable; paths may be on different filesystems or mounts.");
+        }
+        catch (PlatformNotSupportedException)
+        {
+            return PathProbeFailure(id, downloadPath, savePath, "platform_not_supported",
+                "This platform does not support the hard link probe.");
+        }
+        finally
+        {
+            TryDeleteProbeFile(target);
+            TryDeleteProbeFile(source);
+        }
+    }
+
+    private static Ok<DownloaderPathProbeResponse> PathProbeFailure(
+        string id,
+        string downloadPath,
+        string savePath,
+        string failureCode,
+        string message) =>
+        TypedResults.Ok(new DownloaderPathProbeResponse(
+            id, false, false, downloadPath, savePath, failureCode, message));
+
+    private static void TryDeleteProbeFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup must not replace the sanitized probe result.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The probe result already reports permission failure without exposing the path exception.
+        }
     }
 
     private static async Task<Ok<SourceProfileListResponse>> ListSourceProfiles(

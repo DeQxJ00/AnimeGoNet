@@ -32,6 +32,13 @@ public interface IDownloadClientRegistry
     IDownloadClient GetRequired(string instanceId);
 }
 
+public interface IDownloadClientDiagnostics
+{
+    Task<string> GetVersionAsync(CancellationToken cancellationToken = default);
+
+    Task<string> GetDefaultSavePathAsync(CancellationToken cancellationToken = default);
+}
+
 public sealed record AddTorrentCommand(
     Stream Torrent,
     string FileName,

@@ -77,6 +77,29 @@ public sealed class QbittorrentClientTests
     }
 
     [Fact]
+    public async Task DiagnosticsReadVersionAndDefaultSavePath()
+    {
+        using var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/v2/app/version" => Text("v5.2.3\n"),
+            "/api/v2/app/defaultSavePath" => Text("/downloads/complete\n"),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+
+        var version = await client.GetVersionAsync();
+        var defaultSavePath = await client.GetDefaultSavePathAsync();
+
+        Assert.Equal("v5.2.3", version);
+        Assert.Equal("/downloads/complete", defaultSavePath);
+        Assert.Collection(
+            handler.Requests,
+            request => Assert.Equal("/api/v2/app/version", request.Path),
+            request => Assert.Equal("/api/v2/app/defaultSavePath", request.Path));
+    }
+
+    [Fact]
     public async Task AddStartsStoppedAndSendsOnlyTorrentBytesToQbittorrent()
     {
         using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));

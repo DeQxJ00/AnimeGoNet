@@ -41,6 +41,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(DownloaderInstanceResponse))]
 [JsonSerializable(typeof(DownloaderInstanceListResponse))]
 [JsonSerializable(typeof(DownloaderConnectionTestResponse))]
+[JsonSerializable(typeof(DownloaderPathProbeResponse))]
 [JsonSerializable(typeof(DownloaderInstanceUpsertRequest))]
 [JsonSerializable(typeof(DownloaderConfigurationWriteResponse))]
 [JsonSerializable(typeof(SourceRoutePreviewRequest))]

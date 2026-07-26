@@ -162,10 +162,12 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 
 下载器连接以部署级 `AnimeGoOptions.Downloaders` 为基础，可由 data_path 私有覆盖增加或替换。`GET /api/v1/downloaders` 永不返回用户名/密码；`PUT/DELETE /api/v1/downloaders/{id}` 使用全局 configuration revision 原子写入覆盖，密码字段留空时保留、`clear_password=true` 时清除。修改不会热替换正在运行的客户端，响应与 Web 明确显示 `restart_required`；重启后在配置校验和客户端注册前应用。仍被 SourceProfile、导入任务或下载任务引用的实例不能停用或移除覆盖。
 
+`POST /api/v1/downloaders/{id}/test` 依次验证 Cookie 登录、任务列表、客户端版本和 qB 默认保存路径；响应不包含凭据。`POST /api/v1/downloaders/{id}/path-probe` 不连接 qB，只验证 AnimeGoNet 进程是否同时看见实例 `download_path` 与全局 `save_path`，并用随机隐藏临时文件实际创建一次硬链接。探测总是显式触发，结束后尽力清理；返回 `directory_missing`、`permission_denied`、`hard_link_unavailable`、`platform_not_supported` 或验证失败等稳定错误码，不回传异常细节。
+
 ### 下载器页面
 
-- 多实例 CRUD、连接测试、客户端版本、延迟、当前任务数和最近错误。
-- 显示容器路径、宿主映射提示、硬链接探测结果和被哪些来源引用。
+- 多实例 CRUD、连接测试、客户端版本、qB 默认保存路径、延迟、当前任务数和最近错误。
+- 显示容器路径、宿主映射提示、显式硬链接探测结果和被哪些来源引用。当前页面已接入这些操作；真实容器间映射仍由 Compose 集成测试验收。
 - 删除实例前阻止仍被 profile 或活动任务引用；支持禁用但不破坏历史任务快照。
 
 ### 输入源页面

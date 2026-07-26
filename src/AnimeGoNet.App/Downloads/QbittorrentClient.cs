@@ -6,7 +6,8 @@ using AnimeGoNet.Core.Downloads;
 
 namespace AnimeGoNet.App.Downloads;
 
-public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstanceOptions options) : IDownloadClient
+public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstanceOptions options)
+    : IDownloadClient, IDownloadClientDiagnostics
 {
     private readonly HttpClient _httpClient = Configure(httpClient, options);
 
@@ -33,6 +34,21 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
         {
             throw new InvalidOperationException("qBittorrent authentication failed.");
         }
+    }
+
+    public async Task<string> GetVersionAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync("api/v2/app/version", cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Trim();
+    }
+
+    public async Task<string> GetDefaultSavePathAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync(
+            "api/v2/app/defaultSavePath", cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Trim();
     }
 
     public async Task<IReadOnlyList<DownloadTaskSnapshot>> ListAsync(CancellationToken cancellationToken = default)
