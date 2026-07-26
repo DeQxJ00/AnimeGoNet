@@ -62,6 +62,11 @@ public static class AnimeGoApplication
         options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
+        var applicationOverrides = new ApplicationOverrideStore(layout.ConfigurationPath);
+        var applicationOverrideSnapshot = await applicationOverrides
+            .LoadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        options = ApplicationOverrideStore.Apply(options, applicationOverrideSnapshot);
         var downloaderOverrides = new DownloaderOverrideStore(layout.ConfigurationPath);
         var downloaderOverrideSnapshot = await downloaderOverrides.LoadAsync(cancellationToken).ConfigureAwait(false);
         options = ApplyDownloaderOverrides(options, downloaderOverrideSnapshot);
@@ -111,6 +116,9 @@ public static class AnimeGoApplication
             runningInContainer.Value,
             startBackgroundWorkers.Value,
             !string.IsNullOrWhiteSpace(accessKey)));
+        builder.Services.AddSingleton(applicationOverrides);
+        builder.Services.AddSingleton(
+            new ApplicationConfigurationRuntimeState(applicationOverrideSnapshot.Revision));
         builder.Services.AddSingleton(downloaderOverrides);
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));

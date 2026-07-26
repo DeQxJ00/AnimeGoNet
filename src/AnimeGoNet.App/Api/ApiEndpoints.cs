@@ -32,6 +32,8 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/config", Configuration);
+        app.MapPut("/api/v1/config", PutConfiguration);
+        app.MapDelete("/api/v1/config", DeleteConfigurationOverride);
         app.MapGet("/api/v1/downloads", Downloads);
         app.MapGet("/api/v1/downloaders", ListDownloaders);
         app.MapPut("/api/v1/downloaders/{downloaderId}", PutDownloader);
@@ -193,15 +195,110 @@ public static class ApiEndpoints
                 Deletion: true)));
     }
 
-    private static Ok<ConfigurationResponse> Configuration(
+    private static async Task<Ok<ConfigurationResponse>> Configuration(
         AnimeGoOptions options,
-        RuntimeConfigurationState runtime)
+        RuntimeConfigurationState runtime,
+        ApplicationOverrideStore store,
+        ApplicationConfigurationRuntimeState applied,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(ToConfigurationResponse(options, runtime, snapshot.Revision, applied.AppliedRevision));
+    }
+
+    private static async Task<IResult> PutConfiguration(
+        ConfigurationUpdateRequest request,
+        AnimeGoOptions options,
+        ApplicationOverrideStore store,
+        ApplicationConfigurationRuntimeState applied,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var current = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (request.ClearTmdbApiKey && !string.IsNullOrWhiteSpace(request.TmdbApiKey))
+            {
+                throw new ArgumentException("tmdb_api_key and clear_tmdb_api_key cannot both be set.");
+            }
+
+            if (request.ClearTmdbReadAccessToken
+                && !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken))
+            {
+                throw new ArgumentException(
+                    "tmdb_read_access_token and clear_tmdb_read_access_token cannot both be set.");
+            }
+
+            var settings = CreateApplicationOverride(request, current.Settings, DateTimeOffset.UtcNow);
+            var candidate = ApplicationOverrideStore.Apply(
+                options,
+                new ApplicationOverrideSnapshot(1, current.Revision + 1, settings));
+            var errors = AnimeGoOptionsValidator.Validate(candidate);
+            if (errors.Count > 0)
+            {
+                throw new ArgumentException(string.Join("; ", errors));
+            }
+
+            var saved = await store.SaveAsync(
+                settings,
+                request.ExpectedConfigurationRevision,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new ConfigurationWriteResponse(
+                saved.Revision,
+                RestartRequired: saved.Revision != applied.AppliedRevision,
+                RevertedToDeploymentDefault: false));
+        }
+        catch (ApplicationOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "configuration_revision_conflict",
+                "Configuration changed concurrently; reload before saving."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("configuration_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteConfigurationOverride(
+        [FromQuery(Name = "expected_revision")] long expectedRevision,
+        ApplicationOverrideStore store,
+        ApplicationConfigurationRuntimeState applied,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var saved = await store.DeleteAsync(expectedRevision, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new ConfigurationWriteResponse(
+                saved.Revision,
+                RestartRequired: saved.Revision != applied.AppliedRevision,
+                RevertedToDeploymentDefault: true));
+        }
+        catch (ApplicationOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "configuration_revision_conflict",
+                "Configuration changed concurrently; reload before reverting."));
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            return TypedResults.BadRequest(Error("configuration_invalid", exception.Message));
+        }
+    }
+
+    private static ConfigurationResponse ToConfigurationResponse(
+        AnimeGoOptions options,
+        RuntimeConfigurationState runtime,
+        long configurationRevision,
+        long appliedConfigurationRevision)
     {
         var tmdb = options.Metadata.Tmdb;
         var season = options.Metadata.SeasonFailure;
         var ai = options.Metadata.Ai;
         var fetch = options.TorrentFetch;
-        return TypedResults.Ok(new ConfigurationResponse(
+        return new ConfigurationResponse(
+            configurationRevision,
+            appliedConfigurationRevision,
+            configurationRevision != appliedConfigurationRevision,
             new RuntimePaths(
                 options.Paths.DataPath,
                 options.Paths.DownloadPath,
@@ -233,7 +330,105 @@ public static class ApiEndpoints
                 fetch.Timeout.TotalSeconds,
                 fetch.MaxResponseBytes,
                 fetch.MaxRedirects,
-                fetch.StagingTtl.TotalSeconds)));
+                fetch.StagingTtl.TotalSeconds));
+    }
+
+    private static ApplicationOverrideEntry CreateApplicationOverride(
+        ConfigurationUpdateRequest request,
+        ApplicationOverrideEntry? current,
+        DateTimeOffset utcNow)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(request.ExpectedConfigurationRevision);
+        var baseUrl = request.TmdbBaseUrl?.Trim()
+            ?? throw new ArgumentException("tmdb_base_url is required.");
+        var language = request.TmdbLanguage?.Trim()
+            ?? throw new ArgumentException("tmdb_language is required.");
+        if (baseUrl.Length is < 1 or > 2048)
+        {
+            throw new ArgumentException("tmdb_base_url must contain 1 to 2048 characters.");
+        }
+
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException("tmdb_base_url must be an absolute URL.");
+        }
+
+        if (language.Length is < 1 or > 32)
+        {
+            throw new ArgumentException("tmdb_language must contain 1 to 32 characters.");
+        }
+
+        ValidateSeconds(request.TmdbHttpTimeoutSeconds, "tmdb_http_timeout_seconds", 86_400);
+        ValidateSeconds(request.AiHttpTimeoutSeconds, "ai_http_timeout_seconds", 86_400);
+        ValidateSeconds(request.TorrentHttpTimeoutSeconds, "torrent_http_timeout_seconds", 86_400);
+        ValidateSeconds(request.TorrentStagingTtlSeconds, "torrent_staging_ttl_seconds", 604_800);
+        if (request.TorrentMaxResponseBytes is < 1 or > 1_073_741_824)
+        {
+            throw new ArgumentException(
+                "torrent_max_response_bytes must be between 1 and 1073741824.");
+        }
+
+        if (request.TorrentMaxRedirects is < 0 or > 10)
+        {
+            throw new ArgumentException("torrent_max_redirects must be between 0 and 10.");
+        }
+
+        var apiKey = NormalizeSecret(request.TmdbApiKey, "tmdb_api_key");
+        var readToken = NormalizeSecret(
+            request.TmdbReadAccessToken,
+            "tmdb_read_access_token");
+        var apiKeyOverridden = request.ClearTmdbApiKey
+            || apiKey is not null
+            || current?.TmdbApiKeyOverridden == true;
+        var readTokenOverridden = request.ClearTmdbReadAccessToken
+            || readToken is not null
+            || current?.TmdbReadAccessTokenOverridden == true;
+        return new ApplicationOverrideEntry(
+            baseUrl,
+            language,
+            request.TmdbHttpTimeoutSeconds,
+            apiKeyOverridden,
+            request.ClearTmdbApiKey ? null : apiKey ?? current?.TmdbApiKey,
+            readTokenOverridden,
+            request.ClearTmdbReadAccessToken ? null : readToken ?? current?.TmdbReadAccessToken,
+            request.SeasonFailureSkip,
+            request.SeasonFailureBacktrace,
+            request.SeasonFailureUseTitleSeason,
+            request.SeasonFailureUseFirstSeason,
+            request.AiUseSeasonMatch,
+            request.AiUseEpisodeMatch,
+            request.AiHttpTimeoutSeconds,
+            request.TmdbFailureUseBangumi,
+            request.MikanTrustedOffsetCacheEnabled,
+            request.TorrentHttpTimeoutSeconds,
+            request.TorrentMaxResponseBytes,
+            request.TorrentMaxRedirects,
+            request.TorrentStagingTtlSeconds,
+            utcNow);
+    }
+
+    private static void ValidateSeconds(double value, string name, double maximum)
+    {
+        if (!double.IsFinite(value) || value <= 0 || value > maximum)
+        {
+            throw new ArgumentException($"{name} must be greater than 0 and at most {maximum}.");
+        }
+    }
+
+    private static string? NormalizeSecret(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 8192 || normalized.Any(character => character is '\r' or '\n'))
+        {
+            throw new ArgumentException($"{name} is invalid.");
+        }
+
+        return normalized;
     }
 
     private static async Task<Ok<DownloadListResponse>> Downloads(

@@ -50,10 +50,41 @@ public sealed record RuntimeCapabilities(
     [property: JsonPropertyName("deletion")] bool Deletion);
 
 public sealed record ConfigurationResponse(
+    [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
+    [property: JsonPropertyName("applied_configuration_revision")] long AppliedConfigurationRevision,
+    [property: JsonPropertyName("restart_required")] bool RestartRequired,
     [property: JsonPropertyName("paths")] RuntimePaths Paths,
     [property: JsonPropertyName("deployment")] DeploymentConfigurationResponse Deployment,
     [property: JsonPropertyName("metadata")] MetadataConfigurationResponse Metadata,
     [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch);
+
+public sealed record ConfigurationUpdateRequest(
+    [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,
+    [property: JsonPropertyName("tmdb_language")] string? TmdbLanguage,
+    [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
+    [property: JsonPropertyName("tmdb_api_key")] string? TmdbApiKey,
+    [property: JsonPropertyName("clear_tmdb_api_key")] bool ClearTmdbApiKey,
+    [property: JsonPropertyName("tmdb_read_access_token")] string? TmdbReadAccessToken,
+    [property: JsonPropertyName("clear_tmdb_read_access_token")] bool ClearTmdbReadAccessToken,
+    [property: JsonPropertyName("season_failure_skip")] bool SeasonFailureSkip,
+    [property: JsonPropertyName("season_failure_backtrace")] bool SeasonFailureBacktrace,
+    [property: JsonPropertyName("season_failure_use_title_season")] bool SeasonFailureUseTitleSeason,
+    [property: JsonPropertyName("season_failure_use_first_season")] bool SeasonFailureUseFirstSeason,
+    [property: JsonPropertyName("ai_use_season_match")] bool AiUseSeasonMatch,
+    [property: JsonPropertyName("ai_use_episode_match")] bool AiUseEpisodeMatch,
+    [property: JsonPropertyName("ai_http_timeout_seconds")] double AiHttpTimeoutSeconds,
+    [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
+    [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
+    [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
+    [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
+    [property: JsonPropertyName("torrent_max_redirects")] int TorrentMaxRedirects,
+    [property: JsonPropertyName("torrent_staging_ttl_seconds")] double TorrentStagingTtlSeconds,
+    [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision);
+
+public sealed record ConfigurationWriteResponse(
+    [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
+    [property: JsonPropertyName("restart_required")] bool RestartRequired,
+    [property: JsonPropertyName("reverted_to_deployment_default")] bool RevertedToDeploymentDefault);
 
 public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("running_in_container")] bool RunningInContainer,

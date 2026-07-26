@@ -1,6 +1,9 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -92,5 +95,137 @@ public sealed class ConfigurationApiTests
         Assert.Contains("loadConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("凭据永不回传", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrivateConfigurationUsesRevisionAndSecretTriState()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var first = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                apiKey: "new-api-secret",
+                readToken: "new-read-secret"));
+        var firstText = await first.Content.ReadAsStringAsync();
+        using var firstJson = JsonDocument.Parse(firstText);
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(1, firstJson.RootElement.GetProperty("configuration_revision").GetInt64());
+        Assert.True(firstJson.RootElement.GetProperty("restart_required").GetBoolean());
+        Assert.DoesNotContain("new-api-secret", firstText, StringComparison.Ordinal);
+        Assert.DoesNotContain("new-read-secret", firstText, StringComparison.Ordinal);
+
+        using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
+        using (var current = JsonDocument.Parse(await currentResponse.Content.ReadAsStreamAsync()))
+        {
+            Assert.Equal(1, current.RootElement.GetProperty("configuration_revision").GetInt64());
+            Assert.Equal(0, current.RootElement.GetProperty("applied_configuration_revision").GetInt64());
+            Assert.True(current.RootElement.GetProperty("restart_required").GetBoolean());
+            Assert.False(current.RootElement.GetProperty("metadata")
+                .GetProperty("tmdb").GetProperty("api_key_configured").GetBoolean());
+        }
+
+        var store = app.App.Services.GetRequiredService<ApplicationOverrideStore>();
+        var saved = await store.LoadAsync();
+        Assert.Equal("new-api-secret", saved.Settings?.TmdbApiKey);
+        Assert.Equal("new-read-secret", saved.Settings?.TmdbReadAccessToken);
+
+        using var preserve = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(expectedRevision: 1, aiEpisode: true));
+        Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
+        var preserved = await store.LoadAsync();
+        Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
+        Assert.Equal("new-read-secret", preserved.Settings?.TmdbReadAccessToken);
+        Assert.True(preserved.Settings?.AiUseEpisodeMatch);
+
+        using var clear = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(expectedRevision: 2, clearApiKey: true));
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        var cleared = await store.LoadAsync();
+        Assert.True(cleared.Settings?.TmdbApiKeyOverridden);
+        Assert.Null(cleared.Settings?.TmdbApiKey);
+        Assert.Equal("new-read-secret", cleared.Settings?.TmdbReadAccessToken);
+
+        using var conflict = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(expectedRevision: 1));
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+
+        using var reset = await app.Client.DeleteAsync(
+            "/api/v1/config?expected_revision=3");
+        using var resetJson = JsonDocument.Parse(await reset.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+        Assert.Equal(4, resetJson.RootElement.GetProperty("configuration_revision").GetInt64());
+        Assert.True(resetJson.RootElement.GetProperty("reverted_to_deployment_default").GetBoolean());
+        Assert.Null((await store.LoadAsync()).Settings);
+    }
+
+    [Fact]
+    public async Task InvalidPrivateConfigurationDoesNotWriteSecretFile()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var credentialUrl = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                baseUrl: "https://user:password@api.themoviedb.org/"));
+        using var conflictingSecret = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                apiKey: "must-not-be-written",
+                clearApiKey: true));
+
+        Assert.Equal(HttpStatusCode.BadRequest, credentialUrl.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, conflictingSecret.StatusCode);
+        var snapshot = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.Equal(0, snapshot.Revision);
+        Assert.Null(snapshot.Settings);
+        Assert.False(File.Exists(Path.Combine(
+            app.RootPath,
+            "data",
+            "config",
+            "application.private.json")));
+    }
+
+    private static StringContent Payload(
+        long expectedRevision,
+        string? apiKey = null,
+        string? readToken = null,
+        bool clearApiKey = false,
+        bool aiEpisode = false,
+        string baseUrl = "https://api.themoviedb.org/")
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            tmdb_base_url = baseUrl,
+            tmdb_language = "zh-CN",
+            tmdb_http_timeout_seconds = 30,
+            tmdb_api_key = apiKey,
+            clear_tmdb_api_key = clearApiKey,
+            tmdb_read_access_token = readToken,
+            clear_tmdb_read_access_token = false,
+            season_failure_skip = false,
+            season_failure_backtrace = true,
+            season_failure_use_title_season = true,
+            season_failure_use_first_season = true,
+            ai_use_season_match = false,
+            ai_use_episode_match = aiEpisode,
+            ai_http_timeout_seconds = 600,
+            tmdb_failure_use_bangumi = false,
+            mikan_trusted_offset_cache_enabled = false,
+            torrent_http_timeout_seconds = 30,
+            torrent_max_response_bytes = 16 * 1024 * 1024,
+            torrent_max_redirects = 3,
+            torrent_staging_ttl_seconds = 900,
+            expected_configuration_revision = expectedRevision,
+        });
+        return new StringContent(json, Encoding.UTF8, "application/json");
     }
 }

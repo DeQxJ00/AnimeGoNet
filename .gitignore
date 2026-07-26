@@ -42,3 +42,4 @@ publish/
 TestSpace/
 *.local-integration.json
 .env.integration
+*.private.json

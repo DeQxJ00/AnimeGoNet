@@ -150,7 +150,10 @@ async function loadConfiguration() {
             ],
             ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
         ]));
-        status.textContent = "当前进程的生效值；凭据永不回传。";
+        status.textContent = config.restart_required
+            ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
+                + `当前应用 revision ${config.applied_configuration_revision}`
+            : `当前进程的生效值 · revision ${config.configuration_revision}；凭据永不回传。`;
     }
     catch (error) {
         container.replaceChildren();

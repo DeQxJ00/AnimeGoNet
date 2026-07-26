@@ -20,7 +20,7 @@ AnimeGoNet.slnx
 ## 2. 配置、数据与目录真相源
 
 - 部署配置文件保存监听地址、Access Key、`data_path`、`download_path`、`save_path`、命名 qBittorrent 实例、路径映射、TMDB/AI 连接与更新策略。
-- 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。Web 写入的 qB 覆盖位于 `data_path/config/downloaders.private.json`，采用 source-generated JSON、全局/实例 revision、同目录临时文件原子替换；Unix 权限为 `0600`。该文件属于部署 secret，必须随 data_path 一起保护且不得提交。
+- 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。Web/API 写入的 qB 覆盖位于 `data_path/config/downloaders.private.json`，TMDB/季度失败链/AI/offset/Torrent 覆盖位于 `data_path/config/application.private.json`；两者都采用 source-generated JSON、revision、同目录临时文件原子替换，Unix 权限为 `0600`。这些文件属于部署 secret，必须随 data_path 一起保护且不得提交。
 - SQLite 保存来源 profile、规则、动画、任务、匹配尝试、下载/整理状态、完成记录和审计，不复制密码等部署配置。
 - Docker 默认路径固定为 `data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。Compose 必须把 AnimeGoNet 与 qBittorrent 的共同宿主父目录映射为同一容器内 `/download`。
 
