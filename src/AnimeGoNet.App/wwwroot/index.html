@@ -64,6 +64,58 @@
       </div>
     </section>
 
+    <section aria-labelledby="sources-title">
+      <div class="section-heading source-heading">
+        <div>
+          <p class="eyebrow">Input routing</p>
+          <h2 id="sources-title">输入源</h2>
+        </div>
+        <button id="source-new" type="button" class="secondary-button">新增来源</button>
+      </div>
+      <p id="source-status" class="muted">正在读取来源配置…</p>
+      <div class="source-workspace">
+        <div id="source-list" class="source-list" aria-live="polite"></div>
+        <form id="source-form" class="source-form">
+          <div class="source-form-grid">
+            <label>稳定 ID<input id="source-id" required pattern="[a-z0-9][a-z0-9._-]*" autocomplete="off"></label>
+            <label>显示名称<input id="source-name" required maxlength="128" autocomplete="off"></label>
+            <label>适配器
+              <select id="source-adapter">
+                <option value="mikan">Mikan</option>
+                <option value="u2">U2</option>
+                <option value="ttg">TTG</option>
+              </select>
+            </label>
+            <label>qBittorrent 实例
+              <input id="source-downloader" required list="source-downloader-options" autocomplete="off">
+              <datalist id="source-downloader-options"></datalist>
+            </label>
+            <label>文件策略
+              <select id="source-strategy">
+                <option value="move">move · 移动且不做种</option>
+                <option value="link">link · 保留源文件</option>
+                <option value="link_delete">link_delete</option>
+                <option value="wait_move">wait_move</option>
+              </select>
+            </label>
+            <label class="source-hosts">允许的 Torrent Host
+              <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
+            </label>
+          </div>
+          <div class="source-switches">
+            <label><input id="source-enabled" type="checkbox">启用来源</label>
+            <label><input id="source-filter-enabled" type="checkbox">执行旧 Mikan 过滤</label>
+            <label><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
+          </div>
+          <p id="source-warning" class="source-warning"></p>
+          <div class="source-form-actions">
+            <button id="source-delete" type="button" class="delete-button">删除来源</button>
+            <button id="source-save" type="submit" class="primary-button">保存来源</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
     <section aria-labelledby="rss-rules-title">
       <div class="section-heading rss-heading">
         <div>
@@ -108,7 +160,7 @@
 
     <section class="grid panels" aria-label="管理入口">
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>骨架已就绪</span></article>
-      <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>待实现</span></article>
+      <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
       <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>管理与预览已接入</span></article>
       <article><h3>动画库</h3><p>封面、季度、TMDB EP 与下载进度。</p><span>待实现</span></article>
       <article><h3>待补全 TMDB</h3><p>查看失败分类、原因与重试入口。</p><span>待实现</span></article>

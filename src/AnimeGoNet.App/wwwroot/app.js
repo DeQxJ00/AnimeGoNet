@@ -20,6 +20,8 @@ const deleteDialog = element("#delete-dialog");
 const deleteConfirm = element("#delete-confirm");
 let activeDeletePreview = null;
 let activeRssRules = null;
+let sourceProfiles = [];
+let activeSourceId = null;
 let ruleIdSequence = 0;
 const statusLabels = {
     received: "已接收",
@@ -328,6 +330,161 @@ async function loadMetadataTasks() {
         container.replaceChildren(failed);
     }
 }
+function activeSource() {
+    return sourceProfiles.find((profile) => profile.id === activeSourceId) ?? null;
+}
+function updateSourceWarning() {
+    const strategy = element("#source-strategy").value;
+    element("#source-warning").textContent = strategy === "move"
+        ? "move 会在下载完成后移动源文件，无法继续做种；修改只影响之后创建的任务。"
+        : "修改只影响之后创建的任务；历史任务继续使用原 revision 路由快照。";
+}
+function populateSourceForm(profile) {
+    activeSourceId = profile?.id ?? null;
+    const id = element("#source-id");
+    const adapter = element("#source-adapter");
+    id.disabled = profile !== null;
+    adapter.disabled = profile !== null;
+    id.value = profile?.id ?? "";
+    element("#source-name").value = profile?.display_name ?? "";
+    adapter.value = profile?.adapter ?? "u2";
+    element("#source-downloader").value = profile?.downloader_id ?? "pt";
+    element("#source-strategy").value = profile?.file_strategy ?? "link";
+    element("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
+    element("#source-enabled").checked = profile?.enabled ?? true;
+    element("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
+    element("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
+    const remove = element("#source-delete");
+    remove.disabled = profile === null || profile.is_default;
+    remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
+    updateSourceWarning();
+    renderSourceList();
+}
+function renderSourceList() {
+    const list = element("#source-list");
+    if (sourceProfiles.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "muted empty";
+        empty.textContent = "暂无来源";
+        list.replaceChildren(empty);
+        return;
+    }
+    list.replaceChildren(...sourceProfiles.map((profile) => {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = `source-card ${profile.id === activeSourceId ? "active" : ""}`;
+        const heading = document.createElement("div");
+        heading.className = "source-card-heading";
+        const name = document.createElement("strong");
+        name.textContent = profile.display_name;
+        const revision = document.createElement("span");
+        revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
+        heading.append(name, revision);
+        const route = document.createElement("p");
+        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+        card.append(heading, route);
+        card.addEventListener("click", () => populateSourceForm(profile));
+        return card;
+    }));
+}
+async function loadSources(selectedId) {
+    const status = element("#source-status");
+    status.textContent = "正在读取来源配置…";
+    try {
+        const response = await fetch("/api/v1/sources", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        sourceProfiles = body.items;
+        const downloaders = [...new Set(sourceProfiles.map((profile) => profile.downloader_id))].sort();
+        element("#source-downloader-options").replaceChildren(...downloaders.map((downloader) => {
+            const option = document.createElement("option");
+            option.value = downloader;
+            return option;
+        }));
+        const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
+            ?? sourceProfiles[0]
+            ?? null;
+        populateSourceForm(selected);
+        status.textContent = `${sourceProfiles.length} 个来源 · 修改采用 revision 乐观并发且不改变历史任务路由`;
+    }
+    catch (error) {
+        sourceProfiles = [];
+        activeSourceId = null;
+        renderSourceList();
+        status.textContent = `来源读取失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+function sourceHosts() {
+    return element("#source-hosts").value
+        .split(/[\r\n,，]+/u)
+        .map((host) => host.trim().toLowerCase())
+        .filter(Boolean);
+}
+async function saveSource(event) {
+    event.preventDefault();
+    const current = activeSource();
+    const save = element("#source-save");
+    const status = element("#source-status");
+    const common = {
+        display_name: element("#source-name").value.trim(),
+        downloader_id: element("#source-downloader").value.trim(),
+        file_strategy: element("#source-strategy").value,
+        allowed_torrent_hosts: sourceHosts(),
+        rss_filter_enabled: element("#source-filter-enabled").checked,
+        rss_priority_enabled: element("#source-priority-enabled").checked,
+        enabled: element("#source-enabled").checked,
+    };
+    const payload = current
+        ? { ...common, expected_revision: current.revision }
+        : {
+            ...common,
+            id: element("#source-id").value,
+            adapter: element("#source-adapter").value,
+        };
+    save.disabled = true;
+    status.textContent = current ? "正在保存来源…" : "正在创建来源…";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch(current ? `/api/v1/sources/${encodeURIComponent(current.id)}` : "/api/v1/sources", {
+            method: current ? "PUT" : "POST",
+            headers: requestHeaders,
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const saved = await response.json();
+        await loadSources(saved.id);
+        status.textContent = `已保存 ${saved.display_name} · revision ${saved.revision}`;
+    }
+    catch (error) {
+        status.textContent = `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新选择来源。`;
+    }
+    finally {
+        save.disabled = false;
+    }
+}
+async function deleteSource() {
+    const current = activeSource();
+    if (!current || current.is_default)
+        return;
+    if (!window.confirm(`删除来源 ${current.display_name}？已有任务或 RSS batch 引用时服务端会拒绝。`))
+        return;
+    const status = element("#source-status");
+    status.textContent = "正在删除来源…";
+    try {
+        const response = await fetch(`/api/v1/sources/${encodeURIComponent(current.id)}?expected_revision=${current.revision}`, { method: "DELETE", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        activeSourceId = null;
+        await loadSources();
+        status.textContent = `来源 ${current.id} 已删除`;
+    }
+    catch (error) {
+        status.textContent = `删除失败：${errorMessage(error, "未知错误")}`;
+    }
+}
 function moveItem(items, index, delta) {
     const target = index + delta;
     if (target < 0 || target >= items.length)
@@ -543,9 +700,14 @@ element("#rss-add-group").addEventListener("click", () => {
     renderRssRules();
 });
 element("#rss-preview-run").addEventListener("click", () => void previewRssRules());
+element("#source-new").addEventListener("click", () => populateSourceForm(null));
+element("#source-form").addEventListener("submit", (event) => void saveSource(event));
+element("#source-delete").addEventListener("click", () => void deleteSource());
+element("#source-strategy").addEventListener("change", updateSourceWarning);
 void loadStatus();
 void loadDownloads();
 void loadMetadataTasks();
+void loadSources();
 void loadRssRules();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);

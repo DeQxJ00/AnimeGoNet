@@ -170,7 +170,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 
 ### 输入源页面
 
-- source profile CRUD；下载器下拉绑定。
+- source profile CRUD；下载器下拉绑定。当前静态页面已实现列表、创建、编辑、启停和删除，并显示 revision、不可变引用计数、当前路由及 `move` 不做种提示；下载器候选目前来自已有来源绑定且允许输入部署配置中的稳定 ID，待下载器只读/CRUD API 完成后改为完整实例投影。
 - metadata ID 必填规则、过滤/元数据 profile、分类/tag、文件策略、做种和重复命中通知。
 - “路由预览”：输入模拟 title/IDs 后显示会命中哪个下载器、哪些规则以及路径。
 - 修改只影响新任务；进行中任务保持原快照，可由用户显式重新路由。

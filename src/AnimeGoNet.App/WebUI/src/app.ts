@@ -104,6 +104,27 @@ interface RssRuleDecision {
   evaluated_priority_groups: string[];
 }
 
+interface SourceProfile {
+  id: string;
+  display_name: string;
+  adapter: "mikan" | "u2" | "ttg";
+  downloader_id: string;
+  file_strategy: "link" | "link_delete" | "move" | "wait_move";
+  allowed_torrent_hosts: string[];
+  rss_filter_enabled: boolean;
+  rss_priority_enabled: boolean;
+  enabled: boolean;
+  revision: number;
+  ingest_task_count: number;
+  rss_batch_count: number;
+  is_default: boolean;
+  file_strategy_warning: string | null;
+}
+
+interface SourceProfileList {
+  items: SourceProfile[];
+}
+
 interface DeleteGroup {
   flag: DeleteFlag;
   label: string;
@@ -133,6 +154,8 @@ const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
 let activeDeletePreview: DeletePreview | null = null;
 let activeRssRules: RssRuleSnapshot | null = null;
+let sourceProfiles: SourceProfile[] = [];
+let activeSourceId: string | null = null;
 let ruleIdSequence = 0;
 
 const statusLabels: Record<string, string> = {
@@ -443,6 +466,168 @@ async function loadMetadataTasks(): Promise<void> {
   }
 }
 
+function activeSource(): SourceProfile | null {
+  return sourceProfiles.find((profile) => profile.id === activeSourceId) ?? null;
+}
+
+function updateSourceWarning(): void {
+  const strategy = element<HTMLSelectElement>("#source-strategy").value;
+  element<HTMLElement>("#source-warning").textContent = strategy === "move"
+    ? "move 会在下载完成后移动源文件，无法继续做种；修改只影响之后创建的任务。"
+    : "修改只影响之后创建的任务；历史任务继续使用原 revision 路由快照。";
+}
+
+function populateSourceForm(profile: SourceProfile | null): void {
+  activeSourceId = profile?.id ?? null;
+  const id = element<HTMLInputElement>("#source-id");
+  const adapter = element<HTMLSelectElement>("#source-adapter");
+  id.disabled = profile !== null;
+  adapter.disabled = profile !== null;
+  id.value = profile?.id ?? "";
+  element<HTMLInputElement>("#source-name").value = profile?.display_name ?? "";
+  adapter.value = profile?.adapter ?? "u2";
+  element<HTMLInputElement>("#source-downloader").value = profile?.downloader_id ?? "pt";
+  element<HTMLSelectElement>("#source-strategy").value = profile?.file_strategy ?? "link";
+  element<HTMLTextAreaElement>("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
+  element<HTMLInputElement>("#source-enabled").checked = profile?.enabled ?? true;
+  element<HTMLInputElement>("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
+  element<HTMLInputElement>("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
+  const remove = element<HTMLButtonElement>("#source-delete");
+  remove.disabled = profile === null || profile.is_default;
+  remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
+  updateSourceWarning();
+  renderSourceList();
+}
+
+function renderSourceList(): void {
+  const list = element<HTMLElement>("#source-list");
+  if (sourceProfiles.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = "暂无来源";
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...sourceProfiles.map((profile) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `source-card ${profile.id === activeSourceId ? "active" : ""}`;
+    const heading = document.createElement("div");
+    heading.className = "source-card-heading";
+    const name = document.createElement("strong");
+    name.textContent = profile.display_name;
+    const revision = document.createElement("span");
+    revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
+    heading.append(name, revision);
+    const route = document.createElement("p");
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    card.append(heading, route);
+    card.addEventListener("click", () => populateSourceForm(profile));
+    return card;
+  }));
+}
+
+async function loadSources(selectedId?: string): Promise<void> {
+  const status = element<HTMLElement>("#source-status");
+  status.textContent = "正在读取来源配置…";
+  try {
+    const response = await fetch("/api/v1/sources", { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as SourceProfileList;
+    sourceProfiles = body.items;
+    const downloaders = [...new Set(sourceProfiles.map((profile) => profile.downloader_id))].sort();
+    element<HTMLDataListElement>("#source-downloader-options").replaceChildren(
+      ...downloaders.map((downloader) => {
+        const option = document.createElement("option");
+        option.value = downloader;
+        return option;
+      }),
+    );
+    const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
+      ?? sourceProfiles[0]
+      ?? null;
+    populateSourceForm(selected);
+    status.textContent = `${sourceProfiles.length} 个来源 · 修改采用 revision 乐观并发且不改变历史任务路由`;
+  } catch (error) {
+    sourceProfiles = [];
+    activeSourceId = null;
+    renderSourceList();
+    status.textContent = `来源读取失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+function sourceHosts(): string[] {
+  return element<HTMLTextAreaElement>("#source-hosts").value
+    .split(/[\r\n,，]+/u)
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+async function saveSource(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const current = activeSource();
+  const save = element<HTMLButtonElement>("#source-save");
+  const status = element<HTMLElement>("#source-status");
+  const common = {
+    display_name: element<HTMLInputElement>("#source-name").value.trim(),
+    downloader_id: element<HTMLInputElement>("#source-downloader").value.trim(),
+    file_strategy: element<HTMLSelectElement>("#source-strategy").value,
+    allowed_torrent_hosts: sourceHosts(),
+    rss_filter_enabled: element<HTMLInputElement>("#source-filter-enabled").checked,
+    rss_priority_enabled: element<HTMLInputElement>("#source-priority-enabled").checked,
+    enabled: element<HTMLInputElement>("#source-enabled").checked,
+  };
+  const payload = current
+    ? { ...common, expected_revision: current.revision }
+    : {
+        ...common,
+        id: element<HTMLInputElement>("#source-id").value,
+        adapter: element<HTMLSelectElement>("#source-adapter").value,
+      };
+  save.disabled = true;
+  status.textContent = current ? "正在保存来源…" : "正在创建来源…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(
+      current ? `/api/v1/sources/${encodeURIComponent(current.id)}` : "/api/v1/sources",
+      {
+        method: current ? "PUT" : "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const saved = await response.json() as SourceProfile;
+    await loadSources(saved.id);
+    status.textContent = `已保存 ${saved.display_name} · revision ${saved.revision}`;
+  } catch (error) {
+    status.textContent = `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新选择来源。`;
+  } finally {
+    save.disabled = false;
+  }
+}
+
+async function deleteSource(): Promise<void> {
+  const current = activeSource();
+  if (!current || current.is_default) return;
+  if (!window.confirm(`删除来源 ${current.display_name}？已有任务或 RSS batch 引用时服务端会拒绝。`)) return;
+  const status = element<HTMLElement>("#source-status");
+  status.textContent = "正在删除来源…";
+  try {
+    const response = await fetch(
+      `/api/v1/sources/${encodeURIComponent(current.id)}?expected_revision=${current.revision}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    activeSourceId = null;
+    await loadSources();
+    status.textContent = `来源 ${current.id} 已删除`;
+  } catch (error) {
+    status.textContent = `删除失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
 function moveItem<T>(items: T[], index: number, delta: number): void {
   const target = index + delta;
   if (target < 0 || target >= items.length) return;
@@ -670,10 +855,15 @@ element<HTMLButtonElement>("#rss-add-group").addEventListener("click", () => {
   renderRssRules();
 });
 element<HTMLButtonElement>("#rss-preview-run").addEventListener("click", () => void previewRssRules());
+element<HTMLButtonElement>("#source-new").addEventListener("click", () => populateSourceForm(null));
+element<HTMLFormElement>("#source-form").addEventListener("submit", (event) => void saveSource(event));
+element<HTMLButtonElement>("#source-delete").addEventListener("click", () => void deleteSource());
+element<HTMLSelectElement>("#source-strategy").addEventListener("change", updateSourceWarning);
 
 void loadStatus();
 void loadDownloads();
 void loadMetadataTasks();
+void loadSources();
 void loadRssRules();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);

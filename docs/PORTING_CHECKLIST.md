@@ -88,7 +88,7 @@
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
 | 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、只读 downloads、脱敏 metadata task、SourceProfile 版本化 CRUD/引用保护以及四类删除 API 已实现；downloader/anime CRUD、路由预览与 OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载状态卡片和元数据阶段/失败/文件归类/显式重试面板使用安全 DOM API，完整管理 UI 与发布镜像浏览器 E2E 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；下载/元数据面板及 SourceProfile 版本化 CRUD 编辑器使用安全 DOM API，下载器/作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

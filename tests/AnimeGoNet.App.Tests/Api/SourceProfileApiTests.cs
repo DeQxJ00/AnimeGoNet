@@ -173,6 +173,24 @@ public sealed class SourceProfileApiTests
         Assert.Equal("source_profile_invalid", body.RootElement.GetProperty("code").GetString());
     }
 
+    [Fact]
+    public async Task StaticWebUiContainsVersionedSourceProfileEditor()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var html = await app.Client.GetStringAsync("/");
+        var script = await app.Client.GetStringAsync("/app.js");
+
+        Assert.Contains("id=\"source-list\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-downloader\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-hosts\"", html, StringComparison.Ordinal);
+        Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
+        Assert.Contains("loadSources", script, StringComparison.Ordinal);
+        Assert.Contains("expected_revision", script, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/sources/", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
     private static StringContent Json(object value) =>
         new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
 }
