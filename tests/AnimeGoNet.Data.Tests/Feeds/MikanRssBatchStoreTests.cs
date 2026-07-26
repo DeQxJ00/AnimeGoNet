@@ -137,6 +137,44 @@ public sealed class MikanRssBatchStoreTests
         Assert.Equal(0, reader.GetInt32(2));
     }
 
+    [Fact]
+    public async Task PersistsLegacyFilterRevisionDecisionScopeAndIdentity()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var feed = new RssFeedDocument(
+        [
+            Item("Show [03] x265", "a", "https://example.invalid/download/a"),
+            Item("Show [03] x264", "b", "https://example.invalid/download/b"),
+        ], 3951);
+        var audits = new[]
+        {
+            new MikanLegacyFilterAudit(
+                MikanLegacyFilterState.Rejected, "RejectedByLegacyMikanTool",
+                "Filiter1", "key_3951_370", 3951, 370),
+            new MikanLegacyFilterAudit(
+                MikanLegacyFilterState.SkippedByConfiguration, "SkippedByConfiguration"),
+        };
+        var plan = MikanRssBatchPlanner.Create(
+            feed, new MikanRssRuleSet([], [], []),
+            legacyFilterAudits: audits, legacyFilterRevision: 9, legacyFilterEnabled: true);
+
+        var stored = await fixture.Store.SaveAsync(
+            "mikan", 1, true, plan,
+            DateTimeOffset.Parse("2026-07-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.Equal(9, stored.LegacyFilterRevision);
+        Assert.True(stored.LegacyFilterEnabled);
+        var rejected = stored.Entries[0];
+        Assert.Equal(MikanRssDecisionKind.RejectedByLegacyFilter, rejected.Decision.Kind);
+        Assert.Equal(MikanLegacyFilterState.Rejected, rejected.LegacyFilterAudit.State);
+        Assert.Equal("Filiter1", rejected.LegacyFilterAudit.MatchedScope);
+        Assert.Equal("key_3951_370", rejected.LegacyFilterAudit.MatchedKey);
+        Assert.Equal(3951, rejected.LegacyFilterAudit.IdentityMikanId);
+        Assert.Equal(370, rejected.LegacyFilterAudit.IdentityGroupId);
+        Assert.Equal("blocked", rejected.EffectState);
+        Assert.Equal(MikanRssDecisionKind.Winner, stored.Entries[1].Decision.Kind);
+    }
+
     private static MikanRssBatchPlan Plan()
     {
         var feed = new RssFeedDocument(

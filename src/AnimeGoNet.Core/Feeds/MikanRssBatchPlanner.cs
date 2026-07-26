@@ -8,11 +8,14 @@ namespace AnimeGoNet.Core.Feeds;
 public sealed record MikanRssPlannedItem(
     RssFeedItem FeedItem,
     MikanRssCandidate Candidate,
-    MikanRssDecision Decision);
+    MikanRssDecision Decision,
+    MikanLegacyFilterAudit LegacyFilterAudit);
 
 public sealed record MikanRssBatchPlan(
     int? MikanId,
-    IReadOnlyList<MikanRssPlannedItem> Items)
+    IReadOnlyList<MikanRssPlannedItem> Items,
+    long LegacyFilterRevision,
+    bool LegacyFilterEnabled)
 {
     public IReadOnlyList<MikanRssPlannedItem> Winners =>
         Items.Where(item => item.Decision.Kind == MikanRssDecisionKind.Winner).ToArray();
@@ -23,10 +26,18 @@ public static class MikanRssBatchPlanner
     public static MikanRssBatchPlan Create(
         RssFeedDocument feed,
         MikanRssRuleSet rules,
-        bool priorityEnabled = true)
+        bool priorityEnabled = true,
+        IReadOnlyList<MikanLegacyFilterAudit>? legacyFilterAudits = null,
+        long legacyFilterRevision = 1,
+        bool legacyFilterEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(feed);
         ArgumentNullException.ThrowIfNull(rules);
+        ArgumentOutOfRangeException.ThrowIfLessThan(legacyFilterRevision, 1);
+        if (legacyFilterAudits is not null && legacyFilterAudits.Count != feed.Items.Count)
+        {
+            throw new ArgumentException("Legacy filter audit count must match feed item count.", nameof(legacyFilterAudits));
+        }
 
         var usedIds = new HashSet<string>(StringComparer.Ordinal);
         var candidates = new MikanRssCandidate[feed.Items.Count];
@@ -42,25 +53,40 @@ public static class MikanRssBatchPlanner
                 episode.SourceEpisode);
         }
 
-        IReadOnlyList<MikanRssDecision> decisions = priorityEnabled
-            ? MikanRssRuleEngine.Evaluate(candidates, rules)
-            : candidates.Select(candidate => new MikanRssDecision(
+        var audits = legacyFilterAudits?.ToArray()
+            ?? Enumerable.Repeat(MikanLegacyFilterAudit.NotEvaluated, candidates.Length).ToArray();
+        var eligibleCandidates = candidates.Where((_, index) => audits[index].Eligible).ToArray();
+        IReadOnlyList<MikanRssDecision> eligibleDecisions = priorityEnabled
+            ? MikanRssRuleEngine.Evaluate(eligibleCandidates, rules)
+            : eligibleCandidates.Select(candidate => new MikanRssDecision(
                 candidate.Id,
                 MikanRssDecisionKind.Winner,
                 "SkippedByConfiguration",
                 candidate.Id,
                 [])).ToArray();
-        var decisionsById = decisions.ToDictionary(decision => decision.CandidateId, StringComparer.Ordinal);
+        var decisionsById = eligibleDecisions.ToDictionary(decision => decision.CandidateId, StringComparer.Ordinal);
         var planned = new MikanRssPlannedItem[feed.Items.Count];
         for (var index = 0; index < feed.Items.Count; index++)
         {
+            var audit = audits[index];
+            var decision = audit.State switch
+            {
+                MikanLegacyFilterState.Rejected => new MikanRssDecision(
+                    candidates[index].Id, MikanRssDecisionKind.RejectedByLegacyFilter,
+                    audit.Reason, null, []),
+                MikanLegacyFilterState.FilterEvaluationFailed => new MikanRssDecision(
+                    candidates[index].Id, MikanRssDecisionKind.FilterEvaluationFailed,
+                    audit.Reason, null, []),
+                _ => decisionsById[candidates[index].Id],
+            };
             planned[index] = new MikanRssPlannedItem(
                 feed.Items[index],
                 candidates[index],
-                decisionsById[candidates[index].Id]);
+                decision,
+                audit);
         }
 
-        return new MikanRssBatchPlan(feed.MikanId, planned);
+        return new MikanRssBatchPlan(feed.MikanId, planned, legacyFilterRevision, legacyFilterEnabled);
     }
 
     private static string CreateStableId(RssFeedItem item)

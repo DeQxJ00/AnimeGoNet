@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 15;
+    public const int CurrentVersion = 16;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -21,6 +21,7 @@ public static class DatabaseSchema
         new SchemaMigration(13, "mikan_rss_rule_storage", MikanRssRuleStorage),
         new SchemaMigration(14, "mikan_rss_batch_audit", MikanRssBatchAudit),
         new SchemaMigration(15, "legacy_mikan_filter_storage", LegacyMikanFilterStorage),
+        new SchemaMigration(16, "mikan_legacy_filter_audit", MikanLegacyFilterAudit),
     ];
 
     private const string InitialBusinessSchema = """
@@ -666,5 +667,90 @@ public static class DatabaseSchema
             created_at_utc TEXT NOT NULL,
             PRIMARY KEY (source_profile_id, revision)
         ) STRICT;
+        """;
+
+    private const string MikanLegacyFilterAudit = """
+        ALTER TABLE mikan_rss_batches
+        ADD COLUMN legacy_filter_revision INTEGER NOT NULL DEFAULT 1 CHECK (legacy_filter_revision > 0);
+
+        ALTER TABLE mikan_rss_batches
+        ADD COLUMN legacy_filter_enabled INTEGER NOT NULL DEFAULT 0 CHECK (legacy_filter_enabled IN (0, 1));
+
+        DROP INDEX ix_mikan_rss_entries_effect;
+
+        CREATE TABLE mikan_rss_batch_entries_v16 (
+            batch_id TEXT NOT NULL REFERENCES mikan_rss_batches(id) ON DELETE CASCADE,
+            candidate_id TEXT NOT NULL,
+            ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+            title TEXT NOT NULL,
+            mikan_url TEXT NOT NULL,
+            torrent_url_fingerprint TEXT NOT NULL CHECK (
+                length(torrent_url_fingerprint) = 64 AND torrent_url_fingerprint = lower(torrent_url_fingerprint)),
+            content_type TEXT NOT NULL,
+            length_bytes INTEGER NOT NULL CHECK (length_bytes >= 0),
+            published_date TEXT,
+            source_episode_kind TEXT CHECK (source_episode_kind IN ('normal', 'fractional', 'special')),
+            source_episode TEXT,
+            decision_kind TEXT NOT NULL CHECK (decision_kind IN (
+                'Winner', 'RejectedByBlacklist', 'RejectedByWhitelist', 'SuppressedByHigherPriority',
+                'RejectedByLegacyFilter', 'FilterEvaluationFailed')),
+            decision_reason TEXT NOT NULL,
+            winner_candidate_id TEXT,
+            legacy_filter_state TEXT NOT NULL CHECK (legacy_filter_state IN (
+                'NotEvaluated', 'Accepted', 'Rejected', 'SkippedByConfiguration', 'FilterEvaluationFailed')),
+            legacy_filter_reason TEXT NOT NULL,
+            legacy_filter_scope TEXT,
+            legacy_filter_key TEXT,
+            identity_mikanid INTEGER CHECK (identity_mikanid > 0),
+            identity_groupid INTEGER CHECK (identity_groupid > 0),
+            effect_state TEXT NOT NULL CHECK (effect_state IN ('blocked', 'ready', 'claimed', 'ingested')),
+            claim_token TEXT,
+            claim_expires_at_utc TEXT,
+            ingest_task_id TEXT REFERENCES ingest_tasks(id),
+            PRIMARY KEY (batch_id, candidate_id),
+            UNIQUE (batch_id, ordinal),
+            CHECK ((source_episode_kind IS NULL AND source_episode IS NULL)
+                OR (source_episode_kind IS NOT NULL AND source_episode IS NOT NULL)),
+            CHECK ((decision_kind = 'Winner' AND effect_state IN ('ready', 'claimed', 'ingested'))
+                OR (decision_kind <> 'Winner' AND effect_state = 'blocked')),
+            CHECK ((effect_state = 'claimed' AND claim_token IS NOT NULL AND claim_expires_at_utc IS NOT NULL)
+                OR (effect_state <> 'claimed' AND claim_token IS NULL AND claim_expires_at_utc IS NULL)),
+            CHECK ((effect_state = 'ingested' AND ingest_task_id IS NOT NULL)
+                OR (effect_state <> 'ingested' AND ingest_task_id IS NULL))
+        ) STRICT;
+
+        INSERT INTO mikan_rss_batch_entries_v16 (
+            batch_id, candidate_id, ordinal, title, mikan_url, torrent_url_fingerprint,
+            content_type, length_bytes, published_date, source_episode_kind, source_episode,
+            decision_kind, decision_reason, winner_candidate_id,
+            legacy_filter_state, legacy_filter_reason,
+            effect_state, claim_token, claim_expires_at_utc, ingest_task_id)
+        SELECT batch_id, candidate_id, ordinal, title, mikan_url, torrent_url_fingerprint,
+            content_type, length_bytes, published_date, source_episode_kind, source_episode,
+            decision_kind, decision_reason, winner_candidate_id,
+            'NotEvaluated', 'LegacyFilterNotRecorded',
+            effect_state, claim_token, claim_expires_at_utc, ingest_task_id
+        FROM mikan_rss_batch_entries;
+
+        CREATE TABLE mikan_rss_decision_groups_v16 (
+            batch_id TEXT NOT NULL,
+            candidate_id TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            group_id TEXT NOT NULL,
+            PRIMARY KEY (batch_id, candidate_id, position),
+            FOREIGN KEY (batch_id, candidate_id)
+                REFERENCES mikan_rss_batch_entries_v16(batch_id, candidate_id) ON DELETE CASCADE
+        ) STRICT;
+
+        INSERT INTO mikan_rss_decision_groups_v16 (batch_id, candidate_id, position, group_id)
+        SELECT batch_id, candidate_id, position, group_id FROM mikan_rss_decision_groups;
+
+        DROP TABLE mikan_rss_decision_groups;
+        DROP TABLE mikan_rss_batch_entries;
+        ALTER TABLE mikan_rss_batch_entries_v16 RENAME TO mikan_rss_batch_entries;
+        ALTER TABLE mikan_rss_decision_groups_v16 RENAME TO mikan_rss_decision_groups;
+
+        CREATE INDEX ix_mikan_rss_entries_effect
+        ON mikan_rss_batch_entries(effect_state, claim_expires_at_utc, batch_id, ordinal);
         """;
 }

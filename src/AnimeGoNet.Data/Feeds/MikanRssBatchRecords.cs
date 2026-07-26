@@ -9,6 +9,8 @@ public sealed record MikanRssBatchRecord(
     string Fingerprint,
     int? MikanId,
     bool PriorityEnabled,
+    long LegacyFilterRevision,
+    bool LegacyFilterEnabled,
     DateTimeOffset CreatedAtUtc,
     IReadOnlyList<MikanRssBatchEntryRecord> Entries);
 
@@ -23,6 +25,7 @@ public sealed record MikanRssBatchEntryRecord(
     string? SourceEpisodeKind,
     string? SourceEpisode,
     MikanRssDecision Decision,
+    MikanLegacyFilterAudit LegacyFilterAudit,
     string EffectState,
     string? IngestTaskId);
 

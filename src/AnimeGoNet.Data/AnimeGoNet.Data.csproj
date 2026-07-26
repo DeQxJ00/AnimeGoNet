@@ -10,4 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="../AnimeGoNet.Core/AnimeGoNet.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AnimeGoNet.Data.Tests" />
+  </ItemGroup>
 </Project>

@@ -32,8 +32,10 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             insert.CommandText = """
                 INSERT OR IGNORE INTO mikan_rss_batches (
                     id, source_profile_id, rule_revision, fingerprint, mikanid,
-                    priority_enabled, entry_count, created_at_utc)
-                VALUES ($id, $profile, $revision, $fingerprint, $mikanid, $enabled, $count, $created);
+                    priority_enabled, entry_count, created_at_utc,
+                    legacy_filter_revision, legacy_filter_enabled)
+                VALUES ($id, $profile, $revision, $fingerprint, $mikanid, $enabled, $count, $created,
+                    $legacy_revision, $legacy_enabled);
                 """;
             insert.Parameters.AddWithValue("$id", batchId);
             insert.Parameters.AddWithValue("$profile", profile);
@@ -43,6 +45,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$enabled", priorityEnabled);
             insert.Parameters.AddWithValue("$count", plan.Items.Count);
             insert.Parameters.AddWithValue("$created", Format(utcNow));
+            insert.Parameters.AddWithValue("$legacy_revision", plan.LegacyFilterRevision);
+            insert.Parameters.AddWithValue("$legacy_enabled", plan.LegacyFilterEnabled);
             if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
@@ -151,9 +155,13 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
                 INSERT INTO mikan_rss_batch_entries (
                     batch_id, candidate_id, ordinal, title, mikan_url, torrent_url_fingerprint,
                     content_type, length_bytes, published_date, source_episode_kind, source_episode,
-                    decision_kind, decision_reason, winner_candidate_id, effect_state)
+                    decision_kind, decision_reason, winner_candidate_id,
+                    legacy_filter_state, legacy_filter_reason, legacy_filter_scope, legacy_filter_key,
+                    identity_mikanid, identity_groupid, effect_state)
                 VALUES ($batch, $candidate, $ordinal, $title, $mikan_url, $torrent, $content_type,
-                    $length, $published, $kind, $episode, $decision, $reason, $winner, $state);
+                    $length, $published, $kind, $episode, $decision, $reason, $winner,
+                    $filter_state, $filter_reason, $filter_scope, $filter_key,
+                    $identity_mikanid, $identity_groupid, $state);
                 """;
             insert.Parameters.AddWithValue("$batch", batchId);
             insert.Parameters.AddWithValue("$candidate", item.Candidate.Id);
@@ -169,6 +177,12 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$decision", item.Decision.Kind.ToString());
             insert.Parameters.AddWithValue("$reason", item.Decision.Reason);
             insert.Parameters.AddWithValue("$winner", (object?)item.Decision.WinnerId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$filter_state", item.LegacyFilterAudit.State.ToString());
+            insert.Parameters.AddWithValue("$filter_reason", item.LegacyFilterAudit.Reason);
+            insert.Parameters.AddWithValue("$filter_scope", (object?)item.LegacyFilterAudit.MatchedScope ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$filter_key", (object?)item.LegacyFilterAudit.MatchedKey ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$identity_mikanid", PositiveOrNull(item.LegacyFilterAudit.IdentityMikanId));
+            insert.Parameters.AddWithValue("$identity_groupid", PositiveOrNull(item.LegacyFilterAudit.IdentityGroupId));
             insert.Parameters.AddWithValue("$state", item.Decision.Kind == MikanRssDecisionKind.Winner ? "ready" : "blocked");
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -198,12 +212,14 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         string fingerprint;
         int? mikanId;
         bool enabled;
+        long legacyRevision;
+        bool legacyEnabled;
         DateTimeOffset created;
         await using (var root = connection.CreateCommand())
         {
             root.CommandText = $"""
                 SELECT id, source_profile_id, rule_revision, fingerprint, mikanid,
-                       priority_enabled, created_at_utc
+                       priority_enabled, created_at_utc, legacy_filter_revision, legacy_filter_enabled
                 FROM mikan_rss_batches WHERE {keyColumn} = $key;
                 """;
             root.Parameters.AddWithValue("$key", key);
@@ -216,6 +232,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             mikanId = reader.IsDBNull(4) ? null : reader.GetInt32(4);
             enabled = reader.GetBoolean(5);
             created = DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture);
+            legacyRevision = reader.GetInt64(7);
+            legacyEnabled = reader.GetBoolean(8);
         }
 
         var storedRows = new List<StoredEntryRow>();
@@ -224,7 +242,9 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             query.CommandText = """
                 SELECT candidate_id, title, mikan_url, torrent_url_fingerprint, content_type,
                        length_bytes, published_date, source_episode_kind, source_episode,
-                   decision_kind, decision_reason, winner_candidate_id, effect_state, ingest_task_id
+                       decision_kind, decision_reason, winner_candidate_id,
+                       legacy_filter_state, legacy_filter_reason, legacy_filter_scope, legacy_filter_key,
+                       identity_mikanid, identity_groupid, effect_state, ingest_task_id
                 FROM mikan_rss_batch_entries WHERE batch_id = $batch ORDER BY ordinal;
                 """;
             query.Parameters.AddWithValue("$batch", id);
@@ -236,7 +256,10 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
                     rows.GetInt64(5), rows.IsDBNull(6) ? null : rows.GetString(6),
                     rows.IsDBNull(7) ? null : rows.GetString(7), rows.IsDBNull(8) ? null : rows.GetString(8),
                     rows.GetString(9), rows.GetString(10), rows.IsDBNull(11) ? null : rows.GetString(11),
-                    rows.GetString(12), rows.IsDBNull(13) ? null : rows.GetString(13)));
+                    rows.GetString(12), rows.GetString(13), rows.IsDBNull(14) ? null : rows.GetString(14),
+                    rows.IsDBNull(15) ? null : rows.GetString(15), rows.IsDBNull(16) ? null : rows.GetInt32(16),
+                    rows.IsDBNull(17) ? null : rows.GetInt32(17), rows.GetString(18),
+                    rows.IsDBNull(19) ? null : rows.GetString(19)));
             }
         }
 
@@ -247,13 +270,22 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             var decision = new MikanRssDecision(row.CandidateId,
                 Enum.Parse<MikanRssDecisionKind>(row.DecisionKind), row.DecisionReason,
                 row.WinnerCandidateId, groups);
+            var filterAudit = new MikanLegacyFilterAudit(
+                Enum.Parse<MikanLegacyFilterState>(row.LegacyFilterState),
+                row.LegacyFilterReason,
+                row.LegacyFilterScope,
+                row.LegacyFilterKey,
+                row.IdentityMikanId,
+                row.IdentityGroupId);
             entries.Add(new MikanRssBatchEntryRecord(
                 row.CandidateId, row.Title, row.MikanUrl, row.TorrentUrlFingerprint,
                 row.ContentType, row.LengthBytes, row.PublishedDate, row.SourceEpisodeKind,
-                row.SourceEpisode, decision, row.EffectState, row.IngestTaskId));
+                row.SourceEpisode, decision, filterAudit, row.EffectState, row.IngestTaskId));
         }
 
-        return new MikanRssBatchRecord(id, profile, revision, fingerprint, mikanId, enabled, created, entries);
+        return new MikanRssBatchRecord(
+            id, profile, revision, fingerprint, mikanId, enabled,
+            legacyRevision, legacyEnabled, created, entries);
     }
 
     private static async Task<IReadOnlyList<string>> ReadGroupsAsync(
@@ -274,11 +306,16 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
 
     private static string Fingerprint(string profile, long revision, bool enabled, MikanRssBatchPlan plan)
     {
-        var value = new StringBuilder().Append(profile).Append('|').Append(revision).Append('|').Append(enabled).Append('|');
+        var value = new StringBuilder().Append(profile).Append('|').Append(revision).Append('|').Append(enabled)
+            .Append('|').Append(plan.LegacyFilterRevision).Append('|').Append(plan.LegacyFilterEnabled).Append('|');
         foreach (var item in plan.Items)
         {
             value.Append(item.Candidate.Id).Append('|').Append(item.Decision.Kind).Append('|')
-                .Append(item.Decision.Reason).Append('|').Append(item.Decision.WinnerId).Append(';');
+                .Append(item.Decision.Reason).Append('|').Append(item.Decision.WinnerId).Append('|')
+                .Append(item.LegacyFilterAudit.State).Append('|').Append(item.LegacyFilterAudit.Reason).Append('|')
+                .Append(item.LegacyFilterAudit.MatchedScope).Append('|').Append(item.LegacyFilterAudit.MatchedKey).Append('|')
+                .Append(item.LegacyFilterAudit.IdentityMikanId).Append('|').Append(item.LegacyFilterAudit.IdentityGroupId)
+                .Append(';');
         }
         return Sha256(value.ToString());
     }
@@ -287,6 +324,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private static string Format(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static object PositiveOrNull(int? value) => value is > 0 ? value.Value : DBNull.Value;
 
     private sealed record StoredEntryRow(
         string CandidateId,
@@ -301,6 +340,12 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         string DecisionKind,
         string DecisionReason,
         string? WinnerCandidateId,
+        string LegacyFilterState,
+        string LegacyFilterReason,
+        string? LegacyFilterScope,
+        string? LegacyFilterKey,
+        int? IdentityMikanId,
+        int? IdentityGroupId,
         string EffectState,
         string? IngestTaskId);
 }
