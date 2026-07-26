@@ -45,7 +45,7 @@
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |
-| AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约与 TMDB 二次验证门已完成；HTTP/MCP 工具循环及处理器接入待实现） | Core fake TMDB 已覆盖文件顺序/Season 0/重复目标/身份越界/网络失败；后续 fake AI + NativeAOT smoke |
+| AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP 工具循环与 TMDB 二次验证门已完成；季度/EP 处理器接入待实现） | fake AI/MCP 与 Core fake TMDB 已覆盖顺序/Season 0/重复目标/身份越界/429/认证/网络失败；后续处理器 + NativeAOT 端到端 smoke |
 | 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选，并在 Season 确认后持久化 Other 原因；实际整理路径待实现 |
 
 ## 存储与业务状态

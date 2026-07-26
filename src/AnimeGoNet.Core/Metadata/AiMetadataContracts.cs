@@ -54,3 +54,14 @@ public interface IAiMetadataMatcher
         AiMetadataMatchInput input,
         CancellationToken cancellationToken = default);
 }
+
+public sealed class AiMetadataMatcherException(
+    MetadataFailureKind kind,
+    string safeCode,
+    Exception? innerException = null)
+    : Exception(safeCode, innerException)
+{
+    public MetadataFailureKind Kind { get; } = kind;
+
+    public string SafeCode { get; } = safeCode;
+}

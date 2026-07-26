@@ -78,6 +78,23 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
+    public async Task RejectsForgedBangumiPubdateGateBeforeTmdbAccess()
+    {
+        var tmdb = new FakeTmdbClient();
+        var input = Input(new AiMetadataFileInput("01.mkv", 100)) with
+        {
+            UseBangumiPubDateFirst = true,
+        };
+
+        var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(
+            input,
+            Success("01.mkv", 1, 1));
+
+        Assert.Equal("ai_metadata_input_invalid", result.Failure!.Code);
+        Assert.Equal(0, tmdb.TotalCalls);
+    }
+
+    [Fact]
     public async Task RejectsDuplicateEpisodeTargets()
     {
         var tmdb = new FakeTmdbClient();

@@ -152,6 +152,11 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
             || input.BangumiSubjectId is <= 0
             || input.AniDbAnimeId is <= 0
             || input.BangumiEpisodeCandidate is <= 0
+            || (input.UseBangumiPubDateFirst
+                && (input.TorrentFileCount != 1
+                    || input.BangumiSubjectId is null
+                    || input.PublishedAt is null
+                    || input.BangumiEpisodeCandidate is null))
             || (input.ImdbTitleId is not null && !ImdbTitleIdPattern().IsMatch(input.ImdbTitleId)))
         {
             return new MetadataFailure(MetadataFailureKind.InvalidInput, "ai_metadata_input_invalid", false);

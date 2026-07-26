@@ -33,6 +33,7 @@ public sealed class RunningApp : IAsyncDisposable
         IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
         IBangumiSubjectClient? bangumiSubjectClient = null,
+        IAiMetadataMatcher? aiMetadataMatcher = null,
         ITorrentDnsResolver? rssDnsResolver = null,
         ITorrentHttpTransport? rssHttpTransport = null)
     {
@@ -49,6 +50,7 @@ public sealed class RunningApp : IAsyncDisposable
             downloadClientRegistry: downloadClientRegistry,
             tmdbClient: tmdbClient,
             bangumiSubjectClient: bangumiSubjectClient,
+            aiMetadataMatcher: aiMetadataMatcher,
             rssDnsResolver: rssDnsResolver,
             rssHttpTransport: rssHttpTransport,
             startBackgroundWorkers: false);
