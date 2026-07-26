@@ -47,18 +47,59 @@ public sealed class EpisodeMetadataResolutionProcessor(
         var results = new List<MetadataEpisodeFileResolution>(claim.Files.Count);
         foreach (var file in claim.Files.Where(file => !subtitleIds.Contains(file.FileId)))
         {
-            if (!int.TryParse(file.FileEpisodeCandidate, NumberStyles.None, CultureInfo.InvariantCulture, out var sourceEpisode)
+            if (manualOffset is null && file.PreResolvedOtherReason is not null)
+            {
+                await RecordAsync(
+                    claim,
+                    "ai_season",
+                    null,
+                    "other",
+                    file.PreResolvedOtherReason,
+                    retryable: false,
+                    0,
+                    cancellationToken).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    "other",
+                    file.PreResolvedOtherReason));
+                continue;
+            }
+
+            var strategy = manualOffset is not null
+                ? "manual_mikan_offset"
+                : file.PreResolvedEpisodeNumber is > 0
+                    ? "ai_season"
+                    : "tmdb_episode_number";
+            int? priority = manualOffset is null
+                ? null
+                : ManualMetadataResolutionProcessor.ManualOverridePriority;
+            int targetEpisode;
+            if (manualOffset is null && file.PreResolvedEpisodeNumber is > 0)
+            {
+                targetEpisode = file.PreResolvedEpisodeNumber.Value;
+            }
+            else if (!int.TryParse(
+                    file.FileEpisodeCandidate,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var sourceEpisode)
                 || sourceEpisode <= 0)
             {
                 var reason = OtherReason(file);
-                await RecordAsync(claim, manualOffset is null ? "tmdb_episode_number" : "manual_mikan_offset",
-                    manualOffset is null ? null : ManualMetadataResolutionProcessor.ManualOverridePriority,
+                await RecordAsync(
+                    claim,
+                    strategy,
+                    priority,
                     "other", reason, retryable: false, 0, cancellationToken).ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(file.FileId, null, "other", reason));
                 continue;
             }
+            else
+            {
+                targetEpisode = sourceEpisode + (manualOffset ?? 0);
+            }
 
-            var targetEpisode = sourceEpisode + (manualOffset ?? 0);
             if (targetEpisode <= 0)
             {
                 var failure = new MetadataFailure(
@@ -89,8 +130,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 await RecordFailureAndStopAsync(
                     claim,
-                    manualOffset is null ? "tmdb_episode_number" : "manual_mikan_offset",
-                    manualOffset is null ? null : ManualMetadataResolutionProcessor.ManualOverridePriority,
+                    strategy,
+                    priority,
                     new MetadataFailure(exception.Kind, exception.SafeCode, exception.TmdbAccessConfirmed),
                     ElapsedMilliseconds(started),
                     cancellationToken).ConfigureAwait(false);
@@ -99,15 +140,17 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             if (episode is null)
             {
-                if (manualOffset is not null)
+                if (manualOffset is not null || strategy == "ai_season")
                 {
                     await RecordFailureAndStopAsync(
                         claim,
-                        "manual_mikan_offset",
-                        ManualMetadataResolutionProcessor.ManualOverridePriority,
+                        strategy,
+                        priority,
                         new MetadataFailure(
                             MetadataFailureKind.SemanticNoMatch,
-                            "manual_tmdb_episode_not_found",
+                            strategy == "ai_season"
+                                ? "ai_tmdb_episode_not_found"
+                                : "manual_tmdb_episode_not_found",
                             TmdbAccessConfirmed: true),
                         ElapsedMilliseconds(started),
                         cancellationToken).ConfigureAwait(false);
@@ -127,8 +170,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 await RecordFailureAndStopAsync(
                     claim,
-                    manualOffset is null ? "tmdb_episode_number" : "manual_mikan_offset",
-                    manualOffset is null ? null : ManualMetadataResolutionProcessor.ManualOverridePriority,
+                    strategy,
+                    priority,
                     new MetadataFailure(
                         MetadataFailureKind.Protocol,
                         "tmdb_episode_identity_mismatch",
@@ -140,8 +183,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             await RecordAsync(
                 claim,
-                manualOffset is null ? "tmdb_episode_number" : "manual_mikan_offset",
-                manualOffset is null ? null : ManualMetadataResolutionProcessor.ManualOverridePriority,
+                strategy,
+                priority,
                 "matched",
                 null,
                 false,
@@ -152,6 +195,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
         if (manualOffset is null
             && options.Metadata.Ai.UseEpisodeMatch
+            && !claim.SeasonResolvedByAi
             && results.Any(result => result.Episode is null
                 && claim.Files.Any(file => file.FileId == result.FileId
                     && SubtitleAssociationResolver.IsVideo(file.RelativePath))))

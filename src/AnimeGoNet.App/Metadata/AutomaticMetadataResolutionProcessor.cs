@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
 
@@ -10,6 +11,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
     BangumiSeasonBacktraceResolver backtrace,
     TmdbSeriesResolver seriesResolver,
     ITmdbClient tmdb,
+    IAiMetadataMatcher aiMatcher,
+    AiMetadataResultValidator aiValidator,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
@@ -150,6 +153,14 @@ public sealed class AutomaticMetadataResolutionProcessor(
             }
         }
 
+        if (options.Metadata.Ai.UseSeasonMatch)
+        {
+            if (await TryCompleteAiSeasonAsync(claim, cancellationToken).ConfigureAwait(false))
+            {
+                return true;
+            }
+        }
+
         if (policy.UseTitleSeason)
         {
             var started = _timeProvider.GetTimestamp();
@@ -183,6 +194,127 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         await FailAsync(claim, direct.Failure!, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> TryCompleteAiSeasonAsync(
+        MetadataTaskClaim claim,
+        CancellationToken cancellationToken)
+    {
+        var videos = (claim.Files ?? [])
+            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            .ToArray();
+        var started = _timeProvider.GetTimestamp();
+        if (videos.Length == 0)
+        {
+            await RecordAsync(
+                claim,
+                "season",
+                "ai_season",
+                null,
+                "not_applicable",
+                "ai_video_files_missing",
+                false,
+                started,
+                cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        var input = new AiMetadataMatchInput(
+            claim.Title,
+            videos.Select(file => new AiMetadataFileInput(
+                file.RelativePath,
+                file.SizeBytes)).ToArray(),
+            claim.BangumiSubjectId,
+            claim.AniDbAnimeId,
+            claim.ImdbTitleId,
+            claim.Files!.Count,
+            PublishedAt: null,
+            BangumiEpisodeCandidate: null,
+            UseBangumiPubDateFirst: false);
+        AiMetadataMatchCandidate candidate;
+        try
+        {
+            candidate = await aiMatcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            await RecordAsync(
+                claim,
+                "season",
+                "ai_season",
+                null,
+                "error",
+                exception.SafeCode,
+                IsRetryable(exception.Kind),
+                started,
+                cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        var validated = await aiValidator.ValidateAsync(
+            input,
+            candidate,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!validated.IsSuccess)
+        {
+            var failure = validated.Failure!;
+            await RecordAsync(
+                claim,
+                "season",
+                "ai_season",
+                null,
+                failure.Kind == MetadataFailureKind.SemanticNoMatch ? "not_matched" : "error",
+                failure.Code,
+                IsRetryable(failure.Kind),
+                started,
+                cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        var seasons = validated.Value!.Files
+            .Select(file => file.Season.SeasonNumber)
+            .Distinct()
+            .ToArray();
+        if (seasons.Length != 1)
+        {
+            await RecordAsync(
+                claim,
+                "season",
+                "ai_season",
+                null,
+                "error",
+                "ai_multiple_seasons_unsupported",
+                false,
+                started,
+                cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        var season = validated.Value.Files[0].Season;
+        var seeds = validated.Value.Files
+            .Select(file => new MetadataSeasonFileSeed(
+                file.Input.Name,
+                file.Episode?.EpisodeNumber,
+                file.Episode is null ? "ai_episode_unmatched" : null))
+            .ToArray();
+        await RecordAsync(
+            claim,
+            "season",
+            "ai_season",
+            null,
+            "matched",
+            null,
+            false,
+            started,
+            cancellationToken).ConfigureAwait(false);
+        await resolutions.CompleteAiSeasonAsync(
+            claim,
+            validated.Value.Series,
+            season,
+            seeds,
+            _timeProvider.GetUtcNow(),
+            cancellationToken).ConfigureAwait(false);
         return true;
     }
 

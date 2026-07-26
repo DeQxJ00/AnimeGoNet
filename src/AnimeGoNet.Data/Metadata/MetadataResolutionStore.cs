@@ -63,13 +63,21 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         string? imdbTitleId = null;
         var tmdbSeriesId = 0;
         var tmdbSeasonNumber = 0;
+        var seasonResolvedByAi = false;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
             select.CommandText = """
                 SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id,
                        task.anidb_id, task.imdb_id,
-                       MIN(file.tmdb_series_id), MIN(file.tmdb_season_number)
+                       MIN(file.tmdb_series_id), MIN(file.tmdb_season_number),
+                       EXISTS (
+                         SELECT 1
+                         FROM metadata_resolution_attempts AS attempt
+                         JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
+                         WHERE prior_run.task_id = task.id
+                           AND attempt.strategy = 'ai_season'
+                           AND attempt.result = 'matched')
                 FROM ingest_tasks AS task
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
                 WHERE task.status = 'metadata_season_resolved'
@@ -97,6 +105,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 imdbTitleId = reader.IsDBNull(6) ? null : reader.GetString(6);
                 tmdbSeriesId = reader.GetInt32(7);
                 tmdbSeasonNumber = reader.GetInt32(8);
+                seasonResolvedByAi = reader.GetInt64(9) == 1;
             }
         }
 
@@ -159,7 +168,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         {
             selectFiles.Transaction = transaction;
             selectFiles.CommandText = """
-                SELECT id, relative_path, size_bytes, source_episode, file_episode_candidate
+                SELECT id, relative_path, size_bytes, source_episode, file_episode_candidate,
+                       tmdb_episode_number, other_reason
                 FROM task_files
                 WHERE task_id = $task_id AND disposition = 'pending'
                 ORDER BY relative_path, id;
@@ -173,7 +183,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     reader.GetString(1),
                     reader.GetInt64(2),
                     reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4)));
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                    reader.IsDBNull(6) ? null : reader.GetString(6)));
             }
         }
 
@@ -184,7 +196,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 aniDbAnimeId, imdbTitleId),
             tmdbSeriesId,
             tmdbSeasonNumber,
-            files);
+            files,
+            seasonResolvedByAi);
     }
 
     private async Task<MetadataTaskClaim?> TryClaimAsync(
@@ -328,6 +341,29 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             }
         }
 
+        var files = new List<MetadataTaskFileProjection>();
+        await using (var selectFiles = connection.CreateCommand())
+        {
+            selectFiles.Transaction = transaction;
+            selectFiles.CommandText = """
+                SELECT id, relative_path, size_bytes, source_episode, file_episode_candidate
+                FROM task_files
+                WHERE task_id = $task_id AND disposition = 'pending'
+                ORDER BY relative_path, id;
+                """;
+            selectFiles.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await selectFiles.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                files.Add(new MetadataTaskFileProjection(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetInt64(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4)));
+            }
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new MetadataTaskClaim(
             runId,
@@ -339,7 +375,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             attemptNumber,
             leaseToken,
             aniDbAnimeId,
-            imdbTitleId);
+            imdbTitleId,
+            files);
     }
 
     public async Task RecordAttemptAsync(
@@ -394,7 +431,37 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         TmdbSeries series,
         TmdbSeason season,
         DateTimeOffset utcNow,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await CompleteSeasonCoreAsync(
+            claim,
+            series,
+            season,
+            null,
+            utcNow,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task CompleteAiSeasonAsync(
+        MetadataTaskClaim claim,
+        TmdbSeries series,
+        TmdbSeason season,
+        IReadOnlyList<MetadataSeasonFileSeed> fileSeeds,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        await CompleteSeasonCoreAsync(
+            claim,
+            series,
+            season,
+            fileSeeds,
+            utcNow,
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task CompleteSeasonCoreAsync(
+        MetadataTaskClaim claim,
+        TmdbSeries series,
+        TmdbSeason season,
+        IReadOnlyList<MetadataSeasonFileSeed>? fileSeeds,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(series);
@@ -402,6 +469,35 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         if (series.Id <= 0 || season.Id <= 0 || season.SeriesId != series.Id || season.SeasonNumber <= 0)
         {
             throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(season));
+        }
+
+        if (fileSeeds is not null)
+        {
+            if (fileSeeds.Count == 0
+                || fileSeeds.Select(seed => seed.RelativePath)
+                    .Distinct(StringComparer.Ordinal).Count() != fileSeeds.Count)
+            {
+                throw new ArgumentException(
+                    "AI Season file seeds must be non-empty and unique.",
+                    nameof(fileSeeds));
+            }
+
+            foreach (var seed in fileSeeds)
+            {
+                if (string.IsNullOrWhiteSpace(seed.RelativePath)
+                    || (seed.EpisodeNumber is null) == (seed.OtherReason is null)
+                    || seed.EpisodeNumber is <= 0)
+                {
+                    throw new ArgumentException(
+                        "Every AI Season file seed requires either a positive Episode or an Other reason.",
+                        nameof(fileSeeds));
+                }
+
+                if (seed.OtherReason is not null)
+                {
+                    ValidateIdentifier(seed.OtherReason, nameof(fileSeeds));
+                }
+            }
         }
 
         var now = Format(utcNow);
@@ -463,6 +559,40 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             upsertSeason.Parameters.AddWithValue("$task_id", claim.TaskId);
             upsertSeason.Parameters.AddWithValue("$now", now);
             await upsertSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (fileSeeds is not null)
+        {
+            foreach (var seed in fileSeeds)
+            {
+                await using var seedFile = connection.CreateCommand();
+                seedFile.Transaction = transaction;
+                seedFile.CommandText = """
+                    UPDATE task_files
+                    SET tmdb_episode_number = $episode_number,
+                        other_reason = $other_reason
+                    WHERE task_id = $task_id
+                      AND relative_path = $relative_path
+                      AND disposition = 'pending'
+                      AND tmdb_series_id = $tmdb_id
+                      AND tmdb_season_number = $season_number;
+                    """;
+                seedFile.Parameters.AddWithValue("$task_id", claim.TaskId);
+                seedFile.Parameters.AddWithValue("$relative_path", seed.RelativePath);
+                seedFile.Parameters.AddWithValue("$tmdb_id", series.Id);
+                seedFile.Parameters.AddWithValue("$season_number", season.SeasonNumber);
+                seedFile.Parameters.AddWithValue(
+                    "$episode_number",
+                    (object?)seed.EpisodeNumber ?? DBNull.Value);
+                seedFile.Parameters.AddWithValue(
+                    "$other_reason",
+                    (object?)seed.OtherReason ?? DBNull.Value);
+                if (await seedFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                {
+                    throw new InvalidOperationException(
+                        "AI Season task file changed concurrently or was not found.");
+                }
+            }
         }
 
         await using (var finish = connection.CreateCommand())

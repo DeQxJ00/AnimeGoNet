@@ -55,6 +55,7 @@ public sealed class MetadataResolutionStoreTests
         var claim = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
             now,
             TimeSpan.FromMinutes(1)));
+        Assert.Single(claim.Files!);
         await fixture.Store.RecordAttemptAsync(
             claim,
             new MetadataAttempt("series", "tmdb_title", null, "matched", null, false, 1, 12),
@@ -90,6 +91,45 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(2, reader.GetInt32(2));
         Assert.Equal(72517, reader.GetInt32(3));
         Assert.Equal(2, reader.GetInt32(4));
+    }
+
+    [Fact]
+    public async Task AiSeasonSeedsVerifiedEpisodeForEpisodeClaim()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.RecordAttemptAsync(
+            claim,
+            new MetadataAttempt(
+                "season",
+                "ai_season",
+                null,
+                "matched",
+                null,
+                false,
+                claim.AttemptNumber,
+                10),
+            now);
+        await fixture.Store.CompleteAiSeasonAsync(
+            claim,
+            new TmdbSeries(72517, "来自深渊", "メイドインアビス", null),
+            new TmdbSeason(204984, 72517, 2, "Season 2", null, 12),
+            [new MetadataSeasonFileSeed("episode.mkv", 7, null)],
+            now);
+
+        var episodeClaim = Assert.IsType<MetadataEpisodeTaskClaim>(
+            await fixture.Store.TryClaimNextSeasonResolvedAsync(
+                now.AddSeconds(1),
+                TimeSpan.FromMinutes(1)));
+
+        Assert.True(episodeClaim.SeasonResolvedByAi);
+        var file = Assert.Single(episodeClaim.Files);
+        Assert.Equal(7, file.PreResolvedEpisodeNumber);
+        Assert.Null(file.PreResolvedOtherReason);
     }
 
     [Fact]

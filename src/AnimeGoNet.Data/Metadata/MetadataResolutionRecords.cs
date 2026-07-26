@@ -12,7 +12,8 @@ public sealed record MetadataTaskClaim(
     int AttemptNumber,
     string LeaseToken,
     int? AniDbAnimeId = null,
-    string? ImdbTitleId = null);
+    string? ImdbTitleId = null,
+    IReadOnlyList<MetadataTaskFileProjection>? Files = null);
 
 public sealed record MetadataAttempt(
     string Stage,
@@ -49,13 +50,21 @@ public sealed record MetadataTaskFileProjection(
     string RelativePath,
     long SizeBytes,
     string? SourceEpisode,
-    string? FileEpisodeCandidate);
+    string? FileEpisodeCandidate,
+    int? PreResolvedEpisodeNumber = null,
+    string? PreResolvedOtherReason = null);
 
 public sealed record MetadataEpisodeTaskClaim(
     MetadataTaskClaim Resolution,
     int TmdbSeriesId,
     int TmdbSeasonNumber,
-    IReadOnlyList<MetadataTaskFileProjection> Files);
+    IReadOnlyList<MetadataTaskFileProjection> Files,
+    bool SeasonResolvedByAi = false);
+
+public sealed record MetadataSeasonFileSeed(
+    string RelativePath,
+    int? EpisodeNumber,
+    string? OtherReason);
 
 public sealed record MetadataEpisodeFileResolution(
     string FileId,
