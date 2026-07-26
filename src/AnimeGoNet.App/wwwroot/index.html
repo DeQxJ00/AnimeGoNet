@@ -46,7 +46,11 @@
           <p class="eyebrow">Effective configuration</p>
           <h2 id="configuration-title">运行配置</h2>
         </div>
-        <button id="configuration-reload" type="button" class="secondary-button">刷新配置</button>
+        <div class="configuration-actions">
+          <button id="configuration-reload" type="button" class="secondary-button">刷新配置</button>
+          <button id="configuration-edit" type="button" class="primary-button">编辑覆盖</button>
+          <button id="configuration-reset" type="button" class="danger-button">恢复部署默认</button>
+        </div>
       </div>
       <p id="configuration-status" class="muted">正在读取脱敏后的生效配置…</p>
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
@@ -213,6 +217,54 @@
       <article><h3>任务</h3><p>下载、匹配、整理和删除审计。</p><span>下载状态已接入</span></article>
     </section>
   </main>
+
+  <dialog id="configuration-dialog" aria-labelledby="configuration-dialog-title">
+    <form id="configuration-form" class="configuration-form">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Private application override</p>
+          <h2 id="configuration-dialog-title">编辑应用配置</h2>
+        </div>
+        <button id="configuration-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；所有修改均在重启后生效。</p>
+      <div class="configuration-form-grid">
+        <label class="wide">TMDB Base URL<input id="configuration-tmdb-url" type="url" required></label>
+        <label>TMDB 语言<input id="configuration-tmdb-language" required maxlength="32"></label>
+        <label>TMDB 超时（秒）<input id="configuration-tmdb-timeout" type="number" min="1" max="86400" required></label>
+        <label>新 TMDB API Key<input id="configuration-tmdb-key" type="password" autocomplete="new-password"></label>
+        <label class="configuration-clear"><input id="configuration-tmdb-key-clear" type="checkbox">明确清除 API Key</label>
+        <p id="configuration-tmdb-key-state" class="configuration-secret-state wide"></p>
+        <label>新 TMDB Read Token<input id="configuration-tmdb-token" type="password" autocomplete="new-password"></label>
+        <label class="configuration-clear"><input id="configuration-tmdb-token-clear" type="checkbox">明确清除 Read Token</label>
+        <p id="configuration-tmdb-token-state" class="configuration-secret-state wide"></p>
+        <fieldset class="wide">
+          <legend>季度失败链</legend>
+          <label><input id="configuration-fail-skip" type="checkbox">TMDBFailSkip</label>
+          <label><input id="configuration-fail-backtrace" type="checkbox">TMDBFailBacktrace</label>
+          <label><input id="configuration-fail-title" type="checkbox">文件名季度</label>
+          <label><input id="configuration-fail-first" type="checkbox">第一季</label>
+        </fieldset>
+        <fieldset class="wide">
+          <legend>AI 与兜底</legend>
+          <label><input id="configuration-ai-season" type="checkbox">AI 季度匹配</label>
+          <label><input id="configuration-ai-episode" type="checkbox">AI EP 匹配</label>
+          <label><input id="configuration-bangumi-fallback" type="checkbox">Bangumi 完全兜底</label>
+          <label><input id="configuration-offset-cache" type="checkbox">可信 offset 缓存</label>
+        </fieldset>
+        <label>AI 超时（秒）<input id="configuration-ai-timeout" type="number" min="1" max="86400" required></label>
+        <label>Torrent HTTP 超时（秒）<input id="configuration-torrent-timeout" type="number" min="1" max="86400" required></label>
+        <label>Torrent 最大响应（bytes）<input id="configuration-torrent-bytes" type="number" min="1" max="1073741824" required></label>
+        <label>Torrent 最大跳转<input id="configuration-torrent-redirects" type="number" min="0" max="10" required></label>
+        <label>Torrent 暂存 TTL（秒）<input id="configuration-torrent-ttl" type="number" min="1" max="604800" required></label>
+      </div>
+      <p id="configuration-message" class="delete-message" aria-live="polite"></p>
+      <div class="delete-actions">
+        <span class="muted">保存采用 revision 乐观并发。</span>
+        <button id="configuration-save" type="submit" class="primary-button">保存并等待重启</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="delete-dialog" aria-labelledby="delete-title">
     <form method="dialog" class="delete-panel">

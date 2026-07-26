@@ -94,6 +94,12 @@ public sealed class ConfigurationApiTests
         Assert.Contains("/api/v1/config", script, StringComparison.Ordinal);
         Assert.Contains("loadConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("凭据永不回传", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
     }
 
@@ -124,6 +130,11 @@ public sealed class ConfigurationApiTests
             Assert.True(current.RootElement.GetProperty("restart_required").GetBoolean());
             Assert.False(current.RootElement.GetProperty("metadata")
                 .GetProperty("tmdb").GetProperty("api_key_configured").GetBoolean());
+            var editable = current.RootElement.GetProperty("editable");
+            Assert.Equal("configured", editable.GetProperty("tmdb_api_key_state").GetString());
+            Assert.Equal(
+                "configured",
+                editable.GetProperty("tmdb_read_access_token_state").GetString());
         }
 
         var store = app.App.Services.GetRequiredService<ApplicationOverrideStore>();
@@ -139,6 +150,12 @@ public sealed class ConfigurationApiTests
         Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", preserved.Settings?.TmdbReadAccessToken);
         Assert.True(preserved.Settings?.AiUseEpisodeMatch);
+        using (var desiredResponse = await app.Client.GetAsync("/api/v1/config"))
+        using (var desired = JsonDocument.Parse(await desiredResponse.Content.ReadAsStreamAsync()))
+        {
+            Assert.True(desired.RootElement.GetProperty("editable")
+                .GetProperty("ai_use_episode_match").GetBoolean());
+        }
 
         using var clear = await app.Client.PutAsync(
             "/api/v1/config",
@@ -148,6 +165,14 @@ public sealed class ConfigurationApiTests
         Assert.True(cleared.Settings?.TmdbApiKeyOverridden);
         Assert.Null(cleared.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", cleared.Settings?.TmdbReadAccessToken);
+        using (var clearedResponse = await app.Client.GetAsync("/api/v1/config"))
+        using (var clearedJson = JsonDocument.Parse(await clearedResponse.Content.ReadAsStreamAsync()))
+        {
+            Assert.Equal(
+                "cleared",
+                clearedJson.RootElement.GetProperty("editable")
+                    .GetProperty("tmdb_api_key_state").GetString());
+        }
 
         using var conflict = await app.Client.PutAsync(
             "/api/v1/config",
@@ -161,6 +186,17 @@ public sealed class ConfigurationApiTests
         Assert.Equal(4, resetJson.RootElement.GetProperty("configuration_revision").GetInt64());
         Assert.True(resetJson.RootElement.GetProperty("reverted_to_deployment_default").GetBoolean());
         Assert.Null((await store.LoadAsync()).Settings);
+        using var resetConfigResponse = await app.Client.GetAsync("/api/v1/config");
+        using var resetConfig = JsonDocument.Parse(
+            await resetConfigResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(
+            "inherit",
+            resetConfig.RootElement.GetProperty("editable")
+                .GetProperty("tmdb_api_key_state").GetString());
+        Assert.Equal(
+            "https://api.themoviedb.org/",
+            resetConfig.RootElement.GetProperty("editable")
+                .GetProperty("tmdb_base_url").GetString());
     }
 
     [Fact]

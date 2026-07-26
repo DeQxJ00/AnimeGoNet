@@ -56,7 +56,28 @@ public sealed record ConfigurationResponse(
     [property: JsonPropertyName("paths")] RuntimePaths Paths,
     [property: JsonPropertyName("deployment")] DeploymentConfigurationResponse Deployment,
     [property: JsonPropertyName("metadata")] MetadataConfigurationResponse Metadata,
-    [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch);
+    [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch,
+    [property: JsonPropertyName("editable")] EditableConfigurationResponse Editable);
+
+public sealed record EditableConfigurationResponse(
+    [property: JsonPropertyName("tmdb_base_url")] string TmdbBaseUrl,
+    [property: JsonPropertyName("tmdb_language")] string TmdbLanguage,
+    [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
+    [property: JsonPropertyName("tmdb_api_key_state")] string TmdbApiKeyState,
+    [property: JsonPropertyName("tmdb_read_access_token_state")] string TmdbReadAccessTokenState,
+    [property: JsonPropertyName("season_failure_skip")] bool SeasonFailureSkip,
+    [property: JsonPropertyName("season_failure_backtrace")] bool SeasonFailureBacktrace,
+    [property: JsonPropertyName("season_failure_use_title_season")] bool SeasonFailureUseTitleSeason,
+    [property: JsonPropertyName("season_failure_use_first_season")] bool SeasonFailureUseFirstSeason,
+    [property: JsonPropertyName("ai_use_season_match")] bool AiUseSeasonMatch,
+    [property: JsonPropertyName("ai_use_episode_match")] bool AiUseEpisodeMatch,
+    [property: JsonPropertyName("ai_http_timeout_seconds")] double AiHttpTimeoutSeconds,
+    [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
+    [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
+    [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
+    [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
+    [property: JsonPropertyName("torrent_max_redirects")] int TorrentMaxRedirects,
+    [property: JsonPropertyName("torrent_staging_ttl_seconds")] double TorrentStagingTtlSeconds);
 
 public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,

@@ -198,17 +198,25 @@ public static class ApiEndpoints
     private static async Task<Ok<ConfigurationResponse>> Configuration(
         AnimeGoOptions options,
         RuntimeConfigurationState runtime,
+        DeploymentConfigurationOptions deployment,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
         CancellationToken cancellationToken)
     {
         var snapshot = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(ToConfigurationResponse(options, runtime, snapshot.Revision, applied.AppliedRevision));
+        var desired = ApplicationOverrideStore.Apply(deployment.Value, snapshot);
+        return TypedResults.Ok(ToConfigurationResponse(
+            options,
+            desired,
+            snapshot.Settings,
+            runtime,
+            snapshot.Revision,
+            applied.AppliedRevision));
     }
 
     private static async Task<IResult> PutConfiguration(
         ConfigurationUpdateRequest request,
-        AnimeGoOptions options,
+        DeploymentConfigurationOptions deployment,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
         CancellationToken cancellationToken)
@@ -230,7 +238,7 @@ public static class ApiEndpoints
 
             var settings = CreateApplicationOverride(request, current.Settings, DateTimeOffset.UtcNow);
             var candidate = ApplicationOverrideStore.Apply(
-                options,
+                deployment.Value,
                 new ApplicationOverrideSnapshot(1, current.Revision + 1, settings));
             var errors = AnimeGoOptionsValidator.Validate(candidate);
             if (errors.Count > 0)
@@ -287,6 +295,8 @@ public static class ApiEndpoints
 
     private static ConfigurationResponse ToConfigurationResponse(
         AnimeGoOptions options,
+        AnimeGoOptions desired,
+        ApplicationOverrideEntry? settings,
         RuntimeConfigurationState runtime,
         long configurationRevision,
         long appliedConfigurationRevision)
@@ -330,8 +340,43 @@ public static class ApiEndpoints
                 fetch.Timeout.TotalSeconds,
                 fetch.MaxResponseBytes,
                 fetch.MaxRedirects,
-                fetch.StagingTtl.TotalSeconds));
+                fetch.StagingTtl.TotalSeconds),
+            ToEditableConfiguration(desired, settings));
     }
+
+    private static EditableConfigurationResponse ToEditableConfiguration(
+        AnimeGoOptions desired,
+        ApplicationOverrideEntry? settings)
+    {
+        var tmdb = desired.Metadata.Tmdb;
+        var season = desired.Metadata.SeasonFailure;
+        var ai = desired.Metadata.Ai;
+        var fetch = desired.TorrentFetch;
+        return new EditableConfigurationResponse(
+            tmdb.BaseUrl.AbsoluteUri,
+            tmdb.Language,
+            tmdb.HttpTimeout.TotalSeconds,
+            SecretState(settings?.TmdbApiKeyOverridden == true, settings?.TmdbApiKey),
+            SecretState(
+                settings?.TmdbReadAccessTokenOverridden == true,
+                settings?.TmdbReadAccessToken),
+            season.Skip,
+            season.Backtrace,
+            season.UseTitleSeason,
+            season.UseFirstSeason,
+            ai.UseSeasonMatch,
+            ai.UseEpisodeMatch,
+            ai.HttpTimeout.TotalSeconds,
+            desired.Metadata.TmdbFailureUseBangumi,
+            desired.Metadata.MikanTrustedOffsetCacheEnabled,
+            fetch.Timeout.TotalSeconds,
+            fetch.MaxResponseBytes,
+            fetch.MaxRedirects,
+            fetch.StagingTtl.TotalSeconds);
+    }
+
+    private static string SecretState(bool overridden, string? value) =>
+        !overridden ? "inherit" : value is null ? "cleared" : "configured";
 
     private static ApplicationOverrideEntry CreateApplicationOverride(
         ConfigurationUpdateRequest request,

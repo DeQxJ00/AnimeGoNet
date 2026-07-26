@@ -49,6 +49,26 @@ interface RuntimeConfiguration {
     max_redirects: number;
     staging_ttl_seconds: number;
   };
+  editable: {
+    tmdb_base_url: string;
+    tmdb_language: string;
+    tmdb_http_timeout_seconds: number;
+    tmdb_api_key_state: "inherit" | "configured" | "cleared";
+    tmdb_read_access_token_state: "inherit" | "configured" | "cleared";
+    season_failure_skip: boolean;
+    season_failure_backtrace: boolean;
+    season_failure_use_title_season: boolean;
+    season_failure_use_first_season: boolean;
+    ai_use_season_match: boolean;
+    ai_use_episode_match: boolean;
+    ai_http_timeout_seconds: number;
+    tmdb_failure_use_bangumi: boolean;
+    mikan_trusted_offset_cache_enabled: boolean;
+    torrent_http_timeout_seconds: number;
+    torrent_max_response_bytes: number;
+    torrent_max_redirects: number;
+    torrent_staging_ttl_seconds: number;
+  };
 }
 
 interface DownloadItem {
@@ -269,7 +289,9 @@ if (accessKey) headers.set("Access-Key", accessKey);
 const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
 const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-dialog");
+const configurationDialog = element<HTMLDialogElement>("#configuration-dialog");
 let activeDeletePreview: DeletePreview | null = null;
+let currentConfiguration: RuntimeConfiguration | null = null;
 let activeRssRules: RssRuleSnapshot | null = null;
 let sourceProfiles: SourceProfile[] = [];
 let activeSourceId: string | null = null;
@@ -364,6 +386,9 @@ async function loadConfiguration(): Promise<void> {
     const response = await fetch("/api/v1/config", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const config = await response.json() as RuntimeConfiguration;
+    currentConfiguration = config;
+    element<HTMLButtonElement>("#configuration-reset").disabled =
+      config.configuration_revision === 0;
     const tmdbCredential = config.metadata.tmdb.api_key_configured
       || config.metadata.tmdb.read_access_token_configured;
     container.replaceChildren(
@@ -413,8 +438,154 @@ async function loadConfiguration(): Promise<void> {
         + `当前应用 revision ${config.applied_configuration_revision}`
       : `当前进程的生效值 · revision ${config.configuration_revision}；凭据永不回传。`;
   } catch (error) {
+    currentConfiguration = null;
     container.replaceChildren();
     status.textContent = `配置读取失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+function configurationSecretLabel(state: "inherit" | "configured" | "cleared"): string {
+  switch (state) {
+    case "configured": return "当前私密覆盖：已配置（值已隐藏）";
+    case "cleared": return "当前私密覆盖：已明确清除";
+    default: return "当前私密覆盖：继承部署配置";
+  }
+}
+
+function setConfigurationValue(id: string, value: string | number): void {
+  element<HTMLInputElement>(id).value = String(value);
+}
+
+function setConfigurationChecked(id: string, value: boolean): void {
+  element<HTMLInputElement>(id).checked = value;
+}
+
+function syncConfigurationSecretInputs(): void {
+  const clearKey = element<HTMLInputElement>("#configuration-tmdb-key-clear").checked;
+  const clearToken = element<HTMLInputElement>("#configuration-tmdb-token-clear").checked;
+  const key = element<HTMLInputElement>("#configuration-tmdb-key");
+  const token = element<HTMLInputElement>("#configuration-tmdb-token");
+  key.disabled = clearKey;
+  token.disabled = clearToken;
+  if (clearKey) key.value = "";
+  if (clearToken) token.value = "";
+}
+
+function openConfigurationEditor(): void {
+  if (!currentConfiguration) return;
+  const editable = currentConfiguration.editable;
+  setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
+  setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
+  setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
+  setConfigurationValue("#configuration-tmdb-key", "");
+  setConfigurationChecked("#configuration-tmdb-key-clear", false);
+  element<HTMLElement>("#configuration-tmdb-key-state").textContent =
+    configurationSecretLabel(editable.tmdb_api_key_state);
+  setConfigurationValue("#configuration-tmdb-token", "");
+  setConfigurationChecked("#configuration-tmdb-token-clear", false);
+  element<HTMLElement>("#configuration-tmdb-token-state").textContent =
+    configurationSecretLabel(editable.tmdb_read_access_token_state);
+  setConfigurationChecked("#configuration-fail-skip", editable.season_failure_skip);
+  setConfigurationChecked("#configuration-fail-backtrace", editable.season_failure_backtrace);
+  setConfigurationChecked("#configuration-fail-title", editable.season_failure_use_title_season);
+  setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
+  setConfigurationChecked("#configuration-ai-season", editable.ai_use_season_match);
+  setConfigurationChecked("#configuration-ai-episode", editable.ai_use_episode_match);
+  setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
+  setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
+  setConfigurationValue("#configuration-ai-timeout", editable.ai_http_timeout_seconds);
+  setConfigurationValue("#configuration-torrent-timeout", editable.torrent_http_timeout_seconds);
+  setConfigurationValue("#configuration-torrent-bytes", editable.torrent_max_response_bytes);
+  setConfigurationValue("#configuration-torrent-redirects", editable.torrent_max_redirects);
+  setConfigurationValue("#configuration-torrent-ttl", editable.torrent_staging_ttl_seconds);
+  element<HTMLElement>("#configuration-message").textContent =
+    `正在编辑 revision ${currentConfiguration.configuration_revision}`;
+  syncConfigurationSecretInputs();
+  configurationDialog.showModal();
+}
+
+async function saveConfiguration(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  if (!currentConfiguration) return;
+  const save = element<HTMLButtonElement>("#configuration-save");
+  const message = element<HTMLElement>("#configuration-message");
+  save.disabled = true;
+  message.textContent = "正在保存私密配置覆盖…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/config", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        tmdb_base_url: element<HTMLInputElement>("#configuration-tmdb-url").value,
+        tmdb_language: element<HTMLInputElement>("#configuration-tmdb-language").value,
+        tmdb_http_timeout_seconds:
+          element<HTMLInputElement>("#configuration-tmdb-timeout").valueAsNumber,
+        tmdb_api_key: element<HTMLInputElement>("#configuration-tmdb-key").value || null,
+        clear_tmdb_api_key:
+          element<HTMLInputElement>("#configuration-tmdb-key-clear").checked,
+        tmdb_read_access_token:
+          element<HTMLInputElement>("#configuration-tmdb-token").value || null,
+        clear_tmdb_read_access_token:
+          element<HTMLInputElement>("#configuration-tmdb-token-clear").checked,
+        season_failure_skip:
+          element<HTMLInputElement>("#configuration-fail-skip").checked,
+        season_failure_backtrace:
+          element<HTMLInputElement>("#configuration-fail-backtrace").checked,
+        season_failure_use_title_season:
+          element<HTMLInputElement>("#configuration-fail-title").checked,
+        season_failure_use_first_season:
+          element<HTMLInputElement>("#configuration-fail-first").checked,
+        ai_use_season_match:
+          element<HTMLInputElement>("#configuration-ai-season").checked,
+        ai_use_episode_match:
+          element<HTMLInputElement>("#configuration-ai-episode").checked,
+        ai_http_timeout_seconds:
+          element<HTMLInputElement>("#configuration-ai-timeout").valueAsNumber,
+        tmdb_failure_use_bangumi:
+          element<HTMLInputElement>("#configuration-bangumi-fallback").checked,
+        mikan_trusted_offset_cache_enabled:
+          element<HTMLInputElement>("#configuration-offset-cache").checked,
+        torrent_http_timeout_seconds:
+          element<HTMLInputElement>("#configuration-torrent-timeout").valueAsNumber,
+        torrent_max_response_bytes:
+          element<HTMLInputElement>("#configuration-torrent-bytes").valueAsNumber,
+        torrent_max_redirects:
+          element<HTMLInputElement>("#configuration-torrent-redirects").valueAsNumber,
+        torrent_staging_ttl_seconds:
+          element<HTMLInputElement>("#configuration-torrent-ttl").valueAsNumber,
+        expected_configuration_revision: currentConfiguration.configuration_revision,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const saved = await response.json() as {
+      configuration_revision: number;
+      restart_required: boolean;
+    };
+    await loadConfiguration();
+    message.textContent = `已保存 revision ${saved.configuration_revision}；重启主程序后生效。`;
+  } catch (error) {
+    message.textContent = `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请刷新后重试。`;
+  } finally {
+    save.disabled = false;
+  }
+}
+
+async function resetConfiguration(): Promise<void> {
+  if (!currentConfiguration || currentConfiguration.configuration_revision === 0) return;
+  if (!window.confirm("恢复部署默认配置？重启主程序后生效。")) return;
+  const status = element<HTMLElement>("#configuration-status");
+  status.textContent = "正在移除私密配置覆盖…";
+  try {
+    const response = await fetch(
+      `/api/v1/config?expected_revision=${currentConfiguration.configuration_revision}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadConfiguration();
+  } catch (error) {
+    status.textContent = `恢复失败：${errorMessage(error, "未知错误")}`;
   }
 }
 
@@ -1310,6 +1481,21 @@ async function previewRssRules(): Promise<void> {
 
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());
 element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => void loadConfiguration());
+element<HTMLButtonElement>("#configuration-edit").addEventListener("click", openConfigurationEditor);
+element<HTMLButtonElement>("#configuration-reset").addEventListener("click", () => void resetConfiguration());
+element<HTMLButtonElement>("#configuration-close").addEventListener("click", () => configurationDialog.close());
+element<HTMLFormElement>("#configuration-form").addEventListener(
+  "submit",
+  (event) => void saveConfiguration(event),
+);
+element<HTMLInputElement>("#configuration-tmdb-key-clear").addEventListener(
+  "change",
+  syncConfigurationSecretInputs,
+);
+element<HTMLInputElement>("#configuration-tmdb-token-clear").addEventListener(
+  "change",
+  syncConfigurationSecretInputs,
+);
 element<HTMLButtonElement>("#rss-save").addEventListener("click", () => void saveRssRules());
 element<HTMLButtonElement>("#rss-add-whitelist").addEventListener("click", () => {
   activeRssRules?.whitelist.push({ id: nextRuleId("whitelist"), name: "新白名单", enabled: true, values: [] });

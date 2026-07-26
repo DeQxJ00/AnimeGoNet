@@ -32,6 +32,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .panels p { color: #aebbd3; min-height: 44px; line-height: 1.45; }
 .configuration-heading { gap: 18px; }
 .configuration-heading h2 { margin-bottom: 0; }
+.configuration-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .configuration-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .configuration-card { border: 1px solid #344260; border-radius: 18px; padding: 18px; background: rgba(16,22,37,.88); }
 .configuration-card h3 { margin-bottom: 13px; }
@@ -39,6 +40,19 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-card dl div { min-width: 0; padding: 9px 11px; border-radius: 10px; background: rgba(5,8,16,.5); }
 .configuration-card dt { color: #8da2c9; font-size: .7rem; }
 .configuration-card dd { margin: 5px 0 0; color: #dbe6fa; font-size: .82rem; overflow-wrap: anywhere; }
+#configuration-dialog { width: min(820px,calc(100% - 28px)); max-height: calc(100vh - 40px); padding: 0; color: #edf2ff; border: 1px solid #344260; border-radius: 22px; background: #101625; }
+#configuration-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
+.configuration-form { padding: 24px; }
+.configuration-form h2 { margin-bottom: 0; font-size: 1.55rem; }
+.configuration-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.configuration-form-grid > label { color: #8da2c9; font-size: .75rem; }
+.configuration-form-grid input:not([type="checkbox"]) { width: 100%; margin-top: 6px; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; font: inherit; }
+.configuration-form-grid .wide { grid-column: 1 / -1; }
+.configuration-form-grid fieldset { display: flex; flex-wrap: wrap; gap: 10px 18px; border: 1px solid #344260; border-radius: 12px; padding: 12px; }
+.configuration-form-grid legend { color: #8da2c9; font-size: .75rem; padding: 0 6px; }
+.configuration-form-grid fieldset label, .configuration-clear { display: flex; align-items: center; gap: 7px; color: #d4def1; font-size: .8rem; }
+.configuration-form-grid input[type="checkbox"] { accent-color: #59d3a5; }
+.configuration-secret-state { margin: -5px 0 2px; color: #8da2c9; font-size: .75rem; }
 .downloads { display: grid; gap: 12px; }
 .download-card { border: 1px solid #315f58; border-radius: 18px; padding: 18px 20px; background: rgba(16,22,37,.88); }
 .download-card.stale { border-color: #813f49; }
@@ -168,6 +182,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .metadata-tasks { grid-template-columns: 1fr; }
   .downloader-list { grid-template-columns: 1fr; }
   .configuration-grid { grid-template-columns: 1fr; }
+  .configuration-form-grid { grid-template-columns: 1fr; }
+  .configuration-form-grid .wide { grid-column: auto; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
   .source-workspace, .source-form-grid { grid-template-columns: 1fr; }

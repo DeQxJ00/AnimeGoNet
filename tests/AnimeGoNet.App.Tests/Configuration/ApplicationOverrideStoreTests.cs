@@ -64,6 +64,7 @@ public sealed class ApplicationOverrideStoreTests
                 startBackgroundWorkers: false);
             var effective = app.Services.GetRequiredService<AnimeGoOptions>();
             var runtime = app.Services.GetRequiredService<ApplicationConfigurationRuntimeState>();
+            var deployment = app.Services.GetRequiredService<DeploymentConfigurationOptions>();
 
             Assert.Equal(new Uri("https://tmdb.test.invalid/"), effective.Metadata.Tmdb.BaseUrl);
             Assert.Equal("en-US", effective.Metadata.Tmdb.Language);
@@ -74,6 +75,8 @@ public sealed class ApplicationOverrideStoreTests
             Assert.Equal(TimeSpan.FromSeconds(600), effective.Metadata.Ai.HttpTimeout);
             Assert.Equal(2, effective.TorrentFetch.MaxRedirects);
             Assert.Equal(1, runtime.AppliedRevision);
+            Assert.Equal("zh-CN", deployment.Value.Metadata.Tmdb.Language);
+            Assert.Null(deployment.Value.Metadata.Tmdb.ApiKey);
         }
         finally
         {

@@ -60,6 +60,7 @@ public static class AnimeGoApplication
             builder.Configuration["background_workers_enabled"],
             out var configuredWorkers) || configuredWorkers;
         options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
+        var deploymentOptions = options;
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
         var applicationOverrides = new ApplicationOverrideStore(layout.ConfigurationPath);
@@ -111,6 +112,7 @@ public static class AnimeGoApplication
         downloadClientRegistry ??= new QbittorrentClientRegistry(options);
 
         builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton(new DeploymentConfigurationOptions(deploymentOptions));
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(new RuntimeConfigurationState(
             runningInContainer.Value,
