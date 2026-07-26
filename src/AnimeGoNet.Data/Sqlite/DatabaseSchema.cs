@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 18;
+    public const int CurrentVersion = 19;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -24,6 +24,7 @@ public static class DatabaseSchema
         new SchemaMigration(16, "mikan_legacy_filter_audit", MikanLegacyFilterAudit),
         new SchemaMigration(17, "source_download_policy", SourceDownloadPolicy),
         new SchemaMigration(18, "enable_all_file_strategies", EnableAllFileStrategies),
+        new SchemaMigration(19, "mikan_publication_evidence", MikanPublicationEvidence),
     ];
 
     private const string InitialBusinessSchema = """
@@ -780,5 +781,13 @@ public static class DatabaseSchema
               FROM ingest_tasks
               WHERE json_extract(route_snapshot_json, '$.file_strategy')
                     IN ('link', 'link_delete', 'wait_move'));
+        """;
+
+    private const string MikanPublicationEvidence = """
+        ALTER TABLE ingest_tasks
+        ADD COLUMN source_published_at_raw TEXT;
+
+        ALTER TABLE ingest_tasks
+        ADD COLUMN source_published_at TEXT;
         """;
 }

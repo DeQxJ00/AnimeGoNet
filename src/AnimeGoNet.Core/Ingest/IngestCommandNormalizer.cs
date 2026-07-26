@@ -66,6 +66,14 @@ public static class IngestCommandNormalizer
             ? mikanId?.ToString(CultureInfo.InvariantCulture)
             : command.Info.SourceWorkId.Trim();
         var imdbId = NormalizeImdbId(command.Info.ImdbId, errors);
+        var publishedAtRaw = NullIfWhiteSpace(command.SourceEvidence?.PublishedAtRaw);
+        var publishedAt = command.SourceEvidence?.PublishedAt;
+        if (command.SourceEvidence is not null
+            && (normalizedSource != "mikan"
+                || publishedAtRaw is null))
+        {
+            errors.Add("source publication evidence requires a Mikan raw timestamp");
+        }
 
         switch (normalizedSource)
         {
@@ -108,7 +116,9 @@ public static class IngestCommandNormalizer
                 mikanId,
                 command.Info.BangumiId,
                 command.Info.AniDbId,
-                imdbId),
+                imdbId,
+                publishedAtRaw,
+                publishedAt),
             []);
     }
 

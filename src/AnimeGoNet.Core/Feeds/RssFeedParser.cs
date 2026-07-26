@@ -68,11 +68,6 @@ public static class RssFeedParser
                 ?.Value.Trim() ?? string.Empty;
             var published = item.Descendants().FirstOrDefault(element => element.Name.LocalName == "pubDate")
                 ?.Value.Trim();
-            var separator = published?.IndexOf('T', StringComparison.Ordinal) ?? -1;
-            if (separator >= 0)
-            {
-                published = published![..separator];
-            }
 
             items.Add(new RssFeedItem(
                 title,

@@ -99,6 +99,75 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task IngestTasksIncludeMikanPublicationEvidence()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        var columns = await ColumnsAsync(connection, "ingest_tasks");
+
+        Assert.Contains("source_published_at_raw", columns);
+        Assert.Contains("source_published_at", columns);
+    }
+
+    [Fact]
+    public async Task PublicationEvidenceMigrationPreservesSchema18IngestTasks()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 18))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc, allowed_torrent_hosts_json)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now, '["mikanani.me"]');
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    source_item_id, source_work_id, mikanid, groupid,
+                    bangumi_subject_id, anidb_id, imdb_id, title,
+                    torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                    status, failure_kind, failure_reason, created_at_utc, updated_at_utc)
+                VALUES (
+                    'legacy-task', 'mikan', 1, 'mikan',
+                    'legacy-item', '3951', 3951, NULL,
+                    547888, NULL, NULL, 'Legacy episode',
+                    'legacy-fingerprint', 'bt', '{}',
+                    'received', NULL, NULL, $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-07-26T10:00:00.0000000+00:00");
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        var migration19 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 19);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration19.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT title, source_published_at_raw, source_published_at
+            FROM ingest_tasks WHERE id = 'legacy-task';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("Legacy episode", reader.GetString(0));
+        Assert.True(reader.IsDBNull(1));
+        Assert.True(reader.IsDBNull(2));
+    }
+
+    [Fact]
     public async Task RssBatchAuditIncludesVersionedLegacyFilterColumns()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

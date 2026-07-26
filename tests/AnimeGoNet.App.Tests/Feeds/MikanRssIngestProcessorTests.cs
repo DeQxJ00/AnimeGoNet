@@ -37,8 +37,21 @@ public sealed class MikanRssIngestProcessorTests
         Assert.Equal(first.Items[1].IngestTaskId, stored.Entries[1].IngestTaskId);
         await using var connection = await app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>().OpenConnectionAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM ingest_tasks;";
-        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
+        command.CommandText = """
+            SELECT COUNT(*), source_published_at_raw, source_published_at
+            FROM ingest_tasks;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1, reader.GetInt32(0));
+        Assert.Equal("2026-07-22T12:34:56.123", reader.GetString(1));
+        Assert.Equal(
+            DateTimeOffset.Parse(
+                "2026-07-22T12:34:56.123+08:00",
+                System.Globalization.CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse(
+                reader.GetString(2),
+                System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]
@@ -81,7 +94,7 @@ public sealed class MikanRssIngestProcessorTests
         $"https://mikanani.me/Download/{id}.torrent",
         "application/x-bittorrent",
         42,
-        "2026-07-22");
+        "2026-07-22T12:34:56.123");
 
     private sealed class CountingStagingService(
         int failuresBeforeSuccess = 0,

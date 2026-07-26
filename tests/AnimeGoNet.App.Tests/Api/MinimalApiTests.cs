@@ -153,7 +153,11 @@ public sealed class MinimalApiTests
               "data": [
                 {
                   "torrent": "https://tracker.invalid/personal-passkey/one.torrent",
-                  "info": { "title": "Episode 1", "mikanid": 3951, "bgmid": 547888 }
+                  "info": { "title": "Episode 1", "mikanid": 3951, "bgmid": 547888 },
+                  "source_evidence": {
+                    "published_at_raw": "2099-01-01T00:00:00+08:00",
+                    "published_at": "2099-01-01T00:00:00+08:00"
+                  }
                 },
                 {
                   "torrent": "https://tracker.invalid/personal-passkey/two.torrent",
@@ -183,6 +187,21 @@ public sealed class MinimalApiTests
         Assert.Equal("rejected", json.RootElement.GetProperty("items")[1].GetProperty("status").GetString());
         Assert.Equal("info is required", json.RootElement.GetProperty("items")[2].GetProperty("errors")[0].GetString());
         Assert.DoesNotContain("personal-passkey", body, StringComparison.Ordinal);
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT source_published_at_raw, source_published_at
+                FROM ingest_tasks
+                WHERE title = 'Episode 1';
+                """;
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.True(reader.IsDBNull(0));
+            Assert.True(reader.IsDBNull(1));
+        }
 
         const string u2Payload = """
             {

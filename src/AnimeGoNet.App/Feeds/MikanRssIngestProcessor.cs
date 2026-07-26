@@ -96,13 +96,19 @@ public sealed class MikanRssIngestProcessor(
                 continue;
             }
 
+            var publishedAt = MikanPublishedAtParser.Parse(item.FeedItem.PublishedDate);
             var command = new IngestItemCommand(
                 item.FeedItem.TorrentUrl,
                 new IngestItemInfo(
                     item.FeedItem.Title, null, item.Candidate.Id,
                     feed.MikanId?.ToString(CultureInfo.InvariantCulture),
                     item.FeedItem.MikanUrl, null, feed.MikanId,
-                    null, null, null));
+                    null, null, null),
+                string.IsNullOrWhiteSpace(item.FeedItem.PublishedDate)
+                    ? null
+                    : new IngestSourceEvidence(
+                        item.FeedItem.PublishedDate,
+                        publishedAt));
             UnifiedIngestItemResult outcome;
             try
             {

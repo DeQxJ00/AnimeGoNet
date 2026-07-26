@@ -37,7 +37,7 @@ public sealed class RssFeedParserTests
         Assert.Equal("https://mikanani.me/Download/token/show.torrent", item.TorrentUrl);
         Assert.Equal("application/x-bittorrent", item.ContentType);
         Assert.Equal(0, item.Length);
-        Assert.Equal("2026-07-22", item.PublishedDate);
+        Assert.Equal("2026-07-22T12:34:56.123", item.PublishedDate);
     }
 
     [Theory]

@@ -67,6 +67,47 @@ public sealed class IngestCommandNormalizerTests
         Assert.Contains(result.Errors, error => error.Contains("same work", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void InternalMikanPublicationEvidenceIsPreserved()
+    {
+        var published = DateTimeOffset.Parse(
+            "2026-07-22T12:34:56+08:00",
+            System.Globalization.CultureInfo.InvariantCulture);
+        var command = Item(
+            title: "Episode 01",
+            mikanId: 3951,
+            bgmid: 547888) with
+        {
+            SourceEvidence = new IngestSourceEvidence(
+                "2026-07-22T12:34:56",
+                published),
+        };
+
+        var result = IngestCommandNormalizer.Normalize("mikan", command);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+        Assert.Equal("2026-07-22T12:34:56", result.Item!.PublishedAtRaw);
+        Assert.Equal(published, result.Item.PublishedAt);
+    }
+
+    [Fact]
+    public void NonMikanSourceCannotAttachMikanPublicationEvidence()
+    {
+        var command = Item(title: "Show", imdbid: "tt1234567") with
+        {
+            SourceEvidence = new IngestSourceEvidence(
+                "2026-07-22T12:34:56Z",
+                DateTimeOffset.Parse(
+                    "2026-07-22T12:34:56Z",
+                    System.Globalization.CultureInfo.InvariantCulture)),
+        };
+
+        var result = IngestCommandNormalizer.Normalize("ttg", command);
+
+        Assert.Contains(result.Errors, error =>
+            error.Contains("publication evidence", StringComparison.Ordinal));
+    }
+
     private static IngestItemCommand Item(
         string? title,
         string? name = null,
