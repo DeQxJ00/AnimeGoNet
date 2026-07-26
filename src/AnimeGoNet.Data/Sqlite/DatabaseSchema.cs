@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 17;
+    public const int CurrentVersion = 18;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -23,6 +23,7 @@ public static class DatabaseSchema
         new SchemaMigration(15, "legacy_mikan_filter_storage", LegacyMikanFilterStorage),
         new SchemaMigration(16, "mikan_legacy_filter_audit", MikanLegacyFilterAudit),
         new SchemaMigration(17, "source_download_policy", SourceDownloadPolicy),
+        new SchemaMigration(18, "enable_all_file_strategies", EnableAllFileStrategies),
     ];
 
     private const string InitialBusinessSchema = """
@@ -768,5 +769,16 @@ public static class DatabaseSchema
         ADD COLUMN seeding_time_minutes INTEGER NOT NULL DEFAULT 0
             CHECK (seeding_time_minutes BETWEEN -1 AND 5256000
                 AND (file_strategy <> 'move' OR seeding_time_minutes = 0));
+        """;
+
+    private const string EnableAllFileStrategies = """
+        UPDATE download_jobs
+        SET organization_state = 'pending'
+        WHERE organization_state = 'not_required'
+          AND task_id IN (
+              SELECT id
+              FROM ingest_tasks
+              WHERE json_extract(route_snapshot_json, '$.file_strategy')
+                    IN ('link', 'link_delete', 'wait_move'));
         """;
 }

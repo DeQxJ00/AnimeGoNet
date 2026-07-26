@@ -102,7 +102,11 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             updateTask.Transaction = transaction;
             updateTask.CommandText = """
                 UPDATE ingest_tasks
-                SET status = $status, updated_at_utc = $now
+                SET status = CASE
+                        WHEN status IN ('organizing_cleanup', 'organized') THEN status
+                        ELSE $status
+                    END,
+                    updated_at_utc = $now
                 WHERE id = $task_id;
                 """;
             updateTask.Parameters.AddWithValue("$status", ToBusinessStatus(snapshot.State));

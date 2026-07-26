@@ -58,6 +58,7 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - qB category、静态附加 tags；AnimeGoNet 总会额外加入 `animegonet`、来源 ID 和文件策略三个可识别系统 tag。
 - `file_strategy`：`link`、`link_delete`、`move`、`wait_move`。
 - `seeding_time_minutes` 沿用上游 qB 语义：`0` 不做种、`-1` 无限做种、正数为分钟上限；`move` 必须为 `0`，因为下载完成后移动源文件。
+- 四种策略严格使用任务创建时的 route snapshot。`link` 与 `link_delete` 在 qB 首次进入已下载/做种状态后建立媒体库硬链接且不暂停做种；`link_delete` 只在 qB 进入 `Complete` 后校验目标与源内容一致再删除源文件。`move` 在下载完成后暂停并立即安全移动；`wait_move` 等 qB 进入 `Complete` 后才暂停并移动。文件/NFO/完成记录成功后才进入独立 qB 清理阶段，清理固定使用 `deleteFiles=false`。
 - 依赖 TMDB/Bangumi 日期或 EP 的上游 `{year}/{quarter}/{ep}` 动态 tag 模板不能在暂停 dispatch 阶段求值；它将由后置元数据模块验证后再赋值，本阶段不会把未展开模板原样发送给 qB。
 - 去重范围固定为全局媒体库，不允许 source profile 改成来源内去重；规范键为 TMDB Series/Season/Episode。profile 只可配置发现重复后的日志/通知，不可绕过完成记录。
 

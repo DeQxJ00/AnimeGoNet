@@ -17,6 +17,7 @@ public sealed class MediaOrganizationProcessor(
     MediaOrganizationStore store,
     DownloadClientOperationCoordinator clients,
     SafeFileMover mover,
+    SafeFileLinker linker,
     TvShowNfoWriter nfoWriter,
     TimeProvider? timeProvider = null)
 {
@@ -37,6 +38,21 @@ public sealed class MediaOrganizationProcessor(
         {
             if (claim.Stage == MediaOrganizationStage.CleanupDownloader)
             {
+                if (claim.FileStrategy == "link_delete")
+                {
+                    var completed = await store.GetOperationsAsync(claim, cancellationToken).ConfigureAwait(false);
+                    foreach (var operation in completed)
+                    {
+                        var file = claim.Files.Single(item => item.TaskFileId == operation.TaskFileId);
+                        await linker.DeleteSourceAsync(new SafeFileLinkRequest(
+                            claim.DownloadRootPath,
+                            claim.SaveRootPath,
+                            operation.SourcePath,
+                            operation.TargetPath,
+                            file.SizeBytes), cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
                 await clients.ExecuteAsync(
                     claim.DownloaderId,
                     async (client, token) =>
@@ -50,15 +66,18 @@ public sealed class MediaOrganizationProcessor(
                 return MediaOrganizationResult.CleanupCompleted;
             }
 
-            await clients.ExecuteAsync(
-                claim.DownloaderId,
-                async (client, token) =>
-                {
-                    await client.ConnectAsync(token).ConfigureAwait(false);
-                    await client.PauseAsync([claim.InfoHash], token).ConfigureAwait(false);
-                    return true;
-                },
-                cancellationToken).ConfigureAwait(false);
+            if (claim.FileStrategy is "move" or "wait_move")
+            {
+                await clients.ExecuteAsync(
+                    claim.DownloaderId,
+                    async (client, token) =>
+                    {
+                        await client.ConnectAsync(token).ConfigureAwait(false);
+                        await client.PauseAsync([claim.InfoHash], token).ConfigureAwait(false);
+                        return true;
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             var plans = claim.Files.Select(file => Plan(claim, file)).ToArray();
             var operations = await store.EnsureOperationsAsync(
@@ -66,15 +85,22 @@ public sealed class MediaOrganizationProcessor(
             foreach (var operation in operations.Where(operation => operation.State != "completed"))
             {
                 var file = claim.Files.Single(file => file.TaskFileId == operation.TaskFileId);
-                var result = await mover.MoveAsync(new SafeFileMoveRequest(
-                    operation.OperationId,
-                    claim.DownloadRootPath,
-                    claim.SaveRootPath,
-                    operation.SourcePath,
-                    operation.TargetPath,
-                    file.SizeBytes), cancellationToken).ConfigureAwait(false);
+                var bytesVerified = claim.FileStrategy is "link" or "link_delete"
+                    ? (await linker.LinkAsync(new SafeFileLinkRequest(
+                        claim.DownloadRootPath,
+                        claim.SaveRootPath,
+                        operation.SourcePath,
+                        operation.TargetPath,
+                        file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
+                    : (await mover.MoveAsync(new SafeFileMoveRequest(
+                        operation.OperationId,
+                        claim.DownloadRootPath,
+                        claim.SaveRootPath,
+                        operation.SourcePath,
+                        operation.TargetPath,
+                        file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified;
                 await store.CompleteFileAsync(
-                    claim, operation.OperationId, result.BytesVerified,
+                    claim, operation.OperationId, bytesVerified,
                     _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
             }
 
@@ -96,7 +122,8 @@ public sealed class MediaOrganizationProcessor(
         }
         catch (Exception exception)
         {
-            if (claim.Stage == MediaOrganizationStage.MoveFiles)
+            if (claim.Stage == MediaOrganizationStage.MoveFiles
+                && claim.FileStrategy is "move" or "wait_move")
             {
                 await BestEffortPauseAsync(claim, cancellationToken).ConfigureAwait(false);
             }

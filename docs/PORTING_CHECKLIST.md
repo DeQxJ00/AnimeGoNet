@@ -68,9 +68,9 @@
 | `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过，动态元数据 tag 与真实容器 file-priority/reconnect 待实现 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 例外 | migration diagnostic test |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v10 另含 media organization job租约、逐文件operation、独立cleanup重试与完成记录事务门禁；qB状态/paused preparation/不可变路径/实例故障恢复 tests 已通过，实际整理 worker 待接入 |
-| `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB完成→暂停→move/NFO/completion→独立deleteFiles=false cleanup 的持久化 worker 与恢复 tests 已通过；link/做种事件待实现 |
+| `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB下载完成与做种结束分阶段驱动四种策略；link/link_delete 先发布媒体后等待 Complete，wait_move 等待 Complete，独立 deleteFiles=false cleanup 与崩溃恢复 tests 已通过；真实容器状态转换待实现 |
 | `renamer` 与 rename Python | C# 整理器 | 替换 | 进行中 | C# TMDB canonical path planner、跨平台名称清洗和 Other 路径 tests 已通过；字幕/NFO/持久化 worker 待实现 |
-| `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 进行中 | move 的根目录/符号链接防逃逸、同卷原子 rename、跨卷 copy+SHA-256、冲突保全和幂等恢复 FS tests 已通过；其余策略与下载事件串联待实现 |
+| `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 进行中 | 四策略已接入不可变 route snapshot：link/link_delete 的 NativeAOT 硬链接、做种门控、安全源文件删除，move/wait_move 的安全移动、逐文件/NFO/completion/cleanup 持久化与临时真实 FS tests 已通过；跨容器同 inode 与跨卷失败 E2E 待实现 |
 | Mikan 默认整理 | `move` | 扩展默认 | 已验证 | 默认profile、paused preparation、真实临时文件 move/NFO/completion 与 fake-qB deleteFiles=false cleanup flow tests |
 | 字幕整理 | EP 绑定、重命名、保留语言后缀 | 扩展 | 已验证 | 同stem/唯一来源EP、歧义Other、多语言/default/forced/SDH、ass/srt/idx/sub、单TMDB请求/claim/completion及真实临时文件move tests |
 | Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 进行中 | 容器配置、Compose 共享卷和 CI smoke 已建立；Docker runner 实跑待验收 |

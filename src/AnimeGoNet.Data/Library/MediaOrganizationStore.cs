@@ -47,9 +47,30 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 SELECT job.id, job.task_id, job.organization_state
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
-                WHERE ((job.organization_state = 'pending' AND task.status = 'downloaded')
-                    OR (job.organization_state = 'cleanup' AND task.status = 'organizing_cleanup'))
-                  AND json_extract(task.route_snapshot_json, '$.file_strategy') = 'move'
+                WHERE (
+                    (job.organization_state = 'pending'
+                     AND task.status = 'downloaded'
+                     AND (
+                         json_extract(task.route_snapshot_json, '$.file_strategy')
+                             IN ('move', 'link', 'link_delete')
+                         OR (
+                             json_extract(task.route_snapshot_json, '$.file_strategy') = 'wait_move'
+                             AND job.state = 'complete'
+                         )
+                     ))
+                    OR
+                    (job.organization_state = 'cleanup'
+                     AND (
+                         (json_extract(task.route_snapshot_json, '$.file_strategy')
+                              IN ('move', 'wait_move')
+                          AND task.status = 'organizing_cleanup')
+                         OR
+                         (json_extract(task.route_snapshot_json, '$.file_strategy')
+                              IN ('link', 'link_delete')
+                          AND task.status = 'downloaded'
+                          AND job.state = 'complete')
+                     ))
+                )
                   AND (job.organization_next_attempt_at_utc IS NULL
                        OR job.organization_next_attempt_at_utc <= $now)
                 ORDER BY job.updated_at_utc, job.id
@@ -106,6 +127,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         var stage = priorState == "cleanup" ? MediaOrganizationStage.CleanupDownloader : MediaOrganizationStage.MoveFiles;
         string downloaderId;
         string infoHash;
+        string fileStrategy;
         string downloadRoot;
         string saveRoot;
         string sourceId;
@@ -140,9 +162,10 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             sourceId = reader.GetString(4);
             sourceItemId = reader.IsDBNull(5) ? null : reader.GetString(5);
             bangumiId = reader.IsDBNull(6) ? null : reader.GetInt32(6);
-            if (!string.Equals(reader.GetString(7), "move", StringComparison.Ordinal))
+            fileStrategy = reader.GetString(7);
+            if (fileStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
             {
-                throw new InvalidOperationException("Only move organization is implemented.");
+                throw new InvalidOperationException("Captured file strategy is unsupported.");
             }
         }
 
@@ -152,7 +175,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         }
 
         var files = new List<MediaOrganizationFile>();
-        if (stage == MediaOrganizationStage.MoveFiles)
+        if (stage == MediaOrganizationStage.MoveFiles
+            || (stage == MediaOrganizationStage.CleanupDownloader && fileStrategy == "link_delete"))
         {
             await using var query = connection.CreateCommand();
             query.Transaction = transaction;
@@ -186,7 +210,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new MediaOrganizationClaim(
-            jobId, taskId, downloaderId, infoHash, downloadRoot, saveRoot,
+            jobId, taskId, downloaderId, infoHash, fileStrategy, downloadRoot, saveRoot,
             sourceId, sourceItemId, bangumiId, token, attempt, stage, files);
     }
 
@@ -216,11 +240,12 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 INSERT INTO file_operations (
                     id, task_file_id, strategy, source_path, target_path, state,
                     bytes_verified, failure_reason, created_at_utc, updated_at_utc)
-                VALUES ($id, $file_id, 'move', $source, $target, 'pending', 0, NULL, $now, $now)
+                VALUES ($id, $file_id, $strategy, $source, $target, 'pending', 0, NULL, $now, $now)
                 ON CONFLICT(task_file_id) DO NOTHING;
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$file_id", plan.TaskFileId);
+            insert.Parameters.AddWithValue("$strategy", claim.FileStrategy);
             insert.Parameters.AddWithValue("$source", plan.SourcePath);
             insert.Parameters.AddWithValue("$target", plan.TargetPath);
             insert.Parameters.AddWithValue("$now", now);
@@ -232,10 +257,35 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         {
             var operation = operations.Single(item => item.TaskFileId == plan.TaskFileId);
             if (!string.Equals(operation.SourcePath, plan.SourcePath, StringComparison.Ordinal)
-                || !string.Equals(operation.TargetPath, plan.TargetPath, StringComparison.Ordinal))
+                || !string.Equals(operation.TargetPath, plan.TargetPath, StringComparison.Ordinal)
+                || !string.Equals(operation.Strategy, claim.FileStrategy, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("Persisted media operation path differs from the immutable plan.");
             }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return operations;
+    }
+
+    public async Task<IReadOnlyList<MediaOperationRecord>> GetOperationsAsync(
+        MediaOrganizationClaim claim,
+        CancellationToken cancellationToken = default)
+    {
+        if (claim.Stage != MediaOrganizationStage.CleanupDownloader)
+        {
+            throw new ArgumentException("Completed operations are only read during downloader cleanup.", nameof(claim));
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        var operations = await ReadOperationsAsync(connection, transaction, claim.TaskId, cancellationToken).ConfigureAwait(false);
+        if (operations.Count == 0 || operations.Any(operation =>
+                operation.State != "completed"
+                || !string.Equals(operation.Strategy, claim.FileStrategy, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Downloader cleanup requires completed immutable file operations.");
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -322,10 +372,16 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 organization_failure_code = NULL, updated_at_utc = $now, revision = revision + 1
             WHERE id = $job_id AND task_id = $task_id AND organization_state = 'organizing'
               AND organization_lease_token = $token;
-            UPDATE ingest_tasks SET status = 'organizing_cleanup', updated_at_utc = $now
+            UPDATE ingest_tasks
+            SET status = CASE
+                    WHEN $strategy IN ('move', 'wait_move') THEN 'organizing_cleanup'
+                    ELSE 'downloaded'
+                END,
+                updated_at_utc = $now
             WHERE id = $task_id AND status = 'downloaded';
             """;
         AddIdentity(finish, claim);
+        finish.Parameters.AddWithValue("$strategy", claim.FileStrategy);
         finish.Parameters.AddWithValue("$now", now);
         if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
         {
@@ -350,7 +406,10 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
     {
         ValidateFailureCode(failureCode);
         var restoredState = claim.Stage == MediaOrganizationStage.CleanupDownloader ? "cleanup" : "pending";
-        var taskStatus = claim.Stage == MediaOrganizationStage.CleanupDownloader ? "organizing_cleanup" : "downloaded";
+        var taskStatus = claim.Stage == MediaOrganizationStage.CleanupDownloader
+            && claim.FileStrategy is "move" or "wait_move"
+                ? "organizing_cleanup"
+                : "downloaded";
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -402,9 +461,15 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
               AND organization_lease_token = $token;
             UPDATE ingest_tasks SET status = $task_status, failure_kind = NULL,
                 failure_reason = NULL, updated_at_utc = $now
-            WHERE id = $task_id AND status = 'organizing_cleanup';
+            WHERE id = $task_id
+              AND (
+                  ($strategy IN ('move', 'wait_move') AND status = 'organizing_cleanup')
+                  OR
+                  ($strategy IN ('link', 'link_delete') AND status = 'downloaded')
+              );
             """;
         AddIdentity(command, claim);
+        command.Parameters.AddWithValue("$strategy", claim.FileStrategy);
         command.Parameters.AddWithValue("$state", organizationState);
         command.Parameters.AddWithValue("$task_status", taskStatus);
         command.Parameters.AddWithValue("$now", now);
@@ -445,8 +510,9 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         await using var query = connection.CreateCommand();
         query.Transaction = transaction;
         query.CommandText = """
-            SELECT operation.id, operation.task_file_id, operation.source_path,
-                   operation.target_path, operation.state, operation.bytes_verified
+            SELECT operation.id, operation.task_file_id, operation.strategy,
+                   operation.source_path, operation.target_path,
+                   operation.state, operation.bytes_verified
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
             WHERE file.task_id = $task_id ORDER BY operation.id;
@@ -458,7 +524,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         {
             results.Add(new MediaOperationRecord(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                reader.GetString(4), reader.GetInt64(5)));
+                reader.GetString(4), reader.GetString(5), reader.GetInt64(6)));
         }
 
         return results;

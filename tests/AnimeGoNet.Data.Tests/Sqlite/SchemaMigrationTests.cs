@@ -1,3 +1,9 @@
+using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Torrents;
+using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -152,6 +158,71 @@ public sealed class SchemaMigrationTests
         Assert.Equal("[]", reader.GetString(1));
         Assert.Equal(0, reader.GetInt32(2));
         Assert.Equal(3, reader.GetInt64(3));
+    }
+
+    [Fact]
+    public async Task FileStrategyMigrationBackfillsExistingNonMoveDownloadJobs()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profiles = new SourceProfileStore(fixture.Database);
+        await profiles.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        _ = await profiles.UpdateAsync(
+            "mikan",
+            new SourceProfileDefinition(
+                "Mikan", "mikan", "bt", "link",
+                ["mikanani.me"], "animegonet", [], 30, true, true, true),
+            1,
+            DateTimeOffset.UtcNow);
+        var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("mikan"));
+        var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
+            "mikan",
+            new IngestItemCommand(
+                "https://mikanani.me/passkey/legacy-link.torrent",
+                new IngestItemInfo(
+                    "Legacy link", null, "legacy", "3951", null, null, 3951, 547888, null, null))).Item);
+        var tasks = new IngestTaskStore(fixture.Database);
+        var task = await tasks.AddStagedAsync(
+            normalized,
+            profile,
+            new TorrentMetadata(
+                "episode.mkv", new string('a', 40), 5,
+                [new TorrentFile("episode.mkv", 5, false)]),
+            "legacy-link.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(15));
+        var claim = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+        await tasks.CompleteDispatchAsync(
+            claim,
+            new DownloadTaskSnapshot(
+                new string('a', 40), "Legacy link", DownloadTaskState.Seeding,
+                1, 5, 5, 0, null),
+            "/download/incomplete/bt",
+            "/download/anime",
+            DateTimeOffset.UtcNow);
+
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using (var legacy = connection.CreateCommand())
+        {
+            legacy.CommandText = """
+                UPDATE download_jobs SET organization_state = 'not_required'
+                WHERE task_id = $task_id;
+                """;
+            legacy.Parameters.AddWithValue("$task_id", task.Id);
+            Assert.Equal(1, await legacy.ExecuteNonQueryAsync());
+        }
+
+        var migration = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 18);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = "SELECT organization_state FROM download_jobs WHERE task_id = $task_id;";
+        query.Parameters.AddWithValue("$task_id", task.Id);
+        Assert.Equal("pending", await query.ExecuteScalarAsync());
     }
 
     [Fact]

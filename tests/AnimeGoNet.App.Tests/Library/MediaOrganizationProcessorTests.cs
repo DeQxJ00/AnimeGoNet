@@ -63,6 +63,62 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
     }
 
+    [Theory]
+    [InlineData("link", true)]
+    [InlineData("link_delete", false)]
+    public async Task LinkStrategiesPublishBeforeSeedingEndsAndCleanupAfterCompletion(
+        string strategy,
+        bool preserveSource)
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths, strategy, "seeding");
+        var source = Path.Combine(paths.DownloadPath, "bt", "episode.mkv");
+        var target = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
+        var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
+
+        Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
+        Assert.True(File.Exists(source));
+        Assert.True(File.Exists(target));
+        Assert.Empty(client.Paused);
+        Assert.Empty(client.Deleted);
+        Assert.Equal(("downloaded", "cleanup", 1), await ReadStateAsync(app, taskId));
+        Assert.Equal(MediaOrganizationResult.NoWork, await processor.RunOnceAsync());
+
+        await SetDownloadStateAsync(app, taskId, "complete");
+        Assert.Equal(MediaOrganizationResult.CleanupCompleted, await processor.RunOnceAsync());
+
+        Assert.Equal(preserveSource, File.Exists(source));
+        Assert.True(File.Exists(target));
+        Assert.Single(client.Deleted);
+        Assert.Equal(("organized", "completed", 1), await ReadStateAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task WaitMoveDoesNotTouchFilesUntilSeedingEnds()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths, "wait_move", "seeding");
+        var source = Path.Combine(paths.DownloadPath, "bt", "episode.mkv");
+        var target = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
+        var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
+
+        Assert.Equal(MediaOrganizationResult.NoWork, await processor.RunOnceAsync());
+        Assert.True(File.Exists(source));
+        Assert.False(File.Exists(target));
+
+        await SetDownloadStateAsync(app, taskId, "complete");
+        Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
+
+        Assert.False(File.Exists(source));
+        Assert.True(File.Exists(target));
+        Assert.NotEmpty(client.Paused);
+        Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
+    }
+
     private static async Task AddAssociatedSubtitleAsync(RunningApp app, string taskId, PathOptions paths)
     {
         var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
@@ -83,8 +139,37 @@ public sealed class MediaOrganizationProcessorTests
             Path.Combine(paths.DownloadPath, "bt", "episode.zh-Hans.forced.ass"), [6, 7, 8]);
     }
 
-    private static async Task<string> PrepareDownloadedTaskAsync(RunningApp app, PathOptions paths)
+    private static async Task<string> PrepareDownloadedTaskAsync(
+        RunningApp app,
+        PathOptions paths,
+        string strategy = "move",
+        string downloadState = "complete")
     {
+        if (strategy != "move")
+        {
+            using var update = await app.Client.PutAsync(
+                "/api/v1/sources/mikan",
+                new StringContent(
+                    $$"""
+                      {
+                        "display_name": "Mikan",
+                        "downloader_id": "bt",
+                        "file_strategy": "{{strategy}}",
+                        "allowed_torrent_hosts": ["mikanani.me"],
+                        "category": "animegonet",
+                        "tags": [],
+                        "seeding_time_minutes": 30,
+                        "rss_filter_enabled": true,
+                        "rss_priority_enabled": true,
+                        "enabled": true,
+                        "expected_revision": 1
+                      }
+                      """,
+                    Encoding.UTF8,
+                    "application/json"));
+            update.EnsureSuccessStatusCode();
+        }
+
         const string payload = """
             {
               "source": "mikan",
@@ -125,14 +210,30 @@ public sealed class MediaOrganizationProcessorTests
                 tmdb_season_number = 1, tmdb_episode_number = 1,
                 tmdb_episode_id = 1001, download_wanted = 1
             WHERE task_id = $task_id;
-            UPDATE download_jobs SET preparation_state = 'completed', state = 'complete', progress = 1
+            UPDATE download_jobs SET preparation_state = 'completed', state = $download_state, progress = 1
             WHERE task_id = $task_id;
             UPDATE ingest_tasks SET status = 'downloaded' WHERE id = $task_id;
             """;
         setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
         setup.Parameters.AddWithValue("$task_id", taskId);
+        setup.Parameters.AddWithValue("$download_state", downloadState);
         Assert.Equal(4, await setup.ExecuteNonQueryAsync());
         return taskId;
+    }
+
+    private static async Task SetDownloadStateAsync(RunningApp app, string taskId, string state)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE download_jobs SET state = $state, updated_at_utc = $now
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$state", state);
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task<(string Task, string Organization, int Completions)> ReadStateAsync(

@@ -23,6 +23,7 @@ public sealed record MediaOrganizationClaim(
     string TaskId,
     string DownloaderId,
     string InfoHash,
+    string FileStrategy,
     string DownloadRootPath,
     string SaveRootPath,
     string SourceId,
@@ -41,6 +42,7 @@ public sealed record MediaOperationPlan(
 public sealed record MediaOperationRecord(
     string OperationId,
     string TaskFileId,
+    string Strategy,
     string SourcePath,
     string TargetPath,
     string State,

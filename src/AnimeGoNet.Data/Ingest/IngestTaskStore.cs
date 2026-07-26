@@ -487,7 +487,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$save_root_path", saveRootPath);
             insert.Parameters.AddWithValue(
                 "$organization_state",
-                string.Equals(claim.FileStrategy, "move", StringComparison.Ordinal) ? "pending" : "not_required");
+                "pending");
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

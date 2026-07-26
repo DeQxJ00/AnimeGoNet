@@ -141,6 +141,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<DownloadSnapshotSynchronizer>();
         builder.Services.AddSingleton<DownloadPreparationProcessor>();
         builder.Services.AddSingleton<SafeFileMover>();
+        builder.Services.AddSingleton<SafeFileLinker>();
         builder.Services.AddSingleton<TvShowNfoWriter>();
         builder.Services.AddSingleton<MediaOrganizationProcessor>();
         builder.Services.AddSingleton<SafeFileDeleter>();
