@@ -2,9 +2,11 @@
 
 ## 显示契约
 
-- 生效配置卡与编辑器都按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 文件名季度 → P1 第一季显示确定性优先级。
+- 生效配置卡与编辑器都按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 显示确定性优先级。
 - P3 明确标注仅有 `bgmid` 时可执行 Backtrace。
-- P1 明确标注为前序策略全部失败后，勾选即使用 `S01`，不是再次尝试季度匹配。
+- P2 明确标注为前面策略全部失败后的本地标题解析，只读取统一导入任务 `title`；解析出的季度不验证 TMDB Season，解析不到继续 P1。
+- P1 明确标注为前序策略全部失败后，勾选即使用本地 `S01`，不验证 TMDB Season。
+- P4、P3 与独立季度 AI 的远端结果仍必须验证。
 - Bangumi 完全兜底标注为“一般不启用”；说明限定为 TMDB 完全失败、有 `bgmid`、固定 `S01` 且不提供有效 TMDB ID，同时明确内部 `tmdbid=0` 逻辑不变。
 - AI 季度匹配显示在 P3 与 P2 之间的独立分支，明确默认关闭且不占确定性优先级。
 - EP-AI 明确标记为独立后置阶段。

@@ -504,14 +504,15 @@ function seasonFailurePriority(metadata: RuntimeConfiguration["metadata"]): HTML
     },
     {
       priority: "2",
-      title: "文件名季度",
-      description: "从标题中的明确季度取值",
+      title: "TMDBFailUseTitleSeason",
+      description: "前面策略全部失败后，只用本地标题解析器读取任务 title；"
+        + "解析成功即使用该本地季度，不验证 TMDB Season；解析不到继续 P1",
       enabled: metadata.season_failure.use_title_season,
     },
     {
       priority: "1",
-      title: "第一季",
-      description: "前序策略全部失败后，勾选即使用 S01",
+      title: "TMDBFailUseFirstSeason",
+      description: "前序策略全部失败后，勾选即使用本地 S01，不验证 TMDB Season",
       enabled: metadata.season_failure.use_first_season,
     },
   ];

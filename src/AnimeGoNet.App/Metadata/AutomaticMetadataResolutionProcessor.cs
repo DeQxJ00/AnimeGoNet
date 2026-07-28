@@ -198,15 +198,20 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (policy.UseTitleSeason)
         {
             var started = _timeProvider.GetTimestamp();
-            var season = TmdbSeasonFallbackSelector.SelectTitleSeason(claim.Title, details.Seasons);
+            var seasonNumber = TmdbSeasonFallbackSelector.ParseSeasonNumber(claim.Title);
+            var matched = seasonNumber is > 0;
             await RecordAsync(claim, "season", "title_season", 2,
-                season is null ? "not_matched" : "matched",
-                season is null ? "title_season_not_found" : null,
+                matched ? "matched" : "not_matched",
+                matched ? null : "title_season_not_found",
                 false, started, cancellationToken).ConfigureAwait(false);
-            if (season is not null)
+            if (matched)
             {
-                await resolutions.CompleteSeasonAsync(
-                    claim, details.Series, season, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+                await resolutions.CompleteLocalSeasonAsync(
+                    claim,
+                    details.Series,
+                    seasonNumber!.Value,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
                 return true;
             }
         }
@@ -214,17 +219,17 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (policy.UseFirstSeason)
         {
             var started = _timeProvider.GetTimestamp();
-            var season = TmdbSeasonFallbackSelector.SelectFirstSeason(details.Seasons);
             await RecordAsync(claim, "season", "first_season", 1,
-                season is null ? "not_matched" : "matched",
-                season is null ? "first_season_not_found" : null,
+                "matched",
+                null,
                 false, started, cancellationToken).ConfigureAwait(false);
-            if (season is not null)
-            {
-                await resolutions.CompleteSeasonAsync(
-                    claim, details.Series, season, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-                return true;
-            }
+            await resolutions.CompleteLocalSeasonAsync(
+                claim,
+                details.Series,
+                1,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            return true;
         }
 
         await FailAsync(claim, direct.Failure!, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);

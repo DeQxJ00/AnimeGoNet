@@ -210,8 +210,8 @@ advanced:
 1. `tmdb_fail_skip=true`：优先级 4，立即跳过当前项，不执行其他策略。
 2. `tmdb_fail_backtrace=true`：优先级 3，按 [AnimeGo issue #15](https://github.com/wetor/AnimeGo/issues/15) 沿 Bangumi“前传”关系逐项回溯；成功即采用，耗尽则继续下一策略。
 3. `tmdb_fail_use_ai_match_season=true`：独立可选阶段，使用下载任务总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid` 请求大模型，一次返回整个任务的 TMDB Series/Season/Episode 候选。非空 ID 已绑定当前任务，但跨站标题、季度和 EP 编号可能不同，只能作参考；结果必须通过官方 TMDB API 二次验证，详细协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
-4. `tmdb_fail_use_title_season=true`：优先级 2，从标题明确季度中取值。
-5. `tmdb_fail_use_first_season=true`：优先级 1，使用第一季。
+4. `tmdb_fail_use_title_season=true`（`TMDBFailUseTitleSeason`）：优先级 2。前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器；解析出正季度后直接使用该本地季度，不验证 TMDB Season，解析不到时继续 P1。
+5. `tmdb_fail_use_first_season=true`（`TMDBFailUseFirstSeason`）：优先级 1。前序策略全部失败后直接使用本地 `S01`，不验证 TMDB Season。
 6. 所有启用策略都没有结果：进入待确认/解析失败。
 
 除 `Skip` 外，某个已启用策略返回“未匹配”或在自身重试耗尽后失败时，必须记录本次尝试并继续较低优先级；成功后立即停止。`Skip` 是显式终止策略，命中后不得执行较低优先级。未启用、因前置条件不满足而不适用、执行后未匹配、执行出错和成功必须是可区分结果，不能都记成“失败”。
@@ -288,7 +288,7 @@ Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access
 13. 前传缺日期、多前传和循环关系：遍历结果确定、无死循环、同一 Subject 不重复请求。
 14. 前传请求瞬时失败后恢复：继续回溯；重试耗尽：记录 `BacktraceError` 后执行较低优先级策略。
 15. TMDB 完全失败且仅 Backtrace 开启：不发起无意义的前传请求，最终仍解析失败；若 TitleSeason/FirstSeason 同时开启则可由它们确定季度。
-16. 任一季度策略返回 Series/Season/Episode 且均验证成功：目录名、季度和集号全部使用 TMDB 值，来源值只保留审计。
+16. Backtrace 或 AI 返回的 Series/Season/Episode 均验证成功时，目录名、季度和集号使用 TMDB 值，来源值只保留审计；P2/P1 是明确的本地 Season 回退例外，分别使用任务 `title` 解析季度或固定 `S01`，不验证 TMDB Season，且必须保存取得策略。
 17. AI 返回有效 Series/Season 但 Episode 不存在：不得下载/重命名，不允许退回来源 EP 冒充 TMDB EP。
 18. `tmdb_fail_use_bangumi=true` 的 `tmdbid=0` 路径明确标记为例外，不得把其名称/季度/集号记录为 TMDB 来源。
 19. 非 AI 季度成功且同号 EP 标题/日期一致：直接采用 TMDB EP，AI 请求数为 0。

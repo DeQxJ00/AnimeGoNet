@@ -526,10 +526,31 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await CompleteSeasonCoreAsync(
             claim,
             series,
-            [season],
+            [VerifiedSeason(series, season)],
             null,
             utcNow,
             cancellationToken).ConfigureAwait(false);
+
+    public async Task CompleteLocalSeasonAsync(
+        MetadataTaskClaim claim,
+        TmdbSeries series,
+        int seasonNumber,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(series);
+        ArgumentOutOfRangeException.ThrowIfLessThan(series.Id, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(seasonNumber, 1);
+        await CompleteSeasonCoreAsync(
+            claim,
+            series,
+            [new SeasonCompletion(
+                seasonNumber,
+                $"Season {seasonNumber.ToString(CultureInfo.InvariantCulture)}")],
+            null,
+            utcNow,
+            cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task CompleteAiSeasonAsync(
         MetadataTaskClaim claim,
@@ -541,7 +562,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await CompleteSeasonCoreAsync(
             claim,
             series,
-            [season],
+            [VerifiedSeason(series, season)],
             fileSeeds,
             utcNow,
             cancellationToken).ConfigureAwait(false);
@@ -556,7 +577,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await CompleteSeasonCoreAsync(
             claim,
             series,
-            seasons,
+            seasons.Select(season => VerifiedSeason(series, season)).ToArray(),
             fileSeeds,
             utcNow,
             cancellationToken).ConfigureAwait(false);
@@ -764,7 +785,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
     private async Task CompleteSeasonCoreAsync(
         MetadataTaskClaim claim,
         TmdbSeries series,
-        IReadOnlyList<TmdbSeason> seasons,
+        IReadOnlyList<SeasonCompletion> seasons,
         IReadOnlyList<MetadataSeasonFileSeed>? fileSeeds,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken)
@@ -776,11 +797,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             || seasons.Count == 0
             || seasons.Select(value => value.SeasonNumber).Distinct().Count() != seasons.Count
             || seasons.Any(season =>
-                season.Id <= 0
-                || season.SeriesId != series.Id
-                || season.SeasonNumber <= 0))
+                season.SeasonNumber <= 0
+                || string.IsNullOrWhiteSpace(season.CanonicalName)))
         {
-            throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(seasons));
+            throw new ArgumentException("Series/Season completion identity is invalid.", nameof(seasons));
         }
 
         var defaultSeasonNumber = seasons.Count == 1
@@ -873,7 +893,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             upsertSeason.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             upsertSeason.Parameters.AddWithValue("$series_id", seriesRowId);
             upsertSeason.Parameters.AddWithValue("$season_number", season.SeasonNumber);
-            upsertSeason.Parameters.AddWithValue("$canonical_name", season.Name);
+            upsertSeason.Parameters.AddWithValue("$canonical_name", season.CanonicalName);
             upsertSeason.Parameters.AddWithValue("$now", now);
             await upsertSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -981,6 +1001,24 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static SeasonCompletion VerifiedSeason(TmdbSeries series, TmdbSeason season)
+    {
+        ArgumentNullException.ThrowIfNull(series);
+        ArgumentNullException.ThrowIfNull(season);
+        if (series.Id <= 0
+            || season.Id <= 0
+            || season.SeriesId != series.Id
+            || season.SeasonNumber <= 0
+            || string.IsNullOrWhiteSpace(season.Name))
+        {
+            throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(season));
+        }
+
+        return new SeasonCompletion(season.SeasonNumber, season.Name);
+    }
+
+    private sealed record SeasonCompletion(int SeasonNumber, string CanonicalName);
 
     public async Task CompleteEpisodesAsync(
         MetadataEpisodeTaskClaim claim,

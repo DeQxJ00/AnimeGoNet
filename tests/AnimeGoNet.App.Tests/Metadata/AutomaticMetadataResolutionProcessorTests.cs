@@ -189,6 +189,69 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task TitleSeasonUsesLocalTaskTitleWithoutTmdbSeasonValidation()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888, "Made in Abyss", "来自深渊", new DateOnly(2020, 1, 1), 12));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    SeasonFailure = options.Metadata.SeasonFailure with
+                    {
+                        UseTitleSeason = true,
+                        UseFirstSeason = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 Season 3");
+
+        Assert.True(await app.App.Services.GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal(3, run.TmdbSeasonNumber);
+        var strategies = await ReadStrategiesAsync(app, taskId);
+        Assert.Contains("title_season", strategies);
+        Assert.DoesNotContain("first_season", strategies);
+    }
+
+    [Fact]
+    public async Task FirstSeasonUsesLocalS01WithoutTmdbSeasonValidation()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonTwo]);
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888, "Made in Abyss", "来自深渊", new DateOnly(2020, 1, 1), 12));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    SeasonFailure = options.Metadata.SeasonFailure with
+                    {
+                        UseTitleSeason = false,
+                        UseFirstSeason = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊");
+
+        Assert.True(await app.App.Services.GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal(1, run.TmdbSeasonNumber);
+        var strategies = await ReadStrategiesAsync(app, taskId);
+        Assert.Contains("first_season", strategies);
+    }
+
+    [Fact]
     public async Task SkipStopsLowerPrioritySeasonFallbacks()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);

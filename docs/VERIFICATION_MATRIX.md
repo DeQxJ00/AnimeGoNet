@@ -135,7 +135,7 @@ GET    /websocket/log
 2. Skip 与 Backtrace 同时开启：Skip 优先级 4 立即终止，前传请求数为 0。
 3. 当前 Bgm 首播日期已命中：即使 Backtrace 开启也不读取前传。
 4. 第一层或更深前传命中：采用同一 TMDB 剧集内命中的季度，TitleSeason/FirstSeason 不执行。
-5. 回溯到首部仍无匹配：依次尝试 TitleSeason=2、FirstSeason=1。
+5. 回溯到首部仍无匹配：依次尝试 `TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；P2 只读取任务 `title` 并采用本地解析季度，P1 固定采用本地 `S01`，两者都不请求或验证 TMDB Season。
 6. 前传缺日期、多前传及循环：遍历次序稳定、无重复请求、可终止。
 7. 前传请求瞬时错误恢复；重试耗尽时记录 `BacktraceError`，然后执行较低优先级策略。
 8. TMDB 完全失败：Backtrace 不适用且不发起关系请求，与 `tmdb_fail_use_bangumi` 的完整失败兜底保持独立。

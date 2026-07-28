@@ -36,7 +36,7 @@
 | TMDB 规范命名 | 已确认：TMDB 匹配成功时名称、季度和集号全部以经官方 API 验证的 TMDB 数据为准 | TMDB 语言固定 `zh-CN`，中文名缺失时仍使用 TMDB `original_name`；Bangumi/文件名值仅保留为来源字段。 |
 | Mikan 人工规则 | 已确认：人工覆盖最高优先级；Mikan URL 中的作品 ID 统一称 `mikanid` | 相同 `mikanid` 视为同一作品，共享 `bgmid`、TMDB Series/Season 和 Episode Offset；自动解析不得覆盖。 |
 | 多源路由 | 已确认：多个命名下载器实例，按输入源配置路由和规则 | Mikan（bgmid必填）可绑定 `bt`；U2（anidbid可空）和TTG（imdbid可空）可绑定 `pt`；名称、客户端类型和绑定均可在UI配置。 |
-| AI 匹配 | 已确认：确定性季度链为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；季度 AI 与 EP-AI 是独立开关且默认关闭 | 每个任务发送总标题、候选视频相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`；非空 ID 与任务作品级绑定但跨站标题/季度/EP 仅供参考；最终 Series/Season/Episode 必须由 TMDB 验证。 |
+| AI 匹配 | 已确认：确定性季度链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；季度 AI 与 EP-AI 是独立开关且默认关闭 | 每个任务发送总标题、候选视频相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`；非空 ID 与任务作品级绑定但跨站标题/季度/EP 仅供参考；AI 最终 Series/Season/Episode 必须由 TMDB 验证。P2/P1 是明确的本地 Season 回退例外，不验证 TMDB Season。 |
 | 在线数据源测试 | CI 默认回放 fixture；手动/定时任务运行受控 live smoke | 避免 Mikan/Bangumi/TMDB 波动导致 CI 不稳定。 |
 
 ### C# 插件模型
@@ -205,7 +205,7 @@ docs/
 - Bangumi API + Archive 缓存读取/刷新/锁。
 - TMDB 搜索、相似度、季度/首播日期匹配及 fallback。
 - 明确区分 Mikan `bangumiId`、Bangumi Subject ID、TMDB Series ID、Season Number 和 AnimeGoNet 内部 ID；详细状态机见 [`METADATA_RESOLUTION.md`](METADATA_RESOLUTION.md)。
-- “TMDB 完全失败”与“已经得到 TMDB ID 但季度未匹配”分开；确定性链按适用条件执行 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1，AI 是独立可选阶段，Backtrace 在没有 TMDB ID 时不适用。
+- “TMDB 完全失败”与“已经得到 TMDB ID 但季度未匹配”分开；确定性链按适用条件执行 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`，AI 是独立可选阶段，Backtrace 在没有 `bgmid` 时不适用。P2 仅本地解析任务 `title`，P1 固定本地 `S01`，均不验证 TMDB Season。
 - 按 [AnimeGo issue #15](https://github.com/wetor/AnimeGo/issues/15) 新增 `TMDBFailBacktrace` / `advanced.default.tmdb_fail_backtrace`（默认 `false`）：当前 Bgm 首播日期无法匹配时，沿 Bangumi“前传”关系逐项回溯，用前传首播日期重新匹配同一 TMDB 剧集季度，直到命中或没有可继续回溯的前传。
 - 回溯实现必须可取消并使用 visited Subject ID 防止关系环；缺日期时继续查找其前传，多前传按最近关系优先且稳定排序；回溯耗尽后继续较低优先级策略。
 - 新增 `advanced.default.tmdb_fail_use_ai_match_season`（默认 `false`）：每个下载任务使用总标题、候选视频的相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid` 请求一次大模型，返回整个任务的 TMDB Series/Season/Episode 候选。Mikan日期优先开关开启且单文件、`bgmid/pubDate` 等运行条件满足时，主程序先按Bangumi播出日期计算 `bgm_episode_candidate`；候选成功后才开启固定Prompt区块，结合文件名EP定向查询TMDB。非空 ID 已由来源链路绑定当前任务，但只提供作品级上下文；跨站标题、季度拆分和 Episode 编号可不同，不能直接复制。完整协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
