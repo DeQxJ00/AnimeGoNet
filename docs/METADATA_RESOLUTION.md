@@ -33,6 +33,8 @@
 
 规则以 `mikanid` 为唯一作品键，而不是标题、字幕组、Torrent hash 或 `bgmid`。`bgmid` 是该作品规则的关联字段和查询上下文，不替代规则主键。人工规则保存时验证 TMDB TV Series、Season 和可用的样例 Episode，运行时仍验证最终 Episode。
 
+`PUT /api/v1/mikan/work-rules/{mikanid}` 可选接收正整数 `sample_source_episode`。提供时必须同时提供有效 `tmdb_series_id`、普通 `tmdb_season_number` 和 `episode_offset`，服务端以 `sample_source_episode + episode_offset` 计算目标并依次调用 TMDB TV Series、Season、Episode 官方端点验证；目标非正数、身份不一致或 Episode 不存在均在写规则前拒绝。网络/远端失败返回可重试的安全错误码，任何失败都不增加 revision、不留下部分人工覆盖。未提供样例字段时保持原兼容契约，最终任务运行时仍逐集验证。
+
 规则无效时记录 `ManualOverrideInvalid` 并停止当前项，不能由自动策略静默覆盖。只有用户修正规则、禁用规则或明确清除人工覆盖后才恢复自动解析。规则修改影响新任务和用户显式重新匹配的任务，不静默移动已整理完成的媒体文件。
 
 ### 1.2 TMDB 获取阶段

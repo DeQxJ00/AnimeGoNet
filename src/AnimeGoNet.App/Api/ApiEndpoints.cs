@@ -5,10 +5,12 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Serialization;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Downloads;
@@ -1225,10 +1227,20 @@ public static class ApiEndpoints
         int mikanId,
         MikanWorkRuleRequest request,
         MikanWorkMetadataRuleStore rules,
+        ITmdbClient tmdb,
         CancellationToken cancellationToken)
     {
         try
         {
+            var validationError = await ValidateMikanWorkRuleSampleAsync(
+                request,
+                tmdb,
+                cancellationToken).ConfigureAwait(false);
+            if (validationError is not null)
+            {
+                return validationError;
+            }
+
             var saved = await rules.SaveAsync(
                 new MikanWorkMetadataRuleUpdate(
                     mikanId,
@@ -1252,6 +1264,95 @@ public static class ApiEndpoints
         {
             return TypedResults.BadRequest(Error("mikan_rule_invalid", exception.Message));
         }
+    }
+
+    private static async Task<IResult?> ValidateMikanWorkRuleSampleAsync(
+        MikanWorkRuleRequest request,
+        ITmdbClient tmdb,
+        CancellationToken cancellationToken)
+    {
+        if (request.SampleSourceEpisode is null)
+        {
+            return null;
+        }
+
+        if (request.SampleSourceEpisode <= 0
+            || request.TmdbSeriesId is null or <= 0
+            || request.TmdbSeasonNumber is null or <= 0
+            || request.EpisodeOffset is null)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_rule_sample_invalid",
+                "Sample source Episode requires positive TMDB Series/Season and an Episode offset."));
+        }
+
+        int targetEpisode;
+        try
+        {
+            targetEpisode = checked(request.SampleSourceEpisode.Value + request.EpisodeOffset.Value);
+        }
+        catch (OverflowException)
+        {
+            targetEpisode = 0;
+        }
+
+        if (targetEpisode <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_rule_sample_target_invalid",
+                "Sample source Episode plus offset must produce a positive TMDB Episode."));
+        }
+
+        try
+        {
+            var series = await tmdb.GetSeriesAsync(
+                request.TmdbSeriesId.Value,
+                cancellationToken).ConfigureAwait(false);
+            if (series?.Id != request.TmdbSeriesId.Value)
+            {
+                return TypedResults.BadRequest(Error(
+                    "mikan_rule_tmdb_series_not_found",
+                    "TMDB TV Series could not be verified."));
+            }
+
+            var season = await tmdb.GetSeasonAsync(
+                series.Id,
+                request.TmdbSeasonNumber.Value,
+                cancellationToken).ConfigureAwait(false);
+            if (season?.SeriesId != series.Id
+                || season.SeasonNumber != request.TmdbSeasonNumber.Value)
+            {
+                return TypedResults.BadRequest(Error(
+                    "mikan_rule_tmdb_season_not_found",
+                    "TMDB Season could not be verified."));
+            }
+
+            var episode = await tmdb.GetEpisodeAsync(
+                series.Id,
+                season.SeasonNumber,
+                targetEpisode,
+                cancellationToken).ConfigureAwait(false);
+            if (episode?.SeriesId != series.Id
+                || episode.SeasonNumber != season.SeasonNumber
+                || episode.EpisodeNumber != targetEpisode)
+            {
+                return TypedResults.BadRequest(Error(
+                    "mikan_rule_tmdb_episode_not_found",
+                    "The sample Episode mapping could not be verified by TMDB."));
+            }
+        }
+        catch (TmdbClientException exception)
+        {
+            var status = exception.Kind is MetadataFailureKind.Network or MetadataFailureKind.RemoteService
+                ? StatusCodes.Status503ServiceUnavailable
+                : StatusCodes.Status502BadGateway;
+            return TypedResults.Json(
+                Error(exception.SafeCode, "TMDB sample validation failed."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: status);
+        }
+
+        return null;
     }
 
     private static async Task<IResult> DeleteMikanWorkRule(

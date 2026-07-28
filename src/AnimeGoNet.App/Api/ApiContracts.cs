@@ -223,7 +223,8 @@ public sealed record MikanWorkRuleRequest(
     [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
     [property: JsonPropertyName("episode_offset")] int? EpisodeOffset,
     [property: JsonPropertyName("enabled")] bool Enabled,
-    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("sample_source_episode")] int? SampleSourceEpisode = null);
 
 public sealed record MikanWorkRuleResponse(
     [property: JsonPropertyName("mikanid")] int MikanId,
