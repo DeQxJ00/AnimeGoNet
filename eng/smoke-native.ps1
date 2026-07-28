@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Executable,
 
-    [int]$Port = 0
+    [int]$Port = 0,
+
+    [int]$ExpectedSchemaVersion = 22
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +47,7 @@ try {
     }
 
     $status = Invoke-RestMethod -Uri "$baseUrl/api/v1/status" -TimeoutSec 5
+    $cacheBuckets = Invoke-RestMethod -Uri "$baseUrl/api/bolt?type=bucket" -TimeoutSec 5
     $ingestPayload = '{"source":"mikan","data":[{"torrent":"https://tracker.invalid/passkey/smoke.torrent","info":{"title":"NativeAOT smoke","mikanid":3951,"bgmid":547888}}]}'
     $ingestParameters = @{
         Uri = "$baseUrl/api/v1/ingest"
@@ -55,8 +58,12 @@ try {
     }
     $ingest = Invoke-RestMethod @ingestParameters
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
-    if ($status.database_schema_version -ne 11) {
+    if ($status.database_schema_version -ne $ExpectedSchemaVersion) {
         throw "Unexpected schema version: $($status.database_schema_version)"
+    }
+
+    if ($cacheBuckets.code -ne 200 -or $cacheBuckets.data.type -ne 'bucket') {
+        throw 'NativeAOT SQLite cache compatibility API smoke failed.'
     }
 
     if (-not $status.native_aot) {

@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 21;
+    public const int CurrentVersion = 22;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -27,6 +27,7 @@ public static class DatabaseSchema
         new SchemaMigration(19, "mikan_publication_evidence", MikanPublicationEvidence),
         new SchemaMigration(20, "pending_tmdb_recovery", PendingTmdbRecovery),
         new SchemaMigration(21, "pending_tmdb_nfo_rewrite_jobs", PendingTmdbNfoRewriteJobs),
+        new SchemaMigration(22, "sqlite_json_cache", SqliteJsonCache),
     ];
 
     private const string InitialBusinessSchema = """
@@ -891,5 +892,32 @@ public static class DatabaseSchema
 
         CREATE INDEX ix_pending_tmdb_nfo_rewrite_jobs_ready
         ON pending_tmdb_nfo_rewrite_jobs(state, next_attempt_at_utc, updated_at_utc);
+        """;
+
+    private const string SqliteJsonCache = """
+        CREATE TABLE cache_buckets (
+            database_name TEXT NOT NULL
+                CHECK (database_name IN ('bolt', 'bolt_sub')),
+            name TEXT NOT NULL,
+            created_at_utc TEXT NOT NULL,
+            PRIMARY KEY (database_name, name)
+        ) STRICT;
+
+        CREATE TABLE cache_entries (
+            database_name TEXT NOT NULL,
+            bucket_name TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value_json TEXT NOT NULL CHECK (json_valid(value_json)),
+            expires_at_utc TEXT,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (database_name, bucket_name, key),
+            FOREIGN KEY (database_name, bucket_name)
+                REFERENCES cache_buckets(database_name, name)
+                ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX ix_cache_entries_expiry
+        ON cache_entries(expires_at_utc)
+        WHERE expires_at_utc IS NOT NULL;
         """;
 }

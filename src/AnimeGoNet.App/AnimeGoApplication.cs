@@ -13,6 +13,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Cache;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.App.Feeds;
@@ -127,6 +128,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
         builder.Services.AddSingleton(database);
+        builder.Services.AddSingleton<SqliteJsonCacheStore>();
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);
         builder.Services.AddSingleton(legacyMikanFilters);

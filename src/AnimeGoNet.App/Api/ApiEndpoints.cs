@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Configuration;
@@ -13,6 +14,7 @@ using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Cache;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
 using AnimeGoNet.Data.Mikan;
@@ -73,6 +75,9 @@ public static class ApiEndpoints
         app.MapPost("/api/download/manager", LegacyDownloadManager);
         app.MapPost("/api/plugin/config", LegacyPluginConfigPost);
         app.MapGet("/api/plugin/config", LegacyPluginConfigGet);
+        app.MapGet("/api/bolt", LegacyBoltList);
+        app.MapGet("/api/bolt/value", LegacyBoltGet);
+        app.MapDelete("/api/bolt/value", LegacyBoltDelete);
     }
 
     private static Ok<LegacyApiResponse<PingData>> Ping()
@@ -179,6 +184,127 @@ public static class ApiEndpoints
         catch (System.Text.Json.JsonException)
         {
             return false;
+        }
+    }
+
+    private static async Task<Ok<LegacyApiResponse<LegacyBoltListResponse?>>> LegacyBoltList(
+        string? db,
+        string? type,
+        string? bucket,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var databaseName = string.IsNullOrWhiteSpace(db) ? "bolt" : db;
+        var listType = type?.Trim().ToLowerInvariant();
+        try
+        {
+            IReadOnlyList<string> values;
+            string? responseBucket = null;
+            if (listType == "bucket")
+            {
+                values = await store.ListBucketsAsync(
+                    databaseName,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else if (listType == "key")
+            {
+                if (string.IsNullOrWhiteSpace(bucket))
+                {
+                    return TypedResults.Ok(new LegacyApiResponse<LegacyBoltListResponse?>(
+                        300, "参数错误，type为 key 时，需要 bucket 参数", null));
+                }
+                responseBucket = bucket.Trim();
+                values = await store.ListKeysAsync(
+                    databaseName,
+                    responseBucket,
+                    DateTimeOffset.UtcNow,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                return TypedResults.Ok(new LegacyApiResponse<LegacyBoltListResponse?>(
+                    300, "参数错误，type 仅支持 bucket 和 key", null));
+            }
+
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltListResponse?>(
+                200,
+                "列表",
+                new LegacyBoltListResponse(listType, responseBucket, values)));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltListResponse?>(
+                300, "参数错误，未找到数据库或缓存标识无效", null));
+        }
+    }
+
+    private static async Task<Ok<LegacyApiResponse<LegacyBoltGetResponse?>>> LegacyBoltGet(
+        string? db,
+        string? bucket,
+        string? key,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var databaseName = string.IsNullOrWhiteSpace(db) ? "bolt" : db;
+        try
+        {
+            var value = await store.GetJsonAsync(
+                databaseName,
+                bucket ?? string.Empty,
+                key ?? string.Empty,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            if (value is null)
+            {
+                return TypedResults.Ok(new LegacyApiResponse<LegacyBoltGetResponse?>(
+                    300, "查询失败，Key不存在或已过期", null));
+            }
+
+            using var document = JsonDocument.Parse(value.ValueJson);
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltGetResponse?>(
+                200,
+                "查询结果",
+                new LegacyBoltGetResponse(
+                    value.Bucket,
+                    value.Key,
+                    value.ExpiresAtUtc?.ToUnixTimeSeconds() ?? 0,
+                    document.RootElement.Clone())));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltGetResponse?>(
+                300, "参数错误，未找到数据库或缓存标识无效", null));
+        }
+    }
+
+    private static async Task<Ok<LegacyApiResponse<LegacyBoltDeleteResponse?>>> LegacyBoltDelete(
+        string? db,
+        string? bucket,
+        string? key,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var databaseName = string.IsNullOrWhiteSpace(db) ? "bolt" : db.Trim();
+        if (!string.Equals(databaseName, "bolt", StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltDeleteResponse?>(
+                300, "参数错误，只能删除 bolt 数据库中的数据", null));
+        }
+
+        try
+        {
+            await store.DeleteAsync(
+                "bolt",
+                bucket ?? string.Empty,
+                key ?? string.Empty,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltDeleteResponse?>(
+                200, "删除成功", null));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.Ok(new LegacyApiResponse<LegacyBoltDeleteResponse?>(
+                300, "参数错误，缓存标识无效", null));
         }
     }
 

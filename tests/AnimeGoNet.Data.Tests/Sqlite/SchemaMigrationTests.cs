@@ -29,6 +29,8 @@ public sealed class SchemaMigrationTests
         {
             "anime_seasons",
             "anime_series",
+            "cache_buckets",
+            "cache_entries",
             "completion_aliases",
             "completion_records",
             "delete_executions",

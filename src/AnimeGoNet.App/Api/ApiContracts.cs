@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace AnimeGoNet.App.Api;
@@ -23,6 +24,21 @@ public sealed record LegacyPluginResponse(
 public sealed record LegacyPluginConfigResponse(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("data")] string Data);
+
+public sealed record LegacyBoltListResponse(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("bucket")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Bucket,
+    [property: JsonPropertyName("data")] IReadOnlyList<string> Data);
+
+public sealed record LegacyBoltGetResponse(
+    [property: JsonPropertyName("bucket")] string Bucket,
+    [property: JsonPropertyName("key")] string Key,
+    [property: JsonPropertyName("ttl")] long Ttl,
+    [property: JsonPropertyName("value")] JsonElement Value);
+
+public sealed record LegacyBoltDeleteResponse;
 
 public sealed record PingData(string Version, long Time);
 
