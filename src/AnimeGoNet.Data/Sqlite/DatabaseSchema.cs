@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 19;
+    public const int CurrentVersion = 20;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -25,6 +25,7 @@ public static class DatabaseSchema
         new SchemaMigration(17, "source_download_policy", SourceDownloadPolicy),
         new SchemaMigration(18, "enable_all_file_strategies", EnableAllFileStrategies),
         new SchemaMigration(19, "mikan_publication_evidence", MikanPublicationEvidence),
+        new SchemaMigration(20, "pending_tmdb_recovery", PendingTmdbRecovery),
     ];
 
     private const string InitialBusinessSchema = """
@@ -789,5 +790,77 @@ public static class DatabaseSchema
 
         ALTER TABLE ingest_tasks
         ADD COLUMN source_published_at TEXT;
+        """;
+
+    private const string PendingTmdbRecovery = """
+        ALTER TABLE completion_aliases
+        ADD COLUMN fallback_scope_kind TEXT
+            CHECK (fallback_scope_kind IS NULL OR fallback_scope_kind IN (
+                'bangumi_episode', 'mikan_episode', 'source_work_episode', 'torrent_file'));
+
+        ALTER TABLE completion_aliases
+        ADD COLUMN fallback_scope_key TEXT;
+
+        CREATE UNIQUE INDEX ux_completion_aliases_fallback_scope
+        ON completion_aliases(fallback_scope_kind, fallback_scope_key)
+        WHERE fallback_scope_kind IS NOT NULL AND fallback_scope_key IS NOT NULL;
+
+        ALTER TABLE fallback_completion_records
+        ADD COLUMN resolution_state TEXT NOT NULL DEFAULT 'pending'
+            CHECK (resolution_state IN ('pending', 'resolved', 'duplicate_after_resolution'));
+
+        ALTER TABLE fallback_completion_records
+        ADD COLUMN resolved_completion_id TEXT
+            REFERENCES completion_records(id) ON DELETE CASCADE;
+
+        ALTER TABLE fallback_completion_records
+        ADD COLUMN resolved_at_utc TEXT;
+
+        ALTER TABLE fallback_completion_records
+        ADD COLUMN resolution_source TEXT
+            CHECK (resolution_source IS NULL OR resolution_source IN ('manual', 'automatic'));
+
+        CREATE TRIGGER completion_alias_fallback_pair_insert_guard
+        BEFORE INSERT ON completion_aliases
+        WHEN (NEW.fallback_scope_kind IS NULL) <> (NEW.fallback_scope_key IS NULL)
+        BEGIN
+            SELECT RAISE(ABORT, 'fallback alias identity must be complete');
+        END;
+
+        CREATE TRIGGER completion_alias_fallback_pair_update_guard
+        BEFORE UPDATE OF fallback_scope_kind, fallback_scope_key ON completion_aliases
+        WHEN (NEW.fallback_scope_kind IS NULL) <> (NEW.fallback_scope_key IS NULL)
+        BEGIN
+            SELECT RAISE(ABORT, 'fallback alias identity must be complete');
+        END;
+
+        CREATE TRIGGER fallback_completion_resolution_insert_guard
+        BEFORE INSERT ON fallback_completion_records
+        WHEN (NEW.resolution_state = 'pending'
+                  AND (NEW.resolved_completion_id IS NOT NULL
+                       OR NEW.resolved_at_utc IS NOT NULL
+                       OR NEW.resolution_source IS NOT NULL))
+          OR (NEW.resolution_state <> 'pending'
+                  AND (NEW.resolved_completion_id IS NULL
+                       OR NEW.resolved_at_utc IS NULL
+                       OR NEW.resolution_source IS NULL))
+        BEGIN
+            SELECT RAISE(ABORT, 'fallback resolution projection is inconsistent');
+        END;
+
+        CREATE TRIGGER fallback_completion_resolution_update_guard
+        BEFORE UPDATE OF resolution_state, resolved_completion_id, resolved_at_utc, resolution_source
+        ON fallback_completion_records
+        WHEN (NEW.resolution_state = 'pending'
+                  AND (NEW.resolved_completion_id IS NOT NULL
+                       OR NEW.resolved_at_utc IS NOT NULL
+                       OR NEW.resolution_source IS NOT NULL))
+          OR (NEW.resolution_state <> 'pending'
+                  AND (NEW.resolved_completion_id IS NULL
+                       OR NEW.resolved_at_utc IS NULL
+                       OR NEW.resolution_source IS NULL))
+        BEGIN
+            SELECT RAISE(ABORT, 'fallback resolution projection is inconsistent');
+        END;
         """;
 }

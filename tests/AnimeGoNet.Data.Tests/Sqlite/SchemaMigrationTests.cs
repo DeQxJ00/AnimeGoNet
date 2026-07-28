@@ -168,6 +168,57 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task PendingTmdbRecoveryMigrationPreservesPendingFallbackRecords()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 19))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name,
+                    needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES ('fallback-series', 0, 547888, 'Fallback', 1, $now, $now);
+
+                INSERT INTO fallback_completion_records (
+                    id, anime_series_id, bangumi_subject_id, scope_kind, scope_key,
+                    source_id, source_episode, media_path, completed_at_utc)
+                VALUES (
+                    'fallback-1', 'fallback-series', 547888, 'mikan_episode', 'scope-1',
+                    'mikan', '7', '/media/episode.mkv', $now);
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-07-28T10:00:00.0000000+00:00");
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        var migration20 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 20);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration20.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT resolution_state, resolved_completion_id, resolved_at_utc, resolution_source
+            FROM fallback_completion_records WHERE id = 'fallback-1';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("pending", reader.GetString(0));
+        Assert.True(reader.IsDBNull(1));
+        Assert.True(reader.IsDBNull(2));
+        Assert.True(reader.IsDBNull(3));
+    }
+
+    [Fact]
     public async Task RssBatchAuditIncludesVersionedLegacyFilterColumns()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
