@@ -181,7 +181,12 @@ function metadataConfigurationCard(config) {
         ["Bangumi API", config.metadata.bangumi.base_url],
         ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
         ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
-        ["Bangumi 完全兜底", enabledLabel(config.metadata.tmdb_failure_use_bangumi)],
+        [
+            "Bangumi 完全兜底（一般不启用这个）",
+            `${enabledLabel(config.metadata.tmdb_failure_use_bangumi)} · `
+                + "TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；"
+                + "不输出有效 tmdbid（内部仍按现有逻辑写 0）",
+        ],
     ]);
     card.append(seasonFailurePriority(config.metadata));
     return card;

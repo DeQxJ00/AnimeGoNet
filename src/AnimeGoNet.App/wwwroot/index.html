@@ -299,7 +299,10 @@
         <fieldset class="wide">
           <legend>AI 与兜底</legend>
           <label><input id="configuration-ai-episode" type="checkbox">AI EP 匹配（独立后置阶段）</label>
-          <label><input id="configuration-bangumi-fallback" type="checkbox">Bangumi 完全兜底</label>
+          <label class="configuration-guided-option">
+            <input id="configuration-bangumi-fallback" type="checkbox">
+            <span><strong>Bangumi 完全兜底（一般不启用这个）</strong><small>TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；不输出有效 tmdbid（内部仍按现有逻辑写 0）</small></span>
+          </label>
           <label><input id="configuration-offset-cache" type="checkbox">可信 offset 缓存</label>
         </fieldset>
         <label>AI 超时（秒）<input id="configuration-ai-timeout" type="number" min="1" max="86400" required></label>
