@@ -5,6 +5,7 @@ using AnimeGoNet.App.Library;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -90,6 +91,7 @@ public sealed class MediaOrganizationProcessorTests
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             Assert.Equal(3, await command.ExecuteNonQueryAsync());
         }
+        await SeedFallbackClaimAsync(app, taskId);
 
         Assert.Equal(
             MediaOrganizationResult.FilesCompleted,
@@ -105,14 +107,19 @@ public sealed class MediaOrganizationProcessorTests
         await using var verifyConnection = await database.OpenConnectionAsync();
         await using var verify = verifyConnection.CreateCommand();
         verify.CommandText = """
-            SELECT scope_kind, source_id, media_path
-            FROM fallback_completion_records;
+            SELECT completion.scope_kind, completion.source_id, completion.media_path,
+                   claim.state
+            FROM fallback_completion_records AS completion
+            JOIN fallback_claims AS claim
+              ON claim.scope_kind = completion.scope_kind
+             AND claim.scope_key = completion.scope_key;
             """;
         await using var reader = await verify.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         Assert.Equal("torrent_file", reader.GetString(0));
         Assert.Equal("mikan", reader.GetString(1));
         Assert.Equal(target, reader.GetString(2));
+        Assert.Equal("completed", reader.GetString(3));
         Assert.False(await reader.ReadAsync());
     }
 
@@ -190,6 +197,52 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
         await File.WriteAllBytesAsync(
             Path.Combine(paths.DownloadPath, "bt", "episode.zh-Hans.forced.ass"), [6, 7, 8]);
+    }
+
+    private static async Task SeedFallbackClaimAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        string fileId;
+        FallbackDedupScope scope;
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT file.id, task.source_id, task.mikanid, task.source_work_id,
+                       task.source_item_id, job.info_hash, file.relative_path,
+                       file.size_bytes, file.source_episode
+                FROM task_files AS file
+                JOIN ingest_tasks AS task ON task.id = file.task_id
+                JOIN download_jobs AS job ON job.task_id = task.id
+                WHERE task.id = $task_id;
+                """;
+            query.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            fileId = reader.GetString(0);
+            scope = FallbackDedupScopeResolver.Resolve(
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetInt64(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8));
+        }
+
+        await using var insert = connection.CreateCommand();
+        insert.CommandText = """
+            INSERT INTO fallback_claims (
+                id, scope_kind, scope_key, task_file_id,
+                state, claimed_at_utc, expires_at_utc)
+            VALUES ('fallback-claim', $scope_kind, $scope_key, $file_id, 'active', $now, NULL);
+            """;
+        insert.Parameters.AddWithValue("$scope_kind", scope.Kind);
+        insert.Parameters.AddWithValue("$scope_key", scope.Key);
+        insert.Parameters.AddWithValue("$file_id", fileId);
+        insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        Assert.Equal(1, await insert.ExecuteNonQueryAsync());
     }
 
     private static async Task<string> PrepareDownloadedTaskAsync(

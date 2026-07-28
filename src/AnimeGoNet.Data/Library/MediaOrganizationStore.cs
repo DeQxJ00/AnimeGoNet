@@ -382,7 +382,15 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         foreach (var file in claim.Files.Where(file => file.TmdbSeriesId == 0))
         {
             var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
-            var (scopeKind, scopeKey) = FallbackScope(claim, file);
+            var scope = FallbackDedupScopeResolver.Resolve(
+                claim.SourceId,
+                claim.MikanId,
+                claim.SourceWorkId,
+                claim.SourceItemId,
+                claim.InfoHash,
+                file.RelativePath,
+                file.SizeBytes,
+                file.SourceEpisode);
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
@@ -395,15 +403,24 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 WHERE series.tmdb_series_id = 0
                   AND series.bangumi_subject_id = $bgmid
                 ON CONFLICT(scope_kind, scope_key) DO NOTHING;
+
+                UPDATE fallback_claims
+                SET state = 'completed', expires_at_utc = NULL
+                WHERE scope_kind = $scope_kind
+                  AND scope_key = $scope_key
+                  AND state = 'active'
+                  AND task_file_id IN (
+                      SELECT id FROM task_files WHERE task_id = $task_id);
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$bgmid", claim.BangumiSubjectId!.Value);
-            insert.Parameters.AddWithValue("$scope_kind", scopeKind);
-            insert.Parameters.AddWithValue("$scope_key", scopeKey);
+            insert.Parameters.AddWithValue("$scope_kind", scope.Kind);
+            insert.Parameters.AddWithValue("$scope_key", scope.Key);
             insert.Parameters.AddWithValue("$source_id", claim.SourceId);
             insert.Parameters.AddWithValue("$source_episode", (object?)file.SourceEpisode ?? DBNull.Value);
             insert.Parameters.AddWithValue("$media_path", operation.TargetPath);
             insert.Parameters.AddWithValue("$now", now);
+            insert.Parameters.AddWithValue("$task_id", claim.TaskId);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -433,31 +450,6 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private static (string Kind, string Key) FallbackScope(
-        MediaOrganizationClaim claim,
-        MediaOrganizationFile file)
-    {
-        var episode = file.SourceEpisode?.Trim().ToLowerInvariant();
-        if (string.Equals(claim.SourceId, "mikan", StringComparison.OrdinalIgnoreCase)
-            && claim.MikanId is > 0
-            && !string.IsNullOrWhiteSpace(episode))
-        {
-            return ("mikan_episode", $"{claim.MikanId.Value}:{episode}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(claim.SourceWorkId)
-            && !string.IsNullOrWhiteSpace(episode))
-        {
-            return (
-                "source_work_episode",
-                $"{claim.SourceId.ToLowerInvariant()}:{claim.SourceWorkId.ToLowerInvariant()}:{episode}");
-        }
-
-        return (
-            "torrent_file",
-            $"{claim.InfoHash.ToLowerInvariant()}:{file.RelativePath.Replace('\\', '/').ToLowerInvariant()}");
     }
 
     public Task CompleteCleanupAsync(

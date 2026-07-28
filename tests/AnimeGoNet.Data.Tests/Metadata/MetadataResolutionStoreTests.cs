@@ -4,6 +4,7 @@ using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Ingest;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sources;
@@ -322,6 +323,99 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
+    public async Task FallbackClaimStopsSameMikanEpisodeButReleaseAllowsRetryAndOtherEpisodeContinues()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await fixture.SetSourceEpisodeAsync(fixture.TaskId, "01");
+        var first = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, first, now);
+        var firstFile = await fixture.ReadFileAsync(first.TaskId);
+        Assert.Equal(("other", "tmdb_fallback_pending_completion"), firstFile.State);
+
+        var competingTaskId = await fixture.AddDownloadedTaskAsync('f', "competing");
+        await fixture.SetSourceEpisodeAsync(competingTaskId, "1.0");
+        var competing = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now.AddSeconds(1),
+            TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, competing, now.AddSeconds(1));
+        Assert.Equal(
+            ("duplicate", "fallback_claimed_by_another_task"),
+            (await fixture.ReadFileAsync(competingTaskId)).State);
+
+        var otherEpisodeTaskId = await fixture.AddDownloadedTaskAsync('d', "other-episode");
+        await fixture.SetSourceEpisodeAsync(otherEpisodeTaskId, "2");
+        var otherEpisode = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now.AddSeconds(2),
+            TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, otherEpisode, now.AddSeconds(2));
+        Assert.Equal(
+            ("other", "tmdb_fallback_pending_completion"),
+            (await fixture.ReadFileAsync(otherEpisodeTaskId)).State);
+
+        var completionStore = new CompletionRecordStore(fixture.Database);
+        Assert.True(await completionStore.ReleaseFallbackClaimAsync(
+            new FallbackDedupScope("mikan_episode", "3951:source:1"),
+            firstFile.FileId));
+
+        var retryTaskId = await fixture.AddDownloadedTaskAsync('c', "retry");
+        await fixture.SetSourceEpisodeAsync(retryTaskId, "1");
+        var retry = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now.AddSeconds(3),
+            TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, retry, now.AddSeconds(3));
+        Assert.Equal(
+            ("other", "tmdb_fallback_pending_completion"),
+            (await fixture.ReadFileAsync(retryTaskId)).State);
+        Assert.Equal(2, await fixture.CountFallbackClaimsAsync());
+    }
+
+    [Fact]
+    public async Task CompletedFallbackScopeStopsLaterTaskBeforeDownloadResume()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await fixture.SetSourceEpisodeAsync(fixture.TaskId, "7");
+        var first = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, first, now);
+        await fixture.MarkFallbackCompletedAsync(
+            new FallbackDedupScope("mikan_episode", "3951:source:7"),
+            now.AddSeconds(1));
+
+        var laterTaskId = await fixture.AddDownloadedTaskAsync('b', "completed-duplicate");
+        await fixture.SetSourceEpisodeAsync(laterTaskId, "07.0");
+        var later = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now.AddSeconds(2),
+            TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, later, now.AddSeconds(2));
+
+        Assert.Equal(
+            ("duplicate", "fallback_already_completed"),
+            (await fixture.ReadFileAsync(laterTaskId)).State);
+    }
+
+    [Fact]
+    public async Task FilesInSameTaskShareOneFallbackEpisodeClaim()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await fixture.SetSourceEpisodeAsync(fixture.TaskId, "3");
+        await fixture.AddPendingFileAsync("episode.zh-Hans.ass", 20, "3");
+        var claim = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+
+        await CompleteFallbackAsync(fixture, claim, now);
+
+        Assert.Equal(2, await fixture.CountFilesByStateAsync("other", "tmdb_fallback_pending_completion"));
+        Assert.Equal(1, await fixture.CountFallbackClaimsAsync());
+    }
+
+    [Fact]
     public async Task FailedTaskCanBeRetriedWithoutDeletingResolutionHistory()
     {
         await using var fixture = await MetadataFixture.CreateAsync();
@@ -405,6 +499,20 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(1, episodeClaim.Resolution.TorrentFileCount);
     }
 
+    private static Task CompleteFallbackAsync(
+        MetadataFixture fixture,
+        MetadataTaskClaim claim,
+        DateTimeOffset now) =>
+        fixture.Store.CompleteBangumiFallbackAsync(
+            claim,
+            new BangumiSubject(547888, "Made in Abyss", "来自深渊", null, 12),
+            1,
+            new MetadataFailure(
+                MetadataFailureKind.SemanticNoMatch,
+                "tmdb_series_not_found",
+                TmdbAccessConfirmed: true),
+            now);
+
     private sealed class MetadataFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _databaseFixture;
@@ -422,6 +530,145 @@ public sealed class MetadataResolutionStoreTests
         public MetadataResolutionStore Store { get; }
 
         public string TaskId { get; }
+
+        public async Task<string> AddDownloadedTaskAsync(char hashCharacter, string sourceItemId)
+        {
+            var profile = Assert.IsType<SourceProfileRecord>(
+                await new SourceProfileStore(Database).GetEnabledAsync("mikan"));
+            var normalizedResult = IngestCommandNormalizer.Normalize(
+                "mikan",
+                new IngestItemCommand(
+                    $"https://mikanani.me/passkey/{sourceItemId}.torrent",
+                    new IngestItemInfo(
+                        "Episode",
+                        null,
+                        sourceItemId,
+                        "3951",
+                        null,
+                        null,
+                        3951,
+                        547888,
+                        999,
+                        "tt1234567")));
+            var normalized = Assert.IsType<NormalizedIngestItem>(normalizedResult.Item);
+            var hash = new string(hashCharacter, 40);
+            var tasks = new IngestTaskStore(Database);
+            var staged = await tasks.AddStagedAsync(
+                normalized,
+                profile,
+                new TorrentMetadata("episode.mkv", hash, 100, [new TorrentFile("episode.mkv", 100, false)]),
+                $"{sourceItemId}.torrent",
+                DateTimeOffset.UtcNow.AddMinutes(15));
+            var dispatch = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+                DateTimeOffset.UtcNow,
+                TimeSpan.FromMinutes(1)));
+            await tasks.CompleteDispatchAsync(
+                dispatch,
+                new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Waiting, 0, 0, 100, 0, null),
+                "/download/incomplete/bt",
+                "/download/anime",
+                DateTimeOffset.UtcNow);
+            await new AnimeGoNet.Data.Downloads.DownloadJobStore(Database).ApplyInstanceSnapshotAsync(
+                "bt",
+                [new DownloadTaskSnapshot(hash, "Episode", DownloadTaskState.Complete, 1, 100, 100, 0, 0)],
+                DateTimeOffset.UtcNow);
+            return staged.Id;
+        }
+
+        public async Task SetSourceEpisodeAsync(string taskId, string sourceEpisode)
+        {
+            await using var connection = await Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE task_files
+                SET source_episode = $source_episode
+                WHERE task_id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$source_episode", sourceEpisode);
+            command.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task AddPendingFileAsync(string relativePath, long sizeBytes, string sourceEpisode)
+        {
+            await using var connection = await Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes,
+                    source_episode, disposition)
+                VALUES ($id, $task_id, $relative_path, $size_bytes, $source_episode, 'pending');
+                """;
+            command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            command.Parameters.AddWithValue("$relative_path", relativePath);
+            command.Parameters.AddWithValue("$size_bytes", sizeBytes);
+            command.Parameters.AddWithValue("$source_episode", sourceEpisode);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task<(string FileId, (string Disposition, string Reason) State)> ReadFileAsync(
+            string taskId)
+        {
+            await using var connection = await Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, disposition, other_reason
+                FROM task_files WHERE task_id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            return (reader.GetString(0), (reader.GetString(1), reader.GetString(2)));
+        }
+
+        public async Task<int> CountFallbackClaimsAsync()
+        {
+            await using var connection = await Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM fallback_claims;";
+            return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        public async Task<int> CountFilesByStateAsync(string disposition, string reason)
+        {
+            await using var connection = await Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT COUNT(*) FROM task_files
+                WHERE task_id = $task_id
+                  AND disposition = $disposition
+                  AND other_reason = $reason;
+                """;
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            command.Parameters.AddWithValue("$disposition", disposition);
+            command.Parameters.AddWithValue("$reason", reason);
+            return Convert.ToInt32(
+                await command.ExecuteScalarAsync(),
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        public async Task MarkFallbackCompletedAsync(FallbackDedupScope scope, DateTimeOffset completedAt)
+        {
+            await using var connection = await Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO fallback_completion_records (
+                    id, anime_series_id, bangumi_subject_id, scope_kind, scope_key,
+                    source_id, source_episode, media_path, completed_at_utc)
+                SELECT 'completed-fallback', id, 547888, $scope_kind, $scope_key,
+                       'mikan', '7', '/download/anime/episode.mkv', $now
+                FROM anime_series
+                WHERE tmdb_series_id = 0 AND bangumi_subject_id = 547888;
+                UPDATE fallback_claims
+                SET state = 'completed'
+                WHERE scope_kind = $scope_kind AND scope_key = $scope_key;
+                """;
+            command.Parameters.AddWithValue("$scope_kind", scope.Kind);
+            command.Parameters.AddWithValue("$scope_key", scope.Key);
+            command.Parameters.AddWithValue("$now", completedAt.ToUniversalTime().ToString("O"));
+            Assert.Equal(2, await command.ExecuteNonQueryAsync());
+        }
 
         public static async Task<MetadataFixture> CreateAsync()
         {

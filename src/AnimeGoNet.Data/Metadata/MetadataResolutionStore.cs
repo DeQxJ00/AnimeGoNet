@@ -1,6 +1,7 @@
 using System.Globalization;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -623,6 +624,59 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 ?? throw new InvalidOperationException("Bangumi fallback Series projection was not found."));
         }
 
+        string sourceId;
+        string? sourceItemId;
+        string? sourceWorkId;
+        int? mikanId;
+        string infoHash;
+        await using (var taskContext = connection.CreateCommand())
+        {
+            taskContext.Transaction = transaction;
+            taskContext.CommandText = """
+                SELECT task.source_id, task.source_item_id, task.source_work_id,
+                       task.mikanid, job.info_hash
+                FROM ingest_tasks AS task
+                JOIN download_jobs AS job ON job.task_id = task.id
+                WHERE task.id = $task_id;
+                """;
+            taskContext.Parameters.AddWithValue("$task_id", claim.TaskId);
+            await using var reader = await taskContext.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                throw new InvalidOperationException("Bangumi fallback download context was not found.");
+            }
+
+            sourceId = reader.GetString(0);
+            sourceItemId = reader.IsDBNull(1) ? null : reader.GetString(1);
+            sourceWorkId = reader.IsDBNull(2) ? null : reader.GetString(2);
+            mikanId = reader.IsDBNull(3) ? null : reader.GetInt32(3);
+            infoHash = reader.GetString(4);
+        }
+
+        var decisions = new List<(string FileId, EpisodeClaimDecision Decision)>();
+        foreach (var file in claim.Files ?? [])
+        {
+            var scope = FallbackDedupScopeResolver.Resolve(
+                sourceId,
+                mikanId,
+                sourceWorkId,
+                sourceItemId,
+                infoHash,
+                file.RelativePath,
+                file.SizeBytes,
+                file.SourceEpisode);
+            decisions.Add((
+                file.FileId,
+                await ClaimFallbackAsync(
+                    connection,
+                    transaction,
+                    claim.TaskId,
+                    file.FileId,
+                    scope,
+                    now,
+                    cancellationToken).ConfigureAwait(false)));
+        }
+
         await using (var complete = connection.CreateCommand())
         {
             complete.Transaction = transaction;
@@ -672,6 +726,30 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             if (await complete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) < 4)
             {
                 throw new InvalidOperationException("Bangumi fallback metadata lease is no longer active.");
+            }
+        }
+
+        foreach (var decision in decisions.Where(value => value.Decision != EpisodeClaimDecision.Owned))
+        {
+            await using var duplicate = connection.CreateCommand();
+            duplicate.Transaction = transaction;
+            duplicate.CommandText = """
+                UPDATE task_files
+                SET disposition = 'duplicate', other_reason = $reason
+                WHERE id = $file_id AND task_id = $task_id
+                  AND disposition = 'other'
+                  AND other_reason = 'tmdb_fallback_pending_completion';
+                """;
+            duplicate.Parameters.AddWithValue(
+                "$reason",
+                decision.Decision == EpisodeClaimDecision.AlreadyCompleted
+                    ? "fallback_already_completed"
+                    : "fallback_claimed_by_another_task");
+            duplicate.Parameters.AddWithValue("$file_id", decision.FileId);
+            duplicate.Parameters.AddWithValue("$task_id", claim.TaskId);
+            if (await duplicate.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException("Bangumi fallback duplicate projection changed concurrently.");
             }
         }
 
@@ -1204,6 +1282,91 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             throw new InvalidOperationException("TMDB Episode claim conflict disappeared during the transaction.");
+        }
+
+        var ownerTaskId = reader.GetString(0);
+        var state = reader.GetString(1);
+        if (string.Equals(ownerTaskId, taskId, StringComparison.Ordinal) && state == "active")
+        {
+            return EpisodeClaimDecision.Owned;
+        }
+
+        return state == "completed"
+            ? EpisodeClaimDecision.AlreadyCompleted
+            : EpisodeClaimDecision.ClaimedByAnotherTask;
+    }
+
+    private static async Task<EpisodeClaimDecision> ClaimFallbackAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string taskId,
+        string taskFileId,
+        FallbackDedupScope scope,
+        string claimedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using (var completed = connection.CreateCommand())
+        {
+            completed.Transaction = transaction;
+            completed.CommandText = """
+                SELECT EXISTS(
+                    SELECT 1 FROM fallback_completion_records
+                    WHERE scope_kind = $scope_kind AND scope_key = $scope_key);
+                """;
+            completed.Parameters.AddWithValue("$scope_kind", scope.Kind);
+            completed.Parameters.AddWithValue("$scope_key", scope.Key);
+            if (Convert.ToInt64(
+                    await completed.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                    CultureInfo.InvariantCulture) == 1)
+            {
+                return EpisodeClaimDecision.AlreadyCompleted;
+            }
+        }
+
+        await using (var acquire = connection.CreateCommand())
+        {
+            acquire.Transaction = transaction;
+            acquire.CommandText = """
+                INSERT INTO fallback_claims (
+                    id, scope_kind, scope_key, task_file_id,
+                    state, claimed_at_utc, expires_at_utc)
+                VALUES (
+                    $id, $scope_kind, $scope_key, $task_file_id,
+                    'active', $claimed_at_utc, NULL)
+                ON CONFLICT(scope_kind, scope_key)
+                DO UPDATE SET
+                    id = excluded.id,
+                    task_file_id = excluded.task_file_id,
+                    state = 'active',
+                    claimed_at_utc = excluded.claimed_at_utc,
+                    expires_at_utc = NULL
+                WHERE fallback_claims.state = 'released';
+                """;
+            acquire.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            acquire.Parameters.AddWithValue("$scope_kind", scope.Kind);
+            acquire.Parameters.AddWithValue("$scope_key", scope.Key);
+            acquire.Parameters.AddWithValue("$task_file_id", taskFileId);
+            acquire.Parameters.AddWithValue("$claimed_at_utc", claimedAtUtc);
+            if (await acquire.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+            {
+                return EpisodeClaimDecision.Owned;
+            }
+        }
+
+        await using var existing = connection.CreateCommand();
+        existing.Transaction = transaction;
+        existing.CommandText = """
+            SELECT file.task_id, claim.state
+            FROM fallback_claims AS claim
+            JOIN task_files AS file ON file.id = claim.task_file_id
+            WHERE claim.scope_kind = $scope_kind AND claim.scope_key = $scope_key;
+            """;
+        existing.Parameters.AddWithValue("$scope_kind", scope.Kind);
+        existing.Parameters.AddWithValue("$scope_key", scope.Key);
+        await using var reader = await existing.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("Bangumi fallback claim conflict disappeared during the transaction.");
         }
 
         var ownerTaskId = reader.GetString(0);

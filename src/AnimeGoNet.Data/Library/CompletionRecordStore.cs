@@ -106,4 +106,27 @@ public sealed class CompletionRecordStore(Sqlite.AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$taskFileId", taskFileId);
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
+
+    public async Task<bool> ReleaseFallbackClaimAsync(
+        FallbackDedupScope scope,
+        string taskFileId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskFileId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE fallback_claims
+            SET state = 'released', expires_at_utc = NULL
+            WHERE scope_kind = $scope_kind
+              AND scope_key = $scope_key
+              AND task_file_id = $task_file_id
+              AND state = 'active';
+            """;
+        command.Parameters.AddWithValue("$scope_kind", scope.Kind);
+        command.Parameters.AddWithValue("$scope_key", scope.Key);
+        command.Parameters.AddWithValue("$task_file_id", taskFileId);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
 }
