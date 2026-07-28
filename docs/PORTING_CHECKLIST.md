@@ -43,7 +43,7 @@
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit，以及安全页面抓取/批内缓存/真实 RSS 前置执行已验证；WebUI 管理与原油猴浏览器 E2E 待实现 |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss` 及 winner→统一 staging 已验证；过滤 WebUI历史/回滚待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
-| `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
+| `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任/冲突撤销、已验证 Episode 自动学习、AI 前任务级命中、零 AI/零 TMDB Episode 调用和本地 completion 已通过；状态管理 API/WebUI 与冲突审计展示待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |
 | AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP、TMDB 二次验证、季度 AI、后置 EP-AI、Mikan pubDate 内部证据及 Bangumi 普通 EP 候选门控、跨季度逐文件状态已完成） | fake AI/MCP/TMDB 已覆盖 Skip→Backtrace→AI→Title→First、EP/字幕/Other、跨季度视频与关联字幕、无法归属文件安全拒绝、顺序/Season 0/重复目标/身份越界/429/认证/网络失败、人工规则抑制、实际文件数、31 天日期窗口与通用 AI 降级；后续发布二进制 fake AI HTTP 端到端 smoke |
 | 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选，并在 Season 确认后持久化 Other 原因；实际整理路径待实现 |

@@ -14,6 +14,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
     IAiMetadataMatcher aiMatcher,
     AiMetadataResultValidator aiValidator,
     AiPublicationEvidenceResolver publicationEvidence,
+    MikanTrustedOffsetStore trustedOffsets,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
@@ -65,7 +66,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 await RecordAsync(
                     claim,
-                    "ai_season",
+                    claim.EpisodeResolvedByTrustedOffset ? "trusted_mikan_offset" : "ai_season",
                     null,
                     "other",
                     file.PreResolvedOtherReason,
@@ -82,6 +83,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             var strategy = manualOffset is not null
                 ? "manual_mikan_offset"
+                : claim.EpisodeResolvedByTrustedOffset
+                    ? "trusted_mikan_offset"
                 : file.PreResolvedEpisodeNumber is > 0
                     ? "ai_season"
                     : "tmdb_episode_number";
@@ -128,6 +131,26 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     0,
                     cancellationToken).ConfigureAwait(false);
                 return true;
+            }
+
+            if (claim.EpisodeResolvedByTrustedOffset)
+            {
+                await RecordAsync(
+                    claim,
+                    strategy,
+                    priority,
+                    "matched",
+                    null,
+                    false,
+                    0,
+                    cancellationToken).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    "episode",
+                    null,
+                    TrustedEpisodeNumber: targetEpisode));
+                continue;
             }
 
             var started = _timeProvider.GetTimestamp();
@@ -211,6 +234,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             && options.Metadata.Ai.UseEpisodeMatch
             && !claim.SeasonResolvedByAi
             && !claim.HasMultipleSeasons
+            && !claim.EpisodeResolvedByTrustedOffset
             && results.Any(result => result.Episode is null
                 && claim.Files.Any(file => file.FileId == result.FileId
                     && SubtitleAssociationResolver.IsVideo(file.RelativePath))))
@@ -230,7 +254,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             var video = association.VideoFileId is null
                 ? null
                 : results.SingleOrDefault(result => result.FileId == association.VideoFileId);
-            if (video?.Episode is not null)
+            if (video?.ResolvedEpisodeNumber is > 0)
             {
                 await RecordAsync(
                     claim, "subtitle_association", null, "matched", null,
@@ -241,7 +265,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     "episode",
                     null,
                     association.VideoFileId,
-                    association.RenameSuffix));
+                    association.RenameSuffix,
+                    video.TrustedEpisodeNumber));
             }
             else
             {
@@ -264,7 +289,69 @@ public sealed class EpisodeMetadataResolutionProcessor(
             results,
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
+        await LearnTrustedOffsetAsync(claim, results, cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    private async Task LearnTrustedOffsetAsync(
+        MetadataEpisodeTaskClaim claim,
+        IReadOnlyList<MetadataEpisodeFileResolution> results,
+        CancellationToken cancellationToken)
+    {
+        if (!options.Metadata.MikanTrustedOffsetCacheEnabled
+            || claim.EpisodeResolvedByTrustedOffset
+            || claim.HasMultipleSeasons
+            || !string.Equals(claim.Resolution.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase)
+            || claim.Resolution.MikanId is null or <= 0
+            || claim.Resolution.GroupId is null or <= 0)
+        {
+            return;
+        }
+
+        var evidence = new List<MikanOffsetEvidenceObservation>();
+        foreach (var result in results.Where(result => result.Episode is not null))
+        {
+            var file = claim.Files.Single(candidate => candidate.FileId == result.FileId);
+            if (!SubtitleAssociationResolver.IsVideo(file.RelativePath)
+                || !int.TryParse(
+                    file.FileEpisodeCandidate,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var sourceEpisode)
+                || sourceEpisode <= 0)
+            {
+                continue;
+            }
+
+            evidence.Add(new MikanOffsetEvidenceObservation(
+                claim.Resolution.MikanId.Value,
+                claim.Resolution.GroupId.Value,
+                sourceEpisode,
+                result.Episode!.SeriesId,
+                result.Episode.SeasonNumber,
+                result.Episode.EpisodeNumber - sourceEpisode));
+        }
+
+        if (evidence.Count == 0
+            || evidence.Select(item => (
+                    item.TmdbSeriesId,
+                    item.TmdbSeasonNumber,
+                    item.EpisodeOffset))
+                .Distinct()
+                .Count() != 1)
+        {
+            return;
+        }
+
+        foreach (var observation in evidence
+                     .GroupBy(item => item.SourceEpisode)
+                     .Select(group => group.First()))
+        {
+            await trustedOffsets.ObserveAsync(
+                observation,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<bool> TryApplyAiAsync(

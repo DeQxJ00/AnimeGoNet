@@ -549,6 +549,128 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task TrustedMikanOffsetBypassesAiAndTmdbEpisodeRequests()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
+        var ai = new FakeAiMetadataMatcher();
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    MikanTrustedOffsetCacheEnabled = true,
+                    Ai = options.Metadata.Ai with
+                    {
+                        UseSeasonMatch = true,
+                        UseEpisodeMatch = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient((BangumiSubject?)null),
+            aiMetadataMatcher: ai);
+        await SeedCanonicalSeasonAsync(app);
+        var offsets = app.App.Services.GetRequiredService<MikanTrustedOffsetStore>();
+        for (var episode = 1; episode <= 3; episode++)
+        {
+            await offsets.ObserveAsync(
+                new MikanOffsetEvidenceObservation(3951, 7, episode, Series.Id, 2, 13),
+                DateTimeOffset.UtcNow.AddMinutes(episode));
+        }
+
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第四话");
+        await SetMikanGroupAndEpisodeCandidateAsync(app, taskId, 7, 4);
+        await AddTrustedOffsetSubtitleAsync(app, taskId);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        var files = await ReadTaskFilesAsync(app, taskId);
+        Assert.Equal(2, files.Length);
+        Assert.All(files, file =>
+        {
+            Assert.Equal(17, file.EpisodeNumber);
+            Assert.Equal("episode", file.Disposition);
+        });
+        Assert.Equal(
+            ".zh-Hans.ass",
+            Assert.Single(files, file => file.RelativePath.EndsWith(".ass", StringComparison.Ordinal))
+                .RenameSuffix);
+        Assert.Empty(ai.Requests);
+        Assert.Empty(tmdb.SearchTitles);
+        Assert.Empty(tmdb.EpisodeIdentities);
+        Assert.Contains("trusted_mikan_offset", await ReadStrategiesAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task VerifiedEpisodeCompletesThirdTrustedOffsetObservation()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            number => new TmdbEpisode(
+                9000 + number,
+                Series.Id,
+                2,
+                number,
+                $"Episode {number}",
+                null));
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                Series.Id,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    2,
+                    17,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    MikanTrustedOffsetCacheEnabled = true,
+                    Ai = options.Metadata.Ai with { UseSeasonMatch = true },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient(new BangumiSubject(
+                547888,
+                "Made in Abyss",
+                "来自深渊",
+                new DateOnly(2020, 1, 1),
+                12)),
+            aiMetadataMatcher: ai);
+        var offsets = app.App.Services.GetRequiredService<MikanTrustedOffsetStore>();
+        Assert.Null(await offsets.ObserveAsync(
+            new MikanOffsetEvidenceObservation(3951, 7, 1, Series.Id, 2, 13),
+            DateTimeOffset.UtcNow));
+        Assert.Null(await offsets.ObserveAsync(
+            new MikanOffsetEvidenceObservation(3951, 7, 2, Series.Id, 2, 13),
+            DateTimeOffset.UtcNow.AddMinutes(1)));
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第四话");
+        await SetMikanGroupAndEpisodeCandidateAsync(app, taskId, 7, 4);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var trusted = Assert.IsType<MikanTrustedOffset>(
+            await offsets.GetTrustedAsync(3951, 7));
+        Assert.Equal(3, trusted.DistinctEpisodeCount);
+        Assert.Equal(13, trusted.EpisodeOffset);
+        Assert.Single(ai.Requests);
+    }
+
+    [Fact]
     public async Task SeasonAiConfigurationFailureIsAuditedThenTitleFallbackContinues()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
@@ -779,6 +901,74 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             VALUES (
                 'cross-season-unassigned', $task_id, 'extras/commentary.ass', 10,
                 NULL, NULL, 'pending', NULL);
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SetMikanGroupAndEpisodeCandidateAsync(
+        RunningApp app,
+        string taskId,
+        int groupId,
+        int episode)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE ingest_tasks SET groupid = $groupid WHERE id = $task_id;
+            UPDATE task_files
+            SET relative_path = '[04].mkv',
+                source_episode = $episode,
+                file_episode_candidate = $episode
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue("$groupid", groupId);
+        command.Parameters.AddWithValue("$episode", episode.ToString(
+            System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(2, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SeedCanonicalSeasonAsync(RunningApp app)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO anime_series (
+                id, tmdb_series_id, bangumi_subject_id, canonical_name,
+                original_name, poster_path, needs_tmdb_completion,
+                created_at_utc, updated_at_utc)
+            VALUES (
+                'trusted-series', 72517, NULL, '来自深渊',
+                'メイドインアビス', NULL, 0, $now, $now);
+            INSERT INTO anime_seasons (
+                id, series_id, season_number, canonical_name, poster_path,
+                created_at_utc, updated_at_utc)
+            VALUES (
+                'trusted-season', 'trusted-series', 2, 'Season 2', NULL,
+                $now, $now);
+            """;
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        Assert.Equal(2, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task AddTrustedOffsetSubtitleAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO task_files (
+                id, task_id, relative_path, size_bytes, source_episode,
+                file_episode_candidate, disposition, other_reason)
+            VALUES (
+                'trusted-offset-subtitle', $task_id, '[04].zh-Hans.ass', 10,
+                '4', '4', 'pending', NULL);
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());

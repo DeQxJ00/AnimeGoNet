@@ -17,6 +17,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
     AiMetadataResultValidator aiValidator,
     AiPublicationEvidenceResolver publicationEvidence,
     MikanWorkMetadataRuleStore rules,
+    MikanTrustedOffsetStore trustedOffsets,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
@@ -40,6 +41,11 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (rule?.BangumiSubjectId is not null)
         {
             claim = claim with { BangumiSubjectId = rule.BangumiSubjectId };
+        }
+
+        if (await TryCompleteTrustedOffsetAsync(claim, cancellationToken).ConfigureAwait(false))
+        {
+            return true;
         }
 
         BangumiSubject? subject = null;
@@ -206,6 +212,112 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         await FailAsync(claim, direct.Failure!, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> TryCompleteTrustedOffsetAsync(
+        MetadataTaskClaim claim,
+        CancellationToken cancellationToken)
+    {
+        if (!options.Metadata.MikanTrustedOffsetCacheEnabled
+            || !string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase)
+            || claim.MikanId is null or <= 0
+            || claim.GroupId is null or <= 0)
+        {
+            return false;
+        }
+
+        var started = _timeProvider.GetTimestamp();
+        var trusted = await trustedOffsets.GetTrustedAsync(
+            claim.MikanId.Value,
+            claim.GroupId.Value,
+            cancellationToken).ConfigureAwait(false);
+        if (trusted is null)
+        {
+            await RecordAsync(
+                claim, "season", "trusted_mikan_offset", null, "not_matched",
+                "trusted_offset_not_found", false, started, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        var canonical = await resolutions.GetCanonicalSeasonAsync(
+            trusted.TmdbSeriesId,
+            trusted.TmdbSeasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (canonical is null)
+        {
+            await RecordAsync(
+                claim, "season", "trusted_mikan_offset", null, "not_matched",
+                "trusted_offset_projection_missing", false, started, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        var videos = (claim.Files ?? [])
+            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            .ToArray();
+        var seeds = new List<MetadataSeasonFileSeed>(videos.Length);
+        foreach (var file in videos)
+        {
+            if (int.TryParse(
+                    file.FileEpisodeCandidate,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var sourceEpisode)
+                && sourceEpisode > 0)
+            {
+                int targetEpisode;
+                try
+                {
+                    targetEpisode = checked(sourceEpisode + trusted.EpisodeOffset);
+                }
+                catch (OverflowException)
+                {
+                    targetEpisode = 0;
+                }
+
+                if (targetEpisode <= 0)
+                {
+                    await RecordAsync(
+                        claim, "season", "trusted_mikan_offset", null, "not_matched",
+                        "trusted_offset_episode_invalid", false, started, cancellationToken).ConfigureAwait(false);
+                    return false;
+                }
+
+                seeds.Add(new MetadataSeasonFileSeed(file.RelativePath, targetEpisode, null));
+                continue;
+            }
+
+            var parsed = TorrentEpisodeCandidateParser.Parse(file.RelativePath);
+            if (parsed.Kind is TorrentEpisodeCandidateKind.Special or TorrentEpisodeCandidateKind.Fractional)
+            {
+                seeds.Add(new MetadataSeasonFileSeed(file.RelativePath, null, parsed.Reason));
+                continue;
+            }
+
+            await RecordAsync(
+                claim, "season", "trusted_mikan_offset", null, "not_matched",
+                "trusted_offset_file_ineligible", false, started, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        if (seeds.Count == 0)
+        {
+            await RecordAsync(
+                claim, "season", "trusted_mikan_offset", null, "not_applicable",
+                "trusted_offset_video_files_missing", false, started, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        await RecordAsync(
+            claim, "season", "trusted_mikan_offset", null, "matched",
+            null, false, started, cancellationToken).ConfigureAwait(false);
+        await resolutions.CompleteAiSeasonAsync(
+            claim,
+            canonical.Series,
+            canonical.Season,
+            seeds,
+            _timeProvider.GetUtcNow(),
+            cancellationToken).ConfigureAwait(false);
         return true;
     }
 

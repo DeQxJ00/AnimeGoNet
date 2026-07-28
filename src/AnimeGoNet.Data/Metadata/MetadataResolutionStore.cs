@@ -69,6 +69,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var tmdbSeasonNumber = 0;
         var seasonResolvedByAi = false;
         var hasMultipleSeasons = false;
+        var episodeResolvedByTrustedOffset = false;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -85,7 +86,14 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          WHERE prior_run.task_id = task.id
                            AND attempt.strategy = 'ai_season'
                            AND attempt.result = 'matched'),
-                       COUNT(DISTINCT file.tmdb_season_number) > 1
+                       COUNT(DISTINCT file.tmdb_season_number) > 1,
+                       EXISTS (
+                         SELECT 1
+                         FROM metadata_resolution_attempts AS attempt
+                         JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
+                         WHERE prior_run.task_id = task.id
+                           AND attempt.strategy = 'trusted_mikan_offset'
+                           AND attempt.result = 'matched')
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -121,6 +129,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 tmdbSeasonNumber = reader.GetInt32(12);
                 seasonResolvedByAi = reader.GetInt64(13) == 1;
                 hasMultipleSeasons = reader.GetInt64(14) == 1;
+                episodeResolvedByTrustedOffset = reader.GetInt64(15) == 1;
             }
         }
 
@@ -219,7 +228,49 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             tmdbSeasonNumber,
             files,
             seasonResolvedByAi,
-            hasMultipleSeasons);
+            hasMultipleSeasons,
+            episodeResolvedByTrustedOffset);
+    }
+
+    public async Task<MetadataCanonicalSeason?> GetCanonicalSeasonAsync(
+        int tmdbSeriesId,
+        int tmdbSeasonNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbSeriesId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbSeasonNumber, 1);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT series.canonical_name, series.original_name, season.canonical_name
+            FROM anime_series AS series
+            JOIN anime_seasons AS season ON season.series_id = series.id
+            WHERE series.tmdb_series_id = $tmdb_series_id
+              AND season.season_number = $tmdb_season_number;
+            """;
+        command.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        command.Parameters.AddWithValue("$tmdb_season_number", tmdbSeasonNumber);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var canonicalName = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+        var originalName = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+        if (string.IsNullOrWhiteSpace(canonicalName) && string.IsNullOrWhiteSpace(originalName))
+        {
+            return null;
+        }
+
+        canonicalName = string.IsNullOrWhiteSpace(canonicalName) ? originalName : canonicalName;
+        originalName = string.IsNullOrWhiteSpace(originalName) ? canonicalName : originalName;
+        var seasonName = reader.IsDBNull(2)
+            ? $"Season {tmdbSeasonNumber.ToString(CultureInfo.InvariantCulture)}"
+            : reader.GetString(2);
+        return new MetadataCanonicalSeason(
+            new TmdbSeries(tmdbSeriesId, canonicalName, originalName, null),
+            new TmdbSeason(1, tmdbSeriesId, tmdbSeasonNumber, seasonName, null, 0));
     }
 
     private async Task<MetadataTaskClaim?> TryClaimAsync(
@@ -750,6 +801,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         {
             var claimedFile = claimedFiles[resolution.FileId];
             var expectedSeasonNumber = claimedFile.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
+            var resolvedEpisodeNumber = resolution.ResolvedEpisodeNumber;
             if (expectedSeasonNumber <= 0)
             {
                 throw new ArgumentException("Task file TMDB Season identity is invalid.", nameof(fileResolutions));
@@ -762,17 +814,23 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
             if (resolution.Disposition == "episode")
             {
-                if (resolution.Episode is null
-                    || resolution.Episode.SeriesId != claim.TmdbSeriesId
-                    || resolution.Episode.SeasonNumber != expectedSeasonNumber
-                    || resolution.Episode.EpisodeNumber <= 0)
+                if (resolvedEpisodeNumber is null or <= 0
+                    || (resolution.Episode is not null
+                        && (resolution.TrustedEpisodeNumber is not null
+                            || resolution.Episode.SeriesId != claim.TmdbSeriesId
+                            || resolution.Episode.SeasonNumber != expectedSeasonNumber))
+                    || (resolution.Episode is null
+                        && (!claim.EpisodeResolvedByTrustedOffset
+                            || resolution.TrustedEpisodeNumber is null)))
                 {
                     throw new ArgumentException("TMDB Episode identity is invalid.", nameof(fileResolutions));
                 }
             }
             else
             {
-                if (resolution.Episode is not null || resolution.OtherReason is null)
+                if (resolution.Episode is not null
+                    || resolution.TrustedEpisodeNumber is not null
+                    || resolution.OtherReason is null)
                 {
                     throw new ArgumentException("Other resolution requires a reason and no TMDB Episode.", nameof(fileResolutions));
                 }
@@ -811,15 +869,15 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var episodeClaims = new Dictionary<TmdbEpisodeIdentity, EpisodeClaimDecision>();
         foreach (var resolution in fileResolutions)
         {
-            if (resolution.Episode is null)
+            if (resolution.ResolvedEpisodeNumber is null)
             {
                 continue;
             }
 
             var identity = new TmdbEpisodeIdentity(
-                resolution.Episode.SeriesId,
-                resolution.Episode.SeasonNumber,
-                resolution.Episode.EpisodeNumber);
+                claim.TmdbSeriesId,
+                claimedFiles[resolution.FileId].TmdbSeasonNumber ?? claim.TmdbSeasonNumber,
+                resolution.ResolvedEpisodeNumber.Value);
             if (!episodeClaims.ContainsKey(identity))
             {
                 episodeClaims.Add(
@@ -871,12 +929,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
             var disposition = resolution.Disposition;
             var otherReason = resolution.OtherReason;
-            if (resolution.Episode is not null)
+            if (resolution.ResolvedEpisodeNumber is not null)
             {
                 var identity = new TmdbEpisodeIdentity(
-                    resolution.Episode.SeriesId,
-                    resolution.Episode.SeasonNumber,
-                    resolution.Episode.EpisodeNumber);
+                    claim.TmdbSeriesId,
+                    expectedSeasonNumber,
+                    resolution.ResolvedEpisodeNumber.Value);
                 var decision = episodeClaims[identity];
                 if (decision != EpisodeClaimDecision.Owned)
                 {
@@ -908,7 +966,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             updateFile.Parameters.AddWithValue("$tmdb_season_number", expectedSeasonNumber);
             updateFile.Parameters.AddWithValue(
                 "$tmdb_episode_number",
-                (object?)resolution.Episode?.EpisodeNumber ?? DBNull.Value);
+                (object?)resolution.ResolvedEpisodeNumber ?? DBNull.Value);
             updateFile.Parameters.AddWithValue("$tmdb_episode_id", (object?)resolution.Episode?.Id ?? DBNull.Value);
             updateFile.Parameters.AddWithValue("$disposition", disposition);
             updateFile.Parameters.AddWithValue("$other_reason", (object?)otherReason ?? DBNull.Value);

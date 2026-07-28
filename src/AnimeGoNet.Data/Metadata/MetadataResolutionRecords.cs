@@ -65,7 +65,12 @@ public sealed record MetadataEpisodeTaskClaim(
     int TmdbSeasonNumber,
     IReadOnlyList<MetadataTaskFileProjection> Files,
     bool SeasonResolvedByAi = false,
-    bool HasMultipleSeasons = false);
+    bool HasMultipleSeasons = false,
+    bool EpisodeResolvedByTrustedOffset = false);
+
+public sealed record MetadataCanonicalSeason(
+    TmdbSeries Series,
+    TmdbSeason Season);
 
 public sealed record MetadataSeasonFileSeed(
     string RelativePath,
@@ -79,7 +84,11 @@ public sealed record MetadataEpisodeFileResolution(
     string Disposition,
     string? OtherReason,
     string? AssociatedFileId = null,
-    string? RenameSuffix = null);
+    string? RenameSuffix = null,
+    int? TrustedEpisodeNumber = null)
+{
+    public int? ResolvedEpisodeNumber => Episode?.EpisodeNumber ?? TrustedEpisodeNumber;
+}
 
 public sealed record MetadataTaskListProjection(
     string TaskId,
