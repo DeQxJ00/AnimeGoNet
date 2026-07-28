@@ -132,6 +132,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         string saveRoot;
         string sourceId;
         string? sourceItemId;
+        string? sourceWorkId;
+        int? mikanId;
         int? bangumiId;
         await using (var details = connection.CreateCommand())
         {
@@ -139,6 +141,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             details.CommandText = """
                 SELECT job.downloader_id, job.info_hash, job.download_root_path, job.save_root_path,
                        task.source_id, task.source_item_id, task.bangumi_subject_id,
+                       task.source_work_id, task.mikanid,
                        json_extract(task.route_snapshot_json, '$.file_strategy')
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
@@ -162,7 +165,9 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             sourceId = reader.GetString(4);
             sourceItemId = reader.IsDBNull(5) ? null : reader.GetString(5);
             bangumiId = reader.IsDBNull(6) ? null : reader.GetInt32(6);
-            fileStrategy = reader.GetString(7);
+            sourceWorkId = reader.IsDBNull(7) ? null : reader.GetString(7);
+            mikanId = reader.IsDBNull(8) ? null : reader.GetInt32(8);
+            fileStrategy = reader.GetString(9);
             if (fileStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
             {
                 throw new InvalidOperationException("Captured file strategy is unsupported.");
@@ -182,10 +187,19 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             query.Transaction = transaction;
             query.CommandText = """
                 SELECT file.id, file.relative_path, file.size_bytes, file.disposition,
-                       file.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
+                       series.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
                        series.canonical_name, file.rename_suffix, file.associated_task_file_id
+                       , file.source_episode
                 FROM task_files AS file
-                JOIN anime_series AS series ON series.tmdb_series_id = file.tmdb_series_id
+                JOIN ingest_tasks AS task ON task.id = file.task_id
+                JOIN anime_series AS series ON
+                    (file.tmdb_series_id IS NOT NULL
+                     AND series.tmdb_series_id = file.tmdb_series_id)
+                    OR
+                    (file.tmdb_series_id IS NULL
+                     AND file.other_reason = 'tmdb_fallback_pending_completion'
+                     AND series.tmdb_series_id = 0
+                     AND series.bangumi_subject_id = task.bangumi_subject_id)
                 WHERE file.task_id = $task_id
                   AND file.disposition IN ('episode', 'other')
                   AND COALESCE(file.download_wanted, 1) = 1
@@ -199,7 +213,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                     reader.GetString(0), reader.GetString(1), reader.GetInt64(2), reader.GetString(3),
                     reader.GetInt32(4), reader.GetInt32(5), reader.IsDBNull(6) ? null : reader.GetInt32(6),
                     reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8),
-                    reader.IsDBNull(9) ? null : reader.GetString(9)));
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    reader.IsDBNull(10) ? null : reader.GetString(10)));
             }
 
             if (files.Count == 0)
@@ -211,7 +226,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new MediaOrganizationClaim(
             jobId, taskId, downloaderId, infoHash, fileStrategy, downloadRoot, saveRoot,
-            sourceId, sourceItemId, bangumiId, token, attempt, stage, files);
+            sourceId, sourceItemId, bangumiId, token, attempt, stage, files,
+            sourceWorkId, mikanId);
     }
 
     public async Task<IReadOnlyList<MediaOperationRecord>> EnsureOperationsAsync(
@@ -363,6 +379,34 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        foreach (var file in claim.Files.Where(file => file.TmdbSeriesId == 0))
+        {
+            var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
+            var (scopeKind, scopeKey) = FallbackScope(claim, file);
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO fallback_completion_records (
+                    id, anime_series_id, bangumi_subject_id, scope_kind, scope_key,
+                    source_id, source_episode, media_path, completed_at_utc)
+                SELECT $id, series.id, $bgmid, $scope_kind, $scope_key,
+                       $source_id, $source_episode, $media_path, $now
+                FROM anime_series AS series
+                WHERE series.tmdb_series_id = 0
+                  AND series.bangumi_subject_id = $bgmid
+                ON CONFLICT(scope_kind, scope_key) DO NOTHING;
+                """;
+            insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            insert.Parameters.AddWithValue("$bgmid", claim.BangumiSubjectId!.Value);
+            insert.Parameters.AddWithValue("$scope_kind", scopeKind);
+            insert.Parameters.AddWithValue("$scope_key", scopeKey);
+            insert.Parameters.AddWithValue("$source_id", claim.SourceId);
+            insert.Parameters.AddWithValue("$source_episode", (object?)file.SourceEpisode ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$media_path", operation.TargetPath);
+            insert.Parameters.AddWithValue("$now", now);
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await using var finish = connection.CreateCommand();
         finish.Transaction = transaction;
         finish.CommandText = """
@@ -389,6 +433,31 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static (string Kind, string Key) FallbackScope(
+        MediaOrganizationClaim claim,
+        MediaOrganizationFile file)
+    {
+        var episode = file.SourceEpisode?.Trim().ToLowerInvariant();
+        if (string.Equals(claim.SourceId, "mikan", StringComparison.OrdinalIgnoreCase)
+            && claim.MikanId is > 0
+            && !string.IsNullOrWhiteSpace(episode))
+        {
+            return ("mikan_episode", $"{claim.MikanId.Value}:{episode}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(claim.SourceWorkId)
+            && !string.IsNullOrWhiteSpace(episode))
+        {
+            return (
+                "source_work_episode",
+                $"{claim.SourceId.ToLowerInvariant()}:{claim.SourceWorkId.ToLowerInvariant()}:{episode}");
+        }
+
+        return (
+            "torrent_file",
+            $"{claim.InfoHash.ToLowerInvariant()}:{file.RelativePath.Replace('\\', '/').ToLowerInvariant()}");
     }
 
     public Task CompleteCleanupAsync(

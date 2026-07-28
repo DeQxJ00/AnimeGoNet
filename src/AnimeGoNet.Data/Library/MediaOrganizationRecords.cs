@@ -16,7 +16,8 @@ public sealed record MediaOrganizationFile(
     int? EpisodeNumber,
     string CanonicalSeriesName,
     string? RenameSuffix,
-    string? AssociatedFileId);
+    string? AssociatedFileId,
+    string? SourceEpisode = null);
 
 public sealed record MediaOrganizationClaim(
     string JobId,
@@ -32,7 +33,9 @@ public sealed record MediaOrganizationClaim(
     string LeaseToken,
     int AttemptCount,
     MediaOrganizationStage Stage,
-    IReadOnlyList<MediaOrganizationFile> Files);
+    IReadOnlyList<MediaOrganizationFile> Files,
+    string? SourceWorkId = null,
+    int? MikanId = null);
 
 public sealed record MediaOperationPlan(
     string TaskFileId,

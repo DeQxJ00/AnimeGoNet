@@ -137,6 +137,8 @@ advanced:
 
 本节的 `tmdbid`、`bangumiid` 都指 NFO XML 标签内容。内部 SQLite 分别保存来源值、TMDB 规范值、失败原因和待修复状态，不用 NFO 的 `0` 代替内部身份信息。
 
+当前主程序在权威 Series `SemanticNoMatch` 后先尝试已启用的季度 AI 恢复；仍失败时才评估 Bangumi 兜底。兜底任务在 `anime_series` 保存 `tmdb_series_id=0 + bangumi_subject_id + needs_tmdb_completion=1`，但 `task_files.tmdb_series_id` 和 `metadata_resolution_runs.tmdb_series_id` 保持 `NULL`，避免把例外值混入规范 TMDB 身份。文件只携带已确认的来源季度并以 `Other/tmdb_fallback_pending_completion` 整理，不生成 TMDB Episode 进度或规范 completion record。
+
 ## 4. NFO 文件和内容
 
 ID 写入动画剧集根目录的 `tvshow.nfo`，与 AnimeGo `develop` 保持一致；不写入季度目录的 `season.nfo`。

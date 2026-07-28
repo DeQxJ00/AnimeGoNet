@@ -63,6 +63,59 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
     }
 
+    [Fact]
+    public async Task BangumiFallbackMovesToOtherAndWritesTmdbZeroNfoWithoutCanonicalCompletion()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                DELETE FROM anime_series WHERE id = 'series';
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
+                    needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES ('fallback-series', 0, 547888, 'Fallback Series', 'Fallback Series', 1, $now, $now);
+                UPDATE task_files
+                SET disposition = 'other', other_reason = 'tmdb_fallback_pending_completion',
+                    tmdb_series_id = NULL, tmdb_season_number = 2,
+                    tmdb_episode_number = NULL, tmdb_episode_id = NULL
+                WHERE task_id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(3, await command.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var target = Path.Combine(paths.SavePath, "Fallback Series", "S02", "Other", "episode.mkv");
+        var nfo = Path.Combine(paths.SavePath, "Fallback Series", "tvshow.nfo");
+        Assert.True(File.Exists(target));
+        var document = XDocument.Load(nfo);
+        Assert.Equal("0", document.Root?.Element("tmdbid")?.Value);
+        Assert.Equal("547888", document.Root?.Element("bangumiid")?.Value);
+        Assert.Equal(("organizing_cleanup", "cleanup", 0), await ReadStateAsync(app, taskId));
+        await using var verifyConnection = await database.OpenConnectionAsync();
+        await using var verify = verifyConnection.CreateCommand();
+        verify.CommandText = """
+            SELECT scope_kind, source_id, media_path
+            FROM fallback_completion_records;
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("torrent_file", reader.GetString(0));
+        Assert.Equal("mikan", reader.GetString(1));
+        Assert.Equal(target, reader.GetString(2));
+        Assert.False(await reader.ReadAsync());
+    }
+
     [Theory]
     [InlineData("link", true)]
     [InlineData("link_delete", false)]

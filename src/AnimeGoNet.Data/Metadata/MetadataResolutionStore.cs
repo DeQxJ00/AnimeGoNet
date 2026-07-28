@@ -560,6 +560,124 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             utcNow,
             cancellationToken).ConfigureAwait(false);
 
+    public async Task CompleteBangumiFallbackAsync(
+        MetadataTaskClaim claim,
+        BangumiSubject subject,
+        int seasonNumber,
+        MetadataFailure failure,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(failure);
+        if (claim.BangumiSubjectId != subject.Id
+            || subject.Id <= 0
+            || seasonNumber <= 0
+            || failure.Kind != MetadataFailureKind.SemanticNoMatch
+            || !failure.TmdbAccessConfirmed)
+        {
+            throw new ArgumentException("Bangumi fallback requires authoritative no-match, bgmid and a positive Season.");
+        }
+
+        var now = Format(utcNow);
+        var canonicalName = string.IsNullOrWhiteSpace(subject.ChineseName)
+            ? subject.Name
+            : subject.ChineseName;
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var seriesRowId = Guid.NewGuid().ToString("N");
+        await using (var upsertSeries = connection.CreateCommand())
+        {
+            upsertSeries.Transaction = transaction;
+            upsertSeries.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name,
+                    original_name, poster_path, needs_tmdb_completion,
+                    created_at_utc, updated_at_utc)
+                VALUES ($id, 0, $bgmid, $name, $original_name, NULL, 1, $now, $now)
+                ON CONFLICT(bangumi_subject_id) WHERE tmdb_series_id = 0 DO UPDATE SET
+                    canonical_name = excluded.canonical_name,
+                    original_name = excluded.original_name,
+                    needs_tmdb_completion = 1,
+                    updated_at_utc = excluded.updated_at_utc;
+                """;
+            upsertSeries.Parameters.AddWithValue("$id", seriesRowId);
+            upsertSeries.Parameters.AddWithValue("$bgmid", subject.Id);
+            upsertSeries.Parameters.AddWithValue("$name", canonicalName);
+            upsertSeries.Parameters.AddWithValue("$original_name", subject.Name);
+            upsertSeries.Parameters.AddWithValue("$now", now);
+            await upsertSeries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var findSeries = connection.CreateCommand())
+        {
+            findSeries.Transaction = transaction;
+            findSeries.CommandText = """
+                SELECT id FROM anime_series
+                WHERE tmdb_series_id = 0 AND bangumi_subject_id = $bgmid;
+                """;
+            findSeries.Parameters.AddWithValue("$bgmid", subject.Id);
+            seriesRowId = (string)(await findSeries.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Bangumi fallback Series projection was not found."));
+        }
+
+        await using (var complete = connection.CreateCommand())
+        {
+            complete.Transaction = transaction;
+            complete.CommandText = """
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name, poster_path,
+                    created_at_utc, updated_at_utc)
+                VALUES ($season_id, $series_id, $season, $season_name, NULL, $now, $now)
+                ON CONFLICT(series_id, season_number) DO UPDATE SET
+                    canonical_name = excluded.canonical_name,
+                    updated_at_utc = excluded.updated_at_utc;
+
+                UPDATE task_files
+                SET tmdb_series_id = NULL,
+                    tmdb_season_number = $season,
+                    tmdb_episode_number = NULL,
+                    tmdb_episode_id = NULL,
+                    disposition = 'other',
+                    other_reason = 'tmdb_fallback_pending_completion'
+                WHERE task_id = $task_id AND disposition = 'pending';
+
+                UPDATE metadata_resolution_runs
+                SET status = 'fallback_resolved', tmdb_access_confirmed = 1,
+                    failure_kind = 'SemanticNoMatch', fallback_eligible = 1,
+                    fallback_denial_reason = NULL, completed_at_utc = $now,
+                    lease_token = NULL, lease_expires_at_utc = NULL,
+                    tmdb_series_id = NULL, tmdb_season_number = $season
+                WHERE id = $run_id AND task_id = $task_id
+                  AND status = 'running' AND lease_token = $lease_token;
+
+                UPDATE ingest_tasks
+                SET status = 'metadata_resolved',
+                    failure_kind = 'tmdb_completion_pending',
+                    failure_reason = $failure_code,
+                    updated_at_utc = $now
+                WHERE id = $task_id AND status = 'metadata_resolving';
+                """;
+            complete.Parameters.AddWithValue("$season_id", Guid.NewGuid().ToString("N"));
+            complete.Parameters.AddWithValue("$series_id", seriesRowId);
+            complete.Parameters.AddWithValue("$season", seasonNumber);
+            complete.Parameters.AddWithValue("$season_name", $"Season {seasonNumber.ToString(CultureInfo.InvariantCulture)}");
+            complete.Parameters.AddWithValue("$task_id", claim.TaskId);
+            complete.Parameters.AddWithValue("$run_id", claim.RunId);
+            complete.Parameters.AddWithValue("$lease_token", claim.LeaseToken);
+            complete.Parameters.AddWithValue("$failure_code", failure.Code);
+            complete.Parameters.AddWithValue("$now", now);
+            if (await complete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) < 4)
+            {
+                throw new InvalidOperationException("Bangumi fallback metadata lease is no longer active.");
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task CompleteSeasonCoreAsync(
         MetadataTaskClaim claim,
         TmdbSeries series,

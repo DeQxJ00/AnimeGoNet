@@ -40,6 +40,114 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task AuthoritativeSeriesNoMatchCanCreateBangumiPendingCompletionWithoutFakeEpisode()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            searchReturnsEmpty: true);
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888,
+            "Made in Abyss Season 2",
+            "来自深渊 第二季",
+            new DateOnly(2022, 7, 6),
+            12));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    TmdbFailureUseBangumi = true,
+                    SeasonFailure = options.Metadata.SeasonFailure with
+                    {
+                        UseTitleSeason = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第二季");
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("fallback_resolved", run.Status);
+        Assert.Null(run.TmdbSeriesId);
+        Assert.Equal(2, run.TmdbSeasonNumber);
+        Assert.True(run.FallbackEligible);
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT series.tmdb_series_id, series.bangumi_subject_id,
+                   series.needs_tmdb_completion, file.tmdb_series_id,
+                   file.tmdb_season_number, file.tmdb_episode_number,
+                   file.disposition, file.other_reason
+            FROM ingest_tasks AS task
+            JOIN anime_series AS series
+              ON series.tmdb_series_id = 0
+             AND series.bangumi_subject_id = task.bangumi_subject_id
+            JOIN task_files AS file ON file.task_id = task.id
+            WHERE task.id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0, reader.GetInt32(0));
+        Assert.Equal(547888, reader.GetInt32(1));
+        Assert.Equal(1, reader.GetInt64(2));
+        Assert.True(reader.IsDBNull(3));
+        Assert.Equal(2, reader.GetInt32(4));
+        Assert.True(reader.IsDBNull(5));
+        Assert.Equal("other", reader.GetString(6));
+        Assert.Equal("tmdb_fallback_pending_completion", reader.GetString(7));
+    }
+
+    [Fact]
+    public async Task TmdbNetworkFailureNeverCreatesBangumiFallback()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            searchFailure: new TmdbClientException(
+                MetadataFailureKind.Network,
+                "tmdb_network_error",
+                tmdbAccessConfirmed: false));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    TmdbFailureUseBangumi = true,
+                    SeasonFailure = options.Metadata.SeasonFailure with { UseTitleSeason = true },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient(new BangumiSubject(
+                547888, "Made in Abyss Season 2", "来自深渊 第二季", null, 12)));
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第二季");
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("failed", run.Status);
+        Assert.Equal(MetadataFailureKind.Network, run.FailureKind);
+        Assert.False(run.FallbackEligible);
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM anime_series WHERE tmdb_series_id = 0;";
+        Assert.Equal(0L, await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task TitleSeasonRunsBeforeFirstSeasonAfterDirectDateFailure()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
@@ -1147,7 +1255,9 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         TmdbSeries series,
         IReadOnlyList<TmdbSeason> seasons,
         Func<int, TmdbEpisode?>? episodeFactory = null,
-        Func<int, int, TmdbEpisode?>? seasonEpisodeFactory = null) : ITmdbClient
+        Func<int, int, TmdbEpisode?>? seasonEpisodeFactory = null,
+        bool searchReturnsEmpty = false,
+        TmdbClientException? searchFailure = null) : ITmdbClient
     {
         public List<string> SearchTitles { get; } = [];
 
@@ -1158,7 +1268,13 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(string title, CancellationToken cancellationToken = default)
         {
             SearchTitles.Add(title);
-            return Task.FromResult<IReadOnlyList<TmdbSeries>>([series]);
+            if (searchFailure is not null)
+            {
+                return Task.FromException<IReadOnlyList<TmdbSeries>>(searchFailure);
+            }
+
+            return Task.FromResult<IReadOnlyList<TmdbSeries>>(
+                searchReturnsEmpty ? [] : [series]);
         }
 
         public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>

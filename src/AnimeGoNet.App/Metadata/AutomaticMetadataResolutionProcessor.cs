@@ -89,6 +89,21 @@ public sealed class AutomaticMetadataResolutionProcessor(
             var failure = seriesResult.Failure!;
             await RecordAsync(claim, "series", "tmdb_title", null, "failed", failure.Code,
                 IsRetryable(failure.Kind), seriesStarted, cancellationToken).ConfigureAwait(false);
+            if (options.Metadata.Ai.UseSeasonMatch
+                && await TryCompleteAiSeasonAsync(claim, cancellationToken).ConfigureAwait(false))
+            {
+                return true;
+            }
+
+            if (await TryCompleteBangumiFallbackAsync(
+                    claim,
+                    subject,
+                    failure,
+                    cancellationToken).ConfigureAwait(false))
+            {
+                return true;
+            }
+
             await FailAsync(claim, failure, SeriesFailureDenialReason(claim, failure), cancellationToken)
                 .ConfigureAwait(false);
             return true;
@@ -212,6 +227,54 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         await FailAsync(claim, direct.Failure!, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> TryCompleteBangumiFallbackAsync(
+        MetadataTaskClaim claim,
+        BangumiSubject? subject,
+        MetadataFailure failure,
+        CancellationToken cancellationToken)
+    {
+        if (!options.Metadata.TmdbFailureUseBangumi
+            || failure.Kind != MetadataFailureKind.SemanticNoMatch
+            || !failure.TmdbAccessConfirmed
+            || subject is null
+            || claim.BangumiSubjectId != subject.Id)
+        {
+            return false;
+        }
+
+        var policy = options.Metadata.SeasonFailure;
+        int? seasonNumber = policy.UseTitleSeason
+            ? TmdbSeasonFallbackSelector.ParseSeasonNumber(claim.Title)
+                ?? TmdbSeasonFallbackSelector.ParseSeasonNumber(subject.ChineseName)
+                ?? TmdbSeasonFallbackSelector.ParseSeasonNumber(subject.Name)
+            : null;
+        if (seasonNumber is null && policy.UseFirstSeason)
+        {
+            seasonNumber = 1;
+        }
+
+        var started = _timeProvider.GetTimestamp();
+        if (seasonNumber is null or <= 0)
+        {
+            await RecordAsync(
+                claim, "season", "bangumi_fallback", null, "not_matched",
+                "bangumi_fallback_season_missing", false, started, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        await RecordAsync(
+            claim, "season", "bangumi_fallback", null, "matched",
+            null, false, started, cancellationToken).ConfigureAwait(false);
+        await resolutions.CompleteBangumiFallbackAsync(
+            claim,
+            subject,
+            seasonNumber.Value,
+            failure,
+            _timeProvider.GetUtcNow(),
+            cancellationToken).ConfigureAwait(false);
         return true;
     }
 

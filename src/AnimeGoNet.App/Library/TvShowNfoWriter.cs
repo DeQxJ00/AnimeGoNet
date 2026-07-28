@@ -14,7 +14,13 @@ public sealed class TvShowNfoWriter
         int? bangumiSubjectId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbSeriesId, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(tmdbSeriesId);
+        if (tmdbSeriesId == 0 && bangumiSubjectId is null or <= 0)
+        {
+            throw new ArgumentException(
+                "TMDB fallback NFO requires a positive Bangumi Subject ID.",
+                nameof(bangumiSubjectId));
+        }
         var seriesDirectory = PathBoundary.Combine(saveRoot, MediaPathPlanner.SanitizeSegment(canonicalSeriesName));
         var target = Path.Combine(seriesDirectory, "tvshow.nfo");
         if (!PathBoundary.IsWithin(saveRoot, target))
