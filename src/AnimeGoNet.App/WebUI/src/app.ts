@@ -492,7 +492,7 @@ function seasonFailurePriority(metadata: RuntimeConfiguration["metadata"]): HTML
     {
       priority: "3",
       title: "TMDBFailBacktrace",
-      description: "沿 Bangumi 前传关系回溯季度",
+      description: "仅有 bgmid 时可用；沿 Bangumi 前传关系回溯季度",
       enabled: metadata.season_failure.backtrace,
     },
     {
@@ -511,7 +511,7 @@ function seasonFailurePriority(metadata: RuntimeConfiguration["metadata"]): HTML
     {
       priority: "1",
       title: "第一季",
-      description: "最后尝试 TMDB 第一季",
+      description: "前序策略全部失败后，勾选即使用 S01",
       enabled: metadata.season_failure.use_first_season,
     },
   ];

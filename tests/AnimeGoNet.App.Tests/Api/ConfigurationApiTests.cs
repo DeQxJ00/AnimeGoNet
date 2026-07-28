@@ -145,9 +145,13 @@ public sealed class ConfigurationApiTests
         Assert.Contains("data-priority=\"2\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"1\"", html, StringComparison.Ordinal);
         Assert.Contains("默认关闭，不占确定性优先级", html, StringComparison.Ordinal);
+        Assert.Contains("仅有 bgmid 时可用", html, StringComparison.Ordinal);
+        Assert.Contains("前序策略全部失败后，勾选即使用 S01", html, StringComparison.Ordinal);
         Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
         Assert.Contains("seasonFailurePriority", script, StringComparison.Ordinal);
         Assert.Contains("独立可选阶段，不占确定性优先级", script, StringComparison.Ordinal);
+        Assert.Contains("仅有 bgmid 时可用", script, StringComparison.Ordinal);
+        Assert.Contains("前序策略全部失败后，勾选即使用 S01", script, StringComparison.Ordinal);
         Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
