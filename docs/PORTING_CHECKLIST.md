@@ -57,7 +57,7 @@
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 待实现 | scan/upsert/recovery tests |
 | 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 进行中 | ingest command/response 和 JSON context 已验证；其余模型待实现 |
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 进行中 | SQLite 唯一约束、并发完成写入、逐文件 claim、同任务字幕共享、跨任务完成/进行中精确跳过及失败释放已验证；alias/delete 和 qB 文件 priority 待实现 |
-| TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 进行中 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid/季度门禁、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API 与只读 UI 已验证；schema v20 与事务恢复已把已验证 TMDB 映射合并为唯一规范 completion、保存 fallback alias，并将冲突标为 `DuplicateAfterResolution`；安全恢复候选和人工恢复 POST 已逐项在线验证 TMDB Series/Season/Episode；Bangumi Episode ID scope、人工恢复 WebUI 和可恢复 NFO 重写待实现 |
+| TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 进行中 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid/季度门禁、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API/UI 已验证；schema v20 与事务恢复已把已验证 TMDB 映射合并为唯一规范 completion、保存 fallback alias，并将冲突标为 `DuplicateAfterResolution`；安全恢复候选、人工恢复 POST 和静态 TypeScript 映射表单已逐项在线验证 TMDB Series/Season/Episode；Bangumi Episode ID scope和可恢复 NFO 重写待实现 |
 | 元数据解析尝试 | failure kind/reason/timeline | 扩展 | 待实现 | persistence/retry tests |
 | 四类删除 | 业务/下载器任务/源文件/媒体文件 | 扩展 | 进行中 | 四类独立 flags/schema 已建；preview/executor 待实现 |
 
@@ -88,7 +88,7 @@
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
 | 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复、下载/元数据面板、SourceProfile 版本化 CRUD 与下载器编辑器使用安全 DOM API，作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复、下载/元数据面板、待补全 TMDB 人工映射、SourceProfile 版本化 CRUD 与下载器编辑器使用安全 DOM API，作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

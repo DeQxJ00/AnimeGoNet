@@ -145,10 +145,31 @@ interface PendingTmdbScope {
   completed_at_utc: string | null;
 }
 
+interface PendingTmdbRecoveryCandidate {
+  fallback_record_id: string;
+  source: string;
+  source_episode: string | null;
+  dedup_boundary: string;
+  completed_at_utc: string;
+}
+
 interface PendingTmdbDetail {
   summary: PendingTmdbSummary;
   tasks: PendingTmdbTask[];
   scopes: PendingTmdbScope[];
+  recovery_candidates: PendingTmdbRecoveryCandidate[];
+}
+
+interface PendingTmdbRecoveryResult {
+  bgmid: number;
+  tmdb_series_id: number;
+  has_pending_fallback_records: boolean;
+  items: Array<{
+    fallback_record_id: string;
+    tmdb_season_number: number;
+    tmdb_episode_number: number;
+    state: "Resolved" | "DuplicateAfterResolution";
+  }>;
 }
 
 interface MikanTrustedOffsetItem {
@@ -974,6 +995,130 @@ function pendingStat(label: string, value: number): HTMLDivElement {
   return group;
 }
 
+function positiveInteger(value: string): number | null {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function createPendingRecoveryForm(
+  bgmid: number,
+  detail: PendingTmdbDetail,
+): HTMLElement[] {
+  const heading = document.createElement("h4");
+  heading.textContent = "人工 TMDB 恢复";
+  if (detail.recovery_candidates.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "尚无已整理完成、可恢复的 fallback 记录。";
+    return [heading, empty];
+  }
+
+  const explanation = document.createElement("p");
+  explanation.className = "pending-recovery-warning";
+  explanation.textContent = "提交后会逐项向 TMDB 验证 Series / Season / Episode。收敛到已有集时标记 DuplicateAfterResolution，不重新下载或删除文件。";
+  const form = document.createElement("form");
+  form.className = "pending-recovery-form";
+  const seriesLabel = document.createElement("label");
+  seriesLabel.textContent = "TMDB Series ID";
+  const seriesInput = document.createElement("input");
+  seriesInput.type = "number";
+  seriesInput.min = "1";
+  seriesInput.required = true;
+  seriesInput.inputMode = "numeric";
+  seriesInput.autocomplete = "off";
+  seriesLabel.append(seriesInput);
+  form.append(seriesLabel);
+
+  const defaultSeason = detail.summary.season_numbers.length === 1
+    ? detail.summary.season_numbers[0]
+    : null;
+  const fields = detail.recovery_candidates.map((candidate) => {
+    const row = document.createElement("fieldset");
+    row.className = "pending-recovery-row";
+    const legend = document.createElement("legend");
+    legend.textContent = `${candidate.source} · 来源 EP ${textOrDash(candidate.source_episode)} · ${candidate.dedup_boundary}`;
+    const seasonLabel = document.createElement("label");
+    seasonLabel.textContent = "Season";
+    const seasonInput = document.createElement("input");
+    seasonInput.type = "number";
+    seasonInput.min = "1";
+    seasonInput.required = true;
+    seasonInput.inputMode = "numeric";
+    seasonInput.value = defaultSeason === null ? "" : String(defaultSeason);
+    const episodeLabel = document.createElement("label");
+    episodeLabel.textContent = "Episode";
+    const episodeInput = document.createElement("input");
+    episodeInput.type = "number";
+    episodeInput.min = "1";
+    episodeInput.required = true;
+    episodeInput.inputMode = "numeric";
+    const sourceEpisode = candidate.source_episode === null
+      ? null
+      : positiveInteger(candidate.source_episode);
+    episodeInput.value = sourceEpisode === null ? "" : String(sourceEpisode);
+    seasonLabel.append(seasonInput);
+    episodeLabel.append(episodeInput);
+    row.append(legend, seasonLabel, episodeLabel);
+    form.append(row);
+    return { candidate, seasonInput, episodeInput };
+  });
+
+  const status = document.createElement("p");
+  status.className = "pending-recovery-status";
+  status.setAttribute("aria-live", "polite");
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "primary-button";
+  submit.textContent = "验证并恢复";
+  form.append(status, submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const seriesId = positiveInteger(seriesInput.value);
+    const mappings = fields.map(({ candidate, seasonInput, episodeInput }) => ({
+      fallback_record_id: candidate.fallback_record_id,
+      tmdb_season_number: positiveInteger(seasonInput.value),
+      tmdb_episode_number: positiveInteger(episodeInput.value),
+    }));
+    if (seriesId === null
+      || mappings.some((mapping) =>
+        mapping.tmdb_season_number === null || mapping.tmdb_episode_number === null)) {
+      status.textContent = "Series、Season、Episode 都必须是正整数。";
+      return;
+    }
+    if (!window.confirm(
+      `确认用 TMDB Series ${seriesId} 恢复 bgmid ${bgmid} 的 ${mappings.length} 条记录？`,
+    )) return;
+
+    submit.disabled = true;
+    submit.textContent = "正在向 TMDB 验证…";
+    status.textContent = "";
+    try {
+      const requestHeaders = new Headers(headers);
+      requestHeaders.set("Content-Type", "application/json");
+      const response = await fetch(
+        `/api/v1/metadata/pending-tmdb/${encodeURIComponent(String(bgmid))}/recover`,
+        {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify({ tmdb_series_id: seriesId, mappings }),
+        },
+      );
+      if (!response.ok) throw new Error(await responseError(response));
+      const result = await response.json() as PendingTmdbRecoveryResult;
+      const duplicates = result.items.filter(
+        (item) => item.state === "DuplicateAfterResolution",
+      ).length;
+      status.textContent = `已验证并恢复 ${result.items.length} 条；解析后重复 ${duplicates} 条。`;
+      await Promise.all([loadPendingTmdb(true), loadMetadataTasks()]);
+    } catch (error) {
+      status.textContent = `恢复失败：${errorMessage(error, "未知错误")}`;
+      submit.disabled = false;
+      submit.textContent = "验证并恢复";
+    }
+  });
+  return [heading, explanation, form];
+}
+
 async function loadPendingTmdbDetail(
   bgmid: number,
   target: HTMLDivElement,
@@ -1013,6 +1158,7 @@ async function loadPendingTmdbDetail(
       }
       sections.push(row);
     }
+    sections.push(...createPendingRecoveryForm(bgmid, detail));
     const taskHeading = document.createElement("h4");
     taskHeading.textContent = "关联任务";
     sections.push(taskHeading);
@@ -1031,7 +1177,7 @@ async function loadPendingTmdbDetail(
     button.disabled = false;
     button.onclick = () => {
       target.replaceChildren();
-      button.textContent = "查看作用域与任务";
+      button.textContent = "查看详情与人工恢复";
       button.onclick = () => void loadPendingTmdbDetail(bgmid, target, button);
     };
   } catch (error) {
@@ -1041,7 +1187,8 @@ async function loadPendingTmdbDetail(
   }
 }
 
-async function loadPendingTmdb(): Promise<void> {
+async function loadPendingTmdb(force = false): Promise<void> {
+  if (!force && document.querySelector(".pending-recovery-form")) return;
   const container = element<HTMLElement>("#pending-tmdb-list");
   try {
     const response = await fetch("/api/v1/metadata/pending-tmdb", { headers });
@@ -1094,7 +1241,7 @@ async function loadPendingTmdb(): Promise<void> {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "secondary-button";
-      button.textContent = "查看作用域与任务";
+      button.textContent = "查看详情与人工恢复";
       const detail = document.createElement("div");
       detail.className = "pending-tmdb-detail";
       button.onclick = () => void loadPendingTmdbDetail(item.bgmid, detail, button);
@@ -1753,7 +1900,7 @@ element<HTMLButtonElement>("#trusted-offsets-reload").addEventListener(
 );
 element<HTMLButtonElement>("#pending-tmdb-reload").addEventListener(
   "click",
-  () => void loadPendingTmdb(),
+  () => void loadPendingTmdb(true),
 );
 element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => void loadConfiguration());
 element<HTMLButtonElement>("#configuration-edit").addEventListener("click", openConfigurationEditor);

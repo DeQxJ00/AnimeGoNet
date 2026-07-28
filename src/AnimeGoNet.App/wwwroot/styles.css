@@ -123,6 +123,14 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .pending-scope strong, .pending-task strong { font-size: .8rem; overflow-wrap: anywhere; }
 .pending-scope span, .pending-task span { color: #aebbd3; font-size: .75rem; line-height: 1.45; overflow-wrap: anywhere; }
 .pending-scope em { color: #ffbf7c; font-size: .72rem; font-style: normal; }
+.pending-recovery-warning { margin: 0; color: #ffd487; font-size: .76rem; line-height: 1.55; }
+.pending-recovery-form { display: grid; gap: 10px; padding: 13px; border: 1px solid #5e5131; border-radius: 13px; background: rgba(8,10,15,.58); }
+.pending-recovery-form > label { display: grid; gap: 6px; color: #d7c99f; font-size: .76rem; }
+.pending-recovery-form input { width: 100%; box-sizing: border-box; border: 1px solid #45516b; border-radius: 9px; padding: 9px 10px; color: #edf2ff; background: #0c1220; }
+.pending-recovery-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; min-width: 0; margin: 0; padding: 10px; border: 1px solid #303b51; border-radius: 11px; }
+.pending-recovery-row legend { max-width: 100%; padding: 0 5px; color: #aebbd3; font-size: .72rem; overflow-wrap: anywhere; }
+.pending-recovery-row label { display: grid; gap: 5px; color: #9dacbf; font-size: .72rem; }
+.pending-recovery-status { min-height: 1.2em; margin: 0; color: #d8e4fb; font-size: .76rem; line-height: 1.45; }
 .downloader-heading { gap: 18px; }
 .downloader-heading h2 { margin-bottom: 0; }
 .downloader-heading-actions { display: flex; gap: 9px; }
