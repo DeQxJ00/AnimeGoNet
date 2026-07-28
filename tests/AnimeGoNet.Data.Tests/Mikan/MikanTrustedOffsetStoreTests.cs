@@ -59,6 +59,28 @@ public sealed class MikanTrustedOffsetStoreTests
     }
 
     [Fact]
+    public async Task NewEpisodeWithConflictingSignatureImmediatelyRevokesAndRestartsLearning()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new MikanTrustedOffsetStore(fixture.Database);
+        for (var episode = 1; episode <= 3; episode++)
+        {
+            await store.ObserveAsync(Observation(episode, 13), DateTimeOffset.UtcNow.AddMinutes(episode));
+        }
+
+        var revoked = Assert.IsType<MikanTrustedOffset>(await store.ObserveAsync(
+            Observation(4, 12),
+            DateTimeOffset.UtcNow.AddMinutes(4)));
+
+        Assert.False(revoked.IsTrusted);
+        Assert.Null(await store.GetTrustedAsync(3951, 7));
+        var state = Assert.Single(await store.ListAsync(3951, 7));
+        Assert.Equal("conflict_reset", state.State);
+        Assert.Equal(1, state.DistinctEpisodeCount);
+        Assert.Equal(12, state.EpisodeOffset);
+    }
+
+    [Fact]
     public async Task DisabledCacheAndUnsafeEpisodeResultsAlwaysFallBack()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
@@ -77,7 +99,7 @@ public sealed class MikanTrustedOffsetStoreTests
     }
 
     [Fact]
-    public async Task TwoCompetingTrustedGroupsAreRejectedAsAmbiguous()
+    public async Task ThreeNewConsistentEpisodesAfterConflictCanBecomeTrustedAgain()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
         var store = new MikanTrustedOffsetStore(fixture.Database);
@@ -91,8 +113,12 @@ public sealed class MikanTrustedOffsetStoreTests
             await store.ObserveAsync(Observation(episode, 12), DateTimeOffset.UtcNow.AddMinutes(episode));
         }
 
-        Assert.Null(await store.GetTrustedAsync(3951, 7));
-        Assert.Null(await store.TryResolveEpisodeAsync(3951, 7, 7, enabled: true));
+        var trusted = Assert.IsType<MikanTrustedOffset>(await store.GetTrustedAsync(3951, 7));
+        Assert.True(trusted.IsTrusted);
+        Assert.Equal(12, trusted.EpisodeOffset);
+        var resolved = Assert.IsType<MikanTrustedEpisodeResolution>(
+            await store.TryResolveEpisodeAsync(3951, 7, 7, enabled: true));
+        Assert.Equal(19, resolved.TmdbEpisodeNumber);
     }
 
     private static MikanOffsetEvidenceObservation Observation(int sourceEpisode, int offset) =>

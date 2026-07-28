@@ -236,6 +236,20 @@ public sealed record MikanWorkRuleResponse(
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MikanTrustedOffsetListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanTrustedOffsetItemResponse> Items);
+
+public sealed record MikanTrustedOffsetItemResponse(
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("episode_offset")] int EpisodeOffset,
+    [property: JsonPropertyName("distinct_episode_count")] int DistinctEpisodeCount,
+    [property: JsonPropertyName("required_episode_count")] int RequiredEpisodeCount,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
 public sealed record MetadataRetryResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("status")] string Status);

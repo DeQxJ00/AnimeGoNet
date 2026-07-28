@@ -55,6 +55,10 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}", GetMikanWorkRule);
         app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
         app.MapDelete("/api/v1/mikan/work-rules/{mikanId:int}", DeleteMikanWorkRule);
+        app.MapGet("/api/v1/mikan/trusted-offsets", ListMikanTrustedOffsets);
+        app.MapDelete(
+            "/api/v1/mikan/trusted-offsets/{mikanId:int}/{groupId:int}",
+            ClearMikanTrustedOffset);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapPost("/api/v1/ingest", Ingest);
@@ -1270,6 +1274,53 @@ public static class ApiEndpoints
         catch (ArgumentException exception)
         {
             return TypedResults.BadRequest(Error("mikan_rule_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> ListMikanTrustedOffsets(
+        [FromQuery(Name = "mikanid")] int? mikanId,
+        [FromQuery(Name = "groupid")] int? groupId,
+        MikanTrustedOffsetStore offsets,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var values = await offsets.ListAsync(mikanId, groupId, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new MikanTrustedOffsetListResponse(
+                values.Select(value => new MikanTrustedOffsetItemResponse(
+                    value.MikanId,
+                    value.GroupId,
+                    value.TmdbSeriesId,
+                    value.TmdbSeasonNumber,
+                    value.EpisodeOffset,
+                    value.DistinctEpisodeCount,
+                    MikanTrustedOffsetStore.RequiredDistinctEpisodes,
+                    value.State,
+                    value.UpdatedAtUtc)).ToArray()));
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_offset_key_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> ClearMikanTrustedOffset(
+        int mikanId,
+        int groupId,
+        MikanTrustedOffsetStore offsets,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await offsets.ClearAsync(mikanId, groupId, cancellationToken).ConfigureAwait(false)
+                ? TypedResults.NoContent()
+                : TypedResults.NotFound(Error(
+                    "mikan_offset_not_found",
+                    "Mikan trusted offset evidence was not found."));
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_offset_key_invalid", exception.Message));
         }
     }
 

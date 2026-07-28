@@ -146,17 +146,6 @@ async function loadConfiguration() {
                     + `EP ${enabledLabel(config.metadata.ai.use_episode_match)} · `
                     + `${config.metadata.ai.http_timeout_seconds} 秒`,
             ],
-            [
-                "AI Provider",
-                `${config.metadata.ai.provider} · `
-                    + `${config.metadata.ai.model || "未配置模型"} · `
-                    + `${config.metadata.ai.api_key_configured ? "密钥已配置（值已隐藏）" : "未配置密钥"}`,
-            ],
-            [
-                "AI 工具",
-                `TMDB MCP ${config.metadata.ai.tmdb_mcp_url} · `
-                    + `Bangumi MCP ${config.metadata.ai.bangumi_mcp_url}`,
-            ],
             ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
             [
                 "Torrent HTTP",
@@ -366,6 +355,69 @@ async function loadDownloads() {
         failed.className = "muted empty";
         failed.textContent = `下载状态读取失败：${errorMessage(error, "未知错误")}`;
         container.replaceChildren(failed);
+    }
+}
+async function loadTrustedOffsets() {
+    const container = element("#trusted-offsets");
+    try {
+        const response = await fetch("/api/v1/mikan/trusted-offsets", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        if (body.items.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "muted empty";
+            empty.textContent = "暂无自动 offset 学习证据";
+            container.replaceChildren(empty);
+            return;
+        }
+        container.replaceChildren(...body.items.map((item) => {
+            const card = document.createElement("article");
+            card.className = "offset-card";
+            const summary = document.createElement("div");
+            const heading = document.createElement("div");
+            heading.className = "download-heading";
+            const title = document.createElement("strong");
+            title.textContent = `Mikan ${item.mikanid} · Group ${item.groupid}`;
+            const state = document.createElement("span");
+            state.className = `badge ${item.state}`;
+            state.textContent = item.state === "trusted"
+                ? "Trusted"
+                : item.state === "conflict_reset" ? "Conflict reset" : "Learning";
+            heading.append(title, state);
+            const details = document.createElement("p");
+            details.className = "muted";
+            const signedOffset = item.episode_offset >= 0
+                ? `+${item.episode_offset}` : `${item.episode_offset}`;
+            details.textContent = `TMDB ${item.tmdb_series_id} · S${String(item.tmdb_season_number).padStart(2, "0")} · offset ${signedOffset} · ${item.distinct_episode_count}/${item.required_episode_count}`;
+            summary.append(heading, details);
+            const clear = document.createElement("button");
+            clear.type = "button";
+            clear.className = "delete-button";
+            clear.textContent = "清理自动缓存";
+            clear.addEventListener("click", () => void clearTrustedOffset(item));
+            card.append(summary, clear);
+            return card;
+        }));
+    }
+    catch (error) {
+        const failed = document.createElement("p");
+        failed.className = "muted empty";
+        failed.textContent = `可信 offset 读取失败：${errorMessage(error, "未知错误")}`;
+        container.replaceChildren(failed);
+    }
+}
+async function clearTrustedOffset(item) {
+    if (!window.confirm(`清理 Mikan ${item.mikanid} / Group ${item.groupid} 的自动证据与缓存？人工规则、完成记录和媒体文件不会删除。`))
+        return;
+    try {
+        const response = await fetch(`/api/v1/mikan/trusted-offsets/${item.mikanid}/${item.groupid}`, { method: "DELETE", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        await loadTrustedOffsets();
+    }
+    catch (error) {
+        window.alert(`清理失败：${errorMessage(error, "未知错误")}`);
     }
 }
 function selectedDeleteInput(flag) {
@@ -1179,6 +1231,7 @@ async function previewRssRules() {
     }
 }
 element("#rss-reload").addEventListener("click", () => void loadRssRules());
+element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsets());
 element("#configuration-reload").addEventListener("click", () => void loadConfiguration());
 element("#configuration-edit").addEventListener("click", openConfigurationEditor);
 element("#configuration-reset").addEventListener("click", () => void resetConfiguration());
@@ -1217,5 +1270,6 @@ void loadMetadataTasks();
 void loadDownloaders();
 void loadSources();
 void loadRssRules();
+void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);

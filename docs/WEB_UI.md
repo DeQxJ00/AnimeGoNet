@@ -77,6 +77,8 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例，尚未实现的筛选、策略尝试时间线、作品 CRUD、Cover 和 TMDB EP 网格仍按 TODO 独立验收。
 
+可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同 EP 进度。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
+
 ## 8. 当前生效配置投影
 
 首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、TMDB 端点与语言、季度失败链、AI 两个独立开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。

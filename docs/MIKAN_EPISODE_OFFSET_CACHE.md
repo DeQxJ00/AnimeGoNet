@@ -109,6 +109,8 @@ SQLite 必须以 `(mikanid, groupid, file_episode_candidate)` 建立证据唯一
 
 删除缓存只删除自动证据/状态，不删除下载完成记录、人工规则或媒体文件。API Key、passkey、Torrent URL、announce 和 Cookie 不得进入证据表或日志。
 
+管理端点为 `GET /api/v1/mikan/trusted-offsets`（支持可选 `mikanid/groupid` 正整数过滤）以及 `DELETE /api/v1/mikan/trusted-offsets/{mikanid}/{groupid}`。列表按候选签名显示 `Learning/Trusted/ConflictReset`、当前不同 EP 数和固定门槛 `3`；删除在一个 SQLite 事务内仅清理目标键的 `mikan_offset_evidence` 与 `mikan_trusted_offsets`。静态 WebUI 使用同一端点展示进度，删除前明确提示不会影响人工规则、完成记录和媒体文件。
+
 ## 9. 验收重点
 
 1. 所有来源的 AI Prompt、请求和响应都没有文件名候选或偏移字段。

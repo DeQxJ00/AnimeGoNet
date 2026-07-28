@@ -107,6 +107,18 @@ interface MetadataItem {
   pending_file_count: number;
 }
 
+interface MikanTrustedOffsetItem {
+  mikanid: number;
+  groupid: number;
+  tmdb_series_id: number;
+  tmdb_season_number: number;
+  episode_offset: number;
+  distinct_episode_count: number;
+  required_episode_count: number;
+  state: "learning" | "trusted" | "conflict_reset";
+  updated_at_utc: string;
+}
+
 interface DeleteTarget {
   display_value: string;
 }
@@ -651,6 +663,72 @@ async function loadDownloads(): Promise<void> {
     failed.className = "muted empty";
     failed.textContent = `下载状态读取失败：${errorMessage(error, "未知错误")}`;
     container.replaceChildren(failed);
+  }
+}
+
+async function loadTrustedOffsets(): Promise<void> {
+  const container = element<HTMLElement>("#trusted-offsets");
+  try {
+    const response = await fetch("/api/v1/mikan/trusted-offsets", { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as { items: MikanTrustedOffsetItem[] };
+    if (body.items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted empty";
+      empty.textContent = "暂无自动 offset 学习证据";
+      container.replaceChildren(empty);
+      return;
+    }
+
+    container.replaceChildren(...body.items.map((item) => {
+      const card = document.createElement("article");
+      card.className = "offset-card";
+      const summary = document.createElement("div");
+      const heading = document.createElement("div");
+      heading.className = "download-heading";
+      const title = document.createElement("strong");
+      title.textContent = `Mikan ${item.mikanid} · Group ${item.groupid}`;
+      const state = document.createElement("span");
+      state.className = `badge ${item.state}`;
+      state.textContent = item.state === "trusted"
+        ? "Trusted"
+        : item.state === "conflict_reset" ? "Conflict reset" : "Learning";
+      heading.append(title, state);
+      const details = document.createElement("p");
+      details.className = "muted";
+      const signedOffset = item.episode_offset >= 0
+        ? `+${item.episode_offset}` : `${item.episode_offset}`;
+      details.textContent = `TMDB ${item.tmdb_series_id} · S${String(item.tmdb_season_number).padStart(2, "0")} · offset ${signedOffset} · ${item.distinct_episode_count}/${item.required_episode_count}`;
+      summary.append(heading, details);
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "delete-button";
+      clear.textContent = "清理自动缓存";
+      clear.addEventListener("click", () => void clearTrustedOffset(item));
+      card.append(summary, clear);
+      return card;
+    }));
+  } catch (error) {
+    const failed = document.createElement("p");
+    failed.className = "muted empty";
+    failed.textContent = `可信 offset 读取失败：${errorMessage(error, "未知错误")}`;
+    container.replaceChildren(failed);
+  }
+}
+
+async function clearTrustedOffset(item: MikanTrustedOffsetItem): Promise<void> {
+  if (!window.confirm(
+    `清理 Mikan ${item.mikanid} / Group ${item.groupid} 的自动证据与缓存？人工规则、完成记录和媒体文件不会删除。`,
+  )) return;
+  try {
+    const response = await fetch(
+      `/api/v1/mikan/trusted-offsets/${item.mikanid}/${item.groupid}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadTrustedOffsets();
+  } catch (error) {
+    window.alert(`清理失败：${errorMessage(error, "未知错误")}`);
   }
 }
 
@@ -1480,6 +1558,10 @@ async function previewRssRules(): Promise<void> {
 }
 
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());
+element<HTMLButtonElement>("#trusted-offsets-reload").addEventListener(
+  "click",
+  () => void loadTrustedOffsets(),
+);
 element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => void loadConfiguration());
 element<HTMLButtonElement>("#configuration-edit").addEventListener("click", openConfigurationEditor);
 element<HTMLButtonElement>("#configuration-reset").addEventListener("click", () => void resetConfiguration());
@@ -1528,5 +1610,6 @@ void loadMetadataTasks();
 void loadDownloaders();
 void loadSources();
 void loadRssRules();
+void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);

@@ -28,13 +28,17 @@
   observations, follows the normal AI/TMDB validation path for source EP4→EP17,
   and promotes the signature to Trusted with `3/3` evidence.
 - Existing store tests continue to cover duplicate source EP suppression, positive,
-  zero and negative offsets, conflict revocation, ambiguous signatures and the
-  disabled switch.
+  zero and negative offsets, immediate conflict revocation, evidence reset,
+  three-new-sample re-trust and the disabled switch.
+- `MikanTrustedOffsetApiTests` verifies filtered Learning/Trusted progress, fixed
+  `3/3` threshold projection, exact-key cleanup, invalid-key errors, preservation
+  of the same work's manual rule, and the static WebUI management contract.
 
 ## Commands
 
 ```powershell
 dotnet test tests/AnimeGoNet.App.Tests/AnimeGoNet.App.Tests.csproj --no-restore --filter FullyQualifiedName~AutomaticMetadataResolutionProcessorTests
+dotnet test tests/AnimeGoNet.App.Tests/AnimeGoNet.App.Tests.csproj --no-restore --filter FullyQualifiedName~MikanTrustedOffsetApiTests
 dotnet test AnimeGoNet.slnx --no-restore
 dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj -c Release -r win-x64 --self-contained true /p:PublishAot=true --no-restore
 ```
@@ -42,6 +46,7 @@ dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj -c Release -r win-x64 --
 ## Result
 
 - Automatic metadata processor target: 16 passed.
-- Full solution: 504 passed (`Core 199`, `Data 74`, `App 231`), 0 failed,
+- Offset API/WebUI target: 3 passed.
+- Full solution: 508 passed (`Core 199`, `Data 75`, `App 234`), 0 failed,
   0 skipped.
 - `win-x64` NativeAOT publish: passed with no warnings or errors.

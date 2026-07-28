@@ -18,6 +18,53 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         var now = Format(utcNow);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var previous = await ReadAsync(
+            connection,
+            transaction,
+            observation.MikanId,
+            observation.GroupId,
+            trustedOnly: false,
+            cancellationToken).ConfigureAwait(false);
+        var trustedConflict = previous?.IsTrusted == true
+            && (previous.TmdbSeriesId != observation.TmdbSeriesId
+                || previous.TmdbSeasonNumber != observation.TmdbSeasonNumber
+                || previous.EpisodeOffset != observation.EpisodeOffset);
+        var signatureConflict = false;
+        await using (var conflict = connection.CreateCommand())
+        {
+            conflict.Transaction = transaction;
+            conflict.CommandText = """
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM mikan_offset_evidence
+                    WHERE mikanid = $mikanid AND groupid = $groupid
+                      AND (tmdb_series_id != $tmdb_series_id
+                        OR tmdb_season_number != $tmdb_season_number
+                        OR episode_offset != $episode_offset));
+                """;
+            conflict.Parameters.AddWithValue("$mikanid", observation.MikanId);
+            conflict.Parameters.AddWithValue("$groupid", observation.GroupId);
+            conflict.Parameters.AddWithValue("$tmdb_series_id", observation.TmdbSeriesId);
+            conflict.Parameters.AddWithValue("$tmdb_season_number", observation.TmdbSeasonNumber);
+            conflict.Parameters.AddWithValue("$episode_offset", observation.EpisodeOffset);
+            signatureConflict = Convert.ToInt32(
+                await conflict.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                CultureInfo.InvariantCulture) == 1;
+        }
+
+        if (signatureConflict)
+        {
+            await using var reset = connection.CreateCommand();
+            reset.Transaction = transaction;
+            reset.CommandText = """
+                DELETE FROM mikan_offset_evidence
+                WHERE mikanid = $mikanid AND groupid = $groupid;
+                """;
+            reset.Parameters.AddWithValue("$mikanid", observation.MikanId);
+            reset.Parameters.AddWithValue("$groupid", observation.GroupId);
+            await reset.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await using (var upsert = connection.CreateCommand())
         {
             upsert.Transaction = transaction;
@@ -72,7 +119,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             }
         }
 
-        if (candidates.Count == 1)
+        if (candidates.Count == 1 && !trustedConflict)
         {
             var candidate = candidates[0];
             await using var trust = connection.CreateCommand();
@@ -141,6 +188,113 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             groupId,
             trustedOnly: true,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<MikanOffsetCandidateState>> ListAsync(
+        int? mikanId = null,
+        int? groupId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (mikanId is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(mikanId.Value, 1);
+        }
+
+        if (groupId is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(groupId.Value, 1);
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT evidence.mikanid, evidence.groupid, evidence.tmdb_series_id,
+                   evidence.tmdb_season_number, evidence.episode_offset,
+                   COUNT(DISTINCT evidence.source_episode),
+                   CASE
+                     WHEN trusted.state = 'trusted'
+                      AND trusted.tmdb_series_id = evidence.tmdb_series_id
+                      AND trusted.tmdb_season_number = evidence.tmdb_season_number
+                      AND trusted.episode_offset = evidence.episode_offset
+                       THEN 'trusted'
+                     WHEN trusted.state = 'revoked' THEN 'conflict_reset'
+                     ELSE 'learning'
+                   END,
+                   MAX(evidence.observed_at_utc)
+            FROM mikan_offset_evidence AS evidence
+            LEFT JOIN mikan_trusted_offsets AS trusted
+              ON trusted.mikanid = evidence.mikanid
+             AND trusted.groupid = evidence.groupid
+            WHERE ($mikanid IS NULL OR evidence.mikanid = $mikanid)
+              AND ($groupid IS NULL OR evidence.groupid = $groupid)
+            GROUP BY evidence.mikanid, evidence.groupid, evidence.tmdb_series_id,
+                     evidence.tmdb_season_number, evidence.episode_offset,
+                     trusted.state, trusted.tmdb_series_id,
+                     trusted.tmdb_season_number, trusted.episode_offset
+            ORDER BY evidence.mikanid, evidence.groupid,
+                     COUNT(DISTINCT evidence.source_episode) DESC,
+                     evidence.tmdb_series_id, evidence.tmdb_season_number,
+                     evidence.episode_offset;
+            """;
+        command.Parameters.AddWithValue("$mikanid", (object?)mikanId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$groupid", (object?)groupId ?? DBNull.Value);
+        var result = new List<MikanOffsetCandidateState>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add(new MikanOffsetCandidateState(
+                reader.GetInt32(0),
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4),
+                reader.GetInt32(5),
+                reader.GetString(6),
+                DateTimeOffset.Parse(
+                    reader.GetString(7),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind)));
+        }
+
+        return result;
+    }
+
+    public async Task<bool> ClearAsync(
+        int mikanId,
+        int groupId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateKey(mikanId, groupId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var affected = 0;
+        await using (var evidence = connection.CreateCommand())
+        {
+            evidence.Transaction = transaction;
+            evidence.CommandText = """
+                DELETE FROM mikan_offset_evidence
+                WHERE mikanid = $mikanid AND groupid = $groupid;
+                """;
+            evidence.Parameters.AddWithValue("$mikanid", mikanId);
+            evidence.Parameters.AddWithValue("$groupid", groupId);
+            affected += await evidence.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var trusted = connection.CreateCommand())
+        {
+            trusted.Transaction = transaction;
+            trusted.CommandText = """
+                DELETE FROM mikan_trusted_offsets
+                WHERE mikanid = $mikanid AND groupid = $groupid;
+                """;
+            trusted.Parameters.AddWithValue("$mikanid", mikanId);
+            trusted.Parameters.AddWithValue("$groupid", groupId);
+            affected += await trusted.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return affected > 0;
     }
 
     public async Task<MikanTrustedEpisodeResolution?> TryResolveEpisodeAsync(

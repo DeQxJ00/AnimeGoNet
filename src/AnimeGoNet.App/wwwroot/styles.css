@@ -55,6 +55,12 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-secret-state { margin: -5px 0 2px; color: #8da2c9; font-size: .75rem; }
 .downloads { display: grid; gap: 12px; }
 .download-card { border: 1px solid #315f58; border-radius: 18px; padding: 18px 20px; background: rgba(16,22,37,.88); }
+.offset-list { display: grid; gap: 12px; }
+.offset-card { border: 1px solid #344260; border-radius: 16px; padding: 16px 18px; background: rgba(16,22,37,.88); display: flex; justify-content: space-between; gap: 18px; align-items: center; }
+.offset-card p { margin: 5px 0 0; }
+.offset-card .badge.learning { border-color: #7c6835; color: #ffe09a; }
+.offset-card .badge.conflict_reset { border-color: #813f49; color: #ffb4b4; }
+@media (max-width: 720px) { .offset-card { align-items: stretch; flex-direction: column; } }
 .download-card.stale { border-color: #813f49; }
 .download-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .download-heading strong { overflow-wrap: anywhere; }

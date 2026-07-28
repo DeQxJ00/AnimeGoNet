@@ -26,3 +26,13 @@ public sealed record MikanTrustedEpisodeResolution(
     int SourceEpisode,
     int TmdbEpisodeNumber,
     int EpisodeOffset);
+
+public sealed record MikanOffsetCandidateState(
+    int MikanId,
+    int GroupId,
+    int TmdbSeriesId,
+    int TmdbSeasonNumber,
+    int EpisodeOffset,
+    int DistinctEpisodeCount,
+    string State,
+    DateTimeOffset UpdatedAtUtc);

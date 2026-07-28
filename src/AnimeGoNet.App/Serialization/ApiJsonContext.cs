@@ -25,6 +25,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(DownloadListResponse))]
 [JsonSerializable(typeof(MikanWorkRuleRequest))]
 [JsonSerializable(typeof(MikanWorkRuleResponse))]
+[JsonSerializable(typeof(MikanTrustedOffsetListResponse))]
 [JsonSerializable(typeof(MetadataRetryResponse))]
 [JsonSerializable(typeof(MetadataTaskListResponse))]
 [JsonSerializable(typeof(ApiErrorResponse))]
