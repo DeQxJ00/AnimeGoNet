@@ -81,8 +81,15 @@ public sealed class AnimeGoOptionsValidatorTests
                 Tmdb = defaults.Metadata.Tmdb with
                 {
                     BaseUrl = new Uri("ftp://tmdb.invalid/"),
+                    ProxyUrl = new Uri("https://user:secret@proxy.invalid/"),
                     HttpTimeout = TimeSpan.Zero,
                     Language = " ",
+                },
+                Bangumi = defaults.Metadata.Bangumi with
+                {
+                    BaseUrl = new Uri("https://bangumi.invalid/no-trailing-slash"),
+                    ProxyUrl = new Uri("https://proxy.invalid/path"),
+                    HttpTimeout = TimeSpan.Zero,
                 },
             },
         };
@@ -90,8 +97,36 @@ public sealed class AnimeGoOptionsValidatorTests
         var errors = AnimeGoOptionsValidator.Validate(options);
 
         Assert.Contains(errors, error => error.Contains("TMDB base URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TMDB proxy URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB HTTP timeout", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB language", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Bangumi base URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Bangumi proxy URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Bangumi HTTP timeout", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptsPrefixedMetadataApisAndIndependentProxySchemes()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Tmdb = defaults.Metadata.Tmdb with
+                {
+                    BaseUrl = new Uri("https://metadata.invalid/tmdb/"),
+                    ProxyUrl = new Uri("http://127.0.0.1:7890/"),
+                },
+                Bangumi = defaults.Metadata.Bangumi with
+                {
+                    BaseUrl = new Uri("https://metadata.invalid/bangumi/"),
+                    ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
+                },
+            },
+        };
+
+        Assert.Empty(AnimeGoOptionsValidator.Validate(options));
     }
 
     [Fact]

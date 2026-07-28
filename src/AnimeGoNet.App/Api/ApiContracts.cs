@@ -77,10 +77,14 @@ public sealed record ConfigurationResponse(
 
 public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("tmdb_base_url")] string TmdbBaseUrl,
+    [property: JsonPropertyName("tmdb_proxy_url")] string? TmdbProxyUrl,
     [property: JsonPropertyName("tmdb_language")] string TmdbLanguage,
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_api_key_state")] string TmdbApiKeyState,
     [property: JsonPropertyName("tmdb_read_access_token_state")] string TmdbReadAccessTokenState,
+    [property: JsonPropertyName("bangumi_base_url")] string BangumiBaseUrl,
+    [property: JsonPropertyName("bangumi_proxy_url")] string? BangumiProxyUrl,
+    [property: JsonPropertyName("bangumi_http_timeout_seconds")] double BangumiHttpTimeoutSeconds,
     [property: JsonPropertyName("season_failure_skip")] bool SeasonFailureSkip,
     [property: JsonPropertyName("season_failure_backtrace")] bool SeasonFailureBacktrace,
     [property: JsonPropertyName("season_failure_use_title_season")] bool SeasonFailureUseTitleSeason,
@@ -97,12 +101,16 @@ public sealed record EditableConfigurationResponse(
 
 public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,
+    [property: JsonPropertyName("tmdb_proxy_url")] string? TmdbProxyUrl,
     [property: JsonPropertyName("tmdb_language")] string? TmdbLanguage,
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_api_key")] string? TmdbApiKey,
     [property: JsonPropertyName("clear_tmdb_api_key")] bool ClearTmdbApiKey,
     [property: JsonPropertyName("tmdb_read_access_token")] string? TmdbReadAccessToken,
     [property: JsonPropertyName("clear_tmdb_read_access_token")] bool ClearTmdbReadAccessToken,
+    [property: JsonPropertyName("bangumi_base_url")] string? BangumiBaseUrl,
+    [property: JsonPropertyName("bangumi_proxy_url")] string? BangumiProxyUrl,
+    [property: JsonPropertyName("bangumi_http_timeout_seconds")] double BangumiHttpTimeoutSeconds,
     [property: JsonPropertyName("season_failure_skip")] bool SeasonFailureSkip,
     [property: JsonPropertyName("season_failure_backtrace")] bool SeasonFailureBacktrace,
     [property: JsonPropertyName("season_failure_use_title_season")] bool SeasonFailureUseTitleSeason,
@@ -131,6 +139,7 @@ public sealed record DeploymentConfigurationResponse(
 
 public sealed record MetadataConfigurationResponse(
     [property: JsonPropertyName("tmdb")] TmdbConfigurationResponse Tmdb,
+    [property: JsonPropertyName("bangumi")] BangumiConfigurationResponse Bangumi,
     [property: JsonPropertyName("season_failure")] SeasonFailureConfigurationResponse SeasonFailure,
     [property: JsonPropertyName("ai")] AiConfigurationResponse Ai,
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
@@ -138,10 +147,16 @@ public sealed record MetadataConfigurationResponse(
 
 public sealed record TmdbConfigurationResponse(
     [property: JsonPropertyName("base_url")] string BaseUrl,
+    [property: JsonPropertyName("proxy_url")] string? ProxyUrl,
     [property: JsonPropertyName("language")] string Language,
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
     [property: JsonPropertyName("api_key_configured")] bool ApiKeyConfigured,
     [property: JsonPropertyName("read_access_token_configured")] bool ReadAccessTokenConfigured);
+
+public sealed record BangumiConfigurationResponse(
+    [property: JsonPropertyName("base_url")] string BaseUrl,
+    [property: JsonPropertyName("proxy_url")] string? ProxyUrl,
+    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds);
 
 public sealed record SeasonFailureConfigurationResponse(
     [property: JsonPropertyName("skip")] bool Skip,

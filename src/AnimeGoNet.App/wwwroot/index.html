@@ -257,7 +257,8 @@
       </div>
       <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；所有修改均在重启后生效。</p>
       <div class="configuration-form-grid">
-        <label class="wide">TMDB Base URL<input id="configuration-tmdb-url" type="url" required></label>
+        <label class="wide">TMDB API 地址<input id="configuration-tmdb-url" type="url" required placeholder="https://api.themoviedb.org/"></label>
+        <label class="wide">TMDB 代理（可选）<input id="configuration-tmdb-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>TMDB 语言<input id="configuration-tmdb-language" required maxlength="32"></label>
         <label>TMDB 超时（秒）<input id="configuration-tmdb-timeout" type="number" min="1" max="86400" required></label>
         <label>新 TMDB API Key<input id="configuration-tmdb-key" type="password" autocomplete="new-password"></label>
@@ -266,6 +267,9 @@
         <label>新 TMDB Read Token<input id="configuration-tmdb-token" type="password" autocomplete="new-password"></label>
         <label class="configuration-clear"><input id="configuration-tmdb-token-clear" type="checkbox">明确清除 Read Token</label>
         <p id="configuration-tmdb-token-state" class="configuration-secret-state wide"></p>
+        <label class="wide">Bangumi API 地址<input id="configuration-bangumi-url" type="url" required placeholder="https://api.bgm.tv/"></label>
+        <label class="wide">Bangumi 代理（可选）<input id="configuration-bangumi-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
+        <label>Bangumi 超时（秒）<input id="configuration-bangumi-timeout" type="number" min="1" max="86400" required></label>
         <fieldset class="wide">
           <legend>季度失败链</legend>
           <label><input id="configuration-fail-skip" type="checkbox">TMDBFailSkip</label>

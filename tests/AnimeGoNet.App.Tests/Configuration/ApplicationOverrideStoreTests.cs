@@ -1,6 +1,7 @@
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 
 namespace AnimeGoNet.App.Tests.Configuration;
 
@@ -67,16 +68,104 @@ public sealed class ApplicationOverrideStoreTests
             var deployment = app.Services.GetRequiredService<DeploymentConfigurationOptions>();
 
             Assert.Equal(new Uri("https://tmdb.test.invalid/"), effective.Metadata.Tmdb.BaseUrl);
+            Assert.Equal(new Uri("http://127.0.0.1:7890/"), effective.Metadata.Tmdb.ProxyUrl);
             Assert.Equal("en-US", effective.Metadata.Tmdb.Language);
             Assert.Equal("private-api-key", effective.Metadata.Tmdb.ApiKey);
             Assert.Equal("private-read-token", effective.Metadata.Tmdb.ReadAccessToken);
             Assert.True(effective.Metadata.SeasonFailure.Backtrace);
             Assert.True(effective.Metadata.Ai.UseEpisodeMatch);
             Assert.Equal(TimeSpan.FromSeconds(600), effective.Metadata.Ai.HttpTimeout);
+            Assert.Equal(
+                new Uri("https://bangumi.test.invalid/api/"),
+                effective.Metadata.Bangumi.BaseUrl);
+            Assert.Equal(
+                new Uri("socks5://127.0.0.1:1080/"),
+                effective.Metadata.Bangumi.ProxyUrl);
+            Assert.Equal(TimeSpan.FromSeconds(45), effective.Metadata.Bangumi.HttpTimeout);
             Assert.Equal(2, effective.TorrentFetch.MaxRedirects);
             Assert.Equal(1, runtime.AppliedRevision);
             Assert.Equal("zh-CN", deployment.Value.Metadata.Tmdb.Language);
             Assert.Null(deployment.Value.Metadata.Tmdb.ApiKey);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LegacyFormatOneFileInheritsNewTransportFields()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-application-overrides",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var legacy = JsonSerializer.Serialize(new
+            {
+                format_version = 1,
+                revision = 3,
+                settings = new
+                {
+                    tmdb_base_url = "https://legacy-tmdb.invalid/",
+                    tmdb_language = "zh-CN",
+                    tmdb_http_timeout_seconds = 30,
+                    tmdb_api_key_overridden = false,
+                    tmdb_api_key = (string?)null,
+                    tmdb_read_access_token_overridden = false,
+                    tmdb_read_access_token = (string?)null,
+                    season_failure_skip = false,
+                    season_failure_backtrace = false,
+                    season_failure_use_title_season = false,
+                    season_failure_use_first_season = false,
+                    ai_use_season_match = false,
+                    ai_use_episode_match = false,
+                    ai_http_timeout_seconds = 600,
+                    tmdb_failure_use_bangumi = false,
+                    mikan_trusted_offset_cache_enabled = false,
+                    torrent_http_timeout_seconds = 30,
+                    torrent_max_response_bytes = 16 * 1024 * 1024,
+                    torrent_max_redirects = 3,
+                    torrent_staging_ttl_seconds = 900,
+                    updated_at_utc = "2026-07-26T12:00:00Z",
+                },
+            });
+            await File.WriteAllTextAsync(
+                Path.Combine(root, "application.private.json"),
+                legacy);
+            using var store = new ApplicationOverrideStore(root);
+            var snapshot = await store.LoadAsync();
+            var defaults = AnimeGoDefaults.CreateNative(root);
+            defaults = defaults with
+            {
+                Metadata = defaults.Metadata with
+                {
+                    Tmdb = defaults.Metadata.Tmdb with
+                    {
+                        ProxyUrl = new Uri("http://127.0.0.1:7890/"),
+                    },
+                    Bangumi = defaults.Metadata.Bangumi with
+                    {
+                        BaseUrl = new Uri("https://deployment-bangumi.invalid/"),
+                        ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
+                    },
+                },
+            };
+
+            var applied = ApplicationOverrideStore.Apply(defaults, snapshot);
+
+            Assert.Equal(3, snapshot.Revision);
+            Assert.Equal(
+                new Uri("http://127.0.0.1:7890/"),
+                applied.Metadata.Tmdb.ProxyUrl);
+            Assert.Equal(
+                new Uri("https://deployment-bangumi.invalid/"),
+                applied.Metadata.Bangumi.BaseUrl);
+            Assert.Equal(
+                new Uri("socks5://127.0.0.1:1080/"),
+                applied.Metadata.Bangumi.ProxyUrl);
         }
         finally
         {
@@ -107,5 +196,11 @@ public sealed class ApplicationOverrideStoreTests
         900,
         DateTimeOffset.Parse(
             "2026-07-26T12:00:00Z",
-            System.Globalization.CultureInfo.InvariantCulture));
+            System.Globalization.CultureInfo.InvariantCulture),
+        TmdbProxyUrlOverridden: true,
+        TmdbProxyUrl: "http://127.0.0.1:7890/",
+        BangumiBaseUrl: "https://bangumi.test.invalid/api/",
+        BangumiProxyUrlOverridden: true,
+        BangumiProxyUrl: "socks5://127.0.0.1:1080/",
+        BangumiHttpTimeoutSeconds: 45);
 }

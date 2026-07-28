@@ -25,7 +25,13 @@ public sealed record ApplicationOverrideEntry(
     long TorrentMaxResponseBytes,
     int TorrentMaxRedirects,
     double TorrentStagingTtlSeconds,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    bool? TmdbProxyUrlOverridden = null,
+    string? TmdbProxyUrl = null,
+    string? BangumiBaseUrl = null,
+    bool? BangumiProxyUrlOverridden = null,
+    string? BangumiProxyUrl = null,
+    double? BangumiHttpTimeoutSeconds = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -141,6 +147,15 @@ public sealed class ApplicationOverrideStore : IDisposable
         {
             throw new InvalidOperationException("Application private configuration has an invalid TMDB base URL.");
         }
+        var tmdbProxyUrl = settings.TmdbProxyUrlOverridden == true
+            ? ParseOptionalUri(settings.TmdbProxyUrl, "TMDB proxy URL")
+            : options.Metadata.Tmdb.ProxyUrl;
+        var bangumiBaseUrl = settings.BangumiBaseUrl is null
+            ? options.Metadata.Bangumi.BaseUrl
+            : ParseRequiredUri(settings.BangumiBaseUrl, "Bangumi base URL");
+        var bangumiProxyUrl = settings.BangumiProxyUrlOverridden == true
+            ? ParseOptionalUri(settings.BangumiProxyUrl, "Bangumi proxy URL")
+            : options.Metadata.Bangumi.ProxyUrl;
 
         return options with
         {
@@ -149,6 +164,7 @@ public sealed class ApplicationOverrideStore : IDisposable
                 Tmdb = options.Metadata.Tmdb with
                 {
                     BaseUrl = tmdbBaseUrl,
+                    ProxyUrl = tmdbProxyUrl,
                     Language = settings.TmdbLanguage,
                     HttpTimeout = TimeSpan.FromSeconds(settings.TmdbHttpTimeoutSeconds),
                     ApiKey = settings.TmdbApiKeyOverridden
@@ -157,6 +173,14 @@ public sealed class ApplicationOverrideStore : IDisposable
                     ReadAccessToken = settings.TmdbReadAccessTokenOverridden
                         ? settings.TmdbReadAccessToken
                         : options.Metadata.Tmdb.ReadAccessToken,
+                },
+                Bangumi = options.Metadata.Bangumi with
+                {
+                    BaseUrl = bangumiBaseUrl,
+                    ProxyUrl = bangumiProxyUrl,
+                    HttpTimeout = settings.BangumiHttpTimeoutSeconds is > 0
+                        ? TimeSpan.FromSeconds(settings.BangumiHttpTimeoutSeconds.Value)
+                        : options.Metadata.Bangumi.HttpTimeout,
                 },
                 SeasonFailure = new SeasonFailureOptions
                 {
@@ -183,6 +207,15 @@ public sealed class ApplicationOverrideStore : IDisposable
             },
         };
     }
+
+    private static Uri ParseRequiredUri(string value, string name) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            ? uri
+            : throw new InvalidOperationException(
+                $"Application private configuration has an invalid {name}.");
+
+    private static Uri? ParseOptionalUri(string? value, string name) =>
+        string.IsNullOrWhiteSpace(value) ? null : ParseRequiredUri(value, name);
 
     private async Task<ApplicationOverrideSnapshot> LoadCoreAsync(
         CancellationToken cancellationToken)

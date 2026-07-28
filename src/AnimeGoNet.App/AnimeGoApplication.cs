@@ -169,7 +169,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<SafeFileDeleter>();
         builder.Services.AddSingleton<DeleteExecutionProcessor>();
         tmdbClient ??= new TmdbClient(
-            new HttpClient(),
+            MetadataHttpClientFactory.Create(options.Metadata.Tmdb.ProxyUrl),
             options.Metadata.Tmdb,
             ownsHttpClient: true);
         builder.Services.AddSingleton(tmdbClient);
@@ -177,7 +177,10 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<TmdbSeriesResolver>();
         if (bangumiSubjectClient is null)
         {
-            var client = new BangumiSubjectClient(new HttpClient(), ownsHttpClient: true);
+            var client = new BangumiSubjectClient(
+                MetadataHttpClientFactory.Create(options.Metadata.Bangumi.ProxyUrl),
+                options.Metadata.Bangumi,
+                ownsHttpClient: true);
             bangumiSubjectClient = client;
             bangumiEpisodeClient ??= client;
         }
@@ -263,8 +266,33 @@ public static class AnimeGoApplication
             {
                 Tmdb = defaults.Metadata.Tmdb with
                 {
+                    BaseUrl = ParseOptionalAbsoluteUri(
+                        configuration["tmdb_base_url"],
+                        "tmdb_base_url") ?? defaults.Metadata.Tmdb.BaseUrl,
+                    ProxyUrl = ParseOptionalAbsoluteUri(
+                        configuration["tmdb_proxy_url"],
+                        "tmdb_proxy_url"),
                     ApiKey = configuration["tmdb_api_key"],
                     ReadAccessToken = configuration["tmdb_read_access_token"],
+                    Language = NormalizeOptional(configuration["tmdb_language"])
+                        ?? defaults.Metadata.Tmdb.Language,
+                    HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
+                        configuration["tmdb_timeout_second"],
+                        defaults.Metadata.Tmdb.HttpTimeout.TotalSeconds,
+                        "tmdb_timeout_second")),
+                },
+                Bangumi = defaults.Metadata.Bangumi with
+                {
+                    BaseUrl = ParseOptionalAbsoluteUri(
+                        configuration["bangumi_base_url"],
+                        "bangumi_base_url") ?? defaults.Metadata.Bangumi.BaseUrl,
+                    ProxyUrl = ParseOptionalAbsoluteUri(
+                        configuration["bangumi_proxy_url"],
+                        "bangumi_proxy_url"),
+                    HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
+                        configuration["bangumi_timeout_second"],
+                        defaults.Metadata.Bangumi.HttpTimeout.TotalSeconds,
+                        "bangumi_timeout_second")),
                 },
                 Ai = defaults.Metadata.Ai with
                 {

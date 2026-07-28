@@ -20,9 +20,17 @@ public sealed class ConfigurationApiTests
                 {
                     Tmdb = options.Metadata.Tmdb with
                     {
+                        BaseUrl = new Uri("https://metadata.test.invalid/tmdb/"),
+                        ProxyUrl = new Uri("http://127.0.0.1:7890/"),
                         ApiKey = "tmdb-api-secret",
                         ReadAccessToken = "tmdb-bearer-secret",
                         Language = "ja-JP",
+                    },
+                    Bangumi = options.Metadata.Bangumi with
+                    {
+                        BaseUrl = new Uri("https://metadata.test.invalid/bangumi/"),
+                        ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
+                        HttpTimeout = TimeSpan.FromSeconds(45),
                     },
                     SeasonFailure = new SeasonFailureOptions
                     {
@@ -70,8 +78,20 @@ public sealed class ConfigurationApiTests
         var metadata = json.RootElement.GetProperty("metadata");
         var tmdb = metadata.GetProperty("tmdb");
         Assert.Equal("ja-JP", tmdb.GetProperty("language").GetString());
+        Assert.Equal(
+            "https://metadata.test.invalid/tmdb/",
+            tmdb.GetProperty("base_url").GetString());
+        Assert.Equal("http://127.0.0.1:7890/", tmdb.GetProperty("proxy_url").GetString());
         Assert.True(tmdb.GetProperty("api_key_configured").GetBoolean());
         Assert.True(tmdb.GetProperty("read_access_token_configured").GetBoolean());
+        var bangumi = metadata.GetProperty("bangumi");
+        Assert.Equal(
+            "https://metadata.test.invalid/bangumi/",
+            bangumi.GetProperty("base_url").GetString());
+        Assert.Equal(
+            "socks5://127.0.0.1:1080/",
+            bangumi.GetProperty("proxy_url").GetString());
+        Assert.Equal(45, bangumi.GetProperty("http_timeout_seconds").GetDouble());
         Assert.True(metadata.GetProperty("season_failure").GetProperty("skip").GetBoolean());
         Assert.True(metadata.GetProperty("ai").GetProperty("use_season_match").GetBoolean());
         Assert.False(metadata.GetProperty("ai").GetProperty("use_episode_match").GetBoolean());
@@ -115,6 +135,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-bangumi-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-bangumi-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
         Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
@@ -130,7 +154,10 @@ public sealed class ConfigurationApiTests
             Payload(
                 expectedRevision: 0,
                 apiKey: "new-api-secret",
-                readToken: "new-read-secret"));
+                readToken: "new-read-secret",
+                tmdbProxy: "http://127.0.0.1:7890/",
+                bangumiBase: "https://metadata.test.invalid/bangumi/",
+                bangumiProxy: "socks5://127.0.0.1:1080/"));
         var firstText = await first.Content.ReadAsStringAsync();
         using var firstJson = JsonDocument.Parse(firstText);
 
@@ -159,10 +186,20 @@ public sealed class ConfigurationApiTests
         var saved = await store.LoadAsync();
         Assert.Equal("new-api-secret", saved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", saved.Settings?.TmdbReadAccessToken);
+        Assert.Equal("http://127.0.0.1:7890/", saved.Settings?.TmdbProxyUrl);
+        Assert.Equal(
+            "https://metadata.test.invalid/bangumi/",
+            saved.Settings?.BangumiBaseUrl);
+        Assert.Equal("socks5://127.0.0.1:1080/", saved.Settings?.BangumiProxyUrl);
 
         using var preserve = await app.Client.PutAsync(
             "/api/v1/config",
-            Payload(expectedRevision: 1, aiEpisode: true));
+            Payload(
+                expectedRevision: 1,
+                aiEpisode: true,
+                tmdbProxy: "http://127.0.0.1:7890/",
+                bangumiBase: "https://metadata.test.invalid/bangumi/",
+                bangumiProxy: "socks5://127.0.0.1:1080/"));
         Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
         var preserved = await store.LoadAsync();
         Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
@@ -173,11 +210,20 @@ public sealed class ConfigurationApiTests
         {
             Assert.True(desired.RootElement.GetProperty("editable")
                 .GetProperty("ai_use_episode_match").GetBoolean());
+            Assert.Equal(
+                "https://metadata.test.invalid/bangumi/",
+                desired.RootElement.GetProperty("editable")
+                    .GetProperty("bangumi_base_url").GetString());
         }
 
         using var clear = await app.Client.PutAsync(
             "/api/v1/config",
-            Payload(expectedRevision: 2, clearApiKey: true));
+            Payload(
+                expectedRevision: 2,
+                clearApiKey: true,
+                tmdbProxy: "http://127.0.0.1:7890/",
+                bangumiBase: "https://metadata.test.invalid/bangumi/",
+                bangumiProxy: "socks5://127.0.0.1:1080/"));
         Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
         var cleared = await store.LoadAsync();
         Assert.True(cleared.Settings?.TmdbApiKeyOverridden);
@@ -233,9 +279,21 @@ public sealed class ConfigurationApiTests
                 expectedRevision: 0,
                 apiKey: "must-not-be-written",
                 clearApiKey: true));
+        using var credentialProxy = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                tmdbProxy: "http://user:password@proxy.invalid/"));
+        using var invalidBangumiBase = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                bangumiBase: "https://api.bgm.tv/no-trailing-slash"));
 
         Assert.Equal(HttpStatusCode.BadRequest, credentialUrl.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, conflictingSecret.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, credentialProxy.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidBangumiBase.StatusCode);
         var snapshot = await app.App.Services
             .GetRequiredService<ApplicationOverrideStore>()
             .LoadAsync();
@@ -254,17 +312,24 @@ public sealed class ConfigurationApiTests
         string? readToken = null,
         bool clearApiKey = false,
         bool aiEpisode = false,
-        string baseUrl = "https://api.themoviedb.org/")
+        string baseUrl = "https://api.themoviedb.org/",
+        string? tmdbProxy = null,
+        string bangumiBase = "https://api.bgm.tv/",
+        string? bangumiProxy = null)
     {
         var json = JsonSerializer.Serialize(new
         {
             tmdb_base_url = baseUrl,
+            tmdb_proxy_url = tmdbProxy,
             tmdb_language = "zh-CN",
             tmdb_http_timeout_seconds = 30,
             tmdb_api_key = apiKey,
             clear_tmdb_api_key = clearApiKey,
             tmdb_read_access_token = readToken,
             clear_tmdb_read_access_token = false,
+            bangumi_base_url = bangumiBase,
+            bangumi_proxy_url = bangumiProxy,
+            bangumi_http_timeout_seconds = 30,
             season_failure_skip = false,
             season_failure_backtrace = true,
             season_failure_use_title_season = true,

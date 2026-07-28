@@ -24,10 +24,16 @@ interface RuntimeConfiguration {
   metadata: {
     tmdb: {
       base_url: string;
+      proxy_url: string | null;
       language: string;
       http_timeout_seconds: number;
       api_key_configured: boolean;
       read_access_token_configured: boolean;
+    };
+    bangumi: {
+      base_url: string;
+      proxy_url: string | null;
+      http_timeout_seconds: number;
     };
     season_failure: {
       skip: boolean;
@@ -51,10 +57,14 @@ interface RuntimeConfiguration {
   };
   editable: {
     tmdb_base_url: string;
+    tmdb_proxy_url: string | null;
     tmdb_language: string;
     tmdb_http_timeout_seconds: number;
     tmdb_api_key_state: "inherit" | "configured" | "cleared";
     tmdb_read_access_token_state: "inherit" | "configured" | "cleared";
+    bangumi_base_url: string;
+    bangumi_proxy_url: string | null;
+    bangumi_http_timeout_seconds: number;
     season_failure_skip: boolean;
     season_failure_backtrace: boolean;
     season_failure_use_title_season: boolean;
@@ -483,7 +493,11 @@ async function loadConfiguration(): Promise<void> {
       configurationCard("TMDB 与季度失败链", [
         ["TMDB", tmdbCredential ? "凭据已配置（值已隐藏）" : "未配置凭据"],
         ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
+        ["TMDB 代理", config.metadata.tmdb.proxy_url ?? "直连（未配置）"],
         ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
+        ["Bangumi API", config.metadata.bangumi.base_url],
+        ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
+        ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
         [
           "失败优先级",
           `Skip ${enabledLabel(config.metadata.season_failure.skip)} · `
@@ -552,6 +566,7 @@ function openConfigurationEditor(): void {
   if (!currentConfiguration) return;
   const editable = currentConfiguration.editable;
   setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
+  setConfigurationValue("#configuration-tmdb-proxy", editable.tmdb_proxy_url ?? "");
   setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
   setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
   setConfigurationValue("#configuration-tmdb-key", "");
@@ -562,6 +577,12 @@ function openConfigurationEditor(): void {
   setConfigurationChecked("#configuration-tmdb-token-clear", false);
   element<HTMLElement>("#configuration-tmdb-token-state").textContent =
     configurationSecretLabel(editable.tmdb_read_access_token_state);
+  setConfigurationValue("#configuration-bangumi-url", editable.bangumi_base_url);
+  setConfigurationValue("#configuration-bangumi-proxy", editable.bangumi_proxy_url ?? "");
+  setConfigurationValue(
+    "#configuration-bangumi-timeout",
+    editable.bangumi_http_timeout_seconds,
+  );
   setConfigurationChecked("#configuration-fail-skip", editable.season_failure_skip);
   setConfigurationChecked("#configuration-fail-backtrace", editable.season_failure_backtrace);
   setConfigurationChecked("#configuration-fail-title", editable.season_failure_use_title_season);
@@ -596,6 +617,8 @@ async function saveConfiguration(event: SubmitEvent): Promise<void> {
       headers: requestHeaders,
       body: JSON.stringify({
         tmdb_base_url: element<HTMLInputElement>("#configuration-tmdb-url").value,
+        tmdb_proxy_url:
+          element<HTMLInputElement>("#configuration-tmdb-proxy").value || null,
         tmdb_language: element<HTMLInputElement>("#configuration-tmdb-language").value,
         tmdb_http_timeout_seconds:
           element<HTMLInputElement>("#configuration-tmdb-timeout").valueAsNumber,
@@ -606,6 +629,12 @@ async function saveConfiguration(event: SubmitEvent): Promise<void> {
           element<HTMLInputElement>("#configuration-tmdb-token").value || null,
         clear_tmdb_read_access_token:
           element<HTMLInputElement>("#configuration-tmdb-token-clear").checked,
+        bangumi_base_url:
+          element<HTMLInputElement>("#configuration-bangumi-url").value,
+        bangumi_proxy_url:
+          element<HTMLInputElement>("#configuration-bangumi-proxy").value || null,
+        bangumi_http_timeout_seconds:
+          element<HTMLInputElement>("#configuration-bangumi-timeout").valueAsNumber,
         season_failure_skip:
           element<HTMLInputElement>("#configuration-fail-skip").checked,
         season_failure_backtrace:

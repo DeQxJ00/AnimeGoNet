@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using AnimeGoNet.App.Metadata;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Tests.Metadata;
@@ -20,7 +21,12 @@ public sealed class BangumiSubjectClientTests
               "total_episodes": 13
             }
             """));
-        using var client = new BangumiSubjectClient(new HttpClient(handler));
+        using var client = new BangumiSubjectClient(
+            new HttpClient(handler),
+            new BangumiClientOptions
+            {
+                BaseUrl = new Uri("https://bangumi.test.invalid/api/"),
+            });
 
         var subject = Assert.IsType<BangumiSubject>(await client.GetSubjectAsync(371546));
 
@@ -28,7 +34,9 @@ public sealed class BangumiSubjectClientTests
         Assert.Equal("欢迎来到实力至上主义教室 第二季", subject.ChineseName);
         Assert.Equal(new DateOnly(2022, 7, 4), subject.AirDate);
         Assert.Equal(13, subject.EpisodeCount);
-        Assert.Equal("https://api.bgm.tv/v0/subjects/371546", handler.RequestUri?.AbsoluteUri);
+        Assert.Equal(
+            "https://bangumi.test.invalid/api/v0/subjects/371546",
+            handler.RequestUri?.AbsoluteUri);
         Assert.Contains("AnimeGoNet/0.1", handler.UserAgent ?? string.Empty, StringComparison.Ordinal);
     }
 
@@ -144,6 +152,23 @@ public sealed class BangumiSubjectClientTests
         Assert.Equal("bangumi_episode_page_invalid", exception.SafeCode);
     }
 
+    [Fact]
+    public async Task RequestTimeoutUsesConfiguredBangumiTransportLimit()
+    {
+        using var client = new BangumiSubjectClient(
+            new HttpClient(new NeverCompletesHandler()),
+            new BangumiClientOptions
+            {
+                HttpTimeout = TimeSpan.FromMilliseconds(30),
+            });
+
+        var exception = await Assert.ThrowsAsync<BangumiClientException>(
+            () => client.GetSubjectAsync(1));
+
+        Assert.Equal(MetadataFailureKind.Network, exception.Kind);
+        Assert.Equal("bangumi_timeout", exception.SafeCode);
+    }
+
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
@@ -165,6 +190,18 @@ public sealed class BangumiSubjectClientTests
             RequestUris.Add(request.RequestUri!);
             UserAgent = request.Headers.UserAgent.ToString();
             return Task.FromResult(response(request));
+        }
+    }
+
+    private sealed class NeverCompletesHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            _ = request;
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
         }
     }
 }

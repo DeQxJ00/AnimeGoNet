@@ -2,23 +2,32 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Metadata;
 
 public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisodeClient, IDisposable
 {
-    private static readonly Uri BaseUrl = new("https://api.bgm.tv/");
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
     private const int EpisodePageSize = 200;
     private const int MaximumEpisodes = 10_000;
     private readonly HttpClient _httpClient;
+    private readonly BangumiClientOptions _options;
     private readonly bool _ownsHttpClient;
 
     public BangumiSubjectClient(HttpClient httpClient, bool ownsHttpClient = false)
+        : this(httpClient, new BangumiClientOptions(), ownsHttpClient)
+    {
+    }
+
+    public BangumiSubjectClient(
+        HttpClient httpClient,
+        BangumiClientOptions options,
+        bool ownsHttpClient = false)
     {
         _httpClient = httpClient;
         _httpClient.Timeout = Timeout.InfiniteTimeSpan;
+        _options = options;
         _ownsHttpClient = ownsHttpClient;
     }
 
@@ -31,12 +40,14 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
             throw Failure(MetadataFailureKind.InvalidInput, "bangumi_subject_id_invalid");
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(BaseUrl, $"v0/subjects/{subjectId}"));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri(_options.BaseUrl, $"v0/subjects/{subjectId}"));
         request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(RequestTimeout);
+            timeout.CancelAfter(_options.HttpTimeout);
             using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -89,12 +100,12 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
 
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            new Uri(BaseUrl, $"v0/subjects/{subjectId}/subjects"));
+            new Uri(_options.BaseUrl, $"v0/subjects/{subjectId}/subjects"));
         request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(RequestTimeout);
+            timeout.CancelAfter(_options.HttpTimeout);
             using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -152,13 +163,13 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(RequestTimeout);
+            timeout.CancelAfter(_options.HttpTimeout);
             while (true)
             {
                 using var request = new HttpRequestMessage(
                     HttpMethod.Get,
                     new Uri(
-                        BaseUrl,
+                        _options.BaseUrl,
                         $"v0/episodes?subject_id={subjectId}&type=0&limit={EpisodePageSize}&offset={offset}"));
                 request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
                 using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);

@@ -57,6 +57,7 @@ public static class AnimeGoDefaults
             Metadata = new MetadataMatchingOptions
             {
                 Tmdb = new TmdbClientOptions(),
+                Bangumi = new BangumiClientOptions(),
                 SeasonFailure = new SeasonFailureOptions(),
                 Ai = new AiMatchingOptions
                 {

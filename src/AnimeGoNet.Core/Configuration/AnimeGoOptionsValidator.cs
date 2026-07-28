@@ -138,14 +138,15 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AniDB mapping URL template must be an absolute HTTP(S) URL containing '{anidbid}'.");
         }
 
-        if (!options.Metadata.Tmdb.BaseUrl.IsAbsoluteUri
-            || options.Metadata.Tmdb.BaseUrl.Scheme is not ("http" or "https")
-            || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.UserInfo)
-            || options.Metadata.Tmdb.BaseUrl.AbsolutePath != "/"
-            || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.Query)
-            || !string.IsNullOrEmpty(options.Metadata.Tmdb.BaseUrl.Fragment))
+        if (!IsMetadataApiBaseUrl(options.Metadata.Tmdb.BaseUrl))
         {
-            errors.Add("TMDB base URL must be an absolute HTTP(S) origin without credentials, query or fragment.");
+            errors.Add("TMDB base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
+        }
+
+        if (options.Metadata.Tmdb.ProxyUrl is not null
+            && !IsMetadataProxyUrl(options.Metadata.Tmdb.ProxyUrl))
+        {
+            errors.Add("TMDB proxy URL must be an absolute HTTP(S) or SOCKS5 origin without credentials, query or fragment.");
         }
 
         if (options.Metadata.Tmdb.HttpTimeout <= TimeSpan.Zero)
@@ -156,6 +157,22 @@ public static partial class AnimeGoOptionsValidator
         if (string.IsNullOrWhiteSpace(options.Metadata.Tmdb.Language))
         {
             errors.Add("TMDB language must not be empty.");
+        }
+
+        if (!IsMetadataApiBaseUrl(options.Metadata.Bangumi.BaseUrl))
+        {
+            errors.Add("Bangumi base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
+        }
+
+        if (options.Metadata.Bangumi.ProxyUrl is not null
+            && !IsMetadataProxyUrl(options.Metadata.Bangumi.ProxyUrl))
+        {
+            errors.Add("Bangumi proxy URL must be an absolute HTTP(S) or SOCKS5 origin without credentials, query or fragment.");
+        }
+
+        if (options.Metadata.Bangumi.HttpTimeout <= TimeSpan.Zero)
+        {
+            errors.Add("Bangumi HTTP timeout must be positive.");
         }
 
         if (options.TorrentFetch.Timeout <= TimeSpan.Zero)
@@ -210,6 +227,19 @@ public static partial class AnimeGoOptionsValidator
         uri.IsAbsoluteUri
         && uri.Scheme is "http" or "https"
         && string.IsNullOrEmpty(uri.UserInfo)
+        && string.IsNullOrEmpty(uri.Fragment);
+
+    private static bool IsMetadataApiBaseUrl(Uri uri) =>
+        IsHttpEndpoint(uri)
+        && uri.AbsolutePath.EndsWith('/')
+        && string.IsNullOrEmpty(uri.Query);
+
+    private static bool IsMetadataProxyUrl(Uri uri) =>
+        uri.IsAbsoluteUri
+        && uri.Scheme is "http" or "https" or "socks5"
+        && string.IsNullOrEmpty(uri.UserInfo)
+        && uri.AbsolutePath == "/"
+        && string.IsNullOrEmpty(uri.Query)
         && string.IsNullOrEmpty(uri.Fragment);
 
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]*$")]

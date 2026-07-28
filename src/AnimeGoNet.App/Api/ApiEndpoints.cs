@@ -439,6 +439,7 @@ public static class ApiEndpoints
         long appliedConfigurationRevision)
     {
         var tmdb = options.Metadata.Tmdb;
+        var bangumi = options.Metadata.Bangumi;
         var season = options.Metadata.SeasonFailure;
         var ai = options.Metadata.Ai;
         var fetch = options.TorrentFetch;
@@ -458,10 +459,15 @@ public static class ApiEndpoints
             new MetadataConfigurationResponse(
                 new TmdbConfigurationResponse(
                     tmdb.BaseUrl.AbsoluteUri,
+                    tmdb.ProxyUrl?.AbsoluteUri,
                     tmdb.Language,
                     tmdb.HttpTimeout.TotalSeconds,
                     !string.IsNullOrWhiteSpace(tmdb.ApiKey),
                     !string.IsNullOrWhiteSpace(tmdb.ReadAccessToken)),
+                new BangumiConfigurationResponse(
+                    bangumi.BaseUrl.AbsoluteUri,
+                    bangumi.ProxyUrl?.AbsoluteUri,
+                    bangumi.HttpTimeout.TotalSeconds),
                 new SeasonFailureConfigurationResponse(
                     season.Skip,
                     season.Backtrace,
@@ -494,17 +500,22 @@ public static class ApiEndpoints
         ApplicationOverrideEntry? settings)
     {
         var tmdb = desired.Metadata.Tmdb;
+        var bangumi = desired.Metadata.Bangumi;
         var season = desired.Metadata.SeasonFailure;
         var ai = desired.Metadata.Ai;
         var fetch = desired.TorrentFetch;
         return new EditableConfigurationResponse(
             tmdb.BaseUrl.AbsoluteUri,
+            tmdb.ProxyUrl?.AbsoluteUri,
             tmdb.Language,
             tmdb.HttpTimeout.TotalSeconds,
             SecretState(settings?.TmdbApiKeyOverridden == true, settings?.TmdbApiKey),
             SecretState(
                 settings?.TmdbReadAccessTokenOverridden == true,
                 settings?.TmdbReadAccessToken),
+            bangumi.BaseUrl.AbsoluteUri,
+            bangumi.ProxyUrl?.AbsoluteUri,
+            bangumi.HttpTimeout.TotalSeconds,
             season.Skip,
             season.Backtrace,
             season.UseTitleSeason,
@@ -533,6 +544,8 @@ public static class ApiEndpoints
             ?? throw new ArgumentException("tmdb_base_url is required.");
         var language = request.TmdbLanguage?.Trim()
             ?? throw new ArgumentException("tmdb_language is required.");
+        var bangumiBaseUrl = request.BangumiBaseUrl?.Trim()
+            ?? throw new ArgumentException("bangumi_base_url is required.");
         if (baseUrl.Length is < 1 or > 2048)
         {
             throw new ArgumentException("tmdb_base_url must contain 1 to 2048 characters.");
@@ -542,6 +555,17 @@ public static class ApiEndpoints
         {
             throw new ArgumentException("tmdb_base_url must be an absolute URL.");
         }
+        var tmdbProxyUrl = NormalizeOptionalUrl(request.TmdbProxyUrl, "tmdb_proxy_url");
+
+        if (bangumiBaseUrl.Length is < 1 or > 2048
+            || !Uri.TryCreate(bangumiBaseUrl, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException(
+                "bangumi_base_url must contain an absolute URL of at most 2048 characters.");
+        }
+        var bangumiProxyUrl = NormalizeOptionalUrl(
+            request.BangumiProxyUrl,
+            "bangumi_proxy_url");
 
         if (language.Length is < 1 or > 32)
         {
@@ -549,6 +573,10 @@ public static class ApiEndpoints
         }
 
         ValidateSeconds(request.TmdbHttpTimeoutSeconds, "tmdb_http_timeout_seconds", 86_400);
+        ValidateSeconds(
+            request.BangumiHttpTimeoutSeconds,
+            "bangumi_http_timeout_seconds",
+            86_400);
         ValidateSeconds(request.AiHttpTimeoutSeconds, "ai_http_timeout_seconds", 86_400);
         ValidateSeconds(request.TorrentHttpTimeoutSeconds, "torrent_http_timeout_seconds", 86_400);
         ValidateSeconds(request.TorrentStagingTtlSeconds, "torrent_staging_ttl_seconds", 604_800);
@@ -594,7 +622,13 @@ public static class ApiEndpoints
             request.TorrentMaxResponseBytes,
             request.TorrentMaxRedirects,
             request.TorrentStagingTtlSeconds,
-            utcNow);
+            utcNow,
+            TmdbProxyUrlOverridden: true,
+            TmdbProxyUrl: tmdbProxyUrl,
+            BangumiBaseUrl: bangumiBaseUrl,
+            BangumiProxyUrlOverridden: true,
+            BangumiProxyUrl: bangumiProxyUrl,
+            BangumiHttpTimeoutSeconds: request.BangumiHttpTimeoutSeconds);
     }
 
     private static void ValidateSeconds(double value, string name, double maximum)
@@ -618,6 +652,22 @@ public static class ApiEndpoints
             throw new ArgumentException($"{name} is invalid.");
         }
 
+        return normalized;
+    }
+
+    private static string? NormalizeOptionalUrl(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 2048
+            || !Uri.TryCreate(normalized, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException($"{name} must be an absolute URL of at most 2048 characters.");
+        }
         return normalized;
     }
 

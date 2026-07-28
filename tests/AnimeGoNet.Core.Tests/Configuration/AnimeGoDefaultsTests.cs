@@ -40,9 +40,13 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(new Uri("http://tmdb.mcp.local/mcp"), options.Metadata.Ai.TmdbMcpUrl);
         Assert.Equal(new Uri("http://bgm.mcp.local/mcp"), options.Metadata.Ai.BangumiMcpUrl);
         Assert.Equal(new Uri("https://api.themoviedb.org/"), options.Metadata.Tmdb.BaseUrl);
+        Assert.Null(options.Metadata.Tmdb.ProxyUrl);
         Assert.Equal("zh-CN", options.Metadata.Tmdb.Language);
         Assert.Null(options.Metadata.Tmdb.ApiKey);
         Assert.Null(options.Metadata.Tmdb.ReadAccessToken);
+        Assert.Equal(new Uri("https://api.bgm.tv/"), options.Metadata.Bangumi.BaseUrl);
+        Assert.Null(options.Metadata.Bangumi.ProxyUrl);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Bangumi.HttpTimeout);
     }
 
     [Fact]
