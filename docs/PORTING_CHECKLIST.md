@@ -27,8 +27,8 @@
 | `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 进行中 | 严格v1 Bencode、原始info-hash、单/多文件与安全staging已验证；magnet和4个上游fixture parity待实现 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 已验证 | 5 MiB 有界 raw/file/可注入 URL 读取、首个 enclosure、缺失跳过、非法 length=0、Mikan pubDate 原文与带偏移规范值、稳定失败码与安全 XML tests 已通过；`/api/rss` 已接入 |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 进行中 | RSS source URL/channel link 的 path/query 正整数 mikanid cases，以及 Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid` 上游 fixture、容错与失败码已通过；安全抓取、缓存、持久化待实现 |
-| `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系 v0 AOT DTO、User-Agent、身份/日期校验、安全失败分类、前传稳定遍历与自动编排 fake tests 已通过；Episode 与缓存待实现 |
-| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy 与自动 Series/Season/Episode worker tests 已通过；cache/Bangumi Episode 确定性匹配待实现 |
+| `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选与自动编排 fake tests 已通过；SQLite cache 待实现 |
+| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选与自动 Series/Season/Episode worker tests 已通过；cache 待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
 | 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；真实双实例/container E2E待实现 |
 
@@ -45,7 +45,7 @@
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 进行中 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断与显式重试 tests 已通过；样例 EP 保存时预验证待实现 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 进行中 | 默认关闭、3 个不同 EP 建立信任与冲突撤销 tests 已通过；Episode 流水线应用待实现 |
 | TMDB 季度失败链 | Skip=4→Backtrace=3→Title=2→First=1 | 扩展 | 进行中 | Skip 早停、前传多层/多候选/缺日期/防环/错误降级、Title 优先于 First、日期直接命中 timeline tests 已通过；关系网络重试与 live fixture 待实现 |
-| AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP、TMDB 二次验证、季度 AI 与后置 EP-AI 已完成；Mikan pubDate 内部证据已持久化，候选预计算和跨季度包状态待实现） | fake AI/MCP/TMDB 已覆盖 Skip→Backtrace→AI→Title→First、EP/字幕/Other、顺序/Season 0/重复目标/身份越界/429/认证/网络失败/人工规则抑制；后续 Bangumi pubDate 候选 + 跨季度 + NativeAOT 端到端 smoke |
+| AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP、TMDB 二次验证、季度 AI、后置 EP-AI、Mikan pubDate 内部证据及 Bangumi 普通 EP 候选门控已完成；跨季度包状态待实现） | fake AI/MCP/TMDB 已覆盖 Skip→Backtrace→AI→Title→First、EP/字幕/Other、顺序/Season 0/重复目标/身份越界/429/认证/网络失败、人工规则抑制、实际文件数、31 天日期窗口与通用 AI 降级；后续跨季度 + NativeAOT 端到端 smoke |
 | 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选，并在 Season 确认后持久化 Other 原因；实际整理路径待实现 |
 
 ## 存储与业务状态

@@ -53,6 +53,12 @@ public sealed record BangumiSubjectRelation(
     string ChineseName,
     string Relation);
 
+public sealed record BangumiEpisode(
+    int Id,
+    int Type,
+    decimal? EpisodeNumber,
+    DateOnly? AirDate);
+
 public sealed record TmdbCanonicalEpisode(
     TmdbSeries Series,
     TmdbSeason Season,
@@ -104,6 +110,13 @@ public interface IBangumiSubjectClient
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+        int subjectId,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IBangumiEpisodeClient
+{
+    Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
         int subjectId,
         CancellationToken cancellationToken = default);
 }

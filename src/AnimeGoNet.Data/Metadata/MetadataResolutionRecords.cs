@@ -13,7 +13,11 @@ public sealed record MetadataTaskClaim(
     string LeaseToken,
     int? AniDbAnimeId = null,
     string? ImdbTitleId = null,
-    IReadOnlyList<MetadataTaskFileProjection>? Files = null);
+    IReadOnlyList<MetadataTaskFileProjection>? Files = null,
+    string? SourceAdapter = null,
+    string? SourcePublishedAtRaw = null,
+    DateTimeOffset? SourcePublishedAt = null,
+    int TorrentFileCount = 0);
 
 public sealed record MetadataAttempt(
     string Stage,

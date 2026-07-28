@@ -2,6 +2,7 @@ using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
+using AnimeGoNet.Data.Mikan;
 
 namespace AnimeGoNet.App.Metadata;
 
@@ -13,6 +14,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
     ITmdbClient tmdb,
     IAiMetadataMatcher aiMatcher,
     AiMetadataResultValidator aiValidator,
+    AiPublicationEvidenceResolver publicationEvidence,
+    MikanWorkMetadataRuleStore rules,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
@@ -28,6 +31,14 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (claim is null)
         {
             return false;
+        }
+
+        var rule = claim.MikanId is null
+            ? null
+            : await rules.GetEnabledAsync(claim.MikanId.Value, cancellationToken).ConfigureAwait(false);
+        if (rule?.BangumiSubjectId is not null)
+        {
+            claim = claim with { BangumiSubjectId = rule.BangumiSubjectId };
         }
 
         BangumiSubject? subject = null;
@@ -220,6 +231,24 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return false;
         }
 
+        var publicationStarted = _timeProvider.GetTimestamp();
+        var publication = await publicationEvidence.ResolveAsync(
+            claim,
+            cancellationToken).ConfigureAwait(false);
+        if (publication.ShouldAudit)
+        {
+            await RecordAsync(
+                claim,
+                "season",
+                "ai_pubdate",
+                null,
+                publication.Result,
+                publication.ErrorCode,
+                publication.Retryable,
+                publicationStarted,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var input = new AiMetadataMatchInput(
             claim.Title,
             videos.Select(file => new AiMetadataFileInput(
@@ -228,10 +257,10 @@ public sealed class AutomaticMetadataResolutionProcessor(
             claim.BangumiSubjectId,
             claim.AniDbAnimeId,
             claim.ImdbTitleId,
-            claim.Files!.Count,
-            PublishedAt: null,
-            BangumiEpisodeCandidate: null,
-            UseBangumiPubDateFirst: false);
+            claim.TorrentFileCount,
+            publication.PublishedAt,
+            publication.BangumiEpisodeCandidate,
+            publication.UseBangumiPubDateFirst);
         AiMetadataMatchCandidate candidate;
         try
         {

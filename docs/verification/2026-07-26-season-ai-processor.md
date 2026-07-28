@@ -9,8 +9,8 @@
   Bangumi/AniDB/IMDb work IDs.
 - The AI request includes candidate videos only, while `torrent_file_count` includes
   every actual Torrent file.
-- Publication-date evidence remains disabled until its authoritative source fields
-  are persisted.
+- Authoritative Mikan publication evidence and the Bangumi Episode candidate are
+  now supplied by the separately verified `ai_pubdate` gate.
 - AI output is structurally checked and every Series/Season/Episode is verified by
   TMDB before the season transaction commits.
 - Same-season verified Episode/Other seeds are persisted atomically with the
@@ -35,7 +35,8 @@
 
 - Fake AI wins before Title/First, persists Episode 7 and completes through the
   Episode processor.
-- Fake AI receives `bgmid`/`anidbid`/`imdbid` and no publication-date evidence.
+- Fake AI receives `bgmid`/`anidbid`/`imdbid`; ordinary API ingest without trusted
+  RSS evidence keeps the publication gate false.
 - Fake configuration failure is audited and TitleSeason succeeds.
 - Skip suppresses all AI calls.
 - Known-season Other completes without a second AI call.

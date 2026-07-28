@@ -71,6 +71,79 @@ public sealed class BangumiSubjectClientTests
         Assert.Equal("https://api.bgm.tv/v0/subjects/371546/subjects", handler.RequestUri?.AbsoluteUri);
     }
 
+    [Fact]
+    public async Task EpisodeEndpointPaginatesOfficialContractWithoutReflection()
+    {
+        using var handler = new RecordingHandler(request =>
+            request.RequestUri!.Query.Contains("offset=0", StringComparison.Ordinal)
+                ? Json("""
+                    {
+                      "total": 2,
+                      "limit": 200,
+                      "offset": 0,
+                      "data": [{
+                        "id": 1001,
+                        "type": 0,
+                        "ep": 7,
+                        "airdate": "2026-07-22"
+                      }]
+                    }
+                    """)
+                : Json("""
+                    {
+                      "total": 2,
+                      "limit": 200,
+                      "offset": 1,
+                      "data": [{
+                        "id": 1002,
+                        "type": 0,
+                        "ep": 7.5,
+                        "airdate": ""
+                      }]
+                    }
+                    """));
+        using var client = new BangumiSubjectClient(new HttpClient(handler));
+
+        var episodes = await client.GetEpisodesAsync(547888);
+
+        Assert.Collection(
+            episodes,
+            first =>
+            {
+                Assert.Equal(1001, first.Id);
+                Assert.Equal(0, first.Type);
+                Assert.Equal(7, first.EpisodeNumber);
+                Assert.Equal(new DateOnly(2026, 7, 22), first.AirDate);
+            },
+            second =>
+            {
+                Assert.Equal(7.5m, second.EpisodeNumber);
+                Assert.Null(second.AirDate);
+            });
+        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.Equal(
+            "https://api.bgm.tv/v0/episodes?subject_id=547888&type=0&limit=200&offset=0",
+            handler.RequestUris[0].AbsoluteUri);
+        Assert.Equal(
+            "https://api.bgm.tv/v0/episodes?subject_id=547888&type=0&limit=200&offset=1",
+            handler.RequestUris[1].AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task EpisodeEndpointRejectsInvalidPaginationWithStableFailure()
+    {
+        using var handler = new RecordingHandler(_ => Json("""
+            { "total": 2, "limit": 200, "offset": 99, "data": [] }
+            """));
+        using var client = new BangumiSubjectClient(new HttpClient(handler));
+
+        var exception = await Assert.ThrowsAsync<BangumiClientException>(
+            () => client.GetEpisodesAsync(547888));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("bangumi_episode_page_invalid", exception.SafeCode);
+    }
+
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
@@ -80,6 +153,8 @@ public sealed class BangumiSubjectClientTests
     {
         public Uri? RequestUri { get; private set; }
 
+        public List<Uri> RequestUris { get; } = [];
+
         public string? UserAgent { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -87,6 +162,7 @@ public sealed class BangumiSubjectClientTests
             CancellationToken cancellationToken)
         {
             RequestUri = request.RequestUri;
+            RequestUris.Add(request.RequestUri!);
             UserAgent = request.Headers.UserAgent.ToString();
             return Task.FromResult(response(request));
         }

@@ -39,6 +39,7 @@ public static class AnimeGoApplication
         IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
         IBangumiSubjectClient? bangumiSubjectClient = null,
+        IBangumiEpisodeClient? bangumiEpisodeClient = null,
         IAiMetadataMatcher? aiMetadataMatcher = null,
         ITorrentDnsResolver? rssDnsResolver = null,
         ITorrentHttpTransport? rssHttpTransport = null,
@@ -168,9 +169,22 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(tmdbClient);
         builder.Services.AddSingleton<TmdbAuthority>();
         builder.Services.AddSingleton<TmdbSeriesResolver>();
-        bangumiSubjectClient ??= new BangumiSubjectClient(new HttpClient(), ownsHttpClient: true);
+        if (bangumiSubjectClient is null)
+        {
+            var client = new BangumiSubjectClient(new HttpClient(), ownsHttpClient: true);
+            bangumiSubjectClient = client;
+            bangumiEpisodeClient ??= client;
+        }
+        else
+        {
+            bangumiEpisodeClient ??= bangumiSubjectClient as IBangumiEpisodeClient;
+        }
+
         builder.Services.AddSingleton(bangumiSubjectClient);
         builder.Services.AddSingleton<BangumiSeasonBacktraceResolver>();
+        builder.Services.AddSingleton(new AiPublicationEvidenceResolver(
+            bangumiEpisodeClient,
+            options.Metadata.Ai));
         aiMetadataMatcher ??= new OpenAiCompatibleMetadataMatcher(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
             options.Metadata.Ai,

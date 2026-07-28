@@ -481,11 +481,65 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Equal("other", Assert.Single(await ReadFilesAsync(app, taskId)).Disposition);
     }
 
+    [Fact]
+    public async Task EpisodeAiUsesTrustedMikanPublicationEvidence()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number,
+                72517,
+                2,
+                number,
+                $"Episode {number}",
+                null),
+        };
+        var episodes = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(100, 0, 7, new DateOnly(2026, 7, 22)),
+        ]);
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                [new(input.Files[0].Name, true, 2, 7, null)],
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true,
+            bangumiEpisodeClient: episodes);
+        var taskId = await PrepareFilesAsync(app, ("Show unknown.mkv", null, null));
+        await SetTrustedPublicationEvidenceAsync(app, taskId);
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var request = Assert.Single(ai.Requests);
+        Assert.True(request.UseBangumiPubDateFirst);
+        Assert.Equal(7, request.BangumiEpisodeCandidate);
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)),
+            request.PublishedAt);
+        Assert.Equal([547888], episodes.SubjectIds);
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(7, file.EpisodeNumber);
+        Assert.Equal(
+            "matched",
+            await ReadLatestAttemptResultAsync(app, taskId, "ai_pubdate"));
+    }
+
     private static async Task<RunningApp> StartSeasonResolvedTaskAsync(
         FakeTmdbClient tmdb,
         int? episodeOffset,
         IAiMetadataMatcher? aiMatcher = null,
-        bool enableEpisodeAi = false)
+        bool enableEpisodeAi = false,
+        IBangumiEpisodeClient? bangumiEpisodeClient = null)
     {
         var app = await RunningApp.StartAsync(
             configure: options => options with
@@ -496,6 +550,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 },
             },
             tmdbClient: tmdb,
+            bangumiEpisodeClient: bangumiEpisodeClient,
             aiMetadataMatcher: aiMatcher);
         await app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>().SaveAsync(
             new MikanWorkMetadataRuleUpdate(3951, 547888, 72517, 2, episodeOffset),
@@ -574,6 +629,24 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         return taskId;
     }
 
+    private static async Task SetTrustedPublicationEvidenceAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE ingest_tasks
+            SET source_published_at_raw = '2026-07-22T12:34:56.123',
+                source_published_at = '2026-07-22T12:34:56.123+08:00'
+            WHERE id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
     private static async Task ResolveSeasonAsync(RunningApp app) =>
         Assert.True(await app.App.Services.GetRequiredService<ManualMetadataResolutionProcessor>().RunOnceAsync());
 
@@ -626,6 +699,28 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT attempt.error_code
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            WHERE run.task_id = $task_id AND attempt.strategy = $strategy
+            ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue("$strategy", strategy);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
+    private static async Task<string?> ReadLatestAttemptResultAsync(
+        RunningApp app,
+        string taskId,
+        string strategy)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT attempt.result
             FROM metadata_resolution_attempts AS attempt
             JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
             WHERE run.task_id = $task_id AND attempt.strategy = $strategy
@@ -773,6 +868,20 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             return Task.FromResult(
                 ResultFactory?.Invoke(input)
                 ?? new AiMetadataMatchCandidate(false, null, [], "not configured"));
+        }
+    }
+
+    private sealed class FakeBangumiEpisodeClient(
+        IReadOnlyList<BangumiEpisode> episodes) : IBangumiEpisodeClient
+    {
+        public List<int> SubjectIds { get; } = [];
+
+        public Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            SubjectIds.Add(subjectId);
+            return Task.FromResult(episodes);
         }
     }
 }

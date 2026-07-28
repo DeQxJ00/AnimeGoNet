@@ -328,6 +328,84 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task SeasonAiUsesTrustedMikanPublicationAndSharedRuleBangumiId()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            number => new TmdbEpisode(
+                9000 + number,
+                72517,
+                2,
+                number,
+                $"Episode {number}",
+                null));
+        var subject = new FakeBangumiClient(new BangumiSubject(
+            547888,
+            "Made in Abyss",
+            "来自深渊",
+            new DateOnly(2020, 1, 1),
+            12));
+        var episodes = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(100, 0, 6, new DateOnly(2026, 7, 15)),
+            new BangumiEpisode(101, 0, 7, new DateOnly(2026, 7, 22)),
+        ]);
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    2,
+                    7,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Ai = options.Metadata.Ai with
+                    {
+                        UseSeasonMatch = true,
+                        UseBangumiPubDateFirst = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: subject,
+            bangumiEpisodeClient: episodes,
+            aiMetadataMatcher: ai);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 Season 2 EP07");
+        await SetTrustedPublicationEvidenceAsync(
+            app,
+            taskId,
+            clearTaskBangumiId: true);
+        await app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>().SaveAsync(
+            new MikanWorkMetadataRuleUpdate(3951, 547888, null, null, null),
+            expectedRevision: 0,
+            DateTimeOffset.UtcNow);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var request = Assert.Single(ai.Requests);
+        Assert.True(request.UseBangumiPubDateFirst);
+        Assert.Equal(547888, request.BangumiSubjectId);
+        Assert.Equal(7, request.BangumiEpisodeCandidate);
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)),
+            request.PublishedAt);
+        Assert.Equal(1, request.TorrentFileCount);
+        Assert.Equal([547888], episodes.SubjectIds);
+        Assert.Contains("ai_pubdate", await ReadStrategiesAsync(app, taskId));
+    }
+
+    [Fact]
     public async Task SeasonAiConfigurationFailureIsAuditedThenTitleFallbackContinues()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
@@ -496,6 +574,30 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         return taskId;
     }
 
+    private static async Task SetTrustedPublicationEvidenceAsync(
+        RunningApp app,
+        string taskId,
+        bool clearTaskBangumiId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE ingest_tasks
+            SET source_published_at_raw = '2026-07-22T12:34:56.123',
+                source_published_at = '2026-07-22T12:34:56.123+08:00',
+                bangumi_subject_id = CASE
+                    WHEN $clear_bgmid = 1 THEN NULL
+                    ELSE bangumi_subject_id
+                END
+            WHERE id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue("$clear_bgmid", clearTaskBangumiId ? 1 : 0);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
     private static async Task<string[]> ReadStrategiesAsync(RunningApp app, string taskId)
     {
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
@@ -606,6 +708,20 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             int subjectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<BangumiSubjectRelation>>([]);
+    }
+
+    private sealed class FakeBangumiEpisodeClient(
+        IReadOnlyList<BangumiEpisode> episodes) : IBangumiEpisodeClient
+    {
+        public List<int> SubjectIds { get; } = [];
+
+        public Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            SubjectIds.Add(subjectId);
+            return Task.FromResult(episodes);
+        }
     }
 
     private sealed record TaskFileState(

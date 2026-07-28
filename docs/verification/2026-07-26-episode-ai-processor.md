@@ -9,8 +9,8 @@
   least one unmatched video.
 - The request contains the task title, all candidate video relative paths/sizes,
   actual Torrent file count, and optional `bgmid`/`anidbid`/`imdbid`.
-- Publication-date evidence remains disabled until the ingest task schema persists
-  the authoritative Mikan publication timestamp and Bangumi candidate.
+- Authoritative Mikan publication evidence and the Bangumi Episode candidate are
+  now supplied by the separately verified `ai_pubdate` gate.
 - AI output cannot change the confirmed TMDB Series, confirmed Season or any
   deterministically resolved Episode.
 - Every AI Series/Season/Episode candidate is re-read through `ITmdbClient`.

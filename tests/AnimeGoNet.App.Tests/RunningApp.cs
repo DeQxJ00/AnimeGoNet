@@ -33,6 +33,7 @@ public sealed class RunningApp : IAsyncDisposable
         IDownloadClientRegistry? downloadClientRegistry = null,
         ITmdbClient? tmdbClient = null,
         IBangumiSubjectClient? bangumiSubjectClient = null,
+        IBangumiEpisodeClient? bangumiEpisodeClient = null,
         IAiMetadataMatcher? aiMetadataMatcher = null,
         ITorrentDnsResolver? rssDnsResolver = null,
         ITorrentHttpTransport? rssHttpTransport = null)
@@ -50,6 +51,7 @@ public sealed class RunningApp : IAsyncDisposable
             downloadClientRegistry: downloadClientRegistry,
             tmdbClient: tmdbClient,
             bangumiSubjectClient: bangumiSubjectClient,
+            bangumiEpisodeClient: bangumiEpisodeClient,
             aiMetadataMatcher: aiMetadataMatcher,
             rssDnsResolver: rssDnsResolver,
             rssHttpTransport: rssHttpTransport,

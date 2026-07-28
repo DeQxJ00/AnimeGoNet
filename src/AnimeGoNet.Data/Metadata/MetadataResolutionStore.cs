@@ -61,6 +61,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         int? bangumiSubjectId = null;
         int? aniDbAnimeId = null;
         string? imdbTitleId = null;
+        string? sourceAdapter = null;
+        string? sourcePublishedAtRaw = null;
+        DateTimeOffset? sourcePublishedAt = null;
+        var torrentFileCount = 0;
         var tmdbSeriesId = 0;
         var tmdbSeasonNumber = 0;
         var seasonResolvedByAi = false;
@@ -70,6 +74,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             select.CommandText = """
                 SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id,
                        task.anidb_id, task.imdb_id,
+                       profile.adapter, task.source_published_at_raw, task.source_published_at,
+                       (SELECT COUNT(*) FROM task_files AS all_file WHERE all_file.task_id = task.id),
                        MIN(file.tmdb_series_id), MIN(file.tmdb_season_number),
                        EXISTS (
                          SELECT 1
@@ -79,6 +85,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                            AND attempt.strategy = 'ai_season'
                            AND attempt.result = 'matched')
                 FROM ingest_tasks AS task
+                JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
                 WHERE task.status = 'metadata_season_resolved'
                   AND file.tmdb_series_id IS NOT NULL
@@ -103,9 +110,15 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 bangumiSubjectId = reader.IsDBNull(4) ? null : reader.GetInt32(4);
                 aniDbAnimeId = reader.IsDBNull(5) ? null : reader.GetInt32(5);
                 imdbTitleId = reader.IsDBNull(6) ? null : reader.GetString(6);
-                tmdbSeriesId = reader.GetInt32(7);
-                tmdbSeasonNumber = reader.GetInt32(8);
-                seasonResolvedByAi = reader.GetInt64(9) == 1;
+                sourceAdapter = reader.GetString(7);
+                sourcePublishedAtRaw = reader.IsDBNull(8) ? null : reader.GetString(8);
+                sourcePublishedAt = reader.IsDBNull(9)
+                    ? null
+                    : ParseDateTimeOffset(reader.GetString(9));
+                torrentFileCount = reader.GetInt32(10);
+                tmdbSeriesId = reader.GetInt32(11);
+                tmdbSeasonNumber = reader.GetInt32(12);
+                seasonResolvedByAi = reader.GetInt64(13) == 1;
             }
         }
 
@@ -193,7 +206,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         return new MetadataEpisodeTaskClaim(
             new MetadataTaskClaim(
                 runId, taskId, title!, mikanId, groupId, bangumiSubjectId, attemptNumber, leaseToken,
-                aniDbAnimeId, imdbTitleId),
+                aniDbAnimeId, imdbTitleId, SourceAdapter: sourceAdapter,
+                SourcePublishedAtRaw: sourcePublishedAtRaw,
+                SourcePublishedAt: sourcePublishedAt,
+                TorrentFileCount: torrentFileCount),
             tmdbSeriesId,
             tmdbSeasonNumber,
             files,
@@ -248,13 +264,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         int? bangumiSubjectId = null;
         int? aniDbAnimeId = null;
         string? imdbTitleId = null;
+        string? sourceAdapter = null;
+        string? sourcePublishedAtRaw = null;
+        DateTimeOffset? sourcePublishedAt = null;
+        var torrentFileCount = 0;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
             select.CommandText = """
                 SELECT task.id, task.title, task.mikanid, task.groupid, task.bangumi_subject_id,
-                       task.anidb_id, task.imdb_id
+                       task.anidb_id, task.imdb_id,
+                       profile.adapter, task.source_published_at_raw, task.source_published_at,
+                       (SELECT COUNT(*) FROM task_files AS all_file WHERE all_file.task_id = task.id)
                 FROM ingest_tasks AS task
+                JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 WHERE task.status IN ('download_preparing', 'downloaded')
                   AND NOT EXISTS (
                     SELECT 1 FROM metadata_resolution_runs
@@ -286,6 +309,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 bangumiSubjectId = reader.IsDBNull(4) ? null : reader.GetInt32(4);
                 aniDbAnimeId = reader.IsDBNull(5) ? null : reader.GetInt32(5);
                 imdbTitleId = reader.IsDBNull(6) ? null : reader.GetString(6);
+                sourceAdapter = reader.GetString(7);
+                sourcePublishedAtRaw = reader.IsDBNull(8) ? null : reader.GetString(8);
+                sourcePublishedAt = reader.IsDBNull(9)
+                    ? null
+                    : ParseDateTimeOffset(reader.GetString(9));
+                torrentFileCount = reader.GetInt32(10);
             }
         }
 
@@ -376,7 +405,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             leaseToken,
             aniDbAnimeId,
             imdbTitleId,
-            files);
+            files,
+            sourceAdapter,
+            sourcePublishedAtRaw,
+            sourcePublishedAt,
+            torrentFileCount);
     }
 
     public async Task RecordAttemptAsync(
@@ -1237,6 +1270,15 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
     private static string Format(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset? ParseDateTimeOffset(string value) =>
+        DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var parsed)
+            ? parsed
+            : null;
 
     private static void ValidateIdentifier(string value, string parameterName)
     {

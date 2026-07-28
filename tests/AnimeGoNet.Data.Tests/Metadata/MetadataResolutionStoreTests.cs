@@ -26,6 +26,34 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
+    public async Task ClaimCountsEveryTorrentFileNotOnlyPendingMetadataFiles()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    file_episode_candidate, disposition, other_reason)
+                VALUES (
+                    'ignored-file', $task_id, 'cover.jpg', 10, NULL,
+                    NULL, 'ignored', 'not_media');
+                """;
+            insert.Parameters.AddWithValue("$task_id", fixture.TaskId);
+            Assert.Equal(1, await insert.ExecuteNonQueryAsync());
+        }
+
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                DateTimeOffset.UtcNow,
+                TimeSpan.FromMinutes(1)));
+
+        Assert.Single(claim.Files!);
+        Assert.Equal(2, claim.TorrentFileCount);
+    }
+
+    [Fact]
     public async Task ManualClaimRequiresEnabledCompleteTmdbOverride()
     {
         await using var fixture = await MetadataFixture.CreateAsync();
@@ -45,6 +73,12 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(547888, claim.BangumiSubjectId);
         Assert.Equal(999, claim.AniDbAnimeId);
         Assert.Equal("tt1234567", claim.ImdbTitleId);
+        Assert.Equal("mikan", claim.SourceAdapter);
+        Assert.Equal("2026-07-22T12:34:56.123", claim.SourcePublishedAtRaw);
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)),
+            claim.SourcePublishedAt);
+        Assert.Equal(1, claim.TorrentFileCount);
     }
 
     [Fact]
@@ -255,6 +289,11 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(2, episodeClaim.Resolution.AttemptNumber);
         Assert.Equal(999, episodeClaim.Resolution.AniDbAnimeId);
         Assert.Equal("tt1234567", episodeClaim.Resolution.ImdbTitleId);
+        Assert.Equal("mikan", episodeClaim.Resolution.SourceAdapter);
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)),
+            episodeClaim.Resolution.SourcePublishedAt);
+        Assert.Equal(1, episodeClaim.Resolution.TorrentFileCount);
     }
 
     private sealed class MetadataFixture : IAsyncDisposable
@@ -281,7 +320,7 @@ public sealed class MetadataResolutionStoreTests
             var profiles = new SourceProfileStore(databaseFixture.Database);
             await profiles.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
             var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("mikan"));
-            var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
+            var normalizedResult = IngestCommandNormalizer.Normalize(
                 "mikan",
                 new IngestItemCommand(
                     "https://mikanani.me/passkey/file.torrent",
@@ -295,7 +334,12 @@ public sealed class MetadataResolutionStoreTests
                         3951,
                         547888,
                         999,
-                        "tt1234567"))).Item);
+                        "tt1234567"),
+                    new IngestSourceEvidence(
+                        "2026-07-22T12:34:56.123",
+                        new DateTimeOffset(
+                            2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)))));
+            var normalized = Assert.IsType<NormalizedIngestItem>(normalizedResult.Item);
             var hash = new string('e', 40);
             var tasks = new IngestTaskStore(databaseFixture.Database);
             var staged = await tasks.AddStagedAsync(

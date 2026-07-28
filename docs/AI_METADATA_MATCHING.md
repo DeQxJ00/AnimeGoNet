@@ -100,7 +100,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 该分支由主程序预计算 Bangumi 日期候选、固定 Prompt 执行 TMDB 定向验证。主程序不预计算 TMDB 候选：
 
 1. 开关开启且基础条件满足后，主程序通过 Bangumi 客户端读取 `bgmid` 对应 Subject 的 Episode 列表。
-2. 只考虑有合法播出日期的普通正片，排除特别篇、OP/ED、PV 和其他附加条目；以 `published_at` 寻找日期最近者，同日优先，距离相同时优先不晚于发布时间的条目。结果写入 `bgm_episode_candidate`。
+2. 只考虑有合法播出日期且集号为正整数的普通正片，排除小数集、特别篇、OP/ED、PV 和其他附加条目；以 `published_at` 的来源本地日历日期寻找最近者，同日优先，距离相同时优先不晚于发布时间的条目，再按集号和 Episode ID 稳定排序。最大合理偏差为 31 个日历日，超出不产生候选。结果写入 `bgm_episode_candidate`。
 3. 任一步失败、候选为空或日期明显不合理时，最终门禁为 false，Prompt 完全删除日期优先字段和指令，继续通用 AI 匹配。
 4. 门禁为 true 时，模型使用原始 `files[].name` 和 `bgm_episode_candidate` 定向查询 TMDB TV Series、普通 Season 和 Episode；任何来源集号都不得直接复制成 TMDB Episode Number。
 5. TMDB 定向验证失败时继续原通用 AI 匹配流程，不把它当成整个任务失败；最终仍必须通过 TMDB MCP和主程序二次验证。
@@ -108,6 +108,8 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 `use_bangumi_pubdate_first=false` 时不得把 `published_at` 或 `bgm_episode_candidate` 的日期优先区块发送给模型。即使 `bgmid` 非空，Bangumi MCP仍可按原通用流程提供作品标题、别名等上下文。人工规则和 Episode Offset 始终优先，命中时不调用 AI。
 
 主程序可按 `bgmid` 和数据版本缓存 Bangumi 普通 Episode 列表，但缓存必须遵守更新策略，不能导致新播 Episode 永久不可见。模型侧不再为日期候选重复调用 Bangumi 工具。
+
+当前实现按 Bangumi 官方 `GET /v0/episodes` 合约请求 `type=0`，每页 200 条并设置 10,000 条硬上限；分页字段不一致、超限、无效 JSON、网络或服务错误都只关闭可选日期门禁并记录 `ai_pubdate` 安全错误码，不阻断随后通用 AI。任务 claim 从 SourceProfile 读取真实 adapter，从全部 `task_files` 计数，已被标记 `ignored/duplicate/other` 的条目也计入 Torrent 实际文件数。启用的同 `mikanid` 人工规则中的 `bgmid` 高于任务来源值；完整 Series/Season 人工覆盖仍先于季度 AI，EP offset 非空时直接抑制后置 EP-AI。
 
 ## 5. 最小响应契约
 
