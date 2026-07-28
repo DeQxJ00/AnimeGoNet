@@ -1,3 +1,4 @@
+using System.Globalization;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
@@ -301,32 +302,88 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return false;
         }
 
-        var seasons = validated.Value!.Files
-            .Select(file => file.Season.SeasonNumber)
-            .Distinct()
+        var validatedFiles = validated.Value!.Files;
+        var seasons = validatedFiles
+            .GroupBy(file => file.Season.SeasonNumber)
+            .Select(group => group.First().Season)
+            .OrderBy(season => season.SeasonNumber)
             .ToArray();
-        if (seasons.Length != 1)
+        MetadataSeasonFileSeed[] seeds;
+        if (seasons.Length == 1)
         {
-            await RecordAsync(
-                claim,
-                "season",
-                "ai_season",
-                null,
-                "error",
-                "ai_multiple_seasons_unsupported",
-                false,
-                started,
-                cancellationToken).ConfigureAwait(false);
-            return false;
+            seeds = validatedFiles
+                .Select(file => new MetadataSeasonFileSeed(
+                    file.Input.Name,
+                    file.Episode?.EpisodeNumber,
+                    file.Episode is null ? "ai_episode_unmatched" : null,
+                    file.Season.SeasonNumber))
+                .ToArray();
+        }
+        else
+        {
+            var files = claim.Files ?? [];
+            var validatedByPath = validatedFiles.ToDictionary(
+                file => file.Input.Name,
+                StringComparer.Ordinal);
+            var seedsByFileId = new Dictionary<string, MetadataSeasonFileSeed>(StringComparer.Ordinal);
+            foreach (var file in files.Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath)))
+            {
+                var aiFile = validatedByPath[file.RelativePath];
+                seedsByFileId.Add(
+                    file.FileId,
+                    new MetadataSeasonFileSeed(
+                        file.RelativePath,
+                        aiFile.Episode?.EpisodeNumber,
+                        aiFile.Episode is null ? "ai_episode_unmatched" : null,
+                        aiFile.Season.SeasonNumber));
+            }
+
+            var associations = SubtitleAssociationResolver.Resolve(files.Select(file => new TorrentMediaFile(
+                file.FileId,
+                file.RelativePath,
+                int.TryParse(
+                    file.FileEpisodeCandidate,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var episode)
+                    ? episode
+                    : null)).ToArray());
+            foreach (var association in associations)
+            {
+                if (association.VideoFileId is null
+                    || !seedsByFileId.TryGetValue(association.VideoFileId, out var videoSeed))
+                {
+                    continue;
+                }
+
+                var subtitle = files.Single(file => file.FileId == association.SubtitleFileId);
+                seedsByFileId.Add(
+                    subtitle.FileId,
+                    new MetadataSeasonFileSeed(
+                        subtitle.RelativePath,
+                        videoSeed.EpisodeNumber,
+                        videoSeed.OtherReason,
+                        videoSeed.SeasonNumber));
+            }
+
+            if (seedsByFileId.Count != files.Count)
+            {
+                await RecordAsync(
+                    claim,
+                    "season",
+                    "ai_season",
+                    null,
+                    "error",
+                    "ai_cross_season_file_unassigned",
+                    false,
+                    started,
+                    cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+
+            seeds = files.Select(file => seedsByFileId[file.FileId]).ToArray();
         }
 
-        var season = validated.Value.Files[0].Season;
-        var seeds = validated.Value.Files
-            .Select(file => new MetadataSeasonFileSeed(
-                file.Input.Name,
-                file.Episode?.EpisodeNumber,
-                file.Episode is null ? "ai_episode_unmatched" : null))
-            .ToArray();
         await RecordAsync(
             claim,
             "season",
@@ -337,10 +394,10 @@ public sealed class AutomaticMetadataResolutionProcessor(
             false,
             started,
             cancellationToken).ConfigureAwait(false);
-        await resolutions.CompleteAiSeasonAsync(
+        await resolutions.CompleteAiSeasonsAsync(
             claim,
             validated.Value.Series,
-            season,
+            seasons,
             seeds,
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);

@@ -159,6 +159,8 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 已确认 Episode 的视频正常进入 `Sxx/Eyyy.ext`；Series/Season 已确认但 Episode 未匹配的文件保留原名进入 `Sxx/Other/`。Series 或 Season 未确认、重复目标、目标冲突的文件不移动。网络错误、认证错误、AI 未匹配和 TMDB 验证失败由主程序写入元数据失败审计。
 
+跨季度 Torrent 包仍只发起一次任务级 AI 请求。验证成功后，任务级 `metadata_resolution_runs.tmdb_season_number` 保持 `NULL`，每个 `task_files.tmdb_season_number` 保存自己的普通季度；Episode worker 按逐文件季度请求和校验 TMDB，不能用任务摘要中的最小季度覆盖其他文件。能够唯一关联到视频的字幕继承该视频的季度和 Episode/Other 种子；存在无法归属季度的字幕或其他待处理文件时，整个跨季度候选以 `ai_cross_season_file_unassigned` 安全拒绝，事务不得产生部分季度写入。跨季度任务不应用作品级单季度人工 EP offset，也不再调用后置 EP-AI。
+
 所有请求/响应 DTO 使用 `System.Text.Json` source generation，确保 NativeAOT 可分析。
 
 ## 8. Mikan 文件名 EP 与可信偏移

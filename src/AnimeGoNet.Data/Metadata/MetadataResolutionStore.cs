@@ -68,6 +68,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var tmdbSeriesId = 0;
         var tmdbSeasonNumber = 0;
         var seasonResolvedByAi = false;
+        var hasMultipleSeasons = false;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -83,7 +84,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
                          WHERE prior_run.task_id = task.id
                            AND attempt.strategy = 'ai_season'
-                           AND attempt.result = 'matched')
+                           AND attempt.result = 'matched'),
+                       COUNT(DISTINCT file.tmdb_season_number) > 1
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -96,7 +98,6 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                       AND metadata_resolution_runs.status = 'running')
                 GROUP BY task.id
                 HAVING COUNT(DISTINCT file.tmdb_series_id) = 1
-                   AND COUNT(DISTINCT file.tmdb_season_number) = 1
                 ORDER BY task.updated_at_utc, task.id
                 LIMIT 1;
                 """;
@@ -119,6 +120,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 tmdbSeriesId = reader.GetInt32(11);
                 tmdbSeasonNumber = reader.GetInt32(12);
                 seasonResolvedByAi = reader.GetInt64(13) == 1;
+                hasMultipleSeasons = reader.GetInt64(14) == 1;
             }
         }
 
@@ -153,7 +155,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$lease_token", leaseToken);
             insert.Parameters.AddWithValue("$lease_expires_at_utc", Format(utcNow.Add(leaseDuration)));
             insert.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
-            insert.Parameters.AddWithValue("$tmdb_season_number", tmdbSeasonNumber);
+            insert.Parameters.AddWithValue(
+                "$tmdb_season_number",
+                hasMultipleSeasons ? DBNull.Value : tmdbSeasonNumber);
             attemptNumber = Convert.ToInt32(
                 await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
                 CultureInfo.InvariantCulture);
@@ -182,7 +186,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             selectFiles.Transaction = transaction;
             selectFiles.CommandText = """
                 SELECT id, relative_path, size_bytes, source_episode, file_episode_candidate,
-                       tmdb_episode_number, other_reason
+                       tmdb_episode_number, other_reason, tmdb_season_number
                 FROM task_files
                 WHERE task_id = $task_id AND disposition = 'pending'
                 ORDER BY relative_path, id;
@@ -198,7 +202,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(3) ? null : reader.GetString(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4),
                     reader.IsDBNull(5) ? null : reader.GetInt32(5),
-                    reader.IsDBNull(6) ? null : reader.GetString(6)));
+                    reader.IsDBNull(6) ? null : reader.GetString(6),
+                    reader.IsDBNull(7) ? null : reader.GetInt32(7)));
             }
         }
 
@@ -213,7 +218,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             tmdbSeriesId,
             tmdbSeasonNumber,
             files,
-            seasonResolvedByAi);
+            seasonResolvedByAi,
+            hasMultipleSeasons);
     }
 
     private async Task<MetadataTaskClaim?> TryClaimAsync(
@@ -468,7 +474,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await CompleteSeasonCoreAsync(
             claim,
             series,
-            season,
+            [season],
             null,
             utcNow,
             cancellationToken).ConfigureAwait(false);
@@ -483,7 +489,22 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await CompleteSeasonCoreAsync(
             claim,
             series,
-            season,
+            [season],
+            fileSeeds,
+            utcNow,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task CompleteAiSeasonsAsync(
+        MetadataTaskClaim claim,
+        TmdbSeries series,
+        IReadOnlyList<TmdbSeason> seasons,
+        IReadOnlyList<MetadataSeasonFileSeed> fileSeeds,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        await CompleteSeasonCoreAsync(
+            claim,
+            series,
+            seasons,
             fileSeeds,
             utcNow,
             cancellationToken).ConfigureAwait(false);
@@ -491,19 +512,29 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
     private async Task CompleteSeasonCoreAsync(
         MetadataTaskClaim claim,
         TmdbSeries series,
-        TmdbSeason season,
+        IReadOnlyList<TmdbSeason> seasons,
         IReadOnlyList<MetadataSeasonFileSeed>? fileSeeds,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(series);
-        ArgumentNullException.ThrowIfNull(season);
-        if (series.Id <= 0 || season.Id <= 0 || season.SeriesId != series.Id || season.SeasonNumber <= 0)
+        ArgumentNullException.ThrowIfNull(seasons);
+        if (series.Id <= 0
+            || seasons.Count == 0
+            || seasons.Select(value => value.SeasonNumber).Distinct().Count() != seasons.Count
+            || seasons.Any(season =>
+                season.Id <= 0
+                || season.SeriesId != series.Id
+                || season.SeasonNumber <= 0))
         {
-            throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(season));
+            throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(seasons));
         }
 
+        var defaultSeasonNumber = seasons.Count == 1
+            ? seasons[0].SeasonNumber
+            : (int?)null;
+        MetadataSeasonFileSeed[]? normalizedSeeds = null;
         if (fileSeeds is not null)
         {
             if (fileSeeds.Count == 0
@@ -515,9 +546,15 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     nameof(fileSeeds));
             }
 
-            foreach (var seed in fileSeeds)
+            normalizedSeeds = fileSeeds.Select(seed => seed with
+            {
+                SeasonNumber = seed.SeasonNumber ?? defaultSeasonNumber,
+            }).ToArray();
+            foreach (var seed in normalizedSeeds)
             {
                 if (string.IsNullOrWhiteSpace(seed.RelativePath)
+                    || seed.SeasonNumber is null
+                    || !seasons.Any(season => season.SeasonNumber == seed.SeasonNumber.Value)
                     || (seed.EpisodeNumber is null) == (seed.OtherReason is null)
                     || seed.EpisodeNumber is <= 0)
                 {
@@ -568,8 +605,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 ?? throw new InvalidOperationException("TMDB Series upsert did not return a row."));
         }
 
-        await using (var upsertSeason = connection.CreateCommand())
+        foreach (var season in seasons)
         {
+            await using var upsertSeason = connection.CreateCommand();
             upsertSeason.Transaction = transaction;
             upsertSeason.CommandText = """
                 INSERT INTO anime_seasons (
@@ -579,41 +617,50 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 ON CONFLICT(series_id, season_number) DO UPDATE SET
                     canonical_name = excluded.canonical_name,
                     updated_at_utc = excluded.updated_at_utc;
-
-                UPDATE task_files
-                SET tmdb_series_id = $tmdb_id, tmdb_season_number = $season_number
-                WHERE task_id = $task_id AND disposition = 'pending';
                 """;
             upsertSeason.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             upsertSeason.Parameters.AddWithValue("$series_id", seriesRowId);
             upsertSeason.Parameters.AddWithValue("$season_number", season.SeasonNumber);
             upsertSeason.Parameters.AddWithValue("$canonical_name", season.Name);
-            upsertSeason.Parameters.AddWithValue("$tmdb_id", series.Id);
-            upsertSeason.Parameters.AddWithValue("$task_id", claim.TaskId);
             upsertSeason.Parameters.AddWithValue("$now", now);
             await upsertSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        if (fileSeeds is not null)
+        if (defaultSeasonNumber is not null)
         {
-            foreach (var seed in fileSeeds)
+            await using var assignSeason = connection.CreateCommand();
+            assignSeason.Transaction = transaction;
+            assignSeason.CommandText = """
+                UPDATE task_files
+                SET tmdb_series_id = $tmdb_id, tmdb_season_number = $season_number
+                WHERE task_id = $task_id AND disposition = 'pending';
+                """;
+            assignSeason.Parameters.AddWithValue("$tmdb_id", series.Id);
+            assignSeason.Parameters.AddWithValue("$season_number", defaultSeasonNumber.Value);
+            assignSeason.Parameters.AddWithValue("$task_id", claim.TaskId);
+            await assignSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (normalizedSeeds is not null)
+        {
+            foreach (var seed in normalizedSeeds)
             {
                 await using var seedFile = connection.CreateCommand();
                 seedFile.Transaction = transaction;
                 seedFile.CommandText = """
                     UPDATE task_files
-                    SET tmdb_episode_number = $episode_number,
+                    SET tmdb_series_id = $tmdb_id,
+                        tmdb_season_number = $season_number,
+                        tmdb_episode_number = $episode_number,
                         other_reason = $other_reason
                     WHERE task_id = $task_id
                       AND relative_path = $relative_path
-                      AND disposition = 'pending'
-                      AND tmdb_series_id = $tmdb_id
-                      AND tmdb_season_number = $season_number;
+                      AND disposition = 'pending';
                     """;
                 seedFile.Parameters.AddWithValue("$task_id", claim.TaskId);
                 seedFile.Parameters.AddWithValue("$relative_path", seed.RelativePath);
                 seedFile.Parameters.AddWithValue("$tmdb_id", series.Id);
-                seedFile.Parameters.AddWithValue("$season_number", season.SeasonNumber);
+                seedFile.Parameters.AddWithValue("$season_number", seed.SeasonNumber!.Value);
                 seedFile.Parameters.AddWithValue(
                     "$episode_number",
                     (object?)seed.EpisodeNumber ?? DBNull.Value);
@@ -624,6 +671,26 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 {
                     throw new InvalidOperationException(
                         "AI Season task file changed concurrently or was not found.");
+                }
+            }
+
+            if (defaultSeasonNumber is null)
+            {
+                await using var countPendingFiles = connection.CreateCommand();
+                countPendingFiles.Transaction = transaction;
+                countPendingFiles.CommandText = """
+                    SELECT COUNT(*)
+                    FROM task_files
+                    WHERE task_id = $task_id AND disposition = 'pending';
+                    """;
+                countPendingFiles.Parameters.AddWithValue("$task_id", claim.TaskId);
+                var pendingFileCount = Convert.ToInt32(
+                    await countPendingFiles.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                    CultureInfo.InvariantCulture);
+                if (pendingFileCount != normalizedSeeds.Length)
+                {
+                    throw new InvalidOperationException(
+                        "Every pending task file must receive an AI Season assignment.");
                 }
             }
         }
@@ -651,7 +718,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             finish.Parameters.AddWithValue("$task_id", claim.TaskId);
             finish.Parameters.AddWithValue("$lease_token", claim.LeaseToken);
             finish.Parameters.AddWithValue("$tmdb_id", series.Id);
-            finish.Parameters.AddWithValue("$season_number", season.SeasonNumber);
+            finish.Parameters.AddWithValue(
+                "$season_number",
+                defaultSeasonNumber is null ? DBNull.Value : defaultSeasonNumber.Value);
             if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
             {
                 throw new InvalidOperationException("Metadata resolution lease is no longer active.");
@@ -676,8 +745,16 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             throw new ArgumentException("Every claimed task file must have exactly one Episode resolution.", nameof(fileResolutions));
         }
 
+        var claimedFiles = claim.Files.ToDictionary(file => file.FileId, StringComparer.Ordinal);
         foreach (var resolution in fileResolutions)
         {
+            var claimedFile = claimedFiles[resolution.FileId];
+            var expectedSeasonNumber = claimedFile.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
+            if (expectedSeasonNumber <= 0)
+            {
+                throw new ArgumentException("Task file TMDB Season identity is invalid.", nameof(fileResolutions));
+            }
+
             if (resolution.Disposition is not ("episode" or "other"))
             {
                 throw new ArgumentException("Episode resolution disposition must be episode or other.", nameof(fileResolutions));
@@ -687,7 +764,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             {
                 if (resolution.Episode is null
                     || resolution.Episode.SeriesId != claim.TmdbSeriesId
-                    || resolution.Episode.SeasonNumber != claim.TmdbSeasonNumber
+                    || resolution.Episode.SeasonNumber != expectedSeasonNumber
                     || resolution.Episode.EpisodeNumber <= 0)
                 {
                     throw new ArgumentException("TMDB Episode identity is invalid.", nameof(fileResolutions));
@@ -760,6 +837,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
         foreach (var resolution in fileResolutions)
         {
+            var claimedFile = claimedFiles[resolution.FileId];
+            var expectedSeasonNumber = claimedFile.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
             if (resolution.Episode is not null)
             {
                 await using var upsertEpisode = connection.CreateCommand();
@@ -826,7 +905,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             updateFile.Parameters.AddWithValue("$file_id", resolution.FileId);
             updateFile.Parameters.AddWithValue("$task_id", claim.Resolution.TaskId);
             updateFile.Parameters.AddWithValue("$tmdb_series_id", claim.TmdbSeriesId);
-            updateFile.Parameters.AddWithValue("$tmdb_season_number", claim.TmdbSeasonNumber);
+            updateFile.Parameters.AddWithValue("$tmdb_season_number", expectedSeasonNumber);
             updateFile.Parameters.AddWithValue(
                 "$tmdb_episode_number",
                 (object?)resolution.Episode?.EpisodeNumber ?? DBNull.Value);

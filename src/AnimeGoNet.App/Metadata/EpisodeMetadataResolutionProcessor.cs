@@ -45,7 +45,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             };
         }
 
-        var manualOffset = rule?.TmdbSeriesId == claim.TmdbSeriesId
+        var manualOffset = !claim.HasMultipleSeasons
+            && rule?.TmdbSeriesId == claim.TmdbSeriesId
             && rule.TmdbSeasonNumber == claim.TmdbSeasonNumber
             ? rule.EpisodeOffset
             : null;
@@ -59,6 +60,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         var results = new List<MetadataEpisodeFileResolution>(claim.Files.Count);
         foreach (var file in claim.Files.Where(file => !subtitleIds.Contains(file.FileId)))
         {
+            var targetSeasonNumber = file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
             if (manualOffset is null && file.PreResolvedOtherReason is not null)
             {
                 await RecordAsync(
@@ -134,7 +136,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 episode = await tmdb.GetEpisodeAsync(
                     claim.TmdbSeriesId,
-                    claim.TmdbSeasonNumber,
+                    targetSeasonNumber,
                     targetEpisode,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -177,7 +179,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             }
 
             if (episode.SeriesId != claim.TmdbSeriesId
-                || episode.SeasonNumber != claim.TmdbSeasonNumber
+                || episode.SeasonNumber != targetSeasonNumber
                 || episode.EpisodeNumber != targetEpisode)
             {
                 await RecordFailureAndStopAsync(
@@ -208,6 +210,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         if (manualOffset is null
             && options.Metadata.Ai.UseEpisodeMatch
             && !claim.SeasonResolvedByAi
+            && !claim.HasMultipleSeasons
             && results.Any(result => result.Episode is null
                 && claim.Files.Any(file => file.FileId == result.FileId
                     && SubtitleAssociationResolver.IsVideo(file.RelativePath))))

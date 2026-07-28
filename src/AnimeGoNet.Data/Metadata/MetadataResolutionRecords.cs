@@ -56,19 +56,22 @@ public sealed record MetadataTaskFileProjection(
     string? SourceEpisode,
     string? FileEpisodeCandidate,
     int? PreResolvedEpisodeNumber = null,
-    string? PreResolvedOtherReason = null);
+    string? PreResolvedOtherReason = null,
+    int? TmdbSeasonNumber = null);
 
 public sealed record MetadataEpisodeTaskClaim(
     MetadataTaskClaim Resolution,
     int TmdbSeriesId,
     int TmdbSeasonNumber,
     IReadOnlyList<MetadataTaskFileProjection> Files,
-    bool SeasonResolvedByAi = false);
+    bool SeasonResolvedByAi = false,
+    bool HasMultipleSeasons = false);
 
 public sealed record MetadataSeasonFileSeed(
     string RelativePath,
     int? EpisodeNumber,
-    string? OtherReason);
+    string? OtherReason,
+    int? SeasonNumber = null);
 
 public sealed record MetadataEpisodeFileResolution(
     string FileId,

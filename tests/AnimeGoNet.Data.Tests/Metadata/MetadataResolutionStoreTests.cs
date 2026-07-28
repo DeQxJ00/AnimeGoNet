@@ -161,9 +161,118 @@ public sealed class MetadataResolutionStoreTests
                 TimeSpan.FromMinutes(1)));
 
         Assert.True(episodeClaim.SeasonResolvedByAi);
+        Assert.False(episodeClaim.HasMultipleSeasons);
         var file = Assert.Single(episodeClaim.Files);
         Assert.Equal(7, file.PreResolvedEpisodeNumber);
         Assert.Null(file.PreResolvedOtherReason);
+        Assert.Equal(2, file.TmdbSeasonNumber);
+    }
+
+    [Fact]
+    public async Task AiCrossSeasonAssignmentPersistsAndCompletesEachFileAgainstItsOwnSeason()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    file_episode_candidate, disposition, other_reason)
+                VALUES (
+                    'season-two-file', $task_id, 'season-2/episode-01.mkv', 200,
+                    '1', '1', 'pending', NULL);
+                """;
+            insert.Parameters.AddWithValue("$task_id", fixture.TaskId);
+            Assert.Equal(1, await insert.ExecuteNonQueryAsync());
+        }
+
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.RecordAttemptAsync(
+            claim,
+            new MetadataAttempt(
+                "season",
+                "ai_season",
+                null,
+                "matched",
+                null,
+                false,
+                claim.AttemptNumber,
+                10),
+            now);
+        var series = new TmdbSeries(72517, "来自深渊", "メイドインアビス", null);
+        var seasonOne = new TmdbSeason(100001, 72517, 1, "Season 1", null, 13);
+        var seasonTwo = new TmdbSeason(204984, 72517, 2, "Season 2", null, 12);
+        await fixture.Store.CompleteAiSeasonsAsync(
+            claim,
+            series,
+            [seasonOne, seasonTwo],
+            [
+                new MetadataSeasonFileSeed("episode.mkv", 1, null, 1),
+                new MetadataSeasonFileSeed("season-2/episode-01.mkv", 1, null, 2),
+            ],
+            now);
+
+        var seasonRun = Assert.IsType<MetadataRunProjection>(
+            await fixture.Store.GetLatestAsync(fixture.TaskId));
+        Assert.Equal("season_resolved", seasonRun.Status);
+        Assert.Null(seasonRun.TmdbSeasonNumber);
+        var episodeClaim = Assert.IsType<MetadataEpisodeTaskClaim>(
+            await fixture.Store.TryClaimNextSeasonResolvedAsync(
+                now.AddSeconds(1),
+                TimeSpan.FromMinutes(1)));
+        Assert.True(episodeClaim.SeasonResolvedByAi);
+        Assert.True(episodeClaim.HasMultipleSeasons);
+        Assert.Equal(
+            [1, 2],
+            episodeClaim.Files
+                .OrderBy(file => file.TmdbSeasonNumber)
+                .Select(file => file.TmdbSeasonNumber)
+                .ToArray());
+
+        await fixture.Store.CompleteEpisodesAsync(
+            episodeClaim,
+            episodeClaim.Files.Select(file =>
+            {
+                var seasonNumber = file.TmdbSeasonNumber!.Value;
+                return new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    new TmdbEpisode(
+                        900000 + seasonNumber,
+                        series.Id,
+                        seasonNumber,
+                        1,
+                        $"S{seasonNumber:00}E01",
+                        null),
+                    "episode",
+                    null);
+            }).ToArray(),
+            now.AddSeconds(2));
+
+        await using var verifyConnection = await fixture.Database.OpenConnectionAsync();
+        await using var verify = verifyConnection.CreateCommand();
+        verify.CommandText = """
+            SELECT ingest_tasks.status, task_files.tmdb_season_number, task_files.disposition
+            FROM ingest_tasks
+            JOIN task_files ON task_files.task_id = ingest_tasks.id
+            WHERE ingest_tasks.id = $task_id
+            ORDER BY task_files.tmdb_season_number;
+            """;
+        verify.Parameters.AddWithValue("$task_id", fixture.TaskId);
+        await using var reader = await verify.ExecuteReaderAsync();
+        for (var expectedSeason = 1; expectedSeason <= 2; expectedSeason++)
+        {
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("metadata_resolved", reader.GetString(0));
+            Assert.Equal(expectedSeason, reader.GetInt32(1));
+            Assert.Equal("episode", reader.GetString(2));
+        }
+
+        Assert.False(await reader.ReadAsync());
     }
 
     [Fact]

@@ -406,6 +406,149 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task SeasonAiResolvesCrossSeasonVideosAndAssociatedSubtitleEndToEnd()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            seasonEpisodeFactory: (season, episode) => new TmdbEpisode(
+                9000 + (season * 100) + episode,
+                Series.Id,
+                season,
+                episode,
+                $"S{season:00}E{episode:00}",
+                null));
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888,
+            "Made in Abyss",
+            "来自深渊",
+            new DateOnly(2020, 1, 1),
+            12));
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                Series.Id,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    file.Name.StartsWith("season-2/", StringComparison.Ordinal) ? 2 : 1,
+                    1,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Ai = options.Metadata.Ai with
+                    {
+                        UseSeasonMatch = true,
+                        UseEpisodeMatch = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi,
+            aiMetadataMatcher: ai);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 Season 1-2");
+        await ReplaceWithCrossSeasonFilesAsync(app, taskId);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var seasonRun = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("season_resolved", seasonRun.Status);
+        Assert.Null(seasonRun.TmdbSeasonNumber);
+        var seasonFiles = await ReadTaskFilesAsync(app, taskId);
+        Assert.Equal(3, seasonFiles.Length);
+        Assert.Equal(
+            [1, 2, 2],
+            seasonFiles.OrderBy(file => file.RelativePath)
+                .Select(file => file.SeasonNumber)
+                .ToArray());
+        Assert.All(seasonFiles, file => Assert.Equal(1, file.EpisodeNumber));
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        var completedFiles = await ReadTaskFilesAsync(app, taskId);
+        Assert.All(completedFiles, file => Assert.Equal("episode", file.Disposition));
+        var subtitle = Assert.Single(
+            completedFiles,
+            file => file.RelativePath.EndsWith(".ass", StringComparison.Ordinal));
+        Assert.Equal(2, subtitle.SeasonNumber);
+        Assert.Equal(1, subtitle.EpisodeNumber);
+        Assert.Equal(".zh-Hans.ass", subtitle.RenameSuffix);
+        Assert.Single(ai.Requests);
+        Assert.Equal(2, ai.Requests[0].Files.Count);
+        Assert.Null(await ReadAttemptErrorAsync(app, taskId, "ai_season"));
+        Assert.Contains((1, 1), tmdb.EpisodeIdentities);
+        Assert.Contains((2, 1), tmdb.EpisodeIdentities);
+    }
+
+    [Fact]
+    public async Task SeasonAiRejectsCrossSeasonPackageWhenAFileCannotBeAssignedSafely()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            seasonEpisodeFactory: (season, episode) => new TmdbEpisode(
+                9000 + (season * 100) + episode,
+                Series.Id,
+                season,
+                episode,
+                $"S{season:00}E{episode:00}",
+                null));
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                Series.Id,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    file.Name.StartsWith("season-2/", StringComparison.Ordinal) ? 2 : 1,
+                    1,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Ai = options.Metadata.Ai with { UseSeasonMatch = true },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient(new BangumiSubject(
+                547888,
+                "Made in Abyss",
+                "来自深渊",
+                new DateOnly(2020, 1, 1),
+                12)),
+            aiMetadataMatcher: ai);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 Season 1-2");
+        await ReplaceWithCrossSeasonFilesAsync(app, taskId);
+        await AddUnassignedSubtitleAsync(app, taskId);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("failed", run.Status);
+        Assert.Equal(
+            "ai_cross_season_file_unassigned",
+            await ReadAttemptErrorAsync(app, taskId, "ai_season"));
+        Assert.All(await ReadTaskFilesAsync(app, taskId), file => Assert.Null(file.SeasonNumber));
+    }
+
+    [Fact]
     public async Task SeasonAiConfigurationFailureIsAuditedThenTitleFallbackContinues()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
@@ -598,6 +741,49 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
+    private static async Task ReplaceWithCrossSeasonFilesAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE task_files
+            SET relative_path = 'season-1/episode-01.mkv',
+                size_bytes = 100,
+                source_episode = '1',
+                file_episode_candidate = '1'
+            WHERE task_id = $task_id;
+
+            INSERT INTO task_files (
+                id, task_id, relative_path, size_bytes, source_episode,
+                file_episode_candidate, disposition, other_reason)
+            VALUES
+                ('cross-season-video', $task_id, 'season-2/episode-01.mkv', 200, '1', '1', 'pending', NULL),
+                ('cross-season-subtitle', $task_id, 'season-2/episode-01.zh-Hans.ass', 20, '1', '1', 'pending', NULL);
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(3, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task AddUnassignedSubtitleAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO task_files (
+                id, task_id, relative_path, size_bytes, source_episode,
+                file_episode_candidate, disposition, other_reason)
+            VALUES (
+                'cross-season-unassigned', $task_id, 'extras/commentary.ass', 10,
+                NULL, NULL, 'pending', NULL);
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
     private static async Task<string[]> ReadStrategiesAsync(RunningApp app, string taskId)
     {
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
@@ -679,6 +865,37 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             reader.IsDBNull(2) ? null : reader.GetString(2));
     }
 
+    private static async Task<TaskFileProjection[]> ReadTaskFilesAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT relative_path, tmdb_season_number, tmdb_episode_number,
+                   disposition, rename_suffix
+            FROM task_files
+            WHERE task_id = $task_id
+            ORDER BY relative_path;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        var files = new List<TaskFileProjection>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            files.Add(new TaskFileProjection(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetInt32(1),
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
+        }
+
+        return files.ToArray();
+    }
+
     private static async Task<string> ReadTaskStatusAsync(RunningApp app, string taskId)
     {
         var database = app.App.Services
@@ -729,14 +946,24 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         int? EpisodeNumber,
         string? OtherReason);
 
+    private sealed record TaskFileProjection(
+        string RelativePath,
+        int? SeasonNumber,
+        int? EpisodeNumber,
+        string Disposition,
+        string? RenameSuffix);
+
     private sealed class FakeTmdbClient(
         TmdbSeries series,
         IReadOnlyList<TmdbSeason> seasons,
-        Func<int, TmdbEpisode?>? episodeFactory = null) : ITmdbClient
+        Func<int, TmdbEpisode?>? episodeFactory = null,
+        Func<int, int, TmdbEpisode?>? seasonEpisodeFactory = null) : ITmdbClient
     {
         public List<string> SearchTitles { get; } = [];
 
         public List<int> EpisodeRequests { get; } = [];
+
+        public List<(int SeasonNumber, int EpisodeNumber)> EpisodeIdentities { get; } = [];
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(string title, CancellationToken cancellationToken = default)
         {
@@ -760,7 +987,10 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             CancellationToken cancellationToken = default)
         {
             EpisodeRequests.Add(episodeNumber);
-            return Task.FromResult(episodeFactory?.Invoke(episodeNumber));
+            EpisodeIdentities.Add((seasonNumber, episodeNumber));
+            return Task.FromResult(
+                seasonEpisodeFactory?.Invoke(seasonNumber, episodeNumber)
+                ?? episodeFactory?.Invoke(episodeNumber));
         }
     }
 
