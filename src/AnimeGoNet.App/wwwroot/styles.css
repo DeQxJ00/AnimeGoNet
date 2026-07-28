@@ -106,6 +106,23 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-stages dd { margin: 5px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
 .retry-button { margin-top: 15px; border: 1px solid #6c526f; border-radius: 10px; padding: 9px 12px; color: #f2d9ff; background: #2a1d32; cursor: pointer; }
 .retry-button:disabled { cursor: wait; opacity: .7; }
+.pending-tmdb-heading { gap: 18px; }
+.pending-tmdb-heading h2 { margin-bottom: 0; }
+.pending-tmdb-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.pending-tmdb-card { border: 1px solid #7c6835; border-radius: 18px; padding: 20px; background: rgba(27,24,17,.9); }
+.pending-tmdb-card .badge.pending { color: #ffe09a; border-color: #7c6835; background: #302817; }
+.pending-tmdb-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0; }
+.pending-tmdb-stats div { padding: 10px; border-radius: 11px; background: rgba(5,8,16,.5); }
+.pending-tmdb-stats dt { color: #b8a77c; font-size: .7rem; }
+.pending-tmdb-stats dd { margin: 5px 0 0; font-size: .88rem; }
+.pending-progress-warning { margin: 13px 0; color: #ffe09a; font-size: .8rem; }
+.pending-tmdb-detail { display: grid; gap: 8px; margin-top: 13px; }
+.pending-tmdb-detail:empty { display: none; }
+.pending-tmdb-detail h4 { margin: 8px 0 0; color: #c9d6ec; font-size: .82rem; }
+.pending-scope, .pending-task { display: grid; gap: 4px; padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.55); }
+.pending-scope strong, .pending-task strong { font-size: .8rem; overflow-wrap: anywhere; }
+.pending-scope span, .pending-task span { color: #aebbd3; font-size: .75rem; line-height: 1.45; overflow-wrap: anywhere; }
+.pending-scope em { color: #ffbf7c; font-size: .72rem; font-style: normal; }
 .downloader-heading { gap: 18px; }
 .downloader-heading h2 { margin-bottom: 0; }
 .downloader-heading-actions { display: flex; gap: 9px; }
@@ -186,6 +203,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .hero { grid-template-columns: 1fr; padding: 30px 24px; }
   .grid { grid-template-columns: 1fr; }
   .metadata-tasks { grid-template-columns: 1fr; }
+  .pending-tmdb-list { grid-template-columns: 1fr; }
+  .pending-tmdb-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .downloader-list { grid-template-columns: 1fr; }
   .configuration-grid { grid-template-columns: 1fr; }
   .configuration-form-grid { grid-template-columns: 1fr; }

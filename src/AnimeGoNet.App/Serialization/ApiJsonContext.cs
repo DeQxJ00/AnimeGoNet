@@ -28,6 +28,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MikanTrustedOffsetListResponse))]
 [JsonSerializable(typeof(MetadataRetryResponse))]
 [JsonSerializable(typeof(MetadataTaskListResponse))]
+[JsonSerializable(typeof(PendingTmdbListResponse))]
+[JsonSerializable(typeof(PendingTmdbDetailResponse))]
 [JsonSerializable(typeof(ApiErrorResponse))]
 [JsonSerializable(typeof(DeletePreviewResponse))]
 [JsonSerializable(typeof(CreateDeleteExecutionRequest))]

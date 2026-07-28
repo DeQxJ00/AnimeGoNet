@@ -37,6 +37,8 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 待补全详情还要显示兜底去重身份和作用域，例如“Bangumi Episode”“仅同一 mikanid”“仅当前来源作品”或“仅相同 Torrent/文件”，并在不能跨来源去重时显示风险提示。恢复出真实 TMDB ID/Season/Episode 并通过验证、合并完成记录后，才进入标准动画作品列表；合并冲突显示 `DuplicateAfterResolution`，不自动重新下载或静默删文件。
 
+当前 `GET /api/v1/metadata/pending-tmdb` 和 `/{bgmid}` 已提供待补全作品 summary/detail。静态 WebUI 显示 Bangumi 兜底名、已确认季度、关联任务、已处理文件、兜底 completion/claim、重复数、最近失败分类，以及不含内部 scope key 的去重边界。`mikan_episode`、`source_work_episode`、`torrent_file` 明确提示可能跨来源重复；页面不返回或推导 `tmdb_series_id`、TMDB Episode 进度、季度封面和完成比例。当前为只读观察面，人工映射与恢复合并属于后续独立模块。
+
 ## 4. 排序
 
 作品列表支持升序/降序切换，至少提供以下四种排序：

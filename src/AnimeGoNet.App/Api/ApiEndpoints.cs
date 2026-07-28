@@ -63,6 +63,8 @@ public static class ApiEndpoints
             ClearMikanTrustedOffset);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
+        app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
+        app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/rss", LegacyRss);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
@@ -1485,6 +1487,80 @@ public static class ApiEndpoints
             item.PendingFileCount,
             item.UpdatedAtUtc)).ToArray()));
     }
+
+    private static async Task<Ok<PendingTmdbListResponse>> PendingTmdbSeries(
+        PendingTmdbStore pending,
+        CancellationToken cancellationToken)
+    {
+        var items = await pending.ListAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new PendingTmdbListResponse(items.Select(ToResponse).ToArray()));
+    }
+
+    private static async Task<IResult> PendingTmdbDetail(
+        int bangumiSubjectId,
+        PendingTmdbStore pending,
+        CancellationToken cancellationToken)
+    {
+        if (bangumiSubjectId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "pending_tmdb_bgmid_invalid",
+                "Bangumi Subject ID must be positive."));
+        }
+
+        var detail = await pending.GetAsync(bangumiSubjectId, cancellationToken).ConfigureAwait(false);
+        if (detail is null)
+        {
+            return TypedResults.NotFound(Error(
+                "pending_tmdb_not_found",
+                "Pending TMDB Series was not found."));
+        }
+
+        return TypedResults.Ok(new PendingTmdbDetailResponse(
+            ToResponse(detail.Summary),
+            detail.Tasks.Select(task => new PendingTmdbTaskItem(
+                task.TaskId,
+                task.Title,
+                task.SourceId,
+                task.Status,
+                task.SeasonNumber,
+                task.OtherFileCount,
+                task.DuplicateFileCount,
+                task.FailureKind,
+                task.FailureReason,
+                task.UpdatedAtUtc)).ToArray(),
+            detail.Scopes.Select(scope => new PendingTmdbScopeItem(
+                scope.Kind,
+                scope.State,
+                scope.SourceId,
+                scope.SourceEpisode,
+                ScopeBoundary(scope.Kind),
+                scope.Kind != "bangumi_episode",
+                scope.CompletedAtUtc)).ToArray()));
+    }
+
+    private static PendingTmdbListItem ToResponse(PendingTmdbSeriesSummary item) =>
+        new(
+            item.BangumiSubjectId,
+            item.CanonicalName,
+            item.SeasonNumbers,
+            item.TaskCount,
+            item.ProcessedFileCount,
+            item.CompletionRecordCount,
+            item.ActiveClaimCount,
+            item.CompletedClaimCount,
+            item.DuplicateFileCount,
+            item.LatestFailureKind,
+            item.LatestFailureReason,
+            item.UpdatedAtUtc);
+
+    private static string ScopeBoundary(string kind) => kind switch
+    {
+        "bangumi_episode" => "Bangumi Episode",
+        "mikan_episode" => "仅同一 mikanid",
+        "source_work_episode" => "仅当前来源作品",
+        _ => "仅相同 Torrent/文件",
+    };
 
     private static async Task<Ok<IngestBatchResponse>> Ingest(
         IngestBatchRequest request,

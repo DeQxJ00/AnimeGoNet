@@ -608,6 +608,138 @@ async function loadMetadataTasks() {
         container.replaceChildren(failed);
     }
 }
+function pendingStat(label, value) {
+    const group = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = String(value);
+    group.append(term, description);
+    return group;
+}
+async function loadPendingTmdbDetail(bgmid, target, button) {
+    button.disabled = true;
+    button.textContent = "读取中…";
+    try {
+        const response = await fetch(`/api/v1/metadata/pending-tmdb/${encodeURIComponent(String(bgmid))}`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const detail = await response.json();
+        const sections = [];
+        const scopeHeading = document.createElement("h4");
+        scopeHeading.textContent = "兜底去重作用域";
+        sections.push(scopeHeading);
+        if (detail.scopes.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "muted";
+            empty.textContent = "尚无 claim 或完成记录。";
+            sections.push(empty);
+        }
+        for (const scope of detail.scopes) {
+            const row = document.createElement("div");
+            row.className = "pending-scope";
+            const identity = document.createElement("strong");
+            identity.textContent = `${scope.dedup_boundary} · ${scope.state}`;
+            const evidence = document.createElement("span");
+            evidence.textContent = `${scope.source} · 来源 EP ${textOrDash(scope.source_episode)}`;
+            row.append(identity, evidence);
+            if (scope.cross_source_duplicate_risk) {
+                const warning = document.createElement("em");
+                warning.textContent = "可能跨来源重复";
+                row.append(warning);
+            }
+            sections.push(row);
+        }
+        const taskHeading = document.createElement("h4");
+        taskHeading.textContent = "关联任务";
+        sections.push(taskHeading);
+        for (const task of detail.tasks) {
+            const row = document.createElement("div");
+            row.className = "pending-task";
+            const title = document.createElement("strong");
+            title.textContent = task.title;
+            const state = document.createElement("span");
+            state.textContent = `${task.source} · ${statusLabels[task.status] ?? task.status} · S${task.season_number === null ? "—" : String(task.season_number).padStart(2, "0")} · Other ${task.other_file_count} · 重复 ${task.duplicate_file_count}`;
+            row.append(title, state);
+            sections.push(row);
+        }
+        target.replaceChildren(...sections);
+        button.textContent = "收起详情";
+        button.disabled = false;
+        button.onclick = () => {
+            target.replaceChildren();
+            button.textContent = "查看作用域与任务";
+            button.onclick = () => void loadPendingTmdbDetail(bgmid, target, button);
+        };
+    }
+    catch (error) {
+        target.textContent = `详情读取失败：${errorMessage(error, "未知错误")}`;
+        button.disabled = false;
+        button.textContent = "重试详情";
+    }
+}
+async function loadPendingTmdb() {
+    const container = element("#pending-tmdb-list");
+    try {
+        const response = await fetch("/api/v1/metadata/pending-tmdb", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        if (body.items.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "muted empty";
+            empty.textContent = "暂无待补全 TMDB 的作品";
+            container.replaceChildren(empty);
+            return;
+        }
+        container.replaceChildren(...body.items.map((item) => {
+            const card = document.createElement("article");
+            card.className = "pending-tmdb-card";
+            const heading = document.createElement("div");
+            heading.className = "metadata-heading";
+            const title = document.createElement("strong");
+            title.textContent = item.fallback_name;
+            const badge = document.createElement("span");
+            badge.className = "badge pending";
+            badge.textContent = "TMDB 待补全";
+            heading.append(title, badge);
+            const identity = document.createElement("p");
+            identity.className = "metadata-identity";
+            const seasons = item.season_numbers.length === 0
+                ? "—"
+                : item.season_numbers.map((value) => `S${String(value).padStart(2, "0")}`).join("、");
+            identity.textContent = `bgmid ${item.bgmid} · 已确认季度 ${seasons}`;
+            const stats = document.createElement("dl");
+            stats.className = "pending-tmdb-stats";
+            stats.append(pendingStat("关联任务", item.task_count), pendingStat("已处理文件", item.processed_file_count), pendingStat("兜底记录", item.fallback_record_count), pendingStat("活动 claim", item.active_claim_count), pendingStat("已完成 claim", item.completed_claim_count), pendingStat("重复文件", item.duplicate_file_count));
+            card.append(heading, identity, stats);
+            if (item.latest_failure_kind || item.latest_failure_reason) {
+                const failure = document.createElement("p");
+                failure.className = "metadata-failure";
+                failure.textContent = `${textOrDash(item.latest_failure_kind)} · ${textOrDash(item.latest_failure_reason)}`;
+                card.append(failure);
+            }
+            const warning = document.createElement("p");
+            warning.className = "pending-progress-warning";
+            warning.textContent = "兜底状态，不显示 TMDB Episode 进度。";
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "secondary-button";
+            button.textContent = "查看作用域与任务";
+            const detail = document.createElement("div");
+            detail.className = "pending-tmdb-detail";
+            button.onclick = () => void loadPendingTmdbDetail(item.bgmid, detail, button);
+            card.append(warning, button, detail);
+            return card;
+        }));
+    }
+    catch (error) {
+        const failed = document.createElement("p");
+        failed.className = "muted empty";
+        failed.textContent = `待补全状态读取失败：${errorMessage(error, "未知错误")}`;
+        container.replaceChildren(failed);
+    }
+}
 async function testDownloader(id, button) {
     const status = element("#downloader-status");
     button.disabled = true;
@@ -1232,6 +1364,7 @@ async function previewRssRules() {
 }
 element("#rss-reload").addEventListener("click", () => void loadRssRules());
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsets());
+element("#pending-tmdb-reload").addEventListener("click", () => void loadPendingTmdb());
 element("#configuration-reload").addEventListener("click", () => void loadConfiguration());
 element("#configuration-edit").addEventListener("click", openConfigurationEditor);
 element("#configuration-reset").addEventListener("click", () => void resetConfiguration());
@@ -1267,9 +1400,11 @@ void loadStatus();
 void loadConfiguration();
 void loadDownloads();
 void loadMetadataTasks();
+void loadPendingTmdb();
 void loadDownloaders();
 void loadSources();
 void loadRssRules();
 void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);
+window.setInterval(() => void loadPendingTmdb(), 10000);

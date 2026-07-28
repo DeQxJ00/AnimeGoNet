@@ -278,6 +278,49 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record PendingTmdbListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
+
+public sealed record PendingTmdbListItem(
+    [property: JsonPropertyName("bgmid")] int BangumiSubjectId,
+    [property: JsonPropertyName("fallback_name")] string FallbackName,
+    [property: JsonPropertyName("season_numbers")] IReadOnlyList<int> SeasonNumbers,
+    [property: JsonPropertyName("task_count")] int TaskCount,
+    [property: JsonPropertyName("processed_file_count")] int ProcessedFileCount,
+    [property: JsonPropertyName("fallback_record_count")] int FallbackRecordCount,
+    [property: JsonPropertyName("active_claim_count")] int ActiveClaimCount,
+    [property: JsonPropertyName("completed_claim_count")] int CompletedClaimCount,
+    [property: JsonPropertyName("duplicate_file_count")] int DuplicateFileCount,
+    [property: JsonPropertyName("latest_failure_kind")] string? LatestFailureKind,
+    [property: JsonPropertyName("latest_failure_reason")] string? LatestFailureReason,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record PendingTmdbDetailResponse(
+    [property: JsonPropertyName("summary")] PendingTmdbListItem Summary,
+    [property: JsonPropertyName("tasks")] IReadOnlyList<PendingTmdbTaskItem> Tasks,
+    [property: JsonPropertyName("scopes")] IReadOnlyList<PendingTmdbScopeItem> Scopes);
+
+public sealed record PendingTmdbTaskItem(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("season_number")] int? SeasonNumber,
+    [property: JsonPropertyName("other_file_count")] int OtherFileCount,
+    [property: JsonPropertyName("duplicate_file_count")] int DuplicateFileCount,
+    [property: JsonPropertyName("failure_kind")] string? FailureKind,
+    [property: JsonPropertyName("failure_reason")] string? FailureReason,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record PendingTmdbScopeItem(
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("source_episode")] string? SourceEpisode,
+    [property: JsonPropertyName("dedup_boundary")] string DedupBoundary,
+    [property: JsonPropertyName("cross_source_duplicate_risk")] bool CrossSourceDuplicateRisk,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc);
+
 public sealed record ApiErrorResponse(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message);

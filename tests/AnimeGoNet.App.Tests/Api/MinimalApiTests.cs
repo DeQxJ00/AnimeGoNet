@@ -109,6 +109,96 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
+    public async Task PendingTmdbApiShowsFallbackStateAndScopeWithoutFakeEpisodeProgress()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/pending-tmdb.torrent",
+                "info": { "title": "Fallback title", "mikanid": 3951, "bgmid": 547888 }
+              }]
+            }
+            """;
+        using var ingest = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var ingestJson = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        var taskId = ingestJson.RootElement.GetProperty("items")[0].GetProperty("ingest_id").GetString()!;
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var setup = connection.CreateCommand())
+        {
+            setup.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
+                    needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES ('pending-series', 0, 547888, '兜底动画', 'Fallback Anime', 1, $now, $now);
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name,
+                    created_at_utc, updated_at_utc)
+                VALUES ('pending-season', 'pending-series', 2, 'Season 2', $now, $now);
+                UPDATE ingest_tasks
+                SET status = 'metadata_resolved', failure_kind = 'tmdb_completion_pending',
+                    failure_reason = 'tmdb_series_not_found', updated_at_utc = $now
+                WHERE id = $task_id;
+                UPDATE task_files
+                SET source_episode = '1', tmdb_season_number = 2,
+                    disposition = 'other',
+                    other_reason = 'tmdb_fallback_pending_completion'
+                WHERE task_id = $task_id;
+                INSERT INTO fallback_claims (
+                    id, scope_kind, scope_key, task_file_id,
+                    state, claimed_at_utc, expires_at_utc)
+                SELECT 'pending-claim', 'mikan_episode', '3951:source:1',
+                       id, 'active', $now, NULL
+                FROM task_files WHERE task_id = $task_id;
+                """;
+            setup.Parameters.AddWithValue("$task_id", taskId);
+            setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(5, await setup.ExecuteNonQueryAsync());
+        }
+
+        using var listResponse = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb");
+        var listBody = await listResponse.Content.ReadAsStringAsync();
+        using var listJson = JsonDocument.Parse(listBody);
+        var summary = Assert.Single(listJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        Assert.Equal(547888, summary.GetProperty("bgmid").GetInt32());
+        Assert.Equal("兜底动画", summary.GetProperty("fallback_name").GetString());
+        Assert.Equal([2], summary.GetProperty("season_numbers").EnumerateArray().Select(value => value.GetInt32()));
+        Assert.Equal(1, summary.GetProperty("task_count").GetInt32());
+        Assert.Equal(1, summary.GetProperty("active_claim_count").GetInt32());
+        Assert.Equal(0, summary.GetProperty("fallback_record_count").GetInt32());
+        Assert.False(summary.TryGetProperty("tmdb_series_id", out _));
+        Assert.False(summary.TryGetProperty("episode_progress", out _));
+        Assert.DoesNotContain("private-passkey", listBody, StringComparison.Ordinal);
+
+        using var detailResponse = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888");
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        var task = Assert.Single(detailJson.RootElement.GetProperty("tasks").EnumerateArray());
+        Assert.Equal("Fallback title", task.GetProperty("title").GetString());
+        Assert.Equal(2, task.GetProperty("season_number").GetInt32());
+        var scope = Assert.Single(detailJson.RootElement.GetProperty("scopes").EnumerateArray());
+        Assert.Equal("mikan_episode", scope.GetProperty("kind").GetString());
+        Assert.Equal("仅同一 mikanid", scope.GetProperty("dedup_boundary").GetString());
+        Assert.True(scope.GetProperty("cross_source_duplicate_risk").GetBoolean());
+        Assert.False(scope.TryGetProperty("key", out _));
+    }
+
+    [Fact]
+    public async Task PendingTmdbDetailReturnsNotFoundForCanonicalOrMissingSeries()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var response = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ProtectedApiAcceptsDirectAndLegacyHashedAccessKeys()
     {
         const string accessKey = "test-secret";
