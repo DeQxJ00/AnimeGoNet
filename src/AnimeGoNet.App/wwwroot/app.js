@@ -104,6 +104,88 @@ function configurationCard(title, fields) {
 function enabledLabel(value) {
     return value ? "已启用" : "已关闭";
 }
+function seasonFailurePriority(metadata) {
+    const panel = document.createElement("section");
+    panel.className = "failure-priority";
+    panel.setAttribute("aria-label", "TMDB 季度失败优先级");
+    const caption = document.createElement("p");
+    caption.className = "failure-priority-caption";
+    caption.textContent = "由高到低执行；任一策略成功立即停止。Skip 命中会终止后续 fallback。";
+    const sequence = document.createElement("ol");
+    sequence.className = "failure-priority-list";
+    const steps = [
+        {
+            priority: "4",
+            title: "TMDBFailSkip",
+            description: "显式终止，不再执行低优先级策略",
+            enabled: metadata.season_failure.skip,
+        },
+        {
+            priority: "3",
+            title: "TMDBFailBacktrace",
+            description: "沿 Bangumi 前传关系回溯季度",
+            enabled: metadata.season_failure.backtrace,
+        },
+        {
+            priority: "independent",
+            title: "AI 季度匹配",
+            description: "独立可选阶段，不占确定性优先级",
+            enabled: metadata.ai.use_season_match,
+            independent: true,
+        },
+        {
+            priority: "2",
+            title: "文件名季度",
+            description: "从标题中的明确季度取值",
+            enabled: metadata.season_failure.use_title_season,
+        },
+        {
+            priority: "1",
+            title: "第一季",
+            description: "最后尝试 TMDB 第一季",
+            enabled: metadata.season_failure.use_first_season,
+        },
+    ];
+    sequence.replaceChildren(...steps.map((step) => {
+        const item = document.createElement("li");
+        item.className = `failure-priority-step ${step.enabled ? "enabled" : "disabled"}`
+            + (step.independent ? " independent" : "");
+        item.dataset.priority = step.priority;
+        const badge = document.createElement("span");
+        badge.className = "failure-priority-badge";
+        badge.textContent = step.independent ? "独立 AI" : `P${step.priority}`;
+        const content = document.createElement("span");
+        content.className = "failure-priority-content";
+        const title = document.createElement("strong");
+        title.textContent = step.title;
+        const description = document.createElement("small");
+        description.textContent = step.description;
+        content.append(title, description);
+        const state = document.createElement("span");
+        state.className = "failure-priority-state";
+        state.textContent = enabledLabel(step.enabled);
+        item.append(badge, content, state);
+        return item;
+    }));
+    panel.append(caption, sequence);
+    return panel;
+}
+function metadataConfigurationCard(config) {
+    const tmdbCredential = config.metadata.tmdb.api_key_configured
+        || config.metadata.tmdb.read_access_token_configured;
+    const card = configurationCard("TMDB 与季度失败链", [
+        ["TMDB", tmdbCredential ? "凭据已配置（值已隐藏）" : "未配置凭据"],
+        ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
+        ["TMDB 代理", config.metadata.tmdb.proxy_url ?? "直连（未配置）"],
+        ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
+        ["Bangumi API", config.metadata.bangumi.base_url],
+        ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
+        ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
+        ["Bangumi 完全兜底", enabledLabel(config.metadata.tmdb_failure_use_bangumi)],
+    ]);
+    card.append(seasonFailurePriority(config.metadata));
+    return card;
+}
 async function loadConfiguration() {
     const status = element("#configuration-status");
     const container = element("#configuration");
@@ -116,8 +198,6 @@ async function loadConfiguration() {
         currentConfiguration = config;
         element("#configuration-reset").disabled =
             config.configuration_revision === 0;
-        const tmdbCredential = config.metadata.tmdb.api_key_configured
-            || config.metadata.tmdb.read_access_token_configured;
         container.replaceChildren(configurationCard("目录", [
             ["data_path", config.paths.data_path],
             ["download_path", config.paths.download_path],
@@ -127,23 +207,7 @@ async function loadConfiguration() {
             ["容器模式", enabledLabel(config.deployment.running_in_container)],
             ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
             ["Access-Key", config.deployment.access_key_configured ? "已配置（值已隐藏）" : "未配置"],
-        ]), configurationCard("TMDB 与季度失败链", [
-            ["TMDB", tmdbCredential ? "凭据已配置（值已隐藏）" : "未配置凭据"],
-            ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
-            ["TMDB 代理", config.metadata.tmdb.proxy_url ?? "直连（未配置）"],
-            ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
-            ["Bangumi API", config.metadata.bangumi.base_url],
-            ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
-            ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
-            [
-                "失败优先级",
-                `Skip ${enabledLabel(config.metadata.season_failure.skip)} · `
-                    + `Backtrace ${enabledLabel(config.metadata.season_failure.backtrace)} · `
-                    + `文件名季度 ${enabledLabel(config.metadata.season_failure.use_title_season)} · `
-                    + `第一季 ${enabledLabel(config.metadata.season_failure.use_first_season)}`,
-            ],
-            ["Bangumi 完全兜底", enabledLabel(config.metadata.tmdb_failure_use_bangumi)],
-        ]), configurationCard("AI、偏移与 Torrent", [
+        ]), metadataConfigurationCard(config), configurationCard("AI、偏移与 Torrent", [
             [
                 "AI 匹配",
                 `季度 ${enabledLabel(config.metadata.ai.use_season_match)} · `

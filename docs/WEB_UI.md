@@ -83,7 +83,7 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 ## 8. 当前生效配置投影
 
-首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、TMDB API 地址/代理/语言、Bangumi API 地址/代理、季度失败链、AI 两个独立开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。编辑器允许 TMDB 与 Bangumi 分别选择自定义 API 地址或无凭据 HTTP(S)/SOCKS5 代理；Base URL 必须以 `/` 结尾，代理留空表示直连。
+首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、TMDB API 地址/代理/语言、Bangumi API 地址/代理、季度失败链、AI 两个独立开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 Skip → P3 Backtrace → P2 文件名季度 → P1 第一季纵向显示；AI 季度匹配插在实际执行位置但使用“独立 AI”分支标记，明确不占确定性优先级且默认关闭，EP-AI 则标为独立后置阶段。编辑器允许 TMDB 与 Bangumi 分别选择自定义 API 地址或无凭据 HTTP(S)/SOCKS5 代理；Base URL 必须以 `/` 结尾，代理留空表示直连。
 
 该接口只返回 `api_key_configured`、`read_access_token_configured` 和 `access_key_configured` 布尔值，绝不返回凭据内容；仍受统一 API 鉴权保护。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，密钥输入为空表示保留，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 

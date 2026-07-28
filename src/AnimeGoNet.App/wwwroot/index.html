@@ -270,17 +270,35 @@
         <label class="wide">Bangumi API 地址<input id="configuration-bangumi-url" type="url" required placeholder="https://api.bgm.tv/"></label>
         <label class="wide">Bangumi 代理（可选）<input id="configuration-bangumi-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>Bangumi 超时（秒）<input id="configuration-bangumi-timeout" type="number" min="1" max="86400" required></label>
-        <fieldset class="wide">
+        <fieldset class="wide failure-priority-editor">
           <legend>季度失败链</legend>
-          <label><input id="configuration-fail-skip" type="checkbox">TMDBFailSkip</label>
-          <label><input id="configuration-fail-backtrace" type="checkbox">TMDBFailBacktrace</label>
-          <label><input id="configuration-fail-title" type="checkbox">文件名季度</label>
-          <label><input id="configuration-fail-first" type="checkbox">第一季</label>
+          <p class="failure-priority-caption">由高到低执行；任一策略成功立即停止。Skip 命中会终止后续 fallback。</p>
+          <ol class="failure-priority-list" aria-label="TMDB 季度失败优先级">
+            <li class="failure-priority-step" data-priority="4">
+              <span class="failure-priority-badge">P4</span>
+              <label><input id="configuration-fail-skip" type="checkbox"><span><strong>TMDBFailSkip</strong><small>显式终止，不再执行低优先级策略</small></span></label>
+            </li>
+            <li class="failure-priority-step" data-priority="3">
+              <span class="failure-priority-badge">P3</span>
+              <label><input id="configuration-fail-backtrace" type="checkbox"><span><strong>TMDBFailBacktrace</strong><small>沿 Bangumi 前传关系回溯季度</small></span></label>
+            </li>
+            <li class="failure-priority-step independent" data-priority="independent">
+              <span class="failure-priority-badge">独立 AI</span>
+              <label><input id="configuration-ai-season" type="checkbox"><span><strong>AI 季度匹配</strong><small>独立可选阶段，默认关闭，不占确定性优先级</small></span></label>
+            </li>
+            <li class="failure-priority-step" data-priority="2">
+              <span class="failure-priority-badge">P2</span>
+              <label><input id="configuration-fail-title" type="checkbox"><span><strong>文件名季度</strong><small>从标题中的明确季度取值</small></span></label>
+            </li>
+            <li class="failure-priority-step" data-priority="1">
+              <span class="failure-priority-badge">P1</span>
+              <label><input id="configuration-fail-first" type="checkbox"><span><strong>第一季</strong><small>最后尝试 TMDB 第一季</small></span></label>
+            </li>
+          </ol>
         </fieldset>
         <fieldset class="wide">
           <legend>AI 与兜底</legend>
-          <label><input id="configuration-ai-season" type="checkbox">AI 季度匹配</label>
-          <label><input id="configuration-ai-episode" type="checkbox">AI EP 匹配</label>
+          <label><input id="configuration-ai-episode" type="checkbox">AI EP 匹配（独立后置阶段）</label>
           <label><input id="configuration-bangumi-fallback" type="checkbox">Bangumi 完全兜底</label>
           <label><input id="configuration-offset-cache" type="checkbox">可信 offset 缓存</label>
         </fieldset>

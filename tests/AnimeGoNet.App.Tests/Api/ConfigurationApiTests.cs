@@ -138,7 +138,16 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"TMDB 季度失败优先级\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-priority=\"4\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-priority=\"3\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-priority=\"independent\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-priority=\"2\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-priority=\"1\"", html, StringComparison.Ordinal);
+        Assert.Contains("默认关闭，不占确定性优先级", html, StringComparison.Ordinal);
         Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
+        Assert.Contains("seasonFailurePriority", script, StringComparison.Ordinal);
+        Assert.Contains("独立可选阶段，不占确定性优先级", script, StringComparison.Ordinal);
         Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
