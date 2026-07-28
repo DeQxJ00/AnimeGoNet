@@ -35,7 +35,15 @@ public sealed record PendingTmdbScopeProjection(
     string? SourceEpisode,
     DateTimeOffset? CompletedAtUtc);
 
+public sealed record PendingTmdbRecoveryCandidateProjection(
+    string FallbackCompletionId,
+    string ScopeKind,
+    string SourceId,
+    string? SourceEpisode,
+    DateTimeOffset CompletedAtUtc);
+
 public sealed record PendingTmdbSeriesDetail(
     PendingTmdbSeriesSummary Summary,
     IReadOnlyList<PendingTmdbTaskProjection> Tasks,
-    IReadOnlyList<PendingTmdbScopeProjection> Scopes);
+    IReadOnlyList<PendingTmdbScopeProjection> Scopes,
+    IReadOnlyList<PendingTmdbRecoveryCandidateProjection> RecoveryCandidates);

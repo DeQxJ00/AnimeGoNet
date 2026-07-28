@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Ingest;
@@ -186,6 +187,7 @@ public sealed class MinimalApiTests
         Assert.Equal("仅同一 mikanid", scope.GetProperty("dedup_boundary").GetString());
         Assert.True(scope.GetProperty("cross_source_duplicate_risk").GetBoolean());
         Assert.False(scope.TryGetProperty("key", out _));
+        Assert.Empty(detailJson.RootElement.GetProperty("recovery_candidates").EnumerateArray());
     }
 
     [Fact]
@@ -196,6 +198,162 @@ public sealed class MinimalApiTests
         using var response = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PendingTmdbRecoveryVerifiesTmdbAndCommitsCanonicalCompletion()
+    {
+        var tmdb = new RecoveryTmdbClient(episodeExists: true);
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/recover-tmdb.torrent",
+                "info": { "title": "Recover title", "mikanid": 3951, "bgmid": 547888 }
+              }]
+            }
+            """;
+        using var ingest = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var ingestJson = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        var taskId = ingestJson.RootElement.GetProperty("items")[0].GetProperty("ingest_id").GetString()!;
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var setup = connection.CreateCommand())
+        {
+            setup.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
+                    needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES ('recover-series', 0, 547888, '兜底动画', 'Fallback Anime', 1, $now, $now);
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name,
+                    created_at_utc, updated_at_utc)
+                VALUES ('recover-season', 'recover-series', 2, 'Season 2', $now, $now);
+                UPDATE ingest_tasks
+                SET status = 'organized', failure_kind = 'tmdb_completion_pending',
+                    failure_reason = 'tmdb_series_not_found', updated_at_utc = $now
+                WHERE id = $task_id;
+                UPDATE task_files
+                SET source_episode = '1', tmdb_season_number = 2,
+                    disposition = 'other',
+                    other_reason = 'tmdb_fallback_pending_completion'
+                WHERE task_id = $task_id;
+                INSERT INTO fallback_claims (
+                    id, scope_kind, scope_key, task_file_id,
+                    state, claimed_at_utc, expires_at_utc)
+                SELECT 'recover-claim', 'mikan_episode', '3951:source:1',
+                       id, 'completed', $now, NULL
+                FROM task_files WHERE task_id = $task_id;
+                INSERT INTO fallback_completion_records (
+                    id, anime_series_id, bangumi_subject_id, scope_kind, scope_key,
+                    source_id, source_episode, media_path, completed_at_utc)
+                VALUES (
+                    'recover-record', 'recover-series', 547888,
+                    'mikan_episode', '3951:source:1', 'mikan', '1',
+                    '/private/media/fallback.mkv', $now);
+                """;
+            setup.Parameters.AddWithValue("$task_id", taskId);
+            setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(6, await setup.ExecuteNonQueryAsync());
+        }
+
+        using (var detail = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888"))
+        {
+            var body = await detail.Content.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            var candidate = Assert.Single(
+                json.RootElement.GetProperty("recovery_candidates").EnumerateArray());
+            Assert.Equal("recover-record", candidate.GetProperty("fallback_record_id").GetString());
+            Assert.Equal("1", candidate.GetProperty("source_episode").GetString());
+            Assert.Equal("仅同一 mikanid", candidate.GetProperty("dedup_boundary").GetString());
+            Assert.DoesNotContain("3951:source:1", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("/private/media", body, StringComparison.Ordinal);
+        }
+
+        const string recoveryPayload = """
+            {
+              "tmdb_series_id": 700,
+              "mappings": [{
+                "fallback_record_id": "recover-record",
+                "tmdb_season_number": 2,
+                "tmdb_episode_number": 1
+              }]
+            }
+            """;
+        using var response = await app.Client.PostAsync(
+            "/api/v1/metadata/pending-tmdb/547888/recover",
+            new StringContent(recoveryPayload, Encoding.UTF8, "application/json"));
+        var responseBody = await response.Content.ReadAsStringAsync();
+        using var responseJson = JsonDocument.Parse(responseBody);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(700, responseJson.RootElement.GetProperty("tmdb_series_id").GetInt32());
+        Assert.False(responseJson.RootElement.GetProperty("has_pending_fallback_records").GetBoolean());
+        Assert.Equal(
+            "Resolved",
+            responseJson.RootElement.GetProperty("items")[0].GetProperty("state").GetString());
+        Assert.Equal([(700, 2, 1)], tmdb.EpisodeRequests);
+        Assert.DoesNotContain("private-passkey", responseBody, StringComparison.Ordinal);
+
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var verify = connection.CreateCommand())
+        {
+            verify.CommandText = """
+                SELECT
+                    (SELECT COUNT(*) FROM completion_records
+                     WHERE tmdb_series_id = 700
+                       AND tmdb_season_number = 2
+                       AND tmdb_episode_number = 1),
+                    (SELECT COUNT(*) FROM completion_aliases
+                     WHERE fallback_scope_kind = 'mikan_episode'),
+                    (SELECT COUNT(*) FROM fallback_completion_records
+                     WHERE resolution_state = 'resolved'
+                       AND resolution_source = 'manual');
+                """;
+            await using var reader = await verify.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1, reader.GetInt32(0));
+            Assert.Equal(1, reader.GetInt32(1));
+            Assert.Equal(1, reader.GetInt32(2));
+        }
+
+        using var missing = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task PendingTmdbRecoveryRejectsUnverifiedEpisodeBeforeDatabaseMutation()
+    {
+        var tmdb = new RecoveryTmdbClient(episodeExists: false);
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+
+        const string request = """
+            {
+              "tmdb_series_id": 700,
+              "mappings": [{
+                "fallback_record_id": "missing-record",
+                "tmdb_season_number": 2,
+                "tmdb_episode_number": 1
+              }]
+            }
+            """;
+        using var response = await app.Client.PostAsync(
+            "/api/v1/metadata/pending-tmdb/547888/recover",
+            new StringContent(request, Encoding.UTF8, "application/json"));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(
+            "pending_tmdb_episode_not_found",
+            json.RootElement.GetProperty("code").GetString());
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var count = connection.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM completion_records;";
+        Assert.Equal(0L, (long)(await count.ExecuteScalarAsync())!);
     }
 
     [Fact]
@@ -309,6 +467,51 @@ public sealed class MinimalApiTests
             new StringContent(u2Payload, Encoding.UTF8, "application/json"));
         using var u2Json = JsonDocument.Parse(await u2Response.Content.ReadAsStreamAsync());
         Assert.Equal("pt", u2Json.RootElement.GetProperty("items")[0].GetProperty("downloader_id").GetString());
+    }
+
+    private sealed class RecoveryTmdbClient(bool episodeExists) : ITmdbClient
+    {
+        public List<(int SeriesId, int SeasonNumber, int EpisodeNumber)> EpisodeRequests { get; } = [];
+
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+            string title,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TmdbSeries>>([]);
+
+        public Task<TmdbSeries?> GetSeriesAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeries?>(
+                seriesId == 700
+                    ? new TmdbSeries(700, "Canonical Anime", "Canonical Anime", null)
+                    : null);
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeriesDetails?>(null);
+
+        public Task<TmdbSeason?> GetSeasonAsync(
+            int seriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeason?>(
+                seriesId == 700 && seasonNumber == 2
+                    ? new TmdbSeason(800, 700, 2, "Season 2", null, 12)
+                    : null);
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(
+            int seriesId,
+            int seasonNumber,
+            int episodeNumber,
+            CancellationToken cancellationToken = default)
+        {
+            EpisodeRequests.Add((seriesId, seasonNumber, episodeNumber));
+            return Task.FromResult<TmdbEpisode?>(
+                episodeExists && seriesId == 700 && seasonNumber == 2 && episodeNumber == 1
+                    ? new TmdbEpisode(9001, 700, 2, 1, "Episode 1", null)
+                    : null);
+        }
     }
 
     [Fact]

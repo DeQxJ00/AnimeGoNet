@@ -75,7 +75,9 @@ fallback 唯一键必须包含身份类型，不能把不同编号体系拼进�
 
 后续补全真实 TMDB 映射时，在一个事务中把 `FallbackCompletionRecord` 合并为规范 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)` 完成记录并保存原 fallback alias。若多个 fallback 记录或已有规范记录收敛到同一 TMDB Episode，保留最早的规范完成记录，其他记录标记 `DuplicateAfterResolution` 并进入人工处理；不得再次触发下载，也不得静默删除已经存在的文件。
 
-schema v20 与 `PendingTmdbRecoveryStore` 已实现上述数据库事务边界。调用方必须提交已验证且内部一致的 TMDB Series/Season/Episode；事务按原兜底完成时间排序，首条创建规范 completion，其余或命中既有 completion 的记录写为 `duplicate_after_resolution`。每条记录都保存 `manual/automatic` 恢复来源、规范 completion 外键和 fallback scope alias，同时更新关联 `task_file` 的正式 TMDB 身份；事务不会创建下载任务、移动或删除任何文件。允许分批恢复，只有最后一条待补全记录完成后才移除 `tmdbid=0` 投影。在线 TMDB 验证、人工 API/UI 和 NFO 原子重写由后续应用层模块负责。
+schema v20 与 `PendingTmdbRecoveryStore` 已实现上述数据库事务边界。调用方必须提交已验证且内部一致的 TMDB Series/Season/Episode；事务按原兜底完成时间排序，首条创建规范 completion，其余或命中既有 completion 的记录写为 `duplicate_after_resolution`。每条记录都保存 `manual/automatic` 恢复来源、规范 completion 外键和 fallback scope alias，同时更新关联 `task_file` 的正式 TMDB 身份；事务不会创建下载任务、移动或删除任何文件。允许分批恢复，只有最后一条待补全记录完成后才移除 `tmdbid=0` 投影。
+
+人工恢复端点已在提交事务前通过 `ITmdbClient` 逐项读取并验证 Series、Season、Episode 的 ID 与父级身份；任何不存在、不一致或 TMDB 网络/服务错误都不会进入数据库事务。详情只向客户端公开随机 fallback record ID、来源、来源集号和去重边界，不公开 scope key、媒体路径或下载凭据。NFO 原子重写仍需通过持久化、可恢复的文件作业实现，不能在 HTTP 请求中用不可恢复的文件/数据库双写冒充原子操作。
 
 旧 YAML 的 `allow_duplicate_download` 字段仍可读取和迁移，但新程序不允许它绕过规范 TMDB Episode 完成记录；Web 标记为已弃用并解释需要先删除对应完成记录才能重新下载。这样不会因为旧配置中的 `true` 破坏跨来源全局去重。
 

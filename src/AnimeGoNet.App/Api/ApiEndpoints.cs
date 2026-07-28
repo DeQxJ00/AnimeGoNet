@@ -65,6 +65,9 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
         app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
+        app.MapPost(
+            "/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}/recover",
+            RecoverPendingTmdb);
         app.MapPost("/api/v1/ingest", Ingest);
         app.MapPost("/api/rss", LegacyRss);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
@@ -1536,7 +1539,147 @@ public static class ApiEndpoints
                 scope.SourceEpisode,
                 ScopeBoundary(scope.Kind),
                 scope.Kind != "bangumi_episode",
-                scope.CompletedAtUtc)).ToArray()));
+                scope.CompletedAtUtc)).ToArray(),
+            detail.RecoveryCandidates.Select(candidate => new PendingTmdbRecoveryCandidateItem(
+                candidate.FallbackCompletionId,
+                candidate.SourceId,
+                candidate.SourceEpisode,
+                ScopeBoundary(candidate.ScopeKind),
+                candidate.CompletedAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> RecoverPendingTmdb(
+        int bangumiSubjectId,
+        PendingTmdbRecoveryRequest request,
+        PendingTmdbRecoveryStore recovery,
+        ITmdbClient tmdb,
+        CancellationToken cancellationToken)
+    {
+        if (bangumiSubjectId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "pending_tmdb_bgmid_invalid",
+                "Bangumi Subject ID must be positive."));
+        }
+
+        var mappings = request.Mappings;
+        if (request.TmdbSeriesId <= 0
+            || mappings is null
+            || mappings.Count == 0
+            || mappings.Any(mapping =>
+                string.IsNullOrWhiteSpace(mapping.FallbackRecordId)
+                || mapping.TmdbSeasonNumber <= 0
+                || mapping.TmdbEpisodeNumber <= 0)
+            || mappings.Select(mapping => mapping.FallbackRecordId)
+                .Distinct(StringComparer.Ordinal).Count() != mappings.Count)
+        {
+            return TypedResults.BadRequest(Error(
+                "pending_tmdb_recovery_invalid",
+                "Recovery requires a positive TMDB Series and unique positive Season/Episode mappings."));
+        }
+
+        try
+        {
+            var series = await tmdb.GetSeriesAsync(
+                request.TmdbSeriesId,
+                cancellationToken).ConfigureAwait(false);
+            if (series?.Id != request.TmdbSeriesId)
+            {
+                return TypedResults.BadRequest(Error(
+                    "pending_tmdb_series_not_found",
+                    "TMDB TV Series could not be verified."));
+            }
+
+            var seasons = new Dictionary<int, TmdbSeason>();
+            foreach (var seasonNumber in mappings.Select(value => value.TmdbSeasonNumber).Distinct())
+            {
+                var season = await tmdb.GetSeasonAsync(
+                    series.Id,
+                    seasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+                if (season?.SeriesId != series.Id || season.SeasonNumber != seasonNumber)
+                {
+                    return TypedResults.BadRequest(Error(
+                        "pending_tmdb_season_not_found",
+                        $"TMDB Season {seasonNumber} could not be verified."));
+                }
+
+                seasons.Add(seasonNumber, season);
+            }
+
+            var episodes = new Dictionary<(int Season, int Episode), TmdbEpisode>();
+            foreach (var identity in mappings
+                         .Select(value => (value.TmdbSeasonNumber, value.TmdbEpisodeNumber))
+                         .Distinct())
+            {
+                var episode = await tmdb.GetEpisodeAsync(
+                    series.Id,
+                    identity.TmdbSeasonNumber,
+                    identity.TmdbEpisodeNumber,
+                    cancellationToken).ConfigureAwait(false);
+                if (episode?.SeriesId != series.Id
+                    || episode.SeasonNumber != identity.TmdbSeasonNumber
+                    || episode.EpisodeNumber != identity.TmdbEpisodeNumber)
+                {
+                    return TypedResults.BadRequest(Error(
+                        "pending_tmdb_episode_not_found",
+                        $"TMDB S{identity.TmdbSeasonNumber}E{identity.TmdbEpisodeNumber} could not be verified."));
+                }
+
+                episodes.Add(identity, episode);
+            }
+
+            var result = await recovery.RecoverAsync(
+                new AnimeGoNet.Data.Metadata.PendingTmdbRecoveryRequest(
+                    bangumiSubjectId,
+                    series,
+                    mappings.Select(mapping => new PendingTmdbRecoveryMapping(
+                        mapping.FallbackRecordId!,
+                        seasons[mapping.TmdbSeasonNumber],
+                        episodes[(mapping.TmdbSeasonNumber, mapping.TmdbEpisodeNumber)])).ToArray(),
+                    "manual"),
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new PendingTmdbRecoveryResponse(
+                result.BangumiSubjectId,
+                result.TmdbSeriesId,
+                result.HasPendingFallbackRecords,
+                result.Items.Select(item => new PendingTmdbRecoveryItemResponse(
+                    item.FallbackCompletionId,
+                    item.TmdbSeasonNumber,
+                    item.TmdbEpisodeNumber,
+                    item.State == "duplicate_after_resolution"
+                        ? "DuplicateAfterResolution"
+                        : "Resolved")).ToArray()));
+        }
+        catch (TmdbClientException exception)
+        {
+            var status = exception.Kind is MetadataFailureKind.Network or MetadataFailureKind.RemoteService
+                ? StatusCodes.Status503ServiceUnavailable
+                : StatusCodes.Status502BadGateway;
+            return TypedResults.Json(
+                Error(exception.SafeCode, "TMDB recovery validation failed."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: status);
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.Conflict(Error(
+                "pending_tmdb_recovery_stale",
+                "Pending TMDB recovery data changed; reload the detail before retrying."));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return TypedResults.Conflict(Error(
+                "pending_tmdb_recovery_conflict",
+                exception.Message));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "pending_tmdb_recovery_invalid",
+                exception.Message));
+        }
     }
 
     private static PendingTmdbListItem ToResponse(PendingTmdbSeriesSummary item) =>

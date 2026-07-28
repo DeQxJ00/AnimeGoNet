@@ -298,7 +298,9 @@ public sealed record PendingTmdbListItem(
 public sealed record PendingTmdbDetailResponse(
     [property: JsonPropertyName("summary")] PendingTmdbListItem Summary,
     [property: JsonPropertyName("tasks")] IReadOnlyList<PendingTmdbTaskItem> Tasks,
-    [property: JsonPropertyName("scopes")] IReadOnlyList<PendingTmdbScopeItem> Scopes);
+    [property: JsonPropertyName("scopes")] IReadOnlyList<PendingTmdbScopeItem> Scopes,
+    [property: JsonPropertyName("recovery_candidates")]
+    IReadOnlyList<PendingTmdbRecoveryCandidateItem> RecoveryCandidates);
 
 public sealed record PendingTmdbTaskItem(
     [property: JsonPropertyName("task_id")] string TaskId,
@@ -320,6 +322,34 @@ public sealed record PendingTmdbScopeItem(
     [property: JsonPropertyName("dedup_boundary")] string DedupBoundary,
     [property: JsonPropertyName("cross_source_duplicate_risk")] bool CrossSourceDuplicateRisk,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc);
+
+public sealed record PendingTmdbRecoveryCandidateItem(
+    [property: JsonPropertyName("fallback_record_id")] string FallbackRecordId,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("source_episode")] string? SourceEpisode,
+    [property: JsonPropertyName("dedup_boundary")] string DedupBoundary,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset CompletedAtUtc);
+
+public sealed record PendingTmdbRecoveryRequest(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("mappings")] IReadOnlyList<PendingTmdbRecoveryMappingRequest>? Mappings);
+
+public sealed record PendingTmdbRecoveryMappingRequest(
+    [property: JsonPropertyName("fallback_record_id")] string? FallbackRecordId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_episode_number")] int TmdbEpisodeNumber);
+
+public sealed record PendingTmdbRecoveryResponse(
+    [property: JsonPropertyName("bgmid")] int BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("has_pending_fallback_records")] bool HasPendingFallbackRecords,
+    [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbRecoveryItemResponse> Items);
+
+public sealed record PendingTmdbRecoveryItemResponse(
+    [property: JsonPropertyName("fallback_record_id")] string FallbackRecordId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_episode_number")] int TmdbEpisodeNumber,
+    [property: JsonPropertyName("state")] string State);
 
 public sealed record ApiErrorResponse(
     [property: JsonPropertyName("code")] string Code,

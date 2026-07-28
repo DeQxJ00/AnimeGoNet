@@ -102,7 +102,11 @@ public sealed class PendingTmdbStore(AnimeGoSqliteDatabase database)
             seriesId,
             bangumiSubjectId,
             cancellationToken).ConfigureAwait(false);
-        return new PendingTmdbSeriesDetail(summary, tasks, scopes);
+        var recoveryCandidates = await ReadRecoveryCandidatesAsync(
+            connection,
+            seriesId,
+            cancellationToken).ConfigureAwait(false);
+        return new PendingTmdbSeriesDetail(summary, tasks, scopes, recoveryCandidates);
     }
 
     private static async Task<PendingTmdbSeriesSummary> ReadSummaryAsync(
@@ -282,6 +286,35 @@ public sealed class PendingTmdbStore(AnimeGoSqliteDatabase database)
                 reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : Parse(reader.GetString(5))));
+        }
+
+        return results;
+    }
+
+    private static async Task<IReadOnlyList<PendingTmdbRecoveryCandidateProjection>> ReadRecoveryCandidatesAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        string seriesId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, scope_kind, source_id, source_episode, completed_at_utc
+            FROM fallback_completion_records
+            WHERE anime_series_id = $series_id
+              AND resolution_state = 'pending'
+            ORDER BY completed_at_utc, id;
+            """;
+        command.Parameters.AddWithValue("$series_id", seriesId);
+        var results = new List<PendingTmdbRecoveryCandidateProjection>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            results.Add(new PendingTmdbRecoveryCandidateProjection(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                Parse(reader.GetString(4))));
         }
 
         return results;
