@@ -18,7 +18,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var fallbackSeriesId = await FindFallbackSeriesAsync(
+        var fallbackSeries = await FindFallbackSeriesAsync(
             connection,
             transaction,
             request.BangumiSubjectId,
@@ -29,7 +29,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
             fallbackRows.Add(await ReadFallbackAsync(
                 connection,
                 transaction,
-                fallbackSeriesId,
+                fallbackSeries.Id,
                 mapping,
                 cancellationToken).ConfigureAwait(false));
         }
@@ -50,6 +50,17 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
             request,
             now,
             cancellationToken).ConfigureAwait(false);
+        foreach (var fallback in fallbackRows)
+        {
+            await EnqueueNfoRewritesAsync(
+                connection,
+                transaction,
+                request,
+                fallbackSeries.Name,
+                fallback,
+                now,
+                cancellationToken).ConfigureAwait(false);
+        }
         foreach (var season in request.Mappings.Select(value => value.Season)
                      .DistinctBy(value => value.SeasonNumber))
         {
@@ -138,7 +149,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         var hasPending = await HasPendingAsync(
             connection,
             transaction,
-            fallbackSeriesId,
+            fallbackSeries.Id,
             cancellationToken).ConfigureAwait(false);
         if (!hasPending)
         {
@@ -150,7 +161,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
                   AND tmdb_series_id = 0
                   AND needs_tmdb_completion = 1;
                 """;
-            deleteFallback.Parameters.AddWithValue("$series_id", fallbackSeriesId);
+            deleteFallback.Parameters.AddWithValue("$series_id", fallbackSeries.Id);
             if (await deleteFallback.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 throw new InvalidOperationException("Pending TMDB Series changed concurrently.");
@@ -206,7 +217,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         }
     }
 
-    private static async Task<string> FindFallbackSeriesAsync(
+    private static async Task<FallbackSeries> FindFallbackSeriesAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         int bangumiSubjectId,
@@ -215,14 +226,86 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id FROM anime_series
+            SELECT id, COALESCE(NULLIF(canonical_name, ''), NULLIF(original_name, ''),
+                                'Bangumi ' || bangumi_subject_id)
+            FROM anime_series
             WHERE tmdb_series_id = 0
               AND needs_tmdb_completion = 1
               AND bangumi_subject_id = $bgmid;
             """;
         command.Parameters.AddWithValue("$bgmid", bangumiSubjectId);
-        return (string)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
-            ?? throw new KeyNotFoundException("Pending TMDB Series was not found."));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new KeyNotFoundException("Pending TMDB Series was not found.");
+        }
+
+        return new FallbackSeries(reader.GetString(0), reader.GetString(1));
+    }
+
+    private static async Task EnqueueNfoRewritesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        PendingTmdbRecoveryRequest request,
+        string fallbackSeriesName,
+        FallbackRow fallback,
+        string now,
+        CancellationToken cancellationToken)
+    {
+        var saveRoots = new List<string>();
+        await using (var targets = connection.CreateCommand())
+        {
+            targets.Transaction = transaction;
+            targets.CommandText = """
+                SELECT DISTINCT job.save_root_path
+                FROM fallback_claims AS claim
+                JOIN task_files AS file ON file.id = claim.task_file_id
+                JOIN download_jobs AS job ON job.task_id = file.task_id
+                WHERE claim.scope_kind = $scope_kind
+                  AND claim.scope_key = $scope_key
+                  AND job.save_root_path IS NOT NULL
+                  AND trim(job.save_root_path) <> '';
+                """;
+            targets.Parameters.AddWithValue("$scope_kind", fallback.ScopeKind);
+            targets.Parameters.AddWithValue("$scope_key", fallback.ScopeKey);
+            await using var reader = await targets.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                saveRoots.Add(reader.GetString(0));
+            }
+        }
+
+        foreach (var saveRoot in saveRoots)
+        {
+            await using var enqueue = connection.CreateCommand();
+            enqueue.Transaction = transaction;
+            enqueue.CommandText = """
+                INSERT INTO pending_tmdb_nfo_rewrite_jobs (
+                    id, bangumi_subject_id, tmdb_series_id, save_root_path,
+                    series_directory_name, canonical_series_name, state,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    $id, $bgmid, $tmdb_id, $save_root,
+                    $directory_name, $canonical_name, 'pending', $now, $now)
+                ON CONFLICT(
+                    bangumi_subject_id, tmdb_series_id, save_root_path, series_directory_name)
+                DO NOTHING;
+                """;
+            enqueue.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            enqueue.Parameters.AddWithValue("$bgmid", request.BangumiSubjectId);
+            enqueue.Parameters.AddWithValue("$tmdb_id", request.Series.Id);
+            enqueue.Parameters.AddWithValue("$save_root", saveRoot);
+            enqueue.Parameters.AddWithValue("$directory_name", fallbackSeriesName);
+            enqueue.Parameters.AddWithValue("$canonical_name", request.Series.Name);
+            enqueue.Parameters.AddWithValue("$now", now);
+            await enqueue.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (saveRoots.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Pending TMDB recovery requires a captured save root for NFO rewrite.");
+        }
     }
 
     private static async Task<FallbackRow> ReadFallbackAsync(
@@ -649,4 +732,6 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         string? SourceEpisode,
         string? MediaPath,
         DateTimeOffset CompletedAtUtc);
+
+    private sealed record FallbackSeries(string Id, string Name);
 }

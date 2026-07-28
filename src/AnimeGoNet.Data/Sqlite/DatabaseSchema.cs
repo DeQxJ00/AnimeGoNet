@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 20;
+    public const int CurrentVersion = 21;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -26,6 +26,7 @@ public static class DatabaseSchema
         new SchemaMigration(18, "enable_all_file_strategies", EnableAllFileStrategies),
         new SchemaMigration(19, "mikan_publication_evidence", MikanPublicationEvidence),
         new SchemaMigration(20, "pending_tmdb_recovery", PendingTmdbRecovery),
+        new SchemaMigration(21, "pending_tmdb_nfo_rewrite_jobs", PendingTmdbNfoRewriteJobs),
     ];
 
     private const string InitialBusinessSchema = """
@@ -862,5 +863,33 @@ public static class DatabaseSchema
         BEGIN
             SELECT RAISE(ABORT, 'fallback resolution projection is inconsistent');
         END;
+        """;
+
+    private const string PendingTmdbNfoRewriteJobs = """
+        CREATE TABLE pending_tmdb_nfo_rewrite_jobs (
+            id TEXT NOT NULL PRIMARY KEY,
+            bangumi_subject_id INTEGER NOT NULL CHECK (bangumi_subject_id > 0),
+            tmdb_series_id INTEGER NOT NULL CHECK (tmdb_series_id > 0),
+            save_root_path TEXT NOT NULL,
+            series_directory_name TEXT NOT NULL,
+            canonical_series_name TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('pending', 'writing', 'completed', 'failed')),
+            lease_token TEXT,
+            lease_expires_at_utc TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+            next_attempt_at_utc TEXT,
+            failure_code TEXT,
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT,
+            UNIQUE (
+                bangumi_subject_id, tmdb_series_id, save_root_path, series_directory_name),
+            CHECK (
+                (state = 'writing' AND lease_token IS NOT NULL AND lease_expires_at_utc IS NOT NULL)
+                OR (state <> 'writing' AND lease_token IS NULL AND lease_expires_at_utc IS NULL))
+        ) STRICT;
+
+        CREATE INDEX ix_pending_tmdb_nfo_rewrite_jobs_ready
+        ON pending_tmdb_nfo_rewrite_jobs(state, next_attempt_at_utc, updated_at_utc);
         """;
 }

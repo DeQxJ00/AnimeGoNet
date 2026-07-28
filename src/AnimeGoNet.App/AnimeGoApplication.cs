@@ -151,6 +151,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MetadataResolutionStore>();
         builder.Services.AddSingleton<PendingTmdbStore>();
         builder.Services.AddSingleton<PendingTmdbRecoveryStore>();
+        builder.Services.AddSingleton<PendingTmdbNfoRewriteStore>();
         builder.Services.AddSingleton<CompletionRecordStore>();
         builder.Services.AddSingleton(downloadClientRegistry);
         builder.Services.AddSingleton<DownloadClientOperationCoordinator>();
@@ -161,6 +162,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<SafeFileMover>();
         builder.Services.AddSingleton<SafeFileLinker>();
         builder.Services.AddSingleton<TvShowNfoWriter>();
+        builder.Services.AddSingleton<PendingTmdbNfoRewriteProcessor>();
         builder.Services.AddSingleton<MediaOrganizationProcessor>();
         builder.Services.AddSingleton<SafeFileDeleter>();
         builder.Services.AddSingleton<DeleteExecutionProcessor>();
@@ -205,6 +207,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<EpisodeMetadataResolutionWorker>();
             builder.Services.AddHostedService<DownloadPreparationWorker>();
             builder.Services.AddHostedService<MediaOrganizationWorker>();
+            builder.Services.AddHostedService<PendingTmdbNfoRewriteWorker>();
             builder.Services.AddHostedService<DeleteExecutionWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>

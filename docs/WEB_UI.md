@@ -37,7 +37,7 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 待补全详情还要显示兜底去重身份和作用域，例如“Bangumi Episode”“仅同一 mikanid”“仅当前来源作品”或“仅相同 Torrent/文件”，并在不能跨来源去重时显示风险提示。恢复出真实 TMDB ID/Season/Episode 并通过验证、合并完成记录后，才进入标准动画作品列表；合并冲突显示 `DuplicateAfterResolution`，不自动重新下载或静默删文件。
 
-当前 `GET /api/v1/metadata/pending-tmdb` 和 `/{bgmid}` 已提供待补全作品 summary/detail。静态 WebUI 显示 Bangumi 兜底名、已确认季度、关联任务、已处理文件、兜底 completion/claim、重复数、最近失败分类，以及不含内部 scope key 的去重边界。`mikan_episode`、`source_work_episode`、`torrent_file` 明确提示可能跨来源重复；页面不返回或推导 `tmdb_series_id`、TMDB Episode 进度、季度封面和完成比例。详情 API 另返回不含 scope key、媒体路径的安全恢复候选 ID；页面可为每个候选填写 Season/Episode，并统一提交 TMDB Series ID。`POST /api/v1/metadata/pending-tmdb/{bgmid}/recover` 逐项在线验证后执行事务合并，冲突显示 `DuplicateAfterResolution`。恢复表单打开时暂停十秒自动刷新，防止用户输入丢失；手动刷新和提交成功可强制更新。可恢复 NFO 重写属于后续独立模块。
+当前 `GET /api/v1/metadata/pending-tmdb` 和 `/{bgmid}` 已提供待补全作品 summary/detail。静态 WebUI 显示 Bangumi 兜底名、已确认季度、关联任务、已处理文件、兜底 completion/claim、重复数、最近失败分类，以及不含内部 scope key 的去重边界。`mikan_episode`、`source_work_episode`、`torrent_file` 明确提示可能跨来源重复；页面不返回或推导 `tmdb_series_id`、TMDB Episode 进度、季度封面和完成比例。详情 API 另返回不含 scope key、媒体路径的安全恢复候选 ID；页面可为每个候选填写 Season/Episode，并统一提交 TMDB Series ID。`POST /api/v1/metadata/pending-tmdb/{bgmid}/recover` 逐项在线验证后执行事务合并，冲突显示 `DuplicateAfterResolution`。恢复表单打开时暂停十秒自动刷新，防止用户输入丢失；手动刷新和提交成功可强制更新。成功恢复会在同一事务排入可恢复 NFO 重写作业；作业状态的 Web 展示仍待接入统一任务面板。
 
 ## 4. 排序
 

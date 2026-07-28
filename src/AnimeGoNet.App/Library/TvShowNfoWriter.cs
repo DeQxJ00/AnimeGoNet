@@ -12,6 +12,21 @@ public sealed class TvShowNfoWriter
         string canonicalSeriesName,
         int tmdbSeriesId,
         int? bangumiSubjectId,
+        CancellationToken cancellationToken = default) =>
+        await WriteAsync(
+            saveRoot,
+            canonicalSeriesName,
+            canonicalSeriesName,
+            tmdbSeriesId,
+            bangumiSubjectId,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task WriteAsync(
+        string saveRoot,
+        string seriesDirectoryName,
+        string canonicalSeriesName,
+        int tmdbSeriesId,
+        int? bangumiSubjectId,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(tmdbSeriesId);
@@ -21,7 +36,9 @@ public sealed class TvShowNfoWriter
                 "TMDB fallback NFO requires a positive Bangumi Subject ID.",
                 nameof(bangumiSubjectId));
         }
-        var seriesDirectory = PathBoundary.Combine(saveRoot, MediaPathPlanner.SanitizeSegment(canonicalSeriesName));
+        var seriesDirectory = PathBoundary.Combine(
+            saveRoot,
+            MediaPathPlanner.SanitizeSegment(seriesDirectoryName));
         var target = Path.Combine(seriesDirectory, "tvshow.nfo");
         if (!PathBoundary.IsWithin(saveRoot, target))
         {

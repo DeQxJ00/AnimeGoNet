@@ -44,7 +44,15 @@ public sealed class PendingTmdbRecoveryStoreTests
         Assert.Equal(1, await ScalarAsync(
             connection,
             "SELECT COUNT(*) FROM task_files WHERE disposition = 'duplicate' AND other_reason = 'duplicate_after_resolution';"));
-        Assert.Equal(0, await ScalarAsync(connection, "SELECT COUNT(*) FROM download_jobs;"));
+        Assert.Equal(2, await ScalarAsync(connection, "SELECT COUNT(*) FROM download_jobs;"));
+        Assert.Equal(1, await ScalarAsync(
+            connection,
+            """
+            SELECT COUNT(*) FROM pending_tmdb_nfo_rewrite_jobs
+            WHERE state = 'pending'
+              AND tmdb_series_id = 700
+              AND series_directory_name = 'Fallback Anime';
+            """));
 
         await using (var query = connection.CreateCommand())
         {
@@ -366,6 +374,14 @@ public sealed class PendingTmdbRecoveryStoreTests
                     VALUES (
                         $fallback_id, 'fallback-series', 547888, 'mikan_episode', $scope_key,
                         'mikan', $episode, $media_path, $completed_at);
+
+                    INSERT INTO download_jobs (
+                        id, task_id, downloader_id, state, progress,
+                        downloaded_bytes, total_bytes, speed_bytes_per_second,
+                        download_root_path, save_root_path, created_at_utc, updated_at_utc)
+                    VALUES (
+                        $job_id, $task_id, 'bt', 'complete', 1,
+                        100, 100, 0, '/download', '/media', $now, $now);
                     """;
                 seed.Parameters.AddWithValue("$task_id", $"task-{index}");
                 seed.Parameters.AddWithValue("$source_item", $"item-{index}");
@@ -380,6 +396,7 @@ public sealed class PendingTmdbRecoveryStoreTests
                 seed.Parameters.AddWithValue("$scope_key", $"mikan:3951:{6 + index}");
                 seed.Parameters.AddWithValue("$fallback_id", $"fallback-{index}");
                 seed.Parameters.AddWithValue("$media_path", $"/media/fallback-{index}.mkv");
+                seed.Parameters.AddWithValue("$job_id", $"job-{index}");
                 seed.Parameters.AddWithValue(
                     "$completed_at",
                     index == 2

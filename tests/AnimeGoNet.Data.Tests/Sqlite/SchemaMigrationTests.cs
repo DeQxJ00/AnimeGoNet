@@ -56,6 +56,7 @@ public sealed class SchemaMigrationTests
             "mikan_rss_rule_sets",
             "mikan_trusted_offsets",
             "mikan_work_rules",
+            "pending_tmdb_nfo_rewrite_jobs",
             "schema_migrations",
             "source_profiles",
             "staged_torrents",

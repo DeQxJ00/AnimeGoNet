@@ -241,6 +241,13 @@ public sealed class MinimalApiTests
                     disposition = 'other',
                     other_reason = 'tmdb_fallback_pending_completion'
                 WHERE task_id = $task_id;
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    download_root_path, save_root_path, created_at_utc, updated_at_utc)
+                VALUES (
+                    'recover-job', $task_id, 'bt', 'complete', 1,
+                    100, 100, 0, $download_root, $save_root, $now, $now);
                 INSERT INTO fallback_claims (
                     id, scope_kind, scope_key, task_file_id,
                     state, claimed_at_utc, expires_at_utc)
@@ -256,8 +263,10 @@ public sealed class MinimalApiTests
                     '/private/media/fallback.mkv', $now);
                 """;
             setup.Parameters.AddWithValue("$task_id", taskId);
+            setup.Parameters.AddWithValue("$download_root", Path.Combine(app.RootPath, "download"));
+            setup.Parameters.AddWithValue("$save_root", Path.Combine(app.RootPath, "save"));
             setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
-            Assert.Equal(6, await setup.ExecuteNonQueryAsync());
+            Assert.True(await setup.ExecuteNonQueryAsync() >= 6);
         }
 
         using (var detail = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888"))
@@ -289,7 +298,7 @@ public sealed class MinimalApiTests
         var responseBody = await response.Content.ReadAsStringAsync();
         using var responseJson = JsonDocument.Parse(responseBody);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, responseBody);
         Assert.Equal(700, responseJson.RootElement.GetProperty("tmdb_series_id").GetInt32());
         Assert.False(responseJson.RootElement.GetProperty("has_pending_fallback_records").GetBoolean());
         Assert.Equal(
@@ -311,13 +320,16 @@ public sealed class MinimalApiTests
                      WHERE fallback_scope_kind = 'mikan_episode'),
                     (SELECT COUNT(*) FROM fallback_completion_records
                      WHERE resolution_state = 'resolved'
-                       AND resolution_source = 'manual');
+                       AND resolution_source = 'manual'),
+                    (SELECT COUNT(*) FROM pending_tmdb_nfo_rewrite_jobs
+                     WHERE state = 'pending' AND tmdb_series_id = 700);
                 """;
             await using var reader = await verify.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
             Assert.Equal(1, reader.GetInt32(0));
             Assert.Equal(1, reader.GetInt32(1));
             Assert.Equal(1, reader.GetInt32(2));
+            Assert.Equal(1, reader.GetInt32(3));
         }
 
         using var missing = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888");
