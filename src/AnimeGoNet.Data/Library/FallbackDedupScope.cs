@@ -16,7 +16,8 @@ public static class FallbackDedupScopeResolver
         string infoHash,
         string relativePath,
         long sizeBytes,
-        string? sourceEpisode)
+        string? sourceEpisode,
+        int? bangumiEpisodeId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(infoHash);
@@ -25,6 +26,13 @@ public static class FallbackDedupScopeResolver
 
         var normalizedSource = sourceId.Trim().ToLowerInvariant();
         var normalizedEpisode = NormalizeEpisode(sourceEpisode);
+        if (bangumiEpisodeId is > 0)
+        {
+            return new FallbackDedupScope(
+                "bangumi_episode",
+                bangumiEpisodeId.Value.ToString(CultureInfo.InvariantCulture));
+        }
+
         if (normalizedSource == "mikan"
             && mikanId is > 0
             && normalizedEpisode is not null)

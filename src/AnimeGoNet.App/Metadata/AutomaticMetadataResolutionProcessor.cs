@@ -19,7 +19,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
     MikanWorkMetadataRuleStore rules,
     MikanTrustedOffsetStore trustedOffsets,
     AnimeGoOptions options,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    IBangumiEpisodeClient? bangumiEpisodes = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -268,14 +269,72 @@ public sealed class AutomaticMetadataResolutionProcessor(
         await RecordAsync(
             claim, "season", "bangumi_fallback", null, "matched",
             null, false, started, cancellationToken).ConfigureAwait(false);
+        var bangumiEpisodeIds = await ResolveBangumiEpisodeIdsAsync(
+            claim,
+            bangumiEpisodes,
+            cancellationToken).ConfigureAwait(false);
         await resolutions.CompleteBangumiFallbackAsync(
             claim,
             subject,
             seasonNumber.Value,
             failure,
+            bangumiEpisodeIds,
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    private async Task<IReadOnlyDictionary<string, int>?> ResolveBangumiEpisodeIdsAsync(
+        MetadataTaskClaim claim,
+        IBangumiEpisodeClient? client,
+        CancellationToken cancellationToken)
+    {
+        if (client is null
+            || claim.BangumiSubjectId is null or <= 0
+            || claim.Files is null
+            || claim.Files.All(file => string.IsNullOrWhiteSpace(file.SourceEpisode)))
+        {
+            return null;
+        }
+
+        var started = _timeProvider.GetTimestamp();
+        try
+        {
+            var episodes = await client.GetEpisodesAsync(
+                claim.BangumiSubjectId.Value,
+                cancellationToken).ConfigureAwait(false);
+            var resolved = claim.Files
+                .Select(file => (
+                    file.FileId,
+                    EpisodeId: BangumiEpisodeIdentityResolver.Resolve(episodes, file.SourceEpisode)))
+                .Where(value => value.EpisodeId is > 0)
+                .ToDictionary(value => value.FileId, value => value.EpisodeId!.Value, StringComparer.Ordinal);
+            await RecordAsync(
+                claim,
+                "episode",
+                "bangumi_fallback_episode_identity",
+                null,
+                resolved.Count > 0 ? "matched" : "not_matched",
+                resolved.Count > 0 ? null : "bangumi_episode_identity_not_found",
+                false,
+                started,
+                cancellationToken).ConfigureAwait(false);
+            return resolved;
+        }
+        catch (BangumiClientException exception)
+        {
+            await RecordAsync(
+                claim,
+                "episode",
+                "bangumi_fallback_episode_identity",
+                null,
+                "failed",
+                exception.SafeCode,
+                IsRetryable(exception.Kind),
+                started,
+                cancellationToken).ConfigureAwait(false);
+            return null;
+        }
     }
 
     private async Task<bool> TryCompleteTrustedOffsetAsync(

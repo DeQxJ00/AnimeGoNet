@@ -566,6 +566,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         BangumiSubject subject,
         int seasonNumber,
         MetadataFailure failure,
+        IReadOnlyDictionary<string, int>? bangumiEpisodeIds,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
@@ -664,7 +665,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 infoHash,
                 file.RelativePath,
                 file.SizeBytes,
-                file.SourceEpisode);
+                file.SourceEpisode,
+                bangumiEpisodeIds is not null
+                    && bangumiEpisodeIds.TryGetValue(file.FileId, out var bangumiEpisodeId)
+                    ? bangumiEpisodeId
+                    : null);
             decisions.Add((
                 file.FileId,
                 await ClaimFallbackAsync(

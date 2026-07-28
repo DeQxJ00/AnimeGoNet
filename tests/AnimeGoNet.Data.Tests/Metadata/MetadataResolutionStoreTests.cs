@@ -511,6 +511,7 @@ public sealed class MetadataResolutionStoreTests
                 MetadataFailureKind.SemanticNoMatch,
                 "tmdb_series_not_found",
                 TmdbAccessConfirmed: true),
+            null,
             now);
 
     private sealed class MetadataFixture : IAsyncDisposable

@@ -52,6 +52,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             "来自深渊 第二季",
             new DateOnly(2022, 7, 6),
             12));
+        var bangumiEpisodes = new FakeBangumiEpisodeClient(
+            [new BangumiEpisode(1001, 0, 7, new DateOnly(2022, 8, 17))]);
         await using var app = await RunningApp.StartAsync(
             configure: options => options with
             {
@@ -65,8 +67,10 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 },
             },
             tmdbClient: tmdb,
-            bangumiSubjectClient: bangumi);
+            bangumiSubjectClient: bangumi,
+            bangumiEpisodeClient: bangumiEpisodes);
         var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第二季");
+        await SetMikanGroupAndEpisodeCandidateAsync(app, taskId, 77, 7);
 
         Assert.True(await app.App.Services
             .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
@@ -86,7 +90,9 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             SELECT series.tmdb_series_id, series.bangumi_subject_id,
                    series.needs_tmdb_completion, file.tmdb_series_id,
                    file.tmdb_season_number, file.tmdb_episode_number,
-                   file.disposition, file.other_reason
+                   file.disposition, file.other_reason,
+                   (SELECT scope_kind FROM fallback_claims WHERE task_file_id = file.id),
+                   (SELECT scope_key FROM fallback_claims WHERE task_file_id = file.id)
             FROM ingest_tasks AS task
             JOIN anime_series AS series
               ON series.tmdb_series_id = 0
@@ -105,6 +111,9 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.True(reader.IsDBNull(5));
         Assert.Equal("other", reader.GetString(6));
         Assert.Equal("tmdb_fallback_pending_completion", reader.GetString(7));
+        Assert.Equal("bangumi_episode", reader.GetString(8));
+        Assert.Equal("1001", reader.GetString(9));
+        Assert.Equal([547888], bangumiEpisodes.SubjectIds);
     }
 
     [Fact]

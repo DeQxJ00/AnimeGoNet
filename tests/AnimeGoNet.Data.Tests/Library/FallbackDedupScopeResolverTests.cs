@@ -15,6 +15,20 @@ public sealed class FallbackDedupScopeResolverTests
     }
 
     [Fact]
+    public void BangumiEpisodeIdHasHighestCrossSourcePriority()
+    {
+        var mikan = FallbackDedupScopeResolver.Resolve(
+            "mikan", 3951, "work", "item", new string('a', 40),
+            "Show/EP07.mkv", 100, "7", bangumiEpisodeId: 1001);
+        var u2 = FallbackDedupScopeResolver.Resolve(
+            "u2", null, "different-work", "other-item", new string('b', 40),
+            "Other/07.mkv", 120, "7", bangumiEpisodeId: 1001);
+
+        Assert.Equal(new FallbackDedupScope("bangumi_episode", "1001"), mikan);
+        Assert.Equal(mikan, u2);
+    }
+
+    [Fact]
     public void MissingEpisodeUsesStablePerTorrentFileFingerprint()
     {
         var first = Resolve(sourceEpisode: null);

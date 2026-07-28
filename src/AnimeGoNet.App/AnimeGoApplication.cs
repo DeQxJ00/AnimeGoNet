@@ -185,6 +185,10 @@ public static class AnimeGoApplication
         }
 
         builder.Services.AddSingleton(bangumiSubjectClient);
+        if (bangumiEpisodeClient is not null)
+        {
+            builder.Services.AddSingleton(bangumiEpisodeClient);
+        }
         builder.Services.AddSingleton<BangumiSeasonBacktraceResolver>();
         builder.Services.AddSingleton(new AiPublicationEvidenceResolver(
             bangumiEpisodeClient,

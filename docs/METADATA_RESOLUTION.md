@@ -69,6 +69,8 @@ TMDB 完全失败、`tmdbid=0` 的 Bangumi 兜底没有规范 TMDB Episode 键�
 
 fallback 唯一键必须包含身份类型，不能把不同编号体系拼进同一命名空间。命中记录时必须在 qBittorrent 恢复下载前停止对应文件；多文件 Torrent 仍逐文件处理。上述第二、三档不能保证跨来源、跨编号体系识别同一真实 Episode，因此 Web 必须显示当前去重范围和“可能跨来源重复”的风险，不能宣称全局去重。为了避免误伤，系统也不能仅凭相同标题、容量或来源集号跨来源阻断。
 
+当前自动 fallback 会在确认 bgmid 后读取 Bangumi Episode 列表。只有来源集号是正普通整数，且在 `type=0` Episode 中唯一命中一个正 Bangumi Episode ID 时，才使用 `bangumi_episode` 作为最高优先级 scope；Mikan/U2/TTG 因而可共享该可靠身份。小数、特别篇、文本集号、重复编号、无结果或 Bangumi Episode API 错误都不升级身份，继续使用 mikan/source/torrent 的保守边界。API 错误会写元数据 attempt 审计但不阻止已获准的 Bangumi 完全兜底。
+
 为关闭并发窗口，在 qBittorrent 恢复下载前必须用 SQLite 唯一约束和事务为每个 fallback 键创建 `FallbackEpisodeClaim`。同键只有一个活动 claim；随后到达的任务等待首项结果或以 `DuplicateInProgress` 早停，不能同时进入不同下载器。下载/整理失败时 claim 进入可重试失败态并按重试策略释放或接管；完整成功时在同一事务中转为 `FallbackCompletionRecord`。进程崩溃后的过期 claim 只能在核对下载器任务和文件状态后恢复，不能仅按超时直接再次下载。
 
 当前实现已在 Bangumi 兜底元数据事务中按 `mikan_episode`、`source_work_episode` 或 `torrent_file` 最强可用 scope 获取 `fallback_claims`。来源 Episode 的大小写、空白和十进制格式先规范化；无可靠 Episode 时使用来源项、info-hash、任务内路径与容量生成 SHA-256 文件指纹。已有 completion 标记 `fallback_already_completed`，其他任务持有活动 claim 标记 `fallback_claimed_by_another_task`，两者都会由 download preparation 设为 qB priority 0；同任务同 scope 的视频/字幕共享 claim。整理成功写 completion 与 claim=`completed` 位于同一事务，瞬时整理失败保留活动 claim 并重试，明确放弃时可按 owner file 释放；不得按时间自动抢占。
