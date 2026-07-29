@@ -7,6 +7,7 @@ using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Deletion;
+using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Plugins;
@@ -25,6 +26,7 @@ using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
+using AnimeGoNet.Data.DataUpdate;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
@@ -51,6 +53,7 @@ public static class AnimeGoApplication
         ITorrentDnsResolver? rssDnsResolver = null,
         ITorrentHttpTransport? rssHttpTransport = null,
         ITmdbPosterTransport? tmdbPosterTransport = null,
+        HttpClient? dataUpdateHttpClient = null,
         bool? startBackgroundWorkers = null,
         IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
         CancellationToken cancellationToken = default)
@@ -102,6 +105,20 @@ public static class AnimeGoApplication
         }
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var dataPackages = new DataPackageStore(database);
+        var dataUpdateTransfers = new DataUpdateTransferStore(database);
+        var ownsDataUpdateHttpClient = dataUpdateHttpClient is null;
+        dataUpdateHttpClient ??= new HttpClient
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+        var dataUpdates = new DataUpdateService(
+            dataUpdateHttpClient,
+            options,
+            layout,
+            dataPackages,
+            dataUpdateTransfers,
+            ownsHttpClient: ownsDataUpdateHttpClient);
         var directoryDatabaseScanner = new DirectoryDatabaseScanner();
         var directoryDatabaseIndex = new DirectoryDatabaseIndexStore(
             database,
@@ -152,10 +169,14 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
         builder.Services.AddSingleton(database);
+        builder.Services.AddSingleton(dataPackages);
+        builder.Services.AddSingleton(dataUpdateTransfers);
+        builder.Services.AddSingleton<IDataUpdateService>(dataUpdates);
         builder.Services.AddSingleton<MikanRssFeedPlugin>();
         builder.Services.AddSingleton<MikanToolFilterPlugin>();
         builder.Services.AddSingleton<StagedTorrentDispatchSchedulePlugin>();
         builder.Services.AddSingleton<DirectoryDatabaseRefreshSchedulePlugin>();
+        builder.Services.AddSingleton<DataUpdateSchedulePlugin>();
         builder.Services.AddSingleton<PluginCatalog>(services =>
             BuiltInPluginCatalog.Create(
             [
@@ -163,6 +184,7 @@ public static class AnimeGoApplication
                 services.GetRequiredService<MikanToolFilterPlugin>(),
                 services.GetRequiredService<StagedTorrentDispatchSchedulePlugin>(),
                 services.GetRequiredService<DirectoryDatabaseRefreshSchedulePlugin>(),
+                services.GetRequiredService<DataUpdateSchedulePlugin>(),
             ]));
         builder.Services.AddSingleton<TitleParserManager>();
         builder.Services.AddSingleton<OrderedFeedFilterManager>();

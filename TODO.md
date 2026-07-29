@@ -259,7 +259,7 @@
 - [ ] 建立每日检查 + 手动触发 GitHub Action。
 - [ ] 建立数据唯一性、引用完整性、数量下限和确定性测试。
 - [ ] 发布不可变 Release assets、SHA-256 和 latest manifest。
-- [>] AnimeGoNet 实现检查更新、流式下载、校验和 staging SQLite 导入：schema v28 已加入版本、运行审计、独立 staging 与版本化 Bangumi Archive 表；本地包导入会先验压缩文件大小/SHA-256，再以有界单行缓冲流式解 gzip/JSONL，校验字段、顺序、分片范围、计数、唯一 ID 与 Subject 引用。网络检查和下载待接入。
+- [x] AnimeGoNet 实现检查更新、流式下载、校验和 staging SQLite 导入：schema v28 已加入版本、运行审计、独立 staging 与版本化 Bangumi Archive 表；本地包导入会先验压缩文件大小/SHA-256，再以有界单行缓冲流式解 gzip/JSONL，校验字段、顺序、分片范围、计数、唯一 ID 与 Subject 引用。schema v29 记录检查/下载/导入阶段与已验证下载目录；HTTP 使用 headers-first、有界 manifest 和 64 KiB 流式 asset 下载，逐资产验证长度/SHA-256 后才原子移动到托管包目录。
 - [>] 实现事务切换、上版保留、失败回滚和离线手工导入：存储核心已原子切换 active/previous、保留 2–10 版、支持显式回滚和同版本不可变/幂等；全部导入失败路径保持旧 active 并清空 staging。离线包的 Web API/上传入口待接入。
 - [ ] Web UI 增加数据版本、更新时间、检查/更新/回滚状态。
-- [ ] 分别验证关闭调度、仅检查、自动下载待确认、自动导入和失败保留旧版。
+- [>] 分别验证关闭调度、仅检查、自动下载待确认、自动导入和失败保留旧版：调度插件已按 `auto_download`/`auto_import` 映射三种动作，并有仅检查、只下载、延后手动导入、自动导入、HTTP/坏资产失败保持旧 active 的单元/SQLite 集成测试；配置写回后的 Cron 热重排和 Web E2E 待接入。

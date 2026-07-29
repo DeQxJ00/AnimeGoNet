@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 28;
+    public const int CurrentVersion = 29;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -34,7 +34,62 @@ public static class DatabaseSchema
         new SchemaMigration(26, "mikan_bangumi_discovery_audit", MikanBangumiDiscoveryAudit),
         new SchemaMigration(27, "directory_database_index", DirectoryDatabaseIndex),
         new SchemaMigration(28, "animegonet_data_versions", AnimeGoNetDataVersions),
+        new SchemaMigration(29, "data_update_transfer_audit", DataUpdateTransferAudit),
     ];
+
+    private const string DataUpdateTransferAudit = """
+        CREATE TABLE data_update_transfer_runs (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT NOT NULL UNIQUE,
+            trigger_kind TEXT NOT NULL CHECK (trigger_kind IN ('manual', 'scheduled')),
+            requested_action TEXT NOT NULL CHECK (
+                requested_action IN ('check', 'download', 'download_import')),
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'checking', 'update_available', 'up_to_date',
+                    'downloading', 'downloaded', 'importing',
+                    'completed', 'failed')),
+            data_version TEXT,
+            manifest_sha256 TEXT CHECK (
+                manifest_sha256 IS NULL
+                OR (
+                    length(manifest_sha256) = 64
+                    AND manifest_sha256 NOT GLOB '*[^0-9a-f]*')),
+            failure_code TEXT,
+            downloaded_bytes INTEGER NOT NULL CHECK (downloaded_bytes >= 0),
+            total_bytes INTEGER NOT NULL CHECK (total_bytes >= 0),
+            started_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT,
+            CHECK (
+                (status IN ('checking', 'downloading', 'importing')
+                 AND failure_code IS NULL
+                 AND completed_at_utc IS NULL)
+                OR
+                (status IN (
+                    'update_available', 'up_to_date', 'downloaded', 'completed')
+                 AND failure_code IS NULL
+                 AND completed_at_utc IS NOT NULL)
+                OR
+                (status = 'failed'
+                 AND failure_code IS NOT NULL
+                 AND completed_at_utc IS NOT NULL)
+            )
+        ) STRICT;
+
+        CREATE INDEX ix_data_update_transfer_runs_started
+            ON data_update_transfer_runs(started_at_utc DESC, sequence DESC);
+
+        CREATE TABLE data_update_downloads (
+            data_version TEXT NOT NULL PRIMARY KEY,
+            manifest_sha256 TEXT NOT NULL CHECK (
+                length(manifest_sha256) = 64
+                AND manifest_sha256 NOT GLOB '*[^0-9a-f]*'),
+            relative_directory TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('verified', 'imported')),
+            downloaded_at_utc TEXT NOT NULL,
+            imported_at_utc TEXT
+        ) STRICT;
+        """;
 
     private const string AnimeGoNetDataVersions = """
         CREATE TABLE data_update_versions (

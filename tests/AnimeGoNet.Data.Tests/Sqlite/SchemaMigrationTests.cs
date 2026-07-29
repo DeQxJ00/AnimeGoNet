@@ -37,9 +37,11 @@ public sealed class SchemaMigrationTests
             "completion_aliases",
             "completion_records",
             "data_update_runs",
+            "data_update_downloads",
             "data_update_staging_episodes",
             "data_update_staging_subjects",
             "data_update_state",
+            "data_update_transfer_runs",
             "data_update_versions",
             "delete_executions",
             "delete_execution_items",
@@ -97,6 +99,73 @@ public sealed class SchemaMigrationTests
         Assert.True(await reader.ReadAsync());
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task DataUpdateTransferMigrationPreservesVersion28ActiveData()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using (var foreignKeys = connection.CreateCommand())
+        {
+            foreignKeys.CommandText = "PRAGMA foreign_keys = ON;";
+            await foreignKeys.ExecuteNonQueryAsync();
+        }
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 28))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO data_update_versions (
+                    data_version, schema_version, generated_at_utc,
+                    minimum_client_version, manifest_sha256,
+                    upstream_repository, upstream_release, upstream_asset, upstream_sha256,
+                    subject_count, episode_count, state,
+                    installed_at_utc, activated_at_utc)
+                VALUES (
+                    '2026.07.29.1', 1, $now, '0.1.0', $hash,
+                    'https://github.com/bangumi/Archive', 'archive', 'asset.zip', $hash,
+                    1, 1, 'active', $now, $now);
+
+                UPDATE data_update_state
+                SET active_version = '2026.07.29.1', updated_at_utc = $now
+                WHERE singleton = 1;
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-07-29T12:00:00.0000000+00:00");
+            seed.Parameters.AddWithValue("$hash", new string('a', 64));
+            Assert.Equal(2, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration29 = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 29);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration29.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT
+                (SELECT active_version FROM data_update_state WHERE singleton = 1),
+                EXISTS (
+                    SELECT 1 FROM sqlite_schema
+                    WHERE type = 'table' AND name = 'data_update_transfer_runs'),
+                EXISTS (
+                    SELECT 1 FROM sqlite_schema
+                    WHERE type = 'table' AND name = 'data_update_downloads');
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("2026.07.29.1", reader.GetString(0));
+        Assert.Equal(1, reader.GetInt32(1));
+        Assert.Equal(1, reader.GetInt32(2));
     }
 
     [Fact]

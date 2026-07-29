@@ -16,6 +16,16 @@ public sealed class PluginScheduleHostedService(
                 options.Schedule.RefreshDatabaseCron,
                 StartRun: false),
             stoppingToken).ConfigureAwait(false);
+        if (options.DataUpdate.Enabled)
+        {
+            await coordinator.AddAsync(
+                new PluginScheduleRegistration(
+                    "animegonet-data-update",
+                    "animegonet-data-update",
+                    options.DataUpdate.Cron,
+                    StartRun: false),
+                stoppingToken).ConfigureAwait(false);
+        }
         await coordinator.RunAsync(stoppingToken).ConfigureAwait(false);
     }
 }

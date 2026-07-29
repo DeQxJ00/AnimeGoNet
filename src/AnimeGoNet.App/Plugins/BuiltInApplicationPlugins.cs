@@ -1,10 +1,12 @@
 using System.Globalization;
 using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Library;
+using AnimeGoNet.Data.DataUpdate;
 using AnimeGoNet.Data.Sources;
 
 namespace AnimeGoNet.App.Plugins;
@@ -219,6 +221,64 @@ internal sealed class DirectoryDatabaseRefreshSchedulePlugin(
                 [new PluginOperationError(
                     "directory_database_refresh_failed",
                     "Directory database refresh failed.")],
+                null);
+        }
+    }
+}
+
+internal sealed class DataUpdateSchedulePlugin(
+    IDataUpdateService service,
+    AnimeGoOptions options) : IScheduledPlugin
+{
+    public PluginDescriptor Descriptor { get; } =
+        new(
+            "animegonet-data-update",
+            "AnimeGoNetData update",
+            "1.0.0",
+            PluginCategory.Schedule,
+            120);
+
+    public async ValueTask<ScheduledResult> ExecuteAsync(
+        ScheduledContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var action = !options.DataUpdate.AutoDownload
+                ? DataUpdateActions.Check
+                : options.DataUpdate.AutoImport
+                    ? DataUpdateActions.DownloadImport
+                    : DataUpdateActions.Download;
+            var result = await service.ExecuteAsync(
+                DataUpdateTriggerKinds.Scheduled,
+                action,
+                cancellationToken).ConfigureAwait(false);
+            return new ScheduledResult(
+                true,
+                $"status={result.Status};version={result.DataVersion ?? "-"}",
+                [],
+                null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (DataUpdateServiceException exception)
+        {
+            return new ScheduledResult(
+                false,
+                null,
+                [new PluginOperationError(exception.Code, exception.Message)],
+                null);
+        }
+        catch
+        {
+            return new ScheduledResult(
+                false,
+                null,
+                [new PluginOperationError(
+                    "data_update_failed",
+                    "The scheduled data update failed.")],
                 null);
         }
     }
