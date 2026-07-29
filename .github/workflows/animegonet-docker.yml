@@ -45,3 +45,5 @@ jobs:
           cache-from: type=gha
       - name: Smoke container paths, API, SQLite and NativeAOT
         run: ./eng/smoke-container.sh animegonet:ci
+      - name: Smoke isolated dual qBittorrent routing and Web API
+        run: ./eng/smoke-qbittorrent-compose.sh animegonet:ci

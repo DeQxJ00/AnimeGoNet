@@ -32,7 +32,7 @@
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选与自动编排 fake tests 已通过；SQLite cache 待实现 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选与自动 Series/Season/Episode worker tests 已通过；cache 待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
-| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；RSS 请求级 SourceProfile revision/双开关/下载器路由并发快照已验证，真实双实例/container E2E待实现 |
+| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；RSS 请求级 SourceProfile revision/双开关/下载器路由并发快照已验证；双 qB 容器连接、共享路径与 Mikan→bt/U2/TTG→pt 预览门禁已进入 CI，真实统一导入分别落入两实例的 container E2E 待实现 |
 
 ## 解析、规则与元数据编排
 
@@ -67,7 +67,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过，动态元数据 tag 与真实容器 file-priority/reconnect 待实现 |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过；隔离双容器 login/version/path/reconnect/add/list/files/filePrio/start/stop/delete 已进入 Docker CI，首次 runner 结果和动态元数据 tag 待验收 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 例外 | migration diagnostic test |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v10 另含 media organization job租约、逐文件operation、独立cleanup重试与完成记录事务门禁；qB状态/paused preparation/不可变路径/实例故障恢复 tests 已通过，实际整理 worker 待接入 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB下载完成与做种结束分阶段驱动四种策略；link/link_delete 先发布媒体后等待 Complete，wait_move 等待 Complete，独立 deleteFiles=false cleanup 与崩溃恢复 tests 已通过；真实容器状态转换待实现 |

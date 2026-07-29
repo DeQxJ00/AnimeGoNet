@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile.animegonet
     image: animegonet:local
     restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
     environment:
       ASPNETCORE_ENVIRONMENT: Container
       DOTNET_RUNNING_IN_CONTAINER: "true"
@@ -12,11 +16,19 @@ services:
       data_path: /data
       download_path: /download/incomplete
       save_path: /download/anime
+      background_workers_enabled: "true"
     ports:
       - "7991:7991"
     volumes:
       - ./data:/data
       - ./download:/download
+    depends_on:
+      qbittorrent-bt:
+        condition: service_started
+      qbittorrent-pt:
+        condition: service_started
+    security_opt:
+      - no-new-privileges:true
     networks:
       - animegonet
 
@@ -33,6 +45,8 @@ services:
       - ./download:/download
     ports:
       - "8080:8080"
+    security_opt:
+      - no-new-privileges:true
     networks:
       - animegonet
 
@@ -49,6 +63,8 @@ services:
       - ./download:/download
     ports:
       - "8081:8080"
+    security_opt:
+      - no-new-privileges:true
     networks:
       - animegonet
 

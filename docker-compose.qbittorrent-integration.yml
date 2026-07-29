@@ -1,0 +1,67 @@
+services:
+  qbittorrent-bt:
+    image: ${QBITTORRENT_IMAGE:-lscr.io/linuxserver/qbittorrent:latest}
+    environment:
+      PUID: ${ANIMEGONET_UID:?ANIMEGONET_UID is required}
+      PGID: ${ANIMEGONET_GID:?ANIMEGONET_GID is required}
+      TZ: UTC
+      WEBUI_PORT: "8080"
+    volumes:
+      - ${ANIMEGONET_INTEGRATION_ROOT:?ANIMEGONET_INTEGRATION_ROOT is required}/qbittorrent/bt:/config
+      - ${ANIMEGONET_INTEGRATION_ROOT}/download:/download
+    ports:
+      - "127.0.0.1::8080"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - animegonet-integration
+
+  qbittorrent-pt:
+    image: ${QBITTORRENT_IMAGE:-lscr.io/linuxserver/qbittorrent:latest}
+    environment:
+      PUID: ${ANIMEGONET_UID}
+      PGID: ${ANIMEGONET_GID}
+      TZ: UTC
+      WEBUI_PORT: "8080"
+    volumes:
+      - ${ANIMEGONET_INTEGRATION_ROOT}/qbittorrent/pt:/config
+      - ${ANIMEGONET_INTEGRATION_ROOT}/download:/download
+    ports:
+      - "127.0.0.1::8080"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - animegonet-integration
+
+  animegonet:
+    image: ${ANIMEGONET_IMAGE:?ANIMEGONET_IMAGE is required}
+    user: "${ANIMEGONET_UID}:${ANIMEGONET_GID}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      ASPNETCORE_ENVIRONMENT: Container
+      DOTNET_RUNNING_IN_CONTAINER: "true"
+      access_key: ${ANIMEGONET_ACCESS_KEY:?ANIMEGONET_ACCESS_KEY is required}
+      data_path: /data
+      download_path: /download/incomplete
+      save_path: /download/anime
+      background_workers_enabled: "false"
+    volumes:
+      - ${ANIMEGONET_INTEGRATION_ROOT}/animegonet/data:/data
+      - ${ANIMEGONET_INTEGRATION_ROOT}/download:/download
+    ports:
+      - "127.0.0.1::7991"
+    depends_on:
+      qbittorrent-bt:
+        condition: service_started
+      qbittorrent-pt:
+        condition: service_started
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - animegonet-integration
+
+networks:
+  animegonet-integration:
+    driver: bridge
