@@ -481,7 +481,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             torrentFileCount);
     }
 
-    public async Task RecordAttemptAsync(
+    public async Task<string> RecordAttemptAsync(
         MetadataTaskClaim claim,
         MetadataAttempt attempt,
         DateTimeOffset utcNow,
@@ -511,7 +511,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             FROM metadata_resolution_runs
             WHERE id = $run_id AND status = 'running' AND lease_token = $lease_token;
             """;
-        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+        var attemptId = Guid.NewGuid().ToString("N");
+        command.Parameters.AddWithValue("$id", attemptId);
         command.Parameters.AddWithValue("$run_id", claim.RunId);
         command.Parameters.AddWithValue("$lease_token", claim.LeaseToken);
         command.Parameters.AddWithValue("$stage", attempt.Stage);
@@ -528,6 +529,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         {
             throw new InvalidOperationException("Metadata resolution lease is no longer active.");
         }
+
+        return attemptId;
     }
 
     public async Task CompleteSeasonAsync(
@@ -1029,7 +1032,60 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     failure_kind = NULL, fallback_eligible = 0,
                     fallback_denial_reason = NULL, completed_at_utc = $now,
                     lease_token = NULL, lease_expires_at_utc = NULL,
-                    tmdb_series_id = $tmdb_id, tmdb_season_number = $season_number
+                    tmdb_series_id = $tmdb_id,
+                    tmdb_season_number = $season_number,
+                    series_resolution_source = (
+                        SELECT attempt.strategy
+                        FROM metadata_resolution_attempts AS attempt
+                        WHERE attempt.run_id = $run_id
+                          AND attempt.stage = 'series'
+                          AND attempt.result = 'matched'
+                          AND attempt.strategy IN (
+                              'manual_mikan_override', 'tmdb_title',
+                              'backtrace', 'ai_metadata',
+                              'trusted_mikan_offset')
+                        ORDER BY attempt.created_at_utc DESC,
+                                 attempt.id DESC
+                        LIMIT 1),
+                    series_resolution_attempt_id = (
+                        SELECT attempt.id
+                        FROM metadata_resolution_attempts AS attempt
+                        WHERE attempt.run_id = $run_id
+                          AND attempt.stage = 'series'
+                          AND attempt.result = 'matched'
+                          AND attempt.strategy IN (
+                              'manual_mikan_override', 'tmdb_title',
+                              'backtrace', 'ai_metadata',
+                              'trusted_mikan_offset')
+                        ORDER BY attempt.created_at_utc DESC,
+                                 attempt.id DESC
+                        LIMIT 1),
+                    season_resolution_source = (
+                        SELECT attempt.strategy
+                        FROM metadata_resolution_attempts AS attempt
+                        WHERE attempt.run_id = $run_id
+                          AND attempt.stage = 'season'
+                          AND attempt.result = 'matched'
+                          AND attempt.strategy IN (
+                              'manual_mikan_override', 'tmdb_air_date',
+                              'backtrace', 'ai_metadata', 'title_season',
+                              'first_season', 'trusted_mikan_offset')
+                        ORDER BY attempt.created_at_utc DESC,
+                                 attempt.id DESC
+                        LIMIT 1),
+                    season_resolution_attempt_id = (
+                        SELECT attempt.id
+                        FROM metadata_resolution_attempts AS attempt
+                        WHERE attempt.run_id = $run_id
+                          AND attempt.stage = 'season'
+                          AND attempt.result = 'matched'
+                          AND attempt.strategy IN (
+                              'manual_mikan_override', 'tmdb_air_date',
+                              'backtrace', 'ai_metadata', 'title_season',
+                              'first_season', 'trusted_mikan_offset')
+                        ORDER BY attempt.created_at_utc DESC,
+                                 attempt.id DESC
+                        LIMIT 1)
                 WHERE id = $run_id AND task_id = $task_id
                   AND status = 'running' AND lease_token = $lease_token;
 
@@ -1127,7 +1183,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
             if (resolution.Disposition == "episode")
             {
-                if (resolvedEpisodeNumber is null or <= 0
+                if (resolution.ResolutionSource is null
+                    || string.IsNullOrWhiteSpace(resolution.ResolutionAttemptId)
+                    || resolvedEpisodeNumber is null or <= 0
                     || (resolution.Episode is not null
                         && (resolution.TrustedEpisodeNumber is not null
                             || resolution.Episode.SeriesId != claim.TmdbSeriesId
@@ -1138,12 +1196,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 {
                     throw new ArgumentException("TMDB Episode identity is invalid.", nameof(fileResolutions));
                 }
+
+                ValidateIdentifier(
+                    resolution.ResolutionAttemptId!,
+                    nameof(fileResolutions));
             }
             else
             {
                 if (resolution.Episode is not null
                     || resolution.TrustedEpisodeNumber is not null
-                    || resolution.OtherReason is null)
+                    || resolution.OtherReason is null
+                    || resolution.ResolutionSource is not null
+                    || resolution.ResolutionAttemptId is not null)
                 {
                     throw new ArgumentException("Other resolution requires a reason and no TMDB Episode.", nameof(fileResolutions));
                 }
@@ -1267,7 +1331,16 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     disposition = $disposition,
                     other_reason = $other_reason,
                     associated_task_file_id = $associated_file_id,
-                    rename_suffix = $rename_suffix
+                    rename_suffix = $rename_suffix,
+                    episode_resolution_source = $episode_resolution_source,
+                    episode_resolution_run_id = CASE
+                        WHEN $episode_resolution_source IS NULL THEN NULL
+                        ELSE $run_id
+                    END,
+                    episode_resolution_attempt_id = CASE
+                        WHEN $episode_resolution_source IS NULL THEN NULL
+                        ELSE $episode_resolution_attempt_id
+                    END
                 WHERE id = $file_id AND task_id = $task_id
                   AND disposition = 'pending'
                   AND tmdb_series_id = $tmdb_series_id
@@ -1275,6 +1348,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 """;
             updateFile.Parameters.AddWithValue("$file_id", resolution.FileId);
             updateFile.Parameters.AddWithValue("$task_id", claim.Resolution.TaskId);
+            updateFile.Parameters.AddWithValue(
+                "$run_id",
+                claim.Resolution.RunId);
             updateFile.Parameters.AddWithValue("$tmdb_series_id", claim.TmdbSeriesId);
             updateFile.Parameters.AddWithValue("$tmdb_season_number", expectedSeasonNumber);
             updateFile.Parameters.AddWithValue(
@@ -1285,6 +1361,14 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             updateFile.Parameters.AddWithValue("$other_reason", (object?)otherReason ?? DBNull.Value);
             updateFile.Parameters.AddWithValue("$associated_file_id", (object?)resolution.AssociatedFileId ?? DBNull.Value);
             updateFile.Parameters.AddWithValue("$rename_suffix", (object?)resolution.RenameSuffix ?? DBNull.Value);
+            updateFile.Parameters.AddWithValue(
+                "$episode_resolution_source",
+                resolution.ResolutionSource is null
+                    ? DBNull.Value
+                    : resolution.ResolutionSource.Value.ToStorageValue());
+            updateFile.Parameters.AddWithValue(
+                "$episode_resolution_attempt_id",
+                (object?)resolution.ResolutionAttemptId ?? DBNull.Value);
             if (await updateFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 throw new InvalidOperationException("Metadata Episode task file changed concurrently.");
@@ -1793,27 +1877,92 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         command.CommandText = """
             SELECT task.id, task.title, task.source_id, task.status,
                    task.mikanid, task.bangumi_subject_id,
-                   (SELECT run.tmdb_series_id FROM metadata_resolution_runs AS run
-                    WHERE run.task_id = task.id AND run.tmdb_series_id IS NOT NULL
-                    ORDER BY run.attempt_number DESC LIMIT 1),
-                   (SELECT run.tmdb_season_number FROM metadata_resolution_runs AS run
-                    WHERE run.task_id = task.id AND run.tmdb_season_number IS NOT NULL
-                    ORDER BY run.attempt_number DESC LIMIT 1),
-                   (SELECT attempt.strategy
-                    FROM metadata_resolution_attempts AS attempt
-                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
-                    WHERE run.task_id = task.id AND attempt.stage = 'series' AND attempt.result = 'matched'
-                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
-                   (SELECT attempt.strategy
-                    FROM metadata_resolution_attempts AS attempt
-                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
-                    WHERE run.task_id = task.id AND attempt.stage = 'season' AND attempt.result = 'matched'
-                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
-                   (SELECT attempt.strategy
-                    FROM metadata_resolution_attempts AS attempt
-                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
-                    WHERE run.task_id = task.id AND attempt.stage = 'episode' AND attempt.result = 'matched'
-                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT run.tmdb_series_id
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.series_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.tmdb_season_number
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.season_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.series_resolution_source
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.series_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.id
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.series_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.series_resolution_attempt_id
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.series_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.season_resolution_source
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.season_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.id
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.season_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT run.season_resolution_attempt_id
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.season_resolution_source IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT CASE
+                        WHEN COUNT(DISTINCT (
+                            file_evidence.episode_resolution_source || ':' ||
+                            file_evidence.episode_resolution_run_id || ':' ||
+                            file_evidence.episode_resolution_attempt_id)) = 1
+                            THEN MIN(file_evidence.episode_resolution_source)
+                        WHEN COUNT(file_evidence.episode_resolution_source) > 0
+                            THEN 'mixed'
+                        ELSE NULL
+                    END
+                    FROM task_files AS file_evidence
+                    WHERE file_evidence.task_id = task.id),
+                   (SELECT CASE
+                        WHEN COUNT(DISTINCT (
+                            file_evidence.episode_resolution_source || ':' ||
+                            file_evidence.episode_resolution_run_id || ':' ||
+                            file_evidence.episode_resolution_attempt_id)) = 1
+                            THEN MIN(file_evidence.episode_resolution_run_id)
+                        ELSE NULL
+                    END
+                    FROM task_files AS file_evidence
+                    WHERE file_evidence.task_id = task.id),
+                   (SELECT CASE
+                        WHEN COUNT(DISTINCT (
+                            file_evidence.episode_resolution_source || ':' ||
+                            file_evidence.episode_resolution_run_id || ':' ||
+                            file_evidence.episode_resolution_attempt_id)) = 1
+                            THEN MIN(file_evidence.episode_resolution_attempt_id)
+                        ELSE NULL
+                    END
+                    FROM task_files AS file_evidence
+                    WHERE file_evidence.task_id = task.id),
+                   (SELECT COUNT(DISTINCT (
+                        file_evidence.episode_resolution_source || ':' ||
+                        file_evidence.episode_resolution_run_id || ':' ||
+                        file_evidence.episode_resolution_attempt_id)) > 1
+                    FROM task_files AS file_evidence
+                    WHERE file_evidence.task_id = task.id),
                    task.failure_kind, task.failure_reason,
                    (SELECT attempt.stage
                     FROM metadata_resolution_attempts AS attempt
@@ -1864,27 +2013,92 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             command.CommandText = """
                 SELECT task.id, task.title, task.source_id, task.status,
                        task.mikanid, task.bangumi_subject_id,
-                       (SELECT run.tmdb_series_id FROM metadata_resolution_runs AS run
-                        WHERE run.task_id = task.id AND run.tmdb_series_id IS NOT NULL
-                        ORDER BY run.attempt_number DESC LIMIT 1),
-                       (SELECT run.tmdb_season_number FROM metadata_resolution_runs AS run
-                        WHERE run.task_id = task.id AND run.tmdb_season_number IS NOT NULL
-                        ORDER BY run.attempt_number DESC LIMIT 1),
-                       (SELECT attempt.strategy
-                        FROM metadata_resolution_attempts AS attempt
-                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
-                        WHERE run.task_id = task.id AND attempt.stage = 'series' AND attempt.result = 'matched'
-                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
-                       (SELECT attempt.strategy
-                        FROM metadata_resolution_attempts AS attempt
-                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
-                        WHERE run.task_id = task.id AND attempt.stage = 'season' AND attempt.result = 'matched'
-                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
-                       (SELECT attempt.strategy
-                        FROM metadata_resolution_attempts AS attempt
-                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
-                        WHERE run.task_id = task.id AND attempt.stage = 'episode' AND attempt.result = 'matched'
-                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT run.tmdb_series_id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.series_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.tmdb_season_number
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.season_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.series_resolution_source
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.series_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.series_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.series_resolution_attempt_id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.series_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.season_resolution_source
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.season_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.season_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT run.season_resolution_attempt_id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.season_resolution_source IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT CASE
+                            WHEN COUNT(DISTINCT (
+                                file_evidence.episode_resolution_source || ':' ||
+                                file_evidence.episode_resolution_run_id || ':' ||
+                                file_evidence.episode_resolution_attempt_id)) = 1
+                                THEN MIN(file_evidence.episode_resolution_source)
+                            WHEN COUNT(file_evidence.episode_resolution_source) > 0
+                                THEN 'mixed'
+                            ELSE NULL
+                        END
+                        FROM task_files AS file_evidence
+                        WHERE file_evidence.task_id = task.id),
+                       (SELECT CASE
+                            WHEN COUNT(DISTINCT (
+                                file_evidence.episode_resolution_source || ':' ||
+                                file_evidence.episode_resolution_run_id || ':' ||
+                                file_evidence.episode_resolution_attempt_id)) = 1
+                                THEN MIN(file_evidence.episode_resolution_run_id)
+                            ELSE NULL
+                        END
+                        FROM task_files AS file_evidence
+                        WHERE file_evidence.task_id = task.id),
+                       (SELECT CASE
+                            WHEN COUNT(DISTINCT (
+                                file_evidence.episode_resolution_source || ':' ||
+                                file_evidence.episode_resolution_run_id || ':' ||
+                                file_evidence.episode_resolution_attempt_id)) = 1
+                                THEN MIN(file_evidence.episode_resolution_attempt_id)
+                            ELSE NULL
+                        END
+                        FROM task_files AS file_evidence
+                        WHERE file_evidence.task_id = task.id),
+                       (SELECT COUNT(DISTINCT (
+                            file_evidence.episode_resolution_source || ':' ||
+                            file_evidence.episode_resolution_run_id || ':' ||
+                            file_evidence.episode_resolution_attempt_id)) > 1
+                        FROM task_files AS file_evidence
+                        WHERE file_evidence.task_id = task.id),
                        task.failure_kind, task.failure_reason,
                        (SELECT attempt.stage
                         FROM metadata_resolution_attempts AS attempt
@@ -1960,7 +2174,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        file.tmdb_series_id,
                        COALESCE(NULLIF(series.canonical_name, ''), NULLIF(series.original_name, '')),
                        file.tmdb_season_number, season.canonical_name,
-                       file.tmdb_episode_number, episode.name
+                       file.tmdb_episode_number, episode.name,
+                       file.episode_resolution_source,
+                       file.episode_resolution_run_id,
+                       file.episode_resolution_attempt_id
                 FROM task_files AS file
                 LEFT JOIN anime_series AS series
                   ON series.tmdb_series_id = file.tmdb_series_id
@@ -1988,7 +2205,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(8) ? null : reader.GetInt32(8),
                     reader.IsDBNull(9) ? null : reader.GetString(9),
                     reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                    reader.IsDBNull(11) ? null : reader.GetString(11)));
+                    reader.IsDBNull(11) ? null : reader.GetString(11),
+                    ReadResolutionEvidence(reader, 12, 13, 14)));
             }
         }
 
@@ -1998,10 +2216,16 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
     private static MetadataTaskListProjection ReadTaskListProjection(SqliteDataReader reader)
     {
         var status = reader.GetString(3);
-        var failureKind = reader.IsDBNull(11) ? null : reader.GetString(11);
-        var failureStage = reader.IsDBNull(13) ? null : reader.GetString(13);
-        var failureCode = reader.IsDBNull(14) ? null : reader.GetString(14);
-        bool? failureRetryable = reader.IsDBNull(15) ? null : reader.GetInt64(15) != 0;
+        var seriesResolution = ReadResolutionEvidence(reader, 8, 9, 10);
+        var seasonResolution = ReadResolutionEvidence(reader, 11, 12, 13);
+        var episodeResolution = ReadResolutionEvidence(reader, 14, 15, 16);
+        var episodeResolutionMixed = reader.GetInt64(17) != 0;
+        var failureKind = reader.IsDBNull(18) ? null : reader.GetString(18);
+        var failureStage = reader.IsDBNull(20) ? null : reader.GetString(20);
+        var failureCode = reader.IsDBNull(21) ? null : reader.GetString(21);
+        bool? failureRetryable = reader.IsDBNull(22)
+            ? null
+            : reader.GetInt64(22) != 0;
         return new MetadataTaskListProjection(
             reader.GetString(0),
             reader.GetString(1),
@@ -2011,23 +2235,48 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(5) ? null : reader.GetInt32(5),
             reader.IsDBNull(6) ? null : reader.GetInt32(6),
             reader.IsDBNull(7) ? null : reader.GetInt32(7),
-            reader.IsDBNull(8) ? null : reader.GetString(8),
-            reader.IsDBNull(9) ? null : reader.GetString(9),
-            reader.IsDBNull(10) ? null : reader.GetString(10),
+            seriesResolution?.Strategy,
+            seasonResolution?.Strategy,
+            episodeResolutionMixed
+                ? "mixed"
+                : episodeResolution?.Strategy,
             failureKind,
-            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.IsDBNull(19) ? null : reader.GetString(19),
             failureStage,
             failureCode,
             failureRetryable,
             ClassifyHandling(status, failureKind, failureRetryable),
-            reader.GetInt32(16),
-            reader.GetInt32(17),
-            reader.GetInt32(18),
-            reader.GetInt32(19),
+            reader.GetInt32(23),
+            reader.GetInt32(24),
+            reader.GetInt32(25),
+            reader.GetInt32(26),
             DateTimeOffset.Parse(
-                reader.GetString(20),
+                reader.GetString(27),
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind));
+                DateTimeStyles.RoundtripKind),
+            seriesResolution,
+            seasonResolution,
+            episodeResolution,
+            episodeResolutionMixed);
+    }
+
+    private static TmdbResolutionEvidence? ReadResolutionEvidence(
+        SqliteDataReader reader,
+        int sourceIndex,
+        int runIndex,
+        int attemptIndex)
+    {
+        if (reader.IsDBNull(sourceIndex)
+            || reader.IsDBNull(runIndex)
+            || reader.IsDBNull(attemptIndex))
+        {
+            return null;
+        }
+
+        return new TmdbResolutionEvidence(
+            reader.GetString(sourceIndex).ParseTmdbResolutionSource(),
+            reader.GetString(runIndex),
+            reader.GetString(attemptIndex));
     }
 
     private static string ClassifyHandling(

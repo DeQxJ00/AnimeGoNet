@@ -32,6 +32,24 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal(2, items[1].GetProperty("episode_total").GetInt32());
         Assert.Equal(2, items[1].GetProperty("episode_snapshot_count").GetInt32());
         Assert.Equal(1, items[1].GetProperty("episode_downloaded").GetInt32());
+        Assert.Equal(
+            "tmdb_title",
+            items[1].GetProperty("series_resolution_source").GetString());
+        Assert.Equal(
+            "run-alpha",
+            items[1].GetProperty("series_resolution_run_id").GetString());
+        Assert.Equal(
+            "attempt-alpha-series",
+            items[1].GetProperty("series_resolution_attempt_id").GetString());
+        Assert.Equal(
+            "tmdb_air_date",
+            items[1].GetProperty("season_resolution_source").GetString());
+        Assert.Equal(
+            "run-alpha",
+            items[1].GetProperty("season_resolution_run_id").GetString());
+        Assert.Equal(
+            "attempt-alpha-season",
+            items[1].GetProperty("season_resolution_attempt_id").GetString());
         Assert.DoesNotContain("/media/alpha.mkv", body, StringComparison.Ordinal);
         Assert.DoesNotContain("fallback-row", body, StringComparison.Ordinal);
         Assert.DoesNotContain("series-alpha", body, StringComparison.Ordinal);
@@ -275,6 +293,13 @@ public sealed class AnimeLibraryApiTests
                 ('attempt-alpha-season', 'run-alpha', 'season', 'tmdb_air_date',
                  3, 'matched', 0, 1, 20,
                  '2026-01-01T00:00:01.0000000+00:00');
+
+            UPDATE metadata_resolution_runs
+            SET series_resolution_source = 'tmdb_title',
+                series_resolution_attempt_id = 'attempt-alpha-series',
+                season_resolution_source = 'tmdb_air_date',
+                season_resolution_attempt_id = 'attempt-alpha-season'
+            WHERE id = 'run-alpha';
 
             INSERT INTO mikan_work_rules (
                 mikanid, bangumi_subject_id, tmdb_series_id,

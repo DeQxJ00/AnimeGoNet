@@ -362,6 +362,18 @@ public sealed class MetadataResolutionStoreTests
                 .Select(file => file.TmdbSeasonNumber)
                 .ToArray());
 
+        var episodeAttemptId = await fixture.Store.RecordAttemptAsync(
+            episodeClaim.Resolution,
+            new MetadataAttempt(
+                "episode",
+                "ai_metadata",
+                null,
+                "matched",
+                null,
+                false,
+                episodeClaim.Resolution.AttemptNumber,
+                10),
+            now.AddSeconds(2));
         await fixture.Store.CompleteEpisodesAsync(
             episodeClaim,
             episodeClaim.Files.Select(file =>
@@ -377,9 +389,11 @@ public sealed class MetadataResolutionStoreTests
                         $"S{seasonNumber:00}E01",
                         null),
                     "episode",
-                    null);
+                    null,
+                    ResolutionSource: TmdbResolutionSource.AiMetadata,
+                    ResolutionAttemptId: episodeAttemptId);
             }).ToArray(),
-            now.AddSeconds(2));
+            now.AddSeconds(3));
 
         await using var verifyConnection = await fixture.Database.OpenConnectionAsync();
         await using var verify = verifyConnection.CreateCommand();

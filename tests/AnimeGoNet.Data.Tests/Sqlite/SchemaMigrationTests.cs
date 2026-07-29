@@ -158,6 +158,186 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task TmdbResolutionEvidenceMigrationBackfillsRunsAndGuardsReferences()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using (var foreignKeys = connection.CreateCommand())
+        {
+            foreignKeys.CommandText = "PRAGMA foreign_keys = ON;";
+            await foreignKeys.ExecuteNonQueryAsync();
+        }
+
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 31))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-07-30T10:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES (
+                    'task', 'mikan', 1, 'mikan', 'Episode',
+                    'fingerprint', 'bt', '{}', 'metadata_resolved', $now, $now);
+
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes,
+                    tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    disposition)
+                VALUES ('file', 'task', 'episode.mkv', 1, 100, 2, 3, 'episode');
+
+                INSERT INTO metadata_resolution_runs (
+                    id, task_id, status, tmdb_access_confirmed,
+                    fallback_eligible, started_at_utc, completed_at_utc,
+                    attempt_number, tmdb_series_id, tmdb_season_number)
+                VALUES (
+                    'run', 'task', 'resolved', 1, 0, $now, $now, 1, 100, 2);
+
+                INSERT INTO metadata_resolution_attempts (
+                    id, run_id, stage, strategy, priority, result,
+                    retryable, attempt_number, duration_ms, created_at_utc)
+                VALUES
+                    ('series-attempt', 'run', 'series', 'tmdb_title',
+                     NULL, 'matched', 0, 1, 10, $now),
+                    ('season-attempt', 'run', 'season', 'tmdb_air_date',
+                     4, 'matched', 0, 1, 20, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(6, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration32 = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 32);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration32.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT series_resolution_source, series_resolution_attempt_id,
+                       season_resolution_source, season_resolution_attempt_id
+                FROM metadata_resolution_runs WHERE id = 'run';
+                """;
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("tmdb_title", reader.GetString(0));
+            Assert.Equal("series-attempt", reader.GetString(1));
+            Assert.Equal("tmdb_air_date", reader.GetString(2));
+            Assert.Equal("season-attempt", reader.GetString(3));
+        }
+
+        await using (var invalidRun = connection.CreateCommand())
+        {
+            invalidRun.CommandText = """
+                UPDATE metadata_resolution_runs
+                SET series_resolution_source = 'tmdb_title',
+                    series_resolution_attempt_id = 'season-attempt'
+                WHERE id = 'run';
+                """;
+            await Assert.ThrowsAsync<SqliteException>(
+                () => invalidRun.ExecuteNonQueryAsync());
+        }
+
+        await using (var invalidFile = connection.CreateCommand())
+        {
+            invalidFile.CommandText = """
+                UPDATE task_files
+                SET episode_resolution_source = 'tmdb_episode_number',
+                    episode_resolution_run_id = 'run',
+                    episode_resolution_attempt_id = 'season-attempt'
+                WHERE id = 'file';
+                """;
+            await Assert.ThrowsAsync<SqliteException>(
+                () => invalidFile.ExecuteNonQueryAsync());
+        }
+
+        await using (var invalidRunInsert = connection.CreateCommand())
+        {
+            invalidRunInsert.CommandText = """
+                INSERT INTO metadata_resolution_runs (
+                    id, task_id, status, tmdb_access_confirmed,
+                    fallback_eligible, started_at_utc, completed_at_utc,
+                    attempt_number, tmdb_series_id, tmdb_season_number,
+                    series_resolution_source, series_resolution_attempt_id)
+                VALUES (
+                    'invalid-run', 'task', 'resolved', 1, 0, $now, $now,
+                    2, 100, 2, 'tmdb_title', 'series-attempt');
+                """;
+            invalidRunInsert.Parameters.AddWithValue("$now", now);
+            await Assert.ThrowsAsync<SqliteException>(
+                () => invalidRunInsert.ExecuteNonQueryAsync());
+        }
+
+        await using (var invalidFileInsert = connection.CreateCommand())
+        {
+            invalidFileInsert.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes,
+                    tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    disposition, episode_resolution_source,
+                    episode_resolution_run_id, episode_resolution_attempt_id)
+                VALUES (
+                    'invalid-file', 'task', 'invalid.mkv', 1,
+                    100, 2, 4, 'episode', 'tmdb_episode_number',
+                    'run', 'season-attempt');
+                """;
+            await Assert.ThrowsAsync<SqliteException>(
+                () => invalidFileInsert.ExecuteNonQueryAsync());
+        }
+
+        await using (var validFile = connection.CreateCommand())
+        {
+            validFile.CommandText = """
+                INSERT INTO metadata_resolution_attempts (
+                    id, run_id, stage, strategy, priority, result,
+                    retryable, attempt_number, duration_ms, created_at_utc)
+                VALUES (
+                    'episode-attempt', 'run', 'episode', 'tmdb_episode_number',
+                    NULL, 'matched', 0, 1, 30, $now);
+
+                UPDATE task_files
+                SET episode_resolution_source = 'tmdb_episode_number',
+                    episode_resolution_run_id = 'run',
+                    episode_resolution_attempt_id = 'episode-attempt'
+                WHERE id = 'file';
+                """;
+            validFile.Parameters.AddWithValue("$now", now);
+            Assert.Equal(2, await validFile.ExecuteNonQueryAsync());
+        }
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT episode_resolution_source, episode_resolution_run_id,
+                   episode_resolution_attempt_id
+            FROM task_files WHERE id = 'file';
+            """;
+        await using var verifyReader = await verify.ExecuteReaderAsync();
+        Assert.True(await verifyReader.ReadAsync());
+        Assert.Equal("tmdb_episode_number", verifyReader.GetString(0));
+        Assert.Equal("run", verifyReader.GetString(1));
+        Assert.Equal("episode-attempt", verifyReader.GetString(2));
+    }
+
+    [Fact]
     public async Task DataUpdateTransferMigrationPreservesVersion28ActiveData()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

@@ -133,7 +133,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             if (claim.EpisodeResolvedByTrustedOffset)
             {
-                await RecordAsync(
+                var attemptId = await RecordAsync(
                     claim,
                     strategy,
                     priority,
@@ -147,7 +147,10 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     null,
                     "episode",
                     null,
-                    TrustedEpisodeNumber: targetEpisode));
+                    TrustedEpisodeNumber: targetEpisode,
+                    ResolutionSource:
+                        TmdbResolutionSource.TrustedMikanOffset,
+                    ResolutionAttemptId: attemptId));
                 continue;
             }
 
@@ -216,7 +219,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 return true;
             }
 
-            await RecordAsync(
+            var matchedAttemptId = await RecordAsync(
                 claim,
                 strategy,
                 priority,
@@ -225,7 +228,14 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 false,
                 ElapsedMilliseconds(started),
                 cancellationToken).ConfigureAwait(false);
-            results.Add(new MetadataEpisodeFileResolution(file.FileId, episode, "episode", null));
+            results.Add(new MetadataEpisodeFileResolution(
+                file.FileId,
+                episode,
+                "episode",
+                null,
+                ResolutionSource:
+                    strategy.ParseTmdbResolutionSource(),
+                ResolutionAttemptId: matchedAttemptId));
         }
 
         if (manualOffset is null
@@ -254,7 +264,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 : results.SingleOrDefault(result => result.FileId == association.VideoFileId);
             if (video?.ResolvedEpisodeNumber is > 0)
             {
-                await RecordAsync(
+                var attemptId = await RecordAsync(
                     claim, "subtitle_association", null, "matched", null,
                     false, 0, cancellationToken).ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
@@ -264,7 +274,9 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     null,
                     association.VideoFileId,
                     association.RenameSuffix,
-                    video.TrustedEpisodeNumber));
+                    video.TrustedEpisodeNumber,
+                    TmdbResolutionSource.SubtitleAssociation,
+                    attemptId));
             }
             else
             {
@@ -444,10 +456,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     existing.FileId,
                     aiFile.Episode,
                     "episode",
-                    null);
+                    null,
+                    ResolutionSource:
+                        TmdbResolutionSource.AiMetadata);
         }
 
-        await RecordAsync(
+        var attemptId = await RecordAsync(
             claim,
             "ai_metadata",
             null,
@@ -456,6 +470,17 @@ public sealed class EpisodeMetadataResolutionProcessor(
             false,
             ElapsedMilliseconds(started),
             cancellationToken).ConfigureAwait(false);
+        for (var index = 0; index < results.Count; index++)
+        {
+            if (results[index].ResolutionSource == TmdbResolutionSource.AiMetadata
+                && results[index].ResolutionAttemptId is null)
+            {
+                results[index] = results[index] with
+                {
+                    ResolutionAttemptId = attemptId,
+                };
+            }
+        }
         return false;
     }
 
@@ -536,7 +561,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             cancellationToken).ConfigureAwait(false);
     }
 
-    private Task RecordAsync(
+    private Task<string> RecordAsync(
         MetadataEpisodeTaskClaim claim,
         string strategy,
         int? priority,

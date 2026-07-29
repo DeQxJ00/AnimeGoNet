@@ -217,7 +217,7 @@ docs/
 - 增加默认关闭且只在主程序中实现的 `(mikanid,groupid)` 可信偏移缓存：三个不同来源 EP 的已验证 `tmdb_id+season+offset` 完全一致才升级为可信；重复 EP 不计数，任一冲突重置学习/撤销可信。主程序在 AI 调用前命中包含有效 `tmdb_id`、普通 `season` 和偏移的可信记录后，直接本地计算目标 EP 并跳过 AI，不为该次命中再逐集请求 TMDB。
 - AI 返回值不直接进入领域模型。主程序查询 TMDB `tv/{id}`、`tv/{id}/season/{season}` 和目标 Episode 验证存在性、TV 类型、日期/标题对应关系后，才生成规范字段。
 - 元数据入口先应用启用的 Mikan 作品级人工规则；命中后统一使用规则中的 Bgm/TMDB Series/Season，并按 `TmdbEpisodeNumber = SourceEpisodeNumber + EpisodeOffset` 映射普通正片。人工规则高于所有自动策略，无效时显式报 `ManualOverrideInvalid`，不能静默回退覆盖。
-- 每个最终 Series/Season/Episode 写入值同时保存取得阶…2356 tokens truncated…体原因并在 Web UI 中可见。
+- 每个最终 Series/Season/Episode 写入值同时保存取得阶段和不可变的解析 Run/Attempt 引用。Series/Season 证据保存在完成的 `metadata_resolution_runs`；Episode 证据按 `task_files` 逐文件保存，字幕关联使用自己的 `subtitle_association` Attempt，不能借用视频或同策略最后一次 Attempt。SQLite schema v32 触发器验证 Attempt 属于同一任务/Run、正确 stage、相同 strategy 且结果为 `matched`；失败分类和具体原因继续在 Web UI 中可见。
 - 正常取得 TMDB ID 时，在动画根目录 `tvshow.nfo` 写真实 `<tmdbid>` 和对应 `<bangumiid>`。
 - TMDB 完全失败兜底开启、权威TMDB访问成功并确定无匹配、Bangumi Subject ID有效且季度已确定时，继续下载/刮削，并在 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - 兜底关闭或兜底前置条件不满足时不继续下载/刮削，也不生成失败 NFO；不得只写 `tmdbid=0`。

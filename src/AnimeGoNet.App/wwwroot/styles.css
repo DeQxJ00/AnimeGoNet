@@ -277,6 +277,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-stages div { min-width: 0; padding: 10px; border-radius: 12px; background: rgba(5,8,16,.55); }
 .metadata-stages dt { color: #8da2c9; font-size: .72rem; }
 .metadata-stages dd { margin: 5px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
+.metadata-resolution-reference { color: #7f95bd; font-size: .65rem; }
 .metadata-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
 .retry-button { border: 1px solid #6c526f; border-radius: 10px; padding: 9px 12px; color: #f2d9ff; background: #2a1d32; cursor: pointer; }
 .retry-button:disabled { cursor: wait; opacity: .7; }
@@ -304,6 +305,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-file-source, .metadata-file-canonical { min-width: 0; }
 .metadata-file-source strong, .metadata-file-canonical strong { display: block; color: #dce7fb; font-size: .77rem; overflow-wrap: anywhere; }
 .metadata-file-source p, .metadata-file-canonical p { margin: 5px 0 0; color: #94a7c8; font-size: .7rem; line-height: 1.4; overflow-wrap: anywhere; }
+.metadata-file-canonical .metadata-resolution-evidence { color: #83b6ad; }
 .metadata-file-arrow { color: #6f91c8; font-weight: 700; }
 @media (max-width: 760px) {
     .metadata-file-comparison { grid-template-columns: 1fr; }

@@ -3434,7 +3434,10 @@ public static class ApiEndpoints
                 file.TmdbSeasonNumber,
                 file.TmdbSeasonName,
                 file.TmdbEpisodeNumber,
-                file.TmdbEpisodeName)).ToArray()));
+                file.TmdbEpisodeName,
+                file.EpisodeResolution?.Strategy,
+                file.EpisodeResolution?.RunId,
+                file.EpisodeResolution?.AttemptId)).ToArray()));
     }
 
     private static async Task<IResult> LibrarySeasons(
@@ -3514,7 +3517,11 @@ public static class ApiEndpoints
                     item.EpisodeSnapshotCount,
                     item.EpisodeDownloaded,
                     item.SeriesResolutionSource,
+                    item.SeriesResolutionRunId,
+                    item.SeriesResolutionAttemptId,
                     item.SeasonResolutionSource,
+                    item.SeasonResolutionRunId,
+                    item.SeasonResolutionAttemptId,
                     item.ValidationStatus,
                     item.LastResolutionRunId,
                     item.Warnings);
@@ -3660,7 +3667,11 @@ public static class ApiEndpoints
             season.EpisodeSnapshotCount,
             season.EpisodeDownloaded,
             season.SeriesResolutionSource,
+            season.SeriesResolutionRunId,
+            season.SeriesResolutionAttemptId,
             season.SeasonResolutionSource,
+            season.SeasonResolutionRunId,
+            season.SeasonResolutionAttemptId,
             season.ValidationStatus,
             season.LastResolutionRunId,
             season.Warnings,
@@ -4893,6 +4904,13 @@ public static class ApiEndpoints
             item.SeriesStrategy,
             item.SeasonStrategy,
             item.EpisodeStrategy,
+            item.SeriesResolution?.RunId,
+            item.SeriesResolution?.AttemptId,
+            item.SeasonResolution?.RunId,
+            item.SeasonResolution?.AttemptId,
+            item.EpisodeResolution?.RunId,
+            item.EpisodeResolution?.AttemptId,
+            item.EpisodeResolutionMixed,
             item.FailureKind,
             item.FailureReason,
             item.FailureStage,

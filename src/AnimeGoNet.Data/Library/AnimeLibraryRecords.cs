@@ -36,7 +36,11 @@ public sealed record AnimeSeasonListProjection(
     int EpisodeSnapshotCount,
     int EpisodeDownloaded,
     string? SeriesResolutionSource,
+    string? SeriesResolutionRunId,
+    string? SeriesResolutionAttemptId,
     string? SeasonResolutionSource,
+    string? SeasonResolutionRunId,
+    string? SeasonResolutionAttemptId,
     string ValidationStatus,
     string? LastResolutionRunId,
     IReadOnlyList<string> Warnings);

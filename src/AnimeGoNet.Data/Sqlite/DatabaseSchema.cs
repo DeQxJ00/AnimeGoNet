@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 31;
+    public const int CurrentVersion = 32;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -37,7 +37,256 @@ public static class DatabaseSchema
         new SchemaMigration(29, "data_update_transfer_audit", DataUpdateTransferAudit),
         new SchemaMigration(30, "library_metadata_audit_indexes", LibraryMetadataAuditIndexes),
         new SchemaMigration(31, "source_mikan_identity_cookie", SourceMikanIdentityCookie),
+        new SchemaMigration(32, "tmdb_resolution_evidence", TmdbResolutionEvidence),
     ];
+
+    private const string TmdbResolutionEvidence = """
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN series_resolution_source TEXT;
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN series_resolution_attempt_id TEXT;
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN season_resolution_source TEXT;
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN season_resolution_attempt_id TEXT;
+
+        ALTER TABLE task_files
+        ADD COLUMN episode_resolution_source TEXT;
+
+        ALTER TABLE task_files
+        ADD COLUMN episode_resolution_run_id TEXT;
+
+        ALTER TABLE task_files
+        ADD COLUMN episode_resolution_attempt_id TEXT;
+
+        UPDATE metadata_resolution_runs AS target
+        SET series_resolution_source = (
+                SELECT attempt.strategy
+                FROM metadata_resolution_attempts AS attempt
+                WHERE attempt.run_id = target.id
+                  AND attempt.stage = 'series'
+                  AND attempt.result = 'matched'
+                  AND attempt.strategy IN (
+                      'manual_mikan_override', 'tmdb_title', 'backtrace',
+                      'ai_metadata', 'trusted_mikan_offset')
+                ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                LIMIT 1),
+            series_resolution_attempt_id = (
+                SELECT attempt.id
+                FROM metadata_resolution_attempts AS attempt
+                WHERE attempt.run_id = target.id
+                  AND attempt.stage = 'series'
+                  AND attempt.result = 'matched'
+                  AND attempt.strategy IN (
+                      'manual_mikan_override', 'tmdb_title', 'backtrace',
+                      'ai_metadata', 'trusted_mikan_offset')
+                ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                LIMIT 1),
+            season_resolution_source = (
+                SELECT attempt.strategy
+                FROM metadata_resolution_attempts AS attempt
+                WHERE attempt.run_id = target.id
+                  AND attempt.stage = 'season'
+                  AND attempt.result = 'matched'
+                  AND attempt.strategy IN (
+                      'manual_mikan_override', 'tmdb_air_date', 'backtrace',
+                      'ai_metadata', 'title_season', 'first_season',
+                      'trusted_mikan_offset')
+                ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                LIMIT 1),
+            season_resolution_attempt_id = (
+                SELECT attempt.id
+                FROM metadata_resolution_attempts AS attempt
+                WHERE attempt.run_id = target.id
+                  AND attempt.stage = 'season'
+                  AND attempt.result = 'matched'
+                  AND attempt.strategy IN (
+                      'manual_mikan_override', 'tmdb_air_date', 'backtrace',
+                      'ai_metadata', 'title_season', 'first_season',
+                      'trusted_mikan_offset')
+                ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                LIMIT 1)
+        WHERE target.tmdb_series_id IS NOT NULL;
+
+        CREATE INDEX ix_metadata_runs_series_evidence
+        ON metadata_resolution_runs(
+            task_id, series_resolution_source, completed_at_utc DESC);
+
+        CREATE INDEX ix_metadata_runs_season_evidence
+        ON metadata_resolution_runs(
+            task_id, season_resolution_source, completed_at_utc DESC);
+
+        CREATE INDEX ix_task_files_episode_evidence
+        ON task_files(
+            task_id, episode_resolution_source, episode_resolution_run_id);
+
+        CREATE TRIGGER tr_metadata_runs_resolution_evidence_insert
+        BEFORE INSERT ON metadata_resolution_runs
+        WHEN NOT (
+            (
+                NEW.series_resolution_source IS NULL
+                AND NEW.series_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.series_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_title', 'backtrace',
+                    'ai_metadata', 'trusted_mikan_offset')
+                AND NEW.series_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.series_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'series'
+                      AND attempt.strategy = NEW.series_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        OR NOT (
+            (
+                NEW.season_resolution_source IS NULL
+                AND NEW.season_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.season_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_air_date', 'backtrace',
+                    'ai_metadata', 'title_season', 'first_season',
+                    'trusted_mikan_offset')
+                AND NEW.season_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.season_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'season'
+                      AND attempt.strategy = NEW.season_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB run resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_metadata_runs_resolution_evidence_update
+        BEFORE UPDATE OF
+            series_resolution_source, series_resolution_attempt_id,
+            season_resolution_source, season_resolution_attempt_id
+        ON metadata_resolution_runs
+        WHEN NOT (
+            (
+                NEW.series_resolution_source IS NULL
+                AND NEW.series_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.series_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_title', 'backtrace',
+                    'ai_metadata', 'trusted_mikan_offset')
+                AND NEW.series_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.series_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'series'
+                      AND attempt.strategy = NEW.series_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        OR NOT (
+            (
+                NEW.season_resolution_source IS NULL
+                AND NEW.season_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.season_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_air_date', 'backtrace',
+                    'ai_metadata', 'title_season', 'first_season',
+                    'trusted_mikan_offset')
+                AND NEW.season_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.season_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'season'
+                      AND attempt.strategy = NEW.season_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB run resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_insert
+        BEFORE INSERT ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_update
+        BEFORE UPDATE OF
+            episode_resolution_source, episode_resolution_run_id,
+            episode_resolution_attempt_id
+        ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+        """;
 
     private const string SourceMikanIdentityCookie = """
         ALTER TABLE source_profiles

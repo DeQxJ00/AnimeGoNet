@@ -155,6 +155,16 @@ public sealed class AutomaticMetadataResolutionProcessor(
                     started, cancellationToken).ConfigureAwait(false);
                 if (result.IsSuccess)
                 {
+                    await RecordAsync(
+                        claim,
+                        "series",
+                        "backtrace",
+                        3,
+                        "matched",
+                        null,
+                        false,
+                        started,
+                        cancellationToken).ConfigureAwait(false);
                     await resolutions.CompleteSeasonAsync(
                         claim, result.Details!.Series, result.Season!, _timeProvider.GetUtcNow(), cancellationToken)
                         .ConfigureAwait(false);
@@ -436,6 +446,9 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         await RecordAsync(
+            claim, "series", "trusted_mikan_offset", null, "matched",
+            null, false, started, cancellationToken).ConfigureAwait(false);
+        await RecordAsync(
             claim, "season", "trusted_mikan_offset", null, "matched",
             null, false, started, cancellationToken).ConfigureAwait(false);
         await resolutions.CompleteAiSeasonAsync(
@@ -584,6 +597,16 @@ public sealed class AutomaticMetadataResolutionProcessor(
             seeds = files.Select(file => seedsByFileId[file.FileId]).ToArray();
         }
 
+        await RecordAsync(
+            claim,
+            "series",
+            "ai_metadata",
+            null,
+            "matched",
+            null,
+            false,
+            started,
+            cancellationToken).ConfigureAwait(false);
         await RecordAsync(
             claim,
             "season",

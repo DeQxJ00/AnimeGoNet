@@ -86,9 +86,59 @@ public sealed class MetadataTaskDetailApiTests
                 INSERT INTO metadata_resolution_attempts (
                     id, run_id, stage, strategy, priority, result, error_code,
                     reason, retryable, attempt_number, duration_ms, created_at_utc)
+                VALUES
+                    (
+                        'attempt-detail-series', 'run-detail', 'series',
+                        'ai_metadata', NULL, 'matched', NULL,
+                        'validated by TMDB', 0, 1, 300, $now),
+                    (
+                        'attempt-detail-season', 'run-detail', 'season',
+                        'ai_metadata', NULL, 'matched', NULL,
+                        'validated by TMDB', 0, 1, 321, $now),
+                    (
+                        'attempt-detail-episode', 'run-detail', 'episode',
+                        'tmdb_episode_number', NULL, 'matched', NULL,
+                        'validated by TMDB', 0, 1, 25, $now),
+                    (
+                        'attempt-detail-subtitle', 'run-detail', 'episode',
+                        'subtitle_association', NULL, 'matched', NULL,
+                        'associated with verified episode', 0, 1, 5, $now);
+
+                UPDATE metadata_resolution_runs
+                SET series_resolution_source = 'ai_metadata',
+                    series_resolution_attempt_id = 'attempt-detail-series',
+                    season_resolution_source = 'ai_metadata',
+                    season_resolution_attempt_id = 'attempt-detail-season'
+                WHERE id = 'run-detail';
+
+                UPDATE task_files
+                SET episode_resolution_source = 'tmdb_episode_number',
+                    episode_resolution_run_id = 'run-detail',
+                    episode_resolution_attempt_id = 'attempt-detail-episode'
+                WHERE task_id = $task_id;
+
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes,
+                    source_episode, file_episode_candidate,
+                    tmdb_series_id, tmdb_season_number,
+                    tmdb_episode_number, tmdb_episode_id,
+                    disposition, other_reason, associated_task_file_id,
+                    rename_suffix)
                 VALUES (
-                    'attempt-detail', 'run-detail', 'season', 'ai_metadata', NULL,
-                    'matched', NULL, 'validated by TMDB', 0, 1, 321, $now);
+                    'file-detail-subtitle', $task_id,
+                    'Source Show - 03.zh-Hans.ass', 4096,
+                    '3', '3', 900, 2, 3, 900203,
+                    'episode', NULL,
+                    (SELECT id FROM task_files
+                     WHERE task_id = $task_id
+                       AND relative_path = 'Source Show - 03.mkv'),
+                    '.zh-hans.ass');
+
+                UPDATE task_files
+                SET episode_resolution_source = 'subtitle_association',
+                    episode_resolution_run_id = 'run-detail',
+                    episode_resolution_attempt_id = 'attempt-detail-subtitle'
+                WHERE id = 'file-detail-subtitle';
                 """;
             command.Parameters.AddWithValue("$task_id", taskId);
             command.Parameters.AddWithValue("$now", now);
@@ -100,10 +150,47 @@ public sealed class MetadataTaskDetailApiTests
         var body = await response.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(body);
         var root = json.RootElement;
-        var file = Assert.Single(root.GetProperty("files").EnumerateArray());
+        var files = root.GetProperty("files").EnumerateArray().ToArray();
+        Assert.Equal(2, files.Length);
+        var file = Assert.Single(
+            files,
+            value => value.GetProperty("source_name").GetString() == "Source Show - 03.mkv");
+        var subtitle = Assert.Single(
+            files,
+            value => value.GetProperty("source_name").GetString()
+                == "Source Show - 03.zh-Hans.ass");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("来源作品 第03话", root.GetProperty("summary").GetProperty("title").GetString());
+        Assert.Equal(
+            "ai_metadata",
+            root.GetProperty("summary").GetProperty("series_strategy").GetString());
+        Assert.Equal(
+            "attempt-detail-series",
+            root.GetProperty("summary").GetProperty("series_attempt_id").GetString());
+        Assert.Equal(
+            "run-detail",
+            root.GetProperty("summary").GetProperty("series_run_id").GetString());
+        Assert.Equal(
+            "ai_metadata",
+            root.GetProperty("summary").GetProperty("season_strategy").GetString());
+        Assert.Equal(
+            "attempt-detail-season",
+            root.GetProperty("summary").GetProperty("season_attempt_id").GetString());
+        Assert.Equal(
+            "run-detail",
+            root.GetProperty("summary").GetProperty("season_run_id").GetString());
+        Assert.Equal(
+            "mixed",
+            root.GetProperty("summary").GetProperty("episode_strategy").GetString());
+        Assert.Equal(
+            JsonValueKind.Null,
+            root.GetProperty("summary").GetProperty("episode_attempt_id").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            root.GetProperty("summary").GetProperty("episode_run_id").ValueKind);
+        Assert.True(
+            root.GetProperty("summary").GetProperty("episode_resolution_mixed").GetBoolean());
         Assert.Equal("matched", root.GetProperty("ai").GetProperty("status").GetString());
         Assert.Equal(
             "tmdb_verified",
@@ -114,6 +201,19 @@ public sealed class MetadataTaskDetailApiTests
         Assert.Equal(2, file.GetProperty("tmdb_season_number").GetInt32());
         Assert.Equal(3, file.GetProperty("tmdb_episode_number").GetInt32());
         Assert.Equal("TMDB 第三集", file.GetProperty("tmdb_episode_name").GetString());
+        Assert.Equal(
+            "tmdb_episode_number",
+            file.GetProperty("episode_strategy").GetString());
+        Assert.Equal("run-detail", file.GetProperty("episode_run_id").GetString());
+        Assert.Equal(
+            "attempt-detail-episode",
+            file.GetProperty("episode_attempt_id").GetString());
+        Assert.Equal(
+            "subtitle_association",
+            subtitle.GetProperty("episode_strategy").GetString());
+        Assert.Equal(
+            "attempt-detail-subtitle",
+            subtitle.GetProperty("episode_attempt_id").GetString());
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
         Assert.DoesNotContain("task-detail.torrent", body, StringComparison.Ordinal);
     }

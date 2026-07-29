@@ -105,7 +105,9 @@ public sealed record MetadataEpisodeFileResolution(
     string? OtherReason,
     string? AssociatedFileId = null,
     string? RenameSuffix = null,
-    int? TrustedEpisodeNumber = null)
+    int? TrustedEpisodeNumber = null,
+    TmdbResolutionSource? ResolutionSource = null,
+    string? ResolutionAttemptId = null)
 {
     public int? ResolvedEpisodeNumber => Episode?.EpisodeNumber ?? TrustedEpisodeNumber;
 }
@@ -132,7 +134,11 @@ public sealed record MetadataTaskListProjection(
     int OtherFileCount,
     int DuplicateFileCount,
     int PendingFileCount,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    TmdbResolutionEvidence? SeriesResolution = null,
+    TmdbResolutionEvidence? SeasonResolution = null,
+    TmdbResolutionEvidence? EpisodeResolution = null,
+    bool EpisodeResolutionMixed = false);
 
 public sealed record MetadataTaskFileDetailProjection(
     string RelativePath,
@@ -146,7 +152,8 @@ public sealed record MetadataTaskFileDetailProjection(
     int? TmdbSeasonNumber,
     string? TmdbSeasonName,
     int? TmdbEpisodeNumber,
-    string? TmdbEpisodeName);
+    string? TmdbEpisodeName,
+    TmdbResolutionEvidence? EpisodeResolution = null);
 
 public sealed record MetadataTaskAiProjection(
     string Stage,

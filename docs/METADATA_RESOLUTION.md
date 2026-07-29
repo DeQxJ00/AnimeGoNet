@@ -270,6 +270,28 @@ SQLite 必须同时保存一次解析运行的最终状态和每个策略的尝�
 
 Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access_confirmed=true`。Web 必须显示“允许/拒绝兜底”及拒绝原因；网络恢复后的手动/自动重试重新运行 TMDB，不把旧网络错误转换成 `tmdbid=0`。
 
+### 6.4 最终取得证据
+
+策略尝试时间线用于解释过程，最终字段不能在查询时从“最近一次尝试”重新推断。
+SQLite schema v32 在完成事务中保存以下权威证据：
+
+- Series：`series_resolution_source + run_id + series_resolution_attempt_id`；
+- Season：`season_resolution_source + run_id + season_resolution_attempt_id`；
+- Episode：每个 `task_files` 独立保存
+  `episode_resolution_source + episode_resolution_run_id + episode_resolution_attempt_id`。
+
+每个引用的 Attempt 必须属于同一任务和 Run，stage 与层级一致、strategy 与 source
+一致，并且结果为 `matched`。SQLite 触发器拒绝不完整引用、跨任务引用、错误 stage
+和伪造 strategy。Episode worker 在写每个文件时使用本次匹配直接返回的 Attempt ID；
+多个文件即使策略相同，也不能一律引用最后一次 Attempt。能够关联的字幕保存自己的
+`subtitle_association` 证据；无法关联并进入 `Other` 的文件不伪造 Episode 证据。
+
+任务摘要只有在全部已取得 Episode 证据的 source/run/attempt 三元组相同时才返回单一
+Episode 证据，否则返回 `episode_resolution_mixed=true`，由文件详情逐项展示。作品库
+Series/Season 也读取固化证据，不再聚合尝试时间线猜测来源。P2 `title_season` 和 P1
+`first_season` 仍明确标注为本地未验证季度；证据表示“如何取得”，不把它包装成 TMDB
+Season 验证成功。
+
 ## 7. 验证场景
 
 1. TMDB 全成功：SQLite 保存来源 ID，动画根目录 `tvshow.nfo` 包含真实 TMDB/Bgm ID。

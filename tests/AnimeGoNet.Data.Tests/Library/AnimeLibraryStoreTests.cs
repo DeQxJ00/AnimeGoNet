@@ -22,7 +22,11 @@ public sealed class AnimeLibraryStoreTests
         Assert.Equal(3, alpha.EpisodeSnapshotCount);
         Assert.Equal(2, alpha.EpisodeDownloaded);
         Assert.Equal("tmdb_title", alpha.SeriesResolutionSource);
+        Assert.Equal("run-alpha-2", alpha.SeriesResolutionRunId);
+        Assert.Equal("attempt-alpha-2-series", alpha.SeriesResolutionAttemptId);
         Assert.Equal("tmdb_air_date", alpha.SeasonResolutionSource);
+        Assert.Equal("run-alpha-2", alpha.SeasonResolutionRunId);
+        Assert.Equal("attempt-alpha-2-season", alpha.SeasonResolutionAttemptId);
         Assert.Equal("verified", alpha.ValidationStatus);
         Assert.Equal("run-alpha-2", alpha.LastResolutionRunId);
         Assert.Contains("completion_without_snapshot", alpha.Warnings);
@@ -313,7 +317,11 @@ public sealed class AnimeLibraryStoreTests
                 (
                     'run-alpha-2', 'task-alpha-2', 'episode_resolved', 1, 0,
                     '2026-01-09T00:00:00.0000000+00:00',
-                    '2026-01-09T00:00:01.0000000+00:00', 1, 100, 1);
+                    '2026-01-09T00:00:01.0000000+00:00', 1, 100, 1),
+                (
+                    'run-alpha-3-failed', 'task-alpha-2', 'failed', 1, 0,
+                    '2026-01-10T00:00:00.0000000+00:00',
+                    '2026-01-10T00:00:01.0000000+00:00', 2, 100, 1);
 
                 INSERT INTO metadata_resolution_attempts (
                     id, run_id, stage, strategy, priority, result,
@@ -336,6 +344,20 @@ public sealed class AnimeLibraryStoreTests
                     ('attempt-offset', 'run-alpha-2', 'episode', 'manual_mikan_offset',
                      100, 'matched', NULL, 'Applied +2.', 0,
                      1, 5, '2026-01-09T00:00:01.0000000+00:00');
+
+                UPDATE metadata_resolution_runs
+                SET series_resolution_source = 'tmdb_title',
+                    series_resolution_attempt_id = 'attempt-series',
+                    season_resolution_source = 'tmdb_air_date',
+                    season_resolution_attempt_id = 'attempt-season'
+                WHERE id = 'run-alpha-1';
+
+                UPDATE metadata_resolution_runs
+                SET series_resolution_source = 'tmdb_title',
+                    series_resolution_attempt_id = 'attempt-alpha-2-series',
+                    season_resolution_source = 'tmdb_air_date',
+                    season_resolution_attempt_id = 'attempt-alpha-2-season'
+                WHERE id = 'run-alpha-2';
 
                 INSERT INTO mikan_work_rules (
                     mikanid, bangumi_subject_id, tmdb_series_id,

@@ -46,6 +46,13 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Null(video.AssociatedFileId);
         Assert.Equal(video.FileId, subtitle.AssociatedFileId);
         Assert.Equal(".zh-Hans.ass", subtitle.RenameSuffix);
+        Assert.Equal("tmdb_episode_number", video.ResolutionSource);
+        Assert.Equal("subtitle_association", subtitle.ResolutionSource);
+        Assert.NotNull(video.ResolutionRunId);
+        Assert.Equal(video.ResolutionRunId, subtitle.ResolutionRunId);
+        Assert.NotNull(video.ResolutionAttemptId);
+        Assert.NotNull(subtitle.ResolutionAttemptId);
+        Assert.NotEqual(video.ResolutionAttemptId, subtitle.ResolutionAttemptId);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
         Assert.Equal(1, await CountEpisodeClaimsAsync(app, taskId));
     }
@@ -657,7 +664,9 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, relative_path, disposition, tmdb_episode_number, other_reason,
-                   associated_task_file_id, rename_suffix
+                   associated_task_file_id, rename_suffix,
+                   episode_resolution_source, episode_resolution_run_id,
+                   episode_resolution_attempt_id
             FROM task_files WHERE task_id = $task_id ORDER BY relative_path;
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
@@ -672,7 +681,10 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 reader.IsDBNull(3) ? null : reader.GetInt32(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6)));
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9)));
         }
 
         return values.ToArray();
@@ -812,7 +824,10 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         int? EpisodeNumber,
         string? OtherReason,
         string? AssociatedFileId,
-        string? RenameSuffix);
+        string? RenameSuffix,
+        string? ResolutionSource,
+        string? ResolutionRunId,
+        string? ResolutionAttemptId);
 
     private sealed class FakeTmdbClient : ITmdbClient
     {

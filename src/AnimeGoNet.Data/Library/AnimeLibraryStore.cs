@@ -72,7 +72,12 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    series_poster_path, season_poster_path, air_date, added_at,
                    last_updated_at, display_name AS sort_name, episode_total,
                    episode_snapshot_count, episode_downloaded,
-                   series_resolution_source, season_resolution_source,
+                   series_resolution_source,
+                   series_resolution_run_id,
+                   series_resolution_attempt_id,
+                   season_resolution_source,
+                   season_resolution_run_id,
+                   season_resolution_attempt_id,
                    validation_status, last_resolution_run_id,
                    all_completion_count, missing_media_path_count,
                    series_resource_id, series_resource_updated_at,
@@ -211,7 +216,12 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    series_poster_path, season_poster_path, air_date, added_at,
                    last_updated_at, display_name AS sort_name, episode_total,
                    episode_snapshot_count, episode_downloaded,
-                   series_resolution_source, season_resolution_source,
+                   series_resolution_source,
+                   series_resolution_run_id,
+                   series_resolution_attempt_id,
+                   season_resolution_source,
+                   season_resolution_run_id,
+                   season_resolution_attempt_id,
                    validation_status, last_resolution_run_id,
                    all_completion_count, missing_media_path_count,
                    series_resource_id, series_resource_updated_at,
@@ -266,20 +276,8 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 FROM metadata_resolution_runs AS run
                 WHERE run.tmdb_series_id IS NOT NULL
                   AND run.tmdb_season_number IS NOT NULL
-            ),
-            attempt_sources AS (
-                SELECT attempt.run_id,
-                       MAX(CASE
-                           WHEN attempt.stage = 'series' AND attempt.result = 'matched'
-                               THEN attempt.strategy
-                       END) AS series_source,
-                       MAX(CASE
-                           WHEN attempt.stage = 'season'
-                                AND attempt.result IN ('matched', 'other')
-                               THEN attempt.strategy
-                       END) AS season_source
-                FROM metadata_resolution_attempts AS attempt
-                GROUP BY attempt.run_id
+                  AND run.series_resolution_source IS NOT NULL
+                  AND run.season_resolution_source IS NOT NULL
             ),
             recovery_sources AS (
                 SELECT fallback.anime_series_id,
@@ -319,12 +317,22 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                     season.episode_count AS episode_total,
                     COALESCE(episodes.snapshot_count, 0) AS episode_snapshot_count,
                     COALESCE(valid_completion.downloaded_count, 0) AS episode_downloaded,
-                    COALESCE(sources.series_source, recovery.recovery_source)
+                    COALESCE(run.series_resolution_source, recovery.recovery_source)
                         AS series_resolution_source,
-                    COALESCE(sources.season_source, recovery.recovery_source)
+                    CASE WHEN run.series_resolution_source IS NULL
+                              THEN NULL ELSE run.id END
+                        AS series_resolution_run_id,
+                    run.series_resolution_attempt_id
+                        AS series_resolution_attempt_id,
+                    COALESCE(run.season_resolution_source, recovery.recovery_source)
                         AS season_resolution_source,
+                    CASE WHEN run.season_resolution_source IS NULL
+                              THEN NULL ELSE run.id END
+                        AS season_resolution_run_id,
+                    run.season_resolution_attempt_id
+                        AS season_resolution_attempt_id,
                     CASE
-                        WHEN sources.season_source IN ('title_season', 'first_season')
+                        WHEN run.season_resolution_source IN ('title_season', 'first_season')
                             THEN 'local_unverified'
                         WHEN recovery.recovery_source IS NOT NULL THEN 'verified'
                         WHEN run.id IS NULL THEN 'projection_only'
@@ -356,7 +364,6 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                   ON run.tmdb_series_id = series.tmdb_series_id
                  AND run.tmdb_season_number = season.season_number
                  AND run.row_number = 1
-                LEFT JOIN attempt_sources AS sources ON sources.run_id = run.id
                 LEFT JOIN recovery_sources AS recovery
                   ON recovery.anime_series_id = series.id
                  AND recovery.tmdb_season_number = season.season_number
@@ -372,9 +379,9 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
         var episodeTotal = reader.GetInt32(10);
         var episodeSnapshotCount = reader.GetInt32(11);
         var episodeDownloaded = reader.GetInt32(12);
-        var allCompletionCount = reader.GetInt32(17);
-        var missingMediaPathCount = reader.GetInt32(18);
-        var validationStatus = reader.GetString(15);
+        var allCompletionCount = reader.GetInt32(21);
+        var missingMediaPathCount = reader.GetInt32(22);
+        var validationStatus = reader.GetString(19);
         var warnings = new List<string>(3);
         if (episodeSnapshotCount != episodeTotal)
         {
@@ -398,10 +405,10 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
 
         var displayName = reader.GetString(2);
         var resourceRevision = AnimeLibraryResourceRevision.Create(
-            reader.GetString(19),
-            reader.GetString(20),
-            reader.GetString(21),
-            reader.GetString(22));
+            reader.GetString(23),
+            reader.GetString(24),
+            reader.GetString(25),
+            reader.GetString(26));
         return new AnimeSeasonListProjection(
             reader.GetInt32(0),
             reader.GetInt32(1),
@@ -419,8 +426,12 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             episodeDownloaded,
             reader.IsDBNull(13) ? null : reader.GetString(13),
             reader.IsDBNull(14) ? null : reader.GetString(14),
-            validationStatus,
+            reader.IsDBNull(15) ? null : reader.GetString(15),
             reader.IsDBNull(16) ? null : reader.GetString(16),
+            reader.IsDBNull(17) ? null : reader.GetString(17),
+            reader.IsDBNull(18) ? null : reader.GetString(18),
+            validationStatus,
+            reader.IsDBNull(20) ? null : reader.GetString(20),
             warnings);
     }
 

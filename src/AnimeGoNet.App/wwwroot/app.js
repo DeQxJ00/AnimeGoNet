@@ -745,10 +745,10 @@ function libraryDate(value, includeTime = false) {
 }
 function libraryStrategy(value) {
     const labels = {
-        manual_override: "人工覆盖",
+        manual_mikan_override: "人工 Mikan TMDB 覆盖",
         tmdb_title: "TMDB 标题搜索",
         tmdb_air_date: "TMDB 开播日期验证",
-        bangumi_backtrace: "P3 Bangumi 回溯验证",
+        backtrace: "P3 Bangumi 回溯验证",
         ai_metadata: "AI 统一匹配 + TMDB 验证",
         title_season: "P2 本地任务 title 季度（未验证）",
         first_season: "P1 本地 S01（未验证）",
@@ -757,8 +757,14 @@ function libraryStrategy(value) {
         manual_mikan_offset: "人工 Mikan EP offset + TMDB 验证",
         trusted_mikan_offset: "可信 Mikan EP offset + TMDB 验证",
         tmdb_episode_number: "文件名 EP + TMDB Episode 验证",
+        subtitle_association: "字幕关联已确认 EP",
     };
     return value ? labels[value] ?? value : "未记录";
+}
+function resolutionReference(runId, attemptId) {
+    if (!runId || !attemptId)
+        return "证据引用未记录";
+    return `Run ${runId.slice(0, 8)}… · Attempt ${attemptId.slice(0, 8)}…`;
 }
 function libraryWarning(value) {
     const labels = {
@@ -1056,8 +1062,14 @@ function renderLibraryDetail(detail, focus) {
         ["季度开播", libraryDate(detail.air_date)],
         ["本地加入", libraryDate(detail.added_at_utc, true)],
         ["最后更新", libraryDate(detail.last_updated_at_utc, true)],
-        ["Series 取得", libraryStrategy(detail.series_resolution_source)],
-        ["Season 取得", libraryStrategy(detail.season_resolution_source)],
+        [
+            "Series 取得",
+            `${libraryStrategy(detail.series_resolution_source)} · ${resolutionReference(detail.series_resolution_run_id, detail.series_resolution_attempt_id)}`,
+        ],
+        [
+            "Season 取得",
+            `${libraryStrategy(detail.season_resolution_source)} · ${resolutionReference(detail.season_resolution_run_id, detail.season_resolution_attempt_id)}`,
+        ],
         ["验证状态", libraryValidation(detail.validation_status)],
         ["最近解析 Run", detail.last_resolution_run_id ?? "未记录"],
         ["EP snapshot", `${detail.episode_snapshot_count} / TMDB 声明 ${detail.episode_total}`],
@@ -2439,6 +2451,17 @@ async function loadMetadataDetail(taskId, target, button) {
                     ? `${file.disposition} · ${textOrDash(file.other_reason)}`
                     : `TMDB ${file.tmdb_series_id} · S${String(file.tmdb_season_number).padStart(2, "0")}E${String(file.tmdb_episode_number).padStart(3, "0")} · ${textOrDash(file.tmdb_episode_name)}`;
                 canonical.append(canonicalName, canonicalEpisode);
+                if (file.episode_strategy) {
+                    const evidence = document.createElement("p");
+                    evidence.className = "metadata-resolution-evidence";
+                    evidence.textContent =
+                        `Episode 取得：${libraryStrategy(file.episode_strategy)} · `
+                            + resolutionReference(file.episode_run_id, file.episode_attempt_id);
+                    evidence.title =
+                        `run_id=${file.episode_run_id ?? "未记录"}\n`
+                            + `attempt_id=${file.episode_attempt_id ?? "未记录"}`;
+                    canonical.append(evidence);
+                }
                 row.append(source, arrow, canonical);
                 files.append(row);
             }
@@ -2591,16 +2614,34 @@ async function loadMetadataTasks() {
             identity.textContent = `${item.source} · mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)} · TMDB ${textOrDash(item.tmdb_series_id)} / S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`;
             const stages = document.createElement("dl");
             stages.className = "metadata-stages";
-            for (const [label, value] of [
-                ["Series", item.series_strategy],
-                ["Season", item.season_strategy],
-                ["Episode", item.episode_strategy],
+            for (const [label, value, runId, attemptId, mixed] of [
+                ["Series", item.series_strategy, item.series_run_id, item.series_attempt_id, false],
+                ["Season", item.season_strategy, item.season_run_id, item.season_attempt_id, false],
+                [
+                    "Episode",
+                    item.episode_strategy,
+                    item.episode_run_id,
+                    item.episode_attempt_id,
+                    item.episode_resolution_mixed,
+                ],
             ]) {
                 const group = document.createElement("div");
                 const term = document.createElement("dt");
                 term.textContent = String(label);
                 const description = document.createElement("dd");
-                description.textContent = textOrDash(value);
+                description.textContent = mixed
+                    ? "多个文件使用不同来源或证据（见文件详情）"
+                    : libraryStrategy(value);
+                if (!mixed && value) {
+                    description.title =
+                        `${resolutionReference(runId, attemptId)}\n`
+                            + `run_id=${runId ?? "未记录"}\n`
+                            + `attempt_id=${attemptId ?? "未记录"}`;
+                    const reference = document.createElement("small");
+                    reference.className = "metadata-resolution-reference";
+                    reference.textContent = resolutionReference(runId, attemptId);
+                    description.append(document.createElement("br"), reference);
+                }
                 group.append(term, description);
                 stages.append(group);
             }
