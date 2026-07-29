@@ -10,6 +10,7 @@ using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Plugins;
+using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
@@ -171,6 +172,7 @@ public static class AnimeGoApplication
             sourceProfiles, rssDnsResolver, rssHttpTransport));
         builder.Services.AddSingleton<RssFeedReader>();
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
+        builder.Services.AddSingleton<PluginScheduleCoordinator>();
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloaderAdminStore>();
         builder.Services.AddSingleton<DownloadPreparationStore>();
@@ -264,6 +266,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<MediaOrganizationWorker>();
             builder.Services.AddHostedService<PendingTmdbNfoRewriteWorker>();
             builder.Services.AddHostedService<DeleteExecutionWorker>();
+            builder.Services.AddHostedService<PluginScheduleHostedService>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

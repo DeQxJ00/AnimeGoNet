@@ -75,6 +75,8 @@ services.AddSingleton<IScheduledPlugin, MetadataRefreshTask>();
 - `anime-library` 委托 `MediaPathPlanner`，媒体整理在文件操作落库前消费插件目标并再次执行根目录边界检查。
 - `staged-torrent-dispatch` 委托真实 dispatcher，后台 worker 使用插件的结果与下一次建议延迟。
 
+需要固定 Cron 的 schedule 插件由 `PluginScheduleCoordinator` 显式注册，不从插件文件读取或扫描。Cron 是含秒的六字段格式，支持 `?`、列表、范围、步长、英文月份/星期和标准 descriptor；`StartRun=true` 在注册完成后立即执行一次，`NextTime` 始终由同一已验证表达式与指定时区计算。失败沿用上游三次、每次间隔三秒的重试约定，并在每次调用参数中写入 `__retry_count__=0/1/2`。任务快照只记录稳定插件 ID、Cron、运行数、下一次/最近执行时间和安全失败码。
+
 默认目录不注册 Python 名称，不读取或执行 `.py` 文件；旧 `filter/mikan_tool.py` 只保留为 API 配置别名并映射到 SQLite/C# 实现。
 
 `TitleParserManager` 保留上游 `cmd/animego/main.go` 的选择语义：未指定 ID 时使用目录顺序中的第一个 parser；显式 ID 只执行该 parser。一次返回无匹配或错误不会隐式尝试下一个 parser，避免改变解析优先级。

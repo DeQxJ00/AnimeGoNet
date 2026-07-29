@@ -56,7 +56,7 @@
 - [x] 建立 Windows/Linux/macOS build/test CI，并对工作流 YAML 做本地语法校验。
 - [>] 验证 Minimal API、WebSocket、静态文件 NativeAOT（Minimal API/静态文件已通过 win-x64 原生 smoke；WebSocket 待实现）。
 - [x] 验证 Microsoft.Data.Sqlite NativeAOT（win-x64 原生进程完成 migration、integrity 与状态读取）。
-- [ ] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT。
+- [>] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT：无依赖 HTML scanner 与六字段 Cron/调度器均已通过 win-x64 NativeAOT；YAML AST 仍待实现与验证。
 - [x] 建立 published-binary smoke 脚本（`eng/smoke-native.ps1`）。
 
 ## P2 — 领域与配置
@@ -186,7 +186,7 @@
 
 ## P9 — 调度、Web API 与 Web 页面
 
-- [ ] 实现六字段 Cron 调度、StartRun 和 NextTime。
+- [x] 实现六字段 Cron 调度、StartRun 和 NextTime：支持秒级六字段、`?`、list/range/step、英文月份/星期与标准 descriptor，DOM/DOW 沿用 Cron OR 语义；时区/DST、启动立即执行、三次重试、并发任务、热增删唤醒、稳定快照和取消退出均由可控时钟测试覆盖，宿主仅在后台 worker 开启时运行 coordinator。
 - [ ] 实现 Bangumi/数据库/feed/plugin tasks。
 - [ ] 实现优雅退出和取消传播。
 - [ ] 移植 10 个 HTTP API。

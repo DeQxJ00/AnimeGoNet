@@ -18,6 +18,8 @@ AnimeGoNet.slnx
 
 内置目录当前包含 source `mikan/u2/ttg`、feed `mikan-rss`、parser `mikan-title`、filter `mikan-tool`、rename `anime-library` 和 schedule `staged-torrent-dispatch`。Legacy RSS API、Mikan 批次过滤/解析、媒体整理和 staging worker 都从同一个目录按稳定 ID 取得实现；同步静态入口仅保留为测试/兼容 facade。目录中没有 Python 条目，主程序也没有解释器、脚本执行、程序集扫描或动态 DLL 加载路径。
 
+`PluginScheduleCoordinator` 是编译期 schedule 插件的统一 Cron 宿主。它使用无反射的纯 C# 六字段解析器，注册时固定插件 ID、参数、时区、`StartRun` 和下一次执行时间；运行中增删任务会唤醒等待，不依赖轮询配置。每个触发独立执行，失败最多三次且间隔三秒；应用停止令牌会同时取消等待、重试和插件调用，HostedService 在退出前回收仍在运行的调用。具体 Bangumi Archive、数据库刷新和 feed 任务仍作为后续显式内置注册实现，不通过程序集扫描自动出现。
+
 上游 Go 源码位于独立的 `AnimeGo` 目录和 Git 仓库，仅作为差分 fixture 与业务行为索引；本仓库只保存 `DotnetProject` 的 C# 主程序、测试、文档和交付资产，两边不共享 Git 历史。
 
 ## 2. 配置、数据与目录真相源
