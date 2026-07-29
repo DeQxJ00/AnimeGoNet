@@ -68,12 +68,28 @@ internal sealed class MikanToolFilterPlugin(
         FilterContext context,
         CancellationToken cancellationToken)
     {
-        var profile = await profiles.GetEnabledAsync(
-            context.SourceProfileId.Trim().ToLowerInvariant(),
-            cancellationToken).ConfigureAwait(false);
-        if (profile is null)
+        var profileId = context.SourceProfileId.Trim().ToLowerInvariant();
+        bool rssFilterEnabled;
+        if (context.SourceProfileSnapshot is { } profileSnapshot)
         {
-            return Failure("rss_source_profile_missing", "Enabled RSS source profile was not found.");
+            if (profileSnapshot.Revision < 1)
+            {
+                return Failure(
+                    "rss_source_profile_snapshot_invalid",
+                    "RSS source profile snapshot revision is invalid.");
+            }
+            rssFilterEnabled = profileSnapshot.RssFilterEnabled;
+        }
+        else
+        {
+            var profile = await profiles.GetEnabledAsync(
+                profileId,
+                cancellationToken).ConfigureAwait(false);
+            if (profile is null)
+            {
+                return Failure("rss_source_profile_missing", "Enabled RSS source profile was not found.");
+            }
+            rssFilterEnabled = profile.RssFilterEnabled;
         }
 
         var mikanIds = context.Items
@@ -96,7 +112,11 @@ internal sealed class MikanToolFilterPlugin(
                 item.Length,
                 item.PublishedAtRaw)).ToArray(),
             mikanIds.Length == 0 ? null : mikanIds[0]);
-        var batch = await processor.EvaluateAsync(feed, profile, cancellationToken).ConfigureAwait(false);
+        var batch = await processor.EvaluateAsync(
+            feed,
+            profileId,
+            rssFilterEnabled,
+            cancellationToken).ConfigureAwait(false);
         var decisions = batch.Audits.Select((audit, index) =>
             new FilterDecision(
                 context.Items[index].Index,

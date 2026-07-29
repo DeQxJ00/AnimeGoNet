@@ -15,6 +15,8 @@ AnimeGoNet 支持多个命名下载器实例，并按输入源选择下载器和
 名称和绑定均可在 Web UI 修改；表中的 `bt`、`pt` 不是硬编码关键字。
 默认 Mikan profile 的 `file_strategy=move` 也是可修改的初始值，不是协议常量；变更只影响之后创建的任务，历史/进行中任务继续使用路由快照。Web 选择 `move` 时必须提示下载完成即移动、无法继续做种。
 
+RSS 请求在确认来源已启用时取得一次完整 SourceProfile 快照。该 revision 的 legacy filter 开关、同集优选开关、adapter、Torrent Host 白名单、下载器、文件策略、category、tags 和做种时长会贯穿过滤、winner staging 与任务原子写入；处理中从 Web 修改 profile 只影响下一次请求，不能让同一个批次用旧规则筛选后写入新下载器路由。直接运行内置 filter 插件且没有请求快照时仍读取当前 profile，便于管理端预览当前配置。
+
 唯一支持的下载器类型是 `qbittorrent`，但允许任意多个命名实例。旧配置中的 `transmission` 只可被读取并显示永久 `UnsupportedDownloaderType`，不能启用、路由任务或在 Web 新建，也不得自动转换成 qBittorrent；项目路线图不包含该适配器。
 
 ## 2. 下载器实例
@@ -43,7 +45,7 @@ downloaders:
 - 每个实例有独立连接状态、限流、分类/tag、路径映射和错误熔断，不共享会话或缓存。
 - 密码支持环境变量/secret file；Web 私有覆盖只写不回显，保存到 `data_path/config/downloaders.private.json` 并要求重启应用。该文件不属于业务 SQLite，随 data_path secret 备份策略管理，禁止提交 Git。
 - 全局 Docker 根路径仍为 `download_path=/download/incomplete`、`save_path=/download/anime`，实例路径只能位于下载根目录下。两个下载器和 AnimeGoNet 必须把共同宿主父目录挂载到容器内同一个 `/download`。
-- 下载任务创建时保存下载器实例 ID 和配置版本快照；之后修改源绑定不会偷偷迁移进行中的任务。
+- 下载任务创建时保存下载器实例 ID 和配置版本快照；之后修改源绑定不会偷偷迁移正在导入或已经进行中的任务。
 
 ## 3. 输入源配置
 

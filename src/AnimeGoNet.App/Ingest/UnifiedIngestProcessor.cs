@@ -34,24 +34,48 @@ public sealed class UnifiedIngestProcessor(
         IngestItemCommand command,
         bool requireModernMetadata,
         CancellationToken cancellationToken = default) =>
-        await ProcessCoreAsync(source, command, requireModernMetadata, null, cancellationToken).ConfigureAwait(false);
+        await ProcessCoreAsync(
+            source,
+            command,
+            requireModernMetadata,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
 
     public async Task<UnifiedIngestItemResult> ProcessRssWinnerAsync(
-        string source,
+        SourceProfileRecord sourceProfileSnapshot,
         IngestItemCommand command,
         MikanRssWinnerLease winnerLease,
-        CancellationToken cancellationToken = default) =>
-        await ProcessCoreAsync(source, command, false, winnerLease, cancellationToken).ConfigureAwait(false);
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceProfileSnapshot);
+        return await ProcessCoreAsync(
+            sourceProfileSnapshot.Id,
+            command,
+            false,
+            winnerLease,
+            sourceProfileSnapshot,
+            cancellationToken).ConfigureAwait(false);
+    }
 
     private async Task<UnifiedIngestItemResult> ProcessCoreAsync(
         string source,
         IngestItemCommand command,
         bool requireModernMetadata,
         MikanRssWinnerLease? winnerLease,
+        SourceProfileRecord? sourceProfileSnapshot,
         CancellationToken cancellationToken)
     {
         var profileId = (source ?? string.Empty).Trim().ToLowerInvariant();
-        var profile = await profiles.GetEnabledAsync(profileId, cancellationToken).ConfigureAwait(false);
+        if (sourceProfileSnapshot is not null
+            && !string.Equals(sourceProfileSnapshot.Id, profileId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Source profile snapshot does not match the requested source.",
+                nameof(sourceProfileSnapshot));
+        }
+        var profile = sourceProfileSnapshot
+            ?? await profiles.GetEnabledAsync(profileId, cancellationToken).ConfigureAwait(false);
         if (profile is null)
         {
             return Rejected(["no enabled source profile is configured"]);

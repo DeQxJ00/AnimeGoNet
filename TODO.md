@@ -132,7 +132,7 @@
 - [x] 实现 `AnimeGo.Plugin.Abstractions` 和 source/feed/parser/filter/rename/schedule 六类强类型 C# 插件契约；契约项目启用 trim/AOT analyzer，稳定 DTO 不引用 Web、SQLite 或下载客户端。
 - [x] C# 移植 builtin feed/parser/filter/rename/schedule；`mikan-rss`、`mikan-title`、`mikan-tool`、`anime-library`、`staged-torrent-dispatch` 均由编译期目录注册并接入真实 feed→filter→parse→staging、整理与调度入口，默认运行无 Python 运行时或脚本加载路径。
 - [x] 实现内置 C# MikanTool 五级黑白名单规则：纯 C# 引擎、schema v15 规则/快照、legacy `/api/plugin/config`、Episode identity parser、schema v16 逐候选审计，以及 `/api/rss` 的安全页面抓取/批内缓存/Filiter0..4 前置执行均已串联；被拒绝或身份失败的候选不进入新优选与 staging。现代管理 API 与 WebUI 已支持总开关、五档 CRUD/排序/启停、精确 JSON 数组关键词、服务端逐档预览、旧 JSON 导入导出、revision 冲突和快照回滚。
-- [>] 默认 Mikan SourceProfile 的 `mikan_rss_filter_enabled` 已默认 `true` 并真实控制 `/api/rss`；关闭时零页面请求、逐项记录 `SkippedByConfiguration`、继续优选/staging且规则不变。来源 CRUD/UI 改动与“已有任务保持原快照”的跨请求并发验收待实现。
+- [x] 默认 Mikan SourceProfile 的 `mikan_rss_filter_enabled` 已默认 `true` 并真实控制 `/api/rss`；关闭时零页面请求、逐项记录 `SkippedByConfiguration`、继续优选/staging且规则不变。来源 CRUD/UI 已完成；RSS 从请求起点显式贯穿同一 SourceProfile revision/双开关/下载器路由快照，并发修改只影响下一次请求。
 - [x] 增加独立 `mikan_rss_priority_enabled` 批次优选开关：默认 profile 已启用，schema v13 规则版本、默认初始化、预览 API 和真实 `/api/rss`/现代 RSS 批次均已接入；禁用时真实批次逐项记录 `SkippedByConfiguration`、不执行本功能的黑白名单/有序组且不清空规则，SQLite 审计保留当批开关状态。
 - [x] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 支持增删/排序，schema v25 保存每个 revision 的关系型历史快照并支持安全回滚；WebUI 已提供白/黑名单、组/数组 CRUD、启停、上下移动、服务端预览和历史回滚。
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
@@ -151,7 +151,7 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [x] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作、失败隔离、可选客户端版本/默认保存路径诊断，以及按实例 2～120 秒指数退避/熔断均已实现。
-- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成；历史任务保留原 revision/下载器/下载策略快照。依赖 TMDB/Bangumi 日期与 EP 的上游动态 tag 模板待元数据后置赋值模块实现。
+- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成；RSS 请求处理中并发修改不会混用新旧过滤开关或下载器路由，历史任务保留原 revision/下载器/下载策略快照。依赖 TMDB/Bangumi 日期与 EP 的上游动态 tag 模板待元数据后置赋值模块实现。
 - [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add（category/tags/seedingTimeLimit）、file priority、stop/start/delete、状态映射、严格 hash/index/priority/做种分钟校验与失败响应。

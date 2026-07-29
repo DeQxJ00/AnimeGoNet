@@ -1,4 +1,5 @@
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Plugins;
@@ -76,6 +77,55 @@ public sealed class BuiltInApplicationPluginsTests
         var decision = Assert.Single(result.Decisions);
         Assert.True(decision.Accepted);
         Assert.Equal("Accepted", decision.Outcome);
+    }
+
+    [Fact]
+    public async Task FilterPluginHonorsExplicitSourceProfileSnapshot()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE source_profiles
+                SET rss_filter_enabled = 0, revision = revision + 1
+                WHERE id = 'mikan';
+                """;
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+        var plugin = app.App.Services
+            .GetRequiredService<PluginCatalog>()
+            .Require<IFeedFilterPlugin>("mikan-tool");
+        var item = new FilterItem(
+            0,
+            "[Group] Show [01] [1080p]",
+            "https://tracker.invalid/test.torrent",
+            "https://mikanani.me/Home/Episode/test",
+            null,
+            "3951",
+            "application/x-bittorrent",
+            42,
+            null);
+
+        var snapshotted = await plugin.FilterAsync(
+            new FilterContext(
+                "mikan",
+                [item],
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                new FilterSourceProfileSnapshot(1, true, true)),
+            CancellationToken.None);
+        var current = await plugin.FilterAsync(
+            new FilterContext(
+                "mikan",
+                [item],
+                new Dictionary<string, string>(StringComparer.Ordinal)),
+            CancellationToken.None);
+
+        Assert.Equal("true", snapshotted.Metadata["enabled"]);
+        Assert.Equal("Accepted", Assert.Single(snapshotted.Decisions).Outcome);
+        Assert.Equal("false", current.Metadata["enabled"]);
+        Assert.Equal("SkippedByConfiguration", Assert.Single(current.Decisions).Outcome);
     }
 
     [Fact]

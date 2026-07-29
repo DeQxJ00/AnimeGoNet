@@ -1,5 +1,6 @@
 using System.Text;
 using System.Net;
+using System.Text.Json;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Feeds;
@@ -107,6 +108,68 @@ public sealed class MikanRssIngestProcessorTests
             Assert.Equal("ingested", entry.EffectState);
             Assert.NotNull(entry.IngestTaskId);
         });
+    }
+
+    [Fact]
+    public async Task ConcurrentProfileUpdateOnlyAffectsTheNextRssRequest()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new BlockingWorkPageTransport();
+        await using var app = await StartAsync(staging, transport);
+        var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
+
+        var processing = processor.ProcessAsync(Feed(Item("Show [03] [1080p]", "winner")));
+        await transport.WaitUntilRequestedAsync();
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        try
+        {
+            await using var connection = await database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                    UPDATE source_profiles
+                    SET downloader_id = 'changed',
+                        category = 'changed',
+                        rss_filter_enabled = 0,
+                        rss_priority_enabled = 0,
+                        revision = revision + 1
+                    WHERE id = 'mikan';
+                    """;
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+        finally
+        {
+            transport.Release();
+        }
+
+        var result = await processing;
+        var item = Assert.Single(result.Items);
+        Assert.Equal("staged", item.Status);
+        Assert.Equal(1, staging.StageCount);
+        var taskId = Assert.IsType<string>(item.IngestTaskId);
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT source_profile_revision, downloader_id, route_snapshot_json
+                FROM ingest_tasks
+                WHERE id = $id;
+                """;
+            command.Parameters.AddWithValue("$id", taskId);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1, reader.GetInt64(0));
+            Assert.Equal("bt", reader.GetString(1));
+            using var route = JsonDocument.Parse(reader.GetString(2));
+            Assert.Equal(1, route.RootElement.GetProperty("revision").GetInt64());
+            Assert.Equal("animegonet", route.RootElement.GetProperty("category").GetString());
+            Assert.True(route.RootElement.GetProperty("rss_filter_enabled").GetBoolean());
+            Assert.True(route.RootElement.GetProperty("rss_priority_enabled").GetBoolean());
+        }
+
+        var stored = Assert.IsType<MikanRssBatchRecord>(
+            await app.App.Services.GetRequiredService<MikanRssBatchStore>().GetAsync(result.BatchId));
+        Assert.True(stored.PriorityEnabled);
+        Assert.True(stored.LegacyFilterEnabled);
     }
 
     [Fact]
@@ -266,6 +329,39 @@ public sealed class MikanRssIngestProcessorTests
                 null,
                 bytes.Length,
                 new MemoryStream(bytes, writable: false)));
+        }
+    }
+
+    private sealed class BlockingWorkPageTransport : ITorrentHttpTransport
+    {
+        private readonly TaskCompletionSource _requested =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WaitUntilRequestedAsync() => _requested.Task;
+
+        public void Release() => _release.TrySetResult();
+
+        public async ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            CancellationToken cancellationToken)
+        {
+            _ = uri;
+            _ = validatedAddresses;
+            _requested.TrySetResult();
+            await _release.Task.WaitAsync(cancellationToken);
+            var bytes = Encoding.UTF8.GetBytes("""
+                <p class="bangumi-info">
+                  <a href="https://bgm.tv/subject/547888">Bangumi</a>
+                </p>
+                """);
+            return new TorrentHttpResponse(
+                HttpStatusCode.OK,
+                null,
+                bytes.Length,
+                new MemoryStream(bytes, writable: false));
         }
     }
 }

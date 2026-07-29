@@ -50,6 +50,7 @@ AnimeGoNet.slnx
 ### 来源与路由
 
 - `SourceProfile`：稳定小写 ID、adapter、下载器实例 ID、元数据字段 schema、规则 revision、文件策略、category/tag、路径与做种策略。
+- RSS 编排在请求起点取得一次 SourceProfile record，并通过强类型 `FilterSourceProfileSnapshot` 把相同 revision 的过滤开关传给编译期 filter；winner staging 直接接收原 record，不重新查询当前 profile。这样并发配置更新只能影响后续请求，不能产生规则与下载路由混合快照。
 - `DownloaderInstance`：部署配置或 data_path 私有覆盖中的命名 qBittorrent 连接；API 只回显安全 URL/路径和“凭据是否配置”，密码只写。任务只保存实例 ID 和不可变路由快照，不保存明文密码。
 - `IngestBatch` / `IngestItem`：统一导入命令；保存 title、脱敏 Torrent URL 指纹、source item/work ID、`mikanid`、`groupid`、可选 bgmid/anidbid/imdbid。
 

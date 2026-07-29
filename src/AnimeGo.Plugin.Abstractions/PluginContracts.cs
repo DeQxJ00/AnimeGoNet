@@ -131,10 +131,16 @@ public sealed record FilterItem(
     long Length,
     string? PublishedAtRaw);
 
+public sealed record FilterSourceProfileSnapshot(
+    long Revision,
+    bool RssFilterEnabled,
+    bool RssPriorityEnabled);
+
 public sealed record FilterContext(
     string SourceProfileId,
     IReadOnlyList<FilterItem> Items,
-    IReadOnlyDictionary<string, string> Arguments);
+    IReadOnlyDictionary<string, string> Arguments,
+    FilterSourceProfileSnapshot? SourceProfileSnapshot = null);
 
 public sealed record FilterDecision(
     int Index,

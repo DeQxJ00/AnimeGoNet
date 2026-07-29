@@ -19,11 +19,26 @@ public sealed class MikanLegacyFilterProcessor(
         SourceProfileRecord profile,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(feed);
         ArgumentNullException.ThrowIfNull(profile);
-        var snapshot = await filters.GetAsync(profile.Id, cancellationToken).ConfigureAwait(false)
+        return await EvaluateAsync(
+            feed,
+            profile.Id,
+            profile.RssFilterEnabled,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<MikanLegacyFilterBatch> EvaluateAsync(
+        RssFeedDocument feed,
+        string sourceProfileId,
+        bool rssFilterEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceProfileId);
+        var profileId = sourceProfileId.Trim().ToLowerInvariant();
+        var snapshot = await filters.GetAsync(profileId, cancellationToken).ConfigureAwait(false)
             ?? throw new RssFeedException("legacy_filter_missing", "Legacy Mikan filter was not initialized.");
-        if (!profile.RssFilterEnabled)
+        if (!rssFilterEnabled)
         {
             return new MikanLegacyFilterBatch(
                 snapshot.Revision,

@@ -79,7 +79,11 @@ public sealed class MikanRssIngestProcessor(
                     item.ContentType,
                     item.Length,
                     item.PublishedDate)).ToArray(),
-                EmptyArguments),
+                EmptyArguments,
+                new FilterSourceProfileSnapshot(
+                    profile.Revision,
+                    profile.RssFilterEnabled,
+                    profile.RssPriorityEnabled)),
             MikanFilterChain,
             cancellationToken).ConfigureAwait(false);
         if (!filterExecution.Succeeded)
@@ -180,7 +184,7 @@ public sealed class MikanRssIngestProcessor(
             try
             {
                 outcome = await ingest.ProcessRssWinnerAsync(
-                    profile.Id, command, lease, cancellationToken).ConfigureAwait(false);
+                    profile, command, lease, cancellationToken).ConfigureAwait(false);
                 if (!outcome.Accepted)
                 {
                     _ = await batches.ReleaseWinnerAsync(lease, cancellationToken).ConfigureAwait(false);
