@@ -73,8 +73,8 @@
 - [ ] 增加 OpenAI-compatible AI 配置 DTO、环境变量、敏感值脱敏和 source-generated JSON 上下文。
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
-- [ ] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器，不在兼容层擅加年份保护、歧义拒绝或E04/EP04扩展；另建 `FileEpisodeCandidateResolver` 安全层，只在 Mikan SourceProfile 决定是否形成逐文件 `file_episode_candidate`；增加 AI/TMDB 验证后的本地统一偏移计算器，结果不一致时只禁止缓存学习，不否定已验证的逐文件映射。
-- [>] 已建立 NativeAOT-safe Torrent 文件和 Mikan RSS title EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，RSS title 另支持不受扩展名截断的最后可靠标记；小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 均不形成普通整数。入库仅为普通正整数写 `file_episode_candidate`，已在确认 Season 内逐文件经 TMDB Episode API 验证；RSS 批次串联与 raw_parser.py 严格 differential 仍待实现。
+- [x] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器：19 组由 develop 分支 Python 产出的 golden fixture 已逐字段覆盖标题、季度、集号、字幕、发布组、分辨率和来源，并明确保留不识别 E04/EP04 等原始语义。独立 `FileEpisodeCandidateResolver` 才拒绝年份/分辨率占位、歧义和非正片，只对 Mikan SourceProfile 落逐文件候选；AI/TMDB 验证后的本地统一偏移计算及“不一致只禁止学习”已在 Episode worker 完成。
+- [>] 已建立 NativeAOT-safe Torrent 文件和 Mikan RSS title EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，RSS title 另支持不受扩展名截断的最后可靠标记；小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 均不形成普通整数。入库的 Mikan `file_episode_candidate` 现改由 raw_parser.py 兼容层与独立安全层决定，其他 adapter 固定不写；确认 Season 后仍逐文件经 TMDB Episode API 验证，RSS 批次与逐文件候选的跨请求审计仍待补全。
 - [>] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；数据层已按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中可安全计算目标 EP，主程序 AI 前置接入仍待串联。
 - [ ] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用。
 - [ ] 通过全部配置/模型 parity tests。

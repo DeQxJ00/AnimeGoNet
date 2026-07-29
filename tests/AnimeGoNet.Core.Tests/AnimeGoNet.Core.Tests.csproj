@@ -11,4 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/AnimeGoNet.Core/AnimeGoNet.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

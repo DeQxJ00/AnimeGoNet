@@ -14,6 +14,8 @@
 
 `file_episode_candidate` 必须由后端使用规范化后的 Torrent 内部 basename 重新计算。API、WebUI、导入清单或插件传入的同名字段不能覆盖程序计算值。独立的 `FileEpisodeCandidateResolver` 读取兼容解析结果，再拒绝年份占位、非正数和明显的非正片/歧义结果；只有通过该安全层才形成候选。特别篇、Menu、PV、NCOP、NCED、Logo 等不能为了生成偏移而额外编造普通集号。
 
+当前实现严格以 SourceProfile 的 `adapter` 判断作用域：只有精确的 `mikan` 才运行候选安全层并写入 `file_episode_candidate`；U2、TTG 或自定义非 Mikan profile 即使文件名完全相同也固定不写。兼容解析仍可保留上游会产生的原始结果（例如年份或末尾分辨率数字），但这些值只用于差分证明，不会绕过安全层进入可信 offset 学习。
+
 ## 3. AI 后本地处理
 
 AI 请求中的每个视频文件始终只有：

@@ -138,6 +138,102 @@ public sealed class IngestTaskStoreTests
     }
 
     [Fact]
+    public async Task FileEpisodeCandidateUsesUpstreamParserSafetyPolicyOnlyForMikanAdapter()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profileStore = new SourceProfileStore(fixture.Database);
+        await profileStore.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        await profileStore.CreateAsync(
+            "u2",
+            new SourceProfileDefinition(
+                "U2",
+                "u2",
+                "bt",
+                "move",
+                ["tracker.invalid"],
+                "animegonet-test",
+                [],
+                0,
+                false,
+                false,
+                true),
+            DateTimeOffset.UtcNow);
+        var mikan = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
+        var u2 = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("u2"));
+        var store = new IngestTaskStore(fixture.Database);
+        var mikanTask = await store.AddStagedAsync(
+            CreateNormalized(),
+            mikan,
+            new TorrentMetadata(
+                "Mikan",
+                new string('d', 40),
+                20,
+                [
+                    new TorrentFile("Show [04].mkv", 5, false),
+                    new TorrentFile("Show [2024].mkv", 5, false),
+                    new TorrentFile("Show [01][02].mkv", 5, false),
+                    new TorrentFile("Show -  7.mkv", 5, false),
+                ]),
+            "mikan-policy.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(15));
+        var u2Task = await store.AddStagedAsync(
+            CreateNormalized("u2"),
+            u2,
+            new TorrentMetadata(
+                "U2",
+                new string('e', 40),
+                5,
+                [new TorrentFile("Show [04].mkv", 5, false)]),
+            "u2-policy.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(15));
+
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT task_id, relative_path, source_episode, file_episode_candidate
+            FROM task_files
+            WHERE task_id IN ($mikan_task_id, $u2_task_id)
+            ORDER BY task_id, relative_path;
+            """;
+        command.Parameters.AddWithValue("$mikan_task_id", mikanTask.Id);
+        command.Parameters.AddWithValue("$u2_task_id", u2Task.Id);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<(string TaskId, string Path, string? SourceEpisode, string? Candidate)>();
+        while (await reader.ReadAsync())
+        {
+            rows.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3)));
+        }
+
+        Assert.Contains(rows, row =>
+            row.TaskId == mikanTask.Id
+            && row.Path == "Show [04].mkv"
+            && row.SourceEpisode == "4"
+            && row.Candidate == "4");
+        Assert.Contains(rows, row =>
+            row.TaskId == mikanTask.Id
+            && row.Path == "Show -  7.mkv"
+            && row.SourceEpisode == "7"
+            && row.Candidate == "7");
+        Assert.Contains(rows, row =>
+            row.TaskId == mikanTask.Id
+            && row.Path == "Show [2024].mkv"
+            && row.Candidate is null);
+        Assert.Contains(rows, row =>
+            row.TaskId == mikanTask.Id
+            && row.Path == "Show [01][02].mkv"
+            && row.Candidate is null);
+        Assert.Contains(rows, row =>
+            row.TaskId == u2Task.Id
+            && row.Path == "Show [04].mkv"
+            && row.SourceEpisode == "4"
+            && row.Candidate is null);
+    }
+
+    [Fact]
     public async Task ExpiredStagingBecomesFailedAndReturnsOnlySafeFileNameForCleanup()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
@@ -200,10 +296,32 @@ public sealed class IngestTaskStoreTests
         Assert.Equal(0, claim.SeedingTimeMinutes);
     }
 
-    private static NormalizedIngestItem CreateNormalized() =>
+    private static NormalizedIngestItem CreateNormalized(string source = "mikan") =>
         Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
-            "mikan",
+            source,
             new IngestItemCommand(
                 "https://tracker.invalid/personal-passkey/file.torrent",
-                new IngestItemInfo("Episode 1", null, "item-1", "3951", null, null, 3951, 547888, null, null))).Item);
+                source == "mikan"
+                    ? new IngestItemInfo(
+                        "Episode 1",
+                        null,
+                        "item-1",
+                        "3951",
+                        null,
+                        null,
+                        3951,
+                        547888,
+                        null,
+                        null)
+                    : new IngestItemInfo(
+                        "Episode 1",
+                        null,
+                        "item-u2",
+                        "work-u2",
+                        null,
+                        null,
+                        null,
+                        null,
+                        1234,
+                        null))).Item);
 }
