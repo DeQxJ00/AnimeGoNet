@@ -94,7 +94,8 @@ Each decompressed line is one normal Episode:
 the same data version. `sort` is a positive stable ordering integer.
 `episode` is the invariant decimal string reported by Bangumi and must be
 positive; non-integer values remain data evidence but never become unverified
-TMDB Episode identity. `air_date` is null or ISO `yyyy-MM-dd`.
+TMDB Episode identity. `air_date` is null or ISO `yyyy-MM-dd`. Records are
+strictly ordered by `id` ascending inside each asset.
 
 ## Determinism and validation
 

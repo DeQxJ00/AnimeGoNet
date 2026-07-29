@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 27;
+    public const int CurrentVersion = 28;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -33,7 +33,112 @@ public static class DatabaseSchema
         new SchemaMigration(25, "mikan_rss_rule_snapshots", MikanRssRuleSnapshots),
         new SchemaMigration(26, "mikan_bangumi_discovery_audit", MikanBangumiDiscoveryAudit),
         new SchemaMigration(27, "directory_database_index", DirectoryDatabaseIndex),
+        new SchemaMigration(28, "animegonet_data_versions", AnimeGoNetDataVersions),
     ];
+
+    private const string AnimeGoNetDataVersions = """
+        CREATE TABLE data_update_versions (
+            data_version TEXT NOT NULL PRIMARY KEY,
+            schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+            generated_at_utc TEXT NOT NULL,
+            minimum_client_version TEXT NOT NULL,
+            manifest_sha256 TEXT NOT NULL CHECK (
+                length(manifest_sha256) = 64
+                AND manifest_sha256 NOT GLOB '*[^0-9a-f]*'),
+            upstream_repository TEXT NOT NULL,
+            upstream_release TEXT NOT NULL,
+            upstream_asset TEXT NOT NULL,
+            upstream_sha256 TEXT NOT NULL CHECK (
+                length(upstream_sha256) = 64
+                AND upstream_sha256 NOT GLOB '*[^0-9a-f]*'),
+            subject_count INTEGER NOT NULL CHECK (subject_count > 0),
+            episode_count INTEGER NOT NULL CHECK (episode_count > 0),
+            state TEXT NOT NULL CHECK (state IN ('active', 'inactive')),
+            installed_at_utc TEXT NOT NULL,
+            activated_at_utc TEXT
+        ) STRICT;
+
+        CREATE UNIQUE INDEX ux_data_update_versions_active
+            ON data_update_versions(state) WHERE state = 'active';
+
+        CREATE TABLE data_update_state (
+            singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+            active_version TEXT REFERENCES data_update_versions(data_version) ON DELETE SET NULL,
+            previous_version TEXT REFERENCES data_update_versions(data_version) ON DELETE SET NULL,
+            updated_at_utc TEXT NOT NULL,
+            CHECK (active_version IS NULL OR active_version <> previous_version)
+        ) STRICT;
+
+        INSERT INTO data_update_state (
+            singleton, active_version, previous_version, updated_at_utc)
+        VALUES (1, NULL, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+        CREATE TABLE data_update_runs (
+            id TEXT NOT NULL PRIMARY KEY,
+            operation TEXT NOT NULL CHECK (operation IN ('import', 'rollback')),
+            data_version TEXT,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            failure_code TEXT,
+            subject_count INTEGER NOT NULL CHECK (subject_count >= 0),
+            episode_count INTEGER NOT NULL CHECK (episode_count >= 0),
+            started_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT,
+            CHECK (
+                (status = 'running' AND failure_code IS NULL AND completed_at_utc IS NULL)
+                OR (status = 'completed' AND failure_code IS NULL AND completed_at_utc IS NOT NULL)
+                OR (status = 'failed' AND failure_code IS NOT NULL AND completed_at_utc IS NOT NULL)
+            )
+        ) STRICT;
+
+        CREATE TABLE data_update_staging_subjects (
+            run_id TEXT NOT NULL REFERENCES data_update_runs(id) ON DELETE CASCADE,
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            name TEXT NOT NULL,
+            name_cn TEXT,
+            air_date TEXT,
+            episode_count INTEGER NOT NULL CHECK (episode_count >= 0),
+            PRIMARY KEY (run_id, subject_id)
+        ) STRICT;
+
+        CREATE TABLE data_update_staging_episodes (
+            run_id TEXT NOT NULL REFERENCES data_update_runs(id) ON DELETE CASCADE,
+            episode_id INTEGER NOT NULL CHECK (episode_id > 0),
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            sort_number INTEGER NOT NULL CHECK (sort_number > 0),
+            episode_number TEXT NOT NULL,
+            air_date TEXT,
+            PRIMARY KEY (run_id, episode_id)
+        ) STRICT;
+
+        CREATE INDEX ix_data_update_staging_episode_subject
+            ON data_update_staging_episodes(run_id, subject_id);
+
+        CREATE TABLE bangumi_archive_subjects (
+            data_version TEXT NOT NULL REFERENCES data_update_versions(data_version) ON DELETE CASCADE,
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            name TEXT NOT NULL,
+            name_cn TEXT,
+            air_date TEXT,
+            episode_count INTEGER NOT NULL CHECK (episode_count >= 0),
+            PRIMARY KEY (data_version, subject_id)
+        ) STRICT;
+
+        CREATE TABLE bangumi_archive_episodes (
+            data_version TEXT NOT NULL,
+            episode_id INTEGER NOT NULL CHECK (episode_id > 0),
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            sort_number INTEGER NOT NULL CHECK (sort_number > 0),
+            episode_number TEXT NOT NULL,
+            air_date TEXT,
+            PRIMARY KEY (data_version, episode_id),
+            FOREIGN KEY (data_version, subject_id)
+                REFERENCES bangumi_archive_subjects(data_version, subject_id)
+                ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX ix_bangumi_archive_episode_subject
+            ON bangumi_archive_episodes(data_version, subject_id, sort_number);
+        """;
 
     private const string DirectoryDatabaseIndex = """
         CREATE TABLE directory_database_scan_runs (
