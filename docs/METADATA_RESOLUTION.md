@@ -147,7 +147,7 @@ advanced:
 
 本节的 `tmdbid`、`bangumiid` 都指 NFO XML 标签内容。内部 SQLite 分别保存来源值、TMDB 规范值、失败原因和待修复状态，不用 NFO 的 `0` 代替内部身份信息。
 
-当前主程序在权威 Series `SemanticNoMatch` 后先尝试已启用的季度 AI 恢复；仍失败时才评估 Bangumi 兜底。兜底任务在 `anime_series` 保存 `tmdb_series_id=0 + bangumi_subject_id + needs_tmdb_completion=1`，但 `task_files.tmdb_series_id` 和 `metadata_resolution_runs.tmdb_series_id` 保持 `NULL`，避免把例外值混入规范 TMDB 身份。文件只携带已确认的来源季度并以 `Other/tmdb_fallback_pending_completion` 整理，不生成 TMDB Episode 进度或规范 completion record。
+当前主程序在权威 Series `SemanticNoMatch` 后先尝试已启用的统一 AI 元数据恢复；仍失败时才评估 Bangumi 兜底。兜底任务在 `anime_series` 保存 `tmdb_series_id=0 + bangumi_subject_id + needs_tmdb_completion=1`，但 `task_files.tmdb_series_id` 和 `metadata_resolution_runs.tmdb_series_id` 保持 `NULL`，避免把例外值混入规范 TMDB 身份。文件只携带已确认的来源季度并以 `Other/tmdb_fallback_pending_completion` 整理，不生成 TMDB Episode 进度或规范 completion record。
 
 ## 4. NFO 文件和内容
 
@@ -194,22 +194,19 @@ advanced:
     tmdb_fail_skip: false
     # TMDBFailBacktrace，优先级3
     tmdb_fail_backtrace: false
-    # TMDBFailUseAIMatchSeason；独立阶段，不占确定性优先级
-    tmdb_fail_use_ai_match_season: false
+    # 统一 AI 元数据匹配；独立阶段，不占确定性优先级
+    ai_use_metadata_match: false
     # TMDBFailUseTitleSeason，优先级2
     tmdb_fail_use_title_season: false
     # TMDBFailUseFirstSeason，优先级1
     tmdb_fail_use_first_season: false
-    # TMDBFailEpUseAIMatchSeason；不属于季度优先级链
-    # 非AI季度匹配成功，但EP无法对应时使用AI匹配一次EP
-    tmdb_failep_use_ai_match_season: false
 ```
 
 季度策略按数值从高到低执行：
 
 1. `tmdb_fail_skip=true`：优先级 4，立即跳过当前项，不执行其他策略。
 2. `tmdb_fail_backtrace=true`：优先级 3，AnimeGoNet 沿 Bangumi“前传”关系逐项回溯；每个前作重新联合匹配完整 `tmdbid + Season`，成功即采用，耗尽则继续下一策略。
-3. `tmdb_fail_use_ai_match_season=true`：独立可选阶段，使用下载任务总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid` 请求大模型，一次返回整个任务的 TMDB Series/Season/Episode 候选。非空 ID 已绑定当前任务，但跨站标题、季度和 EP 编号可能不同，只能作参考；结果必须通过官方 TMDB API 二次验证，详细协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
+3. `ai_use_metadata_match=true`：独立可选阶段，使用下载任务总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid` 请求大模型，一次返回整个任务的 TMDB Series/Season/Episode 候选。非空 ID 已绑定当前任务，但跨站标题、季度和 EP 编号可能不同，只能作参考；结果必须通过官方 TMDB API 二次验证，详细协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
 4. `tmdb_fail_use_title_season=true`（`TMDBFailUseTitleSeason`）：优先级 2。前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器；解析出正季度后直接使用该本地季度，不验证 TMDB Season，解析不到时继续 P1。
 5. `tmdb_fail_use_first_season=true`（`TMDBFailUseFirstSeason`）：优先级 1。前序策略全部失败后直接使用本地 `S01`，不验证 TMDB Season。
 6. 所有启用策略都没有结果：进入待确认/解析失败。
@@ -229,20 +226,20 @@ advanced:
 
 无论当前搜索是“已有有效 ID 但季度失败”还是“两个名字均未找到可验证 Series”，只要已有 `bgmid`，P3 都可以尝试恢复完整 `tmdbid + Season`。P3、AI 仍失败且 `tmdb_fail_use_bangumi=true` 时，才进入先前确认的 `tmdbid=0` 例外路径；由于没有 TMDB 规范值，该路径只能使用 Bangumi 名称与来源季度/集号，并必须在状态/UI 中明确标记为非 TMDB 规范命名。P2/P1 仍要求已有有效 TMDB Series，因为两者只提供本地 Season Number。
 
-### 6.2 非 AI 季度成功后的 EP 校验
+### 6.2 普通 EP 校验与统一 AI 补全
 
-`tmdb_failep_use_ai_match_season` 是后置 EP 开关，不参与上述优先级排序，默认 `false`。仅当季度结果来源不是 AI 时执行：
+确定性流程已确认 Series/Season 后，先执行普通 Episode 校验：
 
 1. 在已确认的 TMDB Season 中读取完整 Episode 列表。
 2. 若与 `SourceEpisodeNumber` 同号的 TMDB Episode 存在，且 Bgm/文件名标题、首播日期没有冲突，则直接采用该 TMDB Episode。
 3. 同号不存在或存在冲突时，使用内部取得的 Bgm Episode 标题/日期在同一 TMDB Season 内做确定性匹配；这些详情不发送给 AI。
-4. 仍有文件无法对应且开关为 `true` 时，使用任务总标题和完整候选视频列表发起一次任务级 AI 请求。
+4. 仍有文件无法对应、`ai_use_metadata_match=true` 且该任务此前没有尝试过 AI 时，使用任务总标题和完整候选视频列表发起同一任务级 AI 请求。
 5. AI 必须返回与已确认值相同的 `tmdb_id` 和 `season_number`，且目标 Episode 必须存在；AI 试图更换 Series/Season 时拒绝。
-6. 开关关闭、AI 失败或 TMDB 二次验证失败时进入 `EpisodeUnmatched`，不得退回来源 EP；普通季度已确认时按 `Other` 规则整理，季度未知时不移动。
+6. 开关关闭、该任务已尝试 AI、AI 失败或 TMDB 二次验证失败时进入 `EpisodeUnmatched`，不得退回来源 EP；普通季度已确认时按 `Other` 规则整理，季度未知时不移动。
 
-“一次”指一个下载任务的一次语义匹配，不对无效答案继续改写 Prompt 追问。没有收到响应时可按网络策略幂等重试同一请求；重试不得改变任务标题、文件列表、Prompt 或已确认的 Series/Season。
+“一次”指一个下载任务在季度和 Episode 全流程合计最多一次语义匹配，不对无效答案继续改写 Prompt 追问。季度阶段已经成功或失败尝试 AI 后，Episode 阶段均不得再次请求。没有收到响应时可按网络策略幂等重试同一请求；重试不得改变任务标题、文件列表、Prompt 或已确认的 Series/Season。
 
-Mikan RSS 可在季度 AI 和后置 EP-AI Prompt 中增加单文件发布日期优先分支。配置开关开启后，主程序仍只在 Torrent 实际文件条目数恰好为1、`bgmid` 和合法内部 `pubDate` 同时存在且没有命中更高优先级人工 Episode Offset 时尝试计算；Torrent单文件模式和根目录下仅一个文件均满足，目录节点不计数，但字幕、图片及已标记为 ignored/duplicate 的实际文件条目都计数。`pubDate` 无时区时按 Mikan SourceProfile 默认 `Asia/Shanghai` 解析。主程序从该 Subject 的普通正整数 Episode 中找到播出日期最接近且相差不超过31日者并写入 `bgm_episode_candidate`；同距优先不晚于发布日期，再按集号/ID稳定排序。查询失败、候选为空或超出窗口时最终门禁保持 false。门禁为 true 时，Prompt 直接把该候选与文件名解析EP用于定向查询TMDB。两个来源集号都不能复制为TMDB Episode Number，最终结果仍须TMDB验证；优先分支失败时继续原通用AI流程。
+Mikan RSS 可在统一 AI Prompt 中增加单文件发布日期优先分支。配置开关开启后，主程序仍只在 Torrent 实际文件条目数恰好为1、`bgmid` 和合法内部 `pubDate` 同时存在且没有命中更高优先级人工 Episode Offset 时尝试计算；Torrent单文件模式和根目录下仅一个文件均满足，目录节点不计数，但字幕、图片及已标记为 ignored/duplicate 的实际文件条目都计数。`pubDate` 无时区时按 Mikan SourceProfile 默认 `Asia/Shanghai` 解析。主程序从该 Subject 的普通正整数 Episode 中找到播出日期最接近且相差不超过31日者并写入 `bgm_episode_candidate`；同距优先不晚于发布日期，再按集号/ID稳定排序。查询失败、候选为空或超出窗口时最终门禁保持 false。门禁为 true 时，Prompt 直接把该候选与文件名解析EP用于定向查询TMDB。两个来源集号都不能复制为TMDB Episode Number，最终结果仍须TMDB验证；优先分支失败时继续原通用AI流程。
 
 AI 和确定性匹配均不接受 Season 0。Series 和大于0的普通季度已经确认、但 Episode 无法确认时，不用来源集号冒充 TMDB Episode；该文件保留原名进入 `<TmdbSeriesName>/Sxx/Other/`，并保存未匹配原因。季度也无法确认时保留在下载目录，等待重试或人工处理。多文件任务中的其他已验证文件可以正常落盘。
 
@@ -267,7 +264,7 @@ SQLite 必须同时保存一次解析运行的最终状态和每个策略的尝�
 - 访问：DNS/连接错误、超时、429、5xx、401/403、API Key 缺失、无效响应。
 - Series：没有找到标题、多个候选无法消歧、详情或 TV Series ID 无效。
 - Season：日期不匹配、Backtrace 耗尽或出错、AI 未匹配/不可用、标题没有季度、Season 1 不存在。
-- Episode：目标集不存在、标题/日期冲突、重复映射、EP-AI 失败、TMDB 二次验证失败。
+- Episode：目标集不存在、标题/日期冲突、重复映射、统一 AI 匹配失败、TMDB 二次验证失败。
 
 网络错误、超时、429 和 5xx 在重试耗尽后标记 `retryable=true`；缺少/错误密钥标记为配置修复；确定性无结果、歧义或字段冲突标记为需人工处理。Web UI 显示最终原因和按优先级排列的尝试时间线，并支持按阶段、错误码、可重试性和状态筛选及手动重新匹配。
 
@@ -294,8 +291,8 @@ Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access
 17. AI 返回有效 Series/Season 但 Episode 不存在：不得下载/重命名，不允许退回来源 EP 冒充 TMDB EP。
 18. `tmdb_fail_use_bangumi=true` 的 `tmdbid=0` 路径明确标记为例外，不得把其名称/季度/集号记录为 TMDB 来源。
 19. 非 AI 季度成功且同号 EP 标题/日期一致：直接采用 TMDB EP，AI 请求数为 0。
-20. 同号 EP 存在但日期冲突：不得误判成功；开启后置开关时 AI 恰好调用一次。
-21. EP-AI 返回其他 TMDB ID/Season：拒绝并进入 `EpisodeUnmatched`，已确认季度不得被改写。
+20. 同号 EP 存在但日期冲突：不得误判成功；统一 AI 开启且此前未尝试时恰好调用一次。
+21. AI 返回其他 TMDB ID/Season：拒绝并进入 `EpisodeUnmatched`，已确认季度不得被改写；季度阶段已尝试 AI 时 Episode 阶段调用数必须为 0。
 22. 从 `/Home/Bangumi/3951`、带尾斜杠或 query 的同类 URL 均取得 `mikanid=3951`；缺失、非正整数和不属于 Mikan Bangumi 页面的路径不得误解析。
 23. 同一 `mikanid` 的不同字幕组、RSS 条目和 Torrent 统一使用同一个 `bgmid`、TMDB Series/Season 和 Episode Offset；标题差异不得新建另一条作品规则。
 24. 人工规则存在时自动搜索、Backtrace、AI、TitleSeason 和 FirstSeason 请求数均为 0；规则无效时记录 `ManualOverrideInvalid`，不得静默回退覆盖。

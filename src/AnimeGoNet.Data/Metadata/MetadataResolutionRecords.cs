@@ -66,7 +66,8 @@ public sealed record MetadataEpisodeTaskClaim(
     IReadOnlyList<MetadataTaskFileProjection> Files,
     bool SeasonResolvedByAi = false,
     bool HasMultipleSeasons = false,
-    bool EpisodeResolvedByTrustedOffset = false);
+    bool EpisodeResolvedByTrustedOffset = false,
+    bool AiMetadataAttempted = false);
 
 public sealed record MetadataCanonicalSeason(
     TmdbSeries Series,

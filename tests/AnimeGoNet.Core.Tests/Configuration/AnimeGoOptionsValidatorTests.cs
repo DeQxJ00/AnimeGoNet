@@ -139,7 +139,7 @@ public sealed class AnimeGoOptionsValidatorTests
             {
                 Ai = defaults.Metadata.Ai with
                 {
-                    UseEpisodeMatch = true,
+                    UseMetadataMatch = true,
                     RetryCount = 11,
                     TmdbMcpUrl = new Uri("ftp://tmdb.invalid/mcp"),
                     AniDbMappingUrlTemplate = "https://mapping.invalid/no-placeholder.json",
@@ -162,7 +162,7 @@ public sealed class AnimeGoOptionsValidatorTests
         {
             Metadata = defaults.Metadata with
             {
-                Ai = defaults.Metadata.Ai with { UseEpisodeMatch = true },
+                Ai = defaults.Metadata.Ai with { UseMetadataMatch = true },
             },
         };
 
@@ -181,7 +181,7 @@ public sealed class AnimeGoOptionsValidatorTests
                 {
                     BaseUrl = new Uri("http://local-model.invalid/api/"),
                     Model = "local-model",
-                    UseSeasonMatch = true,
+                    UseMetadataMatch = true,
                 },
             },
         };

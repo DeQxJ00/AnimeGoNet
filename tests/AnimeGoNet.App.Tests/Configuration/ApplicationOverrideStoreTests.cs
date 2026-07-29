@@ -73,7 +73,7 @@ public sealed class ApplicationOverrideStoreTests
             Assert.Equal("private-api-key", effective.Metadata.Tmdb.ApiKey);
             Assert.Equal("private-read-token", effective.Metadata.Tmdb.ReadAccessToken);
             Assert.True(effective.Metadata.SeasonFailure.Backtrace);
-            Assert.True(effective.Metadata.Ai.UseEpisodeMatch);
+            Assert.True(effective.Metadata.Ai.UseMetadataMatch);
             Assert.Equal(TimeSpan.FromSeconds(600), effective.Metadata.Ai.HttpTimeout);
             Assert.Equal(
                 new Uri("https://bangumi.test.invalid/api/"),

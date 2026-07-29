@@ -527,8 +527,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                     },
                     Ai = options.Metadata.Ai with
                     {
-                        UseSeasonMatch = true,
-                        UseEpisodeMatch = true,
+                        UseMetadataMatch = true,
                     },
                 },
             },
@@ -545,7 +544,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal(72517, run.TmdbSeriesId);
         Assert.Equal(2, run.TmdbSeasonNumber);
         var strategies = await ReadStrategiesAsync(app, taskId);
-        Assert.Contains("ai_season", strategies);
+        Assert.Contains("ai_metadata", strategies);
         Assert.DoesNotContain("title_season", strategies);
         Assert.DoesNotContain("first_season", strategies);
         var request = Assert.Single(ai.Requests);
@@ -610,7 +609,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 {
                     Ai = options.Metadata.Ai with
                     {
-                        UseSeasonMatch = true,
+                        UseMetadataMatch = true,
                         UseBangumiPubDateFirst = true,
                     },
                 },
@@ -683,8 +682,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 {
                     Ai = options.Metadata.Ai with
                     {
-                        UseSeasonMatch = true,
-                        UseEpisodeMatch = true,
+                        UseMetadataMatch = true,
                     },
                 },
             },
@@ -724,7 +722,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal(".zh-Hans.ass", subtitle.RenameSuffix);
         Assert.Single(ai.Requests);
         Assert.Equal(2, ai.Requests[0].Files.Count);
-        Assert.Null(await ReadAttemptErrorAsync(app, taskId, "ai_season"));
+        Assert.Null(await ReadAttemptErrorAsync(app, taskId, "ai_metadata"));
         Assert.Contains((1, 1), tmdb.EpisodeIdentities);
         Assert.Contains((2, 1), tmdb.EpisodeIdentities);
     }
@@ -760,7 +758,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             {
                 Metadata = options.Metadata with
                 {
-                    Ai = options.Metadata.Ai with { UseSeasonMatch = true },
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = true },
                 },
             },
             tmdbClient: tmdb,
@@ -783,7 +781,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal("failed", run.Status);
         Assert.Equal(
             "ai_cross_season_file_unassigned",
-            await ReadAttemptErrorAsync(app, taskId, "ai_season"));
+            await ReadAttemptErrorAsync(app, taskId, "ai_metadata"));
         Assert.All(await ReadTaskFilesAsync(app, taskId), file => Assert.Null(file.SeasonNumber));
     }
 
@@ -800,8 +798,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                     MikanTrustedOffsetCacheEnabled = true,
                     Ai = options.Metadata.Ai with
                     {
-                        UseSeasonMatch = true,
-                        UseEpisodeMatch = true,
+                        UseMetadataMatch = true,
                     },
                 },
             },
@@ -876,7 +873,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 Metadata = options.Metadata with
                 {
                     MikanTrustedOffsetCacheEnabled = true,
-                    Ai = options.Metadata.Ai with { UseSeasonMatch = true },
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = true },
                 },
             },
             tmdbClient: tmdb,
@@ -910,7 +907,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
-    public async Task SeasonAiConfigurationFailureIsAuditedThenTitleFallbackContinues()
+    public async Task UnifiedAiFailureThenTitleFallbackDoesNotCallAiAgainForEpisode()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
         var bangumi = new FakeBangumiClient(new BangumiSubject(
@@ -934,7 +931,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                     {
                         UseTitleSeason = true,
                     },
-                    Ai = options.Metadata.Ai with { UseSeasonMatch = true },
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = true },
                 },
             },
             tmdbClient: tmdb,
@@ -950,11 +947,16 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal(2, run.TmdbSeasonNumber);
         var strategies = await ReadStrategiesAsync(app, taskId);
         Assert.True(
-            Array.IndexOf(strategies, "ai_season")
+            Array.IndexOf(strategies, "ai_metadata")
             < Array.IndexOf(strategies, "title_season"));
         Assert.Equal(
             "ai_provider_not_configured",
-            await ReadAttemptErrorAsync(app, taskId, "ai_season"));
+            await ReadAttemptErrorAsync(app, taskId, "ai_metadata"));
+        Assert.Single(ai.Requests);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+        Assert.Single(ai.Requests);
     }
 
     [Fact]
@@ -982,8 +984,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 {
                     Ai = options.Metadata.Ai with
                     {
-                        UseSeasonMatch = true,
-                        UseEpisodeMatch = true,
+                        UseMetadataMatch = true,
                     },
                 },
             },
@@ -1022,7 +1023,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 Metadata = options.Metadata with
                 {
                     SeasonFailure = options.Metadata.SeasonFailure with { Skip = true },
-                    Ai = options.Metadata.Ai with { UseSeasonMatch = true },
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = true },
                 },
             },
             tmdbClient: tmdb,
@@ -1034,7 +1035,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
 
         Assert.Empty(ai.Requests);
-        Assert.DoesNotContain("ai_season", await ReadStrategiesAsync(app, taskId));
+        Assert.DoesNotContain("ai_metadata", await ReadStrategiesAsync(app, taskId));
     }
 
     private static async Task<string> AddDownloadedTaskAsync(RunningApp app, string title)

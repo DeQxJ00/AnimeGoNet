@@ -20,8 +20,7 @@ public sealed class AiDeploymentConfigurationTests
                     "--ai_base_url=https://ai.test.invalid/compatible/",
                     "--ai_api_key=deployment-secret",
                     "--ai_model=test-model",
-                    "--ai_use_season_match=true",
-                    "--ai_use_episode_match=false",
+                    "--ai_use_metadata_match=true",
                     "--ai_timeout_second=600",
                     "--ai_retry_count=3",
                     "--ai_use_bangumi_pubdate_first=false",
@@ -34,8 +33,7 @@ public sealed class AiDeploymentConfigurationTests
             Assert.Equal(new Uri("https://ai.test.invalid/compatible/"), ai.BaseUrl);
             Assert.Equal("deployment-secret", ai.ApiKey);
             Assert.Equal("test-model", ai.Model);
-            Assert.True(ai.UseSeasonMatch);
-            Assert.False(ai.UseEpisodeMatch);
+            Assert.True(ai.UseMetadataMatch);
             Assert.Equal(TimeSpan.FromSeconds(600), ai.HttpTimeout);
             Assert.Equal(3, ai.RetryCount);
             Assert.False(ai.UseBangumiPubDateFirst);
@@ -62,12 +60,72 @@ public sealed class AiDeploymentConfigurationTests
         {
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => AnimeGoApplication.BuildAsync(
-                    Args(root, "--ai_use_episode_match=not-a-boolean"),
+                    Args(root, "--ai_use_metadata_match=not-a-boolean"),
                     runningInContainer: false,
                     startBackgroundWorkers: false));
 
-            Assert.Contains("ai_use_episode_match", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("ai_use_metadata_match", exception.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("deployment-secret", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("--ai_use_season_match=true")]
+    [InlineData("--ai_use_episode_match=true")]
+    public async Task LegacyAiSwitchesEnableUnifiedMetadataMatching(string legacyArgument)
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-ai-deployment-config",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var app = await AnimeGoApplication.BuildAsync(
+                Args(root, legacyArgument),
+                runningInContainer: false,
+                startBackgroundWorkers: false);
+
+            Assert.True(app.Services
+                .GetRequiredService<AnimeGoOptions>()
+                .Metadata.Ai.UseMetadataMatch);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CanonicalAiSwitchOverridesLegacyAliases()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-ai-deployment-config",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var app = await AnimeGoApplication.BuildAsync(
+                Args(
+                    root,
+                    "--ai_use_metadata_match=false",
+                    "--ai_use_season_match=true",
+                    "--ai_use_episode_match=true"),
+                runningInContainer: false,
+                startBackgroundWorkers: false);
+
+            Assert.False(app.Services
+                .GetRequiredService<AnimeGoOptions>()
+                .Metadata.Ai.UseMetadataMatch);
         }
         finally
         {

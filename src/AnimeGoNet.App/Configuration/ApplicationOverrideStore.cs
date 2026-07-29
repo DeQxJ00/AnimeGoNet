@@ -31,7 +31,8 @@ public sealed record ApplicationOverrideEntry(
     string? BangumiBaseUrl = null,
     bool? BangumiProxyUrlOverridden = null,
     string? BangumiProxyUrl = null,
-    double? BangumiHttpTimeoutSeconds = null);
+    double? BangumiHttpTimeoutSeconds = null,
+    bool? AiUseMetadataMatch = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -191,8 +192,8 @@ public sealed class ApplicationOverrideStore : IDisposable
                 },
                 Ai = options.Metadata.Ai with
                 {
-                    UseSeasonMatch = settings.AiUseSeasonMatch,
-                    UseEpisodeMatch = settings.AiUseEpisodeMatch,
+                    UseMetadataMatch = settings.AiUseMetadataMatch
+                        ?? (settings.AiUseSeasonMatch || settings.AiUseEpisodeMatch),
                     HttpTimeout = TimeSpan.FromSeconds(settings.AiHttpTimeoutSeconds),
                 },
                 TmdbFailureUseBangumi = settings.TmdbFailureUseBangumi,

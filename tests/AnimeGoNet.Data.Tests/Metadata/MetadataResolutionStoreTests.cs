@@ -141,7 +141,7 @@ public sealed class MetadataResolutionStoreTests
             claim,
             new MetadataAttempt(
                 "season",
-                "ai_season",
+                "ai_metadata",
                 null,
                 "matched",
                 null,
@@ -162,11 +162,48 @@ public sealed class MetadataResolutionStoreTests
                 TimeSpan.FromMinutes(1)));
 
         Assert.True(episodeClaim.SeasonResolvedByAi);
+        Assert.True(episodeClaim.AiMetadataAttempted);
         Assert.False(episodeClaim.HasMultipleSeasons);
         var file = Assert.Single(episodeClaim.Files);
         Assert.Equal(7, file.PreResolvedEpisodeNumber);
         Assert.Null(file.PreResolvedOtherReason);
         Assert.Equal(2, file.TmdbSeasonNumber);
+    }
+
+    [Fact]
+    public async Task FailedUnifiedAiAttemptIsRememberedAfterDeterministicSeasonFallback()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.RecordAttemptAsync(
+            claim,
+            new MetadataAttempt(
+                "season",
+                "ai_metadata",
+                null,
+                "not_matched",
+                "ai_no_match",
+                false,
+                claim.AttemptNumber,
+                10),
+            now);
+        await fixture.Store.CompleteSeasonAsync(
+            claim,
+            new TmdbSeries(72517, "来自深渊", "メイドインアビス", null),
+            new TmdbSeason(204984, 72517, 2, "Season 2", null, 12),
+            now);
+
+        var episodeClaim = Assert.IsType<MetadataEpisodeTaskClaim>(
+            await fixture.Store.TryClaimNextSeasonResolvedAsync(
+                now.AddSeconds(1),
+                TimeSpan.FromMinutes(1)));
+
+        Assert.True(episodeClaim.AiMetadataAttempted);
+        Assert.False(episodeClaim.SeasonResolvedByAi);
     }
 
     [Fact]
@@ -197,7 +234,7 @@ public sealed class MetadataResolutionStoreTests
             claim,
             new MetadataAttempt(
                 "season",
-                "ai_season",
+                "ai_metadata",
                 null,
                 "matched",
                 null,
@@ -227,6 +264,7 @@ public sealed class MetadataResolutionStoreTests
                 now.AddSeconds(1),
                 TimeSpan.FromMinutes(1)));
         Assert.True(episodeClaim.SeasonResolvedByAi);
+        Assert.True(episodeClaim.AiMetadataAttempted);
         Assert.True(episodeClaim.HasMultipleSeasons);
         Assert.Equal(
             [1, 2],

@@ -26,8 +26,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.False(options.Metadata.SeasonFailure.Backtrace);
         Assert.False(options.Metadata.SeasonFailure.UseTitleSeason);
         Assert.False(options.Metadata.SeasonFailure.UseFirstSeason);
-        Assert.False(options.Metadata.Ai.UseSeasonMatch);
-        Assert.False(options.Metadata.Ai.UseEpisodeMatch);
+        Assert.False(options.Metadata.Ai.UseMetadataMatch);
         Assert.Equal("openai_compatible", options.Metadata.Ai.Provider);
         Assert.Null(options.Metadata.Ai.BaseUrl);
         Assert.Null(options.Metadata.Ai.ApiKey);

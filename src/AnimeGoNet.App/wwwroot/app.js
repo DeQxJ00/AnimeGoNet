@@ -129,9 +129,9 @@ function seasonFailurePriority(metadata) {
         },
         {
             priority: "independent",
-            title: "AI 季度匹配",
-            description: "独立可选阶段，不占确定性优先级",
-            enabled: metadata.ai.use_season_match,
+            title: "AI 元数据匹配",
+            description: "一个任务、一个提示词，统一返回并验证 TMDB Series、Season 和全部文件的 Episode",
+            enabled: metadata.ai.use_metadata_match,
             independent: true,
         },
         {
@@ -217,8 +217,7 @@ async function loadConfiguration() {
         ]), metadataConfigurationCard(config), configurationCard("AI、偏移与 Torrent", [
             [
                 "AI 匹配",
-                `季度 ${enabledLabel(config.metadata.ai.use_season_match)} · `
-                    + `EP ${enabledLabel(config.metadata.ai.use_episode_match)} · `
+                `任务级 ${enabledLabel(config.metadata.ai.use_metadata_match)} · 单提示词 · `
                     + `${config.metadata.ai.http_timeout_seconds} 秒`,
             ],
             ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
@@ -289,8 +288,7 @@ function openConfigurationEditor() {
     setConfigurationChecked("#configuration-fail-backtrace", editable.season_failure_backtrace);
     setConfigurationChecked("#configuration-fail-title", editable.season_failure_use_title_season);
     setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
-    setConfigurationChecked("#configuration-ai-season", editable.ai_use_season_match);
-    setConfigurationChecked("#configuration-ai-episode", editable.ai_use_episode_match);
+    setConfigurationChecked("#configuration-ai-metadata", editable.ai_use_metadata_match);
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
     setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
     setConfigurationValue("#configuration-ai-timeout", editable.ai_http_timeout_seconds);
@@ -333,8 +331,7 @@ async function saveConfiguration(event) {
                 season_failure_backtrace: element("#configuration-fail-backtrace").checked,
                 season_failure_use_title_season: element("#configuration-fail-title").checked,
                 season_failure_use_first_season: element("#configuration-fail-first").checked,
-                ai_use_season_match: element("#configuration-ai-season").checked,
-                ai_use_episode_match: element("#configuration-ai-episode").checked,
+                ai_use_metadata_match: element("#configuration-ai-metadata").checked,
                 ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
                 tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
                 mikan_trusted_offset_cache_enabled: element("#configuration-offset-cache").checked,

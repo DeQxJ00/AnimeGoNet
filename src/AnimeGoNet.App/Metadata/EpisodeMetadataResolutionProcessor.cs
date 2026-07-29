@@ -11,9 +11,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
     MetadataResolutionStore resolutions,
     MikanWorkMetadataRuleStore rules,
     ITmdbClient tmdb,
-    IAiMetadataMatcher aiMatcher,
-    AiMetadataResultValidator aiValidator,
-    AiPublicationEvidenceResolver publicationEvidence,
+    AiMetadataTaskResolver aiMetadata,
     MikanTrustedOffsetStore trustedOffsets,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
@@ -66,7 +64,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 await RecordAsync(
                     claim,
-                    claim.EpisodeResolvedByTrustedOffset ? "trusted_mikan_offset" : "ai_season",
+                    claim.EpisodeResolvedByTrustedOffset ? "trusted_mikan_offset" : "ai_metadata",
                     null,
                     "other",
                     file.PreResolvedOtherReason,
@@ -86,7 +84,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 : claim.EpisodeResolvedByTrustedOffset
                     ? "trusted_mikan_offset"
                 : file.PreResolvedEpisodeNumber is > 0
-                    ? "ai_season"
+                    ? "ai_metadata"
                     : "tmdb_episode_number";
             int? priority = manualOffset is null
                 ? null
@@ -177,7 +175,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             if (episode is null)
             {
-                if (manualOffset is not null || strategy == "ai_season")
+                if (manualOffset is not null || strategy == "ai_metadata")
                 {
                     await RecordFailureAndStopAsync(
                         claim,
@@ -185,7 +183,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                         priority,
                         new MetadataFailure(
                             MetadataFailureKind.SemanticNoMatch,
-                            strategy == "ai_season"
+                            strategy == "ai_metadata"
                                 ? "ai_tmdb_episode_not_found"
                                 : "manual_tmdb_episode_not_found",
                             TmdbAccessConfirmed: true),
@@ -231,8 +229,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
         }
 
         if (manualOffset is null
-            && options.Metadata.Ai.UseEpisodeMatch
-            && !claim.SeasonResolvedByAi
+            && options.Metadata.Ai.UseMetadataMatch
+            && !claim.AiMetadataAttempted
             && !claim.HasMultipleSeasons
             && !claim.EpisodeResolvedByTrustedOffset
             && results.Any(result => result.Episode is null
@@ -359,77 +357,42 @@ public sealed class EpisodeMetadataResolutionProcessor(
         List<MetadataEpisodeFileResolution> results,
         CancellationToken cancellationToken)
     {
-        var videos = claim.Files
-            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
-            .ToArray();
-        if (videos.Length == 0)
-        {
-            return false;
-        }
-
-        var publicationStarted = _timeProvider.GetTimestamp();
-        var publication = await publicationEvidence.ResolveAsync(
+        var started = _timeProvider.GetTimestamp();
+        var resolved = await aiMetadata.ResolveAsync(
             claim.Resolution,
+            claim.Files,
+            claim.TmdbSeriesId,
+            claim.TmdbSeasonNumber,
             cancellationToken).ConfigureAwait(false);
-        if (publication.ShouldAudit)
+        if (resolved.Publication?.ShouldAudit == true)
         {
             await RecordAsync(
                 claim,
                 "ai_pubdate",
                 null,
-                publication.Result,
-                publication.ErrorCode,
-                publication.Retryable,
-                ElapsedMilliseconds(publicationStarted),
+                resolved.Publication.Result,
+                resolved.Publication.ErrorCode,
+                resolved.Publication.Retryable,
+                ElapsedMilliseconds(started),
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var input = new AiMetadataMatchInput(
-            claim.Resolution.Title,
-            videos.Select(file => new AiMetadataFileInput(
-                file.RelativePath,
-                file.SizeBytes)).ToArray(),
-            claim.Resolution.BangumiSubjectId,
-            claim.Resolution.AniDbAnimeId,
-            claim.Resolution.ImdbTitleId,
-            claim.Resolution.TorrentFileCount,
-            publication.PublishedAt,
-            publication.BangumiEpisodeCandidate,
-            publication.UseBangumiPubDateFirst);
-        var started = _timeProvider.GetTimestamp();
-        AiMetadataMatchCandidate candidate;
-        try
+        if (!resolved.IsApplicable)
         {
-            candidate = await aiMatcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
-        }
-        catch (AiMetadataMatcherException exception)
-        {
-            var failure = new MetadataFailure(exception.Kind, exception.SafeCode, false);
-            return await HandleAiFailureAsync(
-                claim,
-                results,
-                failure,
-                started,
-                cancellationToken).ConfigureAwait(false);
+            return false;
         }
 
-        var validated = await aiValidator.ValidateAsync(
-            input,
-            candidate,
-            claim.TmdbSeriesId,
-            claim.TmdbSeasonNumber,
-            cancellationToken).ConfigureAwait(false);
-        if (!validated.IsSuccess)
+        if (!resolved.IsSuccess)
         {
             return await HandleAiFailureAsync(
                 claim,
                 results,
-                validated.Failure!,
+                resolved.Failure!,
                 started,
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var validatedByPath = validated.Value!.Files.ToDictionary(
+        var validatedByPath = resolved.Value!.Files.ToDictionary(
             file => file.Input.Name,
             StringComparer.Ordinal);
         foreach (var existing in results.Where(result => result.Episode is not null))
@@ -445,7 +408,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     TmdbAccessConfirmed: true);
                 await RecordAsync(
                     claim,
-                    "ai_episode",
+                    "ai_metadata",
                     null,
                     "error",
                     failure.Code,
@@ -486,7 +449,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
         await RecordAsync(
             claim,
-            "ai_episode",
+            "ai_metadata",
             null,
             "matched",
             null,
@@ -507,7 +470,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         {
             await RecordFailureAndStopAsync(
                 claim,
-                "ai_episode",
+                "ai_metadata",
                 null,
                 failure,
                 ElapsedMilliseconds(started),
@@ -518,7 +481,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         AnnotateUnresolvedAiFailure(claim, results, failure.Code);
         await RecordAsync(
             claim,
-            "ai_episode",
+            "ai_metadata",
             null,
             failure.Kind == MetadataFailureKind.SemanticNoMatch ? "not_matched" : "error",
             failure.Code,

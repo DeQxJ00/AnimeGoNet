@@ -108,9 +108,7 @@ public sealed record AiMatchingOptions
 
     public string? Model { get; init; }
 
-    public bool UseSeasonMatch { get; init; }
-
-    public bool UseEpisodeMatch { get; init; }
+    public bool UseMetadataMatch { get; init; }
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(600);
 

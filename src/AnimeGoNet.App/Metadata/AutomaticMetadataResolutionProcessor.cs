@@ -12,9 +12,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
     IBangumiSubjectClient bangumi,
     BangumiSeasonBacktraceResolver backtrace,
     TmdbSeriesSeasonResolver seriesSeasonResolver,
-    IAiMetadataMatcher aiMatcher,
-    AiMetadataResultValidator aiValidator,
-    AiPublicationEvidenceResolver publicationEvidence,
+    AiMetadataTaskResolver aiMetadata,
     MikanWorkMetadataRuleStore rules,
     MikanTrustedOffsetStore trustedOffsets,
     AnimeGoOptions options,
@@ -176,9 +174,9 @@ public sealed class AutomaticMetadataResolutionProcessor(
             }
         }
 
-        if (options.Metadata.Ai.UseSeasonMatch)
+        if (options.Metadata.Ai.UseMetadataMatch)
         {
-            if (await TryCompleteAiSeasonAsync(claim, cancellationToken).ConfigureAwait(false))
+            if (await TryCompleteAiMetadataAsync(claim, cancellationToken).ConfigureAwait(false))
             {
                 return true;
             }
@@ -469,90 +467,51 @@ public sealed class AutomaticMetadataResolutionProcessor(
         return true;
     }
 
-    private async Task<bool> TryCompleteAiSeasonAsync(
+    private async Task<bool> TryCompleteAiMetadataAsync(
         MetadataTaskClaim claim,
         CancellationToken cancellationToken)
     {
-        var videos = (claim.Files ?? [])
-            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
-            .ToArray();
         var started = _timeProvider.GetTimestamp();
-        if (videos.Length == 0)
-        {
-            await RecordAsync(
-                claim,
-                "season",
-                "ai_season",
-                null,
-                "not_applicable",
-                "ai_video_files_missing",
-                false,
-                started,
-                cancellationToken).ConfigureAwait(false);
-            return false;
-        }
-
-        var publicationStarted = _timeProvider.GetTimestamp();
-        var publication = await publicationEvidence.ResolveAsync(
+        var resolved = await aiMetadata.ResolveAsync(
             claim,
-            cancellationToken).ConfigureAwait(false);
-        if (publication.ShouldAudit)
+            claim.Files ?? [],
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (resolved.Publication?.ShouldAudit == true)
         {
             await RecordAsync(
                 claim,
                 "season",
                 "ai_pubdate",
                 null,
-                publication.Result,
-                publication.ErrorCode,
-                publication.Retryable,
-                publicationStarted,
+                resolved.Publication.Result,
+                resolved.Publication.ErrorCode,
+                resolved.Publication.Retryable,
+                started,
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var input = new AiMetadataMatchInput(
-            claim.Title,
-            videos.Select(file => new AiMetadataFileInput(
-                file.RelativePath,
-                file.SizeBytes)).ToArray(),
-            claim.BangumiSubjectId,
-            claim.AniDbAnimeId,
-            claim.ImdbTitleId,
-            claim.TorrentFileCount,
-            publication.PublishedAt,
-            publication.BangumiEpisodeCandidate,
-            publication.UseBangumiPubDateFirst);
-        AiMetadataMatchCandidate candidate;
-        try
-        {
-            candidate = await aiMatcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
-        }
-        catch (AiMetadataMatcherException exception)
+        if (!resolved.IsApplicable)
         {
             await RecordAsync(
                 claim,
                 "season",
-                "ai_season",
+                "ai_metadata",
                 null,
-                "error",
-                exception.SafeCode,
-                IsRetryable(exception.Kind),
+                "not_applicable",
+                resolved.Failure!.Code,
+                false,
                 started,
                 cancellationToken).ConfigureAwait(false);
             return false;
         }
 
-        var validated = await aiValidator.ValidateAsync(
-            input,
-            candidate,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (!validated.IsSuccess)
+        if (!resolved.IsSuccess)
         {
-            var failure = validated.Failure!;
+            var failure = resolved.Failure!;
             await RecordAsync(
                 claim,
                 "season",
-                "ai_season",
+                "ai_metadata",
                 null,
                 failure.Kind == MetadataFailureKind.SemanticNoMatch ? "not_matched" : "error",
                 failure.Code,
@@ -562,7 +521,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return false;
         }
 
-        var validatedFiles = validated.Value!.Files;
+        var validatedFiles = resolved.Value!.Files;
         var seasons = validatedFiles
             .GroupBy(file => file.Season.SeasonNumber)
             .Select(group => group.First().Season)
@@ -631,7 +590,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 await RecordAsync(
                     claim,
                     "season",
-                    "ai_season",
+                    "ai_metadata",
                     null,
                     "error",
                     "ai_cross_season_file_unassigned",
@@ -647,7 +606,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
         await RecordAsync(
             claim,
             "season",
-            "ai_season",
+            "ai_metadata",
             null,
             "matched",
             null,
@@ -656,7 +615,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             cancellationToken).ConfigureAwait(false);
         await resolutions.CompleteAiSeasonsAsync(
             claim,
-            validated.Value.Series,
+            resolved.Value.Series,
             seasons,
             seeds,
             _timeProvider.GetUtcNow(),

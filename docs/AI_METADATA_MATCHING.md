@@ -2,7 +2,7 @@
 
 ## 1. 产品语义
 
-`TMDBFailUseAIMatchSeason` / `advanced.default.tmdb_fail_use_ai_match_season` 是独立的季度 AI 匹配开关，默认 `false`。确定性失败策略顺序为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；AI 不占该编号链，且输出必须经过 TMDB Series/Season/Episode 验证。
+AI 元数据匹配是一个独立、默认 `false` 的任务级开关。确定性失败策略顺序为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；AI 不占该编号链。一个下载任务最多执行一次 AI 业务匹配，以同一份请求和同一份 Prompt 同时返回 Series、各文件 Season 与 Episode 候选，输出必须经过 TMDB Series/Season/Episode 验证。不存在独立的“季度 AI 流程”和“EP-AI 流程”。
 
 AI 匹配以一个下载任务为单位，一次处理单文件或多文件。总标题和候选视频文件的名称/字节容量始终足够发起请求，不要求来源是 Mikan；`bgmid`、`anidbid` 和 `imdbid` 是可空的作品级辅助标识。非空 ID 已由调用方与当前下载任务的标题和 Torrent 文件组绑定，但不保证 Bangumi/AniDB/IMDb 与 TMDB 使用相同标题、季度拆分或 Episode 编号，也不表示具体文件已经完成 EP 对应。AI 返回 TMDB TV Series ID，以及每个文件对应的 Season/Episode 候选；正式名称和其他元数据由主程序重新请求 TMDB 获取。
 
@@ -15,17 +15,16 @@ advanced:
   default:
     tmdb_fail_skip: false
     tmdb_fail_backtrace: false
-    tmdb_fail_use_ai_match_season: false
+    ai_use_metadata_match: false
     tmdb_fail_use_title_season: false
     tmdb_fail_use_first_season: false
-    tmdb_failep_use_ai_match_season: false
 
 ai:
   provider: openai_compatible
   base_url: ""
   api_key: ""
   model: ""
-  timeout_second: 60
+  timeout_second: 600
   retry_count: 2
   use_bangumi_pubdate_first: true
 ```
@@ -34,12 +33,14 @@ ai:
 
 当前主程序部署层使用扁平键
 `ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model`、
-`ai_use_season_match`、`ai_use_episode_match`、`ai_timeout_second`、
+`ai_use_metadata_match`、`ai_timeout_second`、
 `ai_retry_count`、`ai_use_bangumi_pubdate_first`、
 `ai_tmdb_mcp_url`、`ai_bangumi_mcp_url` 和
 `ai_anidb_mapping_url_template`；环境变量由 ASP.NET Core 配置系统按同名键覆盖。
 硬性默认超时为 600 秒。AI API key 只保存在服务端配置中，配置 API/WebUI
 仅返回 `api_key_configured`。
+
+旧部署键 `ai_use_season_match` 和 `ai_use_episode_match` 仅用于升级读取：未设置规范键时，任一旧键为 `true` 都会启用统一流程；显式 `ai_use_metadata_match` 的值优先。配置 API 仍回显两个旧字段且值与规范字段相同，供旧客户端平滑迁移；WebUI 和新写入只使用 `ai_use_metadata_match`。
 
 ## 3. 最小请求契约
 
@@ -109,7 +110,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 主程序可按 `bgmid` 和数据版本缓存 Bangumi 普通 Episode 列表，但缓存必须遵守更新策略，不能导致新播 Episode 永久不可见。模型侧不再为日期候选重复调用 Bangumi 工具。
 
-当前实现按 Bangumi 官方 `GET /v0/episodes` 合约请求 `type=0`，每页 200 条并设置 10,000 条硬上限；分页字段不一致、超限、无效 JSON、网络或服务错误都只关闭可选日期门禁并记录 `ai_pubdate` 安全错误码，不阻断随后通用 AI。任务 claim 从 SourceProfile 读取真实 adapter，从全部 `task_files` 计数，已被标记 `ignored/duplicate/other` 的条目也计入 Torrent 实际文件数。启用的同 `mikanid` 人工规则中的 `bgmid` 高于任务来源值；完整 Series/Season 人工覆盖仍先于季度 AI，EP offset 非空时直接抑制后置 EP-AI。
+当前实现按 Bangumi 官方 `GET /v0/episodes` 合约请求 `type=0`，每页 200 条并设置 10,000 条硬上限；分页字段不一致、超限、无效 JSON、网络或服务错误都只关闭可选日期门禁并记录 `ai_pubdate` 安全错误码，不阻断随后通用 AI。任务 claim 从 SourceProfile 读取真实 adapter，从全部 `task_files` 计数，已被标记 `ignored/duplicate/other` 的条目也计入 Torrent 实际文件数。启用的同 `mikanid` 人工规则中的 `bgmid` 高于任务来源值；完整 Series/Season 人工覆盖和 EP offset 均优先于 AI。
 
 ## 5. 最小响应契约
 
@@ -159,7 +160,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 已确认 Episode 的视频正常进入 `Sxx/Eyyy.ext`；Series/Season 已确认但 Episode 未匹配的文件保留原名进入 `Sxx/Other/`。Series 或 Season 未确认、重复目标、目标冲突的文件不移动。网络错误、认证错误、AI 未匹配和 TMDB 验证失败由主程序写入元数据失败审计。
 
-跨季度 Torrent 包仍只发起一次任务级 AI 请求。验证成功后，任务级 `metadata_resolution_runs.tmdb_season_number` 保持 `NULL`，每个 `task_files.tmdb_season_number` 保存自己的普通季度；Episode worker 按逐文件季度请求和校验 TMDB，不能用任务摘要中的最小季度覆盖其他文件。能够唯一关联到视频的字幕继承该视频的季度和 Episode/Other 种子；存在无法归属季度的字幕或其他待处理文件时，整个跨季度候选以 `ai_cross_season_file_unassigned` 安全拒绝，事务不得产生部分季度写入。跨季度任务不应用作品级单季度人工 EP offset，也不再调用后置 EP-AI。
+跨季度 Torrent 包仍只发起一次任务级 AI 请求。验证成功后，任务级 `metadata_resolution_runs.tmdb_season_number` 保持 `NULL`，每个 `task_files.tmdb_season_number` 保存自己的普通季度；Episode worker 按逐文件季度请求和校验 TMDB，不能用任务摘要中的最小季度覆盖其他文件。能够唯一关联到视频的字幕继承该视频的季度和 Episode/Other 种子；存在无法归属季度的字幕或其他待处理文件时，整个跨季度候选以 `ai_cross_season_file_unassigned` 安全拒绝，事务不得产生部分季度写入。跨季度任务不应用作品级单季度人工 EP offset，也不会产生第二次 AI 调用。
 
 所有请求/响应 DTO 使用 `System.Text.Json` source generation，确保 NativeAOT 可分析。
 
@@ -171,16 +172,16 @@ AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/
 
 可选的 `(mikanid,groupid)` 可信偏移缓存默认关闭，并且只由主程序管理，不属于 AI 测试程序。只有三个不同来源 EP 得到完全相同且已由 TMDB 验证的 `tmdb_id+season+episode_offset` 才可信；重复 EP 不计数，冲突重置或撤销可信。主程序在 AI 调用前命中有效可信记录时，直接用 `file_episode_candidate + episode_offset` 本地构造目标 Episode 映射并把本次 AI 请求数降为零，不再为该次命中逐集请求 TMDB。完整状态机、WebUI 和验收规则见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
 
-## 9. 后置 EP-AI
+## 9. 单次任务级调用与阶段复用
 
-`tmdb_failep_use_ai_match_season` 不是第六档季度策略。非 AI 季度成功但一个或多个 Episode 无法确定时，以同一个任务标题和完整候选视频列表执行一次任务级 AI 匹配。
+统一 AI 流程可以在两个位置首次触发，但它们共用同一开关、输入契约、Prompt、解析器和验证器：
 
-主程序不把已确认的 TMDB ID/Season 加进 AI 业务输入；响应返回后在模型外检查：
+- 正常 Series/Season 联合匹配及 P4/P3 都未取得结果时，调用一次 AI，同时验证 Series、Season 和全部视频 Episode；成功结果一次性写入逐文件种子，Episode worker 只消费结果。
+- 已由确定性流程确认 Series/Season、但普通 Episode 匹配仍有缺口时，如果该任务从未尝试过 AI，则调用同一解析器一次，并在模型外锁定已确认的 Series/Season。
 
-- `tmdb_id` 必须等于已确认 Series。
-- 已确认季度范围内的文件不得被 AI 改到其他季度。
-- 每个 Episode 必须由 TMDB API 验证。
-- 季度 AI 已经执行过的任务不再执行 EP-AI，避免同一任务重复请求。
+任务审计使用统一策略名 `ai_metadata`。历史数据库中的 `ai_season`、`ai_episode` 仍被识别为“该任务已经尝试过 AI”，因此升级后不会重复调用。一次 AI 尝试失败后，即使 P2/P1 又取得本地季度，也不得在 Episode 阶段再次调用；HTTP `retry_count` 只允许同一语义请求内部重试，不是第二条业务流程。
+
+已确认 Series/Season 的调用不把它们加入模型业务输入；响应返回后在模型外检查 `tmdb_id` 与季度均未越界，并逐 Episode 请求 TMDB 验证。
 
 ## 10. 验证门禁
 
@@ -193,7 +194,8 @@ AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/
 - `imdbid` 非空时必须先经 TMDB external ID/find 查询并验证 TV 类型；不能采用 Movie ID，也不能直接推导 Season/Episode。
 - AniDB `tmdbtv` 候选未经 TMDB MCP验证不得成为最终 `tmdb_id`。
 - 断言适用 MCP 先于 Web Search；MCP充分时 Web Search调用数为0。
-- 单文件、多文件和跨季度包均使用一次任务级请求，特别篇不映射 Season 0。
+- 单文件、多文件和跨季度包均最多使用一次任务级请求，特别篇不映射 Season 0。
+- 断言季度阶段 AI 失败后即使 P2/P1 成功，Episode 阶段也不会发出第二次 AI 请求。
 - 正片全部映射、其余视频均有普通季度可进入 `Other` 时，顶层 `matched=true`；只有存在无法确定季度的文件或冲突时才为 `false`。
 - 无 Bangumi/Mikan 信息时仍可请求和匹配。
 - 输入/输出数量、顺序或名称不一致时拒绝整个响应。

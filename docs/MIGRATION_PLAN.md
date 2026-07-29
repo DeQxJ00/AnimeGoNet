@@ -36,7 +36,7 @@
 | TMDB 规范命名 | 已确认：TMDB 匹配成功时名称、季度和集号全部以经官方 API 验证的 TMDB 数据为准 | TMDB 语言固定 `zh-CN`，中文名缺失时仍使用 TMDB `original_name`；Bangumi/文件名值仅保留为来源字段。 |
 | Mikan 人工规则 | 已确认：人工覆盖最高优先级；Mikan URL 中的作品 ID 统一称 `mikanid` | 相同 `mikanid` 视为同一作品，共享 `bgmid`、TMDB Series/Season 和 Episode Offset；自动解析不得覆盖。 |
 | 多源路由 | 已确认：多个命名下载器实例，按输入源配置路由和规则 | Mikan（bgmid必填）可绑定 `bt`；U2（anidbid可空）和TTG（imdbid可空）可绑定 `pt`；名称、客户端类型和绑定均可在UI配置。 |
-| AI 匹配 | 已确认：确定性季度链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；季度 AI 与 EP-AI 是独立开关且默认关闭 | 每个任务发送总标题、候选视频相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`；非空 ID 与任务作品级绑定但跨站标题/季度/EP 仅供参考；AI 最终 Series/Season/Episode 必须由 TMDB 验证。P2/P1 是明确的本地 Season 回退例外，不验证 TMDB Season。 |
+| AI 匹配 | 已确认：确定性季度链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；AI 是一个独立、默认关闭的任务级开关 | 每个任务最多一次调用和一个 Prompt，发送总标题、候选视频相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`，同时返回 Series/Season/全部 Episode；非空 ID 与任务作品级绑定但跨站标题/季度/EP 仅供参考；最终结果必须由 TMDB 验证。P2/P1 是明确的本地 Season 回退例外，不验证 TMDB Season。 |
 | 在线数据源测试 | CI 默认回放 fixture；手动/定时任务运行受控 live smoke | 避免 Mikan/Bangumi/TMDB 波动导致 CI 不稳定。 |
 
 ### C# 插件模型
@@ -208,10 +208,10 @@ docs/
 - “TMDB 完全失败”与“已经得到 TMDB ID 但季度未匹配”分开；确定性链按适用条件执行 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`，AI 是独立可选阶段，Backtrace 在没有 `bgmid` 时不适用。P2 仅本地解析任务 `title`，P1 固定本地 `S01`，均不验证 TMDB Season。
 - AnimeGoNet 新增 `TMDBFailBacktrace` / `advanced.default.tmdb_fail_backtrace`（默认 `false`），不属于 AnimeGo `develop` 的原始行为：当前作品无法联合确认 `tmdbid + Season` 时，沿 Bangumi“前传”关系逐项回溯；每个前作分别使用 Bangumi 日文原名、中文名和该前作首播日期重新搜索并验证完整 `tmdbid + Season`，允许命中与当前搜索候选不同的 TMDB Series。
 - 回溯实现必须可取消并使用 visited Subject ID 防止关系环；缺日期时继续查找其前传，多前传按最近关系优先且稳定排序；回溯耗尽后继续较低优先级策略。
-- 新增 `advanced.default.tmdb_fail_use_ai_match_season`（默认 `false`）：每个下载任务使用总标题、候选视频的相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid` 请求一次大模型，返回整个任务的 TMDB Series/Season/Episode 候选。Mikan日期优先开关开启且单文件、`bgmid/pubDate` 等运行条件满足时，主程序先按Bangumi播出日期计算 `bgm_episode_candidate`；候选成功后才开启固定Prompt区块，结合文件名EP定向查询TMDB。非空 ID 已由来源链路绑定当前任务，但只提供作品级上下文；跨站标题、季度拆分和 Episode 编号可不同，不能直接复制。完整协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
+- 新增规范键 `ai_use_metadata_match`（默认 `false`）：每个下载任务最多一次大模型业务调用，使用总标题、候选视频的相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`，通过唯一 Prompt 同时返回整个任务的 TMDB Series/Season/Episode 候选。Mikan日期优先开关开启且单文件、`bgmid/pubDate` 等运行条件满足时，主程序先按Bangumi播出日期计算 `bgm_episode_candidate`；候选成功后才开启固定Prompt区块，结合文件名EP定向查询TMDB。非空 ID 已由来源链路绑定当前任务，但只提供作品级上下文；跨站标题、季度拆分和 Episode 编号可不同，不能直接复制。旧 `ai_use_season_match`/`ai_use_episode_match` 只作升级读取。完整协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
 - 本地桥接 TMDB/Bangumi Streamable HTTP MCP为模型 function tools；TMDB始终启用，Bangumi仅有 `bgmid` 时启用。`anidbid` 存在时增加固定 AniDB→`tmdbtv` 候选工具；适用 MCP不足后才启用 Web Search。
 - `imdbid` 存在时通过 TMDB MCP external ID/find endpoint 查询固定候选，拒绝 Movie 并逐级验证 TV Series/Season/Episode。
-- 新增 `advanced.default.tmdb_failep_use_ai_match_season`（按产品指定拼写，默认 `false`）：季度由非 AI 策略确定后，若一个或多个来源 EP 无法对应，则对整个任务执行一次相同 AI 匹配；模型返回的 `tmdb_id` 和已确认季度必须与上下文一致，否则拒绝。
+- 季度由确定性策略确认后，若一个或多个来源 EP 无法对应且任务从未尝试过 AI，则由同一 `ai_use_metadata_match` 开关首次触发共享任务级匹配；模型返回的 `tmdb_id` 和已确认季度必须与上下文一致，否则拒绝。季度阶段无论成功或失败尝试过 AI，Episode 阶段都不得再次调用。
 - 实现 Mikan 单文件 `pubDate` Prompt门禁和显式开关：无偏移时间按SourceProfile时区（默认 `Asia/Shanghai`）规范化；严格按Torrent实际文件条目数判断。条件满足时主程序先计算最近普通EP并写入 `bgm_episode_candidate`，候选成功后Prompt结合文件名EP查询TMDB；失败后继续通用流程。独立测试程序允许手工输入候选验证同一门禁和Prompt。
 - 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 移植为 C# 内置解析器。Mikan RSS SourceProfile 在本地为每个文件重算 `file_episode_candidate`，但不把它或偏移发送给 AI。主程序在逐文件 TMDB 验证后计算 `episode_offset=TMDB EP-file candidate`，只有同一普通季度内结果统一才写缓存学习证据，详见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
 - 增加默认关闭且只在主程序中实现的 `(mikanid,groupid)` 可信偏移缓存：三个不同来源 EP 的已验证 `tmdb_id+season+offset` 完全一致才升级为可信；重复 EP 不计数，任一冲突重置学习/撤销可信。主程序在 AI 调用前命中包含有效 `tmdb_id`、普通 `season` 和偏移的可信记录后，直接本地计算目标 EP 并跳过 AI，不为该次命中再逐集请求 TMDB。
@@ -260,7 +260,7 @@ docs/
   - 下载状态：统一展示多个qBittorrent实例的规范状态、百分比、容量、速度、ETA、Seeds/Peers和文件级priority，同时独立展示AnimeGoNet解析/移动/重命名/字幕/NFO/数据库阶段；qB 100%不等于业务完成。提供暂停、恢复、业务重试及删除中心跳转，详细边界见[`DOWNLOAD_PROGRESS_UI.md`](DOWNLOAD_PROGRESS_UI.md)。
   - 下载器实例：多实例 CRUD、连接/版本/延迟/任务数、路径与硬链接探测、来源引用；活动引用存在时禁止直接删除。
   - 输入源路由：下载器绑定、ID字段约束、过滤/匹配 profile、category/tag、文件/做种策略、重复命中通知和模拟路由预览。
-  - 配置：表单编辑、原始 YAML 预览、校验、变更 diff、保存前备份、需重启提示；季度失败区显示四个确定性策略及独立季度 AI/EP-AI 开关，AI 密钥只写不回显。
+  - 配置：表单编辑、原始 YAML 预览、校验、变更 diff、保存前备份、需重启提示；季度失败区显示四个确定性策略及一个任务级 AI 元数据开关，AI 密钥只写不回显。
   - Mikan 过滤：内置 C# 复现 `Filiter0`～`Filiter4` 的旧规则和 AnimeGoHelper Base64 配置接口；默认 Mikan SourceProfile 提供默认开启的 RSS 过滤总开关，Web 提供开关、五档规则编辑、真实顺序预览、legacy JSON 导入导出、revision 冲突及快照回滚，详见 [`MIKAN_FILTER_COMPAT.md`](MIKAN_FILTER_COMPAT.md)。
   - Mikan 同集优选：一次 RSS 批次内按可靠的 `mikanid+来源EP` 聚合重复选项，使用完全可配置的有序优先级组和组内 `{name, values[]}` 具名数组逐级淘汰，剩一个立即短路；Web 可独立启停、任意增删/排序组与数组并维护具名黑白名单，预设字幕语言/封装/编码/分辨率四组并默认拒绝720p，详见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
   - 动画作品：按 `mikanid` 查看和编辑作品级人工规则，包括关联 Bgm Subject、TMDB Series/Season 与 Episode Offset；保存前预览受影响的未完成任务和样例 EP，支持禁用、清除和显式重新匹配。

@@ -44,8 +44,7 @@ public sealed class ConfigurationApiTests
                         BaseUrl = new Uri("https://ai.test.invalid/compatible/"),
                         ApiKey = "ai-api-secret",
                         Model = "test-model",
-                        UseSeasonMatch = true,
-                        UseEpisodeMatch = false,
+                        UseMetadataMatch = true,
                     },
                     TmdbFailureUseBangumi = true,
                     MikanTrustedOffsetCacheEnabled = true,
@@ -93,8 +92,9 @@ public sealed class ConfigurationApiTests
             bangumi.GetProperty("proxy_url").GetString());
         Assert.Equal(45, bangumi.GetProperty("http_timeout_seconds").GetDouble());
         Assert.True(metadata.GetProperty("season_failure").GetProperty("skip").GetBoolean());
+        Assert.True(metadata.GetProperty("ai").GetProperty("use_metadata_match").GetBoolean());
         Assert.True(metadata.GetProperty("ai").GetProperty("use_season_match").GetBoolean());
-        Assert.False(metadata.GetProperty("ai").GetProperty("use_episode_match").GetBoolean());
+        Assert.True(metadata.GetProperty("ai").GetProperty("use_episode_match").GetBoolean());
         Assert.Equal(600, metadata.GetProperty("ai").GetProperty("http_timeout_seconds").GetDouble());
         Assert.Equal(
             "openai_compatible",
@@ -144,6 +144,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("data-priority=\"independent\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"2\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"1\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-metadata\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"configuration-ai-season\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"configuration-ai-episode\"", html, StringComparison.Ordinal);
+        Assert.Contains("一个任务只使用一个提示词", html, StringComparison.Ordinal);
         Assert.Contains("默认关闭，不占确定性优先级", html, StringComparison.Ordinal);
         Assert.Contains("需要 bgmid；当前 tmdbid + Season 联合匹配失败后", html, StringComparison.Ordinal);
         Assert.Contains("用每个前作的日文名、中文名和开播日期重新搜索并验证完整 tmdbid + Season", html, StringComparison.Ordinal);
@@ -156,7 +160,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("季度固定 S01；需要 bgmid；不输出有效 tmdbid", html, StringComparison.Ordinal);
         Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
         Assert.Contains("seasonFailurePriority", script, StringComparison.Ordinal);
-        Assert.Contains("独立可选阶段，不占确定性优先级", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "一个任务、一个提示词，统一返回并验证 TMDB Series、Season 和全部文件的 Episode",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("需要 bgmid；当前 tmdbid + Season 联合匹配失败后", script, StringComparison.Ordinal);
         Assert.Contains("用每个前作的日文名、中文名和开播日期重新搜索并验证完整 tmdbid + Season", script, StringComparison.Ordinal);
         Assert.Contains("TMDBFailUseTitleSeason", script, StringComparison.Ordinal);
@@ -166,6 +173,9 @@ public sealed class ConfigurationApiTests
         Assert.Contains("勾选即使用本地 S01，不验证 TMDB Season", script, StringComparison.Ordinal);
         Assert.Contains("Bangumi 完全兜底（一般不启用这个）", script, StringComparison.Ordinal);
         Assert.Contains("内部仍按现有逻辑写 0", script, StringComparison.Ordinal);
+        Assert.Contains("ai_use_metadata_match", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("configuration-ai-season", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("configuration-ai-episode", script, StringComparison.Ordinal);
         Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
@@ -223,7 +233,7 @@ public sealed class ConfigurationApiTests
             "/api/v1/config",
             Payload(
                 expectedRevision: 1,
-                aiEpisode: true,
+                aiMetadata: true,
                 tmdbProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
                 bangumiProxy: "socks5://127.0.0.1:1080/"));
@@ -231,12 +241,12 @@ public sealed class ConfigurationApiTests
         var preserved = await store.LoadAsync();
         Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", preserved.Settings?.TmdbReadAccessToken);
-        Assert.True(preserved.Settings?.AiUseEpisodeMatch);
+        Assert.True(preserved.Settings?.AiUseMetadataMatch);
         using (var desiredResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var desired = JsonDocument.Parse(await desiredResponse.Content.ReadAsStreamAsync()))
         {
             Assert.True(desired.RootElement.GetProperty("editable")
-                .GetProperty("ai_use_episode_match").GetBoolean());
+                .GetProperty("ai_use_metadata_match").GetBoolean());
             Assert.Equal(
                 "https://metadata.test.invalid/bangumi/",
                 desired.RootElement.GetProperty("editable")
@@ -291,6 +301,26 @@ public sealed class ConfigurationApiTests
     }
 
     [Fact]
+    public async Task LegacyAiUpdateFieldsEnableTheUnifiedSwitch()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var response = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                aiMetadata: null,
+                legacyAiEpisode: true));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.True(saved.Settings?.AiUseMetadataMatch);
+        Assert.True(saved.Settings?.AiUseSeasonMatch);
+        Assert.True(saved.Settings?.AiUseEpisodeMatch);
+    }
+
+    [Fact]
     public async Task InvalidPrivateConfigurationDoesNotWriteSecretFile()
     {
         await using var app = await RunningApp.StartAsync();
@@ -338,7 +368,9 @@ public sealed class ConfigurationApiTests
         string? apiKey = null,
         string? readToken = null,
         bool clearApiKey = false,
-        bool aiEpisode = false,
+        bool? aiMetadata = false,
+        bool legacyAiSeason = false,
+        bool legacyAiEpisode = false,
         string baseUrl = "https://api.themoviedb.org/",
         string? tmdbProxy = null,
         string bangumiBase = "https://api.bgm.tv/",
@@ -361,8 +393,9 @@ public sealed class ConfigurationApiTests
             season_failure_backtrace = true,
             season_failure_use_title_season = true,
             season_failure_use_first_season = true,
-            ai_use_season_match = false,
-            ai_use_episode_match = aiEpisode,
+            ai_use_metadata_match = aiMetadata,
+            ai_use_season_match = legacyAiSeason,
+            ai_use_episode_match = legacyAiEpisode,
             ai_http_timeout_seconds = 600,
             tmdb_failure_use_bangumi = false,
             mikan_trusted_offset_cache_enabled = false,

@@ -45,7 +45,7 @@
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 已验证 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断、显式重试及可选 `sample_source_episode` 保存前 Series→Season→目标 Episode 预验证 tests 已通过 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 已验证 | 默认关闭、3 个不同 EP 建立信任/冲突撤销、已验证 Episode 自动学习、AI 前任务级命中、零 AI/零 TMDB Episode 调用、本地 completion、Learning/Trusted/ConflictReset API/WebUI 与自动状态安全清理已通过 |
 | TMDB 季度失败链 | `TMDBFailSkip=4`→`TMDBFailBacktrace=3`→`TMDBFailUseTitleSeason=2`→`TMDBFailUseFirstSeason=1` | 扩展 | 进行中 | 日文名→中文名及每名多轮清理均以完整 `tmdbid+Season` 为成功条件；P3 对每个前作重新联合搜索且可恢复不同 Series，多层/多候选/缺日期/防环/错误降级已验证；P2 只读任务 title、P1 本地 S01 且均不验证 TMDB Season；关系网络重试与 live fixture 待实现 |
-| AI 季度/EP 匹配 | 独立默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP、TMDB 二次验证、季度 AI、后置 EP-AI、Mikan pubDate 内部证据及 Bangumi 普通 EP 候选门控、跨季度逐文件状态已完成） | fake AI/MCP/TMDB 已覆盖 Skip→Backtrace→AI→Title→First、EP/字幕/Other、跨季度视频与关联字幕、无法归属文件安全拒绝、顺序/Season 0/重复目标/身份越界/429/认证/网络失败、人工规则抑制、实际文件数、31 天日期窗口与通用 AI 降级；后续发布二进制 fake AI HTTP 端到端 smoke |
+| AI 元数据匹配 | 单开关、单Prompt、每任务最多一次、默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP、TMDB 二次验证、统一 Series/Season/Episode 流程、Mikan pubDate 内部证据及 Bangumi 普通 EP 候选门控、跨季度逐文件状态已完成） | fake AI/MCP/TMDB 已覆盖 Skip→Backtrace→AI→Title→First、阶段间禁止二次调用、EP/字幕/Other、跨季度视频与关联字幕、无法归属文件安全拒绝、顺序/Season 0/重复目标/身份越界/429/认证/网络失败、人工规则抑制、实际文件数、31 天日期窗口与通用 AI 降级；后续发布二进制 fake AI HTTP 端到端 smoke |
 | 特别篇/小数 EP | 已知季度 `Other`，不伪造整数 EP | 扩展 | 进行中 | 48.5 与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00 已阻止形成普通整数候选，并在 Season 确认后持久化 Other 原因；实际整理路径待实现 |
 
 ## 存储与业务状态

@@ -71,6 +71,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var seasonResolvedByAi = false;
         var hasMultipleSeasons = false;
         var episodeResolvedByTrustedOffset = false;
+        var aiMetadataAttempted = false;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -85,7 +86,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          FROM metadata_resolution_attempts AS attempt
                          JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
                          WHERE prior_run.task_id = task.id
-                           AND attempt.strategy = 'ai_season'
+                           AND (
+                             attempt.strategy = 'ai_season'
+                             OR (attempt.strategy = 'ai_metadata' AND attempt.stage = 'season'))
                            AND attempt.result = 'matched'),
                        COUNT(DISTINCT file.tmdb_season_number) > 1,
                        EXISTS (
@@ -94,7 +97,13 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
                          WHERE prior_run.task_id = task.id
                            AND attempt.strategy = 'trusted_mikan_offset'
-                           AND attempt.result = 'matched')
+                           AND attempt.result = 'matched'),
+                       EXISTS (
+                         SELECT 1
+                         FROM metadata_resolution_attempts AS attempt
+                         JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
+                         WHERE prior_run.task_id = task.id
+                           AND attempt.strategy IN ('ai_metadata', 'ai_season', 'ai_episode'))
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -131,6 +140,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 seasonResolvedByAi = reader.GetInt64(13) == 1;
                 hasMultipleSeasons = reader.GetInt64(14) == 1;
                 episodeResolvedByTrustedOffset = reader.GetInt64(15) == 1;
+                aiMetadataAttempted = reader.GetInt64(16) == 1;
             }
         }
 
@@ -230,7 +240,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             files,
             seasonResolvedByAi,
             hasMultipleSeasons,
-            episodeResolvedByTrustedOffset);
+            episodeResolvedByTrustedOffset,
+            aiMetadataAttempted);
     }
 
     public async Task<MetadataCanonicalSeason?> GetCanonicalSeasonAsync(

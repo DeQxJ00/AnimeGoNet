@@ -478,8 +478,9 @@ public static class ApiEndpoints
                     ai.BaseUrl?.AbsoluteUri,
                     ai.Model,
                     !string.IsNullOrWhiteSpace(ai.ApiKey),
-                    ai.UseSeasonMatch,
-                    ai.UseEpisodeMatch,
+                    ai.UseMetadataMatch,
+                    ai.UseMetadataMatch,
+                    ai.UseMetadataMatch,
                     ai.HttpTimeout.TotalSeconds,
                     ai.RetryCount,
                     ai.UseBangumiPubDateFirst,
@@ -520,8 +521,9 @@ public static class ApiEndpoints
             season.Backtrace,
             season.UseTitleSeason,
             season.UseFirstSeason,
-            ai.UseSeasonMatch,
-            ai.UseEpisodeMatch,
+            ai.UseMetadataMatch,
+            ai.UseMetadataMatch,
+            ai.UseMetadataMatch,
             ai.HttpTimeout.TotalSeconds,
             desired.Metadata.TmdbFailureUseBangumi,
             desired.Metadata.MikanTrustedOffsetCacheEnabled,
@@ -601,6 +603,9 @@ public static class ApiEndpoints
         var readTokenOverridden = request.ClearTmdbReadAccessToken
             || readToken is not null
             || current?.TmdbReadAccessTokenOverridden == true;
+        var aiUseMetadataMatch = request.AiUseMetadataMatch
+            ?? (request.AiUseSeasonMatch.GetValueOrDefault()
+                || request.AiUseEpisodeMatch.GetValueOrDefault());
         return new ApplicationOverrideEntry(
             baseUrl,
             language,
@@ -613,8 +618,8 @@ public static class ApiEndpoints
             request.SeasonFailureBacktrace,
             request.SeasonFailureUseTitleSeason,
             request.SeasonFailureUseFirstSeason,
-            request.AiUseSeasonMatch,
-            request.AiUseEpisodeMatch,
+            aiUseMetadataMatch,
+            aiUseMetadataMatch,
             request.AiHttpTimeoutSeconds,
             request.TmdbFailureUseBangumi,
             request.MikanTrustedOffsetCacheEnabled,
@@ -628,7 +633,8 @@ public static class ApiEndpoints
             BangumiBaseUrl: bangumiBaseUrl,
             BangumiProxyUrlOverridden: true,
             BangumiProxyUrl: bangumiProxyUrl,
-            BangumiHttpTimeoutSeconds: request.BangumiHttpTimeoutSeconds);
+            BangumiHttpTimeoutSeconds: request.BangumiHttpTimeoutSeconds,
+            AiUseMetadataMatch: aiUseMetadataMatch);
     }
 
     private static void ValidateSeconds(double value, string name, double maximum)

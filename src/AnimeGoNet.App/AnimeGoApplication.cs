@@ -205,6 +205,7 @@ public static class AnimeGoApplication
             ownsHttpClient: true);
         builder.Services.AddSingleton(aiMetadataMatcher);
         builder.Services.AddSingleton<AiMetadataResultValidator>();
+        builder.Services.AddSingleton<AiMetadataTaskResolver>();
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();
         builder.Services.AddSingleton<AutomaticMetadataResolutionProcessor>();
         builder.Services.AddSingleton<EpisodeMetadataResolutionProcessor>();
@@ -302,14 +303,9 @@ public static class AnimeGoApplication
                     BaseUrl = ParseOptionalAbsoluteUri(configuration["ai_base_url"], "ai_base_url"),
                     ApiKey = configuration["ai_api_key"],
                     Model = NormalizeOptional(configuration["ai_model"]),
-                    UseSeasonMatch = ParseOptionalBool(
-                        configuration["ai_use_season_match"],
-                        defaults.Metadata.Ai.UseSeasonMatch,
-                        "ai_use_season_match"),
-                    UseEpisodeMatch = ParseOptionalBool(
-                        configuration["ai_use_episode_match"],
-                        defaults.Metadata.Ai.UseEpisodeMatch,
-                        "ai_use_episode_match"),
+                    UseMetadataMatch = ParseAiMetadataMatch(
+                        configuration,
+                        defaults.Metadata.Ai.UseMetadataMatch),
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
                         configuration["ai_timeout_second"],
                         defaults.Metadata.Ai.HttpTimeout.TotalSeconds,
@@ -411,6 +407,30 @@ public static class AnimeGoApplication
         }
 
         return parsed;
+    }
+
+    private static bool ParseAiMetadataMatch(
+        ConfigurationManager configuration,
+        bool defaultValue)
+    {
+        var canonical = NormalizeOptional(configuration["ai_use_metadata_match"]);
+        if (canonical is not null)
+        {
+            return ParseOptionalBool(
+                canonical,
+                defaultValue,
+                "ai_use_metadata_match");
+        }
+
+        var legacySeason = ParseOptionalBool(
+            configuration["ai_use_season_match"],
+            defaultValue,
+            "ai_use_season_match");
+        var legacyEpisode = ParseOptionalBool(
+            configuration["ai_use_episode_match"],
+            defaultValue,
+            "ai_use_episode_match");
+        return legacySeason || legacyEpisode;
     }
 
     private static string? NormalizeOptional(string? value) =>

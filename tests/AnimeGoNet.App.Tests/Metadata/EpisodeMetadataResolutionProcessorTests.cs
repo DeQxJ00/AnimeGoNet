@@ -402,7 +402,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Equal([4, 9, 5], tmdb.EpisodeRequests);
         Assert.Equal(
             "ai_confirmed_episode_changed",
-            await ReadLatestAttemptErrorAsync(app, taskId, "ai_episode"));
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_metadata"));
     }
 
     [Fact]
@@ -431,7 +431,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
         Assert.Equal(
             "ai_provider_not_configured",
-            await ReadLatestAttemptErrorAsync(app, taskId, "ai_episode"));
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_metadata"));
     }
 
     [Fact]
@@ -459,7 +459,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Equal("metadata_failed", await ReadTaskStatusAsync(app, taskId));
         Assert.Equal(
             "ai_network_error",
-            await ReadLatestAttemptErrorAsync(app, taskId, "ai_episode"));
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_metadata"));
     }
 
     [Fact]
@@ -546,7 +546,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             {
                 Metadata = options.Metadata with
                 {
-                    Ai = options.Metadata.Ai with { UseEpisodeMatch = enableEpisodeAi },
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = enableEpisodeAi },
                 },
             },
             tmdbClient: tmdb,

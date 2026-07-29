@@ -284,7 +284,7 @@
             </li>
             <li class="failure-priority-step independent" data-priority="independent">
               <span class="failure-priority-badge">独立 AI</span>
-              <label><input id="configuration-ai-season" type="checkbox"><span><strong>AI 季度匹配</strong><small>独立可选阶段，默认关闭，不占确定性优先级</small></span></label>
+              <label><input id="configuration-ai-metadata" type="checkbox"><span><strong>AI 元数据匹配</strong><small>一个任务只使用一个提示词，统一返回并验证 TMDB Series、Season 和全部文件的 Episode；默认关闭，不占确定性优先级</small></span></label>
             </li>
             <li class="failure-priority-step" data-priority="2">
               <span class="failure-priority-badge">P2</span>
@@ -298,7 +298,6 @@
         </fieldset>
         <fieldset class="wide">
           <legend>AI 与兜底</legend>
-          <label><input id="configuration-ai-episode" type="checkbox">AI EP 匹配（独立后置阶段）</label>
           <label class="configuration-guided-option">
             <input id="configuration-bangumi-fallback" type="checkbox">
             <span><strong>Bangumi 完全兜底（一般不启用这个）</strong><small>TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；不输出有效 tmdbid（内部仍按现有逻辑写 0）</small></span>

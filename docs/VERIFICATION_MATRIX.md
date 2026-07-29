@@ -24,7 +24,7 @@
 | Mikan | URL/mikanid/字幕组/Bangumi 映射、作品作用域、缓存、错误页 | U/P/L | fixture 全过；同一 mikanid 稳定归并，live 只读 smoke |
 | Bangumi | search/get/archive/cache/filter/relation/前传/error | U/P/L | fixture 全过，archive 并发安全，关系循环可终止 |
 | TMDB | 搜索、相似度、季度日期、完全失败、无结果、前传回溯、Bangumi兜底资格、失败审计 | U/P/L | 只有成功访问后的SemanticNoMatch可写tmdbid=0；网络/服务/配置等禁止；重启后原因可查 |
-| AI 元数据匹配 | 季度/EP-AI、任务标题+文件名+容量+可空Bgm/AniDB/IMDb、本地MCP、候选验证、Web Search后备、Season 0拒绝、Other、缓存 | U/C/E | fake server 全过；AniDB/IMDb候选经TMDB验证，EP-AI不能改写已确认Series/Season |
+| AI 元数据匹配 | 单开关/单Prompt/每任务最多一次调用、任务标题+文件名+容量+可空Bgm/AniDB/IMDb、本地MCP、候选验证、Web Search后备、Season 0拒绝、Other、缓存 | U/C/E | fake server 全过；AniDB/IMDb候选经TMDB验证，已确认Series/Season不能被AI改写，阶段间不得二次调用 |
 | C# 内置插件 | source/feed/parser/filter/rename/schedule 的配置、顺序、结果 | U/P/E | 显式注册；上游五类保持 parity，新增 source adapter 通过路由契约 |
 | C# 外部插件 | manifest、协议版本、五 RID、配置、超时、取消、崩溃 | C/P/I/E | JIT/AOT 示例均通过，故障不拖垮主进程 |
 | Parser | 标题/季度/集数/字幕组/Mikan人工规则/EP偏移/Skip=4/Backtrace=3/Title=2/First=1/独立AI | U/P | 人工规则最高优先级；上游 fixture + 新策略通过；来源值与 TMDB 规范值不混用 |
@@ -140,7 +140,7 @@ GET    /websocket/log
 7. 前传缺日期、多前传及循环：遍历次序稳定、无重复请求、可终止。
 8. 前传请求瞬时错误恢复；重试耗尽时记录 `BacktraceError`，然后执行较低优先级策略。
 9. 当前作品日文名、中文名均未找到 Series：只要存在 `bgmid`，Backtrace 仍发起关系请求并可由前作恢复不同的 `tmdbid + Season`；耗尽后才进入独立 AI/完全失败兜底，P2/P1 因缺少有效 Series 标记不适用。
-10. Web 配置页修改四个确定性开关及独立季度 AI/EP-AI 开关后，YAML diff、备份、重载值和阶段说明一致。
+10. Web 配置页修改四个确定性开关及一个任务级 AI 元数据开关后，私有配置、重载值和阶段说明一致；旧双开关仅用于兼容读取。
 11. `Disabled`、`NotApplicable`、`NoMatch`、`Error`、`Succeeded`、`Terminated` 六类策略结果分别持久化正确；最终失败保留已确认的上级 ID。
 12. TMDB搜索成功返回空结果/无可接受TV候选，且bgmid与季度有效、兜底开启：`failure_kind=SemanticNoMatch`、`tmdb_access_confirmed=true`，允许下载并写`tmdbid=0`。
 13. DNS/连接/TLS/代理/超时/取消/408/429/5xx/断路器分别重试耗尽：即使bgmid与季度有效也不得下载或写NFO，状态为重试/服务故障且Web显示兜底拒绝原因。
@@ -150,7 +150,7 @@ GET    /websocket/log
 
 ## AI 与 TMDB 规范命名场景
 
-1. 五个季度失败开关和独立 `tmdb_failep_use_ai_match_season` 的新安装、旧配置升级默认值均为 `false`。
+1. 四个确定性季度失败开关和一个 `ai_use_metadata_match` 任务级开关的新安装默认值均为 `false`；任一旧 AI 开关为真可兼容启用，但显式规范键优先。
 2. AI 关闭时请求数为 0；开启但配置缺失时返回明确配置错误并继续较低优先级策略。
 3. 每个 AI 请求只发送任务总标题、候选视频的任务内相对文件名/字节容量、可空 `bgmid`/`anidbid`/`imdbid`，以及Mikan单文件门禁所需的 `torrent_file_count/published_at/bgm_episode_candidate/use_bangumi_pubdate_first`；断言不包含重复的文件名EP字段、输入源/下载器配置、宿主机绝对路径、Bangumi详情、API Key、Cookie 或其他配置。
 4. 模型一次返回单文件或多文件的有效 Series/Season/Episode，经 TMDB API 逐项二次验证后生成规范字段。
@@ -160,9 +160,9 @@ GET    /websocket/log
 8. 多文件映射存在 Episode 缺口：已确认季度的缺口文件进入 `Other`，其余已验证文件正常落盘；Series/Season 缺失、重复目标或目标冲突的对应文件不落盘并可幂等重试。
 9. AI/网络超时、429、5xx、取消和缓存命中分别验证；日志不得包含密钥或完整敏感请求头。
 10. NativeAOT 发布二进制执行 fake AI → fake TMDB → 重命名 smoke，无反射序列化警告。
-11. 非 AI 季度成功且本地 EP 与 TMDB 同号 Episode 的标题/日期一致：直接采用，EP-AI 请求数为 0。
-12. 同号不存在或存在标题/日期冲突：`tmdb_failep_use_ai_match_season=false` 时进入 `EpisodeUnmatched`；开启时整个下载任务恰好一次语义 AI 调用。
-13. EP-AI 返回不同 TMDB ID/Season、缺失 Episode、文件列表不一致或无效 JSON：拒绝候选，不改写已确认季度，不使用来源 EP 重命名。
+11. 确定性季度成功且本地 EP 与 TMDB 同号 Episode 的标题/日期一致：直接采用，AI 请求数为 0。
+12. 同号不存在或存在标题/日期冲突：`ai_use_metadata_match=false` 时进入 `EpisodeUnmatched`；开启且此前未尝试时整个下载任务恰好一次语义 AI 调用。
+13. Episode 阶段首次触发统一 AI 时，返回不同 TMDB ID/Season、缺失 Episode、文件列表不一致或无效 JSON：拒绝候选，不改写已确认季度，不使用来源 EP 重命名；季度阶段已尝试时不得再次调用。
 14. 多文件仅一个 EP 需要补全时仍按整个下载任务调用一次；未匹配文件按季度 `Other` 规则处理，不影响其他已验证文件。
 15. 特别篇、OVA、NCOP、NCED 不匹配 Season 0；季度已确认时保留原名进入 `Sxx/Other`，季度未知时留在下载目录。
 16. BD 多文件任务中正片 1–12 全部映射，Menu/Summary/PV/NCOP/NCED/Logo 均返回 `matched=false + season>0 + episode=null` 时，顶层 `matched=true`，全部文件按正片或 `Other` 路径落盘。
