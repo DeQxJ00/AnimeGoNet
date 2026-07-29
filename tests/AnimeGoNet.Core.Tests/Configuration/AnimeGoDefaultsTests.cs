@@ -47,6 +47,13 @@ public sealed class AnimeGoDefaultsTests
         Assert.Null(options.Metadata.Bangumi.ProxyUrl);
         Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Bangumi.HttpTimeout);
         Assert.Equal("0 0 6 * * *", options.Schedule.RefreshDatabaseCron);
+        Assert.False(options.DataUpdate.Enabled);
+        Assert.Equal("0 0 4 * * ?", options.DataUpdate.Cron);
+        Assert.Null(options.DataUpdate.ManifestUrl);
+        Assert.True(options.DataUpdate.AutoDownload);
+        Assert.True(options.DataUpdate.AutoImport);
+        Assert.Equal(2, options.DataUpdate.KeepVersions);
+        Assert.Equal(TimeSpan.FromSeconds(300), options.DataUpdate.HttpTimeout);
     }
 
     [Fact]

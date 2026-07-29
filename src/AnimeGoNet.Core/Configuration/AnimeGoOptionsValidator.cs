@@ -202,6 +202,34 @@ public static partial class AnimeGoOptionsValidator
             errors.Add($"Directory database refresh cron is invalid: {exception.Code}.");
         }
 
+        try
+        {
+            _ = SixFieldCronExpression.Parse(options.DataUpdate.Cron);
+        }
+        catch (CronExpressionException exception)
+        {
+            errors.Add($"Data update cron is invalid: {exception.Code}.");
+        }
+
+        if (options.DataUpdate.Enabled && options.DataUpdate.ManifestUrl is null)
+        {
+            errors.Add("Data update manifest URL is required when scheduled updates are enabled.");
+        }
+        if (options.DataUpdate.ManifestUrl is { } manifestUrl
+            && (!IsHttpEndpoint(manifestUrl) || !string.IsNullOrEmpty(manifestUrl.UserInfo)))
+        {
+            errors.Add("Data update manifest URL must be an absolute HTTP(S) URL without credentials.");
+        }
+        if (options.DataUpdate.KeepVersions is < 2 or > 10)
+        {
+            errors.Add("Data update keep versions must be between 2 and 10.");
+        }
+        if (options.DataUpdate.HttpTimeout <= TimeSpan.Zero
+            || options.DataUpdate.HttpTimeout > TimeSpan.FromHours(1))
+        {
+            errors.Add("Data update HTTP timeout must be between 0 and 3600 seconds.");
+        }
+
         return errors;
     }
 

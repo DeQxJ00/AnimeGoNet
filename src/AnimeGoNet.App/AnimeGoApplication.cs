@@ -394,6 +394,34 @@ public static class AnimeGoApplication
                     configuration["refresh_database_cron"])
                     ?? defaults.Schedule.RefreshDatabaseCron,
             },
+            DataUpdate = defaults.DataUpdate with
+            {
+                Enabled = ParseOptionalBool(
+                    configuration["data_update_enabled"],
+                    defaults.DataUpdate.Enabled,
+                    "data_update_enabled"),
+                Cron = NormalizeOptional(configuration["data_update_cron"])
+                    ?? defaults.DataUpdate.Cron,
+                ManifestUrl = ParseOptionalAbsoluteUri(
+                    configuration["data_update_manifest_url"],
+                    "data_update_manifest_url"),
+                AutoDownload = ParseOptionalBool(
+                    configuration["data_update_auto_download"],
+                    defaults.DataUpdate.AutoDownload,
+                    "data_update_auto_download"),
+                AutoImport = ParseOptionalBool(
+                    configuration["data_update_auto_import"],
+                    defaults.DataUpdate.AutoImport,
+                    "data_update_auto_import"),
+                KeepVersions = ParseOptionalInt(
+                    configuration["data_update_keep_versions"],
+                    defaults.DataUpdate.KeepVersions,
+                    "data_update_keep_versions"),
+                HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
+                    configuration["data_update_timeout_second"],
+                    defaults.DataUpdate.HttpTimeout.TotalSeconds,
+                    "data_update_timeout_second")),
+            },
             Downloaders = defaults.Downloaders.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value with { DownloadPath = PathBoundary.Combine(downloadPath, pair.Key) },

@@ -253,8 +253,8 @@
 ## P11 — AnimeGoNetData
 
 - [x] 确认独立数据仓库名称为 `AnimeGoNetData`；托管地址由该独立任务配置。
-- [ ] 定义 `manifest.json`、subjects/episodes JSONL schema 和版本策略。
-- [ ] 定义并验证 `setting.data_update` YAML schema、默认值、环境变量覆盖和热重载行为。
+- [x] 定义 `manifest.json`、subjects/episodes JSONL schema 和版本策略：v1 字段、兼容规则、不可变发布、确定性 gzip/JSONL、哈希/大小/数量/ID 范围与引用语义见 `docs/DATA_MANIFEST_V1.md`；主程序已有 NativeAOT-safe 严格 manifest 解析器。
+- [>] 定义并验证 `setting.data_update` YAML schema、默认值、环境变量覆盖和热重载行为：主程序已加入默认关闭、04:00 六字段 Cron、可空 manifest URL、自动下载/导入、保留 2 版和 300 秒超时的强类型模型及扁平配置绑定/校验；YAML 写回、环境锁和 Cron 热重排待实现。
 - [ ] 实现 Bangumi Archive 下载、校验、清洗、分片和 gzip。
 - [ ] 建立每日检查 + 手动触发 GitHub Action。
 - [ ] 建立数据唯一性、引用完整性、数量下限和确定性测试。

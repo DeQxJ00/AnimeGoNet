@@ -12,12 +12,31 @@ public sealed record AnimeGoOptions
 
     public required ScheduleOptions Schedule { get; init; }
 
+    public required DataUpdateOptions DataUpdate { get; init; }
+
     public required IReadOnlyList<SourceProfileSeed> InitialSourceProfiles { get; init; }
 }
 
 public sealed record ScheduleOptions
 {
     public string RefreshDatabaseCron { get; init; } = "0 0 6 * * *";
+}
+
+public sealed record DataUpdateOptions
+{
+    public bool Enabled { get; init; }
+
+    public string Cron { get; init; } = "0 0 4 * * ?";
+
+    public Uri? ManifestUrl { get; init; }
+
+    public bool AutoDownload { get; init; } = true;
+
+    public bool AutoImport { get; init; } = true;
+
+    public int KeepVersions { get; init; } = 2;
+
+    public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(300);
 }
 
 public sealed record TorrentFetchOptions

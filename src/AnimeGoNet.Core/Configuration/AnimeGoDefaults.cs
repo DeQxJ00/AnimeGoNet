@@ -68,6 +68,7 @@ public static class AnimeGoDefaults
             },
             TorrentFetch = new TorrentFetchOptions(),
             Schedule = new ScheduleOptions(),
+            DataUpdate = new DataUpdateOptions(),
             InitialSourceProfiles =
             [
                 new SourceProfileSeed

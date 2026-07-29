@@ -225,6 +225,39 @@ public sealed class AnimeGoOptionsValidatorTests
             error => error.Contains("refresh cron", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ValidatesDataUpdatePolicyWithoutGuessingRepositoryOwner()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var invalid = defaults with
+        {
+            DataUpdate = defaults.DataUpdate with
+            {
+                Enabled = true,
+                Cron = "invalid",
+                KeepVersions = 1,
+                HttpTimeout = TimeSpan.FromHours(2),
+            },
+        };
+        var errors = AnimeGoOptionsValidator.Validate(invalid);
+
+        Assert.Contains(errors, error => error.Contains("Data update cron", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("manifest URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("keep versions", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HTTP timeout", StringComparison.Ordinal));
+
+        var valid = defaults with
+        {
+            DataUpdate = defaults.DataUpdate with
+            {
+                Enabled = true,
+                ManifestUrl = new Uri(
+                    "https://github.com/example/AnimeGoNetData/releases/latest/download/manifest.json"),
+            },
+        };
+        Assert.Empty(AnimeGoOptionsValidator.Validate(valid));
+    }
+
     [Theory]
     [InlineData("/download/incomplete", "/download/incomplete/bt", true)]
     [InlineData("/download/incomplete", "/download/incomplete-other", false)]
