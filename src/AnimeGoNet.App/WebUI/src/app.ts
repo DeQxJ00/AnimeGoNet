@@ -85,6 +85,28 @@ interface DataUpdateActionResult {
   imported: boolean;
 }
 
+type LiveLogLevel =
+  | "trace"
+  | "debug"
+  | "information"
+  | "warning"
+  | "error"
+  | "critical"
+  | "unknown";
+
+interface LiveLogEntry {
+  level: LiveLogLevel;
+  text: string;
+}
+
+interface LiveLogFrameHeader {
+  type: "log" | "control";
+  count?: number;
+  action?: string;
+  status?: string;
+  code?: string;
+}
+
 interface RuntimeConfiguration {
   configuration_revision: number;
   applied_configuration_revision: number;
@@ -944,6 +966,23 @@ let loadedMikanWorkId: number | null = null;
 let activeMikanWorkImpact: MikanWorkImpact | null = null;
 let activeConfigurationLockedFields = new Set<string>();
 let pendingConfigurationRequest: ConfigurationUpdatePayload | null = null;
+const maximumRenderedLogs = 500;
+const liveLogLevelOrder: Record<LiveLogLevel, number> = {
+  trace: 0,
+  debug: 1,
+  information: 2,
+  warning: 3,
+  error: 4,
+  critical: 5,
+  unknown: 2,
+};
+let liveLogSocket: WebSocket | null = null;
+let liveLogReconnectTimer: number | null = null;
+let liveLogReconnectAttempt = 0;
+let liveLogShouldReconnect = true;
+let liveLogPaused = false;
+let liveLogControlPending = false;
+let liveLogEntries: LiveLogEntry[] = [];
 
 const statusLabels: Record<string, string> = {
   received: "已接收",
@@ -1275,6 +1314,216 @@ async function importOfflineDataPackage(event: SubmitEvent): Promise<void> {
     setDataUpdateBusy(false);
     await loadDataUpdate(true);
   }
+}
+
+function liveLogWebSocketUrl(): string {
+  const url = new URL("/websocket/log", window.location.href);
+  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  url.search = "";
+  if (accessKey) url.searchParams.set("access_key", accessKey);
+  return url.toString();
+}
+
+function setLiveLogStatus(message: string, state: string): void {
+  const target = element<HTMLElement>("#live-log-status");
+  target.textContent = message;
+  target.dataset.state = state;
+}
+
+function parseLiveLogLevel(line: string): LiveLogLevel {
+  const marker = line.match(/\[(TRC|DBG|INF|WRN|ERR|CRT)\]/)?.[1];
+  switch (marker) {
+    case "TRC": return "trace";
+    case "DBG": return "debug";
+    case "INF": return "information";
+    case "WRN": return "warning";
+    case "ERR": return "error";
+    case "CRT": return "critical";
+    default: return "unknown";
+  }
+}
+
+function renderLiveLogs(): void {
+  const minimum = element<HTMLSelectElement>("#live-log-level").value;
+  const minimumOrder = minimum === "all"
+    ? -1
+    : liveLogLevelOrder[minimum as LiveLogLevel] ?? 2;
+  const visible = liveLogEntries.filter(
+    entry => liveLogLevelOrder[entry.level] >= minimumOrder,
+  );
+  const stream = element<HTMLElement>("#live-log-stream");
+  if (visible.length === 0) {
+    stream.replaceChildren(Object.assign(document.createElement("p"), {
+      className: "muted empty",
+      textContent: liveLogEntries.length === 0
+        ? "等待日志…"
+        : "当前级别过滤下没有日志。",
+    }));
+  } else {
+    const nodes = visible.map(entry => {
+      const line = document.createElement("div");
+      line.className = `live-log-entry ${entry.level}`;
+      line.textContent = entry.text;
+      return line;
+    });
+    stream.replaceChildren(...nodes);
+    stream.scrollTop = stream.scrollHeight;
+  }
+  element<HTMLElement>("#live-log-count").textContent =
+    `本页 ${liveLogEntries.length} / ${maximumRenderedLogs} 条`
+    + (visible.length === liveLogEntries.length ? "" : ` · 显示 ${visible.length}`);
+}
+
+function appendLiveLogs(lines: string[]): void {
+  const entries = lines
+    .filter(line => line.length > 0)
+    .map(line => ({ level: parseLiveLogLevel(line), text: line }));
+  if (entries.length === 0) return;
+  liveLogEntries.push(...entries);
+  if (liveLogEntries.length > maximumRenderedLogs) {
+    liveLogEntries.splice(0, liveLogEntries.length - maximumRenderedLogs);
+  }
+  renderLiveLogs();
+}
+
+function updateLiveLogPauseButton(): void {
+  const button = element<HTMLButtonElement>("#live-log-pause");
+  button.textContent = liveLogPaused ? "恢复" : "暂停";
+  button.disabled =
+    liveLogControlPending || liveLogSocket?.readyState !== WebSocket.OPEN;
+}
+
+function handleLiveLogControl(header: LiveLogFrameHeader): void {
+  liveLogControlPending = false;
+  if (header.status !== "ok") {
+    setLiveLogStatus(
+      `日志流控制失败：${header.code ?? "unknown_error"}`,
+      "error",
+    );
+    updateLiveLogPauseButton();
+    return;
+  }
+  if (header.action === "pause") {
+    liveLogPaused = true;
+    setLiveLogStatus("已暂停；服务器正在缓存最新 1000 条", "paused");
+  } else if (header.action === "resume") {
+    liveLogPaused = false;
+    setLiveLogStatus("日志流已连接", "connected");
+  }
+  updateLiveLogPauseButton();
+}
+
+function handleLiveLogMessage(payload: string): void {
+  const parts = payload.split("\n\n");
+  let header: LiveLogFrameHeader;
+  try {
+    header = JSON.parse(parts[0] ?? "") as LiveLogFrameHeader;
+  } catch {
+    setLiveLogStatus("收到无法解析的日志帧，已忽略", "error");
+    return;
+  }
+  if (header.type === "control") {
+    handleLiveLogControl(header);
+    return;
+  }
+  if (
+    header.type !== "log"
+    || !Number.isInteger(header.count)
+    || (header.count ?? 0) < 1
+    || (header.count ?? 0) > 1000
+    || parts.length - 1 < (header.count ?? 0)
+  ) {
+    setLiveLogStatus("收到无效日志帧，已忽略", "error");
+    return;
+  }
+  appendLiveLogs(parts.slice(1, 1 + header.count!));
+}
+
+function scheduleLiveLogReconnect(): void {
+  if (!liveLogShouldReconnect || liveLogReconnectTimer !== null) return;
+  const delay = Math.min(30000, 1000 * (2 ** liveLogReconnectAttempt));
+  liveLogReconnectAttempt++;
+  setLiveLogStatus(`连接已断开，${Math.ceil(delay / 1000)} 秒后重试`, "disconnected");
+  liveLogReconnectTimer = window.setTimeout(() => {
+    liveLogReconnectTimer = null;
+    connectLiveLogs();
+  }, delay);
+}
+
+function disconnectCurrentLiveLogSocket(): void {
+  const socket = liveLogSocket;
+  liveLogSocket = null;
+  if (!socket) return;
+  socket.onopen = null;
+  socket.onmessage = null;
+  socket.onerror = null;
+  socket.onclose = null;
+  try {
+    socket.close(1000, "reconnect");
+  } catch {
+    // A connecting browser socket can reject close; detached callbacks keep it harmless.
+  }
+}
+
+function connectLiveLogs(manual = false): void {
+  if (manual) liveLogReconnectAttempt = 0;
+  if (liveLogReconnectTimer !== null) {
+    window.clearTimeout(liveLogReconnectTimer);
+    liveLogReconnectTimer = null;
+  }
+  disconnectCurrentLiveLogSocket();
+  setLiveLogStatus("正在连接日志流…", "connecting");
+  updateLiveLogPauseButton();
+
+  let socket: WebSocket;
+  try {
+    socket = new WebSocket(liveLogWebSocketUrl());
+  } catch {
+    scheduleLiveLogReconnect();
+    return;
+  }
+  liveLogSocket = socket;
+  socket.onopen = () => {
+    if (liveLogSocket !== socket) return;
+    liveLogReconnectAttempt = 0;
+    if (liveLogPaused) {
+      liveLogControlPending = true;
+      socket.send(JSON.stringify({ action: "pause" }));
+      setLiveLogStatus("已重连，正在恢复暂停状态…", "connecting");
+    } else {
+      setLiveLogStatus("日志流已连接", "connected");
+    }
+    updateLiveLogPauseButton();
+  };
+  socket.onmessage = event => {
+    if (liveLogSocket === socket && typeof event.data === "string") {
+      handleLiveLogMessage(event.data);
+    }
+  };
+  socket.onerror = () => {
+    if (liveLogSocket === socket) {
+      setLiveLogStatus("日志流连接发生错误", "error");
+    }
+  };
+  socket.onclose = () => {
+    if (liveLogSocket !== socket) return;
+    liveLogSocket = null;
+    liveLogControlPending = false;
+    updateLiveLogPauseButton();
+    scheduleLiveLogReconnect();
+  };
+}
+
+function toggleLiveLogPause(): void {
+  if (!liveLogSocket || liveLogSocket.readyState !== WebSocket.OPEN) {
+    setLiveLogStatus("日志流尚未连接，请重新连接", "disconnected");
+    return;
+  }
+  liveLogControlPending = true;
+  updateLiveLogPauseButton();
+  liveLogSocket.send(JSON.stringify({
+    action: liveLogPaused ? "resume" : "pause",
+  }));
 }
 
 function readLibraryState(): AnimeLibraryUiState {
@@ -5395,10 +5644,35 @@ element<HTMLFormElement>("#data-update-offline-form").addEventListener(
   "submit",
   (event) => void importOfflineDataPackage(event),
 );
+element<HTMLSelectElement>("#live-log-level").addEventListener(
+  "change",
+  renderLiveLogs,
+);
+element<HTMLButtonElement>("#live-log-reconnect").addEventListener(
+  "click",
+  () => connectLiveLogs(true),
+);
+element<HTMLButtonElement>("#live-log-pause").addEventListener(
+  "click",
+  toggleLiveLogPause,
+);
+element<HTMLButtonElement>("#live-log-clear").addEventListener("click", () => {
+  liveLogEntries = [];
+  renderLiveLogs();
+});
+window.addEventListener("beforeunload", () => {
+  liveLogShouldReconnect = false;
+  if (liveLogReconnectTimer !== null) {
+    window.clearTimeout(liveLogReconnectTimer);
+    liveLogReconnectTimer = null;
+  }
+  disconnectCurrentLiveLogSocket();
+});
 
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();
+connectLiveLogs();
 void loadLibrary();
 void loadConfiguration();
 void loadDownloads();

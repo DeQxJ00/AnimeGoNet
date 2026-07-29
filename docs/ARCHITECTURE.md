@@ -107,6 +107,7 @@ Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可
 - Torrent v1 使用自有严格 Bencode reader，并对原始 `info` 字节计算协议规定的 SHA-1；不把 announce 或原始 metainfo 投影到业务 DTO。
 - passkey URL 抓取关闭自动 redirect，每跳重新校验 SourceProfile host 和全部 DNS 地址；`SocketsHttpHandler.ConnectCallback` 只连接本跳已校验 IP，避免校验后再次解析造成 DNS rebinding。
 - 静态 WebUI 唯一源码位于 `src/AnimeGoNet.App/WebUI/src`，使用固定 TypeScript 版本、strict 模式和 DOM 类型编译到 `wwwroot`，不引入浏览器运行时框架。编译产物随主程序作为 static content 发布；CI 同时执行 `--noEmit` 类型检查并验证重新编译后 Git 无差异。
+- `/websocket/log` 使用原生 ASP.NET Core WebSocket 和编译期 `ILoggerProvider` fan-out；控制命令只由有界 `JsonDocument` 读取，日志帧显式构造，不使用反射 DTO。每个连接独立暂停，最多缓存最新 1000 条；发送队列最多 256 帧并丢弃最旧帧，避免慢浏览器无界占用内存。进入 WebSocket 前统一验证 access-key，输出先用 `GeneratedRegex` 脱敏 URL、Bearer、Cookie、Authorization、密码及常见 token/key。
 
 禁止进入生产路径：
 

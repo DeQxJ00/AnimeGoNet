@@ -738,3 +738,80 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .data-update-offline small { grid-column: 1; }
   .data-update-columns { grid-template-columns: 1fr; }
 }
+
+.live-log-heading {
+  align-items: end;
+}
+
+.live-log-actions,
+.live-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+}
+
+.live-log-actions {
+  justify-content: flex-end;
+}
+
+.live-log-actions label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  color: var(--muted);
+}
+
+.live-log-meta {
+  justify-content: space-between;
+  margin: .8rem 0;
+}
+
+.live-log-meta p {
+  margin: 0;
+}
+
+#live-log-status[data-state="connected"] { color: #79ddb6; }
+#live-log-status[data-state="paused"] { color: #f3c86b; }
+#live-log-status[data-state="error"] { color: #ff938a; }
+
+.live-log-stream {
+  height: min(24rem, 55vh);
+  overflow: auto;
+  padding: .8rem;
+  border: 1px solid #344260;
+  border-radius: .85rem;
+  background: #070b13;
+  color: #d7dfed;
+  font: .82rem/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  scrollbar-color: #465474 #070b13;
+}
+
+.live-log-entry {
+  padding: .18rem .35rem;
+  border-left: .2rem solid transparent;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.live-log-entry:nth-child(even) {
+  background: rgba(255,255,255,.025);
+}
+
+.live-log-entry.trace { color: #8290a8; }
+.live-log-entry.debug { color: #a9b6ca; }
+.live-log-entry.information { color: #d7dfed; }
+.live-log-entry.warning {
+  border-left-color: #d7a83c;
+  color: #f3d48b;
+}
+.live-log-entry.error,
+.live-log-entry.critical {
+  border-left-color: #d85d54;
+  color: #ffaaa4;
+}
+
+@media (max-width: 860px) {
+  .live-log-heading { align-items: flex-start; }
+  .live-log-actions { justify-content: flex-start; }
+}

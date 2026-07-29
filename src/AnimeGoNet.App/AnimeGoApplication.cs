@@ -10,6 +10,7 @@ using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Logging;
 using AnimeGoNet.App.Plugins;
 using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
@@ -65,6 +66,9 @@ public static class AnimeGoApplication
             ContentRootPath = AppContext.BaseDirectory,
             WebRootPath = webRootPath,
         });
+        var webSocketLogs = new WebSocketLogHub();
+        builder.Logging.AddProvider(webSocketLogs);
+        builder.Services.AddSingleton(webSocketLogs);
 
         runningInContainer ??= string.Equals(
             builder.Configuration["DOTNET_RUNNING_IN_CONTAINER"],
@@ -311,11 +315,16 @@ public static class AnimeGoApplication
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
 
         var app = builder.Build();
+        app.UseWebSockets(new WebSocketOptions
+        {
+            KeepAliveInterval = TimeSpan.FromSeconds(30),
+        });
         app.UseDefaultFiles();
         app.UseStaticFiles();
         app.Use(async (context, next) =>
         {
-            if (context.Request.Path.StartsWithSegments("/api")
+            if ((context.Request.Path.StartsWithSegments("/api")
+                    || context.Request.Path.StartsWithSegments("/websocket"))
                 && !string.IsNullOrWhiteSpace(accessKey)
                 && !HasValidAccessKey(context.Request, accessKey))
             {
@@ -327,6 +336,7 @@ public static class AnimeGoApplication
         });
 
         ApiEndpoints.Map(app);
+        WebSocketLogEndpoint.Map(app);
         app.MapFallbackToFile("index.html");
         return app;
     }

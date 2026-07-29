@@ -145,3 +145,21 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 离线导入不要求 manifest URL。页面只接受一个 ZIP，并在请求建立后立即清空文件选择；不保存上传文件名、本机路径或 ZIP 本体。ZIP 根目录必须严格等于 `manifest.json + assets[].file_name`，服务端拒绝额外条目、目录、路径穿越、重复名称、长度或 SHA-256 不符。上传先进入 `data_path/data-update/.partial-*`，成功后只保留已验证包目录；失败清理 partial 且不改变 active。
 
 “编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前先显示脱敏字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
+
+## 12. 实时日志
+
+首页通过同源 `/websocket/log` 接收服务端已脱敏日志。协议保留上游
+`{"type":"log","count":N}\n\n<line>...` 帧，因此旧客户端仍可消费；新增
+`control` 确认帧只用于静态 WebUI，旧客户端可按既有逻辑忽略。
+
+- access-key 配置开启时，WebSocket 与 `/api` 使用同一鉴权；页面只把当前 URL
+  中已有的旧 hash 放入 upgrade query，不回显、不记录、不写入本地存储。
+- pause/resume 是逐浏览器连接状态，不会暂停其他管理员。暂停后服务端保存最新
+  1000 条，溢出丢弃最旧；恢复时按一个兼容 log 帧补发。
+- 浏览器只保存最新 500 条并可选择 Trace、Debug、Information、Warning、
+  Error 或 Critical 最低级别。过滤只改变显示，不改变服务端采集。
+- 所有日志行通过 `textContent` 创建 DOM，绝不解释成 HTML。服务端先规范化
+  换行，并脱敏 URL path/query、Bearer、Cookie、Authorization、password、
+  passkey、api key、access key 和 token；异常只输出类型与脱敏后的 message。
+- 非预期断开使用 1～30 秒指数退避自动重连；“重新连接”按钮立即重建连接。
+  页面重连时会恢复原暂停意图；关闭页面会取消重连并关闭 socket。

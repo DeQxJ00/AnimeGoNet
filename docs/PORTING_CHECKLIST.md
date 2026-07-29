@@ -19,7 +19,7 @@
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |
 | parser 首个启用实现、filter 顺序串联 | `TitleParserManager` / `OrderedFeedFilterManager` | 保留 | 已验证 | 首个/显式 parser 不 fallback；filter accepted 逐级传递、错误短路、无效/重复 index、空链 tests；Mikan RSS 生产链回归 |
 | `internal/constant`、`exceptions` | 强类型常量、稳定错误码 | 保留 | 待实现 | domain tests |
-| `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 待实现 | redaction/stream tests |
+| `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 进行中 | 编译期 provider fan-out、URL/凭据脱敏与有界 WebSocket stream tests 已通过；轻量滚动文件 provider 待实现 |
 
 ## 输入、网络与数据源
 
@@ -90,9 +90,9 @@
 | `/api/config` | typed deployment config | 保留+扩展 | 进行中 | 脱敏生效值 GET、safe editable desired projection、无副作用字段 diff 预览、版本化 PUT/DELETE、Web 两步确认/恢复、TMDB 密钥三态、TMDB/Bangumi 独立 API 地址/代理/超时、application.private.json 原子写入/0600、不可变旧 revision 备份、重启/热更新效果与鉴权 tests 已通过；部署 YAML 保持只读，完整旧配置来源 precedence 待实现 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
-| `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
+| `/websocket/log` | AOT-safe WebSocket logs | 保留 | 已验证 | 非 upgrade 兼容响应、直接/旧 hash 鉴权、旧帧 envelope、逐连接 pause/resume/terminate、1000 条缓存、异常命令、敏感字段脱敏、WebUI 和 win-x64 NativeAOT upgrade/control smoke 已通过 |
 | 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、手动 Torrent/RSS 安全提交、下载/元数据面板、待补全 TMDB 人工映射、Mikan 人工作品规则 revision-safe CRUD/影响/显式重匹配、SourceProfile 版本化 CRUD、下载器编辑器和 TMDB 作品库均使用安全 DOM API；完整管理 UI 与发布镜像浏览器 E2E 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、手动 Torrent/RSS 安全提交、下载/元数据面板、待补全 TMDB 人工映射、Mikan 人工作品规则 revision-safe CRUD/影响/显式重匹配、SourceProfile 版本化 CRUD、下载器编辑器、TMDB 作品库及实时日志筛选/pause/reconnect 均使用安全 DOM API；完整管理 UI 与发布镜像总体验收待实现 |
 
 ## 构建、发布与平台
 

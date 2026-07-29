@@ -170,6 +170,39 @@
       </div>
     </section>
 
+    <section id="live-logs" aria-labelledby="live-logs-title">
+      <div class="section-heading live-log-heading">
+        <div>
+          <p class="eyebrow">Realtime diagnostics</p>
+          <h2 id="live-logs-title">实时日志</h2>
+        </div>
+        <div class="live-log-actions">
+          <label>最低级别
+            <select id="live-log-level">
+              <option value="all">全部</option>
+              <option value="trace">Trace</option>
+              <option value="debug">Debug</option>
+              <option value="information" selected>Information</option>
+              <option value="warning">Warning</option>
+              <option value="error">Error</option>
+              <option value="critical">Critical</option>
+            </select>
+          </label>
+          <button id="live-log-reconnect" type="button" class="secondary-button">重新连接</button>
+          <button id="live-log-pause" type="button" class="secondary-button" disabled>暂停</button>
+          <button id="live-log-clear" type="button" class="secondary-button">清空本页</button>
+        </div>
+      </div>
+      <div class="live-log-meta">
+        <p id="live-log-status" class="muted" role="status">正在连接日志流…</p>
+        <span id="live-log-count" class="muted">本页 0 / 500 条</span>
+      </div>
+      <p class="muted">服务端先执行密钥与 URL 脱敏；暂停时每个连接独立缓存最新 1000 条，恢复后一次补发。清空只影响当前页面。</p>
+      <div id="live-log-stream" class="live-log-stream" role="log" aria-label="实时日志输出">
+        <p class="muted empty">等待日志…</p>
+      </div>
+    </section>
+
     <section aria-labelledby="metadata-title">
       <div class="section-heading">
         <div>

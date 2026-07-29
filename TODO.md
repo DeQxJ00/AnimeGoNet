@@ -54,7 +54,7 @@
 - [x] 添加 `global.json`、`Directory.Build.props`、`Directory.Packages.props`。
 - [x] 启用 nullable、warnings-as-errors、deterministic、AOT/trim analyzer。
 - [x] 建立 Windows/Linux/macOS build/test CI，并对工作流 YAML 做本地语法校验。
-- [>] 验证 Minimal API、WebSocket、静态文件 NativeAOT（Minimal API/静态文件已通过 win-x64 原生 smoke；WebSocket 待实现）。
+- [x] 验证 Minimal API、WebSocket、静态文件 NativeAOT：win-x64 原生进程 smoke 已覆盖 `/ping`、静态 WebUI、WebSocket upgrade 与 pause 控制帧。
 - [x] 验证 Microsoft.Data.Sqlite NativeAOT（win-x64 原生进程完成 migration、integrity 与状态读取）。
 - [>] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT：无依赖 HTML scanner 与六字段 Cron/调度器均已通过 win-x64 NativeAOT；YAML AST 仍待实现与验证。
 - [x] 建立 published-binary smoke 脚本（`eng/smoke-native.ps1`）。
@@ -194,7 +194,7 @@
 - [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
 - [x] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile CRUD/无副作用预览、下载器脱敏投影/连接测试、data_path 私有覆盖文件、凭据只写 create/update/remove、全局 revision、重启应用和引用保护均已完成。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
-- [ ] 移植 WebSocket 日志 pause/resume。
+- [x] 移植 WebSocket 日志 pause/resume：保留 `/websocket/log`、旧 `type=log/count` 帧和三种控制命令；鉴权、逐连接暂停、1000 条有界缓存、慢消费者有界队列、脱敏及取消均已验证。
 - [>] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖；Kestrel 契约已验证配置上传立即影响 RSS、快速下载仍跳过过滤。原油猴脚本浏览器 E2E 待验收。
 - [x] 将旧插件名 `filter/mikan_tool.py` 及等价别名映射到 SQLite 过滤规则；Base64 JSON 可无损同构往返、并发 legacy 上传完整提交，不查找、不创建且不执行 Python 文件。
 - [x] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停/排序、关键词 JSON 数组编辑、服务端样例预览及逐档决策详情、旧 JSON 导入导出、revision 冲突和快照回滚均已接入；页面明确警告多 F0“最后结果生效”、空关键词匹配全部标题和区分大小写语义。
@@ -225,7 +225,7 @@
 - [x] 对当前应用配置环境变量覆盖字段显示最终有效值、环境变量来源和只读锁定状态；API 拒绝改写被锁字段和凭据，保存其他字段时保留锁字段原有底层覆盖/继承语义，避免环境变量移除后遗留伪覆盖。
 - [ ] 实现插件分类、启停、args/vars 和校验视图。
 - [ ] 实现缓存/数据库浏览和安全删除。
-- [ ] 实现实时日志过滤、暂停、恢复和断线重连。
+- [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [ ] 完成响应式布局、空/错/加载状态和基本可访问性。
 - [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；DOM 单元测试和 Playwright UI E2E 待实现。
 - [ ] 用 Tampermonkey + Mikan fixture 页验证“单集”“全集”“上传/获取过滤配置”。

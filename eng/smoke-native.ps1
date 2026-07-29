@@ -82,6 +82,57 @@ try {
         throw 'Static WebUI smoke failed.'
     }
 
+    $webSocket = [Net.WebSockets.ClientWebSocket]::new()
+    try {
+        $webSocketUri = [Uri]("ws://127.0.0.1:$Port/websocket/log")
+        [void]$webSocket.ConnectAsync(
+            $webSocketUri,
+            [Threading.CancellationToken]::None
+        ).GetAwaiter().GetResult()
+
+        $pauseBytes = [Text.Encoding]::UTF8.GetBytes('{"action":"pause"}')
+        $pauseSegment = [ArraySegment[byte]]::new($pauseBytes)
+        [void]$webSocket.SendAsync(
+            $pauseSegment,
+            [Net.WebSockets.WebSocketMessageType]::Text,
+            $true,
+            [Threading.CancellationToken]::None
+        ).GetAwaiter().GetResult()
+
+        $receiveBytes = [byte[]]::new(4096)
+        $receiveSegment = [ArraySegment[byte]]::new($receiveBytes)
+        $receive = $webSocket.ReceiveAsync(
+            $receiveSegment,
+            [Threading.CancellationToken]::None
+        ).GetAwaiter().GetResult()
+        $control = [Text.Encoding]::UTF8.GetString(
+            $receiveBytes,
+            0,
+            $receive.Count
+        )
+        if (
+            $receive.MessageType -ne [Net.WebSockets.WebSocketMessageType]::Text -or
+            -not $receive.EndOfMessage -or
+            -not $control.Contains('"type":"control"') -or
+            -not $control.Contains('"action":"pause"') -or
+            -not $control.Contains('"status":"ok"')
+        ) {
+            throw 'NativeAOT WebSocket pause control smoke failed.'
+        }
+
+        $terminateBytes = [Text.Encoding]::UTF8.GetBytes('{"action":"terminate"}')
+        $terminateSegment = [ArraySegment[byte]]::new($terminateBytes)
+        [void]$webSocket.SendAsync(
+            $terminateSegment,
+            [Net.WebSockets.WebSocketMessageType]::Text,
+            $true,
+            [Threading.CancellationToken]::None
+        ).GetAwaiter().GetResult()
+    }
+    finally {
+        $webSocket.Dispose()
+    }
+
     if (-not (Test-Path -LiteralPath (Join-Path $env:data_path 'animegonet.db'))) {
         throw 'SQLite database was not initialized.'
     }
