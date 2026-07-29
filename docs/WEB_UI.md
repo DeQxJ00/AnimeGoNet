@@ -139,3 +139,5 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 未配置 manifest 时检查、下载和在线更新按钮禁用；没有 previous 时回滚按钮禁用。执行期间同一区域所有写动作禁用，完成后重新读取服务端状态。回滚必须二次确认。只有完整校验并成功提交 SQLite 事务的数据版本才显示为 active；失败继续显示旧 active 及稳定失败码。关闭 `data_update.enabled` 只关闭 Cron 注册，页面仍允许手动操作。
 
 离线导入不要求 manifest URL。页面只接受一个 ZIP，并在请求建立后立即清空文件选择；不保存上传文件名、本机路径或 ZIP 本体。ZIP 根目录必须严格等于 `manifest.json + assets[].file_name`，服务端拒绝额外条目、目录、路径穿越、重复名称、长度或 SHA-256 不符。上传先进入 `data_path/data-update/.partial-*`，成功后只保留已验证包目录；失败清理 partial 且不改变 active。
+
+“编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存仍写 `data_path/config/application.private.json` 的 revision 私有覆盖，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。

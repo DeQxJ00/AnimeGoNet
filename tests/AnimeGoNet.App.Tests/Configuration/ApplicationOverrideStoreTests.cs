@@ -27,6 +27,11 @@ public sealed class ApplicationOverrideStoreTests
             Assert.Equal(1, saved.Revision);
             Assert.Equal("private-api-key", reloaded.Settings?.TmdbApiKey);
             Assert.Equal("private-read-token", reloaded.Settings?.TmdbReadAccessToken);
+            Assert.True(reloaded.Settings?.DataUpdateEnabled);
+            Assert.Equal("0 15 4 * * ?", reloaded.Settings?.DataUpdateCron);
+            Assert.Equal(
+                "https://updates.test.invalid/manifest.json",
+                reloaded.Settings?.DataUpdateManifestUrl);
             Assert.Single(Directory.GetFiles(root, "application.private.json"));
             Assert.Empty(Directory.GetFiles(root, "*.tmp"));
             await Assert.ThrowsAsync<ApplicationOverrideRevisionException>(() =>
@@ -83,6 +88,18 @@ public sealed class ApplicationOverrideStoreTests
                 effective.Metadata.Bangumi.ProxyUrl);
             Assert.Equal(TimeSpan.FromSeconds(45), effective.Metadata.Bangumi.HttpTimeout);
             Assert.Equal(2, effective.TorrentFetch.MaxRedirects);
+            Assert.True(effective.DataUpdate.Enabled);
+            Assert.Equal("0 15 4 * * ?", effective.DataUpdate.Cron);
+            Assert.Equal(
+                new Uri("https://updates.test.invalid/manifest.json"),
+                effective.DataUpdate.ManifestUrl);
+            Assert.False(effective.DataUpdate.AutoDownload);
+            Assert.False(effective.DataUpdate.AutoImport);
+            Assert.Equal(4, effective.DataUpdate.KeepVersions);
+            Assert.Equal(TimeSpan.FromSeconds(45), effective.DataUpdate.HttpTimeout);
+            Assert.Equal(
+                effective.DataUpdate,
+                app.Services.GetRequiredService<DataUpdateRuntimeState>().Value);
             Assert.Equal(1, runtime.AppliedRevision);
             Assert.Equal("zh-CN", deployment.Value.Metadata.Tmdb.Language);
             Assert.Null(deployment.Value.Metadata.Tmdb.ApiKey);
@@ -152,6 +169,16 @@ public sealed class ApplicationOverrideStoreTests
                         ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
                     },
                 },
+                DataUpdate = defaults.DataUpdate with
+                {
+                    Enabled = true,
+                    Cron = "0 10 4 * * ?",
+                    ManifestUrl = new Uri("https://deployment-updates.invalid/manifest.json"),
+                    AutoDownload = false,
+                    AutoImport = false,
+                    KeepVersions = 5,
+                    HttpTimeout = TimeSpan.FromSeconds(55),
+                },
             };
 
             var applied = ApplicationOverrideStore.Apply(defaults, snapshot);
@@ -166,6 +193,7 @@ public sealed class ApplicationOverrideStoreTests
             Assert.Equal(
                 new Uri("socks5://127.0.0.1:1080/"),
                 applied.Metadata.Bangumi.ProxyUrl);
+            Assert.Equal(defaults.DataUpdate, applied.DataUpdate);
         }
         finally
         {
@@ -202,5 +230,13 @@ public sealed class ApplicationOverrideStoreTests
         BangumiBaseUrl: "https://bangumi.test.invalid/api/",
         BangumiProxyUrlOverridden: true,
         BangumiProxyUrl: "socks5://127.0.0.1:1080/",
-        BangumiHttpTimeoutSeconds: 45);
+        BangumiHttpTimeoutSeconds: 45,
+        DataUpdateEnabled: true,
+        DataUpdateCron: "0 15 4 * * ?",
+        DataUpdateManifestUrlOverridden: true,
+        DataUpdateManifestUrl: "https://updates.test.invalid/manifest.json",
+        DataUpdateAutoDownload: false,
+        DataUpdateAutoImport: false,
+        DataUpdateKeepVersions: 4,
+        DataUpdateHttpTimeoutSeconds: 45);
 }

@@ -24,6 +24,13 @@ public sealed class DeploymentConfigurationLocks
             "ai_use_metadata_match",
             ["ai_use_metadata_match", "ai_use_season_match", "ai_use_episode_match"]),
         new("ai_http_timeout_seconds", ["ai_timeout_second"]),
+        new("data_update_enabled", ["data_update_enabled"]),
+        new("data_update_cron", ["data_update_cron"]),
+        new("data_update_manifest_url", ["data_update_manifest_url"]),
+        new("data_update_auto_download", ["data_update_auto_download"]),
+        new("data_update_auto_import", ["data_update_auto_import"]),
+        new("data_update_keep_versions", ["data_update_keep_versions"]),
+        new("data_update_http_timeout_seconds", ["data_update_timeout_second"]),
     ];
 
     private readonly HashSet<string> _fields;
@@ -168,6 +175,38 @@ public sealed class DeploymentConfigurationLocks
                     "ai_http_timeout_seconds",
                     current.AiHttpTimeoutSeconds,
                     candidate.AiHttpTimeoutSeconds),
+                DataUpdateEnabled = Preserve(
+                    "data_update_enabled",
+                    current.DataUpdateEnabled,
+                    candidate.DataUpdateEnabled),
+                DataUpdateCron = Preserve(
+                    "data_update_cron",
+                    current.DataUpdateCron,
+                    candidate.DataUpdateCron),
+                DataUpdateManifestUrlOverridden = Preserve(
+                    "data_update_manifest_url",
+                    current.DataUpdateManifestUrlOverridden,
+                    candidate.DataUpdateManifestUrlOverridden),
+                DataUpdateManifestUrl = Preserve(
+                    "data_update_manifest_url",
+                    current.DataUpdateManifestUrl,
+                    candidate.DataUpdateManifestUrl),
+                DataUpdateAutoDownload = Preserve(
+                    "data_update_auto_download",
+                    current.DataUpdateAutoDownload,
+                    candidate.DataUpdateAutoDownload),
+                DataUpdateAutoImport = Preserve(
+                    "data_update_auto_import",
+                    current.DataUpdateAutoImport,
+                    candidate.DataUpdateAutoImport),
+                DataUpdateKeepVersions = Preserve(
+                    "data_update_keep_versions",
+                    current.DataUpdateKeepVersions,
+                    candidate.DataUpdateKeepVersions),
+                DataUpdateHttpTimeoutSeconds = Preserve(
+                    "data_update_http_timeout_seconds",
+                    current.DataUpdateHttpTimeoutSeconds,
+                    candidate.DataUpdateHttpTimeoutSeconds),
             };
         }
 
@@ -251,6 +290,39 @@ public sealed class DeploymentConfigurationLocks
             ai = ai with { HttpTimeout = deployment.Metadata.Ai.HttpTimeout };
         }
 
+        var dataUpdate = candidate.DataUpdate;
+        if (IsLocked("data_update_enabled"))
+        {
+            dataUpdate = dataUpdate with { Enabled = deployment.DataUpdate.Enabled };
+        }
+        if (IsLocked("data_update_cron"))
+        {
+            dataUpdate = dataUpdate with { Cron = deployment.DataUpdate.Cron };
+        }
+        if (IsLocked("data_update_manifest_url"))
+        {
+            dataUpdate = dataUpdate with { ManifestUrl = deployment.DataUpdate.ManifestUrl };
+        }
+        if (IsLocked("data_update_auto_download"))
+        {
+            dataUpdate = dataUpdate with { AutoDownload = deployment.DataUpdate.AutoDownload };
+        }
+        if (IsLocked("data_update_auto_import"))
+        {
+            dataUpdate = dataUpdate with { AutoImport = deployment.DataUpdate.AutoImport };
+        }
+        if (IsLocked("data_update_keep_versions"))
+        {
+            dataUpdate = dataUpdate with { KeepVersions = deployment.DataUpdate.KeepVersions };
+        }
+        if (IsLocked("data_update_http_timeout_seconds"))
+        {
+            dataUpdate = dataUpdate with
+            {
+                HttpTimeout = deployment.DataUpdate.HttpTimeout,
+            };
+        }
+
         return candidate with
         {
             Metadata = candidate.Metadata with
@@ -259,6 +331,7 @@ public sealed class DeploymentConfigurationLocks
                 Bangumi = bangumi,
                 Ai = ai,
             },
+            DataUpdate = dataUpdate,
         };
     }
 
@@ -305,6 +378,34 @@ public sealed class DeploymentConfigurationLocks
             "ai_http_timeout_seconds",
             deployment.Metadata.Ai.HttpTimeout,
             candidate.Metadata.Ai.HttpTimeout);
+        AddIfChanged(
+            "data_update_enabled",
+            deployment.DataUpdate.Enabled,
+            candidate.DataUpdate.Enabled);
+        AddIfChanged(
+            "data_update_cron",
+            deployment.DataUpdate.Cron,
+            candidate.DataUpdate.Cron);
+        AddIfChanged(
+            "data_update_manifest_url",
+            deployment.DataUpdate.ManifestUrl,
+            candidate.DataUpdate.ManifestUrl);
+        AddIfChanged(
+            "data_update_auto_download",
+            deployment.DataUpdate.AutoDownload,
+            candidate.DataUpdate.AutoDownload);
+        AddIfChanged(
+            "data_update_auto_import",
+            deployment.DataUpdate.AutoImport,
+            candidate.DataUpdate.AutoImport);
+        AddIfChanged(
+            "data_update_keep_versions",
+            deployment.DataUpdate.KeepVersions,
+            candidate.DataUpdate.KeepVersions);
+        AddIfChanged(
+            "data_update_http_timeout_seconds",
+            deployment.DataUpdate.HttpTimeout,
+            candidate.DataUpdate.HttpTimeout);
         return changed;
 
         void AddIfChanged<T>(string field, T deployed, T requested)

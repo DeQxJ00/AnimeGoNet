@@ -53,7 +53,7 @@
 | Docker | 固定三路径、单一媒体卷、外部客户端路径转换、端口 7991、非 root、UID/GID/TZ、healthcheck、SIGTERM、只读根 | I/E | amd64/arm64 Compose 全链路及硬链接通过 |
 | 旧数据迁移 | YAML、媒体 JSON、可选旧 Go JSON 导出、重复导入 | C/I/E | 不解析 Bolt；已导出的关键数据语义一致 |
 | 数据仓库生成 | 上游版本、清洗、分片、schema、计数、引用、确定性 | U/C | 相同输入哈希一致，坏数据不发布 |
-| 数据自动更新 | YAML 开关/Cron/URL/自动下载/导入/保留数、manifest、校验、staging、切换、回滚 | C/I/E | 各配置组合生效，任一失败继续使用上一可用版本 |
+| 数据自动更新 | 私有覆盖开关/Cron/URL/自动下载/导入/保留数、环境锁、热重排、manifest、校验、staging、切换、回滚 | U/C/I/E | 各配置组合即时生效，Cron 失败恢复旧任务，任一数据失败继续使用上一可用版本 |
 | NativeAOT | analyzers、publish、startup、核心 smoke、size | E | Tier-1 零未批准警告 |
 
 ## Web API 契约清单
@@ -230,7 +230,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 8. 浏览缓存并删除测试 key，验证二次确认和结果刷新。
 9. 在桌面与窄屏视口跑关键流程和键盘导航检查。
 10. 刷新所有前端路由，验证静态 fallback 正常且 API 404 不被吞掉。
-11. 修改数据更新配置，验证 YAML diff/备份、Cron 热重排，以及环境变量覆盖字段只读。
+11. 修改数据更新私有覆盖，验证 revision 冲突、Cron 热重排、禁用/恢复默认，以及环境变量覆盖字段只读；部署 YAML 保持不变。
 12. 构造标题未找到、Series 未找到、Season 未找到、TMDB 网络错误和认证错误，验证失败中心的筛选、最终原因、尝试时间线、重启保留及重新匹配操作。
 13. qB任务从metadata未知依次进入queued/downloading/paused/stalled/checking/100%，断言页面状态、百分比、容量、速度和ETA正确；100%后move/NFO失败仍显示业务未完成。
 14. 多文件任务包含wanted/unwanted及不同priority，断言列表/详情总容量和百分比只统计wanted文件，文件表映射正确。

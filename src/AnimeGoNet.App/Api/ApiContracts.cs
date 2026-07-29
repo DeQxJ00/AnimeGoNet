@@ -77,6 +77,7 @@ public sealed record ConfigurationResponse(
     [property: JsonPropertyName("deployment")] DeploymentConfigurationResponse Deployment,
     [property: JsonPropertyName("metadata")] MetadataConfigurationResponse Metadata,
     [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch,
+    [property: JsonPropertyName("data_update")] DataUpdateConfigurationResponse DataUpdate,
     [property: JsonPropertyName("editable")] EditableConfigurationResponse Editable);
 
 public sealed record EditableConfigurationResponse(
@@ -103,6 +104,13 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
     [property: JsonPropertyName("torrent_max_redirects")] int TorrentMaxRedirects,
     [property: JsonPropertyName("torrent_staging_ttl_seconds")] double TorrentStagingTtlSeconds,
+    [property: JsonPropertyName("data_update_enabled")] bool DataUpdateEnabled,
+    [property: JsonPropertyName("data_update_cron")] string DataUpdateCron,
+    [property: JsonPropertyName("data_update_manifest_url")] string? DataUpdateManifestUrl,
+    [property: JsonPropertyName("data_update_auto_download")] bool DataUpdateAutoDownload,
+    [property: JsonPropertyName("data_update_auto_import")] bool DataUpdateAutoImport,
+    [property: JsonPropertyName("data_update_keep_versions")] int DataUpdateKeepVersions,
+    [property: JsonPropertyName("data_update_http_timeout_seconds")] double DataUpdateHttpTimeoutSeconds,
     [property: JsonPropertyName("locked_fields")] IReadOnlyList<ConfigurationFieldLockResponse> LockedFields);
 
 public sealed record ConfigurationFieldLockResponse(
@@ -136,6 +144,13 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
     [property: JsonPropertyName("torrent_max_redirects")] int TorrentMaxRedirects,
     [property: JsonPropertyName("torrent_staging_ttl_seconds")] double TorrentStagingTtlSeconds,
+    [property: JsonPropertyName("data_update_enabled")] bool DataUpdateEnabled,
+    [property: JsonPropertyName("data_update_cron")] string? DataUpdateCron,
+    [property: JsonPropertyName("data_update_manifest_url")] string? DataUpdateManifestUrl,
+    [property: JsonPropertyName("data_update_auto_download")] bool DataUpdateAutoDownload,
+    [property: JsonPropertyName("data_update_auto_import")] bool DataUpdateAutoImport,
+    [property: JsonPropertyName("data_update_keep_versions")] int DataUpdateKeepVersions,
+    [property: JsonPropertyName("data_update_http_timeout_seconds")] double DataUpdateHttpTimeoutSeconds,
     [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision);
 
 public sealed record ConfigurationWriteResponse(
@@ -148,6 +163,16 @@ public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("background_workers_enabled")] bool BackgroundWorkersEnabled,
     [property: JsonPropertyName("access_key_configured")] bool AccessKeyConfigured,
     [property: JsonPropertyName("paths_restart_required")] bool PathsRestartRequired);
+
+public sealed record DataUpdateConfigurationResponse(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("cron")] string Cron,
+    [property: JsonPropertyName("manifest_url")] string? ManifestUrl,
+    [property: JsonPropertyName("auto_download")] bool AutoDownload,
+    [property: JsonPropertyName("auto_import")] bool AutoImport,
+    [property: JsonPropertyName("keep_versions")] int KeepVersions,
+    [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
+    [property: JsonPropertyName("hot_reload_supported")] bool HotReloadSupported);
 
 public sealed record MetadataConfigurationResponse(
     [property: JsonPropertyName("tmdb")] TmdbConfigurationResponse Tmdb,

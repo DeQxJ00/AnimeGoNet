@@ -135,6 +135,16 @@ interface RuntimeConfiguration {
     max_redirects: number;
     staging_ttl_seconds: number;
   };
+  data_update: {
+    enabled: boolean;
+    cron: string;
+    manifest_url: string | null;
+    auto_download: boolean;
+    auto_import: boolean;
+    keep_versions: number;
+    http_timeout_seconds: number;
+    hot_reload_supported: boolean;
+  };
   editable: {
     tmdb_base_url: string;
     tmdb_proxy_url: string | null;
@@ -159,6 +169,13 @@ interface RuntimeConfiguration {
     torrent_max_response_bytes: number;
     torrent_max_redirects: number;
     torrent_staging_ttl_seconds: number;
+    data_update_enabled: boolean;
+    data_update_cron: string;
+    data_update_manifest_url: string | null;
+    data_update_auto_download: boolean;
+    data_update_auto_import: boolean;
+    data_update_keep_versions: number;
+    data_update_http_timeout_seconds: number;
     locked_fields: Array<{
       field: string;
       source: "environment";
@@ -1896,6 +1913,22 @@ async function loadConfiguration(): Promise<void> {
         ],
         ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
       ]),
+      configurationCard("AnimeGoNetData 更新", [
+        ["定时更新", enabledLabel(config.data_update.enabled)],
+        ["Cron", config.data_update.cron],
+        ["Manifest", config.data_update.manifest_url ?? "未配置（仍可离线导入）"],
+        [
+          "策略",
+          !config.data_update.auto_download
+            ? "仅检查"
+            : config.data_update.auto_import
+              ? "自动下载并导入"
+              : "自动下载后等待确认",
+        ],
+        ["保留版本", `${config.data_update.keep_versions} 版`],
+        ["HTTP 超时", `${config.data_update.http_timeout_seconds} 秒`],
+        ["修改生效", config.data_update.hot_reload_supported ? "即时热重排" : "需要重启"],
+      ]),
     );
     status.textContent = config.restart_required
       ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
@@ -1951,6 +1984,13 @@ const configurationLockSelectors: Record<string, string[]> = {
   bangumi_http_timeout_seconds: ["#configuration-bangumi-timeout"],
   ai_use_metadata_match: ["#configuration-ai-metadata"],
   ai_http_timeout_seconds: ["#configuration-ai-timeout"],
+  data_update_enabled: ["#configuration-data-update-enabled"],
+  data_update_cron: ["#configuration-data-update-cron"],
+  data_update_manifest_url: ["#configuration-data-update-manifest"],
+  data_update_auto_download: ["#configuration-data-update-auto-download"],
+  data_update_auto_import: ["#configuration-data-update-auto-import"],
+  data_update_keep_versions: ["#configuration-data-update-keep"],
+  data_update_http_timeout_seconds: ["#configuration-data-update-timeout"],
 };
 
 function applyConfigurationLocks(
@@ -2022,6 +2062,31 @@ function openConfigurationEditor(): void {
   setConfigurationValue("#configuration-torrent-bytes", editable.torrent_max_response_bytes);
   setConfigurationValue("#configuration-torrent-redirects", editable.torrent_max_redirects);
   setConfigurationValue("#configuration-torrent-ttl", editable.torrent_staging_ttl_seconds);
+  setConfigurationChecked(
+    "#configuration-data-update-enabled",
+    editable.data_update_enabled,
+  );
+  setConfigurationValue("#configuration-data-update-cron", editable.data_update_cron);
+  setConfigurationValue(
+    "#configuration-data-update-manifest",
+    editable.data_update_manifest_url ?? "",
+  );
+  setConfigurationChecked(
+    "#configuration-data-update-auto-download",
+    editable.data_update_auto_download,
+  );
+  setConfigurationChecked(
+    "#configuration-data-update-auto-import",
+    editable.data_update_auto_import,
+  );
+  setConfigurationValue(
+    "#configuration-data-update-keep",
+    editable.data_update_keep_versions,
+  );
+  setConfigurationValue(
+    "#configuration-data-update-timeout",
+    editable.data_update_http_timeout_seconds,
+  );
   applyConfigurationLocks(editable.locked_fields);
   element<HTMLElement>("#configuration-message").textContent =
     `正在编辑 revision ${currentConfiguration.configuration_revision}`;
@@ -2086,6 +2151,20 @@ async function saveConfiguration(event: SubmitEvent): Promise<void> {
           element<HTMLInputElement>("#configuration-torrent-redirects").valueAsNumber,
         torrent_staging_ttl_seconds:
           element<HTMLInputElement>("#configuration-torrent-ttl").valueAsNumber,
+        data_update_enabled:
+          element<HTMLInputElement>("#configuration-data-update-enabled").checked,
+        data_update_cron:
+          element<HTMLInputElement>("#configuration-data-update-cron").value,
+        data_update_manifest_url:
+          element<HTMLInputElement>("#configuration-data-update-manifest").value || null,
+        data_update_auto_download:
+          element<HTMLInputElement>("#configuration-data-update-auto-download").checked,
+        data_update_auto_import:
+          element<HTMLInputElement>("#configuration-data-update-auto-import").checked,
+        data_update_keep_versions:
+          element<HTMLInputElement>("#configuration-data-update-keep").valueAsNumber,
+        data_update_http_timeout_seconds:
+          element<HTMLInputElement>("#configuration-data-update-timeout").valueAsNumber,
         expected_configuration_revision: currentConfiguration.configuration_revision,
       }),
     });
@@ -2095,7 +2174,9 @@ async function saveConfiguration(event: SubmitEvent): Promise<void> {
       restart_required: boolean;
     };
     await loadConfiguration();
-    message.textContent = `已保存 revision ${saved.configuration_revision}；重启主程序后生效。`;
+    message.textContent = saved.restart_required
+      ? `已保存 revision ${saved.configuration_revision}；数据更新策略已即时生效，其他修改需重启主程序。`
+      : `已保存 revision ${saved.configuration_revision}；数据更新策略与 Cron 已即时生效。`;
   } catch (error) {
     message.textContent = `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请刷新后重试。`;
   } finally {
@@ -2105,7 +2186,7 @@ async function saveConfiguration(event: SubmitEvent): Promise<void> {
 
 async function resetConfiguration(): Promise<void> {
   if (!currentConfiguration || currentConfiguration.configuration_revision === 0) return;
-  if (!window.confirm("恢复部署默认配置？重启主程序后生效。")) return;
+  if (!window.confirm("恢复部署默认配置？数据更新策略会立即恢复，其他修改仍需重启。")) return;
   const status = element<HTMLElement>("#configuration-status");
   status.textContent = "正在移除私密配置覆盖…";
   try {

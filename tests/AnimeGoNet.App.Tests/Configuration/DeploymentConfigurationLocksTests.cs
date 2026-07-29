@@ -76,4 +76,66 @@ public sealed class DeploymentConfigurationLocksTests
             ["tmdb_base_url", "ai_use_metadata_match"],
             locks.FindChangedLockedFields(deployment, candidate));
     }
+
+    [Fact]
+    public void AllDataUpdateEnvironmentFieldsAreLockedAndReapplied()
+    {
+        var defaults = AnimeGoDefaults.CreateNative(Path.GetTempPath());
+        var deployment = defaults with
+        {
+            DataUpdate = defaults.DataUpdate with
+            {
+                Enabled = true,
+                Cron = "0 5 4 * * ?",
+                ManifestUrl = new Uri("https://environment.invalid/manifest.json"),
+                AutoDownload = false,
+                AutoImport = false,
+                KeepVersions = 4,
+                HttpTimeout = TimeSpan.FromSeconds(45),
+            },
+        };
+        var candidate = deployment with
+        {
+            DataUpdate = deployment.DataUpdate with
+            {
+                Enabled = false,
+                Cron = "0 15 5 * * ?",
+                ManifestUrl = new Uri("https://private.invalid/manifest.json"),
+                AutoDownload = true,
+                AutoImport = true,
+                KeepVersions = 2,
+                HttpTimeout = TimeSpan.FromSeconds(90),
+            },
+        };
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+        [
+            "DATA_UPDATE_ENABLED",
+            "DATA_UPDATE_CRON",
+            "DATA_UPDATE_MANIFEST_URL",
+            "DATA_UPDATE_AUTO_DOWNLOAD",
+            "DATA_UPDATE_AUTO_IMPORT",
+            "DATA_UPDATE_KEEP_VERSIONS",
+            "DATA_UPDATE_TIMEOUT_SECOND",
+        ]);
+
+        var result = locks.Reapply(deployment, candidate);
+
+        Assert.Equal(deployment.DataUpdate, result.DataUpdate);
+        Assert.Equal(
+        [
+            "data_update_enabled",
+            "data_update_cron",
+            "data_update_manifest_url",
+            "data_update_auto_download",
+            "data_update_auto_import",
+            "data_update_keep_versions",
+            "data_update_http_timeout_seconds",
+        ],
+            locks.FindChangedLockedFields(deployment, candidate));
+        Assert.All(
+            locks.Items,
+            item => Assert.Contains(
+                item.EnvironmentVariables,
+                name => name.StartsWith("DATA_UPDATE_", StringComparison.Ordinal)));
+    }
 }

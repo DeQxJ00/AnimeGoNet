@@ -113,6 +113,14 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             123456,
             json.RootElement.GetProperty("torrent_fetch").GetProperty("max_response_bytes").GetInt64());
+        var dataUpdate = json.RootElement.GetProperty("data_update");
+        Assert.False(dataUpdate.GetProperty("enabled").GetBoolean());
+        Assert.Equal("0 0 4 * * ?", dataUpdate.GetProperty("cron").GetString());
+        Assert.Null(dataUpdate.GetProperty("manifest_url").GetString());
+        Assert.True(dataUpdate.GetProperty("auto_download").GetBoolean());
+        Assert.True(dataUpdate.GetProperty("auto_import").GetBoolean());
+        Assert.Equal(2, dataUpdate.GetProperty("keep_versions").GetInt32());
+        Assert.True(dataUpdate.GetProperty("hot_reload_supported").GetBoolean());
         Assert.DoesNotContain("local-access-secret", text, StringComparison.Ordinal);
         Assert.DoesNotContain("tmdb-api-secret", text, StringComparison.Ordinal);
         Assert.DoesNotContain("tmdb-bearer-secret", text, StringComparison.Ordinal);
@@ -139,6 +147,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-data-update-enabled\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-data-update-cron\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-data-update-manifest\"", html, StringComparison.Ordinal);
+        Assert.Contains("AnimeGoNetData 更新策略与 Cron 即时生效", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"TMDB 季度失败优先级\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"4\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"3\"", html, StringComparison.Ordinal);
@@ -181,7 +193,168 @@ public sealed class ConfigurationApiTests
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
         Assert.Contains("locked_fields", script, StringComparison.Ordinal);
+        Assert.Contains("data_update_manifest_url", script, StringComparison.Ordinal);
+        Assert.Contains("数据更新策略与 Cron 已即时生效", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DataUpdateOnlyWriteHotAppliesRuntimePolicyAndRevision()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            DataUpdatePayload(
+                expectedRevision: 0,
+                enabled: true,
+                cron: "0 15 4 * * ?",
+                manifestUrl: "https://updates.test.invalid/manifest.json",
+                autoDownload: false,
+                autoImport: false,
+                keepVersions: 4,
+                timeoutSeconds: 45));
+        using var writeJson = JsonDocument.Parse(await write.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+        Assert.Equal(1, writeJson.RootElement
+            .GetProperty("configuration_revision").GetInt64());
+        Assert.False(writeJson.RootElement.GetProperty("restart_required").GetBoolean());
+
+        using var configurationResponse = await app.Client.GetAsync("/api/v1/config");
+        using var configuration = JsonDocument.Parse(
+            await configurationResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(1, configuration.RootElement
+            .GetProperty("applied_configuration_revision").GetInt64());
+        Assert.False(configuration.RootElement.GetProperty("restart_required").GetBoolean());
+        var dataUpdate = configuration.RootElement.GetProperty("data_update");
+        Assert.True(dataUpdate.GetProperty("enabled").GetBoolean());
+        Assert.Equal("0 15 4 * * ?", dataUpdate.GetProperty("cron").GetString());
+        Assert.Equal(
+            "https://updates.test.invalid/manifest.json",
+            dataUpdate.GetProperty("manifest_url").GetString());
+        Assert.False(dataUpdate.GetProperty("auto_download").GetBoolean());
+        Assert.False(dataUpdate.GetProperty("auto_import").GetBoolean());
+        Assert.Equal(4, dataUpdate.GetProperty("keep_versions").GetInt32());
+        Assert.Equal(45, dataUpdate.GetProperty("http_timeout_seconds").GetDouble());
+
+        using var statusResponse = await app.Client.GetAsync("/api/v1/data-update");
+        using var status = JsonDocument.Parse(await statusResponse.Content.ReadAsStreamAsync());
+        Assert.True(status.RootElement.GetProperty("scheduled_enabled").GetBoolean());
+        Assert.Equal("0 15 4 * * ?", status.RootElement.GetProperty("cron").GetString());
+        Assert.True(status.RootElement.GetProperty("manifest_configured").GetBoolean());
+        Assert.False(status.RootElement.GetProperty("auto_download").GetBoolean());
+        Assert.False(status.RootElement.GetProperty("auto_import").GetBoolean());
+        Assert.Equal(4, status.RootElement.GetProperty("keep_versions").GetInt32());
+
+        var stored = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.True(stored.Settings?.DataUpdateEnabled);
+        Assert.Equal("0 15 4 * * ?", stored.Settings?.DataUpdateCron);
+        Assert.True(stored.Settings?.DataUpdateManifestUrlOverridden);
+        Assert.Equal(
+            "https://updates.test.invalid/manifest.json",
+            stored.Settings?.DataUpdateManifestUrl);
+    }
+
+    [Fact]
+    public async Task MixedWriteHotAppliesDataUpdateButLeavesOtherChangesPendingRestart()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            DataUpdatePayload(
+                expectedRevision: 0,
+                enabled: true,
+                cron: "0 20 4 * * ?",
+                manifestUrl: "https://updates.test.invalid/manifest.json",
+                tmdbLanguage: "ja-JP"));
+        using var writeJson = JsonDocument.Parse(await write.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+        Assert.True(writeJson.RootElement.GetProperty("restart_required").GetBoolean());
+
+        using var configurationResponse = await app.Client.GetAsync("/api/v1/config");
+        using var configuration = JsonDocument.Parse(
+            await configurationResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(0, configuration.RootElement
+            .GetProperty("applied_configuration_revision").GetInt64());
+        Assert.Equal("zh-CN", configuration.RootElement.GetProperty("metadata")
+            .GetProperty("tmdb").GetProperty("language").GetString());
+        Assert.Equal("ja-JP", configuration.RootElement.GetProperty("editable")
+            .GetProperty("tmdb_language").GetString());
+        Assert.Equal("0 20 4 * * ?", configuration.RootElement
+            .GetProperty("data_update").GetProperty("cron").GetString());
+    }
+
+    [Fact]
+    public async Task DataUpdateEnvironmentLockIsProjectedAndRejected()
+    {
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                DataUpdate = options.DataUpdate with
+                {
+                    Cron = "0 5 4 * * ?",
+                },
+            },
+            deploymentEnvironmentVariables: ["DATA_UPDATE_CRON"]);
+
+        using var currentResponse = await app.Client.GetAsync("/api/v1/config");
+        using var current = JsonDocument.Parse(
+            await currentResponse.Content.ReadAsStreamAsync());
+        var cronLock = Assert.Single(
+            current.RootElement.GetProperty("editable")
+                .GetProperty("locked_fields")
+                .EnumerateArray(),
+            item => item.GetProperty("field").GetString() == "data_update_cron");
+        Assert.Equal(
+            "DATA_UPDATE_CRON",
+            cronLock.GetProperty("environment_variables")[0].GetString());
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            DataUpdatePayload(
+                expectedRevision: 0,
+                enabled: false,
+                cron: "0 15 4 * * ?"));
+        var error = await write.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, write.StatusCode);
+        Assert.Contains("configuration_field_locked", error, StringComparison.Ordinal);
+        Assert.Contains("data_update_cron", error, StringComparison.Ordinal);
+        Assert.Equal(
+            0,
+            (await app.App.Services.GetRequiredService<ApplicationOverrideStore>()
+                .LoadAsync()).Revision);
+    }
+
+    [Fact]
+    public async Task ResetHotAppliesDeploymentDataUpdatePolicy()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            DataUpdatePayload(
+                expectedRevision: 0,
+                enabled: true,
+                cron: "0 25 4 * * ?",
+                manifestUrl: "https://updates.test.invalid/manifest.json"));
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+
+        using var reset = await app.Client.DeleteAsync(
+            "/api/v1/config?expected_revision=1");
+        using var resetJson = JsonDocument.Parse(await reset.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+        Assert.False(resetJson.RootElement.GetProperty("restart_required").GetBoolean());
+
+        using var statusResponse = await app.Client.GetAsync("/api/v1/data-update");
+        using var status = JsonDocument.Parse(await statusResponse.Content.ReadAsStreamAsync());
+        Assert.False(status.RootElement.GetProperty("scheduled_enabled").GetBoolean());
+        Assert.Equal("0 0 4 * * ?", status.RootElement.GetProperty("cron").GetString());
+        Assert.False(status.RootElement.GetProperty("manifest_configured").GetBoolean());
     }
 
     [Fact]
@@ -544,6 +717,63 @@ public sealed class ConfigurationApiTests
             torrent_max_response_bytes = 16 * 1024 * 1024,
             torrent_max_redirects = 3,
             torrent_staging_ttl_seconds = 900,
+            data_update_enabled = false,
+            data_update_cron = "0 0 4 * * ?",
+            data_update_manifest_url = (string?)null,
+            data_update_auto_download = true,
+            data_update_auto_import = true,
+            data_update_keep_versions = 2,
+            data_update_http_timeout_seconds = 300,
+            expected_configuration_revision = expectedRevision,
+        });
+        return new StringContent(json, Encoding.UTF8, "application/json");
+    }
+
+    private static StringContent DataUpdatePayload(
+        long expectedRevision,
+        bool enabled,
+        string cron,
+        string? manifestUrl = null,
+        bool autoDownload = true,
+        bool autoImport = true,
+        int keepVersions = 2,
+        double timeoutSeconds = 300,
+        string tmdbLanguage = "zh-CN")
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            tmdb_base_url = "https://api.themoviedb.org/",
+            tmdb_proxy_url = (string?)null,
+            tmdb_language = tmdbLanguage,
+            tmdb_http_timeout_seconds = 30,
+            tmdb_api_key = (string?)null,
+            clear_tmdb_api_key = false,
+            tmdb_read_access_token = (string?)null,
+            clear_tmdb_read_access_token = false,
+            bangumi_base_url = "https://api.bgm.tv/",
+            bangumi_proxy_url = (string?)null,
+            bangumi_http_timeout_seconds = 30,
+            season_failure_skip = false,
+            season_failure_backtrace = false,
+            season_failure_use_title_season = false,
+            season_failure_use_first_season = false,
+            ai_use_metadata_match = false,
+            ai_use_season_match = false,
+            ai_use_episode_match = false,
+            ai_http_timeout_seconds = 600,
+            tmdb_failure_use_bangumi = false,
+            mikan_trusted_offset_cache_enabled = false,
+            torrent_http_timeout_seconds = 30,
+            torrent_max_response_bytes = 16 * 1024 * 1024,
+            torrent_max_redirects = 3,
+            torrent_staging_ttl_seconds = 900,
+            data_update_enabled = enabled,
+            data_update_cron = cron,
+            data_update_manifest_url = manifestUrl,
+            data_update_auto_download = autoDownload,
+            data_update_auto_import = autoImport,
+            data_update_keep_versions = keepVersions,
+            data_update_http_timeout_seconds = timeoutSeconds,
             expected_configuration_revision = expectedRevision,
         });
         return new StringContent(json, Encoding.UTF8, "application/json");

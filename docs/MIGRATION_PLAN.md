@@ -450,7 +450,7 @@ docs/
   ```
 
 - `enabled=false` 只关闭后台调度，手动检查/导入仍可使用；`auto_download=false` 只提示新版本；`auto_import=false` 下载并校验后等待用户确认。
-- Web 修改这些字段时写回 YAML、备份并热重排 Cron；环境变量覆盖字段只能查看，不能伪装成已写入。
+- Web 修改这些字段时写入 `data_path/config/application.private.json` 的原子 revision 覆盖并热重排 Cron；不改写运维维护的部署 YAML。环境变量覆盖字段只能查看，不能伪装成已写入。
 - 先下载到临时目录，校验 size、SHA-256、schema 和最低客户端版本。
 - 使用流式 gzip + `JsonDocument`/源生成 DTO 读取，不把完整数据集加载到内存。
 - 在单独 SQLite staging 表批量导入，完成完整性检查后事务切换 active version。

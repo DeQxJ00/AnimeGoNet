@@ -254,7 +254,7 @@
 
 - [x] 确认独立数据仓库名称为 `AnimeGoNetData`；托管地址由该独立任务配置。
 - [x] 定义 `manifest.json`、subjects/episodes JSONL schema 和版本策略：v1 字段、兼容规则、不可变发布、确定性 gzip/JSONL、哈希/大小/数量/ID 范围与引用语义见 `docs/DATA_MANIFEST_V1.md`；主程序已有 NativeAOT-safe 严格 manifest 解析器。
-- [>] 定义并验证 `setting.data_update` YAML schema、默认值、环境变量覆盖和热重载行为：主程序已加入默认关闭、04:00 六字段 Cron、可空 manifest URL、自动下载/导入、保留 2 版和 300 秒超时的强类型模型及扁平配置绑定/校验；YAML 写回、环境锁和 Cron 热重排待实现。
+- [x] 定义并验证 `setting.data_update` 配置 schema、默认值、环境变量覆盖和热重载行为：主程序提供默认关闭、04:00 六字段 Cron、可空 manifest URL、自动下载/导入、保留 2 版和 300 秒超时的强类型绑定/校验；Web/API 使用 `data_path/config/application.private.json` 安全私有覆盖而不改写部署 YAML，采用 revision 原子写入。七个字段均支持环境变量只读锁；保存或恢复后共享运行快照与 Cron 任务立即热重排，其他配置字段仍明确要求重启。
 - [ ] 实现 Bangumi Archive 下载、校验、清洗、分片和 gzip。
 - [ ] 建立每日检查 + 手动触发 GitHub Action。
 - [ ] 建立数据唯一性、引用完整性、数量下限和确定性测试。
@@ -262,4 +262,4 @@
 - [x] AnimeGoNet 实现检查更新、流式下载、校验和 staging SQLite 导入：schema v28 已加入版本、运行审计、独立 staging 与版本化 Bangumi Archive 表；本地包导入会先验压缩文件大小/SHA-256，再以有界单行缓冲流式解 gzip/JSONL，校验字段、顺序、分片范围、计数、唯一 ID 与 Subject 引用。schema v29 记录检查/下载/导入阶段与已验证下载目录；HTTP 使用 headers-first、有界 manifest 和 64 KiB 流式 asset 下载，逐资产验证长度/SHA-256 后才原子移动到托管包目录。
 - [x] 实现事务切换、上版保留、失败回滚和离线手工导入：存储核心原子切换 active/previous、保留 2–10 版、支持显式回滚和同版本不可变/幂等；离线 ZIP API/WebUI 只接受根目录 `manifest.json + 声明资产`，流式落盘后逐条验证路径、长度、SHA-256、gzip/JSONL、数量和引用，再进入相同事务导入。全部失败路径保持旧 active 并清理 partial。
 - [x] Web UI 增加数据版本、更新时间、检查/更新/回滚状态：静态 TypeScript 页面已接入状态刷新、手动检查、仅下载、下载并导入、已下载包延后导入和上一版回滚；显示调度策略、传输字节进度、稳定失败码、active/previous、已安装版本与本地下载包，未配置 manifest 或无可回滚版本时禁用对应动作。
-- [>] 分别验证关闭调度、仅检查、自动下载待确认、自动导入和失败保留旧版：调度插件已按 `auto_download`/`auto_import` 映射三种动作，并有仅检查、只下载、延后手动导入、自动导入、HTTP/坏资产失败保持旧 active 的单元/SQLite 集成测试；配置写回后的 Cron 热重排和 Web E2E 待接入。
+- [x] 分别验证关闭调度、仅检查、自动下载待确认、自动导入和失败保留旧版：调度插件按 `auto_download`/`auto_import` 映射三种动作；单元/SQLite/API/浏览器测试覆盖仅检查、只下载、延后手动导入、自动导入、HTTP/坏资产失败保持旧 active、配置即时读取、Cron 增改删/失败回滚、环境锁、Web 表单和静态生产资源。

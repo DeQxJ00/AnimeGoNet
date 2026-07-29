@@ -1,4 +1,5 @@
 using System.Net;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.Data.DataUpdate;
 
@@ -184,6 +185,43 @@ public sealed class DataUpdateServiceTests
         Assert.Equal(
             "data_manifest_url_missing",
             (await fixture.Transfers.GetLastRunAsync())!.FailureCode);
+    }
+
+    [Fact]
+    public async Task UsesHotReloadedManifestAndTimeoutPolicyForNextOperation()
+    {
+        await using var fixture = await DataUpdateServiceFixture.CreateAsync();
+        var release = fixture.AddRelease("2026.07.29.hot");
+        var alternateManifest = new Uri("https://alternate-updates.test/manifest.json");
+        fixture.Handler.Set(
+            alternateManifest,
+            () => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(release.Manifest),
+            });
+        var runtime = new DataUpdateRuntimeState(fixture.Options.DataUpdate);
+        using var service = new DataUpdateService(
+            new HttpClient(fixture.Handler),
+            runtime,
+            fixture.Layout,
+            fixture.Packages,
+            fixture.Transfers,
+            new FixedTimeProvider(
+                new DateTimeOffset(2026, 7, 29, 14, 0, 0, TimeSpan.Zero)),
+            new Version(1, 0, 0),
+            ownsHttpClient: true);
+        runtime.Update(fixture.Options.DataUpdate with
+        {
+            ManifestUrl = alternateManifest,
+            HttpTimeout = TimeSpan.FromSeconds(45),
+        });
+
+        var result = await service.ExecuteAsync(
+            DataUpdateTriggerKinds.Manual,
+            DataUpdateActions.Check);
+
+        Assert.Equal(DataUpdateTransferStatuses.UpdateAvailable, result.Status);
+        Assert.Equal([alternateManifest], fixture.Handler.Requests);
     }
 
     [Fact]

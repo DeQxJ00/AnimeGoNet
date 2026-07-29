@@ -18,14 +18,14 @@ AnimeGoNet.slnx
 
 内置目录当前包含 source `mikan/u2/ttg`、feed `mikan-rss`、parser `mikan-title`、filter `mikan-tool`、rename `anime-library` 和 schedule `staged-torrent-dispatch`。Legacy RSS API、Mikan 批次过滤/解析、媒体整理和 staging worker 都从同一个目录按稳定 ID 取得实现；同步静态入口仅保留为测试/兼容 facade。目录中没有 Python 条目，主程序也没有解释器、脚本执行、程序集扫描或动态 DLL 加载路径。
 
-`PluginScheduleCoordinator` 是编译期 schedule 插件的统一 Cron 宿主。它使用无反射的纯 C# 六字段解析器，注册时固定插件 ID、参数、时区、`StartRun` 和下一次执行时间；运行中增删任务会唤醒等待，不依赖轮询配置。每个触发独立执行，失败最多三次且间隔三秒；应用停止令牌会同时取消等待、重试和插件调用，HostedService 在退出前回收仍在运行的调用。具体 Bangumi Archive、数据库刷新和 feed 任务仍作为后续显式内置注册实现，不通过程序集扫描自动出现。
+`PluginScheduleCoordinator` 是编译期 schedule 插件的统一 Cron 宿主。它使用无反射的纯 C# 六字段解析器，注册时固定插件 ID、参数、时区、`StartRun` 和下一次执行时间；运行中增删任务会唤醒等待，不依赖轮询配置。每个触发独立执行，失败最多三次且间隔三秒；应用停止令牌会同时取消等待、重试和插件调用，HostedService 在退出前回收仍在运行的调用。目录数据库与 AnimeGoNetData 更新均以编译期内置 schedule 插件注册，不通过程序集扫描自动出现。`DataUpdateScheduleManager` 串行执行移除/重建：新 Cron 无效时恢复旧任务与旧运行快照，禁用只移除定时任务；没有启动后台 worker 时仍更新手动 API 使用的运行策略，但不创建假调度。
 
 上游 Go 源码位于独立的 `AnimeGo` 目录和 Git 仓库，仅作为差分 fixture 与业务行为索引；本仓库只保存 `DotnetProject` 的 C# 主程序、测试、文档和交付资产，两边不共享 Git 历史。
 
 ## 2. 配置、数据与目录真相源
 
 - 部署配置文件保存监听地址、Access Key、`data_path`、`download_path`、`save_path`、命名 qBittorrent 实例、路径映射、TMDB/AI 连接与更新策略。
-- 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。Web/API 写入的 qB 覆盖位于 `data_path/config/downloaders.private.json`，TMDB/季度失败链/AI/offset/Torrent 覆盖位于 `data_path/config/application.private.json`；两者都采用 source-generated JSON、revision、同目录临时文件原子替换，Unix 权限为 `0600`。这些文件属于部署 secret，必须随 data_path 一起保护且不得提交。
+- 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。Web/API 写入的 qB 覆盖位于 `data_path/config/downloaders.private.json`，TMDB/季度失败链/AI/offset/Torrent/AnimeGoNetData 更新覆盖位于 `data_path/config/application.private.json`；两者都采用 source-generated JSON、revision、同目录临时文件原子替换，Unix 权限为 `0600`。这些文件属于部署 secret，必须随 data_path 一起保护且不得提交。Web 不直接改写运维人员维护的部署 YAML，避免注释/格式丢失、secret 混入和环境覆盖被伪装成写入成功；data update 七个字段保存后例外地热应用，其他应用覆盖继续在重启后整体生效。
 - SQLite 保存来源 profile、规则、动画、任务、匹配尝试、下载/整理状态、完成记录和审计，不复制密码等部署配置。
 - Docker 默认路径固定为 `data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。Compose 必须把 AnimeGoNet 与 qBittorrent 的共同宿主父目录映射为同一容器内 `/download`。
 

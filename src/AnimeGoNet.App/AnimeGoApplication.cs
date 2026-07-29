@@ -103,6 +103,7 @@ public static class AnimeGoApplication
         {
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
         }
+        var dataUpdateRuntime = new DataUpdateRuntimeState(options.DataUpdate);
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var dataPackages = new DataPackageStore(database);
@@ -114,7 +115,7 @@ public static class AnimeGoApplication
         };
         var dataUpdates = new DataUpdateService(
             dataUpdateHttpClient,
-            options,
+            dataUpdateRuntime,
             layout,
             dataPackages,
             dataUpdateTransfers,
@@ -157,6 +158,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new DeploymentConfigurationOptions(deploymentOptions));
         builder.Services.AddSingleton(configurationLocks);
+        builder.Services.AddSingleton(dataUpdateRuntime);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(new RuntimeConfigurationState(
             runningInContainer.Value,
@@ -207,6 +209,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<RssFeedReader>();
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
         builder.Services.AddSingleton<PluginScheduleCoordinator>();
+        builder.Services.AddSingleton<DataUpdateScheduleManager>();
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloaderAdminStore>();
         builder.Services.AddSingleton<DownloadPreparationStore>();

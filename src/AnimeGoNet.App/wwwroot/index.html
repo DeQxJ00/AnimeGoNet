@@ -712,7 +712,7 @@
         </div>
         <button id="configuration-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
-      <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；所有修改均在重启后生效。</p>
+      <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；AnimeGoNetData 更新策略与 Cron 即时生效，其他修改仍需重启。</p>
       <p id="configuration-lock-summary" class="configuration-lock-summary muted" aria-live="polite">正在读取部署环境锁定状态…</p>
       <div class="configuration-form-grid">
         <label class="wide">TMDB API 地址<input id="configuration-tmdb-url" type="url" required placeholder="https://api.themoviedb.org/"></label>
@@ -767,11 +767,27 @@
         <label>Torrent 最大响应（bytes）<input id="configuration-torrent-bytes" type="number" min="1" max="1073741824" required></label>
         <label>Torrent 最大跳转<input id="configuration-torrent-redirects" type="number" min="0" max="10" required></label>
         <label>Torrent 暂存 TTL（秒）<input id="configuration-torrent-ttl" type="number" min="1" max="604800" required></label>
+        <fieldset class="wide configuration-data-update-editor">
+          <legend>AnimeGoNetData 更新</legend>
+          <p class="configuration-data-update-caption">保存后立即替换定时任务，无需重启。启用定时更新时必须填写 Manifest URL；关闭只停止定时任务，不影响手动检查、下载、导入和离线包导入。</p>
+          <div class="configuration-data-update-grid">
+            <label class="configuration-guided-option wide">
+              <input id="configuration-data-update-enabled" type="checkbox">
+              <span><strong>启用定时更新</strong><small>按下方六字段 Cron 执行已配置的自动策略。</small></span>
+            </label>
+            <label class="wide">六字段 Cron（秒 分 时 日 月 周）<input id="configuration-data-update-cron" required maxlength="256" placeholder="0 0 4 * * *"></label>
+            <label class="wide">Manifest URL（启用时必填）<input id="configuration-data-update-manifest" type="url" maxlength="2048" placeholder="https://example.invalid/animegonet-data/manifest.json"></label>
+            <label><input id="configuration-data-update-auto-download" type="checkbox">检查后自动下载</label>
+            <label><input id="configuration-data-update-auto-import" type="checkbox">下载后自动导入</label>
+            <label>保留版本数<input id="configuration-data-update-keep" type="number" min="2" max="10" required></label>
+            <label>HTTP 超时（秒）<input id="configuration-data-update-timeout" type="number" min="1" max="3600" required></label>
+          </div>
+        </fieldset>
       </div>
       <p id="configuration-message" class="delete-message" aria-live="polite"></p>
       <div class="delete-actions">
         <span class="muted">保存采用 revision 乐观并发。</span>
-        <button id="configuration-save" type="submit" class="primary-button">保存并等待重启</button>
+        <button id="configuration-save" type="submit" class="primary-button">保存配置</button>
       </div>
     </form>
   </dialog>

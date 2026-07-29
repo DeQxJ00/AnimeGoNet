@@ -124,6 +124,13 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-form-grid fieldset label.configuration-guided-option { flex: 1 1 100%; align-items: flex-start; padding: 9px 10px; border: 1px solid #68598b; border-radius: 10px; background: rgba(40,31,65,.4); }
 .configuration-guided-option > span { display: grid; gap: 3px; }
 .configuration-guided-option small { color: #a99bc9; font-size: .7rem; line-height: 1.45; }
+.configuration-form-grid fieldset.configuration-data-update-editor { display: block; }
+.configuration-data-update-caption { margin: 0 0 12px; color: #9fb0d0; font-size: .78rem; line-height: 1.55; }
+.configuration-data-update-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.configuration-data-update-grid > label { color: #8da2c9; font-size: .75rem; }
+.configuration-data-update-grid > label:not(.configuration-guided-option) { display: block; }
+.configuration-data-update-grid input:not([type="checkbox"]) { width: 100%; margin-top: 6px; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; font: inherit; }
+.configuration-data-update-grid .wide { grid-column: 1 / -1; }
 .configuration-form-grid input[type="checkbox"] { accent-color: #59d3a5; }
 .configuration-secret-state { margin: -5px 0 2px; color: #8da2c9; font-size: .75rem; }
 .configuration-lock-summary { margin: 0; padding: 9px 11px; border: 1px solid transparent; border-radius: 9px; font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
@@ -441,6 +448,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .configuration-grid { grid-template-columns: 1fr; }
   .configuration-form-grid { grid-template-columns: 1fr; }
   .configuration-form-grid .wide { grid-column: auto; }
+  .configuration-data-update-grid { grid-template-columns: 1fr; }
+  .configuration-data-update-grid .wide { grid-column: auto; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
   .source-workspace, .source-form-grid, .manual-submit-grid, .manual-submit-fields, .mikan-work-rule-grid, .mikan-work-rule-fields { grid-template-columns: 1fr; }

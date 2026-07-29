@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Cryptography;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.DataUpdate;
 using AnimeGoNet.Data.DataUpdate;
@@ -14,7 +15,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
     private const int DownloadBufferBytes = 64 * 1024;
     private const long ProgressCheckpointBytes = 4L * 1024 * 1024;
     private readonly HttpClient _httpClient;
-    private readonly AnimeGoOptions _options;
+    private readonly DataUpdateRuntimeState _runtimeOptions;
     private readonly DirectoryLayout _layout;
     private readonly DataPackageStore _packages;
     private readonly DataUpdateTransferStore _transfers;
@@ -32,9 +33,30 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         TimeProvider? timeProvider = null,
         Version? clientVersion = null,
         bool ownsHttpClient = false)
+        : this(
+            httpClient,
+            new DataUpdateRuntimeState(options.DataUpdate),
+            layout,
+            packages,
+            transfers,
+            timeProvider,
+            clientVersion,
+            ownsHttpClient)
+    {
+    }
+
+    public DataUpdateService(
+        HttpClient httpClient,
+        DataUpdateRuntimeState runtimeOptions,
+        DirectoryLayout layout,
+        DataPackageStore packages,
+        DataUpdateTransferStore transfers,
+        TimeProvider? timeProvider = null,
+        Version? clientVersion = null,
+        bool ownsHttpClient = false)
     {
         _httpClient = httpClient;
-        _options = options;
+        _runtimeOptions = runtimeOptions;
         _layout = layout;
         _packages = packages;
         _transfers = transfers;
@@ -56,6 +78,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         }
 
         var now = _timeProvider.GetUtcNow();
+        var dataUpdateOptions = _runtimeOptions.Value;
         string? runId = null;
         long downloadedBytes = 0;
         long totalBytes = 0;
@@ -66,12 +89,12 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 requestedAction,
                 now,
                 cancellationToken).ConfigureAwait(false);
-            var manifestUrl = _options.DataUpdate.ManifestUrl
+            var manifestUrl = dataUpdateOptions.ManifestUrl
                 ?? throw Error(
                     "data_manifest_url_missing",
                     "A data update manifest URL is not configured.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(_options.DataUpdate.HttpTimeout);
+            timeout.CancelAfter(dataUpdateOptions.HttpTimeout);
             var manifestBytes = await DownloadManifestAsync(manifestUrl, timeout.Token)
                 .ConfigureAwait(false);
             var manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
@@ -224,7 +247,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     manifestSha256,
                     packageDirectory,
                     _clientVersion,
-                    _options.DataUpdate.KeepVersions,
+                    dataUpdateOptions.KeepVersions,
                     _timeProvider.GetUtcNow()),
                 timeout.Token).ConfigureAwait(false);
             await _transfers.MarkImportedAsync(
@@ -355,6 +378,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         }
 
         string? runId = null;
+        var dataUpdateOptions = _runtimeOptions.Value;
         try
         {
             runId = await _transfers.StartAsync(
@@ -400,7 +424,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     manifestSha,
                     packageDirectory,
                     _clientVersion,
-                    _options.DataUpdate.KeepVersions,
+                    dataUpdateOptions.KeepVersions,
                     _timeProvider.GetUtcNow()),
                 cancellationToken).ConfigureAwait(false);
             await _transfers.MarkImportedAsync(
@@ -498,6 +522,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         }
 
         string? runId = null;
+        var dataUpdateOptions = _runtimeOptions.Value;
         OfflineDataPackage? offlinePackage = null;
         long transferredBytes = 0;
         var totalBytes = contentLength ?? 0;
@@ -556,7 +581,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     offlinePackage.ManifestSha256,
                     packageDirectory,
                     _clientVersion,
-                    _options.DataUpdate.KeepVersions,
+                    dataUpdateOptions.KeepVersions,
                     _timeProvider.GetUtcNow()),
                 cancellationToken).ConfigureAwait(false);
             await _transfers.MarkImportedAsync(

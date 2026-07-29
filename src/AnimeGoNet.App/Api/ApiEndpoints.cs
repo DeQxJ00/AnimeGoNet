@@ -14,6 +14,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Ingest;
@@ -172,7 +173,7 @@ public static class ApiEndpoints
             status.LastCompletedAtUtc);
 
     private static async Task<Ok<DataUpdateStatusResponse>> GetDataUpdateStatus(
-        AnimeGoOptions options,
+        DataUpdateRuntimeState runtimeOptions,
         DataPackageStore packages,
         DataUpdateTransferStore transfers,
         CancellationToken cancellationToken)
@@ -180,13 +181,14 @@ public static class ApiEndpoints
         var package = await packages.GetStatusAsync(cancellationToken).ConfigureAwait(false);
         var downloads = await transfers.ListDownloadsAsync(cancellationToken).ConfigureAwait(false);
         var transfer = await transfers.GetLastRunAsync(cancellationToken).ConfigureAwait(false);
+        var options = runtimeOptions.Value;
         return TypedResults.Ok(new DataUpdateStatusResponse(
-            options.DataUpdate.Enabled,
-            options.DataUpdate.Cron,
-            options.DataUpdate.ManifestUrl is not null,
-            options.DataUpdate.AutoDownload,
-            options.DataUpdate.AutoImport,
-            options.DataUpdate.KeepVersions,
+            options.Enabled,
+            options.Cron,
+            options.ManifestUrl is not null,
+            options.AutoDownload,
+            options.AutoImport,
+            options.KeepVersions,
             package.ActiveVersion,
             package.PreviousVersion,
             package.UpdatedAtUtc,
@@ -666,14 +668,16 @@ public static class ApiEndpoints
         DeploymentConfigurationLocks locks,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
+        DataUpdateRuntimeState dataUpdateRuntime,
         CancellationToken cancellationToken)
     {
         var snapshot = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
         var desired = locks.Reapply(
             deployment.Value,
             ApplicationOverrideStore.Apply(deployment.Value, snapshot));
+        var runtimeOptions = options with { DataUpdate = dataUpdateRuntime.Value };
         return TypedResults.Ok(ToConfigurationResponse(
-            options,
+            runtimeOptions,
             desired,
             snapshot.Settings,
             runtime,
@@ -688,6 +692,8 @@ public static class ApiEndpoints
         DeploymentConfigurationLocks locks,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
+        AnimeGoOptions options,
+        DataUpdateScheduleManager dataUpdateSchedules,
         CancellationToken cancellationToken)
     {
         try
@@ -756,6 +762,13 @@ public static class ApiEndpoints
                 settings,
                 request.ExpectedConfigurationRevision,
                 cancellationToken).ConfigureAwait(false);
+            await dataUpdateSchedules.ApplyAsync(
+                candidate.DataUpdate,
+                CancellationToken.None).ConfigureAwait(false);
+            if (!RequiresRestart(options, candidate))
+            {
+                applied.MarkApplied(saved.Revision);
+            }
             return TypedResults.Ok(new ConfigurationWriteResponse(
                 saved.Revision,
                 RestartRequired: saved.Revision != applied.AppliedRevision,
@@ -773,6 +786,15 @@ public static class ApiEndpoints
                 "configuration_field_locked",
                 exception.Message));
         }
+        catch (PluginScheduleException)
+        {
+            return Results.Json(
+                Error(
+                    "configuration_hot_apply_failed",
+                    "Configuration was saved but data update scheduling could not be applied; restart the application."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
         catch (ArgumentException exception)
         {
             return TypedResults.BadRequest(Error("configuration_invalid", exception.Message));
@@ -781,13 +803,25 @@ public static class ApiEndpoints
 
     private static async Task<IResult> DeleteConfigurationOverride(
         [FromQuery(Name = "expected_revision")] long expectedRevision,
+        AnimeGoOptions options,
+        DeploymentConfigurationOptions deployment,
+        DeploymentConfigurationLocks locks,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
+        DataUpdateScheduleManager dataUpdateSchedules,
         CancellationToken cancellationToken)
     {
         try
         {
             var saved = await store.DeleteAsync(expectedRevision, cancellationToken).ConfigureAwait(false);
+            var candidate = locks.Reapply(deployment.Value, deployment.Value);
+            await dataUpdateSchedules.ApplyAsync(
+                candidate.DataUpdate,
+                CancellationToken.None).ConfigureAwait(false);
+            if (!RequiresRestart(options, candidate))
+            {
+                applied.MarkApplied(saved.Revision);
+            }
             return TypedResults.Ok(new ConfigurationWriteResponse(
                 saved.Revision,
                 RestartRequired: saved.Revision != applied.AppliedRevision,
@@ -798,6 +832,15 @@ public static class ApiEndpoints
             return TypedResults.Conflict(Error(
                 "configuration_revision_conflict",
                 "Configuration changed concurrently; reload before reverting."));
+        }
+        catch (PluginScheduleException)
+        {
+            return Results.Json(
+                Error(
+                    "configuration_hot_apply_failed",
+                    "Configuration override was removed but data update scheduling could not be applied; restart the application."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status500InternalServerError);
         }
         catch (ArgumentOutOfRangeException exception)
         {
@@ -819,6 +862,7 @@ public static class ApiEndpoints
         var season = options.Metadata.SeasonFailure;
         var ai = options.Metadata.Ai;
         var fetch = options.TorrentFetch;
+        var dataUpdate = options.DataUpdate;
         return new ConfigurationResponse(
             configurationRevision,
             appliedConfigurationRevision,
@@ -869,6 +913,15 @@ public static class ApiEndpoints
                 fetch.MaxResponseBytes,
                 fetch.MaxRedirects,
                 fetch.StagingTtl.TotalSeconds),
+            new DataUpdateConfigurationResponse(
+                dataUpdate.Enabled,
+                dataUpdate.Cron,
+                dataUpdate.ManifestUrl?.AbsoluteUri,
+                dataUpdate.AutoDownload,
+                dataUpdate.AutoImport,
+                dataUpdate.KeepVersions,
+                dataUpdate.HttpTimeout.TotalSeconds,
+                HotReloadSupported: true),
             ToEditableConfiguration(desired, settings, locks));
     }
 
@@ -882,6 +935,7 @@ public static class ApiEndpoints
         var season = desired.Metadata.SeasonFailure;
         var ai = desired.Metadata.Ai;
         var fetch = desired.TorrentFetch;
+        var dataUpdate = desired.DataUpdate;
         return new EditableConfigurationResponse(
             tmdb.BaseUrl.AbsoluteUri,
             tmdb.ProxyUrl?.AbsoluteUri,
@@ -908,6 +962,13 @@ public static class ApiEndpoints
             fetch.MaxResponseBytes,
             fetch.MaxRedirects,
             fetch.StagingTtl.TotalSeconds,
+            dataUpdate.Enabled,
+            dataUpdate.Cron,
+            dataUpdate.ManifestUrl?.AbsoluteUri,
+            dataUpdate.AutoDownload,
+            dataUpdate.AutoImport,
+            dataUpdate.KeepVersions,
+            dataUpdate.HttpTimeout.TotalSeconds,
             locks.Items.Select(item => new ConfigurationFieldLockResponse(
                 item.Field,
                 "environment",
@@ -963,6 +1024,24 @@ public static class ApiEndpoints
         ValidateSeconds(request.AiHttpTimeoutSeconds, "ai_http_timeout_seconds", 86_400);
         ValidateSeconds(request.TorrentHttpTimeoutSeconds, "torrent_http_timeout_seconds", 86_400);
         ValidateSeconds(request.TorrentStagingTtlSeconds, "torrent_staging_ttl_seconds", 604_800);
+        ValidateSeconds(
+            request.DataUpdateHttpTimeoutSeconds,
+            "data_update_http_timeout_seconds",
+            3_600);
+        var dataUpdateCron = request.DataUpdateCron?.Trim()
+            ?? throw new ArgumentException("data_update_cron is required.");
+        if (dataUpdateCron.Length is < 1 or > 256)
+        {
+            throw new ArgumentException("data_update_cron must contain 1 to 256 characters.");
+        }
+        var dataUpdateManifestUrl = NormalizeOptionalUrl(
+            request.DataUpdateManifestUrl,
+            "data_update_manifest_url");
+        if (request.DataUpdateKeepVersions is < 2 or > 10)
+        {
+            throw new ArgumentException(
+                "data_update_keep_versions must be between 2 and 10.");
+        }
         if (request.TorrentMaxResponseBytes is < 1 or > 1_073_741_824)
         {
             throw new ArgumentException(
@@ -1015,8 +1094,19 @@ public static class ApiEndpoints
             BangumiProxyUrlOverridden: true,
             BangumiProxyUrl: bangumiProxyUrl,
             BangumiHttpTimeoutSeconds: request.BangumiHttpTimeoutSeconds,
-            AiUseMetadataMatch: aiUseMetadataMatch);
+            AiUseMetadataMatch: aiUseMetadataMatch,
+            DataUpdateEnabled: request.DataUpdateEnabled,
+            DataUpdateCron: dataUpdateCron,
+            DataUpdateManifestUrlOverridden: true,
+            DataUpdateManifestUrl: dataUpdateManifestUrl,
+            DataUpdateAutoDownload: request.DataUpdateAutoDownload,
+            DataUpdateAutoImport: request.DataUpdateAutoImport,
+            DataUpdateKeepVersions: request.DataUpdateKeepVersions,
+            DataUpdateHttpTimeoutSeconds: request.DataUpdateHttpTimeoutSeconds);
     }
+
+    private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate) =>
+        current != candidate with { DataUpdate = current.DataUpdate };
 
     private static void ValidateSeconds(double value, string name, double maximum)
     {

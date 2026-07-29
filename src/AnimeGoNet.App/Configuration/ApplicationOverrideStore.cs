@@ -33,14 +33,33 @@ public sealed record ApplicationOverrideEntry(
     string? BangumiProxyUrl = null,
     double? BangumiHttpTimeoutSeconds = null,
     bool? AiUseMetadataMatch = null,
-    IReadOnlyList<string>? InheritedFields = null);
+    IReadOnlyList<string>? InheritedFields = null,
+    bool? DataUpdateEnabled = null,
+    string? DataUpdateCron = null,
+    bool? DataUpdateManifestUrlOverridden = null,
+    string? DataUpdateManifestUrl = null,
+    bool? DataUpdateAutoDownload = null,
+    bool? DataUpdateAutoImport = null,
+    int? DataUpdateKeepVersions = null,
+    double? DataUpdateHttpTimeoutSeconds = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
     long Revision,
     ApplicationOverrideEntry? Settings);
 
-public sealed record ApplicationConfigurationRuntimeState(long AppliedRevision);
+public sealed class ApplicationConfigurationRuntimeState(long appliedRevision)
+{
+    private long _appliedRevision = appliedRevision;
+
+    public long AppliedRevision => Interlocked.Read(ref _appliedRevision);
+
+    public void MarkApplied(long revision)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(revision);
+        Interlocked.Exchange(ref _appliedRevision, revision);
+    }
+}
 
 public sealed class ApplicationOverrideRevisionException : InvalidOperationException;
 
@@ -167,6 +186,32 @@ public sealed class ApplicationOverrideStore : IDisposable
             : settings.BangumiProxyUrlOverridden == true
             ? ParseOptionalUri(settings.BangumiProxyUrl, "Bangumi proxy URL")
             : options.Metadata.Bangumi.ProxyUrl;
+        var dataUpdate = options.DataUpdate with
+        {
+            Enabled = !inheritedFields.Contains("data_update_enabled")
+                ? settings.DataUpdateEnabled ?? options.DataUpdate.Enabled
+                : options.DataUpdate.Enabled,
+            Cron = !inheritedFields.Contains("data_update_cron")
+                ? settings.DataUpdateCron ?? options.DataUpdate.Cron
+                : options.DataUpdate.Cron,
+            ManifestUrl = !inheritedFields.Contains("data_update_manifest_url")
+                && settings.DataUpdateManifestUrlOverridden == true
+                ? ParseOptionalUri(settings.DataUpdateManifestUrl, "data update manifest URL")
+                : options.DataUpdate.ManifestUrl,
+            AutoDownload = !inheritedFields.Contains("data_update_auto_download")
+                ? settings.DataUpdateAutoDownload ?? options.DataUpdate.AutoDownload
+                : options.DataUpdate.AutoDownload,
+            AutoImport = !inheritedFields.Contains("data_update_auto_import")
+                ? settings.DataUpdateAutoImport ?? options.DataUpdate.AutoImport
+                : options.DataUpdate.AutoImport,
+            KeepVersions = !inheritedFields.Contains("data_update_keep_versions")
+                ? settings.DataUpdateKeepVersions ?? options.DataUpdate.KeepVersions
+                : options.DataUpdate.KeepVersions,
+            HttpTimeout = !inheritedFields.Contains("data_update_http_timeout_seconds")
+                && settings.DataUpdateHttpTimeoutSeconds is > 0
+                ? TimeSpan.FromSeconds(settings.DataUpdateHttpTimeoutSeconds.Value)
+                : options.DataUpdate.HttpTimeout,
+        };
 
         return options with
         {
@@ -227,6 +272,7 @@ public sealed class ApplicationOverrideStore : IDisposable
                 MaxRedirects = settings.TorrentMaxRedirects,
                 StagingTtl = TimeSpan.FromSeconds(settings.TorrentStagingTtlSeconds),
             },
+            DataUpdate = dataUpdate,
         };
     }
 

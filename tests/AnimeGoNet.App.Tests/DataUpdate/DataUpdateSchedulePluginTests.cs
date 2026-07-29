@@ -1,4 +1,5 @@
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Plugins;
 using AnimeGoNet.Core.Configuration;
@@ -28,7 +29,9 @@ public sealed class DataUpdateSchedulePluginTests
                 AutoImport = autoImport,
             },
         };
-        var plugin = new DataUpdateSchedulePlugin(service, options);
+        var plugin = new DataUpdateSchedulePlugin(
+            service,
+            new DataUpdateRuntimeState(options.DataUpdate));
 
         var result = await plugin.ExecuteAsync(Context(), CancellationToken.None);
 
@@ -48,12 +51,34 @@ public sealed class DataUpdateSchedulePluginTests
         };
         var plugin = new DataUpdateSchedulePlugin(
             service,
-            AnimeGoDefaults.CreateNative(Path.GetTempPath()));
+            new DataUpdateRuntimeState(
+                AnimeGoDefaults.CreateNative(Path.GetTempPath()).DataUpdate));
 
         var result = await plugin.ExecuteAsync(Context(), CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("data_manifest_http_failed", Assert.Single(result.Errors).Code);
+    }
+
+    [Fact]
+    public async Task ReadsHotReloadedAutoPolicyOnEveryScheduledExecution()
+    {
+        var service = new RecordingDataUpdateService();
+        var initial = AnimeGoDefaults.CreateNative(Path.GetTempPath()).DataUpdate with
+        {
+            AutoDownload = false,
+            AutoImport = false,
+        };
+        var runtime = new DataUpdateRuntimeState(initial);
+        var plugin = new DataUpdateSchedulePlugin(service, runtime);
+
+        await plugin.ExecuteAsync(Context(), CancellationToken.None);
+        Assert.Equal(DataUpdateActions.Check, service.RequestedAction);
+
+        runtime.Update(initial with { AutoDownload = true, AutoImport = true });
+        await plugin.ExecuteAsync(Context(), CancellationToken.None);
+
+        Assert.Equal(DataUpdateActions.DownloadImport, service.RequestedAction);
     }
 
     private static ScheduledContext Context() =>

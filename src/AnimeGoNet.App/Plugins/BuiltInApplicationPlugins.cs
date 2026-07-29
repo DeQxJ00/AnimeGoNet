@@ -1,5 +1,6 @@
 using System.Globalization;
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Feeds;
@@ -228,7 +229,7 @@ internal sealed class DirectoryDatabaseRefreshSchedulePlugin(
 
 internal sealed class DataUpdateSchedulePlugin(
     IDataUpdateService service,
-    AnimeGoOptions options) : IScheduledPlugin
+    DataUpdateRuntimeState runtimeOptions) : IScheduledPlugin
 {
     public PluginDescriptor Descriptor { get; } =
         new(
@@ -244,9 +245,10 @@ internal sealed class DataUpdateSchedulePlugin(
     {
         try
         {
-            var action = !options.DataUpdate.AutoDownload
+            var options = runtimeOptions.Value;
+            var action = !options.AutoDownload
                 ? DataUpdateActions.Check
-                : options.DataUpdate.AutoImport
+                : options.AutoImport
                     ? DataUpdateActions.DownloadImport
                     : DataUpdateActions.Download;
             var result = await service.ExecuteAsync(
