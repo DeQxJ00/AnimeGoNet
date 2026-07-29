@@ -94,6 +94,7 @@ public static class ApiEndpoints
         app.MapPost(
             "/api/v1/data-update/downloads/{dataVersion}/import",
             ImportDownloadedDataUpdate);
+        app.MapPost("/api/v1/data-update/offline/import", ImportOfflineDataUpdate);
         app.MapPost("/api/v1/data-update/rollback", RollbackDataUpdate);
         app.MapGet(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
@@ -289,6 +290,69 @@ public static class ApiEndpoints
         }
     }
 
+    private static async Task<IResult> ImportOfflineDataUpdate(
+        HttpContext context,
+        IDataUpdateService service,
+        CancellationToken cancellationToken)
+    {
+        var mediaType = context.Request.ContentType?.Split(';', 2)[0].Trim();
+        if (!string.Equals(mediaType, "application/zip", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
+                mediaType,
+                "application/octet-stream",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Json(
+                Error(
+                    "data_offline_content_type_invalid",
+                    "Offline data packages must be uploaded as a ZIP request body."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
+        }
+        if (context.Request.ContentLength is > OfflineDataPackageArchive.MaximumArchiveBytes)
+        {
+            return Results.Json(
+                Error(
+                    "data_offline_archive_size_invalid",
+                    "The offline data archive exceeds the supported size."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+        var requestSize = context.Features.Get<
+            Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+        if (requestSize is { IsReadOnly: false })
+        {
+            requestSize.MaxRequestBodySize = OfflineDataPackageArchive.MaximumArchiveBytes;
+        }
+
+        try
+        {
+            var result = await service.ImportOfflineArchiveAsync(
+                context.Request.Body,
+                context.Request.ContentLength,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(result));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (BadHttpRequestException exception)
+            when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
+        {
+            return Results.Json(
+                Error(
+                    "data_offline_archive_size_invalid",
+                    "The offline data archive exceeds the supported size."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+        catch (DataUpdateServiceException exception)
+        {
+            return DataUpdateFailure(exception, offlineUpload: true);
+        }
+    }
+
     private static async Task<IResult> RollbackDataUpdate(
         DataPackageStore packages,
         CancellationToken cancellationToken)
@@ -328,19 +392,31 @@ public static class ApiEndpoints
             result.Downloaded,
             result.Imported);
 
-    private static IResult DataUpdateFailure(DataUpdateServiceException exception)
+    private static IResult DataUpdateFailure(
+        DataUpdateServiceException exception,
+        bool offlineUpload = false)
     {
-        var statusCode = exception.Code switch
-        {
-            "data_update_busy" => StatusCodes.Status409Conflict,
-            "data_download_not_found" => StatusCodes.Status404NotFound,
-            "data_rollback_version_unavailable" => StatusCodes.Status409Conflict,
-            "data_manifest_url_missing" => StatusCodes.Status400BadRequest,
-            "data_client_version_too_old" => StatusCodes.Status409Conflict,
-            "data_version_immutable_conflict" => StatusCodes.Status409Conflict,
-            "data_update_cancelled" => 499,
-            _ => StatusCodes.Status502BadGateway,
-        };
+        var statusCode = offlineUpload
+            ? exception.Code switch
+            {
+                "data_update_busy" => StatusCodes.Status409Conflict,
+                "data_version_immutable_conflict" => StatusCodes.Status409Conflict,
+                "data_update_cancelled" => 499,
+                "data_update_storage_failed" => StatusCodes.Status500InternalServerError,
+                "data_update_import_failed" => StatusCodes.Status500InternalServerError,
+                _ => StatusCodes.Status400BadRequest,
+            }
+            : exception.Code switch
+            {
+                "data_update_busy" => StatusCodes.Status409Conflict,
+                "data_download_not_found" => StatusCodes.Status404NotFound,
+                "data_rollback_version_unavailable" => StatusCodes.Status409Conflict,
+                "data_manifest_url_missing" => StatusCodes.Status400BadRequest,
+                "data_client_version_too_old" => StatusCodes.Status409Conflict,
+                "data_version_immutable_conflict" => StatusCodes.Status409Conflict,
+                "data_update_cancelled" => 499,
+                _ => StatusCodes.Status502BadGateway,
+            };
         return Results.Json(
             Error(exception.Code, exception.Message),
             ApiJsonContext.Default.ApiErrorResponse,

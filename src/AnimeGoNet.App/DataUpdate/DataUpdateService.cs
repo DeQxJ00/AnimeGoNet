@@ -487,6 +487,175 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         }
     }
 
+    public async Task<DataUpdateExecutionResult> ImportOfflineArchiveAsync(
+        Stream archive,
+        long? contentLength,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await _operationGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        {
+            throw Error("data_update_busy", "Another data update operation is already running.");
+        }
+
+        string? runId = null;
+        OfflineDataPackage? offlinePackage = null;
+        long transferredBytes = 0;
+        var totalBytes = contentLength ?? 0;
+        try
+        {
+            runId = await _transfers.StartAsync(
+                DataUpdateTriggerKinds.Manual,
+                DataUpdateActions.DownloadImport,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            offlinePackage = await OfflineDataPackageArchive.ExtractAsync(
+                archive,
+                contentLength,
+                _layout.DataUpdatePath,
+                progress =>
+                {
+                    transferredBytes = progress;
+                    return Task.CompletedTask;
+                },
+                cancellationToken).ConfigureAwait(false);
+            transferredBytes = offlinePackage.ArchiveBytes;
+            totalBytes = contentLength ?? transferredBytes;
+            await _transfers.SetStageAsync(
+                runId,
+                DataUpdateTransferStatuses.Downloading,
+                offlinePackage.Manifest.DataVersion,
+                offlinePackage.ManifestSha256,
+                transferredBytes,
+                totalBytes,
+                cancellationToken).ConfigureAwait(false);
+            var packageDirectory = await CommitVerifiedPackageAsync(
+                offlinePackage.Manifest.DataVersion,
+                offlinePackage.ManifestSha256,
+                offlinePackage.TemporaryDirectory,
+                cancellationToken).ConfigureAwait(false);
+            await _transfers.SaveDownloadAsync(
+                new DownloadedDataPackage(
+                    offlinePackage.Manifest.DataVersion,
+                    offlinePackage.ManifestSha256,
+                    Path.GetRelativePath(_layout.DataUpdatePath, packageDirectory),
+                    "verified",
+                    _timeProvider.GetUtcNow(),
+                    null),
+                cancellationToken).ConfigureAwait(false);
+            await _transfers.SetStageAsync(
+                runId,
+                DataUpdateTransferStatuses.Importing,
+                offlinePackage.Manifest.DataVersion,
+                offlinePackage.ManifestSha256,
+                transferredBytes,
+                totalBytes,
+                cancellationToken).ConfigureAwait(false);
+            var import = await _packages.ImportAsync(
+                new DataPackageImportRequest(
+                    offlinePackage.Manifest,
+                    offlinePackage.ManifestSha256,
+                    packageDirectory,
+                    _clientVersion,
+                    _options.DataUpdate.KeepVersions,
+                    _timeProvider.GetUtcNow()),
+                cancellationToken).ConfigureAwait(false);
+            await _transfers.MarkImportedAsync(
+                offlinePackage.Manifest.DataVersion,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            await _transfers.CompleteAsync(
+                runId,
+                DataUpdateTransferStatuses.Completed,
+                offlinePackage.Manifest.DataVersion,
+                offlinePackage.ManifestSha256,
+                transferredBytes,
+                totalBytes,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            return new DataUpdateExecutionResult(
+                runId,
+                DataUpdateTransferStatuses.Completed,
+                offlinePackage.Manifest.DataVersion,
+                import.DataVersion,
+                true,
+                true);
+        }
+        catch (DataUpdateServiceException exception)
+        {
+            if (runId is not null)
+            {
+                await BestEffortFailAsync(
+                    runId,
+                    exception.Code,
+                    transferredBytes,
+                    Math.Max(totalBytes, transferredBytes)).ConfigureAwait(false);
+            }
+            throw;
+        }
+        catch (DataPackageException exception)
+        {
+            if (runId is not null)
+            {
+                await BestEffortFailAsync(
+                    runId,
+                    exception.Code,
+                    transferredBytes,
+                    Math.Max(totalBytes, transferredBytes)).ConfigureAwait(false);
+            }
+            throw Error(exception.Code, exception.Message, exception);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (runId is not null)
+            {
+                await BestEffortFailAsync(
+                    runId,
+                    "data_update_cancelled",
+                    transferredBytes,
+                    Math.Max(totalBytes, transferredBytes)).ConfigureAwait(false);
+            }
+            throw;
+        }
+        catch (IOException exception)
+        {
+            if (runId is not null)
+            {
+                await BestEffortFailAsync(
+                    runId,
+                    "data_update_storage_failed",
+                    transferredBytes,
+                    Math.Max(totalBytes, transferredBytes)).ConfigureAwait(false);
+            }
+            throw Error(
+                "data_update_storage_failed",
+                "The offline data package could not be stored.",
+                exception);
+        }
+        catch (Exception exception)
+        {
+            if (runId is not null)
+            {
+                await BestEffortFailAsync(
+                    runId,
+                    "data_update_import_failed",
+                    transferredBytes,
+                    Math.Max(totalBytes, transferredBytes)).ConfigureAwait(false);
+            }
+            throw Error(
+                "data_update_import_failed",
+                "The offline data package could not be imported.",
+                exception);
+        }
+        finally
+        {
+            if (offlinePackage is not null)
+            {
+                BestEffortDeleteTemporaryDirectory(offlinePackage.TemporaryDirectory);
+            }
+            _operationGate.Release();
+        }
+    }
+
     private async Task<byte[]> DownloadManifestAsync(
         Uri manifestUrl,
         CancellationToken cancellationToken)
@@ -559,40 +728,11 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 Path.Combine(temporary, "manifest.json"),
                 manifestBytes,
                 cancellationToken).ConfigureAwait(false);
-
-            var final = Path.Combine(packagesRoot, manifest.DataVersion);
-            if (Directory.Exists(final))
-            {
-                var catalog = await _transfers.GetDownloadAsync(
-                    manifest.DataVersion,
-                    cancellationToken).ConfigureAwait(false);
-                if (catalog is not null
-                    && !string.Equals(
-                        catalog.ManifestSha256,
-                        manifestSha256,
-                        StringComparison.Ordinal))
-                {
-                    throw Error(
-                        "data_version_immutable_conflict",
-                        "A different package already exists for this data version.");
-                }
-                var existingManifest = await ReadLocalManifestAsync(
-                    Path.Combine(final, "manifest.json"),
-                    cancellationToken).ConfigureAwait(false);
-                if (!string.Equals(
-                        Convert.ToHexStringLower(SHA256.HashData(existingManifest)),
-                        manifestSha256,
-                        StringComparison.Ordinal))
-                {
-                    throw Error(
-                        "data_version_immutable_conflict",
-                        "A different package already exists for this data version.");
-                }
-                BestEffortDeleteTemporaryDirectory(temporary);
-                return final;
-            }
-            Directory.Move(temporary, final);
-            return final;
+            return await CommitVerifiedPackageAsync(
+                manifest.DataVersion,
+                manifestSha256,
+                temporary,
+                cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -688,6 +828,50 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 "A downloaded data asset SHA-256 does not match the manifest.");
         }
         return downloaded;
+    }
+
+    private async Task<string> CommitVerifiedPackageAsync(
+        string dataVersion,
+        string manifestSha256,
+        string temporaryDirectory,
+        CancellationToken cancellationToken)
+    {
+        var packagesRoot = Path.Combine(_layout.DataUpdatePath, "packages");
+        Directory.CreateDirectory(packagesRoot);
+        var catalog = await _transfers.GetDownloadAsync(
+            dataVersion,
+            cancellationToken).ConfigureAwait(false);
+        if (catalog is not null
+            && !string.Equals(
+                catalog.ManifestSha256,
+                manifestSha256,
+                StringComparison.Ordinal))
+        {
+            throw Error(
+                "data_version_immutable_conflict",
+                "A different package already exists for this data version.");
+        }
+
+        var final = Path.Combine(packagesRoot, dataVersion);
+        if (Directory.Exists(final))
+        {
+            var existingManifest = await ReadLocalManifestAsync(
+                Path.Combine(final, "manifest.json"),
+                cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(
+                    Convert.ToHexStringLower(SHA256.HashData(existingManifest)),
+                    manifestSha256,
+                    StringComparison.Ordinal))
+            {
+                throw Error(
+                    "data_version_immutable_conflict",
+                    "A different package already exists for this data version.");
+            }
+            BestEffortDeleteTemporaryDirectory(temporaryDirectory);
+            return final;
+        }
+        Directory.Move(temporaryDirectory, final);
+        return final;
     }
 
     private string ResolveManagedPackageDirectory(string relativeDirectory)

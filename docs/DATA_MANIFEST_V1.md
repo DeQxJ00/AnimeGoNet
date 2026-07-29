@@ -57,6 +57,29 @@ The release is immutable: an existing `data_version`, manifest or named asset
 must never be replaced. Publish all versioned assets first and the `latest`
 manifest last.
 
+## Offline ZIP package
+
+The offline Web/API import uses the same bytes as the online release. A ZIP
+request body contains exactly these root entries:
+
+- one case-sensitive `manifest.json`;
+- every `assets[].file_name` declared by that manifest;
+- no directory, nested path, duplicate, symlink-style path or additional file.
+
+The ZIP file name itself is not part of the contract and is neither trusted nor
+stored. AnimeGoNet first streams the request to an application-owned
+`.partial-*` directory, then opens the archive without extracting paths from ZIP
+metadata. Every entry is selected by the safe manifest basename and must match
+the declared uncompressed length and SHA-256. Manifest parsing, client-version
+checks, JSONL/gzip validation, Subject references and counts are identical to
+online import. Only after all checks pass is the package moved atomically into
+the managed package directory and imported into SQLite. Extra/path-traversal
+entries, corrupt ZIP data, truncation, checksum failure and import failure delete
+the partial directory and leave the previous active version unchanged. A package
+whose archive bytes passed manifest length/SHA checks may remain in the managed
+download catalog when deeper gzip/JSONL validation fails, so an operator can
+inspect or retry it; it is never activated by that failed import.
+
 ## Subject JSONL
 
 Each decompressed line is one object:

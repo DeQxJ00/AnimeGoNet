@@ -185,4 +185,36 @@ public sealed class DataUpdateServiceTests
             "data_manifest_url_missing",
             (await fixture.Transfers.GetLastRunAsync())!.FailureCode);
     }
+
+    [Fact]
+    public async Task MissingCatalogDirectoryCannotReplaceImmutableVersion()
+    {
+        await using var fixture = await DataUpdateServiceFixture.CreateAsync();
+        fixture.AddRelease("2026.07.29.immutable");
+        await fixture.Transfers.SaveDownloadAsync(
+            new DownloadedDataPackage(
+                "2026.07.29.immutable",
+                new string('f', 64),
+                Path.Combine("packages", "missing"),
+                "verified",
+                new DateTimeOffset(2026, 7, 29, 13, 0, 0, TimeSpan.Zero),
+                null));
+
+        var exception = await Assert.ThrowsAsync<DataUpdateServiceException>(() =>
+            fixture.Service.ExecuteAsync(
+                DataUpdateTriggerKinds.Manual,
+                DataUpdateActions.Download));
+        var catalog = Assert.Single(await fixture.Transfers.ListDownloadsAsync());
+
+        Assert.Equal("data_version_immutable_conflict", exception.Code);
+        Assert.Equal(new string('f', 64), catalog.ManifestSha256);
+        Assert.False(Directory.Exists(Path.Combine(
+            fixture.Layout.DataUpdatePath,
+            "packages",
+            "2026.07.29.immutable")));
+        Assert.Empty(Directory.EnumerateDirectories(
+            fixture.Layout.DataUpdatePath,
+            ".partial-*",
+            SearchOption.TopDirectoryOnly));
+    }
 }

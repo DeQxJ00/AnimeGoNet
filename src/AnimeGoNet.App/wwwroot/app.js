@@ -148,14 +148,19 @@ function dataUpdateTime(value) {
 }
 function setDataUpdateBusy(busy) {
     dataUpdateActionRunning = busy;
-    for (const button of document.querySelectorAll("#data-update .data-update-actions button, #data-update-downloads button")) {
+    for (const button of document.querySelectorAll("#data-update button")) {
         if (busy) {
             button.disabled = true;
         }
         else if (button.id === "data-update-reload") {
             button.disabled = false;
         }
+        else if (button.id === "data-update-offline-import") {
+            const input = element("#data-update-offline-package");
+            button.disabled = input.files?.length !== 1;
+        }
     }
+    element("#data-update-offline-package").disabled = busy;
 }
 function renderDataUpdateTransfer(status) {
     const target = element("#data-update-transfer");
@@ -313,6 +318,43 @@ async function runDataUpdateAction(endpoint, pendingMessage, confirmation) {
     }
     catch (error) {
         message.textContent = errorMessage(error, "数据更新操作失败");
+    }
+    finally {
+        setDataUpdateBusy(false);
+        await loadDataUpdate(true);
+    }
+}
+async function importOfflineDataPackage(event) {
+    event.preventDefault();
+    if (dataUpdateActionRunning)
+        return;
+    const input = element("#data-update-offline-package");
+    const file = input.files?.item(0);
+    const message = element("#data-update-status");
+    if (!file) {
+        message.textContent = "请选择一个离线数据包 ZIP。";
+        return;
+    }
+    const displayName = file.name;
+    input.value = "";
+    setDataUpdateBusy(true);
+    message.textContent = `正在上传、校验并导入 ${displayName}…`;
+    try {
+        const uploadHeaders = new Headers(headers);
+        uploadHeaders.set("Content-Type", "application/zip");
+        const response = await fetch("/api/v1/data-update/offline/import", {
+            method: "POST",
+            headers: uploadHeaders,
+            body: file,
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        message.textContent =
+            `离线数据包已导入 · 版本 ${result.data_version ?? result.active_version ?? "—"}`;
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "离线数据包导入失败");
     }
     finally {
         setDataUpdateBusy(false);
@@ -3874,6 +3916,12 @@ element("#data-update-check").addEventListener("click", () => void runDataUpdate
 element("#data-update-download").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/download", "正在下载并校验数据包…"));
 element("#data-update-apply").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/update", "正在下载、校验并导入数据包…"));
 element("#data-update-rollback").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/rollback", "正在回滚上一可用版本…", "确认把上一可用数据版本切换为 active？当前版本仍会保留，可再次回滚。"));
+element("#data-update-offline-package").addEventListener("change", () => {
+    element("#data-update-offline-import").disabled =
+        dataUpdateActionRunning
+            || element("#data-update-offline-package").files?.length !== 1;
+});
+element("#data-update-offline-form").addEventListener("submit", (event) => void importOfflineDataPackage(event));
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();

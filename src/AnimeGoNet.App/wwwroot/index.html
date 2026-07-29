@@ -142,6 +142,13 @@
         </div>
       </div>
       <p class="muted">关闭调度不影响手动操作。只有完整校验通过的数据包才会切换 active；失败继续使用旧版本。</p>
+      <form id="data-update-offline-form" class="data-update-offline">
+        <label>离线数据包 ZIP
+          <input id="data-update-offline-package" type="file" accept=".zip,application/zip" required>
+        </label>
+        <button id="data-update-offline-import" type="submit" class="primary-button" disabled>上传并导入</button>
+        <small class="muted">ZIP 根目录必须只包含 manifest.json 及其中声明的全部 gzip 资产；上传文件名和本机路径不会保存。</small>
+      </form>
       <p id="data-update-status" class="muted" role="status">正在读取数据版本…</p>
       <div id="data-update-summary" class="data-update-summary" aria-live="polite"></div>
       <article id="data-update-transfer" class="data-update-transfer" aria-live="polite">

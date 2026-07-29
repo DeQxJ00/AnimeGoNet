@@ -11,6 +11,11 @@ public interface IDataUpdateService
         string dataVersion,
         string triggerKind = AnimeGoNet.Data.DataUpdate.DataUpdateTriggerKinds.Manual,
         CancellationToken cancellationToken = default);
+
+    Task<DataUpdateExecutionResult> ImportOfflineArchiveAsync(
+        Stream archive,
+        long? contentLength,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record DataUpdateExecutionResult(

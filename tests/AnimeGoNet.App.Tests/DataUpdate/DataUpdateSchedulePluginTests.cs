@@ -96,5 +96,11 @@ public sealed class DataUpdateSchedulePluginTests
             string triggerKind = DataUpdateTriggerKinds.Manual,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<DataUpdateExecutionResult> ImportOfflineArchiveAsync(
+            Stream archive,
+            long? contentLength,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }
