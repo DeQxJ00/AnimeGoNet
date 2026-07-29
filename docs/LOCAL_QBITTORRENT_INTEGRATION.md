@@ -40,6 +40,8 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 
 脚本确认端口所有者就是沙箱 `qbittorrent.exe`、portable profile lock 存在，并创建独立的 `animegonet_data`。随后它通过主程序 qBittorrent adapter 完成用户名/密码登录、读取任务列表、核对程序/API 版本和 `download_path`。它不会修改 qBittorrent 偏好、关闭用户已启动的进程或创建 Torrent。
 
+`AnimeGoNet.LocalIntegration.Tests` 同时包含独立的 TMDB live smoke，因此 qB 脚本必须以 `FullyQualifiedName~QbittorrentSandboxTests` 过滤，只运行 qB 测试。不得通过设置无关 TMDB key 来掩盖脚本串跑。
+
 ## 验收
 
 - `qbittorrent.exe` 和监听端口属于同一个沙箱进程。

@@ -66,7 +66,11 @@ $env:ANIMEGONET_QBIT_SAVE_PATH = $savePath
 $env:ANIMEGONET_QBIT_DATA_PATH = $dataPath
 
 try {
-    dotnet test tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegration.Tests.csproj --configuration Release --no-restore --logger 'console;verbosity=normal'
+    dotnet test tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegration.Tests.csproj `
+        --configuration Release `
+        --no-restore `
+        --filter 'FullyQualifiedName~QbittorrentSandboxTests' `
+        --logger 'console;verbosity=normal'
     if ($LASTEXITCODE -ne 0) {
         throw "Local qBittorrent integration tests failed with exit code $LASTEXITCODE."
     }
