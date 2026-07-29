@@ -25,6 +25,8 @@ if ($IsWindows) {
     $startParameters.WindowStyle = 'Hidden'
 }
 $process = Start-Process @startParameters
+$smokePassed = $false
+$shutdownFailure = $null
 
 try {
     $ping = $null
@@ -146,13 +148,38 @@ try {
     }
 
     Write-Output "Native smoke passed: $resolvedExecutable"
+    $smokePassed = $true
 }
 finally {
+    if ($smokePassed -and -not $IsWindows -and $process.HasExited) {
+        $shutdownFailure = 'Published process exited before the SIGTERM shutdown check.'
+    }
     if (-not $process.HasExited) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        [void]$process.WaitForExit(5000)
+        if ($smokePassed -and -not $IsWindows) {
+            & /bin/kill -TERM $process.Id
+            if ($LASTEXITCODE -ne 0) {
+                $shutdownFailure = "Could not send SIGTERM to published process $($process.Id)."
+            }
+            elseif (-not $process.WaitForExit(7000)) {
+                $shutdownFailure = 'Published process did not exit within seven seconds after SIGTERM.'
+            }
+            elseif ($process.ExitCode -ne 0) {
+                $shutdownFailure = "Published process returned exit code $($process.ExitCode) after SIGTERM."
+            }
+            else {
+                Write-Output 'Published process SIGTERM shutdown passed.'
+            }
+        }
+
+        if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            [void]$process.WaitForExit(5000)
+        }
     }
     if (Test-Path -LiteralPath $smokeRoot) {
         [IO.Directory]::Delete($smokeRoot, $true)
+    }
+    if ($null -ne $shutdownFailure) {
+        throw $shutdownFailure
     }
 }

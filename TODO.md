@@ -188,7 +188,7 @@
 
 - [x] 实现六字段 Cron 调度、StartRun 和 NextTime：支持秒级六字段、`?`、list/range/step、英文月份/星期与标准 descriptor，DOM/DOW 沿用 Cron OR 语义；时区/DST、启动立即执行、三次重试、并发任务、热增删唤醒、稳定快照和取消退出均由可控时钟测试覆盖，宿主仅在后台 worker 开启时运行 coordinator。
 - [ ] 实现 Bangumi/数据库/feed/plugin tasks。
-- [ ] 实现优雅退出和取消传播。
+- [>] 实现优雅退出和取消传播：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT 宿主停止与 win-x64 NativeAOT 停止后句柄清理已验证；Linux/macOS NativeAOT `SIGTERM` 已加入五 RID smoke，待 CI 实机结果后完成。
 - [ ] 移植 10 个 HTTP API。
 - [x] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与现代 `/api/v1/rss/ingest` 均已接入来源规则、统一 staging 与后台 qB dispatch。
 - [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
@@ -235,7 +235,7 @@
 
 - [ ] 完成 Host DI 和 CLI 行为。
 - [>] 完成 Docker NativeAOT 镜像（双架构 Dockerfile、Buildx CI 和容器 smoke 已建立；本机无 Docker CLI，待 GitHub runner 实跑）。
-- [ ] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证。
+- [>] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证：Linux/macOS NativeAOT smoke 已在成功验收后发送 `SIGTERM`，要求 7 秒内零退出并可删除隔离数据目录；非 root、PUID/PGID 与只读根仍待完成。
 - [ ] 添加连接外部下载器和内置 Compose 下载器的部署示例。
 - [x] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
 - [x] 提供写有上述绝对路径的 Docker 容器配置；Compose 卷与配置逐项一致，不依赖隐藏路径修正。

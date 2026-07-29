@@ -66,6 +66,8 @@ public static class AnimeGoApplication
             ContentRootPath = AppContext.BaseDirectory,
             WebRootPath = webRootPath,
         });
+        builder.Services.Configure<HostOptions>(host =>
+            host.ShutdownTimeout = TimeSpan.FromSeconds(5));
         builder.Services.AddSingleton<WebSocketLogHub>();
         builder.Services.AddSingleton<ILoggerProvider>(
             static services =>

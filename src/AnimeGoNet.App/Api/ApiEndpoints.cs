@@ -751,6 +751,7 @@ public static class ApiEndpoints
         ApplicationConfigurationRuntimeState applied,
         AnimeGoOptions options,
         DataUpdateScheduleManager dataUpdateSchedules,
+        IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
         try
@@ -768,7 +769,7 @@ public static class ApiEndpoints
                 cancellationToken).ConfigureAwait(false);
             await dataUpdateSchedules.ApplyAsync(
                 candidate.DataUpdate,
-                CancellationToken.None).ConfigureAwait(false);
+                applicationLifetime.ApplicationStopping).ConfigureAwait(false);
             if (!RequiresRestart(options, candidate))
             {
                 applied.MarkApplied(saved.Revision);
@@ -814,6 +815,7 @@ public static class ApiEndpoints
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
         DataUpdateScheduleManager dataUpdateSchedules,
+        IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
         try
@@ -822,7 +824,7 @@ public static class ApiEndpoints
             var candidate = locks.Reapply(deployment.Value, deployment.Value);
             await dataUpdateSchedules.ApplyAsync(
                 candidate.DataUpdate,
-                CancellationToken.None).ConfigureAwait(false);
+                applicationLifetime.ApplicationStopping).ConfigureAwait(false);
             if (!RequiresRestart(options, candidate))
             {
                 applied.MarkApplied(saved.Revision);

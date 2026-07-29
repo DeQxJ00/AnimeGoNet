@@ -62,7 +62,7 @@ public sealed class DataUpdateScheduleManager(
             {
                 await coordinator.AddAsync(
                     Registration(previous),
-                    CancellationToken.None).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false);
             }
             throw;
         }

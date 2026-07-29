@@ -15,7 +15,8 @@ internal static partial class WebSocketLogEndpoint
     private static async Task HandleAsync(
         HttpContext context,
         WebSocketLogHub hub,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IHostApplicationLifetime applicationLifetime)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -29,7 +30,8 @@ internal static partial class WebSocketLogEndpoint
             .AcceptWebSocketAsync()
             .ConfigureAwait(false);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            context.RequestAborted);
+            context.RequestAborted,
+            applicationLifetime.ApplicationStopping);
         var logger = loggerFactory.CreateLogger("AnimeGoNet.WebSocketLog");
         var sender = SendAsync(socket, subscription, linked.Token);
         var receiver = ReceiveAsync(

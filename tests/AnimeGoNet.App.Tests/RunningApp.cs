@@ -40,7 +40,8 @@ public sealed class RunningApp : IAsyncDisposable
         ITorrentHttpTransport? rssHttpTransport = null,
         ITmdbPosterTransport? tmdbPosterTransport = null,
         HttpClient? dataUpdateHttpClient = null,
-        IReadOnlyCollection<string>? deploymentEnvironmentVariables = null)
+        IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
+        bool startBackgroundWorkers = false)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
@@ -61,7 +62,7 @@ public sealed class RunningApp : IAsyncDisposable
             rssHttpTransport: rssHttpTransport,
             tmdbPosterTransport: tmdbPosterTransport,
             dataUpdateHttpClient: dataUpdateHttpClient,
-            startBackgroundWorkers: false,
+            startBackgroundWorkers: startBackgroundWorkers,
             deploymentEnvironmentVariables: deploymentEnvironmentVariables);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();

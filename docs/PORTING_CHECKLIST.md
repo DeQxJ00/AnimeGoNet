@@ -8,7 +8,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | JIT/Kestrel 与 win-x64 NativeAOT 进程 smoke 已通过；SIGTERM/CTRL+C 待验证 |
+| `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 待验证 |
 | `cmd/plugin` | C# 内置插件测试与未来 `PluginTool` | 替换 | 待实现 | 协议/fixture tests |
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |

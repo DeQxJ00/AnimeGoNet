@@ -45,7 +45,8 @@ public sealed class MikanRssIngestProcessor(
     TitleParserManager parsers,
     OrderedFeedFilterManager filters,
     MikanBangumiSubjectResolver bangumiResolver,
-    UnifiedIngestProcessor ingest)
+    UnifiedIngestProcessor ingest,
+    IHostApplicationLifetime applicationLifetime)
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
 
@@ -187,7 +188,17 @@ public sealed class MikanRssIngestProcessor(
             }
             catch
             {
-                _ = await batches.ReleaseWinnerAsync(lease, CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    _ = await batches.ReleaseWinnerAsync(
+                        lease,
+                        applicationLifetime.ApplicationStopping).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (applicationLifetime.ApplicationStopping.IsCancellationRequested)
+                {
+                    // The lease expires and becomes reclaimable after shutdown.
+                }
                 throw;
             }
 

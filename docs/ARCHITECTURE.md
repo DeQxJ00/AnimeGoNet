@@ -20,6 +20,8 @@ AnimeGoNet.slnx
 
 `PluginScheduleCoordinator` 是编译期 schedule 插件的统一 Cron 宿主。它使用无反射的纯 C# 六字段解析器，注册时固定插件 ID、参数、时区、`StartRun` 和下一次执行时间；运行中增删任务会唤醒等待，不依赖轮询配置。每个触发独立执行，失败最多三次且间隔三秒；应用停止令牌会同时取消等待、重试和插件调用，HostedService 在退出前回收仍在运行的调用。目录数据库与 AnimeGoNetData 更新均以编译期内置 schedule 插件注册，不通过程序集扫描自动出现。`DataUpdateScheduleManager` 串行执行移除/重建：新 Cron 无效时恢复旧任务与旧运行快照，禁用只移除定时任务；没有启动后台 worker 时仍更新手动 API 使用的运行策略，但不创建假调度。
 
+宿主使用 5 秒 `ShutdownTimeout`。所有后台循环把 HostedService 的停止令牌继续传给 SQLite、HTTP、qBittorrent 和插件调用；配置文件已经持久化后的 schedule 热应用忽略客户端断开，但改用 `ApplicationStopping`，因此不会拖住进程退出。RSS winner 失败清理也只跨越请求取消，宿主停止时允许租约按超时恢复。日志 WebSocket 同时链接 `RequestAborted` 与 `ApplicationStopping`，停止时先结束收发并发送正常关闭帧。Linux/macOS 发布 smoke 对进程发送 `SIGTERM` 并要求 7 秒内零退出；5 秒是应用业务期限，额外 2 秒只用于 CI 调度余量。
+
 上游 Go 源码位于独立的 `AnimeGo` 目录和 Git 仓库，仅作为差分 fixture 与业务行为索引；本仓库只保存 `DotnetProject` 的 C# 主程序、测试、文档和交付资产，两边不共享 Git 历史。
 
 ## 2. 配置、数据与目录真相源
