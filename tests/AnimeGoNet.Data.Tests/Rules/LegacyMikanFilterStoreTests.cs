@@ -67,6 +67,25 @@ public sealed class LegacyMikanFilterStoreTests
         Assert.Equal(4L, (long)(await command.ExecuteScalarAsync())!);
     }
 
+    [Fact]
+    public async Task SnapshotListIsNewestFirstAndBounded()
+    {
+        await using var fixture = await FilterFixture.CreateAsync();
+        var second = await fixture.Store.SaveLegacyAsync(
+            "mikan", Config("second"), DateTimeOffset.UtcNow);
+        await fixture.Store.SaveAsync(
+            "mikan", Config("third"), second.Revision, "web", DateTimeOffset.UtcNow.AddMinutes(1));
+
+        var snapshots = await fixture.Store.ListSnapshotsAsync("MIKAN", 2);
+
+        Assert.Equal([3L, 2L], snapshots.Select(item => item.Revision));
+        Assert.Equal(["web", "legacy_api"], snapshots.Select(item => item.UpdatedSource));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => fixture.Store.ListSnapshotsAsync("mikan", 0));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => fixture.Store.ListSnapshotsAsync("mikan", 201));
+    }
+
     private static LegacyMikanFilterConfig Config(string key) => new(
         [new KeyValuePair<string, LegacyMikanFilterRule>(key, new(false, false, [], []))],
         Empty(), Empty(), Empty(), Empty());

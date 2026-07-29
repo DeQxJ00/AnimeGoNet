@@ -25,22 +25,43 @@ public sealed record LegacyMikanFilterResult(
     string? MatchedScope,
     string? MatchedKey);
 
+public sealed record LegacyMikanFilterTraceStep(
+    string Tier,
+    string? Key,
+    bool Applicable,
+    bool? Accepted,
+    IReadOnlyList<string> WhitelistMatches,
+    IReadOnlyList<string> BlacklistMatches,
+    string Reason);
+
+public sealed record LegacyMikanFilterPreview(
+    LegacyMikanFilterResult Result,
+    IReadOnlyList<LegacyMikanFilterTraceStep> Steps);
+
 public static class LegacyMikanFilterEngine
 {
     public static LegacyMikanFilterResult Evaluate(
+        LegacyMikanFilterCandidate candidate,
+        LegacyMikanFilterConfig config) =>
+        Preview(candidate, config).Result;
+
+    public static LegacyMikanFilterPreview Preview(
         LegacyMikanFilterCandidate candidate,
         LegacyMikanFilterConfig config)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(config);
+        var steps = new List<LegacyMikanFilterTraceStep>();
         var accepted0 = true;
         string? scope = null;
         string? key = null;
         foreach (var pair in config.Filiter0)
         {
-            accepted0 = IsAccepted(pair.Value, candidate.Title);
+            var evaluation = EvaluateRule(pair.Value, candidate.Title);
+            accepted0 = evaluation.Accepted;
             scope = "Filiter0";
             key = pair.Key;
+            steps.Add(ToStep("Filiter0", pair.Key, evaluation));
         }
 
         var accepted123 = true;
@@ -48,7 +69,12 @@ public static class LegacyMikanFilterEngine
         {
             if (candidate.MikanId is not > 0 || candidate.GroupId is not > 0)
             {
-                return new LegacyMikanFilterResult(false, "MikanIdentityRequired", null, null);
+                steps.Add(new LegacyMikanFilterTraceStep(
+                    "Filiter1-3", null, false, false, [], [],
+                    "MikanIdentityRequired"));
+                return new LegacyMikanFilterPreview(
+                    new LegacyMikanFilterResult(false, "MikanIdentityRequired", null, null),
+                    steps);
             }
 
             var combined = $"key_{candidate.MikanId}_{candidate.GroupId}";
@@ -56,38 +82,68 @@ public static class LegacyMikanFilterEngine
             var group = candidate.GroupId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
             if (config.Filiter1.TryGetValue(combined, out var rule1))
             {
-                accepted123 = IsAccepted(rule1, candidate.Title);
+                var evaluation = EvaluateRule(rule1, candidate.Title);
+                accepted123 = evaluation.Accepted;
                 scope = "Filiter1";
                 key = combined;
+                steps.Add(ToStep("Filiter1", combined, evaluation));
+                steps.Add(NotApplicable("Filiter2", work, "HigherTierMatched"));
+                steps.Add(NotApplicable("Filiter3", group, "HigherTierMatched"));
             }
             else if (config.Filiter2.TryGetValue(work, out var rule2))
             {
-                accepted123 = IsAccepted(rule2, candidate.Title);
+                steps.Add(NotApplicable("Filiter1", combined, "NoMatchingRule"));
+                var evaluation = EvaluateRule(rule2, candidate.Title);
+                accepted123 = evaluation.Accepted;
                 scope = "Filiter2";
                 key = work;
+                steps.Add(ToStep("Filiter2", work, evaluation));
+                steps.Add(NotApplicable("Filiter3", group, "HigherTierMatched"));
             }
             else if (config.Filiter3.TryGetValue(group, out var rule3))
             {
-                accepted123 = IsAccepted(rule3, candidate.Title);
+                steps.Add(NotApplicable("Filiter1", combined, "NoMatchingRule"));
+                steps.Add(NotApplicable("Filiter2", work, "NoMatchingRule"));
+                var evaluation = EvaluateRule(rule3, candidate.Title);
+                accepted123 = evaluation.Accepted;
                 scope = "Filiter3";
                 key = group;
+                steps.Add(ToStep("Filiter3", group, evaluation));
             }
+            else
+            {
+                steps.Add(NotApplicable("Filiter1", combined, "NoMatchingRule"));
+                steps.Add(NotApplicable("Filiter2", work, "NoMatchingRule"));
+                steps.Add(NotApplicable("Filiter3", group, "NoMatchingRule"));
+            }
+        }
+        else
+        {
+            steps.Add(NotApplicable("Filiter1-3", null, "NoConfiguredRules"));
         }
 
         var accepted4 = true;
         if (config.Filiter4.TryGetValue(candidate.GroupName, out var rule4))
         {
-            accepted4 = IsAccepted(rule4, candidate.Title);
+            var evaluation = EvaluateRule(rule4, candidate.Title);
+            accepted4 = evaluation.Accepted;
             scope = "Filiter4";
             key = candidate.GroupName;
+            steps.Add(ToStep("Filiter4", candidate.GroupName, evaluation));
+        }
+        else
+        {
+            steps.Add(NotApplicable("Filiter4", candidate.GroupName, "NoMatchingRule"));
         }
 
         var accepted = accepted0 && accepted123 && accepted4;
-        return new LegacyMikanFilterResult(
-            accepted,
-            accepted ? "Accepted" : "RejectedByLegacyMikanTool",
-            scope,
-            key);
+        return new LegacyMikanFilterPreview(
+            new LegacyMikanFilterResult(
+                accepted,
+                accepted ? "Accepted" : "RejectedByLegacyMikanTool",
+                scope,
+                key),
+            steps);
     }
 
     public static string ParseGroupName(string title)
@@ -100,18 +156,45 @@ public static class LegacyMikanFilterEngine
         return end > start ? normalized[(start + 1)..end] : string.Empty;
     }
 
-    private static bool IsAccepted(LegacyMikanFilterRule rule, string title)
+    private static RuleEvaluation EvaluateRule(LegacyMikanFilterRule rule, string title)
     {
-        var whitelistMatch = rule.IsEnableWhitelist
-            && rule.Whitelist.Any(value => title.Contains(value, StringComparison.Ordinal));
-        var blacklistMatch = rule.IsEnableBlacklist
-            && rule.Blacklist.Any(value => title.Contains(value, StringComparison.Ordinal));
-        return (rule.IsEnableWhitelist, rule.IsEnableBlacklist) switch
+        var whitelistMatches = rule.IsEnableWhitelist
+            ? rule.Whitelist.Where(value => title.Contains(value, StringComparison.Ordinal)).ToArray()
+            : [];
+        var blacklistMatches = rule.IsEnableBlacklist
+            ? rule.Blacklist.Where(value => title.Contains(value, StringComparison.Ordinal)).ToArray()
+            : [];
+        var accepted = (rule.IsEnableWhitelist, rule.IsEnableBlacklist) switch
         {
-            (true, false) => whitelistMatch,
-            (false, true) => !blacklistMatch,
-            (true, true) => whitelistMatch && !blacklistMatch,
+            (true, false) => whitelistMatches.Length > 0,
+            (false, true) => blacklistMatches.Length == 0,
+            (true, true) => whitelistMatches.Length > 0 && blacklistMatches.Length == 0,
             _ => true,
         };
+        return new RuleEvaluation(accepted, whitelistMatches, blacklistMatches);
     }
+
+    private static LegacyMikanFilterTraceStep ToStep(
+        string tier,
+        string key,
+        RuleEvaluation evaluation) =>
+        new(
+            tier,
+            key,
+            true,
+            evaluation.Accepted,
+            evaluation.WhitelistMatches,
+            evaluation.BlacklistMatches,
+            evaluation.Accepted ? "Accepted" : "RejectedByRule");
+
+    private static LegacyMikanFilterTraceStep NotApplicable(
+        string tier,
+        string? key,
+        string reason) =>
+        new(tier, key, false, null, [], [], reason);
+
+    private sealed record RuleEvaluation(
+        bool Accepted,
+        IReadOnlyList<string> WhitelistMatches,
+        IReadOnlyList<string> BlacklistMatches);
 }

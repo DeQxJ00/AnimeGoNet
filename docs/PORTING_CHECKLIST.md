@@ -42,8 +42,8 @@
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 已验证 | 与 raw_parser.py 共用的完整解析主体已由 `AutoBangumiRawParser` 编译期替换；无 Python 运行时，develop Python golden fixture 逐字段通过 |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 已验证 | 19 组 develop Python golden 覆盖全部输出字段和原始 E04/EP04 不识别语义；独立安全层才拒绝年份/分辨率/歧义/非正片，数据层证明只对 Mikan adapter 落候选 |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
-| `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit，以及安全页面抓取/批内缓存/真实 RSS 前置执行已验证；WebUI 管理与原油猴浏览器 E2E 待实现 |
-| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss` 及 winner→统一 staging 已验证；过滤 WebUI历史/回滚待实现 |
+| `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 已验证 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit、安全页面抓取/批内缓存/真实 RSS 前置执行，以及五档 WebUI CRUD/排序、开关、可解释预览、legacy JSON 导入导出和快照回滚均已验证；原油猴发布镜像浏览器 E2E 待总体验收 |
+| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss` 及 winner→统一 staging 已验证；通用优选规则的拖拽与历史回滚待实现 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 已验证 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断及可选 `sample_source_episode` 保存前 Series→Season→目标 Episode 预验证；管理 API/WebUI 已支持 revision-safe 创建/更新/禁用/清除、权威影响分类和只重置无租约失败任务的显式重匹配，已解析/已整理/完成记录/媒体文件保持不变 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 已验证 | 默认关闭、3 个不同 EP 建立信任/冲突撤销、已验证 Episode 自动学习、AI 前任务级命中、零 AI/零 TMDB Episode 调用、本地 completion、Learning/Trusted/ConflictReset API/WebUI 与自动状态安全清理已通过 |
 | TMDB 季度失败链 | `TMDBFailSkip=4`→`TMDBFailBacktrace=3`→`TMDBFailUseTitleSeason=2`→`TMDBFailUseFirstSeason=1` | 扩展 | 进行中 | 日文名→中文名及每名多轮清理均以完整 `tmdbid+Season` 为成功条件；P3 对每个前作重新联合搜索且可恢复不同 Series，多层/多候选/缺日期/防环/错误降级已验证；P2 只读任务 title、P1 本地 S01 且均不验证 TMDB Season；关系网络重试与 live fixture 待实现 |

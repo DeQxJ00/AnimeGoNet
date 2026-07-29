@@ -71,6 +71,12 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(DownloaderConfigurationWriteResponse))]
 [JsonSerializable(typeof(SourceRoutePreviewRequest))]
 [JsonSerializable(typeof(SourceRoutePreviewResponse))]
+[JsonSerializable(typeof(LegacyMikanFilterResponse))]
+[JsonSerializable(typeof(LegacyMikanFilterWriteRequest))]
+[JsonSerializable(typeof(LegacyMikanFilterImportRequest))]
+[JsonSerializable(typeof(LegacyMikanFilterRollbackRequest))]
+[JsonSerializable(typeof(LegacyMikanFilterPreviewRequest))]
+[JsonSerializable(typeof(LegacyMikanFilterPreviewResponse))]
 [JsonSerializable(typeof(QbittorrentTorrentInfo[]))]
 [JsonSerializable(typeof(QbittorrentTorrentFile[]))]
 internal sealed partial class ApiJsonContext : JsonSerializerContext;

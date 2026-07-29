@@ -506,6 +506,52 @@ interface RssRuleDecision {
   evaluated_priority_groups: string[];
 }
 
+interface LegacyMikanFilterRule {
+  tier: number;
+  position: number;
+  key: string;
+  whitelist_enabled: boolean;
+  blacklist_enabled: boolean;
+  whitelist: string[];
+  blacklist: string[];
+}
+
+interface LegacyMikanFilterSnapshot {
+  revision: number;
+  updated_source: string;
+  created_at_utc: string;
+}
+
+interface LegacyMikanFilterResponse {
+  source_profile_id: string;
+  revision: number;
+  updated_source: string;
+  created_at_utc: string;
+  updated_at_utc: string;
+  legacy_json: string;
+  rules: LegacyMikanFilterRule[];
+  snapshots: LegacyMikanFilterSnapshot[];
+}
+
+interface LegacyMikanFilterTrace {
+  tier: string;
+  key: string | null;
+  applicable: boolean;
+  accepted: boolean | null;
+  whitelist_matches: string[];
+  blacklist_matches: string[];
+  reason: string;
+}
+
+interface LegacyMikanFilterPreview {
+  accepted: boolean;
+  reason: string;
+  matched_scope: string | null;
+  matched_key: string | null;
+  derived_group_name: string;
+  steps: LegacyMikanFilterTrace[];
+}
+
 interface ManualIngestItem {
   index: number;
   status: string;
@@ -719,6 +765,7 @@ const configurationDialog = element<HTMLDialogElement>("#configuration-dialog");
 let activeDeletePreview: DeletePreview | null = null;
 let currentConfiguration: RuntimeConfiguration | null = null;
 let activeRssRules: RssRuleSnapshot | null = null;
+let activeLegacyMikanFilter: LegacyMikanFilterResponse | null = null;
 let sourceProfiles: SourceProfile[] = [];
 let activeSourceId: string | null = null;
 let downloaderInstances: DownloaderInstance[] = [];
@@ -3139,6 +3186,7 @@ async function loadSources(selectedId?: string): Promise<void> {
       ?? null;
     populateSourceForm(selected);
     status.textContent = `${sourceProfiles.length} 个来源 · 修改采用 revision 乐观并发且不改变历史任务路由`;
+    if (activeLegacyMikanFilter) renderLegacyMikanFilter();
   } catch (error) {
     sourceProfiles = [];
     activeSourceId = null;
@@ -3916,6 +3964,387 @@ async function previewRssRules(): Promise<void> {
   }
 }
 
+function legacyTierRules(tier: number): LegacyMikanFilterRule[] {
+  return (activeLegacyMikanFilter?.rules ?? [])
+    .filter((rule) => rule.tier === tier)
+    .sort((left, right) => left.position - right.position);
+}
+
+function normalizeLegacyTier(tier: number): void {
+  legacyTierRules(tier).forEach((rule, position) => { rule.position = position; });
+}
+
+function moveLegacyRule(rule: LegacyMikanFilterRule, delta: number): void {
+  const rules = legacyTierRules(rule.tier);
+  const index = rules.indexOf(rule);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= rules.length) return;
+  [rules[index].position, rules[target].position] =
+    [rules[target].position, rules[index].position];
+  renderLegacyMikanFilter();
+}
+
+function removeLegacyRule(rule: LegacyMikanFilterRule): void {
+  if (!activeLegacyMikanFilter) return;
+  const index = activeLegacyMikanFilter.rules.indexOf(rule);
+  if (index >= 0) activeLegacyMikanFilter.rules.splice(index, 1);
+  normalizeLegacyTier(rule.tier);
+  renderLegacyMikanFilter();
+}
+
+function renderLegacyRule(rule: LegacyMikanFilterRule): HTMLElement {
+  const tierRules = legacyTierRules(rule.tier);
+  const tierIndex = tierRules.indexOf(rule);
+  const card = document.createElement("div");
+  card.className = "legacy-filter-rule";
+  card.dataset.ruleIndex = String(activeLegacyMikanFilter!.rules.indexOf(rule));
+
+  const keyLabel = document.createElement("label");
+  keyLabel.textContent = "旧版键（区分大小写）";
+  const key = document.createElement("input");
+  key.value = rule.key;
+  key.maxLength = 1024;
+  key.addEventListener("input", () => { rule.key = key.value; });
+  keyLabel.append(key);
+
+  const switches = document.createElement("div");
+  switches.className = "legacy-filter-rule-switches";
+  const whitelistSwitch = document.createElement("input");
+  whitelistSwitch.type = "checkbox";
+  whitelistSwitch.checked = rule.whitelist_enabled;
+  whitelistSwitch.addEventListener("change", () => {
+    rule.whitelist_enabled = whitelistSwitch.checked;
+    renderLegacyWarnings();
+  });
+  const whitelistSwitchLabel = document.createElement("label");
+  whitelistSwitchLabel.append(whitelistSwitch, "启用白名单");
+  const blacklistSwitch = document.createElement("input");
+  blacklistSwitch.type = "checkbox";
+  blacklistSwitch.checked = rule.blacklist_enabled;
+  blacklistSwitch.addEventListener("change", () => {
+    rule.blacklist_enabled = blacklistSwitch.checked;
+    renderLegacyWarnings();
+  });
+  const blacklistSwitchLabel = document.createElement("label");
+  blacklistSwitchLabel.append(blacklistSwitch, "启用黑名单");
+  switches.append(whitelistSwitchLabel, blacklistSwitchLabel);
+
+  const valueEditor = (
+    title: string,
+    kind: "whitelist" | "blacklist",
+    values: string[],
+  ): HTMLLabelElement => {
+    const label = document.createElement("label");
+    label.textContent = `${title}（JSON 字符串数组）`;
+    const textarea = document.createElement("textarea");
+    textarea.className = "legacy-filter-values";
+    textarea.dataset.kind = kind;
+    textarea.rows = 3;
+    textarea.spellcheck = false;
+    textarea.value = JSON.stringify(values);
+    textarea.addEventListener("input", () => {
+      textarea.classList.remove("invalid");
+    });
+    label.append(textarea);
+    return label;
+  };
+
+  const actions = document.createElement("div");
+  actions.className = "legacy-filter-rule-actions";
+  const up = button("上移", () => moveLegacyRule(rule, -1));
+  up.disabled = tierIndex === 0;
+  const down = button("下移", () => moveLegacyRule(rule, 1));
+  down.disabled = tierIndex + 1 === tierRules.length;
+  actions.append(up, down, button("删除", () => removeLegacyRule(rule)));
+  card.append(
+    keyLabel,
+    switches,
+    valueEditor("白名单", "whitelist", rule.whitelist),
+    valueEditor("黑名单", "blacklist", rule.blacklist),
+    actions,
+  );
+  return card;
+}
+
+function renderLegacyWarnings(): void {
+  const warning = element<HTMLElement>("#legacy-filter-warning");
+  if (!activeLegacyMikanFilter) {
+    warning.textContent = "";
+    return;
+  }
+  const messages: string[] = [];
+  if (legacyTierRules(0).length > 1) {
+    messages.push("F0 有多条规则：上游语义是全部执行、最后一条结果覆盖前面结果，不是 AND。");
+  }
+  const emptyRules = activeLegacyMikanFilter.rules.filter((rule) =>
+    (rule.whitelist_enabled && rule.whitelist.includes(""))
+    || (rule.blacklist_enabled && rule.blacklist.includes("")));
+  if (emptyRules.length > 0) {
+    messages.push(`有 ${emptyRules.length} 条启用规则包含空关键词；空字符串会匹配所有标题。`);
+  }
+  warning.textContent = messages.join(" ");
+}
+
+function renderLegacyMikanFilter(): void {
+  if (!activeLegacyMikanFilter) return;
+  for (let tier = 0; tier <= 4; tier += 1) {
+    normalizeLegacyTier(tier);
+    element<HTMLElement>(`#legacy-filter-tier-${tier}`).replaceChildren(
+      ...legacyTierRules(tier).map(renderLegacyRule),
+    );
+  }
+  const source = sourceProfiles.find((profile) => profile.id === "mikan");
+  const enabled = element<HTMLInputElement>("#legacy-filter-enabled");
+  enabled.checked = source?.rss_filter_enabled ?? false;
+  enabled.disabled = source === undefined;
+  element<HTMLElement>("#legacy-filter-status").textContent =
+    `revision ${activeLegacyMikanFilter.revision} · 更新来源 ${activeLegacyMikanFilter.updated_source}`
+    + ` · 总开关 ${enabled.checked ? "开启" : "关闭"} · 匹配区分大小写`;
+  element<HTMLTextAreaElement>("#legacy-filter-json").value =
+    activeLegacyMikanFilter.legacy_json;
+  const snapshots = element<HTMLSelectElement>("#legacy-filter-snapshots");
+  snapshots.replaceChildren(...activeLegacyMikanFilter.snapshots.map((snapshot) => {
+    const option = document.createElement("option");
+    option.value = String(snapshot.revision);
+    option.textContent =
+      `r${snapshot.revision} · ${snapshot.updated_source} · ${new Date(snapshot.created_at_utc).toLocaleString()}`;
+    return option;
+  }));
+  renderLegacyWarnings();
+}
+
+function readLegacyFilterDraft(): LegacyMikanFilterRule[] {
+  if (!activeLegacyMikanFilter) throw new Error("规则尚未载入。");
+  for (const card of document.querySelectorAll<HTMLElement>(".legacy-filter-rule")) {
+    const index = Number(card.dataset.ruleIndex);
+    const rule = activeLegacyMikanFilter.rules[index];
+    if (!rule) throw new Error("规则编辑器状态已过期，请重新载入。");
+    for (const textarea of card.querySelectorAll<HTMLTextAreaElement>(".legacy-filter-values")) {
+      try {
+        const parsed = JSON.parse(textarea.value) as unknown;
+        if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === "string")) {
+          throw new Error("必须是 JSON 字符串数组");
+        }
+        rule[textarea.dataset.kind as "whitelist" | "blacklist"] = parsed;
+        textarea.classList.remove("invalid");
+      } catch {
+        textarea.classList.add("invalid");
+        throw new Error(`F${rule.tier} / ${rule.key || "空键"} 的名单不是有效 JSON 字符串数组。`);
+      }
+    }
+  }
+  for (let tier = 0; tier <= 4; tier += 1) normalizeLegacyTier(tier);
+  renderLegacyWarnings();
+  return activeLegacyMikanFilter.rules;
+}
+
+async function loadLegacyMikanFilter(): Promise<void> {
+  const status = element<HTMLElement>("#legacy-filter-status");
+  status.textContent = "正在读取旧 Mikan 过滤规则…";
+  try {
+    const response = await fetch("/api/v1/mikan/legacy-filter", { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    activeLegacyMikanFilter = await response.json() as LegacyMikanFilterResponse;
+    renderLegacyMikanFilter();
+  } catch (error) {
+    activeLegacyMikanFilter = null;
+    status.textContent = `读取失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+async function saveLegacyMikanFilter(): Promise<void> {
+  if (!activeLegacyMikanFilter) return;
+  const buttonElement = element<HTMLButtonElement>("#legacy-filter-save");
+  const status = element<HTMLElement>("#legacy-filter-status");
+  try {
+    const rules = readLegacyFilterDraft();
+    buttonElement.disabled = true;
+    status.textContent = "正在保存五级过滤规则…";
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/mikan/legacy-filter", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        expected_revision: activeLegacyMikanFilter.revision,
+        rules,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    activeLegacyMikanFilter = await response.json() as LegacyMikanFilterResponse;
+    renderLegacyMikanFilter();
+    status.textContent = `保存成功 · revision ${activeLegacyMikanFilter.revision}`;
+  } catch (error) {
+    status.textContent =
+      `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新载入。`;
+  } finally {
+    buttonElement.disabled = false;
+  }
+}
+
+function addLegacyMikanRule(tier: number): void {
+  if (!activeLegacyMikanFilter) return;
+  const rules = legacyTierRules(tier);
+  let sequence = rules.length + 1;
+  let key = tier === 1 ? "key_3951_12" : tier === 2 ? "3951" : tier === 3 ? "12"
+    : tier === 4 ? "Group" : `global-${sequence}`;
+  while (rules.some((rule) => rule.key === key)) {
+    sequence += 1;
+    key = `rule-${sequence}`;
+  }
+  activeLegacyMikanFilter.rules.push({
+    tier,
+    position: rules.length,
+    key,
+    whitelist_enabled: false,
+    blacklist_enabled: false,
+    whitelist: [],
+    blacklist: [],
+  });
+  renderLegacyMikanFilter();
+}
+
+async function importLegacyMikanFilter(): Promise<void> {
+  if (!activeLegacyMikanFilter) return;
+  const status = element<HTMLElement>("#legacy-filter-status");
+  status.textContent = "正在导入旧版 JSON…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/mikan/legacy-filter/import", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        expected_revision: activeLegacyMikanFilter.revision,
+        legacy_json: element<HTMLTextAreaElement>("#legacy-filter-json").value,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    activeLegacyMikanFilter = await response.json() as LegacyMikanFilterResponse;
+    renderLegacyMikanFilter();
+    status.textContent = `导入成功 · revision ${activeLegacyMikanFilter.revision}`;
+  } catch (error) {
+    status.textContent =
+      `导入失败：${errorMessage(error, "未知错误")}；原规则未修改。`;
+  }
+}
+
+async function rollbackLegacyMikanFilter(): Promise<void> {
+  if (!activeLegacyMikanFilter) return;
+  const target = Number(element<HTMLSelectElement>("#legacy-filter-snapshots").value);
+  if (!Number.isInteger(target) || target < 1 || target === activeLegacyMikanFilter.revision) return;
+  if (!window.confirm(`将当前规则回滚为 revision ${target}？系统会创建新的审计 revision，不删除历史。`)) return;
+  const status = element<HTMLElement>("#legacy-filter-status");
+  status.textContent = `正在回滚到 revision ${target}…`;
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/mikan/legacy-filter/rollback", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        expected_revision: activeLegacyMikanFilter.revision,
+        target_revision: target,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    activeLegacyMikanFilter = await response.json() as LegacyMikanFilterResponse;
+    renderLegacyMikanFilter();
+    status.textContent = `已回滚并创建 revision ${activeLegacyMikanFilter.revision}`;
+  } catch (error) {
+    status.textContent =
+      `回滚失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新载入。`;
+  }
+}
+
+async function previewLegacyMikanFilter(): Promise<void> {
+  const result = element<HTMLElement>("#legacy-filter-preview-result");
+  try {
+    const rules = readLegacyFilterDraft();
+    result.textContent = "正在执行服务端预览…";
+    const numberOrNull = (selector: string): number | null => {
+      const input = element<HTMLInputElement>(selector);
+      return input.value === "" ? null : input.valueAsNumber;
+    };
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/mikan/legacy-filter/preview", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        title: element<HTMLInputElement>("#legacy-filter-preview-title").value,
+        mikanid: numberOrNull("#legacy-filter-preview-mikanid"),
+        groupid: numberOrNull("#legacy-filter-preview-groupid"),
+        group_name: element<HTMLInputElement>("#legacy-filter-preview-group-name").value || null,
+        rules,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const preview = await response.json() as LegacyMikanFilterPreview;
+    const summary = document.createElement("strong");
+    summary.textContent =
+      `${preview.accepted ? "接受" : "拒绝"} · ${preview.reason}`
+      + ` · 字幕组名 ${preview.derived_group_name || "（空）"}`
+      + (preview.matched_scope ? ` · 最后命中 ${preview.matched_scope}/${preview.matched_key ?? ""}` : "");
+    result.replaceChildren(summary, ...preview.steps.map((step) => {
+      const row = document.createElement("div");
+      row.className = `legacy-filter-trace ${
+        step.accepted === true ? "accepted" : step.accepted === false ? "rejected" : ""}`;
+      row.textContent =
+        `${step.tier}${step.key === null ? "" : ` / ${step.key}`}`
+        + ` · ${step.applicable ? (step.accepted ? "通过" : "拒绝") : "未执行"}`
+        + ` · ${step.reason}`
+        + (step.whitelist_matches.length > 0 ? ` · 白名单命中 ${JSON.stringify(step.whitelist_matches)}` : "")
+        + (step.blacklist_matches.length > 0 ? ` · 黑名单命中 ${JSON.stringify(step.blacklist_matches)}` : "");
+      return row;
+    }));
+  } catch (error) {
+    result.textContent = `预览失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+async function updateLegacyFilterSwitch(): Promise<void> {
+  const profile = sourceProfiles.find((item) => item.id === "mikan");
+  const toggle = element<HTMLInputElement>("#legacy-filter-enabled");
+  if (!profile) return;
+  toggle.disabled = true;
+  const status = element<HTMLElement>("#legacy-filter-status");
+  status.textContent = "正在更新 Mikan 来源总开关…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/sources/mikan", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        display_name: profile.display_name,
+        downloader_id: profile.downloader_id,
+        file_strategy: profile.file_strategy,
+        category: profile.category,
+        tags: profile.tags,
+        seeding_time_minutes: profile.seeding_time_minutes,
+        allowed_torrent_hosts: profile.allowed_torrent_hosts,
+        rss_filter_enabled: toggle.checked,
+        rss_priority_enabled: profile.rss_priority_enabled,
+        enabled: profile.enabled,
+        expected_revision: profile.revision,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const saved = await response.json() as SourceProfile;
+    const index = sourceProfiles.findIndex((item) => item.id === saved.id);
+    if (index >= 0) sourceProfiles[index] = saved;
+    renderLegacyMikanFilter();
+    void loadRssRules();
+  } catch (error) {
+    toggle.checked = profile.rss_filter_enabled;
+    status.textContent =
+      `总开关更新失败：${errorMessage(error, "未知错误")}；请重新载入来源。`;
+  } finally {
+    toggle.disabled = false;
+  }
+}
+
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());
 element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
@@ -4110,6 +4539,41 @@ element<HTMLButtonElement>("#rss-add-group").addEventListener("click", () => {
   renderRssRules();
 });
 element<HTMLButtonElement>("#rss-preview-run").addEventListener("click", () => void previewRssRules());
+element<HTMLButtonElement>("#legacy-filter-reload").addEventListener(
+  "click",
+  () => void loadLegacyMikanFilter(),
+);
+element<HTMLButtonElement>("#legacy-filter-save").addEventListener(
+  "click",
+  () => void saveLegacyMikanFilter(),
+);
+element<HTMLButtonElement>("#legacy-filter-export").addEventListener("click", () => {
+  if (activeLegacyMikanFilter) {
+    element<HTMLTextAreaElement>("#legacy-filter-json").value =
+      activeLegacyMikanFilter.legacy_json;
+  }
+});
+element<HTMLButtonElement>("#legacy-filter-import").addEventListener(
+  "click",
+  () => void importLegacyMikanFilter(),
+);
+element<HTMLButtonElement>("#legacy-filter-rollback").addEventListener(
+  "click",
+  () => void rollbackLegacyMikanFilter(),
+);
+element<HTMLButtonElement>("#legacy-filter-preview-run").addEventListener(
+  "click",
+  () => void previewLegacyMikanFilter(),
+);
+element<HTMLInputElement>("#legacy-filter-enabled").addEventListener(
+  "change",
+  () => void updateLegacyFilterSwitch(),
+);
+for (const addButton of document.querySelectorAll<HTMLButtonElement>("[data-legacy-add-tier]")) {
+  addButton.addEventListener("click", () => {
+    addLegacyMikanRule(Number(addButton.dataset.legacyAddTier));
+  });
+}
 element<HTMLButtonElement>("#source-new").addEventListener("click", () => populateSourceForm(null));
 element<HTMLFormElement>("#source-form").addEventListener("submit", (event) => void saveSource(event));
 element<HTMLButtonElement>("#source-delete").addEventListener("click", () => void deleteSource());
@@ -4162,6 +4626,7 @@ void loadPendingTmdb();
 void loadDownloaders();
 void loadSources();
 void loadRssRules();
+void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);

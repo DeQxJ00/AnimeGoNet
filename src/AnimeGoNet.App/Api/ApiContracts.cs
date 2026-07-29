@@ -875,3 +875,63 @@ public sealed record SourceRoutePreviewResponse(
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("rss_rule_revision")] long? RssRuleRevision);
+
+public sealed record LegacyMikanFilterRuleResponse(
+    [property: JsonPropertyName("tier")] int Tier,
+    [property: JsonPropertyName("position")] int Position,
+    [property: JsonPropertyName("key")] string Key,
+    [property: JsonPropertyName("whitelist_enabled")] bool WhitelistEnabled,
+    [property: JsonPropertyName("blacklist_enabled")] bool BlacklistEnabled,
+    [property: JsonPropertyName("whitelist")] IReadOnlyList<string> Whitelist,
+    [property: JsonPropertyName("blacklist")] IReadOnlyList<string> Blacklist);
+
+public sealed record LegacyMikanFilterSnapshotItem(
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("updated_source")] string UpdatedSource,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc);
+
+public sealed record LegacyMikanFilterResponse(
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("updated_source")] string UpdatedSource,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
+    [property: JsonPropertyName("legacy_json")] string LegacyJson,
+    [property: JsonPropertyName("rules")] IReadOnlyList<LegacyMikanFilterRuleResponse> Rules,
+    [property: JsonPropertyName("snapshots")] IReadOnlyList<LegacyMikanFilterSnapshotItem> Snapshots);
+
+public sealed record LegacyMikanFilterWriteRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("rules")] IReadOnlyList<LegacyMikanFilterRuleResponse>? Rules);
+
+public sealed record LegacyMikanFilterImportRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("legacy_json")] string? LegacyJson);
+
+public sealed record LegacyMikanFilterRollbackRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("target_revision")] long TargetRevision);
+
+public sealed record LegacyMikanFilterPreviewRequest(
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("groupid")] int? GroupId,
+    [property: JsonPropertyName("group_name")] string? GroupName,
+    [property: JsonPropertyName("rules")] IReadOnlyList<LegacyMikanFilterRuleResponse>? Rules);
+
+public sealed record LegacyMikanFilterTraceItem(
+    [property: JsonPropertyName("tier")] string Tier,
+    [property: JsonPropertyName("key")] string? Key,
+    [property: JsonPropertyName("applicable")] bool Applicable,
+    [property: JsonPropertyName("accepted")] bool? Accepted,
+    [property: JsonPropertyName("whitelist_matches")] IReadOnlyList<string> WhitelistMatches,
+    [property: JsonPropertyName("blacklist_matches")] IReadOnlyList<string> BlacklistMatches,
+    [property: JsonPropertyName("reason")] string Reason);
+
+public sealed record LegacyMikanFilterPreviewResponse(
+    [property: JsonPropertyName("accepted")] bool Accepted,
+    [property: JsonPropertyName("reason")] string Reason,
+    [property: JsonPropertyName("matched_scope")] string? MatchedScope,
+    [property: JsonPropertyName("matched_key")] string? MatchedKey,
+    [property: JsonPropertyName("derived_group_name")] string DerivedGroupName,
+    [property: JsonPropertyName("steps")] IReadOnlyList<LegacyMikanFilterTraceItem> Steps);

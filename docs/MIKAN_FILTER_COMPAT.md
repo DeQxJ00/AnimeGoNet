@@ -81,6 +81,18 @@ GET  /api/plugin/config?name=filter/mikan_tool.py
 - 显示最近一次配置来源（Web/AnimeGoHelper/迁移）、revision、修改时间和回滚入口；遇到 stale revision 时要求刷新而不是覆盖。
 - RSS/任务详情保存并展示过滤决策摘要；关键词按普通文本转义显示，禁止作为 HTML 渲染。
 
+现代管理端点固定操作默认 `mikan` SourceProfile，并与旧 AnimeGoHelper API 共用同一份 revision 数据：
+
+```http
+GET  /api/v1/mikan/legacy-filter
+PUT  /api/v1/mikan/legacy-filter
+POST /api/v1/mikan/legacy-filter/import
+POST /api/v1/mikan/legacy-filter/rollback
+POST /api/v1/mikan/legacy-filter/preview
+```
+
+GET 同时返回当前强类型规则、可直接交给 AnimeGoHelper 的 `legacy_json` 和最近快照。PUT、导入与回滚都要求 `expected_revision`；回滚不是覆盖或删除历史，而是从目标快照创建新的 `updated_source=rollback` revision。预览接收当前页面尚未保存的规则草稿，因此可以在持久化前验证 F0 顺序、F1/F2/F3 短路、F4 字幕组名、白黑名单实际命中词和最终结果。结构化编辑器使用 JSON 字符串数组，避免普通“每行一个”编辑器无法区分空数组与单个空字符串，也能保留重复项和原始大小写。
+
 ## 6. NativeAOT 与验证
 
 配置 DTO 和旧 envelope 使用 source-generated `System.Text.Json` context；不得依赖反射序列化、Python 或动态代码生成。C# 实现需要对上游 Python 运行结果做相同输入差分测试，至少覆盖：

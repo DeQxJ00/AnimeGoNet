@@ -14,6 +14,11 @@ public sealed record LegacyMikanFilterSnapshot(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
+public sealed record LegacyMikanFilterSnapshotSummary(
+    long Revision,
+    string UpdatedSource,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed class LegacyMikanFilterRevisionException : InvalidOperationException;
 
 public sealed class LegacyMikanFilterStore(AnimeGoSqliteDatabase database)
@@ -51,6 +56,41 @@ public sealed class LegacyMikanFilterStore(AnimeGoSqliteDatabase database)
         var profile = NormalizeProfile(sourceProfileId);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await ReadAsync(connection, null, profile, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<LegacyMikanFilterSnapshotSummary>> ListSnapshotsAsync(
+        string sourceProfileId,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = NormalizeProfile(sourceProfileId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 200);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT revision, updated_source, created_at_utc
+            FROM legacy_mikan_filter_snapshots
+            WHERE source_profile_id = $profile
+            ORDER BY revision DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$profile", profile);
+        command.Parameters.AddWithValue("$limit", limit);
+        var snapshots = new List<LegacyMikanFilterSnapshotSummary>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            snapshots.Add(new LegacyMikanFilterSnapshotSummary(
+                reader.GetInt64(0),
+                reader.GetString(1),
+                DateTimeOffset.Parse(
+                    reader.GetString(2),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind)));
+        }
+
+        return snapshots;
     }
 
     public async Task<LegacyMikanFilterSnapshot> SaveAsync(

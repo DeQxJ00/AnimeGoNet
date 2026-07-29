@@ -64,6 +64,53 @@ public sealed class LegacyMikanFilterEngineTests
         Assert.Equal("MikanIdentityRequired", result.Reason);
     }
 
+    [Fact]
+    public void PreviewExplainsTierPrecedenceAndCaseSensitiveMatches()
+    {
+        var preview = LegacyMikanFilterEngine.Preview(
+            new LegacyMikanFilterCandidate("Show CHS 1080P", 3951, 370, "Group"),
+            Config(
+                f0:
+                [
+                    new("global", Rule(true, false, ["1080P"], [])),
+                ],
+                f1: new Dictionary<string, LegacyMikanFilterRule>
+                {
+                    ["key_3951_370"] = Rule(true, true, ["CHS", "chs"], ["合集"]),
+                },
+                f2: new Dictionary<string, LegacyMikanFilterRule>
+                {
+                    ["3951"] = Rule(false, true, [], ["CHS"]),
+                }));
+
+        Assert.True(preview.Result.Accepted);
+        Assert.Collection(
+            preview.Steps,
+            step =>
+            {
+                Assert.Equal("Filiter0", step.Tier);
+                Assert.Equal(["1080P"], step.WhitelistMatches);
+            },
+            step =>
+            {
+                Assert.Equal("Filiter1", step.Tier);
+                Assert.Equal(["CHS"], step.WhitelistMatches);
+                Assert.Empty(step.BlacklistMatches);
+            },
+            step =>
+            {
+                Assert.Equal("Filiter2", step.Tier);
+                Assert.False(step.Applicable);
+                Assert.Equal("HigherTierMatched", step.Reason);
+            },
+            step => Assert.Equal("Filiter3", step.Tier),
+            step =>
+            {
+                Assert.Equal("Filiter4", step.Tier);
+                Assert.Equal("NoMatchingRule", step.Reason);
+            });
+    }
+
     [Theory]
     [InlineData("[LoliHouse] Show - 03", "LoliHouse")]
     [InlineData("【字幕组】Show - 03", "字幕组")]

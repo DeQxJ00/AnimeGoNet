@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
@@ -71,6 +72,11 @@ public static class ApiEndpoints
         app.MapDelete(
             "/api/v1/mikan/trusted-offsets/{mikanId:int}/{groupId:int}",
             ClearMikanTrustedOffset);
+        app.MapGet("/api/v1/mikan/legacy-filter", GetLegacyMikanFilter);
+        app.MapPut("/api/v1/mikan/legacy-filter", PutLegacyMikanFilter);
+        app.MapPost("/api/v1/mikan/legacy-filter/import", ImportLegacyMikanFilter);
+        app.MapPost("/api/v1/mikan/legacy-filter/rollback", RollbackLegacyMikanFilter);
+        app.MapPost("/api/v1/mikan/legacy-filter/preview", PreviewLegacyMikanFilter);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
@@ -2142,6 +2148,185 @@ public static class ApiEndpoints
         }
     }
 
+    private static async Task<IResult> GetLegacyMikanFilter(
+        LegacyMikanFilterStore store,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await store.GetAsync("mikan", cancellationToken).ConfigureAwait(false);
+        return snapshot is null
+            ? TypedResults.NotFound(Error(
+                "mikan_legacy_filter_not_found",
+                "The default Mikan legacy filter was not initialized."))
+            : TypedResults.Ok(await ToResponseAsync(store, snapshot, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> PutLegacyMikanFilter(
+        LegacyMikanFilterWriteRequest request,
+        LegacyMikanFilterStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var config = ToLegacyMikanFilterConfig(request.Rules);
+            var saved = await store.SaveAsync(
+                "mikan",
+                config,
+                request.ExpectedRevision,
+                "web",
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(
+                await ToResponseAsync(store, saved, cancellationToken).ConfigureAwait(false));
+        }
+        catch (LegacyMikanFilterRevisionException)
+        {
+            return LegacyMikanFilterRevisionConflict();
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_legacy_filter_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> ImportLegacyMikanFilter(
+        LegacyMikanFilterImportRequest request,
+        LegacyMikanFilterStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request.LegacyJson is null)
+            {
+                throw new ArgumentException("legacy_json is required.");
+            }
+
+            var json = Encoding.UTF8.GetBytes(request.LegacyJson);
+            if (json.Length is 0 or > 1_048_576)
+            {
+                throw new ArgumentException("legacy_json must be between 1 byte and 1 MiB.");
+            }
+
+            var config = LegacyMikanFilterCodec.Parse(json);
+            ValidateLegacyMikanFilterConfig(config);
+            var saved = await store.SaveAsync(
+                "mikan",
+                config,
+                request.ExpectedRevision,
+                "web",
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(
+                await ToResponseAsync(store, saved, cancellationToken).ConfigureAwait(false));
+        }
+        catch (LegacyMikanFilterRevisionException)
+        {
+            return LegacyMikanFilterRevisionConflict();
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or FormatException or JsonException)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_legacy_filter_import_invalid",
+                exception.Message));
+        }
+    }
+
+    private static async Task<IResult> RollbackLegacyMikanFilter(
+        LegacyMikanFilterRollbackRequest request,
+        LegacyMikanFilterStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request.TargetRevision < 1)
+            {
+                throw new ArgumentException("target_revision must be a positive integer.");
+            }
+
+            var saved = await store.RollbackAsync(
+                "mikan",
+                request.TargetRevision,
+                request.ExpectedRevision,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(
+                await ToResponseAsync(store, saved, cancellationToken).ConfigureAwait(false));
+        }
+        catch (LegacyMikanFilterRevisionException)
+        {
+            return LegacyMikanFilterRevisionConflict();
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error(
+                "mikan_legacy_filter_snapshot_not_found",
+                "The requested legacy filter snapshot was not found."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_legacy_filter_rollback_invalid",
+                exception.Message));
+        }
+    }
+
+    private static IResult PreviewLegacyMikanFilter(LegacyMikanFilterPreviewRequest request)
+    {
+        try
+        {
+            var title = request.Title;
+            if (string.IsNullOrWhiteSpace(title) || title.Length > 1_000)
+            {
+                throw new ArgumentException("title is required and cannot exceed 1000 characters.");
+            }
+            if (request.MikanId is <= 0)
+            {
+                throw new ArgumentException("mikanid must be a positive integer when supplied.");
+            }
+            if (request.GroupId is <= 0)
+            {
+                throw new ArgumentException("groupid must be a positive integer when supplied.");
+            }
+
+            var groupName = request.GroupName is null
+                ? LegacyMikanFilterEngine.ParseGroupName(title)
+                : request.GroupName;
+            if (groupName.Length > 256)
+            {
+                throw new ArgumentException("group_name cannot exceed 256 characters.");
+            }
+
+            var config = ToLegacyMikanFilterConfig(request.Rules);
+            var preview = LegacyMikanFilterEngine.Preview(
+                new LegacyMikanFilterCandidate(
+                    title,
+                    request.MikanId,
+                    request.GroupId,
+                    groupName),
+                config);
+            return TypedResults.Ok(new LegacyMikanFilterPreviewResponse(
+                preview.Result.Accepted,
+                preview.Result.Reason,
+                preview.Result.MatchedScope,
+                preview.Result.MatchedKey,
+                groupName,
+                preview.Steps.Select(step => new LegacyMikanFilterTraceItem(
+                    step.Tier,
+                    step.Key,
+                    step.Applicable,
+                    step.Accepted,
+                    step.WhitelistMatches,
+                    step.BlacklistMatches,
+                    step.Reason)).ToArray()));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_legacy_filter_preview_invalid",
+                exception.Message));
+        }
+    }
+
     private static async Task<IResult> RetryMetadataTask(
         string taskId,
         MetadataResolutionStore resolutions,
@@ -3085,6 +3270,184 @@ public static class ApiEndpoints
 
     private static IngestItemResponse Rejected(int index, IReadOnlyList<string> errors) =>
         new(index, "rejected", null, null, null, null, null, null, null, errors);
+
+    private static async Task<LegacyMikanFilterResponse> ToResponseAsync(
+        LegacyMikanFilterStore store,
+        LegacyMikanFilterSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        var snapshots = await store
+            .ListSnapshotsAsync(snapshot.SourceProfileId, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var rules = new List<LegacyMikanFilterRuleResponse>();
+        AddLegacyMikanFilterTier(rules, 0, snapshot.Config.Filiter0);
+        AddLegacyMikanFilterTier(rules, 1, snapshot.Config.Filiter1);
+        AddLegacyMikanFilterTier(rules, 2, snapshot.Config.Filiter2);
+        AddLegacyMikanFilterTier(rules, 3, snapshot.Config.Filiter3);
+        AddLegacyMikanFilterTier(rules, 4, snapshot.Config.Filiter4);
+        return new LegacyMikanFilterResponse(
+            snapshot.SourceProfileId,
+            snapshot.Revision,
+            snapshot.UpdatedSource,
+            snapshot.CreatedAtUtc,
+            snapshot.UpdatedAtUtc,
+            Encoding.UTF8.GetString(LegacyMikanFilterCodec.Encode(snapshot.Config)),
+            rules,
+            snapshots.Select(item => new LegacyMikanFilterSnapshotItem(
+                item.Revision,
+                item.UpdatedSource,
+                item.CreatedAtUtc)).ToArray());
+    }
+
+    private static void AddLegacyMikanFilterTier(
+        List<LegacyMikanFilterRuleResponse> target,
+        int tier,
+        IEnumerable<KeyValuePair<string, LegacyMikanFilterRule>> rules)
+    {
+        var position = 0;
+        foreach (var pair in rules)
+        {
+            target.Add(new LegacyMikanFilterRuleResponse(
+                tier,
+                position++,
+                pair.Key,
+                pair.Value.IsEnableWhitelist,
+                pair.Value.IsEnableBlacklist,
+                pair.Value.Whitelist,
+                pair.Value.Blacklist));
+        }
+    }
+
+    private static LegacyMikanFilterConfig ToLegacyMikanFilterConfig(
+        IReadOnlyList<LegacyMikanFilterRuleResponse>? rules)
+    {
+        if (rules is null)
+        {
+            throw new ArgumentException("rules is required.");
+        }
+        if (rules.Count > 1_000)
+        {
+            throw new ArgumentException("rules cannot contain more than 1000 entries.");
+        }
+
+        var tiers = new List<KeyValuePair<string, LegacyMikanFilterRule>>[5];
+        for (var index = 0; index < tiers.Length; index++)
+        {
+            tiers[index] = [];
+        }
+
+        foreach (var group in rules.GroupBy(rule => rule.Tier))
+        {
+            if (group.Key is < 0 or > 4)
+            {
+                throw new ArgumentException("rule tier must be between 0 and 4.");
+            }
+
+            var positions = new HashSet<int>();
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in group.OrderBy(rule => rule.Position))
+            {
+                if (item.Position < 0 || !positions.Add(item.Position))
+                {
+                    throw new ArgumentException(
+                        $"Filiter{group.Key} rule positions must be unique non-negative integers.");
+                }
+                ValidateLegacyMikanFilterKey(item.Key, group.Key);
+                if (!keys.Add(item.Key))
+                {
+                    throw new ArgumentException(
+                        $"Filiter{group.Key} rule keys must be unique with case-sensitive comparison.");
+                }
+
+                var whitelist = ValidateLegacyMikanFilterValues(
+                    item.Whitelist, $"Filiter{group.Key}.{item.Key}.whitelist");
+                var blacklist = ValidateLegacyMikanFilterValues(
+                    item.Blacklist, $"Filiter{group.Key}.{item.Key}.blacklist");
+                tiers[group.Key].Add(new KeyValuePair<string, LegacyMikanFilterRule>(
+                    item.Key,
+                    new LegacyMikanFilterRule(
+                        item.WhitelistEnabled,
+                        item.BlacklistEnabled,
+                        whitelist,
+                        blacklist)));
+            }
+        }
+
+        return new LegacyMikanFilterConfig(
+            tiers[0],
+            ToLegacyMikanFilterDictionary(tiers[1]),
+            ToLegacyMikanFilterDictionary(tiers[2]),
+            ToLegacyMikanFilterDictionary(tiers[3]),
+            ToLegacyMikanFilterDictionary(tiers[4]));
+    }
+
+    private static void ValidateLegacyMikanFilterConfig(LegacyMikanFilterConfig config)
+    {
+        var rules = new List<LegacyMikanFilterRuleResponse>();
+        AddLegacyMikanFilterTier(rules, 0, config.Filiter0);
+        AddLegacyMikanFilterTier(rules, 1, config.Filiter1);
+        AddLegacyMikanFilterTier(rules, 2, config.Filiter2);
+        AddLegacyMikanFilterTier(rules, 3, config.Filiter3);
+        AddLegacyMikanFilterTier(rules, 4, config.Filiter4);
+        _ = ToLegacyMikanFilterConfig(rules);
+    }
+
+    private static string[] ValidateLegacyMikanFilterValues(
+        IReadOnlyList<string>? values,
+        string path)
+    {
+        if (values is null)
+        {
+            throw new ArgumentException($"{path} is required.");
+        }
+        if (values.Count > 500)
+        {
+            throw new ArgumentException($"{path} cannot contain more than 500 values.");
+        }
+
+        var result = new string[values.Count];
+        for (var index = 0; index < values.Count; index++)
+        {
+            var value = values[index]
+                ?? throw new ArgumentException($"{path}[{index}] must be a string.");
+            if (value.Length > 4_096)
+            {
+                throw new ArgumentException(
+                    $"{path}[{index}] cannot exceed 4096 characters.");
+            }
+            result[index] = value;
+        }
+        return result;
+    }
+
+    private static void ValidateLegacyMikanFilterKey(string? key, int tier)
+    {
+        if (key is null)
+        {
+            throw new ArgumentException($"Filiter{tier} rule key is required.");
+        }
+        if (key.Length > 1_024)
+        {
+            throw new ArgumentException(
+                $"Filiter{tier} rule key cannot exceed 1024 characters.");
+        }
+    }
+
+    private static Dictionary<string, LegacyMikanFilterRule> ToLegacyMikanFilterDictionary(
+        IEnumerable<KeyValuePair<string, LegacyMikanFilterRule>> rules)
+    {
+        var result = new Dictionary<string, LegacyMikanFilterRule>(StringComparer.Ordinal);
+        foreach (var pair in rules)
+        {
+            result.Add(pair.Key, pair.Value);
+        }
+        return result;
+    }
+
+    private static Conflict<ApiErrorResponse> LegacyMikanFilterRevisionConflict() =>
+        TypedResults.Conflict(Error(
+            "mikan_legacy_filter_revision_conflict",
+            "The Mikan legacy filter changed; reload it before saving."));
 
     private static MikanWorkRuleResponse ToResponse(MikanWorkMetadataRule rule) =>
         new(

@@ -562,6 +562,81 @@
       </section>
     </section>
 
+    <section aria-labelledby="legacy-filter-title">
+      <div class="section-heading rss-heading">
+        <div>
+          <p class="eyebrow">Legacy-compatible Mikan filter</p>
+          <h2 id="legacy-filter-title">Mikan 五级过滤</h2>
+        </div>
+        <div class="rss-actions">
+          <button id="legacy-filter-reload" type="button" class="secondary-button">重新载入</button>
+          <button id="legacy-filter-save" type="button" class="primary-button">保存规则</button>
+        </div>
+      </div>
+      <p id="legacy-filter-status" class="muted">正在读取旧 Mikan 过滤规则…</p>
+      <div class="legacy-filter-toolbar">
+        <label class="legacy-filter-switch">
+          <input id="legacy-filter-enabled" type="checkbox">
+          <span><strong>来源总开关</strong><small>关闭时 RSS 跳过五级过滤，但不删除规则；快速下载始终跳过。</small></span>
+        </label>
+        <label>历史快照
+          <select id="legacy-filter-snapshots"></select>
+        </label>
+        <button id="legacy-filter-rollback" type="button" class="secondary-button">回滚为所选快照</button>
+      </div>
+      <div id="legacy-filter-warning" class="legacy-filter-warning" aria-live="polite"></div>
+      <div class="legacy-filter-tiers">
+        <article class="legacy-filter-tier">
+          <div><h3>F0 全局</h3><p>按顺序全部执行，但只有最后一条结果生效。</p></div>
+          <button type="button" data-legacy-add-tier="0">添加 F0</button>
+          <div id="legacy-filter-tier-0" class="legacy-filter-rule-list"></div>
+        </article>
+        <article class="legacy-filter-tier">
+          <div><h3>F1 作品 + 字幕组</h3><p>键格式：key_{mikanid}_{groupid}；命中后不再执行 F2/F3。</p></div>
+          <button type="button" data-legacy-add-tier="1">添加 F1</button>
+          <div id="legacy-filter-tier-1" class="legacy-filter-rule-list"></div>
+        </article>
+        <article class="legacy-filter-tier">
+          <div><h3>F2 作品</h3><p>键为 mikanid；仅 F1 未命中时执行。</p></div>
+          <button type="button" data-legacy-add-tier="2">添加 F2</button>
+          <div id="legacy-filter-tier-2" class="legacy-filter-rule-list"></div>
+        </article>
+        <article class="legacy-filter-tier">
+          <div><h3>F3 字幕组 ID</h3><p>键为 groupid；仅 F1/F2 都未命中时执行。</p></div>
+          <button type="button" data-legacy-add-tier="3">添加 F3</button>
+          <div id="legacy-filter-tier-3" class="legacy-filter-rule-list"></div>
+        </article>
+        <article class="legacy-filter-tier">
+          <div><h3>F4 字幕组名</h3><p>键为标题首个 [] / 【】中的字幕组名；与 F0、F1–F3 结果做 AND。</p></div>
+          <button type="button" data-legacy-add-tier="4">添加 F4</button>
+          <div id="legacy-filter-tier-4" class="legacy-filter-rule-list"></div>
+        </article>
+      </div>
+      <div class="legacy-filter-tools">
+        <article>
+          <h3>旧版 JSON 导入 / 导出</h3>
+          <p class="muted">保留上游拼写 Filiter0…Filiter4、顺序、重复项、空字符串和大小写。</p>
+          <textarea id="legacy-filter-json" rows="12" spellcheck="false"></textarea>
+          <div class="rss-actions">
+            <button id="legacy-filter-export" type="button" class="secondary-button">刷新导出内容</button>
+            <button id="legacy-filter-import" type="button" class="secondary-button">导入并保存</button>
+          </div>
+        </article>
+        <article>
+          <h3>可解释预览</h3>
+          <p class="muted">按当前未保存草稿执行；字符串匹配区分大小写，不自动转小写。</p>
+          <div class="legacy-preview-fields">
+            <label class="wide">任务标题<input id="legacy-filter-preview-title" value="[Group] Anime CHS 1080P"></label>
+            <label>mikanid<input id="legacy-filter-preview-mikanid" type="number" min="1" value="3951"></label>
+            <label>groupid<input id="legacy-filter-preview-groupid" type="number" min="1" value="12"></label>
+            <label class="wide">字幕组名（留空则从标题解析）<input id="legacy-filter-preview-group-name"></label>
+          </div>
+          <button id="legacy-filter-preview-run" type="button" class="secondary-button">服务端预览</button>
+          <div id="legacy-filter-preview-result" class="legacy-filter-preview-result" aria-live="polite"></div>
+        </article>
+      </div>
+    </section>
+
     <section class="grid panels" aria-label="管理入口">
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>脱敏运行视图已接入</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
