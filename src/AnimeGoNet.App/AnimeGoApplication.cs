@@ -78,18 +78,52 @@ public static class AnimeGoApplication
             builder.Configuration["DOTNET_RUNNING_IN_CONTAINER"],
             "true",
             StringComparison.OrdinalIgnoreCase);
-        startBackgroundWorkers ??= !bool.TryParse(
-            builder.Configuration["background_workers_enabled"],
-            out var configuredWorkers) || configuredWorkers;
         var optionsWereSupplied = options is not null;
-        options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
+        DeploymentYamlSnapshot? deploymentYaml = null;
+        if (!optionsWereSupplied)
+        {
+            var yamlDefaults = runningInContainer.Value
+                ? AnimeGoDefaults.CreateDocker()
+                : AnimeGoDefaults.CreateNative(AppContext.BaseDirectory);
+            yamlDefaults = ApplyBootstrapPaths(
+                yamlDefaults,
+                builder.Configuration);
+            var yamlPath = DeploymentYamlConfiguration.ResolvePath(
+                builder.Configuration,
+                yamlDefaults);
+            deploymentYaml = await DeploymentYamlConfiguration
+                .LoadOrCreateAsync(yamlPath, yamlDefaults, cancellationToken)
+                .ConfigureAwait(false);
+            builder.Configuration.AddInMemoryCollection(deploymentYaml.Values);
+            builder.Configuration.AddEnvironmentVariables();
+            if (args.Length > 0)
+            {
+                builder.Configuration.AddCommandLine(args);
+            }
+
+            options = LoadOptions(builder.Configuration, runningInContainer.Value);
+        }
+        if (options is null)
+        {
+            throw new InvalidOperationException(
+                "AnimeGoNet options were not initialized.");
+        }
+
+        startBackgroundWorkers ??= ParseOptionalBool(
+            FirstConfigurationValue(
+                builder.Configuration,
+                "background_workers_enabled",
+                "web:background_workers_enabled"),
+            true,
+            "background_workers_enabled");
         legacyDownloaderMigrationState ??= optionsWereSupplied
             ? LegacyDownloaderMigrationState.None
             : LegacyDownloaderMigrationDetector.Detect(
                 builder.Configuration["ANIMEGO_CLIENT"],
                 options.Paths.DataPath,
                 builder.Configuration["ANIMEGO_CONFIG"]
-                    ?? builder.Configuration["config"]);
+                    ?? builder.Configuration["config"]
+                    ?? deploymentYaml?.FilePath);
         if (legacyDownloaderMigrationState.BlocksDownloads)
         {
             startBackgroundWorkers = false;
@@ -125,7 +159,19 @@ public static class AnimeGoApplication
         var downloaderOverrides = new DownloaderOverrideStore(layout.ConfigurationPath);
         var downloaderOverrideSnapshot = await downloaderOverrides.LoadAsync(cancellationToken).ConfigureAwait(false);
         options = ApplyDownloaderOverrides(options, downloaderOverrideSnapshot);
-        accessKey ??= builder.Configuration["access_key"];
+        if (!optionsWereSupplied)
+        {
+            options = ReapplyLockedDownloaderDeploymentValues(
+                deploymentOptions,
+                options,
+                deploymentEnvironmentVariables,
+                args);
+        }
+        accessKey ??= FirstConfigurationValue(
+            builder.Configuration,
+            "ANIMEGO_WEB_ACCESS_KEY",
+            "access_key",
+            "web:access_key");
         if (runningInContainer.Value && string.IsNullOrWhiteSpace(accessKey))
         {
             throw new InvalidOperationException("Docker mode requires a non-empty access_key.");
@@ -377,15 +423,35 @@ public static class AnimeGoApplication
             ? AnimeGoDefaults.CreateDocker()
             : AnimeGoDefaults.CreateNative(AppContext.BaseDirectory);
 
-        var dataPath = configuration["data_path"] ?? defaults.Paths.DataPath;
-        var downloadPath = configuration["download_path"] ?? defaults.Paths.DownloadPath;
-        var savePath = configuration["save_path"] ?? defaults.Paths.SavePath;
+        var dataPath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_DATA_PATH",
+                "data_path",
+                "paths:data_path")
+            ?? defaults.Paths.DataPath);
+        var downloadPath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_DOWNLOAD_PATH",
+                "download_path",
+                "paths:download_path")
+            ?? defaults.Paths.DownloadPath);
+        var savePath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_SAVE_PATH",
+                "save_path",
+                "paths:save_path")
+            ?? defaults.Paths.SavePath);
         var paths = new PathOptions
         {
             DataPath = dataPath,
             DownloadPath = downloadPath,
             SavePath = savePath,
         };
+        var downloaders = LoadDownloaders(configuration, defaults, downloadPath);
+        var sources = LoadSourceProfiles(configuration, defaults);
 
         return defaults with
         {
@@ -395,106 +461,476 @@ public static class AnimeGoApplication
                 Tmdb = defaults.Metadata.Tmdb with
                 {
                     BaseUrl = ParseOptionalAbsoluteUri(
-                        configuration["tmdb_base_url"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_base_url",
+                            "metadata:tmdb:base_url"),
                         "tmdb_base_url") ?? defaults.Metadata.Tmdb.BaseUrl,
                     ProxyUrl = ParseOptionalAbsoluteUri(
-                        configuration["tmdb_proxy_url"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_proxy_url",
+                            "metadata:tmdb:proxy_url"),
                         "tmdb_proxy_url"),
-                    ApiKey = configuration["tmdb_api_key"],
-                    ReadAccessToken = configuration["tmdb_read_access_token"],
-                    Language = NormalizeOptional(configuration["tmdb_language"])
+                    ApiKey = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        "ANIMEGO_THEMOVIEDB_KEY",
+                        "tmdb_api_key",
+                        "metadata:tmdb:api_key")),
+                    ReadAccessToken = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        "tmdb_read_access_token",
+                        "metadata:tmdb:read_access_token")),
+                    Language = NormalizeOptional(FirstConfigurationValue(
+                            configuration,
+                            "tmdb_language",
+                            "metadata:tmdb:language"))
                         ?? defaults.Metadata.Tmdb.Language,
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
-                        configuration["tmdb_timeout_second"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_timeout_second",
+                            "metadata:tmdb:timeout_seconds"),
                         defaults.Metadata.Tmdb.HttpTimeout.TotalSeconds,
                         "tmdb_timeout_second")),
                 },
                 Bangumi = defaults.Metadata.Bangumi with
                 {
                     BaseUrl = ParseOptionalAbsoluteUri(
-                        configuration["bangumi_base_url"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "bangumi_base_url",
+                            "metadata:bangumi:base_url"),
                         "bangumi_base_url") ?? defaults.Metadata.Bangumi.BaseUrl,
                     ProxyUrl = ParseOptionalAbsoluteUri(
-                        configuration["bangumi_proxy_url"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "bangumi_proxy_url",
+                            "metadata:bangumi:proxy_url"),
                         "bangumi_proxy_url"),
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
-                        configuration["bangumi_timeout_second"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "bangumi_timeout_second",
+                            "metadata:bangumi:timeout_seconds"),
                         defaults.Metadata.Bangumi.HttpTimeout.TotalSeconds,
                         "bangumi_timeout_second")),
                 },
+                SeasonFailure = defaults.Metadata.SeasonFailure with
+                {
+                    Skip = ParseOptionalBool(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_fail_skip",
+                            "metadata:season_failure:skip"),
+                        defaults.Metadata.SeasonFailure.Skip,
+                        "tmdb_fail_skip"),
+                    Backtrace = ParseOptionalBool(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_fail_backtrace",
+                            "metadata:season_failure:backtrace"),
+                        defaults.Metadata.SeasonFailure.Backtrace,
+                        "tmdb_fail_backtrace"),
+                    UseTitleSeason = ParseOptionalBool(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_fail_use_title_season",
+                            "metadata:season_failure:use_title_season"),
+                        defaults.Metadata.SeasonFailure.UseTitleSeason,
+                        "tmdb_fail_use_title_season"),
+                    UseFirstSeason = ParseOptionalBool(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_fail_use_first_season",
+                            "metadata:season_failure:use_first_season"),
+                        defaults.Metadata.SeasonFailure.UseFirstSeason,
+                        "tmdb_fail_use_first_season"),
+                },
                 Ai = defaults.Metadata.Ai with
                 {
-                    Provider = NormalizeOptional(configuration["ai_provider"])
+                    Provider = NormalizeOptional(FirstConfigurationValue(
+                            configuration,
+                            "ai_provider",
+                            "metadata:ai:provider"))
                         ?? defaults.Metadata.Ai.Provider,
-                    BaseUrl = ParseOptionalAbsoluteUri(configuration["ai_base_url"], "ai_base_url"),
-                    ApiKey = configuration["ai_api_key"],
-                    Model = NormalizeOptional(configuration["ai_model"]),
+                    BaseUrl = ParseOptionalAbsoluteUri(
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_base_url",
+                            "metadata:ai:base_url"),
+                        "ai_base_url"),
+                    ApiKey = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        "ai_api_key",
+                        "metadata:ai:api_key")),
+                    Model = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        "ai_model",
+                        "metadata:ai:model")),
                     UseMetadataMatch = ParseAiMetadataMatch(
                         configuration,
-                        defaults.Metadata.Ai.UseMetadataMatch),
+                        ParseOptionalBool(
+                            FirstConfigurationValue(
+                                configuration,
+                                "metadata:ai:use_metadata_match"),
+                            defaults.Metadata.Ai.UseMetadataMatch,
+                            "metadata:ai:use_metadata_match")),
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
-                        configuration["ai_timeout_second"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_timeout_second",
+                            "metadata:ai:timeout_seconds"),
                         defaults.Metadata.Ai.HttpTimeout.TotalSeconds,
                         "ai_timeout_second")),
                     RetryCount = ParseOptionalInt(
-                        configuration["ai_retry_count"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_retry_count",
+                            "metadata:ai:retry_count"),
                         defaults.Metadata.Ai.RetryCount,
                         "ai_retry_count"),
                     UseBangumiPubDateFirst = ParseOptionalBool(
-                        configuration["ai_use_bangumi_pubdate_first"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_use_bangumi_pubdate_first",
+                            "metadata:ai:use_bangumi_pubdate_first"),
                         defaults.Metadata.Ai.UseBangumiPubDateFirst,
                         "ai_use_bangumi_pubdate_first"),
                     TmdbMcpUrl = ParseOptionalAbsoluteUri(
-                        configuration["ai_tmdb_mcp_url"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_tmdb_mcp_url",
+                            "metadata:ai:tmdb_mcp_url"),
                         "ai_tmdb_mcp_url") ?? defaults.Metadata.Ai.TmdbMcpUrl,
                     BangumiMcpUrl = ParseOptionalAbsoluteUri(
-                        configuration["ai_bangumi_mcp_url"],
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_bangumi_mcp_url",
+                            "metadata:ai:bangumi_mcp_url"),
                         "ai_bangumi_mcp_url") ?? defaults.Metadata.Ai.BangumiMcpUrl,
                     AniDbMappingUrlTemplate = NormalizeOptional(
-                        configuration["ai_anidb_mapping_url_template"])
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_anidb_mapping_url_template",
+                            "metadata:ai:anidb_mapping_url_template"))
                         ?? defaults.Metadata.Ai.AniDbMappingUrlTemplate,
                 },
+                TmdbFailureUseBangumi = ParseOptionalBool(
+                    FirstConfigurationValue(
+                        configuration,
+                        "tmdb_fail_use_bangumi",
+                        "metadata:tmdb_failure_use_bangumi"),
+                    defaults.Metadata.TmdbFailureUseBangumi,
+                    "tmdb_fail_use_bangumi"),
+                MikanTrustedOffsetCacheEnabled = ParseOptionalBool(
+                    FirstConfigurationValue(
+                        configuration,
+                        "mikan_trusted_offset_cache_enabled",
+                        "metadata:mikan_trusted_offset_cache_enabled"),
+                    defaults.Metadata.MikanTrustedOffsetCacheEnabled,
+                    "mikan_trusted_offset_cache_enabled"),
             },
             Schedule = defaults.Schedule with
             {
                 RefreshDatabaseCron = NormalizeOptional(
-                    configuration["refresh_database_cron"])
+                    FirstConfigurationValue(
+                        configuration,
+                        "refresh_database_cron",
+                        "schedule:refresh_database_cron"))
                     ?? defaults.Schedule.RefreshDatabaseCron,
             },
             DataUpdate = defaults.DataUpdate with
             {
                 Enabled = ParseOptionalBool(
-                    configuration["data_update_enabled"],
+                    FirstConfigurationValue(
+                        configuration,
+                        "data_update_enabled",
+                        "data_update:enabled"),
                     defaults.DataUpdate.Enabled,
                     "data_update_enabled"),
-                Cron = NormalizeOptional(configuration["data_update_cron"])
+                Cron = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        "data_update_cron",
+                        "data_update:cron"))
                     ?? defaults.DataUpdate.Cron,
                 ManifestUrl = ParseOptionalAbsoluteUri(
-                    configuration["data_update_manifest_url"],
+                    FirstConfigurationValue(
+                        configuration,
+                        "data_update_manifest_url",
+                        "data_update:manifest_url"),
                     "data_update_manifest_url"),
                 AutoDownload = ParseOptionalBool(
-                    configuration["data_update_auto_download"],
+                    FirstConfigurationValue(
+                        configuration,
+                        "data_update_auto_download",
+                        "data_update:auto_download"),
                     defaults.DataUpdate.AutoDownload,
                     "data_update_auto_download"),
                 AutoImport = ParseOptionalBool(
-                    configuration["data_update_auto_import"],
+                    FirstConfigurationValue(
+                        configuration,
+                        "data_update_auto_import",
+                        "data_update:auto_import"),
                     defaults.DataUpdate.AutoImport,
                     "data_update_auto_import"),
                 KeepVersions = ParseOptionalInt(
-                    configuration["data_update_keep_versions"],
+                    FirstConfigurationValue(
+                        configuration,
+                        "data_update_keep_versions",
+                        "data_update:keep_versions"),
                     defaults.DataUpdate.KeepVersions,
                     "data_update_keep_versions"),
                 HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
-                    configuration["data_update_timeout_second"],
+                    FirstConfigurationValue(
+                        configuration,
+                        "data_update_timeout_second",
+                        "data_update:timeout_seconds"),
                     defaults.DataUpdate.HttpTimeout.TotalSeconds,
                     "data_update_timeout_second")),
             },
+            TorrentFetch = defaults.TorrentFetch with
+            {
+                Timeout = TimeSpan.FromSeconds(ParseOptionalDouble(
+                    FirstConfigurationValue(
+                        configuration,
+                        "torrent_http_timeout_seconds",
+                        "torrent_fetch:timeout_seconds"),
+                    defaults.TorrentFetch.Timeout.TotalSeconds,
+                    "torrent_http_timeout_seconds")),
+                MaxResponseBytes = ParseOptionalLong(
+                    FirstConfigurationValue(
+                        configuration,
+                        "torrent_max_response_bytes",
+                        "torrent_fetch:max_response_bytes"),
+                    defaults.TorrentFetch.MaxResponseBytes,
+                    "torrent_max_response_bytes"),
+                MaxRedirects = ParseOptionalInt(
+                    FirstConfigurationValue(
+                        configuration,
+                        "torrent_max_redirects",
+                        "torrent_fetch:max_redirects"),
+                    defaults.TorrentFetch.MaxRedirects,
+                    "torrent_max_redirects"),
+                StagingTtl = TimeSpan.FromSeconds(ParseOptionalDouble(
+                    FirstConfigurationValue(
+                        configuration,
+                        "torrent_staging_ttl_seconds",
+                        "torrent_fetch:staging_ttl_seconds"),
+                    defaults.TorrentFetch.StagingTtl.TotalSeconds,
+                    "torrent_staging_ttl_seconds")),
+            },
+            Downloaders = downloaders,
+            InitialSourceProfiles = sources,
+        };
+    }
+
+    private static AnimeGoOptions ApplyBootstrapPaths(
+        AnimeGoOptions defaults,
+        ConfigurationManager configuration)
+    {
+        var dataPath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_DATA_PATH",
+                "data_path")
+            ?? defaults.Paths.DataPath);
+        var downloadPath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_DOWNLOAD_PATH",
+                "download_path")
+            ?? defaults.Paths.DownloadPath);
+        var savePath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_SAVE_PATH",
+                "save_path")
+            ?? defaults.Paths.SavePath);
+        return defaults with
+        {
+            Paths = new PathOptions
+            {
+                DataPath = dataPath,
+                DownloadPath = downloadPath,
+                SavePath = savePath,
+            },
             Downloaders = defaults.Downloaders.ToDictionary(
                 pair => pair.Key,
-                pair => pair.Value with { DownloadPath = PathBoundary.Combine(downloadPath, pair.Key) },
+                pair => pair.Value with
+                {
+                    DownloadPath = PathBoundary.Combine(downloadPath, pair.Key),
+                },
                 StringComparer.OrdinalIgnoreCase),
         };
     }
+
+    private static Dictionary<string, QbittorrentInstanceOptions> LoadDownloaders(
+        ConfigurationManager configuration,
+        AnimeGoOptions defaults,
+        string globalDownloadPath)
+    {
+        var children = configuration.GetSection("downloaders").GetChildren().ToArray();
+        if (children.Length == 0)
+        {
+            return defaults.Downloaders.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value with
+                {
+                    DownloadPath = PathBoundary.Combine(globalDownloadPath, pair.Key),
+                },
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        var result = new Dictionary<string, QbittorrentInstanceOptions>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var child in children.OrderBy(section => section.Key, StringComparer.Ordinal))
+        {
+            var id = child.Key.Trim().ToLowerInvariant();
+            if (id.Length == 0)
+            {
+                throw new InvalidOperationException("Downloader id must not be empty.");
+            }
+
+            var baseUrlText = id == "bt"
+                ? First(
+                    FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_URL"),
+                    FirstConfigurationValue(child, "base_url"))
+                : FirstConfigurationValue(child, "base_url");
+            var baseUrl = ParseOptionalAbsoluteUri(
+                baseUrlText,
+                $"downloaders:{id}:base_url")
+                ?? throw new InvalidOperationException(
+                    $"downloaders:{id}:base_url is required.");
+            var configuredDownloadPath = id == "bt"
+                ? First(
+                    FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_DOWNLOAD_PATH"),
+                    FirstConfigurationValue(child, "download_path"))
+                : FirstConfigurationValue(child, "download_path");
+            result.Add(id, new QbittorrentInstanceOptions
+            {
+                Type = NormalizeOptional(FirstConfigurationValue(child, "type"))
+                    ?? DownloaderTypes.Qbittorrent,
+                BaseUrl = baseUrl,
+                Username = NormalizeOptional(id == "bt"
+                    ? First(
+                        FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_USERNAME"),
+                        FirstConfigurationValue(child, "username"))
+                    : FirstConfigurationValue(child, "username")),
+                Password = NormalizeOptional(id == "bt"
+                    ? First(
+                        FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_PASSWORD"),
+                        FirstConfigurationValue(child, "password"))
+                    : FirstConfigurationValue(child, "password")),
+                DownloadPath = ResolveConfiguredPath(
+                    configuredDownloadPath
+                    ?? PathBoundary.Combine(globalDownloadPath, id)),
+                Enabled = ParseOptionalBool(
+                    FirstConfigurationValue(child, "enabled"),
+                    true,
+                    $"downloaders:{id}:enabled"),
+            });
+        }
+
+        return result;
+    }
+
+    private static List<SourceProfileSeed> LoadSourceProfiles(
+        ConfigurationManager configuration,
+        AnimeGoOptions defaults)
+    {
+        var children = configuration.GetSection("sources").GetChildren().ToArray();
+        if (children.Length == 0)
+        {
+            return defaults.InitialSourceProfiles.ToList();
+        }
+
+        var result = new List<SourceProfileSeed>(children.Length);
+        foreach (var child in children.OrderBy(section => section.Key, StringComparer.Ordinal))
+        {
+            var id = child.Key.Trim().ToLowerInvariant();
+            var strategyText = NormalizeOptional(
+                FirstConfigurationValue(child, "file_strategy")) ?? "move";
+            result.Add(new SourceProfileSeed
+            {
+                Id = id,
+                Adapter = NormalizeOptional(FirstConfigurationValue(child, "adapter")) ?? id,
+                DownloaderId = NormalizeOptional(
+                    FirstConfigurationValue(child, "downloader_id"))
+                    ?? throw new InvalidOperationException(
+                        $"sources:{id}:downloader_id is required."),
+                FileStrategy = strategyText.ToLowerInvariant() switch
+                {
+                    "link" => FileStrategy.Link,
+                    "link_delete" => FileStrategy.LinkDelete,
+                    "move" => FileStrategy.Move,
+                    "wait_move" => FileStrategy.WaitMove,
+                    _ => throw new InvalidOperationException(
+                        $"sources:{id}:file_strategy is unsupported."),
+                },
+                AllowedTorrentHosts = ReadScalarList(
+                    child.GetSection("allowed_torrent_hosts")),
+                Category = NormalizeOptional(id == "mikan"
+                    ? First(
+                        FirstConfigurationValue(configuration, "ANIMEGO_CATEGORY"),
+                        FirstConfigurationValue(child, "category"))
+                    : FirstConfigurationValue(child, "category"))
+                    ?? "animegonet",
+                Tags = ReadScalarList(child.GetSection("tags")),
+                SeedingTimeMinutes = ParseOptionalInt(
+                    FirstConfigurationValue(child, "seeding_time_minutes"),
+                    0,
+                    $"sources:{id}:seeding_time_minutes"),
+                RssFilterEnabled = ParseOptionalBool(
+                    FirstConfigurationValue(child, "rss_filter_enabled"),
+                    id == "mikan",
+                    $"sources:{id}:rss_filter_enabled"),
+                RssPriorityEnabled = ParseOptionalBool(
+                    FirstConfigurationValue(child, "rss_priority_enabled"),
+                    id == "mikan",
+                    $"sources:{id}:rss_priority_enabled"),
+            });
+        }
+
+        return result;
+    }
+
+    private static string[] ReadScalarList(IConfigurationSection section) =>
+        section.GetChildren()
+            .OrderBy(child =>
+                int.TryParse(
+                    child.Key,
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var index)
+                    ? index
+                    : int.MaxValue)
+            .Select(child => NormalizeOptional(child.Value))
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .ToArray();
+
+    private static string? FirstConfigurationValue(
+        IConfiguration configuration,
+        params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = configuration[key];
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static string ResolveConfiguredPath(string value) =>
+        Path.GetFullPath(
+            Path.IsPathRooted(value)
+                ? value
+                : Path.Combine(AppContext.BaseDirectory, value));
 
     private static Uri? ParseOptionalAbsoluteUri(string? value, string name)
     {
@@ -521,6 +957,26 @@ public static class AnimeGoApplication
         }
 
         if (!int.TryParse(
+            normalized,
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var parsed))
+        {
+            throw new InvalidOperationException($"{name} must be an integer.");
+        }
+
+        return parsed;
+    }
+
+    private static long ParseOptionalLong(string? value, long defaultValue, string name)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is null)
+        {
+            return defaultValue;
+        }
+
+        if (!long.TryParse(
             normalized,
             System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture,
@@ -677,6 +1133,9 @@ public static class AnimeGoApplication
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static string? First(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
     private static AnimeGoOptions ApplyDownloaderOverrides(
         AnimeGoOptions options,
         DownloaderOverrideSnapshot snapshot)
@@ -703,6 +1162,89 @@ public static class AnimeGoApplication
         }
         return options with { Downloaders = downloaders };
     }
+
+    private static AnimeGoOptions ReapplyLockedDownloaderDeploymentValues(
+        AnimeGoOptions deployment,
+        AnimeGoOptions candidate,
+        IReadOnlyCollection<string>? suppliedEnvironmentVariableNames,
+        string[] args)
+    {
+        var names = suppliedEnvironmentVariableNames is null
+            ? Environment.GetEnvironmentVariables()
+                .Keys.Cast<object>()
+                .OfType<string>()
+            : suppliedEnvironmentVariableNames;
+        var keys = names
+            .Select(NormalizeDeploymentKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < args.Length; index++)
+        {
+            var argument = args[index];
+            if (!argument.StartsWith("--", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var separator = argument.IndexOf('=');
+            keys.Add(NormalizeDeploymentKey(
+                separator >= 0
+                    ? argument[2..separator]
+                    : argument[2..]));
+        }
+
+        if (keys.Count == 0)
+        {
+            return candidate;
+        }
+
+        var downloaders = new Dictionary<string, QbittorrentInstanceOptions>(
+            candidate.Downloaders,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, deployed) in deployment.Downloaders)
+        {
+            if (!downloaders.TryGetValue(id, out var effective))
+            {
+                effective = deployed;
+            }
+
+            var legacyBt = string.Equals(id, "bt", StringComparison.OrdinalIgnoreCase);
+            effective = effective with
+            {
+                Type = IsLocked("type", "ANIMEGO_CLIENT")
+                    ? deployed.Type
+                    : effective.Type,
+                BaseUrl = IsLocked("base_url", "ANIMEGO_CLIENT_URL")
+                    ? deployed.BaseUrl
+                    : effective.BaseUrl,
+                Username = IsLocked("username", "ANIMEGO_CLIENT_USERNAME")
+                    ? deployed.Username
+                    : effective.Username,
+                Password = IsLocked("password", "ANIMEGO_CLIENT_PASSWORD")
+                    ? deployed.Password
+                    : effective.Password,
+                DownloadPath = IsLocked(
+                        "download_path",
+                        "ANIMEGO_CLIENT_DOWNLOAD_PATH")
+                    ? deployed.DownloadPath
+                    : effective.DownloadPath,
+                Enabled = IsLocked("enabled", null)
+                    ? deployed.Enabled
+                    : effective.Enabled,
+            };
+            downloaders[id] = effective;
+
+            bool IsLocked(string field, string? legacyKey) =>
+                keys.Contains($"downloaders:{id}:{field}")
+                || (legacyBt
+                    && legacyKey is not null
+                    && keys.Contains(NormalizeDeploymentKey(legacyKey)));
+        }
+
+        return candidate with { Downloaders = downloaders };
+    }
+
+    private static string NormalizeDeploymentKey(string value) =>
+        value.Trim().Replace("__", ":", StringComparison.Ordinal).ToLowerInvariant();
 
     private static bool HasValidAccessKey(HttpRequest request, string configuredKey)
     {

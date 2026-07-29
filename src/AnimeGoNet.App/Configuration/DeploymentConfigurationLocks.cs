@@ -15,7 +15,7 @@ public sealed class DeploymentConfigurationLocks
         new("tmdb_proxy_url", ["tmdb_proxy_url"]),
         new("tmdb_language", ["tmdb_language"]),
         new("tmdb_http_timeout_seconds", ["tmdb_timeout_second"]),
-        new("tmdb_api_key", ["tmdb_api_key"]),
+        new("tmdb_api_key", ["tmdb_api_key", "ANIMEGO_THEMOVIEDB_KEY"]),
         new("tmdb_read_access_token", ["tmdb_read_access_token"]),
         new("bangumi_base_url", ["bangumi_base_url"]),
         new("bangumi_proxy_url", ["bangumi_proxy_url"]),

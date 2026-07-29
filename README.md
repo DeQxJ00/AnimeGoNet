@@ -1,93 +1,91 @@
-# AnimeGo
+# AnimeGoNet
 
-使用Golang编写的全自动追番工具，简单的部署和使用，方便的模块化扩展 
+AnimeGoNet 是 `wetor/AnimeGo develop` 业务行为的 .NET 10 / NativeAOT
+移植。主程序使用 ASP.NET Core Minimal API、SQLite 显式 SQL 和静态
+TypeScript/HTML/CSS WebUI；首版下载器只支持 qBittorrent，可配置多个命名实例并
+按 Mikan/U2/TTG 输入源路由。Python 插件已移除，官方插件均为编译期注册的 C#
+实现。
 
-## 使用帮助
-```text
-  -backup
-        配置文件升级前是否备份 (default true)
-  -config string
-        配置文件路径；配置文件中的相对路径均是相对与程序的位置 (default "data/animego.yaml")
-  -debug
-        Debug模式，将会显示更多的日志
-  -web
-        启用Web API (default true)
-```
-### [可选]0 安装和使用MikanTool插件
-- 配置文件中`setting/filter/plugin`新增如下内容后即可开启插件。
-  ```
-  plugin:
-    filter:
-      - enable: true
-        type: py
-        file: filter/mikan_tool.py
-        args: {}
-        vars: {}
-  ```
-- 然后 [安装MikanTool Tampermonkey插件](https://greasyfork.org/zh-CN/scripts/449596) ，需要浏览器中已安装Tampermonkey（油猴插件）  
-- 具体过滤设置根据油猴插件面板的要求进行  
+当前开发基线和未完成项以 [TODO.md](TODO.md) 为准，上游逐项映射见
+[docs/PORTING_CHECKLIST.md](docs/PORTING_CHECKLIST.md)。
 
-### 1 首次启动：释放资源、升级配置
-```shell
-./AnimeGo
+## 本机启动
+
+需要 .NET SDK 10.0.300 或同一 feature band：
+
+```powershell
+dotnet restore AnimeGoNet.slnx
+dotnet run --project src/AnimeGoNet.App -- `
+  --urls http://127.0.0.1:7991 `
+  --data_path E:\AnimeGoNet\data `
+  --download_path E:\AnimeGoNet\download `
+  --save_path E:\AnimeGoNet\library
 ```
 
-会在程序所在目录输出`data`文件夹，其中`data/animego.yaml`为配置文件。
-### 2 修改配置
-打开并编辑`data/animego.yaml`
+首次启动会在 `data_path/animego.yaml` 原子生成带注释的部署配置。也可显式指定：
 
-其中主要需要修改的配置项为：
-- `setting.client.*` : 必选，客户端参数，根据实际情况填写
-- `setting.download_path`: 下载客户端的下载文件夹
-- `setting.save_path`: 重命名后移动到位置。此时将会改名
-- `plugin.feed`中的`builtin_mikan_rss.py`插件 : 可选，内置自动订阅插件
-  - `vars.url`: 订阅地址，如Mikan的Rss订阅地址
-  - `vars.cron`: 订阅时间，Cron格式，参考[Feed订阅插件帮助](assets/plugin/feed/README.md)
-- 其余配置项根据需求修改
-
-### 3 启动程序
-```shell
-./AnimeGo
+```powershell
+dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 ```
-> 可选`-debug`，启用后将输出更详细的日志
 
-可以使用如screen等工具放至后台执行，也可以创建服务并启动
-### 4 高级使用
-[插件函数文档](assets/plugin/README.md)  
-## 文档
-1. 配置文件，参考注释
-2. [插件函数文档](assets/plugin/README.md)
-3. [webapi(Swagger)接口文档](internal/web/README.md)
+配置优先级为命令行/环境变量高于部署 YAML；WebUI 的安全私有覆盖低于被标记为
+环境锁的字段。旧 `1.1.0`–`1.7.1` YAML 可读取并映射到新模型；旧
+Transmission 配置会 fail closed，必须先迁移到 qBittorrent，绝不会静默改成默认
+实例。
 
-## 目的
-- 简化部署和使用，以及模块化扩展
-- 学习
+部署 YAML 支持：
 
-## 目前进度
-- .NET 10 / NativeAOT 主程序、Minimal API 与静态 TypeScript WebUI
-- C# 编译期注册的内置 feed/filter/parser/schedule 插件；不加载 Python 插件
-- 统一 Mikan/U2/TTG 导入、SQLite 状态、TMDB/Bangumi 匹配和媒体整理
-- 支持Tampermonkey(油猴)插件 [AnimeGo\[Mikan快速订阅\]](https://greasyfork.org/zh-CN/scripts/449596) 快速订阅下载
-- Jellyfin支持
-- 多命名 qBittorrent 实例与按来源路由
-- Transmission 不提供适配器；旧配置会显示 `UnsupportedDownloaderType` 并安全阻断下载，等待迁移到 qBittorrent
+- `paths`：`data_path`、`download_path`、`save_path`
+- `downloaders.<id>`：qB WebUI 地址、用户名、密码、下载路径和启停
+- `sources.<id>`：adapter、下载器绑定、文件策略、Torrent Host 白名单、
+  category/tags、做种时间和 RSS 规则开关
+- `metadata`：TMDB/Bangumi API 地址与代理、P4–P1 季度失败链、Bangumi 最终
+  兜底、可信 offset、统一 AI 配置
+- `torrent_fetch`、`schedule`、`data_update`
 
-## 开发计划
-- [x] 增加读取网站离线Archive的缓存功能 降低网站请求
-  - [x] [Bangumi数据](https://github.com/bangumi/Archive)
-  - [ ] [Mikan数据](https://github.com/MikanProject/bangumi-data/blob/master/dist/data.json)
-- [x] [Mikan Project](https://mikanani.me) 订阅支持
-- [x] [Jellyfin](https://jellyfin.org/) 媒体库软件识别 会写入bgmid到tvshow.nfo 可以配合[jellyfin-plugin-bangumi](https://github.com/kookxiang/jellyfin-plugin-bangumi)使用
-- [x] qBittorrent 下载器支持
-  - [x] [qBittorrent](https://qbittorrent.org) 支持
-- [x] 多命名实例与来源路由
-- [x] Web界面支持
-- [x] 模块化与高级自定义功能支持
-  - [x] 独立的订阅支持
-  - [x] 独立下载控制
-  - [x] 自定义订阅、过滤、筛选、解析和重命名插件
-  - [x] 自定义定时任务
+部署配置的详细边界见
+[docs/DEPLOYMENT_CONFIGURATION.md](docs/DEPLOYMENT_CONFIGURATION.md)。
 
-## 开发日志
- [Changelog.md](CHANGELOG.md) 
- 
+## Docker
+
+```powershell
+$env:ANIMEGONET_ACCESS_KEY = '<strong-local-secret>'
+docker compose -f docker-compose.animegonet.yml up --build
+```
+
+官方容器固定：
+
+- `data_path=/data`
+- `download_path=/download/incomplete`
+- `save_path=/download/anime`
+
+Compose 将 `./data` 挂载到 `/data`，将同一个 `./download` 同时挂载给
+AnimeGoNet 和两个 qB 容器；首次启动生成的 `/data/animego.yaml` 因此可持久化。
+容器模式必须设置 Access Key。
+
+## 测试
+
+```powershell
+dotnet test AnimeGoNet.slnx -c Release
+```
+
+本机 portable qBittorrent 测试默认只读；显式安全写入验收使用：
+
+```powershell
+./eng/qbittorrent-local-integration.ps1 -DispatchFixture
+```
+
+该测试只使用仓库内 5 字节、无可用 tracker 的固定 Torrent，并在结束时精确清理。
+完整边界见
+[docs/LOCAL_QBITTORRENT_INTEGRATION.md](docs/LOCAL_QBITTORRENT_INTEGRATION.md)。
+
+NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
+`linux-arm64`、`osx-arm64`，Docker 构建覆盖 amd64/arm64。
+
+## 主要文档
+
+- [架构与 NativeAOT 边界](docs/ARCHITECTURE.md)
+- [统一输入与来源路由](docs/SOURCE_ROUTING.md)
+- [TMDB/Bangumi/AI 元数据流程](docs/METADATA_RESOLUTION.md)
+- [WebUI](docs/WEB_UI.md)
+- [CI / NativeAOT / Docker](docs/CI_CD.md)

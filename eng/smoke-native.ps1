@@ -139,6 +139,21 @@ try {
         throw 'SQLite database was not initialized.'
     }
 
+    $deploymentYaml = Join-Path $env:data_path 'animego.yaml'
+    if (-not (Test-Path -LiteralPath $deploymentYaml -PathType Leaf)) {
+        throw 'NativeAOT first start did not create deployment YAML.'
+    }
+    $deploymentYamlText = Get-Content -Raw -LiteralPath $deploymentYaml
+    if (
+        -not $deploymentYamlText.Contains('version: 1.7.1') -or
+        -not $deploymentYamlText.Contains($env:data_path) -or
+        -not $deploymentYamlText.Contains($env:download_path) -or
+        -not $deploymentYamlText.Contains($env:save_path) -or
+        -not $deploymentYamlText.Contains('use_metadata_match: false')
+    ) {
+        throw 'NativeAOT deployment YAML does not contain the effective safe defaults.'
+    }
+
     $logFile = Join-Path $env:data_path 'logs/animego.log'
     if (
         -not (Test-Path -LiteralPath $logFile) -or

@@ -56,7 +56,7 @@
 - [x] 建立 Windows/Linux/macOS build/test CI，并对工作流 YAML 做本地语法校验。
 - [x] 验证 Minimal API、WebSocket、静态文件 NativeAOT：win-x64 原生进程 smoke 已覆盖 `/ping`、静态 WebUI、WebSocket upgrade 与 pause 控制帧。
 - [x] 验证 Microsoft.Data.Sqlite NativeAOT（win-x64 原生进程完成 migration、integrity 与状态读取）。
-- [>] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT：无依赖 HTML scanner 与六字段 Cron/调度器均已通过 win-x64 NativeAOT；YAML AST 仍待实现与验证。
+- [x] 验证 YAML AST、Cron、HTML 解析候选依赖 NativeAOT：HTML scanner 与六字段 Cron/调度器无反射；部署 YAML 使用 YamlDotNet `YamlStream` AST 显式遍历，限制 UTF-8/大小/深度/节点并拒绝重复键，三者均通过 win-x64 NativeAOT publish 与原生进程 smoke。
 - [x] 建立 published-binary smoke 脚本（`eng/smoke-native.ps1`）。
 
 ## P2 — 领域与配置
@@ -65,11 +65,11 @@
 - [x] 建立首阶段强类型配置/目录模型与校验：Docker 三路径、命名 qBittorrent、Mikan `move` 默认、AI 600 秒和高风险 fallback 默认关闭。
 - [>] 固化 JSON source-generation context（状态、统一导入和 legacy manager DTO 已覆盖；后续 API DTO 持续加入）。
 - [ ] 移植 hash、name、path、时间等纯函数。
-- [ ] 移植默认 YAML 与注释。
-- [ ] 移植环境变量覆盖。
-- [ ] 移植配置检查、路径初始化和资源释放。
-- [ ] 移植配置 `1.1.0` → `1.7.1` 升级链与备份。
-- [>] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取已完成，旧 YAML 升级显式写入新默认值和注释待实现。
+- [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
+- [>] 移植环境变量覆盖：规范嵌套键、现有扁平键、旧 qB 兼容键及命令行优先级已接入；应用字段环境锁可视化已完成，下载器部署锁已在私有覆盖后重新生效，下载器锁的 WebUI 逐字段可视化仍待实现。
+- [>] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均已有测试；全部旧 Go 配置异常 parity 仍待补齐。
+- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 `setting:`/`advanced:` 已安全兼容读取并映射 qB/Mikan/TMDB/代理/失败链/Cron，但尚不逐版重写旧 YAML，也未生成升级前备份。
+- [>] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取和新安装默认注释已完成，旧 YAML 自动重写新默认值仍待实现。
 - [x] 增加 OpenAI-compatible AI 配置 DTO、扁平环境变量、敏感值脱敏和 source-generated JSON 上下文；API 只返回 provider/base/model/工具端点与 `api_key_configured`，不返回密钥。
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
@@ -234,10 +234,10 @@
 
 ## P10 — 组合与发布
 
-- [ ] 完成 Host DI 和 CLI 行为。
+- [>] 完成 Host DI 和 CLI 行为：宿主组合、优雅退出、`--config`、三路径和规范嵌套配置的命令行覆盖已完成；上游其余 CLI parity 待审计。
 - [>] 完成 Docker NativeAOT 镜像（双架构 Dockerfile、Buildx CI 和容器 smoke 已建立；本机无 Docker CLI，待 GitHub runner 实跑）。
 - [>] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证：Linux/macOS NativeAOT smoke 已在成功验收后发送 `SIGTERM`，要求 7 秒内零退出并可删除隔离数据目录；非 root、PUID/PGID 与只读根仍待完成。
-- [ ] 添加连接外部下载器和内置 Compose 下载器的部署示例。
+- [>] 添加连接外部下载器和内置 Compose 下载器的部署示例：规范 YAML、环境变量、本机 TestSpace 和官方 `/download` Compose 路径契约已记录；远程外部 qB 的容器路径映射完整示例仍待补充。
 - [x] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
 - [x] 提供写有上述绝对路径的 Docker 容器配置；Compose 卷与配置逐项一致，不依赖隐藏路径修正。
 - [>] 官方 Compose 将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`；配置和 smoke 断言已建立，真实容器验证待 CI。
@@ -246,10 +246,10 @@
 - [ ] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [ ] 生成 checksums、SBOM、第三方许可证。
-- [ ] 完成新安装、旧配置升级、旧数据迁移演练。
+- [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；旧 YAML 只完成兼容读取，自动备份重写和旧业务数据演练待实现。
 - [ ] 完成全链路 JIT/AOT/Docker E2E。
 - [ ] 用发布镜像完成 Web UI Playwright E2E。
-- [ ] 编写用户迁移、部署、插件和运维文档。
+- [>] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker 路径和本机 qB 隔离验收文档已完成；旧配置迁移、外部插件和完整运维手册待完成。
 - [ ] 标记第一个可用预发布版本。
 
 ## P11 — AnimeGoNetData

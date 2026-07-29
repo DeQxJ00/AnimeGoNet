@@ -106,6 +106,9 @@ Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可
 允许：
 
 - `System.Text.Json` source generation；固定 DTO 和 polymorphism 显式表。
+- YamlDotNet 仅使用 `YamlStream`/`YamlNode` AST；部署 YAML 由显式节点遍历扁平化为
+  `IConfiguration` 键，不调用反射式 serializer/deserializer。输入固定为严格 UTF-8、
+  单文档 mapping，限制 1 MiB、32 层和 4096 节点，重复键及非标量键直接拒绝。
 - ASP.NET Core Request Delegate Generator 能静态分析的 typed Minimal API handlers。
 - 编译期 DI 注册；内置插件使用普通泛型/接口注册。
 - 显式 SQL reader ordinal → 构造函数映射。

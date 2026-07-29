@@ -18,6 +18,10 @@ public sealed class DeploymentConfigurationLocksTests
             ["TMDB_BASE_URL"],
             Assert.Single(locks.Items, item => item.Field == "tmdb_base_url")
                 .EnvironmentVariables);
+
+        var legacyTmdbKey = DeploymentConfigurationLocks.FromVariableNames(
+            ["ANIMEGO_THEMOVIEDB_KEY"]);
+        Assert.True(legacyTmdbKey.IsLocked("tmdb_api_key"));
         Assert.Equal(
             ["ai_use_episode_match"],
             Assert.Single(locks.Items, item => item.Field == "ai_use_metadata_match")

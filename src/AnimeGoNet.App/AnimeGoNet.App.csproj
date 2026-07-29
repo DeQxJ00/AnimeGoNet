@@ -15,6 +15,9 @@
     <ProjectReference Include="../AnimeGoNet.Data/AnimeGoNet.Data.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="AnimeGoNet.App.Tests" />
     <InternalsVisibleTo Include="AnimeGoNet.LocalIntegration.Tests" />
   </ItemGroup>
