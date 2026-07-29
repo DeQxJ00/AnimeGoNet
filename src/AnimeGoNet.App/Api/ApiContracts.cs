@@ -275,6 +275,38 @@ public sealed record MikanWorkRuleResponse(
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MikanWorkImpactResponse(
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("total_task_count")] int TotalTaskCount,
+    [property: JsonPropertyName("future_task_count")] int FutureTaskCount,
+    [property: JsonPropertyName("retryable_failed_task_count")] int RetryableFailedTaskCount,
+    [property: JsonPropertyName("active_task_count")] int ActiveTaskCount,
+    [property: JsonPropertyName("resolved_protected_task_count")] int ResolvedProtectedTaskCount,
+    [property: JsonPropertyName("completed_protected_task_count")] int CompletedProtectedTaskCount,
+    [property: JsonPropertyName("other_task_count")] int OtherTaskCount,
+    [property: JsonPropertyName("is_truncated")] bool IsTruncated,
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanWorkImpactTaskResponse> Items);
+
+public sealed record MikanWorkImpactTaskResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("organization_state")] string? OrganizationState,
+    [property: JsonPropertyName("category")] string Category,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record MikanWorkRematchRequest(
+    [property: JsonPropertyName("expected_rule_revision")] long ExpectedRuleRevision);
+
+public sealed record MikanWorkRematchResponse(
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("rule_revision")] long RuleRevision,
+    [property: JsonPropertyName("retried_task_count")] int RetriedTaskCount);
+
 public sealed record MikanTrustedOffsetListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<MikanTrustedOffsetItemResponse> Items);
 

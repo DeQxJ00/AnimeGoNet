@@ -397,6 +397,58 @@ interface ManualRssResponse {
   items: ManualRssItem[];
 }
 
+interface MikanWorkRule {
+  mikanid: number;
+  bgmid: number | null;
+  tmdb_series_id: number | null;
+  tmdb_season_number: number | null;
+  episode_offset: number | null;
+  enabled: boolean;
+  revision: number;
+  created_at_utc: string;
+  updated_at_utc: string;
+}
+
+type MikanWorkImpactCategory =
+  | "future"
+  | "retryable_failed"
+  | "active"
+  | "resolved_protected"
+  | "completed_protected"
+  | "other";
+
+interface MikanWorkImpactTask {
+  task_id: string;
+  title: string;
+  source: string;
+  status: string;
+  bgmid: number | null;
+  tmdb_series_id: number | null;
+  tmdb_season_number: number | null;
+  organization_state: string | null;
+  category: MikanWorkImpactCategory;
+  updated_at_utc: string;
+}
+
+interface MikanWorkImpact {
+  mikanid: number;
+  total_task_count: number;
+  future_task_count: number;
+  retryable_failed_task_count: number;
+  active_task_count: number;
+  resolved_protected_task_count: number;
+  completed_protected_task_count: number;
+  other_task_count: number;
+  is_truncated: boolean;
+  items: MikanWorkImpactTask[];
+}
+
+interface MikanWorkRematchResponse {
+  mikanid: number;
+  rule_revision: number;
+  retried_task_count: number;
+}
+
 interface SourceProfile {
   id: string;
   display_name: string;
@@ -532,6 +584,9 @@ let libraryState = readLibraryState();
 let activeLibraryDetail: AnimeSeasonDetail | null = null;
 let libraryListRequestSequence = 0;
 let libraryDetailRequestSequence = 0;
+let activeMikanWorkRule: MikanWorkRule | null = null;
+let loadedMikanWorkId: number | null = null;
+let activeMikanWorkImpact: MikanWorkImpact | null = null;
 
 const statusLabels: Record<string, string> = {
   received: "已接收",
@@ -2583,6 +2638,267 @@ async function submitManualRss(event: SubmitEvent): Promise<void> {
   }
 }
 
+function optionalInteger(selector: string): number | null {
+  const input = element<HTMLInputElement>(selector);
+  return input.value === "" || !Number.isInteger(input.valueAsNumber)
+    ? null
+    : input.valueAsNumber;
+}
+
+function currentMikanWorkId(): number | null {
+  const input = element<HTMLInputElement>("#mikan-work-rule-id");
+  return Number.isInteger(input.valueAsNumber) && input.valueAsNumber > 0
+    ? input.valueAsNumber
+    : null;
+}
+
+function invalidateMikanWorkRule(): void {
+  loadedMikanWorkId = null;
+  activeMikanWorkRule = null;
+  activeMikanWorkImpact = null;
+  element<HTMLButtonElement>("#mikan-work-rule-save").disabled = true;
+  element<HTMLButtonElement>("#mikan-work-rule-delete").disabled = true;
+  element<HTMLButtonElement>("#mikan-work-rule-rematch").disabled = true;
+  element<HTMLElement>("#mikan-work-rule-status").textContent =
+    "mikanid 已改变，请先读取最新规则与影响，避免覆盖现有 revision。";
+  element<HTMLElement>("#mikan-work-impact-summary").replaceChildren(
+    Object.assign(document.createElement("p"), {
+      className: "muted",
+      textContent: "尚未读取当前 mikanid。",
+    }),
+  );
+  element<HTMLElement>("#mikan-work-impact-tasks").replaceChildren();
+}
+
+function populateMikanWorkRule(rule: MikanWorkRule | null): void {
+  element<HTMLInputElement>("#mikan-work-rule-bgmid").value =
+    rule?.bgmid?.toString() ?? "";
+  element<HTMLInputElement>("#mikan-work-rule-series").value =
+    rule?.tmdb_series_id?.toString() ?? "";
+  element<HTMLInputElement>("#mikan-work-rule-season").value =
+    rule?.tmdb_season_number?.toString() ?? "";
+  element<HTMLInputElement>("#mikan-work-rule-offset").value =
+    rule?.episode_offset?.toString() ?? "";
+  // A sample episode is validation-only and is never persisted with the rule.
+  element<HTMLInputElement>("#mikan-work-rule-sample").value = "";
+  element<HTMLInputElement>("#mikan-work-rule-enabled").checked = rule?.enabled ?? true;
+  element<HTMLButtonElement>("#mikan-work-rule-save").disabled = false;
+  element<HTMLButtonElement>("#mikan-work-rule-delete").disabled = rule === null;
+}
+
+const mikanImpactLabels: Record<MikanWorkImpactCategory, string> = {
+  future: "尚未匹配，将自动使用当前规则",
+  retryable_failed: "失败，可显式重新匹配",
+  active: "处理中，保持当前租约",
+  resolved_protected: "已解析保护，不自动回溯",
+  completed_protected: "已整理保护，不移动文件",
+  other: "其他状态，不自动改写",
+};
+
+function mikanImpactStat(value: number, label: string): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "mikan-impact-stat";
+  const count = document.createElement("strong");
+  count.textContent = String(value);
+  const description = document.createElement("span");
+  description.textContent = label;
+  card.append(count, description);
+  return card;
+}
+
+function renderMikanWorkImpact(impact: MikanWorkImpact): void {
+  activeMikanWorkImpact = impact;
+  const summary = element<HTMLElement>("#mikan-work-impact-summary");
+  summary.replaceChildren(
+    mikanImpactStat(impact.total_task_count, "关联任务"),
+    mikanImpactStat(impact.future_task_count, "未来自动应用"),
+    mikanImpactStat(impact.retryable_failed_task_count, "可显式重试"),
+    mikanImpactStat(impact.active_task_count, "活动中保护"),
+    mikanImpactStat(impact.resolved_protected_task_count, "已解析保护"),
+    mikanImpactStat(impact.completed_protected_task_count, "已整理保护"),
+  );
+  if (impact.other_task_count > 0 || impact.is_truncated) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = [
+      impact.other_task_count > 0 ? `另有 ${impact.other_task_count} 个其他状态` : null,
+      impact.is_truncated ? `列表只显示前 ${impact.items.length} 个，统计仍为全量` : null,
+    ].filter((value): value is string => value !== null).join("；");
+    summary.append(note);
+  }
+
+  const tasks = element<HTMLElement>("#mikan-work-impact-tasks");
+  if (impact.items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "该 mikanid 暂无关联任务。";
+    tasks.replaceChildren(empty);
+  } else {
+    tasks.replaceChildren(...impact.items.map((item) => {
+      const row = document.createElement("article");
+      row.className = `mikan-impact-task ${item.category}`;
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const identity = document.createElement("span");
+      identity.textContent = [
+        item.task_id,
+        `${item.source} · ${statusLabels[item.status] ?? item.status}`,
+        `bgmid ${item.bgmid ?? "—"}`,
+        `TMDB ${item.tmdb_series_id ?? "—"} / S${item.tmdb_season_number ?? "—"}`,
+      ].join(" · ");
+      const category = document.createElement("span");
+      category.textContent =
+        `${mikanImpactLabels[item.category]} · 更新 ${new Date(item.updated_at_utc).toLocaleString()}`;
+      row.append(title, identity, category);
+      return row;
+    }));
+  }
+  element<HTMLButtonElement>("#mikan-work-rule-rematch").disabled =
+    impact.retryable_failed_task_count === 0;
+}
+
+async function loadMikanWorkRule(): Promise<void> {
+  const mikanId = currentMikanWorkId();
+  const status = element<HTMLElement>("#mikan-work-rule-status");
+  if (mikanId === null) {
+    invalidateMikanWorkRule();
+    status.textContent = "mikanid 必须是正整数。";
+    return;
+  }
+
+  const load = element<HTMLButtonElement>("#mikan-work-rule-load");
+  load.disabled = true;
+  status.textContent = "正在读取规则 revision 与全量影响统计…";
+  try {
+    const [ruleResponse, impactResponse] = await Promise.all([
+      fetch(`/api/v1/mikan/work-rules/${mikanId}`, { headers }),
+      fetch(`/api/v1/mikan/work-rules/${mikanId}/impact?limit=100`, { headers }),
+    ]);
+    if (!ruleResponse.ok && ruleResponse.status !== 404) {
+      throw new Error(await responseError(ruleResponse));
+    }
+    if (!impactResponse.ok) throw new Error(await responseError(impactResponse));
+    const rule = ruleResponse.status === 404
+      ? null
+      : await ruleResponse.json() as MikanWorkRule;
+    const impact = await impactResponse.json() as MikanWorkImpact;
+    loadedMikanWorkId = mikanId;
+    activeMikanWorkRule = rule;
+    populateMikanWorkRule(rule);
+    renderMikanWorkImpact(impact);
+    status.textContent = rule === null
+      ? `mikanid ${mikanId} 尚无人工规则；保存时从 revision 0 创建。`
+      : `已读取 revision ${rule.revision} · ${rule.enabled ? "人工规则已启用（最高优先级）" : "人工规则已禁用"} · 更新 ${new Date(rule.updated_at_utc).toLocaleString()}`;
+  } catch (error) {
+    invalidateMikanWorkRule();
+    status.textContent = `读取失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    load.disabled = false;
+  }
+}
+
+async function saveMikanWorkRule(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const mikanId = currentMikanWorkId();
+  if (mikanId === null || loadedMikanWorkId !== mikanId) {
+    invalidateMikanWorkRule();
+    return;
+  }
+  const save = element<HTMLButtonElement>("#mikan-work-rule-save");
+  const status = element<HTMLElement>("#mikan-work-rule-status");
+  save.disabled = true;
+  status.textContent = "正在保存；填写样例 EP 时会先在线验证 TMDB…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(`/api/v1/mikan/work-rules/${mikanId}`, {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        bgmid: optionalPositiveNumber("#mikan-work-rule-bgmid"),
+        tmdb_series_id: optionalPositiveNumber("#mikan-work-rule-series"),
+        tmdb_season_number: optionalPositiveNumber("#mikan-work-rule-season"),
+        episode_offset: optionalInteger("#mikan-work-rule-offset"),
+        sample_source_episode: optionalPositiveNumber("#mikan-work-rule-sample"),
+        enabled: element<HTMLInputElement>("#mikan-work-rule-enabled").checked,
+        expected_revision: activeMikanWorkRule?.revision ?? 0,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const saved = await response.json() as MikanWorkRule;
+    activeMikanWorkRule = saved;
+    await loadMikanWorkRule();
+    status.textContent =
+      `已保存 revision ${saved.revision}；规则只影响之后的匹配，已解析/已整理任务未改写。`;
+  } catch (error) {
+    status.textContent =
+      `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新读取。`;
+    save.disabled = false;
+  }
+}
+
+async function deleteMikanWorkRule(): Promise<void> {
+  const mikanId = currentMikanWorkId();
+  const rule = activeMikanWorkRule;
+  if (mikanId === null || loadedMikanWorkId !== mikanId || rule === null) return;
+  if (!window.confirm(
+    `清除 mikanid ${mikanId} 的人工规则？已完成记录和媒体文件不会删除或移动。`,
+  )) return;
+  const status = element<HTMLElement>("#mikan-work-rule-status");
+  status.textContent = "正在清除人工规则…";
+  try {
+    const response = await fetch(
+      `/api/v1/mikan/work-rules/${mikanId}?expected_revision=${rule.revision}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    activeMikanWorkRule = null;
+    await loadMikanWorkRule();
+    status.textContent =
+      "人工规则已清除；之后任务恢复自动匹配，既有解析和媒体文件保持不变。";
+  } catch (error) {
+    status.textContent =
+      `清除失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新读取。`;
+  }
+}
+
+async function rematchMikanWorkTasks(): Promise<void> {
+  const mikanId = currentMikanWorkId();
+  const impact = activeMikanWorkImpact;
+  if (mikanId === null || loadedMikanWorkId !== mikanId || impact === null) return;
+  if (impact.retryable_failed_task_count === 0) return;
+  if (!window.confirm(
+    `重新匹配 ${impact.retryable_failed_task_count} 个失败任务？`
+    + ` ${impact.resolved_protected_task_count} 个已解析和`
+    + ` ${impact.completed_protected_task_count} 个已整理任务保持不变，媒体文件不会移动。`,
+  )) return;
+  const button = element<HTMLButtonElement>("#mikan-work-rule-rematch");
+  const status = element<HTMLElement>("#mikan-work-rule-status");
+  button.disabled = true;
+  status.textContent = "正在按当前规则 revision 重新排队失败任务…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(`/api/v1/mikan/work-rules/${mikanId}/rematch`, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        expected_rule_revision: activeMikanWorkRule?.revision ?? 0,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const result = await response.json() as MikanWorkRematchResponse;
+    await loadMikanWorkRule();
+    status.textContent =
+      `已重新排队 ${result.retried_task_count} 个失败任务；已解析/已整理任务与媒体文件未改写。`;
+    void loadMetadataTasks();
+  } catch (error) {
+    status.textContent =
+      `重新匹配失败：${errorMessage(error, "未知错误")}；请重新读取规则与影响。`;
+    button.disabled = false;
+  }
+}
+
 function sourceHosts(): string[] {
   return element<HTMLTextAreaElement>("#source-hosts").value
     .split(/[\r\n,，]+/u)
@@ -2964,6 +3280,26 @@ element<HTMLFormElement>("#manual-download-form").addEventListener(
 element<HTMLFormElement>("#manual-rss-form").addEventListener(
   "submit",
   (event) => void submitManualRss(event),
+);
+element<HTMLInputElement>("#mikan-work-rule-id").addEventListener(
+  "input",
+  invalidateMikanWorkRule,
+);
+element<HTMLButtonElement>("#mikan-work-rule-load").addEventListener(
+  "click",
+  () => void loadMikanWorkRule(),
+);
+element<HTMLFormElement>("#mikan-work-rule-form").addEventListener(
+  "submit",
+  (event) => void saveMikanWorkRule(event),
+);
+element<HTMLButtonElement>("#mikan-work-rule-delete").addEventListener(
+  "click",
+  () => void deleteMikanWorkRule(),
+);
+element<HTMLButtonElement>("#mikan-work-rule-rematch").addEventListener(
+  "click",
+  () => void rematchMikanWorkTasks(),
 );
 element<HTMLButtonElement>("#downloader-reload").addEventListener("click", () => void loadDownloaders());
 element<HTMLButtonElement>("#downloader-new").addEventListener("click", () => openDownloaderConfig(null));

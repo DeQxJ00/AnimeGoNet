@@ -283,6 +283,39 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .manual-result-item { display: grid; gap: 4px; padding: 9px 10px; border-left: 3px solid #59d3a5; border-radius: 8px; color: #aebbd3; background: rgba(14,29,29,.7); font-size: .76rem; line-height: 1.45; overflow-wrap: anywhere; }
 .manual-result-item.rejected, .manual-result-item.blocked { border-left-color: #e35d6a; background: rgba(40,18,23,.65); }
 .manual-result-item strong { color: #edf2ff; }
+.mikan-work-rule-heading h2 { margin-bottom: 0; }
+.mikan-work-rule-grid { display: grid; grid-template-columns: minmax(300px,.85fr) minmax(0,1.4fr); gap: 14px; }
+.mikan-work-rule-card, .mikan-work-impact-card { min-width: 0; border: 1px solid #665936; border-radius: 18px; padding: 18px; background: rgba(27,24,17,.88); }
+.mikan-work-rule-card { display: grid; align-content: start; gap: 14px; }
+.mikan-work-rule-lookup { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; align-items: end; }
+.mikan-work-rule-lookup label, .mikan-work-rule-fields label { min-width: 0; color: #b8a77c; font-size: .75rem; }
+.mikan-work-rule-lookup input, .mikan-work-rule-fields input { width: 100%; box-sizing: border-box; margin-top: 6px; border: 1px solid #4d4939; border-radius: 9px; padding: 9px; color: #edf2ff; background: #0e0d0a; font: inherit; }
+.mikan-work-rule-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.mikan-work-rule-fields .wide { grid-column: 1 / -1; }
+.mikan-work-rule-fields small { display: block; margin-top: 6px; color: #9f926f; line-height: 1.45; }
+.mikan-work-rule-enabled { display: flex; align-items: center; gap: 8px; color: #e3d8b9; font-size: .82rem; }
+.mikan-work-rule-enabled input { accent-color: #d9b75c; }
+.mikan-work-rule-status { min-height: 42px; margin: 0; color: #e6c77b; font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
+.mikan-work-rule-actions { display: flex; justify-content: space-between; gap: 9px; }
+.mikan-work-rule-actions button:disabled { cursor: not-allowed; opacity: .45; }
+.mikan-work-impact-card { display: grid; align-content: start; gap: 13px; }
+.mikan-work-impact-heading { display: flex; align-items: start; justify-content: space-between; gap: 15px; }
+.mikan-work-impact-heading h3 { margin: 0; }
+.mikan-work-impact-heading p { margin: 6px 0 0; font-size: .75rem; line-height: 1.45; }
+.mikan-work-impact-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.mikan-work-impact-summary > .muted { grid-column: 1 / -1; margin: 0; }
+.mikan-impact-stat { padding: 10px; border-radius: 10px; background: rgba(5,8,16,.52); }
+.mikan-impact-stat strong, .mikan-impact-stat span { display: block; }
+.mikan-impact-stat strong { font-size: 1.05rem; }
+.mikan-impact-stat span { margin-top: 4px; color: #b8a77c; font-size: .7rem; }
+.mikan-work-impact-tasks { display: grid; gap: 7px; max-height: 360px; overflow: auto; }
+.mikan-impact-task { display: grid; gap: 4px; padding: 10px 11px; border-left: 3px solid #7c6835; border-radius: 9px; background: rgba(5,8,16,.48); }
+.mikan-impact-task.retryable_failed { border-left-color: #eab95c; }
+.mikan-impact-task.active { border-left-color: #6e9bd1; }
+.mikan-impact-task.completed_protected { border-left-color: #59d3a5; }
+.mikan-impact-task.resolved_protected { border-left-color: #806db0; }
+.mikan-impact-task strong { font-size: .8rem; overflow-wrap: anywhere; }
+.mikan-impact-task span { color: #aebbd3; font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
 .rss-heading { gap: 18px; }
 .rss-heading h2 { margin-bottom: 0; }
 .rss-actions { display: flex; gap: 9px; }
@@ -334,8 +367,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .configuration-form-grid .wide { grid-column: auto; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
-  .source-workspace, .source-form-grid, .manual-submit-grid, .manual-submit-fields { grid-template-columns: 1fr; }
-  .manual-submit-fields .wide { grid-column: auto; }
+  .source-workspace, .source-form-grid, .manual-submit-grid, .manual-submit-fields, .mikan-work-rule-grid, .mikan-work-rule-fields { grid-template-columns: 1fr; }
+  .manual-submit-fields .wide, .mikan-work-rule-fields .wide { grid-column: auto; }
+  .mikan-work-impact-heading { align-items: stretch; flex-direction: column; }
+  .mikan-work-impact-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .route-preview-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .source-hosts { grid-column: auto; }
   .rss-list-columns, .rss-preview-panel { grid-template-columns: 1fr; }

@@ -44,7 +44,7 @@
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 进行中 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit，以及安全页面抓取/批内缓存/真实 RSS 前置执行已验证；WebUI 管理与原油猴浏览器 E2E 待实现 |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 进行中 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss` 及 winner→统一 staging 已验证；过滤 WebUI历史/回滚待实现 |
-| Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 已验证 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断、显式重试及可选 `sample_source_episode` 保存前 Series→Season→目标 Episode 预验证 tests 已通过 |
+| Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 已验证 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断及可选 `sample_source_episode` 保存前 Series→Season→目标 Episode 预验证；管理 API/WebUI 已支持 revision-safe 创建/更新/禁用/清除、权威影响分类和只重置无租约失败任务的显式重匹配，已解析/已整理/完成记录/媒体文件保持不变 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 已验证 | 默认关闭、3 个不同 EP 建立信任/冲突撤销、已验证 Episode 自动学习、AI 前任务级命中、零 AI/零 TMDB Episode 调用、本地 completion、Learning/Trusted/ConflictReset API/WebUI 与自动状态安全清理已通过 |
 | TMDB 季度失败链 | `TMDBFailSkip=4`→`TMDBFailBacktrace=3`→`TMDBFailUseTitleSeason=2`→`TMDBFailUseFirstSeason=1` | 扩展 | 进行中 | 日文名→中文名及每名多轮清理均以完整 `tmdbid+Season` 为成功条件；P3 对每个前作重新联合搜索且可恢复不同 Series，多层/多候选/缺日期/防环/错误降级已验证；P2 只读任务 title、P1 本地 S01 且均不验证 TMDB Season；关系网络重试与 live fixture 待实现 |
 | AI 元数据匹配 | 单开关、单Prompt、每任务最多一次、默认关闭、600 秒超时 | 扩展 | 进行中（任务级契约、OpenAI-compatible HTTP、本地 MCP、TMDB 二次验证、统一 Series/Season/Episode 流程、Mikan pubDate 内部证据及 Bangumi 普通 EP 候选门控、跨季度逐文件状态已完成） | fake AI/MCP/TMDB 已覆盖 Skip→Backtrace→AI→Title→First、阶段间禁止二次调用、EP/字幕/Other、跨季度视频与关联字幕、无法归属文件安全拒绝、顺序/Season 0/重复目标/身份越界/429/认证/网络失败、人工规则抑制、实际文件数、31 天日期窗口与通用 AI 降级；后续发布二进制 fake AI HTTP 端到端 smoke |
@@ -91,8 +91,8 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、手动 Torrent/RSS 安全提交、下载/元数据面板、待补全 TMDB 人工映射、SourceProfile 版本化 CRUD、下载器编辑器和 TMDB 作品库均使用安全 DOM API；完整管理 UI 与发布镜像浏览器 E2E 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、手动 Torrent/RSS 安全提交、下载/元数据面板、待补全 TMDB 人工映射、Mikan 人工作品规则 revision-safe CRUD/影响/显式重匹配、SourceProfile 版本化 CRUD、下载器编辑器和 TMDB 作品库均使用安全 DOM API；完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

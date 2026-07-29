@@ -2,6 +2,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -139,6 +141,106 @@ public sealed class MikanWorkRuleApiTests
             "mikan_rule_tmdb_episode_not_found",
             json.RootElement.GetProperty("code").GetString());
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task ImpactAndExplicitRematchProtectCompletedTasksAndRequireRuleRevision()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string createRule = """
+            {
+              "bgmid": 547888,
+              "enabled": true,
+              "expected_revision": 0
+            }
+            """;
+        using var createdRule = await app.Client.PutAsync(
+            "/api/v1/mikan/work-rules/3951",
+            Json(createRule));
+        Assert.Equal(HttpStatusCode.OK, createdRule.StatusCode);
+
+        var failedTaskId = await AddTaskAsync(app, "impact-failed");
+        var completedTaskId = await AddTaskAsync(app, "impact-completed");
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await SetStatusAsync(database, failedTaskId, "metadata_failed");
+        await SetStatusAsync(database, completedTaskId, "organized");
+
+        using var impact = await app.Client.GetAsync(
+            "/api/v1/mikan/work-rules/3951/impact");
+        using var impactJson = JsonDocument.Parse(await impact.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, impact.StatusCode);
+        Assert.Equal(2, impactJson.RootElement.GetProperty("total_task_count").GetInt32());
+        Assert.Equal(1, impactJson.RootElement.GetProperty("retryable_failed_task_count").GetInt32());
+        Assert.Equal(1, impactJson.RootElement.GetProperty("completed_protected_task_count").GetInt32());
+
+        using var rematched = await app.Client.PostAsync(
+            "/api/v1/mikan/work-rules/3951/rematch",
+            Json("""{ "expected_rule_revision": 1 }"""));
+        using var rematchedJson = JsonDocument.Parse(await rematched.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, rematched.StatusCode);
+        Assert.Equal(1, rematchedJson.RootElement.GetProperty("retried_task_count").GetInt32());
+        Assert.Equal("downloaded", await ReadStatusAsync(database, failedTaskId));
+        Assert.Equal("organized", await ReadStatusAsync(database, completedTaskId));
+
+        using var stale = await app.Client.PostAsync(
+            "/api/v1/mikan/work-rules/3951/rematch",
+            Json("""{ "expected_rule_revision": 0 }"""));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+    }
+
+    private static async Task<string> AddTaskAsync(RunningApp app, string sourceItemId)
+    {
+        var request = $$"""
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/{{sourceItemId}}.torrent",
+                "info": {
+                  "title": "{{sourceItemId}}",
+                  "source_item_id": "{{sourceItemId}}",
+                  "mikanid": 3951,
+                  "bgmid": 547888
+                }
+              }]
+            }
+            """;
+        using var response = await app.Client.PostAsync("/api/v1/ingest", Json(request));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return Assert.IsType<string>(
+            json.RootElement.GetProperty("items")[0].GetProperty("ingest_id").GetString());
+    }
+
+    private static async Task SetStatusAsync(
+        AnimeGoSqliteDatabase database,
+        string taskId,
+        string status)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE ingest_tasks
+            SET status = $status,
+                failure_kind = CASE WHEN $status = 'metadata_failed' THEN 'SemanticNoMatch' ELSE NULL END,
+                failure_reason = CASE WHEN $status = 'metadata_failed' THEN 'fixture_failure' ELSE NULL END
+            WHERE id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$status", status);
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<string> ReadStatusAsync(
+        AnimeGoSqliteDatabase database,
+        string taskId)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT status FROM ingest_tasks WHERE id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Assert.IsType<string>(await command.ExecuteScalarAsync());
     }
 
     private static StringContent Json(string value) => new(value, Encoding.UTF8, "application/json");

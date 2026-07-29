@@ -106,3 +106,11 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 Mikan RSS 调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。服务端必须先确认该 profile 已启用且 adapter 为 Mikan，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。响应显示 batch、mikanid、规则 revision、候选决策和实际任务 ID。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
 
 Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。
+
+## 10. Mikan 人工作品规则
+
+首页“Mikan 人工作品规则”区按 `mikanid` 管理最高优先级的作品级元数据覆盖。读取不存在的规则时，页面明确显示将从 revision 0 创建；读取现有规则后，保存、禁用和清除均携带 expected revision，服务端在并发修改时返回冲突而不是覆盖其他管理操作。字段包含 `bgmid`、TMDB Series ID、TMDB Season、带符号 EP Offset，以及可选的样例来源 EP。填写样例 EP 时，保存前必须在线验证 Series、Season 和 `来源 EP + Offset` 对应的目标 Episode；未填写时仍执行规则自身的结构和组合约束。
+
+`GET /api/v1/mikan/work-rules/{mikanid}/impact` 返回权威任务总数和有限明细，并将任务分为未来自动应用、可显式重试的失败任务、活动中保护、已解析保护、已整理保护和其他状态。页面不会把截断后的明细数量误当作总数。保存、禁用或清除规则本身只影响之后的匹配，不会回溯修改任务或移动文件。
+
+只有存在可重试失败任务时，页面才启用“显式重新匹配失败任务”。`POST /api/v1/mikan/work-rules/{mikanid}/rematch` 再次校验当前规则 revision，只把没有运行租约的 `metadata_failed` 任务恢复到其安全的元数据入口；已解析、正在处理、已整理任务、Episode claim、完成记录和媒体文件均保持不变。规则已被其他操作修改时，本次重匹配整体冲突，不进行部分重置。

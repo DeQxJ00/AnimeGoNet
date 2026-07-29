@@ -30,15 +30,20 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "organized")]
     [InlineData("/app.js", "text/javascript", "/api/v1/rss/ingest")]
     [InlineData("/app.js", "text/javascript", "/api/v1/ingest")]
+    [InlineData("/app.js", "text/javascript", "/impact?limit=100")]
+    [InlineData("/app.js", "text/javascript", "/rematch")]
     [InlineData("/", "text/html", "metadata-tasks")]
     [InlineData("/", "text/html", "anime-library")]
     [InlineData("/", "text/html", "manual-download-form")]
     [InlineData("/", "text/html", "manual-rss-form")]
+    [InlineData("/", "text/html", "mikan-work-rule-form")]
+    [InlineData("/", "text/html", "mikan-work-rule-rematch")]
     [InlineData("/", "text/html", "library-episode-filter")]
     [InlineData("/", "text/html", "pending-tmdb-list")]
     [InlineData("/styles.css", "text/css", ".pending-tmdb-card")]
     [InlineData("/styles.css", "text/css", ".pending-recovery-form")]
     [InlineData("/styles.css", "text/css", ".manual-submit-card")]
+    [InlineData("/styles.css", "text/css", ".mikan-work-impact-task")]
     public async Task ServesStaticAssets(string path, string mediaType, string marker)
     {
         await using var app = await RunningApp.StartAsync();

@@ -317,6 +317,67 @@
       </div>
     </section>
 
+    <section id="mikan-work-rule" aria-labelledby="mikan-work-rule-title">
+      <div class="section-heading mikan-work-rule-heading">
+        <div>
+          <p class="eyebrow">Highest-priority metadata override</p>
+          <h2 id="mikan-work-rule-title">Mikan 人工作品规则</h2>
+        </div>
+      </div>
+      <p class="muted">同一 mikanid 共用 bgmid、TMDB Series/Season 与 EP Offset。启用的人工规则优先级最高；保存、禁用或清除只影响之后的匹配，不会自动移动已完成文件。</p>
+      <div class="mikan-work-rule-grid">
+        <form id="mikan-work-rule-form" class="mikan-work-rule-card">
+          <div class="mikan-work-rule-lookup">
+            <label>mikanid
+              <input id="mikan-work-rule-id" type="number" min="1" required>
+            </label>
+            <button id="mikan-work-rule-load" type="button" class="secondary-button">读取规则与影响</button>
+          </div>
+          <div class="mikan-work-rule-fields">
+            <label>bgmid
+              <input id="mikan-work-rule-bgmid" type="number" min="1">
+            </label>
+            <label>TMDB Series ID
+              <input id="mikan-work-rule-series" type="number" min="1">
+            </label>
+            <label>TMDB Season
+              <input id="mikan-work-rule-season" type="number" min="1">
+            </label>
+            <label>EP Offset
+              <input id="mikan-work-rule-offset" type="number" step="1" placeholder="例如 -12">
+            </label>
+            <label class="wide">样例来源 EP（可选）
+              <input id="mikan-work-rule-sample" type="number" min="1">
+              <small>填写后，保存前会在线验证 TMDB Series、Season 与“来源 EP + Offset”。</small>
+            </label>
+          </div>
+          <label class="mikan-work-rule-enabled">
+            <input id="mikan-work-rule-enabled" type="checkbox" checked>
+            启用人工规则
+          </label>
+          <p id="mikan-work-rule-status" class="mikan-work-rule-status" aria-live="polite">输入 mikanid 后读取；读取前禁止覆盖现有 revision。</p>
+          <div class="mikan-work-rule-actions">
+            <button id="mikan-work-rule-delete" type="button" class="delete-button" disabled>清除规则</button>
+            <button id="mikan-work-rule-save" type="submit" class="primary-button" disabled>保存规则</button>
+          </div>
+        </form>
+
+        <div class="mikan-work-impact-card">
+          <div class="mikan-work-impact-heading">
+            <div>
+              <h3>影响预览</h3>
+              <p class="muted">规则保存本身不回溯任务；只有下方显式操作会重试符合条件的失败任务。</p>
+            </div>
+            <button id="mikan-work-rule-rematch" type="button" class="retry-button" disabled>显式重新匹配失败任务</button>
+          </div>
+          <div id="mikan-work-impact-summary" class="mikan-work-impact-summary" aria-live="polite">
+            <p class="muted">尚未读取 mikanid。</p>
+          </div>
+          <div id="mikan-work-impact-tasks" class="mikan-work-impact-tasks"></div>
+        </div>
+      </div>
+    </section>
+
     <section aria-labelledby="trusted-offsets-title">
       <div class="section-heading">
         <div>

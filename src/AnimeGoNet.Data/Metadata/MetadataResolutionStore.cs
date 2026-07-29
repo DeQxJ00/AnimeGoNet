@@ -1855,6 +1855,227 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         return items;
     }
 
+    public async Task<MikanWorkImpactProjection> GetMikanWorkImpactAsync(
+        int mikanId,
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(mikanId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 500);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        await using (var summary = connection.CreateCommand())
+        {
+            summary.CommandText = """
+                SELECT category, COUNT(*)
+                FROM (
+                    SELECT CASE
+                        WHEN task.status IN ('organizing_cleanup', 'organized')
+                          OR job.organization_state IN ('organizing', 'cleanup', 'completed')
+                            THEN 'completed_protected'
+                        WHEN EXISTS (
+                            SELECT 1 FROM metadata_resolution_runs AS active_run
+                            WHERE active_run.task_id = task.id AND active_run.status = 'running')
+                          OR task.status IN ('metadata_resolving', 'metadata_episode_resolving')
+                            THEN 'active'
+                        WHEN task.status = 'metadata_failed'
+                            THEN 'retryable_failed'
+                        WHEN task.status IN (
+                            'received', 'staged', 'dispatching',
+                            'download_preparing', 'download_queued',
+                            'downloading', 'downloaded')
+                            THEN 'future'
+                        WHEN task.status IN ('metadata_season_resolved', 'metadata_resolved')
+                          OR job.organization_state = 'pending'
+                            THEN 'resolved_protected'
+                        ELSE 'other'
+                    END AS category
+                    FROM ingest_tasks AS task
+                    LEFT JOIN download_jobs AS job ON job.task_id = task.id
+                    WHERE task.mikanid = $mikanid
+                )
+                GROUP BY category;
+                """;
+            summary.Parameters.AddWithValue("$mikanid", mikanId);
+            await using var reader = await summary.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                counts[reader.GetString(0)] = reader.GetInt32(1);
+            }
+        }
+
+        var tasks = new List<MikanWorkImpactTaskProjection>();
+        await using (var list = connection.CreateCommand())
+        {
+            list.CommandText = """
+                SELECT task.id, task.title, task.source_id, task.status,
+                       task.bangumi_subject_id,
+                       (SELECT run.tmdb_series_id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id AND run.tmdb_series_id IS NOT NULL
+                        ORDER BY run.attempt_number DESC LIMIT 1),
+                       (SELECT run.tmdb_season_number
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id AND run.tmdb_season_number IS NOT NULL
+                        ORDER BY run.attempt_number DESC LIMIT 1),
+                       job.organization_state,
+                       CASE
+                           WHEN task.status IN ('organizing_cleanup', 'organized')
+                             OR job.organization_state IN ('organizing', 'cleanup', 'completed')
+                               THEN 'completed_protected'
+                           WHEN EXISTS (
+                               SELECT 1 FROM metadata_resolution_runs AS active_run
+                               WHERE active_run.task_id = task.id AND active_run.status = 'running')
+                             OR task.status IN ('metadata_resolving', 'metadata_episode_resolving')
+                               THEN 'active'
+                           WHEN task.status = 'metadata_failed'
+                               THEN 'retryable_failed'
+                           WHEN task.status IN (
+                               'received', 'staged', 'dispatching',
+                               'download_preparing', 'download_queued',
+                               'downloading', 'downloaded')
+                               THEN 'future'
+                           WHEN task.status IN ('metadata_season_resolved', 'metadata_resolved')
+                             OR job.organization_state = 'pending'
+                               THEN 'resolved_protected'
+                           ELSE 'other'
+                       END,
+                       task.updated_at_utc
+                FROM ingest_tasks AS task
+                LEFT JOIN download_jobs AS job ON job.task_id = task.id
+                WHERE task.mikanid = $mikanid
+                ORDER BY task.updated_at_utc DESC, task.id DESC
+                LIMIT $limit;
+                """;
+            list.Parameters.AddWithValue("$mikanid", mikanId);
+            list.Parameters.AddWithValue("$limit", limit);
+            await using var reader = await list.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                tasks.Add(new MikanWorkImpactTaskProjection(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                    reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                    reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                    reader.IsDBNull(7) ? null : reader.GetString(7),
+                    ParseMikanImpactCategory(reader.GetString(8)),
+                    DateTimeOffset.Parse(
+                        reader.GetString(9),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind)));
+            }
+        }
+
+        var future = Count("future");
+        var retryable = Count("retryable_failed");
+        var active = Count("active");
+        var resolved = Count("resolved_protected");
+        var completed = Count("completed_protected");
+        var other = Count("other");
+        var total = future + retryable + active + resolved + completed + other;
+        return new MikanWorkImpactProjection(
+            mikanId,
+            total,
+            future,
+            retryable,
+            active,
+            resolved,
+            completed,
+            other,
+            total > tasks.Count,
+            tasks);
+
+        int Count(string category) => counts.TryGetValue(category, out var value) ? value : 0;
+    }
+
+    public async Task<int> RematchFailedMikanTasksAsync(
+        int mikanId,
+        long expectedRuleRevision,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(mikanId, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedRuleRevision);
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        long actualRevision;
+        await using (var revision = connection.CreateCommand())
+        {
+            revision.Transaction = transaction;
+            revision.CommandText = """
+                SELECT COALESCE(
+                    (SELECT revision FROM mikan_work_rules WHERE mikanid = $mikanid),
+                    0);
+                """;
+            revision.Parameters.AddWithValue("$mikanid", mikanId);
+            actualRevision = Convert.ToInt64(
+                await revision.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                CultureInfo.InvariantCulture);
+        }
+
+        if (actualRevision != expectedRuleRevision)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw new MikanWorkRuleRematchRevisionException(
+                mikanId,
+                expectedRuleRevision,
+                actualRevision);
+        }
+
+        var retried = 0;
+        await using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE ingest_tasks
+                SET status = CASE WHEN EXISTS (
+                        SELECT 1 FROM download_jobs
+                        WHERE download_jobs.task_id = ingest_tasks.id
+                          AND download_jobs.preparation_state IN ('pending', 'preparing'))
+                    THEN 'download_preparing' ELSE 'downloaded' END,
+                    failure_kind = NULL,
+                    failure_reason = NULL,
+                    updated_at_utc = $now
+                WHERE mikanid = $mikanid
+                  AND status = 'metadata_failed'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM metadata_resolution_runs
+                      WHERE metadata_resolution_runs.task_id = ingest_tasks.id
+                        AND metadata_resolution_runs.status = 'running')
+                RETURNING id;
+                """;
+            update.Parameters.AddWithValue("$mikanid", mikanId);
+            update.Parameters.AddWithValue("$now", now);
+            await using var reader = await update.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                retried++;
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return retried;
+    }
+
+    private static MikanWorkImpactCategory ParseMikanImpactCategory(string value) => value switch
+    {
+        "future" => MikanWorkImpactCategory.Future,
+        "retryable_failed" => MikanWorkImpactCategory.RetryableFailed,
+        "active" => MikanWorkImpactCategory.Active,
+        "resolved_protected" => MikanWorkImpactCategory.ResolvedProtected,
+        "completed_protected" => MikanWorkImpactCategory.CompletedProtected,
+        _ => MikanWorkImpactCategory.Other,
+    };
+
     private enum EpisodeClaimDecision
     {
         Owned,

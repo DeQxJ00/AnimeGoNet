@@ -61,6 +61,8 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}", GetMikanWorkRule);
         app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
         app.MapDelete("/api/v1/mikan/work-rules/{mikanId:int}", DeleteMikanWorkRule);
+        app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}/impact", GetMikanWorkImpact);
+        app.MapPost("/api/v1/mikan/work-rules/{mikanId:int}/rematch", RematchMikanWorkTasks);
         app.MapGet("/api/v1/mikan/trusted-offsets", ListMikanTrustedOffsets);
         app.MapDelete(
             "/api/v1/mikan/trusted-offsets/{mikanId:int}/{groupId:int}",
@@ -1582,6 +1584,89 @@ public static class ApiEndpoints
         }
     }
 
+    private static async Task<IResult> GetMikanWorkImpact(
+        int mikanId,
+        [FromQuery] int? limit,
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        if (mikanId <= 0)
+        {
+            return TypedResults.BadRequest(Error("mikanid_invalid", "mikanid must be a positive integer."));
+        }
+
+        var resolvedLimit = limit ?? 100;
+        if (resolvedLimit is < 1 or > 500)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_impact_limit_invalid",
+                "Impact task limit must be between 1 and 500."));
+        }
+
+        var impact = await resolutions
+            .GetMikanWorkImpactAsync(mikanId, resolvedLimit, cancellationToken)
+            .ConfigureAwait(false);
+        return TypedResults.Ok(new MikanWorkImpactResponse(
+            impact.MikanId,
+            impact.TotalTaskCount,
+            impact.FutureTaskCount,
+            impact.RetryableFailedTaskCount,
+            impact.ActiveTaskCount,
+            impact.ResolvedProtectedTaskCount,
+            impact.CompletedProtectedTaskCount,
+            impact.OtherTaskCount,
+            impact.IsTruncated,
+            impact.Tasks.Select(task => new MikanWorkImpactTaskResponse(
+                task.TaskId,
+                task.Title,
+                task.SourceId,
+                task.Status,
+                task.BangumiSubjectId,
+                task.TmdbSeriesId,
+                task.TmdbSeasonNumber,
+                task.OrganizationState,
+                ToApiValue(task.Category),
+                task.UpdatedAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> RematchMikanWorkTasks(
+        int mikanId,
+        MikanWorkRematchRequest request,
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        if (mikanId <= 0)
+        {
+            return TypedResults.BadRequest(Error("mikanid_invalid", "mikanid must be a positive integer."));
+        }
+
+        if (request.ExpectedRuleRevision < 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_rule_revision_invalid",
+                "expected_rule_revision cannot be negative."));
+        }
+
+        try
+        {
+            var retried = await resolutions.RematchFailedMikanTasksAsync(
+                mikanId,
+                request.ExpectedRuleRevision,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new MikanWorkRematchResponse(
+                mikanId,
+                request.ExpectedRuleRevision,
+                retried));
+        }
+        catch (MikanWorkRuleRematchRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "mikan_rule_revision_conflict",
+                "Mikan work metadata rule changed; reload impact before rematching."));
+        }
+    }
+
     private static async Task<IResult> ListMikanTrustedOffsets(
         [FromQuery(Name = "mikanid")] int? mikanId,
         [FromQuery(Name = "groupid")] int? groupId,
@@ -2680,5 +2765,15 @@ public static class ApiEndpoints
         MikanRssDecisionKind.RejectedByWhitelist => "rejected_by_whitelist",
         MikanRssDecisionKind.SuppressedByHigherPriority => "suppressed_by_higher_priority",
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
+    };
+
+    private static string ToApiValue(MikanWorkImpactCategory value) => value switch
+    {
+        MikanWorkImpactCategory.Future => "future",
+        MikanWorkImpactCategory.RetryableFailed => "retryable_failed",
+        MikanWorkImpactCategory.Active => "active",
+        MikanWorkImpactCategory.ResolvedProtected => "resolved_protected",
+        MikanWorkImpactCategory.CompletedProtected => "completed_protected",
+        _ => "other",
     };
 }

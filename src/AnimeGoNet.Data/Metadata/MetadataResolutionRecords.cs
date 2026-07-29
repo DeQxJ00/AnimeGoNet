@@ -129,3 +129,43 @@ public sealed record MetadataTaskListProjection(
     int DuplicateFileCount,
     int PendingFileCount,
     DateTimeOffset UpdatedAtUtc);
+
+public enum MikanWorkImpactCategory
+{
+    Future,
+    RetryableFailed,
+    Active,
+    ResolvedProtected,
+    CompletedProtected,
+    Other,
+}
+
+public sealed record MikanWorkImpactTaskProjection(
+    string TaskId,
+    string Title,
+    string SourceId,
+    string Status,
+    int? BangumiSubjectId,
+    int? TmdbSeriesId,
+    int? TmdbSeasonNumber,
+    string? OrganizationState,
+    MikanWorkImpactCategory Category,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record MikanWorkImpactProjection(
+    int MikanId,
+    int TotalTaskCount,
+    int FutureTaskCount,
+    int RetryableFailedTaskCount,
+    int ActiveTaskCount,
+    int ResolvedProtectedTaskCount,
+    int CompletedProtectedTaskCount,
+    int OtherTaskCount,
+    bool IsTruncated,
+    IReadOnlyList<MikanWorkImpactTaskProjection> Tasks);
+
+public sealed class MikanWorkRuleRematchRevisionException(
+    int mikanId,
+    long expectedRevision,
+    long actualRevision) : Exception(
+        $"Mikan work rule {mikanId} revision changed from {expectedRevision} to {actualRevision}.");
