@@ -504,6 +504,20 @@ public static class AnimeGoApplication
                             "metadata:tmdb:timeout_seconds"),
                         defaults.Metadata.Tmdb.HttpTimeout.TotalSeconds,
                         "tmdb_timeout_second")),
+                    RetryCount = ParseOptionalInt(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_retry_count",
+                            "metadata:tmdb:retry_count"),
+                        defaults.Metadata.Tmdb.RetryCount,
+                        "tmdb_retry_count"),
+                    RetryDelay = TimeSpan.FromSeconds(ParseOptionalDouble(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_retry_wait_second",
+                            "metadata:tmdb:retry_wait_seconds"),
+                        defaults.Metadata.Tmdb.RetryDelay.TotalSeconds,
+                        "tmdb_retry_wait_second")),
                 },
                 Bangumi = defaults.Metadata.Bangumi with
                 {
@@ -526,6 +540,20 @@ public static class AnimeGoApplication
                             "metadata:bangumi:timeout_seconds"),
                         defaults.Metadata.Bangumi.HttpTimeout.TotalSeconds,
                         "bangumi_timeout_second")),
+                    RetryCount = ParseOptionalInt(
+                        FirstConfigurationValue(
+                            configuration,
+                            "bangumi_retry_count",
+                            "metadata:bangumi:retry_count"),
+                        defaults.Metadata.Bangumi.RetryCount,
+                        "bangumi_retry_count"),
+                    RetryDelay = TimeSpan.FromSeconds(ParseOptionalDouble(
+                        FirstConfigurationValue(
+                            configuration,
+                            "bangumi_retry_wait_second",
+                            "metadata:bangumi:retry_wait_seconds"),
+                        defaults.Metadata.Bangumi.RetryDelay.TotalSeconds,
+                        "bangumi_retry_wait_second")),
                 },
                 SeasonFailure = defaults.Metadata.SeasonFailure with
                 {

@@ -139,25 +139,47 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
         where T : class
     {
         EnsureConfigured();
-        using var request = new HttpRequestMessage(HttpMethod.Get, BuildRequestUri(relativeUri));
-        if (!string.IsNullOrWhiteSpace(_options.ReadAccessToken))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ReadAccessToken.Trim());
-        }
-
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(_options.HttpTimeout);
-            using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
-            if (allowNotFound && response.StatusCode == HttpStatusCode.NotFound)
-            {
-                return null;
-            }
+            return await MetadataRetryExecutor.ExecuteAsync(
+                async attemptToken =>
+                {
+                    using var request = new HttpRequestMessage(
+                        HttpMethod.Get,
+                        BuildRequestUri(relativeUri));
+                    if (!string.IsNullOrWhiteSpace(_options.ReadAccessToken))
+                    {
+                        request.Headers.Authorization = new AuthenticationHeaderValue(
+                            "Bearer",
+                            _options.ReadAccessToken.Trim());
+                    }
 
-            ThrowForStatus(response.StatusCode);
-            return await response.Content.ReadFromJsonAsync(jsonTypeInfo, timeout.Token).ConfigureAwait(false)
-                ?? throw Failure(MetadataFailureKind.Protocol, "tmdb_empty_response");
+                    using var response = await _httpClient
+                        .SendAsync(request, attemptToken)
+                        .ConfigureAwait(false);
+                    if (allowNotFound
+                        && response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        return null;
+                    }
+
+                    ThrowForStatus(response.StatusCode);
+                    return await response.Content
+                        .ReadFromJsonAsync(jsonTypeInfo, attemptToken)
+                        .ConfigureAwait(false)
+                        ?? throw Failure(
+                            MetadataFailureKind.Protocol,
+                            "tmdb_empty_response");
+                },
+                _options.HttpTimeout,
+                _options.RetryCount,
+                _options.RetryDelay,
+                static exception =>
+                    exception is TmdbClientException
+                    {
+                        Kind: MetadataFailureKind.RemoteService,
+                    },
+                cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

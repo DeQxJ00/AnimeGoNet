@@ -366,6 +366,22 @@ internal static class DeploymentYamlConfiguration
             values,
             "advanced:request:timeout_second",
             "metadata:bangumi:timeout_seconds");
+        Alias(
+            values,
+            "advanced:request:retry_num",
+            "metadata:tmdb:retry_count");
+        Alias(
+            values,
+            "advanced:request:retry_num",
+            "metadata:bangumi:retry_count");
+        Alias(
+            values,
+            "advanced:request:retry_wait_second",
+            "metadata:tmdb:retry_wait_seconds");
+        Alias(
+            values,
+            "advanced:request:retry_wait_second",
+            "metadata:bangumi:retry_wait_seconds");
         if (string.Equals(
                 Value(values, "setting:proxy:enable"),
                 "true",
@@ -590,10 +606,14 @@ internal static class DeploymentYamlConfiguration
                 read_access_token: ''
                 language: {{Scalar(defaults.Metadata.Tmdb.Language)}}
                 timeout_seconds: {{Number(values, "metadata:tmdb:timeout_seconds", defaults.Metadata.Tmdb.HttpTimeout.TotalSeconds)}}
+                retry_count: {{Integer(values, "metadata:tmdb:retry_count", defaults.Metadata.Tmdb.RetryCount)}}
+                retry_wait_seconds: {{Number(values, "metadata:tmdb:retry_wait_seconds", defaults.Metadata.Tmdb.RetryDelay.TotalSeconds)}}
               bangumi:
                 base_url: {{Scalar(Configured(values, "metadata:bangumi:base_url", defaults.Metadata.Bangumi.BaseUrl.AbsoluteUri))}}
                 proxy_url: {{Scalar(Configured(values, "metadata:bangumi:proxy_url", string.Empty))}}
                 timeout_seconds: {{Number(values, "metadata:bangumi:timeout_seconds", defaults.Metadata.Bangumi.HttpTimeout.TotalSeconds)}}
+                retry_count: {{Integer(values, "metadata:bangumi:retry_count", defaults.Metadata.Bangumi.RetryCount)}}
+                retry_wait_seconds: {{Number(values, "metadata:bangumi:retry_wait_seconds", defaults.Metadata.Bangumi.RetryDelay.TotalSeconds)}}
               season_failure:
                 # P4→P3→P2→P1；AI 是独立的一次任务级流程。
                 skip: {{Boolean(values, "metadata:season_failure:skip", false)}}
@@ -780,10 +800,14 @@ internal static class DeploymentYamlConfiguration
                 read_access_token: ''
                 language: zh-CN
                 timeout_seconds: 30
+                retry_count: 3
+                retry_wait_seconds: 5
               bangumi:
                 base_url: https://api.bgm.tv/
                 proxy_url: ''
                 timeout_seconds: 30
+                retry_count: 3
+                retry_wait_seconds: 5
               season_failure:
                 # P4→P3→P2→P1；AI 是独立的一次任务级流程。
                 skip: false

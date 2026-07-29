@@ -28,9 +28,13 @@ public sealed class MetadataTransportConfigurationTests
                     "--tmdb_proxy_url", "http://127.0.0.1:7890/",
                     "--tmdb_language", "ja-JP",
                     "--tmdb_timeout_second", "40",
+                    "--tmdb_retry_count", "4",
+                    "--tmdb_retry_wait_second", "6.5",
                     "--bangumi_base_url", "https://metadata.test.invalid/bangumi/",
                     "--bangumi_proxy_url", "socks5://127.0.0.1:1080/",
                     "--bangumi_timeout_second", "45",
+                    "--bangumi_retry_count", "5",
+                    "--bangumi_retry_wait_second", "7.5",
                 ],
                 tmdbClient: new NullTmdbClient(),
                 bangumiSubjectClient: new NullBangumiClient(),
@@ -46,6 +50,8 @@ public sealed class MetadataTransportConfigurationTests
                 options.Metadata.Tmdb.ProxyUrl);
             Assert.Equal("ja-JP", options.Metadata.Tmdb.Language);
             Assert.Equal(TimeSpan.FromSeconds(40), options.Metadata.Tmdb.HttpTimeout);
+            Assert.Equal(4, options.Metadata.Tmdb.RetryCount);
+            Assert.Equal(TimeSpan.FromSeconds(6.5), options.Metadata.Tmdb.RetryDelay);
             Assert.Equal(
                 new Uri("https://metadata.test.invalid/bangumi/"),
                 options.Metadata.Bangumi.BaseUrl);
@@ -53,6 +59,8 @@ public sealed class MetadataTransportConfigurationTests
                 new Uri("socks5://127.0.0.1:1080/"),
                 options.Metadata.Bangumi.ProxyUrl);
             Assert.Equal(TimeSpan.FromSeconds(45), options.Metadata.Bangumi.HttpTimeout);
+            Assert.Equal(5, options.Metadata.Bangumi.RetryCount);
+            Assert.Equal(TimeSpan.FromSeconds(7.5), options.Metadata.Bangumi.RetryDelay);
             Assert.Equal(options.Metadata, deployment.Value.Metadata);
         }
         finally

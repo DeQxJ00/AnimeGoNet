@@ -43,9 +43,14 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal("zh-CN", options.Metadata.Tmdb.Language);
         Assert.Null(options.Metadata.Tmdb.ApiKey);
         Assert.Null(options.Metadata.Tmdb.ReadAccessToken);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Tmdb.HttpTimeout);
+        Assert.Equal(3, options.Metadata.Tmdb.RetryCount);
+        Assert.Equal(TimeSpan.FromSeconds(5), options.Metadata.Tmdb.RetryDelay);
         Assert.Equal(new Uri("https://api.bgm.tv/"), options.Metadata.Bangumi.BaseUrl);
         Assert.Null(options.Metadata.Bangumi.ProxyUrl);
         Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Bangumi.HttpTimeout);
+        Assert.Equal(3, options.Metadata.Bangumi.RetryCount);
+        Assert.Equal(TimeSpan.FromSeconds(5), options.Metadata.Bangumi.RetryDelay);
         Assert.Equal("0 0 6 * * *", options.Schedule.RefreshDatabaseCron);
         Assert.False(options.DataUpdate.Enabled);
         Assert.Equal("0 0 4 * * ?", options.DataUpdate.Cron);

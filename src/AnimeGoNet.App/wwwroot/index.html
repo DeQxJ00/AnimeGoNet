@@ -768,6 +768,8 @@
         <label class="wide">TMDB 代理（可选）<input id="configuration-tmdb-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>TMDB 语言<input id="configuration-tmdb-language" required maxlength="32"></label>
         <label>TMDB 超时（秒）<input id="configuration-tmdb-timeout" type="number" min="1" max="86400" required></label>
+        <label>TMDB 额外重试次数<input id="configuration-tmdb-retry-count" type="number" min="0" max="10" required></label>
+        <label>TMDB 重试间隔（秒）<input id="configuration-tmdb-retry-delay" type="number" min="0" max="300" step="0.1" required></label>
         <label>新 TMDB API Key<input id="configuration-tmdb-key" type="password" autocomplete="new-password"></label>
         <label class="configuration-clear"><input id="configuration-tmdb-key-clear" type="checkbox">明确清除 API Key</label>
         <p id="configuration-tmdb-key-state" class="configuration-secret-state wide"></p>
@@ -777,6 +779,8 @@
         <label class="wide">Bangumi API 地址<input id="configuration-bangumi-url" type="url" required placeholder="https://api.bgm.tv/"></label>
         <label class="wide">Bangumi 代理（可选）<input id="configuration-bangumi-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>Bangumi 超时（秒）<input id="configuration-bangumi-timeout" type="number" min="1" max="86400" required></label>
+        <label>Bangumi 额外重试次数<input id="configuration-bangumi-retry-count" type="number" min="0" max="10" required></label>
+        <label>Bangumi 重试间隔（秒）<input id="configuration-bangumi-retry-delay" type="number" min="0" max="300" step="0.1" required></label>
         <fieldset class="wide failure-priority-editor">
           <legend>季度失败链</legend>
           <p class="failure-priority-caption">由高到低执行；任一策略成功立即停止。Skip 命中会终止后续 fallback。</p>

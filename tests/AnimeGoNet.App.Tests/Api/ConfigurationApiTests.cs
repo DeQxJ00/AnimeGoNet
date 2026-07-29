@@ -25,12 +25,16 @@ public sealed class ConfigurationApiTests
                         ApiKey = "tmdb-api-secret",
                         ReadAccessToken = "tmdb-bearer-secret",
                         Language = "ja-JP",
+                        RetryCount = 4,
+                        RetryDelay = TimeSpan.FromSeconds(6.5),
                     },
                     Bangumi = options.Metadata.Bangumi with
                     {
                         BaseUrl = new Uri("https://metadata.test.invalid/bangumi/"),
                         ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
                         HttpTimeout = TimeSpan.FromSeconds(45),
+                        RetryCount = 5,
+                        RetryDelay = TimeSpan.FromSeconds(7.5),
                     },
                     SeasonFailure = new SeasonFailureOptions
                     {
@@ -83,6 +87,8 @@ public sealed class ConfigurationApiTests
         Assert.Equal("http://127.0.0.1:7890/", tmdb.GetProperty("proxy_url").GetString());
         Assert.True(tmdb.GetProperty("api_key_configured").GetBoolean());
         Assert.True(tmdb.GetProperty("read_access_token_configured").GetBoolean());
+        Assert.Equal(4, tmdb.GetProperty("retry_count").GetInt32());
+        Assert.Equal(6.5, tmdb.GetProperty("retry_delay_seconds").GetDouble());
         var bangumi = metadata.GetProperty("bangumi");
         Assert.Equal(
             "https://metadata.test.invalid/bangumi/",
@@ -91,6 +97,8 @@ public sealed class ConfigurationApiTests
             "socks5://127.0.0.1:1080/",
             bangumi.GetProperty("proxy_url").GetString());
         Assert.Equal(45, bangumi.GetProperty("http_timeout_seconds").GetDouble());
+        Assert.Equal(5, bangumi.GetProperty("retry_count").GetInt32());
+        Assert.Equal(7.5, bangumi.GetProperty("retry_delay_seconds").GetDouble());
         Assert.True(metadata.GetProperty("season_failure").GetProperty("skip").GetBoolean());
         Assert.True(metadata.GetProperty("ai").GetProperty("use_metadata_match").GetBoolean());
         Assert.True(metadata.GetProperty("ai").GetProperty("use_season_match").GetBoolean());
@@ -145,8 +153,12 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-tmdb-retry-count\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-tmdb-retry-delay\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-bangumi-retry-count\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-bangumi-retry-delay\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-enabled\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-cron\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-manifest\"", html, StringComparison.Ordinal);
@@ -515,6 +527,10 @@ public sealed class ConfigurationApiTests
             "https://metadata.test.invalid/bangumi/",
             saved.Settings?.BangumiBaseUrl);
         Assert.Equal("socks5://127.0.0.1:1080/", saved.Settings?.BangumiProxyUrl);
+        Assert.Equal(3, saved.Settings?.TmdbRetryCount);
+        Assert.Equal(5, saved.Settings?.TmdbRetryDelaySeconds);
+        Assert.Equal(3, saved.Settings?.BangumiRetryCount);
+        Assert.Equal(5, saved.Settings?.BangumiRetryDelaySeconds);
 
         using var preserve = await app.Client.PutAsync(
             "/api/v1/config",
@@ -800,7 +816,11 @@ public sealed class ConfigurationApiTests
         string baseUrl = "https://api.themoviedb.org/",
         string? tmdbProxy = null,
         string bangumiBase = "https://api.bgm.tv/",
-        string? bangumiProxy = null)
+        string? bangumiProxy = null,
+        int tmdbRetryCount = 3,
+        double tmdbRetryDelaySeconds = 5,
+        int bangumiRetryCount = 3,
+        double bangumiRetryDelaySeconds = 5)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -808,6 +828,8 @@ public sealed class ConfigurationApiTests
             tmdb_proxy_url = tmdbProxy,
             tmdb_language = "zh-CN",
             tmdb_http_timeout_seconds = 30,
+            tmdb_retry_count = tmdbRetryCount,
+            tmdb_retry_delay_seconds = tmdbRetryDelaySeconds,
             tmdb_api_key = apiKey,
             clear_tmdb_api_key = clearApiKey,
             tmdb_read_access_token = readToken,
@@ -815,6 +837,8 @@ public sealed class ConfigurationApiTests
             bangumi_base_url = bangumiBase,
             bangumi_proxy_url = bangumiProxy,
             bangumi_http_timeout_seconds = 30,
+            bangumi_retry_count = bangumiRetryCount,
+            bangumi_retry_delay_seconds = bangumiRetryDelaySeconds,
             season_failure_skip = false,
             season_failure_backtrace = true,
             season_failure_use_title_season = true,

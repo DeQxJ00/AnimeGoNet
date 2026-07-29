@@ -130,6 +130,8 @@ interface RuntimeConfiguration {
       proxy_url: string | null;
       language: string;
       http_timeout_seconds: number;
+      retry_count: number;
+      retry_delay_seconds: number;
       api_key_configured: boolean;
       read_access_token_configured: boolean;
     };
@@ -137,6 +139,8 @@ interface RuntimeConfiguration {
       base_url: string;
       proxy_url: string | null;
       http_timeout_seconds: number;
+      retry_count: number;
+      retry_delay_seconds: number;
     };
     season_failure: {
       skip: boolean;
@@ -174,11 +178,15 @@ interface RuntimeConfiguration {
     tmdb_proxy_url: string | null;
     tmdb_language: string;
     tmdb_http_timeout_seconds: number;
+    tmdb_retry_count: number;
+    tmdb_retry_delay_seconds: number;
     tmdb_api_key_state: "inherit" | "configured" | "cleared";
     tmdb_read_access_token_state: "inherit" | "configured" | "cleared";
     bangumi_base_url: string;
     bangumi_proxy_url: string | null;
     bangumi_http_timeout_seconds: number;
+    bangumi_retry_count: number;
+    bangumi_retry_delay_seconds: number;
     season_failure_skip: boolean;
     season_failure_backtrace: boolean;
     season_failure_use_title_season: boolean;
@@ -221,6 +229,8 @@ interface ConfigurationUpdatePayload {
   tmdb_proxy_url: string | null;
   tmdb_language: string;
   tmdb_http_timeout_seconds: number;
+  tmdb_retry_count: number;
+  tmdb_retry_delay_seconds: number;
   tmdb_api_key: string | null;
   clear_tmdb_api_key: boolean;
   tmdb_read_access_token: string | null;
@@ -228,6 +238,8 @@ interface ConfigurationUpdatePayload {
   bangumi_base_url: string;
   bangumi_proxy_url: string | null;
   bangumi_http_timeout_seconds: number;
+  bangumi_retry_count: number;
+  bangumi_retry_delay_seconds: number;
   season_failure_skip: boolean;
   season_failure_backtrace: boolean;
   season_failure_use_title_season: boolean;
@@ -2486,9 +2498,19 @@ function metadataConfigurationCard(config: RuntimeConfiguration): HTMLElement {
     ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
     ["TMDB 代理", config.metadata.tmdb.proxy_url ?? "直连（未配置）"],
     ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
+    [
+      "TMDB 重试",
+      `${config.metadata.tmdb.retry_count} 次 · 间隔 `
+      + `${config.metadata.tmdb.retry_delay_seconds} 秒`,
+    ],
     ["Bangumi API", config.metadata.bangumi.base_url],
     ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
     ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
+    [
+      "Bangumi 重试",
+      `${config.metadata.bangumi.retry_count} 次 · 间隔 `
+      + `${config.metadata.bangumi.retry_delay_seconds} 秒`,
+    ],
     [
       "Bangumi 完全兜底（一般不启用这个）",
       `${enabledLabel(config.metadata.tmdb_failure_use_bangumi)} · `
@@ -2617,11 +2639,15 @@ const configurationLockSelectors: Record<string, string[]> = {
   tmdb_proxy_url: ["#configuration-tmdb-proxy"],
   tmdb_language: ["#configuration-tmdb-language"],
   tmdb_http_timeout_seconds: ["#configuration-tmdb-timeout"],
+  tmdb_retry_count: ["#configuration-tmdb-retry-count"],
+  tmdb_retry_delay_seconds: ["#configuration-tmdb-retry-delay"],
   tmdb_api_key: ["#configuration-tmdb-key", "#configuration-tmdb-key-clear"],
   tmdb_read_access_token: ["#configuration-tmdb-token", "#configuration-tmdb-token-clear"],
   bangumi_base_url: ["#configuration-bangumi-url"],
   bangumi_proxy_url: ["#configuration-bangumi-proxy"],
   bangumi_http_timeout_seconds: ["#configuration-bangumi-timeout"],
+  bangumi_retry_count: ["#configuration-bangumi-retry-count"],
+  bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
   ai_use_metadata_match: ["#configuration-ai-metadata"],
   ai_http_timeout_seconds: ["#configuration-ai-timeout"],
   data_update_enabled: ["#configuration-data-update-enabled"],
@@ -2674,6 +2700,11 @@ function openConfigurationEditor(): void {
   setConfigurationValue("#configuration-tmdb-proxy", editable.tmdb_proxy_url ?? "");
   setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
   setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
+  setConfigurationValue("#configuration-tmdb-retry-count", editable.tmdb_retry_count);
+  setConfigurationValue(
+    "#configuration-tmdb-retry-delay",
+    editable.tmdb_retry_delay_seconds,
+  );
   setConfigurationValue("#configuration-tmdb-key", "");
   setConfigurationChecked("#configuration-tmdb-key-clear", false);
   element<HTMLElement>("#configuration-tmdb-key-state").textContent =
@@ -2687,6 +2718,14 @@ function openConfigurationEditor(): void {
   setConfigurationValue(
     "#configuration-bangumi-timeout",
     editable.bangumi_http_timeout_seconds,
+  );
+  setConfigurationValue(
+    "#configuration-bangumi-retry-count",
+    editable.bangumi_retry_count,
+  );
+  setConfigurationValue(
+    "#configuration-bangumi-retry-delay",
+    editable.bangumi_retry_delay_seconds,
   );
   setConfigurationChecked("#configuration-fail-skip", editable.season_failure_skip);
   setConfigurationChecked("#configuration-fail-backtrace", editable.season_failure_backtrace);
@@ -2740,11 +2779,15 @@ const configurationFieldLabels: Record<string, string> = {
   tmdb_proxy_url: "TMDB 代理",
   tmdb_language: "TMDB 语言",
   tmdb_http_timeout_seconds: "TMDB 超时（秒）",
+  tmdb_retry_count: "TMDB 额外重试次数",
+  tmdb_retry_delay_seconds: "TMDB 重试间隔（秒）",
   tmdb_api_key: "TMDB API Key",
   tmdb_read_access_token: "TMDB Read Token",
   bangumi_base_url: "Bangumi API 地址",
   bangumi_proxy_url: "Bangumi 代理",
   bangumi_http_timeout_seconds: "Bangumi 超时（秒）",
+  bangumi_retry_count: "Bangumi 额外重试次数",
+  bangumi_retry_delay_seconds: "Bangumi 重试间隔（秒）",
   season_failure_skip: "TMDBFailSkip",
   season_failure_backtrace: "TMDBFailBacktrace",
   season_failure_use_title_season: "TMDBFailUseTitleSeason",
@@ -2777,6 +2820,10 @@ function configurationRequest(): ConfigurationUpdatePayload {
     tmdb_language: element<HTMLInputElement>("#configuration-tmdb-language").value,
     tmdb_http_timeout_seconds:
       element<HTMLInputElement>("#configuration-tmdb-timeout").valueAsNumber,
+    tmdb_retry_count:
+      element<HTMLInputElement>("#configuration-tmdb-retry-count").valueAsNumber,
+    tmdb_retry_delay_seconds:
+      element<HTMLInputElement>("#configuration-tmdb-retry-delay").valueAsNumber,
     tmdb_api_key: element<HTMLInputElement>("#configuration-tmdb-key").value || null,
     clear_tmdb_api_key:
       element<HTMLInputElement>("#configuration-tmdb-key-clear").checked,
@@ -2790,6 +2837,10 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-bangumi-proxy").value || null,
     bangumi_http_timeout_seconds:
       element<HTMLInputElement>("#configuration-bangumi-timeout").valueAsNumber,
+    bangumi_retry_count:
+      element<HTMLInputElement>("#configuration-bangumi-retry-count").valueAsNumber,
+    bangumi_retry_delay_seconds:
+      element<HTMLInputElement>("#configuration-bangumi-retry-delay").valueAsNumber,
     season_failure_skip:
       element<HTMLInputElement>("#configuration-fail-skip").checked,
     season_failure_backtrace:

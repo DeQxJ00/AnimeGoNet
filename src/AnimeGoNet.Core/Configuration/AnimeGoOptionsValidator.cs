@@ -152,6 +152,12 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("TMDB HTTP timeout must be positive.");
         }
 
+        ValidateMetadataRetry(
+            "TMDB",
+            options.Metadata.Tmdb.RetryCount,
+            options.Metadata.Tmdb.RetryDelay,
+            errors);
+
         if (string.IsNullOrWhiteSpace(options.Metadata.Tmdb.Language))
         {
             errors.Add("TMDB language must not be empty.");
@@ -172,6 +178,12 @@ public static partial class AnimeGoOptionsValidator
         {
             errors.Add("Bangumi HTTP timeout must be positive.");
         }
+
+        ValidateMetadataRetry(
+            "Bangumi",
+            options.Metadata.Bangumi.RetryCount,
+            options.Metadata.Bangumi.RetryDelay,
+            errors);
 
         if (options.TorrentFetch.Timeout <= TimeSpan.Zero)
         {
@@ -231,6 +243,23 @@ public static partial class AnimeGoOptionsValidator
         }
 
         return errors;
+    }
+
+    private static void ValidateMetadataRetry(
+        string name,
+        int retryCount,
+        TimeSpan retryDelay,
+        List<string> errors)
+    {
+        if (retryCount is < 0 or > 10)
+        {
+            errors.Add($"{name} retry count must be between 0 and 10.");
+        }
+
+        if (retryDelay < TimeSpan.Zero || retryDelay > TimeSpan.FromMinutes(5))
+        {
+            errors.Add($"{name} retry delay must be between 0 and 300 seconds.");
+        }
     }
 
     public static bool IsStableId(string value) =>

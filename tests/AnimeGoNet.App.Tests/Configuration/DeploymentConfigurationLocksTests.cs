@@ -142,4 +142,46 @@ public sealed class DeploymentConfigurationLocksTests
                 item.EnvironmentVariables,
                 name => name.StartsWith("DATA_UPDATE_", StringComparison.Ordinal)));
     }
+
+    [Fact]
+    public void MetadataRetryEnvironmentFieldsAreLockedAndReapplied()
+    {
+        var deployment = AnimeGoDefaults.CreateNative(Path.GetTempPath());
+        var candidate = deployment with
+        {
+            Metadata = deployment.Metadata with
+            {
+                Tmdb = deployment.Metadata.Tmdb with
+                {
+                    RetryCount = 1,
+                    RetryDelay = TimeSpan.FromSeconds(2),
+                },
+                Bangumi = deployment.Metadata.Bangumi with
+                {
+                    RetryCount = 6,
+                    RetryDelay = TimeSpan.FromSeconds(7),
+                },
+            },
+        };
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+        [
+            "TMDB_RETRY_COUNT",
+            "TMDB_RETRY_WAIT_SECOND",
+            "BANGUMI_RETRY_COUNT",
+            "BANGUMI_RETRY_WAIT_SECOND",
+        ]);
+
+        var result = locks.Reapply(deployment, candidate);
+
+        Assert.Equal(deployment.Metadata.Tmdb, result.Metadata.Tmdb);
+        Assert.Equal(deployment.Metadata.Bangumi, result.Metadata.Bangumi);
+        Assert.Equal(
+        [
+            "tmdb_retry_count",
+            "tmdb_retry_delay_seconds",
+            "bangumi_retry_count",
+            "bangumi_retry_delay_seconds",
+        ],
+            locks.FindChangedLockedFields(deployment, candidate));
+    }
 }

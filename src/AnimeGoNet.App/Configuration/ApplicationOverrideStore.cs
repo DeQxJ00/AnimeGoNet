@@ -41,7 +41,11 @@ public sealed record ApplicationOverrideEntry(
     bool? DataUpdateAutoDownload = null,
     bool? DataUpdateAutoImport = null,
     int? DataUpdateKeepVersions = null,
-    double? DataUpdateHttpTimeoutSeconds = null);
+    double? DataUpdateHttpTimeoutSeconds = null,
+    int? TmdbRetryCount = null,
+    double? TmdbRetryDelaySeconds = null,
+    int? BangumiRetryCount = null,
+    double? BangumiRetryDelaySeconds = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -237,6 +241,15 @@ public sealed class ApplicationOverrideStore : IDisposable
                     HttpTimeout = inheritedFields.Contains("tmdb_http_timeout_seconds")
                         ? options.Metadata.Tmdb.HttpTimeout
                         : TimeSpan.FromSeconds(settings.TmdbHttpTimeoutSeconds),
+                    RetryCount = inheritedFields.Contains("tmdb_retry_count")
+                        ? options.Metadata.Tmdb.RetryCount
+                        : settings.TmdbRetryCount
+                        ?? options.Metadata.Tmdb.RetryCount,
+                    RetryDelay = inheritedFields.Contains("tmdb_retry_delay_seconds")
+                        ? options.Metadata.Tmdb.RetryDelay
+                        : settings.TmdbRetryDelaySeconds is { } tmdbRetryDelay
+                        ? TimeSpan.FromSeconds(tmdbRetryDelay)
+                        : options.Metadata.Tmdb.RetryDelay,
                     ApiKey = !inheritedFields.Contains("tmdb_api_key")
                         && settings.TmdbApiKeyOverridden
                         ? settings.TmdbApiKey
@@ -254,6 +267,15 @@ public sealed class ApplicationOverrideStore : IDisposable
                         && settings.BangumiHttpTimeoutSeconds is > 0
                         ? TimeSpan.FromSeconds(settings.BangumiHttpTimeoutSeconds.Value)
                         : options.Metadata.Bangumi.HttpTimeout,
+                    RetryCount = inheritedFields.Contains("bangumi_retry_count")
+                        ? options.Metadata.Bangumi.RetryCount
+                        : settings.BangumiRetryCount
+                        ?? options.Metadata.Bangumi.RetryCount,
+                    RetryDelay = inheritedFields.Contains("bangumi_retry_delay_seconds")
+                        ? options.Metadata.Bangumi.RetryDelay
+                        : settings.BangumiRetryDelaySeconds is { } bangumiRetryDelay
+                        ? TimeSpan.FromSeconds(bangumiRetryDelay)
+                        : options.Metadata.Bangumi.RetryDelay,
                 },
                 SeasonFailure = new SeasonFailureOptions
                 {

@@ -102,6 +102,10 @@ public sealed record TmdbClientOptions
     public string Language { get; init; } = "zh-CN";
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    public int RetryCount { get; init; } = 3;
+
+    public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(5);
 }
 
 public sealed record BangumiClientOptions
@@ -111,6 +115,10 @@ public sealed record BangumiClientOptions
     public Uri? ProxyUrl { get; init; }
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    public int RetryCount { get; init; } = 3;
+
+    public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(5);
 }
 
 public sealed record SeasonFailureOptions

@@ -908,12 +908,16 @@ public static class ApiEndpoints
                     tmdb.ProxyUrl?.AbsoluteUri,
                     tmdb.Language,
                     tmdb.HttpTimeout.TotalSeconds,
+                    tmdb.RetryCount,
+                    tmdb.RetryDelay.TotalSeconds,
                     !string.IsNullOrWhiteSpace(tmdb.ApiKey),
                     !string.IsNullOrWhiteSpace(tmdb.ReadAccessToken)),
                 new BangumiConfigurationResponse(
                     bangumi.BaseUrl.AbsoluteUri,
                     bangumi.ProxyUrl?.AbsoluteUri,
-                    bangumi.HttpTimeout.TotalSeconds),
+                    bangumi.HttpTimeout.TotalSeconds,
+                    bangumi.RetryCount,
+                    bangumi.RetryDelay.TotalSeconds),
                 new SeasonFailureConfigurationResponse(
                     season.Skip,
                     season.Backtrace,
@@ -967,6 +971,8 @@ public static class ApiEndpoints
             tmdb.ProxyUrl?.AbsoluteUri,
             tmdb.Language,
             tmdb.HttpTimeout.TotalSeconds,
+            tmdb.RetryCount,
+            tmdb.RetryDelay.TotalSeconds,
             SecretState(settings?.TmdbApiKeyOverridden == true, settings?.TmdbApiKey),
             SecretState(
                 settings?.TmdbReadAccessTokenOverridden == true,
@@ -974,6 +980,8 @@ public static class ApiEndpoints
             bangumi.BaseUrl.AbsoluteUri,
             bangumi.ProxyUrl?.AbsoluteUri,
             bangumi.HttpTimeout.TotalSeconds,
+            bangumi.RetryCount,
+            bangumi.RetryDelay.TotalSeconds,
             season.Skip,
             season.Backtrace,
             season.UseTitleSeason,
@@ -1101,6 +1109,14 @@ public static class ApiEndpoints
             "tmdb_http_timeout_seconds",
             beforeTmdb.HttpTimeout,
             afterTmdb.HttpTimeout);
+        Add(
+            "tmdb_retry_count",
+            beforeTmdb.RetryCount.ToString(invariant),
+            afterTmdb.RetryCount.ToString(invariant));
+        AddSeconds(
+            "tmdb_retry_delay_seconds",
+            beforeTmdb.RetryDelay,
+            afterTmdb.RetryDelay);
         AddSecret(
             "tmdb_api_key",
             request.TmdbApiKey,
@@ -1125,6 +1141,14 @@ public static class ApiEndpoints
             "bangumi_http_timeout_seconds",
             beforeBangumi.HttpTimeout,
             afterBangumi.HttpTimeout);
+        Add(
+            "bangumi_retry_count",
+            beforeBangumi.RetryCount.ToString(invariant),
+            afterBangumi.RetryCount.ToString(invariant));
+        AddSeconds(
+            "bangumi_retry_delay_seconds",
+            beforeBangumi.RetryDelay,
+            afterBangumi.RetryDelay);
         AddBool("season_failure_skip", beforeSeason.Skip, afterSeason.Skip);
         AddBool("season_failure_backtrace", beforeSeason.Backtrace, afterSeason.Backtrace);
         AddBool(
@@ -1313,10 +1337,32 @@ public static class ApiEndpoints
         }
 
         ValidateSeconds(request.TmdbHttpTimeoutSeconds, "tmdb_http_timeout_seconds", 86_400);
+        if (request.TmdbRetryCount is { } tmdbRetryCount)
+        {
+            ValidateRetryCount(tmdbRetryCount, "tmdb_retry_count");
+        }
+        if (request.TmdbRetryDelaySeconds is { } tmdbRetryDelay)
+        {
+            ValidateNonNegativeSeconds(
+                tmdbRetryDelay,
+                "tmdb_retry_delay_seconds",
+                300);
+        }
         ValidateSeconds(
             request.BangumiHttpTimeoutSeconds,
             "bangumi_http_timeout_seconds",
             86_400);
+        if (request.BangumiRetryCount is { } bangumiRetryCount)
+        {
+            ValidateRetryCount(bangumiRetryCount, "bangumi_retry_count");
+        }
+        if (request.BangumiRetryDelaySeconds is { } bangumiRetryDelay)
+        {
+            ValidateNonNegativeSeconds(
+                bangumiRetryDelay,
+                "bangumi_retry_delay_seconds",
+                300);
+        }
         ValidateSeconds(request.AiHttpTimeoutSeconds, "ai_http_timeout_seconds", 86_400);
         ValidateSeconds(request.TorrentHttpTimeoutSeconds, "torrent_http_timeout_seconds", 86_400);
         ValidateSeconds(request.TorrentStagingTtlSeconds, "torrent_staging_ttl_seconds", 604_800);
@@ -1398,7 +1444,15 @@ public static class ApiEndpoints
             DataUpdateAutoDownload: request.DataUpdateAutoDownload,
             DataUpdateAutoImport: request.DataUpdateAutoImport,
             DataUpdateKeepVersions: request.DataUpdateKeepVersions,
-            DataUpdateHttpTimeoutSeconds: request.DataUpdateHttpTimeoutSeconds);
+            DataUpdateHttpTimeoutSeconds: request.DataUpdateHttpTimeoutSeconds,
+            TmdbRetryCount: request.TmdbRetryCount
+                ?? current?.TmdbRetryCount,
+            TmdbRetryDelaySeconds: request.TmdbRetryDelaySeconds
+                ?? current?.TmdbRetryDelaySeconds,
+            BangumiRetryCount: request.BangumiRetryCount
+                ?? current?.BangumiRetryCount,
+            BangumiRetryDelaySeconds: request.BangumiRetryDelaySeconds
+                ?? current?.BangumiRetryDelaySeconds);
     }
 
     private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate) =>
@@ -1409,6 +1463,27 @@ public static class ApiEndpoints
         if (!double.IsFinite(value) || value <= 0 || value > maximum)
         {
             throw new ArgumentException($"{name} must be greater than 0 and at most {maximum}.");
+        }
+    }
+
+    private static void ValidateNonNegativeSeconds(
+        double value,
+        string name,
+        double maximum)
+    {
+        if (!double.IsFinite(value) || value < 0 || value > maximum)
+        {
+            throw new ArgumentException(
+                $"{name} must be at least 0 and at most {maximum}.");
+        }
+    }
+
+    private static void ValidateRetryCount(int value, string name)
+    {
+        if (value is < 0 or > 10)
+        {
+            throw new ArgumentException(
+                $"{name} must be between 0 and 10.");
         }
     }
 

@@ -160,6 +160,7 @@ public sealed class BangumiSubjectClientTests
             new BangumiClientOptions
             {
                 HttpTimeout = TimeSpan.FromMilliseconds(30),
+                RetryCount = 0,
             });
 
         var exception = await Assert.ThrowsAsync<BangumiClientException>(
@@ -167,6 +168,64 @@ public sealed class BangumiSubjectClientTests
 
         Assert.Equal(MetadataFailureKind.Network, exception.Kind);
         Assert.Equal("bangumi_timeout", exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task RetriesRateLimitAndServiceFailureBeforeSuccessfulSubject()
+    {
+        var attempt = 0;
+        using var handler = new RecordingHandler(_ => ++attempt switch
+        {
+            1 => new HttpResponseMessage(HttpStatusCode.TooManyRequests),
+            2 => new HttpResponseMessage(HttpStatusCode.BadGateway),
+            _ => Json("""
+                {
+                  "id": 371546,
+                  "name": "ようこそ実力至上主義の教室へ 2nd Season",
+                  "name_cn": "欢迎来到实力至上主义教室 第二季",
+                  "date": "2022-07-04",
+                  "eps": 13,
+                  "total_episodes": 13
+                }
+                """),
+        });
+        using var client = new BangumiSubjectClient(
+            new HttpClient(handler),
+            new BangumiClientOptions
+            {
+                RetryCount = 2,
+                RetryDelay = TimeSpan.Zero,
+            });
+
+        var subject = Assert.IsType<BangumiSubject>(
+            await client.GetSubjectAsync(371546));
+
+        Assert.Equal(371546, subject.Id);
+        Assert.Equal(3, handler.RequestUris.Count);
+        Assert.All(
+            handler.UserAgents,
+            value => Assert.Contains(
+                "AnimeGoNet/0.1",
+                value,
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BangumiNotFoundIsNotRetried()
+    {
+        using var handler = new RecordingHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        using var client = new BangumiSubjectClient(
+            new HttpClient(handler),
+            new BangumiClientOptions
+            {
+                RetryCount = 3,
+                RetryDelay = TimeSpan.Zero,
+            });
+
+        Assert.Null(await client.GetSubjectAsync(371546));
+
+        Assert.Single(handler.RequestUris);
     }
 
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
@@ -182,6 +241,8 @@ public sealed class BangumiSubjectClientTests
 
         public string? UserAgent { get; private set; }
 
+        public List<string> UserAgents { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -189,6 +250,7 @@ public sealed class BangumiSubjectClientTests
             RequestUri = request.RequestUri;
             RequestUris.Add(request.RequestUri!);
             UserAgent = request.Headers.UserAgent.ToString();
+            UserAgents.Add(UserAgent);
             return Task.FromResult(response(request));
         }
     }

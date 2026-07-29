@@ -223,13 +223,20 @@ public sealed class TmdbClientTests
     {
         using var handler = new RecordingHandler(_ => Json("{not-json"));
         using var http = new HttpClient(handler);
-        using var client = CreateClient(http);
+        using var client = new TmdbClient(
+            http,
+            Options() with
+            {
+                RetryCount = 3,
+                RetryDelay = TimeSpan.Zero,
+            });
 
         var exception = await Assert.ThrowsAsync<TmdbClientException>(() => client.GetSeriesAsync(1));
 
         Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
         Assert.Equal("tmdb_invalid_json", exception.SafeCode);
         Assert.False(exception.TmdbAccessConfirmed);
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
@@ -251,13 +258,126 @@ public sealed class TmdbClientTests
     public async Task PerClientTimeoutUsesStableNetworkClassification()
     {
         using var http = new HttpClient(new NeverCompletesHandler());
-        using var client = new TmdbClient(http, Options() with { HttpTimeout = TimeSpan.FromMilliseconds(30) });
+        using var client = new TmdbClient(
+            http,
+            Options() with
+            {
+                HttpTimeout = TimeSpan.FromMilliseconds(30),
+            });
 
         var exception = await Assert.ThrowsAsync<TmdbClientException>(() => client.GetSeriesAsync(1));
 
         Assert.Equal(MetadataFailureKind.Network, exception.Kind);
         Assert.Equal("tmdb_timeout", exception.SafeCode);
         Assert.False(exception.TmdbAccessConfirmed);
+    }
+
+    [Fact]
+    public async Task RetriesNetworkAndRemoteServiceFailuresWithFreshCredentialedRequests()
+    {
+        const string json =
+            """{"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07"}""";
+        var attempt = 0;
+        using var handler = new RecordingHandler(_ => ++attempt switch
+        {
+            1 => throw new HttpRequestException("transient"),
+            2 => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
+            _ => Json(json),
+        });
+        using var http = new HttpClient(handler);
+        using var client = new TmdbClient(
+            http,
+            Options() with
+            {
+                RetryCount = 2,
+                RetryDelay = TimeSpan.Zero,
+            });
+
+        var series = Assert.IsType<TmdbSeries>(
+            await client.GetSeriesAsync(72517));
+
+        Assert.Equal(72517, series.Id);
+        Assert.Equal(3, handler.Requests.Count);
+        Assert.All(
+            handler.Requests,
+            request => Assert.Contains(
+                "api_key=test-key",
+                request.Query,
+                StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task DoesNotRetrySemanticAuthenticationOrProtocolResponses(
+        HttpStatusCode statusCode)
+    {
+        using var handler = new RecordingHandler(
+            _ => new HttpResponseMessage(statusCode));
+        using var http = new HttpClient(handler);
+        using var client = new TmdbClient(
+            http,
+            Options() with
+            {
+                RetryCount = 3,
+                RetryDelay = TimeSpan.Zero,
+            });
+
+        if (statusCode == HttpStatusCode.NotFound)
+        {
+            Assert.Null(await client.GetSeriesAsync(72517));
+        }
+        else
+        {
+            _ = await Assert.ThrowsAsync<TmdbClientException>(
+                () => client.GetSeriesAsync(72517));
+        }
+
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task CallerCancellationStopsRetryDelayImmediately()
+    {
+        using var handler = new RecordingHandler(
+            _ => throw new HttpRequestException("transient"));
+        using var http = new HttpClient(handler);
+        using var client = new TmdbClient(
+            http,
+            Options() with
+            {
+                RetryCount = 3,
+                RetryDelay = TimeSpan.FromMinutes(1),
+            });
+        using var cancellation = new CancellationTokenSource(
+            TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetSeriesAsync(72517, cancellation.Token));
+
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task PerAttemptTimeoutIsRetriedBeforeStableSuccess()
+    {
+        using var handler = new TimeoutThenSuccessHandler();
+        using var http = new HttpClient(handler);
+        using var client = new TmdbClient(
+            http,
+            Options() with
+            {
+                HttpTimeout = TimeSpan.FromMilliseconds(30),
+                RetryCount = 1,
+                RetryDelay = TimeSpan.Zero,
+            });
+
+        var series = Assert.IsType<TmdbSeries>(
+            await client.GetSeriesAsync(72517));
+
+        Assert.Equal(72517, series.Id);
+        Assert.Equal(2, handler.Attempts);
     }
 
     private static TmdbClient CreateClient(HttpClient http) => new(http, Options());
@@ -267,6 +387,7 @@ public sealed class TmdbClientTests
         BaseUrl = new Uri("https://tmdb.invalid/"),
         ApiKey = "test-key",
         HttpTimeout = TimeSpan.FromSeconds(2),
+        RetryCount = 0,
     };
 
     private static HttpResponseMessage Json(string value) => new(HttpStatusCode.OK)
@@ -304,6 +425,26 @@ public sealed class TmdbClientTests
             _ = request;
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("unreachable");
+        }
+    }
+
+    private sealed class TimeoutThenSuccessHandler : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            _ = request;
+            Attempts++;
+            if (Attempts == 1)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            return Json(
+                """{"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07"}""");
         }
     }
 }

@@ -25,12 +25,12 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/pkg/request` | AOT-safe `HttpClient` pipeline | 保留 | 进行中 | 真实 loopback socket 已验证固定已校验 IP 连接、原 URI Host、固定 User-Agent、禁止自动 redirect 和流式响应；生产 SSRF 策略继续拒绝 loopback/private。代理、超时与重试编排待实现 |
+| `internal/pkg/request` | AOT-safe `HttpClient` pipeline | 保留 | 进行中 | 真实 loopback socket 已验证固定已校验 IP 连接、原 URI Host、固定 User-Agent、禁止自动 redirect 和流式响应；生产 SSRF 策略继续拒绝 loopback/private。TMDB/Bangumi 独立 API 地址、HTTP(S)/SOCKS5 代理、逐次超时、可配置额外重试/间隔、请求重建、取消传播及 429/5xx 与非重试错误边界已通过故障注入/API/WebUI/NativeAOT smoke；Mikan Cookie 等来源级凭据待实现 |
 | `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 已验证 | 严格 v1 Bencode、原始 info-hash、单/多文件与安全 staging 已验证；magnet 的 40 hex/32 Base32、首个 xt/dn 和 tracker 计数已按上游 fixture 验证且不保留 tracker/passkey；固定 `c7475df` 的 4 个真实 `.torrent` 已逐项验证 info-hash、名称、总量和全部 17 个文件 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 已验证 | 5 MiB 有界 raw/file/URL 读取、真实 loopback chunked HTTP、原始 path/query/Host、首个 enclosure、缺失跳过、非法 length=0、Mikan pubDate 原文与带偏移规范值、稳定失败码与安全 XML tests 已通过；`/api/rss` 已接入 |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 已验证 | RSS source URL/channel link 的 path/query 正整数 mikanid、Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid`，以及 `/Home/Bangumi/{mikanid}` 中 `p.bangumi-info` 的可信 Bangumi Subject 链接均已覆盖上游 fixture；SSRF 防护、严格 UTF-8/容量限制、歧义与伪造域名拒绝、schema v26 批次缓存/审计、统一导入 task 持久化和失败重试 tests 已通过 |
-| `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选与自动编排 fake tests 已通过；SQLite cache 待实现 |
-| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选与自动 Series/Season/Episode worker tests 已通过；cache 待实现 |
+| `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选、逐次超时和安全可取消重试已通过；SQLite cache 待实现 |
+| `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选、逐次超时和安全可取消重试及自动 Series/Season/Episode worker tests 已通过；cache 待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
 | 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；RSS 请求级 SourceProfile revision/双开关/下载器路由并发快照已验证；双 qB 容器连接、共享路径与 Mikan→bt/U2/TTG→pt 预览门禁已进入 CI，真实统一导入分别落入两实例的 container E2E 待实现 |
 

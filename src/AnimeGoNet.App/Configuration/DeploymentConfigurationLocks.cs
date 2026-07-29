@@ -15,11 +15,17 @@ public sealed class DeploymentConfigurationLocks
         new("tmdb_proxy_url", ["tmdb_proxy_url"]),
         new("tmdb_language", ["tmdb_language"]),
         new("tmdb_http_timeout_seconds", ["tmdb_timeout_second"]),
+        new("tmdb_retry_count", ["tmdb_retry_count"]),
+        new("tmdb_retry_delay_seconds", ["tmdb_retry_wait_second"]),
         new("tmdb_api_key", ["tmdb_api_key", "ANIMEGO_THEMOVIEDB_KEY"]),
         new("tmdb_read_access_token", ["tmdb_read_access_token"]),
         new("bangumi_base_url", ["bangumi_base_url"]),
         new("bangumi_proxy_url", ["bangumi_proxy_url"]),
         new("bangumi_http_timeout_seconds", ["bangumi_timeout_second"]),
+        new("bangumi_retry_count", ["bangumi_retry_count"]),
+        new(
+            "bangumi_retry_delay_seconds",
+            ["bangumi_retry_wait_second"]),
         new(
             "ai_use_metadata_match",
             ["ai_use_metadata_match", "ai_use_season_match", "ai_use_episode_match"]),
@@ -127,6 +133,14 @@ public sealed class DeploymentConfigurationLocks
                     "tmdb_http_timeout_seconds",
                     current.TmdbHttpTimeoutSeconds,
                     candidate.TmdbHttpTimeoutSeconds),
+                TmdbRetryCount = Preserve(
+                    "tmdb_retry_count",
+                    current.TmdbRetryCount,
+                    candidate.TmdbRetryCount),
+                TmdbRetryDelaySeconds = Preserve(
+                    "tmdb_retry_delay_seconds",
+                    current.TmdbRetryDelaySeconds,
+                    candidate.TmdbRetryDelaySeconds),
                 TmdbApiKeyOverridden = Preserve(
                     "tmdb_api_key",
                     current.TmdbApiKeyOverridden,
@@ -159,6 +173,14 @@ public sealed class DeploymentConfigurationLocks
                     "bangumi_http_timeout_seconds",
                     current.BangumiHttpTimeoutSeconds,
                     candidate.BangumiHttpTimeoutSeconds),
+                BangumiRetryCount = Preserve(
+                    "bangumi_retry_count",
+                    current.BangumiRetryCount,
+                    candidate.BangumiRetryCount),
+                BangumiRetryDelaySeconds = Preserve(
+                    "bangumi_retry_delay_seconds",
+                    current.BangumiRetryDelaySeconds,
+                    candidate.BangumiRetryDelaySeconds),
                 AiUseSeasonMatch = Preserve(
                     "ai_use_metadata_match",
                     current.AiUseSeasonMatch,
@@ -248,6 +270,14 @@ public sealed class DeploymentConfigurationLocks
         {
             tmdb = tmdb with { HttpTimeout = deployment.Metadata.Tmdb.HttpTimeout };
         }
+        if (IsLocked("tmdb_retry_count"))
+        {
+            tmdb = tmdb with { RetryCount = deployment.Metadata.Tmdb.RetryCount };
+        }
+        if (IsLocked("tmdb_retry_delay_seconds"))
+        {
+            tmdb = tmdb with { RetryDelay = deployment.Metadata.Tmdb.RetryDelay };
+        }
         if (IsLocked("tmdb_api_key"))
         {
             tmdb = tmdb with { ApiKey = deployment.Metadata.Tmdb.ApiKey };
@@ -274,6 +304,20 @@ public sealed class DeploymentConfigurationLocks
             bangumi = bangumi with
             {
                 HttpTimeout = deployment.Metadata.Bangumi.HttpTimeout,
+            };
+        }
+        if (IsLocked("bangumi_retry_count"))
+        {
+            bangumi = bangumi with
+            {
+                RetryCount = deployment.Metadata.Bangumi.RetryCount,
+            };
+        }
+        if (IsLocked("bangumi_retry_delay_seconds"))
+        {
+            bangumi = bangumi with
+            {
+                RetryDelay = deployment.Metadata.Bangumi.RetryDelay,
             };
         }
 
@@ -359,6 +403,14 @@ public sealed class DeploymentConfigurationLocks
             deployment.Metadata.Tmdb.HttpTimeout,
             candidate.Metadata.Tmdb.HttpTimeout);
         AddIfChanged(
+            "tmdb_retry_count",
+            deployment.Metadata.Tmdb.RetryCount,
+            candidate.Metadata.Tmdb.RetryCount);
+        AddIfChanged(
+            "tmdb_retry_delay_seconds",
+            deployment.Metadata.Tmdb.RetryDelay,
+            candidate.Metadata.Tmdb.RetryDelay);
+        AddIfChanged(
             "bangumi_base_url",
             deployment.Metadata.Bangumi.BaseUrl,
             candidate.Metadata.Bangumi.BaseUrl);
@@ -370,6 +422,14 @@ public sealed class DeploymentConfigurationLocks
             "bangumi_http_timeout_seconds",
             deployment.Metadata.Bangumi.HttpTimeout,
             candidate.Metadata.Bangumi.HttpTimeout);
+        AddIfChanged(
+            "bangumi_retry_count",
+            deployment.Metadata.Bangumi.RetryCount,
+            candidate.Metadata.Bangumi.RetryCount);
+        AddIfChanged(
+            "bangumi_retry_delay_seconds",
+            deployment.Metadata.Bangumi.RetryDelay,
+            candidate.Metadata.Bangumi.RetryDelay);
         AddIfChanged(
             "ai_use_metadata_match",
             deployment.Metadata.Ai.UseMetadataMatch,

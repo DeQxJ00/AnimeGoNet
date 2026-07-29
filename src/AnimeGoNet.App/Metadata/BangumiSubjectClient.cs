@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
 
@@ -40,53 +41,30 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
             throw Failure(MetadataFailureKind.InvalidInput, "bangumi_subject_id_invalid");
         }
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            new Uri(_options.BaseUrl, $"v0/subjects/{subjectId}"));
-        request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
-        try
+        var value = await GetAsync(
+            new Uri(_options.BaseUrl, $"v0/subjects/{subjectId}"),
+            BangumiJsonContext.Default.BangumiSubjectDto,
+            allowNotFound: true,
+            notFoundCode: null,
+            cancellationToken).ConfigureAwait(false);
+        if (value is null)
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(_options.HttpTimeout);
-            using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                return null;
-            }
+            return null;
+        }
 
-            ThrowForStatus(response.StatusCode);
-            var value = await response.Content.ReadFromJsonAsync(
-                BangumiJsonContext.Default.BangumiSubjectDto,
-                timeout.Token).ConfigureAwait(false)
-                ?? throw Failure(MetadataFailureKind.Protocol, "bangumi_empty_response");
-            if (value.Id != subjectId || string.IsNullOrWhiteSpace(value.Name))
-            {
-                throw Failure(MetadataFailureKind.Protocol, "bangumi_subject_invalid");
-            }
+        if (value.Id != subjectId || string.IsNullOrWhiteSpace(value.Name))
+        {
+            throw Failure(MetadataFailureKind.Protocol, "bangumi_subject_invalid");
+        }
 
-            return new BangumiSubject(
-                value.Id,
-                value.Name.Trim(),
-                value.ChineseName?.Trim() ?? string.Empty,
-                ParseDate(value.Date),
-                value.EpisodeCount > 0 ? value.EpisodeCount : Math.Max(0, value.TotalEpisodeCount));
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            throw Failure(MetadataFailureKind.Network, "bangumi_timeout");
-        }
-        catch (HttpRequestException)
-        {
-            throw Failure(MetadataFailureKind.Network, "bangumi_network_error");
-        }
-        catch (JsonException)
-        {
-            throw Failure(MetadataFailureKind.Protocol, "bangumi_invalid_json");
-        }
+        return new BangumiSubject(
+            value.Id,
+            value.Name.Trim(),
+            value.ChineseName?.Trim() ?? string.Empty,
+            ParseDate(value.Date),
+            value.EpisodeCount > 0
+                ? value.EpisodeCount
+                : Math.Max(0, value.TotalEpisodeCount));
     }
 
     public async Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
@@ -98,55 +76,28 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
             throw Failure(MetadataFailureKind.InvalidInput, "bangumi_subject_id_invalid");
         }
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            new Uri(_options.BaseUrl, $"v0/subjects/{subjectId}/subjects"));
-        request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
-        try
+        var values = await GetAsync(
+            new Uri(_options.BaseUrl, $"v0/subjects/{subjectId}/subjects"),
+            BangumiJsonContext.Default.BangumiSubjectRelationDtoArray,
+            allowNotFound: false,
+            "bangumi_relations_not_found",
+            cancellationToken).ConfigureAwait(false)
+            ?? throw Failure(
+                MetadataFailureKind.Protocol,
+                "bangumi_empty_response");
+        if (values.Any(value => value.Id <= 0
+            || string.IsNullOrWhiteSpace(value.Name)
+            || string.IsNullOrWhiteSpace(value.Relation)))
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(_options.HttpTimeout);
-            using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                throw Failure(MetadataFailureKind.SemanticNoMatch, "bangumi_relations_not_found");
-            }
+            throw Failure(MetadataFailureKind.Protocol, "bangumi_relations_invalid");
+        }
 
-            ThrowForStatus(response.StatusCode);
-            var values = await response.Content.ReadFromJsonAsync(
-                BangumiJsonContext.Default.BangumiSubjectRelationDtoArray,
-                timeout.Token).ConfigureAwait(false)
-                ?? throw Failure(MetadataFailureKind.Protocol, "bangumi_empty_response");
-            if (values.Any(value => value.Id <= 0
-                || string.IsNullOrWhiteSpace(value.Name)
-                || string.IsNullOrWhiteSpace(value.Relation)))
-            {
-                throw Failure(MetadataFailureKind.Protocol, "bangumi_relations_invalid");
-            }
-
-            return values.Select(value => new BangumiSubjectRelation(
-                value.Id,
-                value.Type,
-                value.Name!.Trim(),
-                value.ChineseName?.Trim() ?? string.Empty,
-                value.Relation!.Trim())).ToArray();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            throw Failure(MetadataFailureKind.Network, "bangumi_timeout");
-        }
-        catch (HttpRequestException)
-        {
-            throw Failure(MetadataFailureKind.Network, "bangumi_network_error");
-        }
-        catch (JsonException)
-        {
-            throw Failure(MetadataFailureKind.Protocol, "bangumi_invalid_json");
-        }
+        return values.Select(value => new BangumiSubjectRelation(
+            value.Id,
+            value.Type,
+            value.Name!.Trim(),
+            value.ChineseName?.Trim() ?? string.Empty,
+            value.Relation!.Trim())).ToArray();
     }
 
     public async Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
@@ -160,64 +111,112 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
 
         var episodes = new List<BangumiEpisode>();
         var offset = 0;
-        try
+        while (true)
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(_options.HttpTimeout);
-            while (true)
+            var page = await GetAsync(
+                new Uri(
+                    _options.BaseUrl,
+                    $"v0/episodes?subject_id={subjectId}&type=0&limit={EpisodePageSize}&offset={offset}"),
+                BangumiJsonContext.Default.BangumiEpisodePageDto,
+                allowNotFound: true,
+                notFoundCode: null,
+                cancellationToken).ConfigureAwait(false);
+            if (page is null)
             {
-                using var request = new HttpRequestMessage(
-                    HttpMethod.Get,
-                    new Uri(
-                        _options.BaseUrl,
-                        $"v0/episodes?subject_id={subjectId}&type=0&limit={EpisodePageSize}&offset={offset}"));
-                request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
-                using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
-                if (response.StatusCode == HttpStatusCode.NotFound)
-                {
-                    return [];
-                }
-
-                ThrowForStatus(response.StatusCode);
-                var page = await response.Content.ReadFromJsonAsync(
-                    BangumiJsonContext.Default.BangumiEpisodePageDto,
-                    timeout.Token).ConfigureAwait(false)
-                    ?? throw Failure(MetadataFailureKind.Protocol, "bangumi_empty_response");
-                var data = page.Data ?? [];
-                if (page.Total < 0
-                    || page.Total > MaximumEpisodes
-                    || page.Limit is < 1 or > EpisodePageSize
-                    || page.Offset != offset
-                    || data.Length > page.Limit
-                    || episodes.Count + data.Length > page.Total
-                    || episodes.Count + data.Length > MaximumEpisodes)
-                {
-                    throw Failure(MetadataFailureKind.Protocol, "bangumi_episode_page_invalid");
-                }
-
-                episodes.AddRange(data.Select(value => new BangumiEpisode(
-                    value.Id,
-                    value.Type,
-                    value.EpisodeNumber,
-                    ParseOptionalDate(value.AirDate))));
-
-                var nextOffset = offset + data.Length;
-                if (nextOffset >= page.Total)
-                {
-                    break;
-                }
-
-                if (data.Length == 0 || nextOffset <= offset)
-                {
-                    throw Failure(MetadataFailureKind.Protocol, "bangumi_episode_page_invalid");
-                }
-
-                offset = nextOffset;
+                return [];
             }
 
-            return episodes;
+            var data = page.Data ?? [];
+            if (page.Total < 0
+                || page.Total > MaximumEpisodes
+                || page.Limit is < 1 or > EpisodePageSize
+                || page.Offset != offset
+                || data.Length > page.Limit
+                || episodes.Count + data.Length > page.Total
+                || episodes.Count + data.Length > MaximumEpisodes)
+            {
+                throw Failure(
+                    MetadataFailureKind.Protocol,
+                    "bangumi_episode_page_invalid");
+            }
+
+            episodes.AddRange(data.Select(value => new BangumiEpisode(
+                value.Id,
+                value.Type,
+                value.EpisodeNumber,
+                ParseOptionalDate(value.AirDate))));
+
+            var nextOffset = offset + data.Length;
+            if (nextOffset >= page.Total)
+            {
+                break;
+            }
+
+            if (data.Length == 0 || nextOffset <= offset)
+            {
+                throw Failure(
+                    MetadataFailureKind.Protocol,
+                    "bangumi_episode_page_invalid");
+            }
+
+            offset = nextOffset;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+        return episodes;
+    }
+
+    private async Task<T?> GetAsync<T>(
+        Uri uri,
+        JsonTypeInfo<T> jsonTypeInfo,
+        bool allowNotFound,
+        string? notFoundCode,
+        CancellationToken cancellationToken)
+        where T : class
+    {
+        try
+        {
+            return await MetadataRetryExecutor.ExecuteAsync(
+                async attemptToken =>
+                {
+                    using var request = new HttpRequestMessage(
+                        HttpMethod.Get,
+                        uri);
+                    request.Headers.UserAgent.ParseAdd("AnimeGoNet/0.1");
+                    using var response = await _httpClient
+                        .SendAsync(request, attemptToken)
+                        .ConfigureAwait(false);
+                    if (response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        if (allowNotFound)
+                        {
+                            return null;
+                        }
+
+                        throw Failure(
+                            MetadataFailureKind.SemanticNoMatch,
+                            notFoundCode ?? "bangumi_not_found");
+                    }
+
+                    ThrowForStatus(response.StatusCode);
+                    return await response.Content
+                        .ReadFromJsonAsync(jsonTypeInfo, attemptToken)
+                        .ConfigureAwait(false)
+                        ?? throw Failure(
+                            MetadataFailureKind.Protocol,
+                            "bangumi_empty_response");
+                },
+                _options.HttpTimeout,
+                _options.RetryCount,
+                _options.RetryDelay,
+                static exception =>
+                    exception is BangumiClientException
+                    {
+                        Kind: MetadataFailureKind.RemoteService,
+                    },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -227,7 +226,9 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
         }
         catch (HttpRequestException)
         {
-            throw Failure(MetadataFailureKind.Network, "bangumi_network_error");
+            throw Failure(
+                MetadataFailureKind.Network,
+                "bangumi_network_error");
         }
         catch (JsonException)
         {

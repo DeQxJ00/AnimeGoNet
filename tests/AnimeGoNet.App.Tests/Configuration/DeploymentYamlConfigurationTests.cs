@@ -121,10 +121,14 @@ public sealed class DeploymentYamlConfigurationTests
                     read_access_token: ''
                     language: ja-JP
                     timeout_seconds: 41
+                    retry_count: 4
+                    retry_wait_seconds: 6.5
                   bangumi:
                     base_url: https://bangumi.example.invalid/v0/
                     proxy_url: ''
                     timeout_seconds: 42
+                    retry_count: 5
+                    retry_wait_seconds: 7.5
                   season_failure:
                     skip: true
                     backtrace: true
@@ -189,9 +193,13 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("yaml-key", options.Metadata.Tmdb.ApiKey);
             Assert.Equal("en-US", options.Metadata.Tmdb.Language);
             Assert.Equal(TimeSpan.FromSeconds(41), options.Metadata.Tmdb.HttpTimeout);
+            Assert.Equal(4, options.Metadata.Tmdb.RetryCount);
+            Assert.Equal(TimeSpan.FromSeconds(6.5), options.Metadata.Tmdb.RetryDelay);
             Assert.Equal(
                 new Uri("https://bangumi.example.invalid/v0/"),
                 options.Metadata.Bangumi.BaseUrl);
+            Assert.Equal(5, options.Metadata.Bangumi.RetryCount);
+            Assert.Equal(TimeSpan.FromSeconds(7.5), options.Metadata.Bangumi.RetryDelay);
             Assert.True(options.Metadata.SeasonFailure.Skip);
             Assert.True(options.Metadata.SeasonFailure.Backtrace);
             Assert.True(options.Metadata.SeasonFailure.UseTitleSeason);
@@ -333,6 +341,8 @@ public sealed class DeploymentYamlConfigurationTests
                       redirect: https://tmdb.example.invalid/
                   request:
                     timeout_second: 47
+                    retry_num: 4
+                    retry_wait_second: 6
                   download:
                     rename: wait_move
                     seeding_time_minute: 15
@@ -380,6 +390,10 @@ public sealed class DeploymentYamlConfigurationTests
                 snapshot.Values["metadata:tmdb:proxy_url"]);
             Assert.Equal("legacy-tmdb-key", snapshot.Values["metadata:tmdb:api_key"]);
             Assert.Equal("47", snapshot.Values["metadata:tmdb:timeout_seconds"]);
+            Assert.Equal("4", snapshot.Values["metadata:tmdb:retry_count"]);
+            Assert.Equal("6", snapshot.Values["metadata:tmdb:retry_wait_seconds"]);
+            Assert.Equal("4", snapshot.Values["metadata:bangumi:retry_count"]);
+            Assert.Equal("6", snapshot.Values["metadata:bangumi:retry_wait_seconds"]);
 
             var second = await DeploymentYamlConfiguration.LoadOrCreateAsync(
                 path,
