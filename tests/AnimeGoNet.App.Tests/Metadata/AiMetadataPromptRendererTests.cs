@@ -29,10 +29,12 @@ public sealed class AiMetadataPromptRendererTests
         Assert.Contains("\"bgmid\": 100", rendered, StringComparison.Ordinal);
         Assert.Contains("\"anidbid\": 200", rendered, StringComparison.Ordinal);
         Assert.Contains("\"imdbid\": \"tt1234567\"", rendered, StringComparison.Ordinal);
+        Assert.Contains("lookup_imdb_tmdb_tv", rendered, StringComparison.Ordinal);
+        Assert.Contains("不得把 imdbid 或自定义 URL 作为工具参数", rendered, StringComparison.Ordinal);
         Assert.Contains("\"torrent_file_count\": 1", rendered, StringComparison.Ordinal);
         Assert.Contains("\"use_bangumi_pubdate_first\": true", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v8", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v9", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]

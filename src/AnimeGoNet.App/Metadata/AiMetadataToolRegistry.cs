@@ -15,7 +15,8 @@ internal sealed record AiFunctionTool(
 internal sealed class AiMetadataToolRegistry(
     HttpClient httpClient,
     AiMatchingOptions options,
-    AiMetadataMatchInput input)
+    AiMetadataMatchInput input,
+    HttpClient? referenceHttpClient = null)
 {
     private const int MaxToolArgumentsChars = 32_768;
     private const int MaxToolResponseBytes = 20_000;
@@ -68,6 +69,14 @@ internal sealed class AiMetadataToolRegistry(
                 "Look up a reference TMDB TV Series ID for the current fixed AniDB ID. Takes no arguments. The result is only a candidate and must be verified with TMDB MCP.",
                 """{"type":"object","properties":{},"additionalProperties":false}"""));
         }
+
+        if (input.ImdbTitleId is not null)
+        {
+            _tools.Add(new AiFunctionTool(
+                "lookup_imdb_tmdb_tv",
+                "Look up TMDB TV Series candidates for the current fixed IMDb Title ID through TMDB MCP. Takes no arguments. Movie results are removed; every TV candidate still requires Series, Season, and Episode verification.",
+                """{"type":"object","properties":{},"additionalProperties":false}"""));
+        }
     }
 
     public async Task<string> CallAsync(
@@ -84,8 +93,15 @@ internal sealed class AiMetadataToolRegistry(
         {
             if (name.StartsWith("tmdb__", StringComparison.Ordinal) && _tmdb is not null)
             {
+                var rawName = name["tmdb__".Length..];
+                if (rawName == "invoke-api-endpoint"
+                    && TmdbFindArgumentsMatchBoundImdb(argumentsJson) is { } error)
+                {
+                    return ErrorJson(error);
+                }
+
                 return await _tmdb.CallAsync(
-                    name["tmdb__".Length..],
+                    rawName,
                     argumentsJson,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -101,6 +117,13 @@ internal sealed class AiMetadataToolRegistry(
             if (name == "lookup_anidb_tmdbtv" && input.AniDbAnimeId is not null)
             {
                 return await LookupAniDbAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (name == "lookup_imdb_tmdb_tv"
+                && input.ImdbTitleId is not null
+                && _tmdb is not null)
+            {
+                return await LookupImdbAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return ErrorJson("tool_not_available");
@@ -119,12 +142,12 @@ internal sealed class AiMetadataToolRegistry(
 
     private async Task<string> LookupAniDbAsync(CancellationToken cancellationToken)
     {
-        var url = options.AniDbMappingUrlTemplate.Replace(
+        var url = AiMatchingOptions.FixedAniDbMappingUrlTemplate.Replace(
             "{anidbid}",
             input.AniDbAnimeId!.Value.ToString(
                 System.Globalization.CultureInfo.InvariantCulture),
             StringComparison.Ordinal);
-        using var response = await httpClient.GetAsync(
+        using var response = await (referenceHttpClient ?? httpClient).GetAsync(
             url,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
@@ -164,6 +187,197 @@ internal sealed class AiMetadataToolRegistry(
         {
             return """{"tmdbtv":null,"reason":"mapping JSON malformed"}""";
         }
+    }
+
+    private async Task<string> LookupImdbAsync(CancellationToken cancellationToken)
+    {
+        var arguments = BuildImdbLookupArguments(input.ImdbTitleId!);
+        var raw = await _tmdb!.CallAsync(
+            "invoke-api-endpoint",
+            arguments,
+            cancellationToken).ConfigureAwait(false);
+        return FilterTmdbFindResult(raw, input.ImdbTitleId!);
+    }
+
+    private string? TmdbFindArgumentsMatchBoundImdb(string argumentsJson)
+    {
+        try
+        {
+            using var arguments = JsonDocument.Parse(argumentsJson);
+            if (arguments.RootElement.ValueKind != JsonValueKind.Object
+                || !arguments.RootElement.TryGetProperty("endpoint", out var endpoint)
+                || endpoint.ValueKind != JsonValueKind.String)
+            {
+                return "tmdb_invoke_arguments_invalid";
+            }
+
+            var path = endpoint.GetString()!;
+            if (!path.Equals(
+                    "/3/find/{external_id}",
+                    StringComparison.OrdinalIgnoreCase)
+                && !path.StartsWith("/3/find/", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (input.ImdbTitleId is null)
+            {
+                return "tmdb_find_reference_unavailable";
+            }
+
+            if (!arguments.RootElement.TryGetProperty("params", out var parameters)
+                || parameters.ValueKind != JsonValueKind.Object
+                || !parameters.TryGetProperty("external_source", out var source)
+                || source.ValueKind != JsonValueKind.String
+                || source.GetString() != "imdb_id")
+            {
+                return "tmdb_find_reference_mismatch";
+            }
+
+            var boundId = parameters.TryGetProperty("external_id", out var externalId)
+                && externalId.ValueKind == JsonValueKind.String
+                ? externalId.GetString()
+                : path.Equals(
+                    "/3/find/" + input.ImdbTitleId,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? input.ImdbTitleId
+                    : null;
+            return boundId == input.ImdbTitleId
+                ? null
+                : "tmdb_find_reference_mismatch";
+        }
+        catch (JsonException)
+        {
+            return "tmdb_invoke_arguments_invalid";
+        }
+    }
+
+    private static string BuildImdbLookupArguments(string imdbTitleId)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("endpoint", "/3/find/{external_id}");
+            writer.WriteString("method", "GET");
+            writer.WritePropertyName("params");
+            writer.WriteStartObject();
+            writer.WriteString("external_id", imdbTitleId);
+            writer.WriteString("external_source", "imdb_id");
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static string FilterTmdbFindResult(
+        string rawMcpResult,
+        string imdbTitleId)
+    {
+        try
+        {
+            using var mcp = JsonDocument.Parse(rawMcpResult);
+            if (mcp.RootElement.TryGetProperty("isError", out var isError)
+                && isError.ValueKind == JsonValueKind.True)
+            {
+                return WriteImdbLookupResult(
+                    imdbTitleId,
+                    [],
+                    0,
+                    "tmdb find unavailable");
+            }
+
+            if (!mcp.RootElement.TryGetProperty("content", out var content)
+                || content.ValueKind != JsonValueKind.Array)
+            {
+                return WriteImdbLookupResult(
+                    imdbTitleId,
+                    [],
+                    0,
+                    "tmdb find response malformed");
+            }
+
+            var tvIds = new SortedSet<long>();
+            var rejectedMovies = 0;
+            foreach (var item in content.EnumerateArray())
+            {
+                if (!item.TryGetProperty("type", out var type)
+                    || type.GetString() != "text"
+                    || !item.TryGetProperty("text", out var text)
+                    || text.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                using var payload = JsonDocument.Parse(text.GetString()!);
+                if (payload.RootElement.TryGetProperty("tv_results", out var tvResults)
+                    && tvResults.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var result in tvResults.EnumerateArray())
+                    {
+                        if (result.TryGetProperty("id", out var id)
+                            && id.TryGetInt64(out var value)
+                            && value > 0)
+                        {
+                            tvIds.Add(value);
+                        }
+                    }
+                }
+
+                if (payload.RootElement.TryGetProperty("movie_results", out var movieResults)
+                    && movieResults.ValueKind == JsonValueKind.Array)
+                {
+                    rejectedMovies += movieResults.GetArrayLength();
+                }
+            }
+
+            return WriteImdbLookupResult(
+                imdbTitleId,
+                tvIds,
+                rejectedMovies,
+                tvIds.Count == 0 ? "no TMDB TV candidate" : null);
+        }
+        catch (JsonException)
+        {
+            return WriteImdbLookupResult(
+                imdbTitleId,
+                [],
+                0,
+                "tmdb find response malformed");
+        }
+    }
+
+    private static string WriteImdbLookupResult(
+        string imdbTitleId,
+        IEnumerable<long> tvIds,
+        int rejectedMovies,
+        string? reason)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("imdbid", imdbTitleId);
+            writer.WritePropertyName("tmdb_tv_ids");
+            writer.WriteStartArray();
+            foreach (var id in tvIds)
+            {
+                writer.WriteNumberValue(id);
+            }
+            writer.WriteEndArray();
+            writer.WriteNumber("movie_results_rejected", rejectedMovies);
+            if (reason is not null)
+            {
+                writer.WriteString("reason", reason);
+            }
+            writer.WriteString(
+                "note",
+                "Reference candidates only; verify TMDB TV Series, Season, and Episode.");
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static string ErrorJson(string code)

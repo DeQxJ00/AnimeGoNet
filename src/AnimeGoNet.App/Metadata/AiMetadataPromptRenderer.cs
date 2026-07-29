@@ -7,7 +7,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v8";
+    public const string PromptVersion = "tmdb-ai-match-v9";
 
     public static string LoadAndRender(AiMetadataMatchInput input)
     {

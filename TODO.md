@@ -70,7 +70,7 @@
 - [ ] 移植配置检查、路径初始化和资源释放。
 - [ ] 移植配置 `1.1.0` → `1.7.1` 升级链与备份。
 - [>] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取已完成，旧 YAML 升级显式写入新默认值和注释待实现。
-- [ ] 增加 OpenAI-compatible AI 配置 DTO、环境变量、敏感值脱敏和 source-generated JSON 上下文。
+- [x] 增加 OpenAI-compatible AI 配置 DTO、扁平环境变量、敏感值脱敏和 source-generated JSON 上下文；API 只返回 provider/base/model/工具端点与 `api_key_configured`，不返回密钥。
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
 - [x] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器：19 组由 develop 分支 Python 产出的 golden fixture 已逐字段覆盖标题、季度、集号、字幕、发布组、分辨率和来源，并明确保留不识别 E04/EP04 等原始语义。独立 `FileEpisodeCandidateResolver` 才拒绝年份/分辨率占位、歧义和非正片，只对 Mikan SourceProfile 落逐文件候选；AI/TMDB 验证后的本地统一偏移计算及“不一致只禁止学习”已在 Episode worker 完成。
@@ -109,12 +109,12 @@
 - [>] 实现 AnimeGoNet 新增的 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：日文名、中文名、各自多轮清理及每轮全部合格 Series 均以完整 `tmdbid+Season` 为成功条件；P3 已按每个 Bangumi 前作的日文名、中文名和开播日期重新联合搜索，可恢复不同 TMDB Series，并覆盖多层、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；网络重试策略与受控 live fixture 仍待实现。
 - [x] 实现统一 `ai_use_metadata_match`（默认 `false`）：一个共享解析器按下载任务发送总标题、候选视频相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB Series/Season/Episode 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [x] 季度与 Episode 阶段共用同一 AI 尝试门禁和 `ai_metadata` 审计；确定性季度成功后普通 EP 匹配失败可首次触发，季度阶段成功或失败尝试过 AI 后均禁止 Episode 阶段再次调用；历史 `ai_season`/`ai_episode` 记录仍能阻止重复调用。
-- [ ] 实现 Mikan 单文件发布日期Prompt门禁和显式开关：保留完整 `pubDate`，无偏移时按SourceProfile时区解析；即使开关开启也仅在Torrent实际文件条目数1、bgmid/日期有效且主程序成功计算 `bgm_episode_candidate` 时为真，Prompt直接结合文件名EP定向查TMDB，失败回通用流程。
+- [x] 实现 Mikan 单文件发布日期 Prompt 门禁和显式开关：保留完整 `pubDate`，无偏移时按 SourceProfile 时区解析；仅在实际 Torrent 文件条目数为 1、bgmid/日期有效且主程序成功计算 `bgm_episode_candidate` 时启用，日期候选失败安全回通用统一 AI 流程。
 - [x] 同步 AI 测试程序：增加可编辑开关和手工 `bgm_episode_candidate`、只读有效门禁；覆盖两种单文件Torrent、实际多文件禁用、无bgmid/日期/候选禁用和优先分支失败回退。
-- [ ] 使用固定 JSON 请求/响应 DTO 调用 OpenAI-compatible API；模型返回必须由 TMDB Series/Season/Episode API 二次验证。
-- [ ] 实现 AOT-safe 本地 Streamable HTTP MCP客户端和 function-calling工具循环；为 BGM/TMDB同名工具添加命名空间，并覆盖 JSON/SSE、会话、超时、取消和失败隔离。
-- [ ] 实现可空 `anidbid` → `tmdbtv` 候选查询；固定URL、限制响应并阻止SSRF，候选未经 TMDB MCP验证不得采用。
-- [ ] 实现可空 `imdbid` 规范化和 TMDB MCP external ID/find 候选查询；拒绝 Movie，最终 TV Series/Season/Episode 逐级验证。
+- [x] 使用固定 JSON 请求/响应 DTO 调用 OpenAI-compatible API；输入/输出结构、文件身份和结果完整性先校验，模型候选再由 TMDB Series/Season/Episode API 二次验证。
+- [x] 实现 AOT-safe 本地 Streamable HTTP MCP 客户端和 function-calling 工具循环；BGM/TMDB 工具使用命名空间，覆盖 JSON/SSE、session、工具 schema 缓存、超时、取消、响应上限和失败隔离。
+- [x] 实现可空 `anidbid` → `tmdbtv` 候选查询：URL 固定、模型零参数、响应有界、禁止重定向/代理并将 DNS 连接钉在公网地址；候选仍需 TMDB MCP 与主程序 API 验证。
+- [x] 实现可空 `imdbid` 规范化和固定零参数 `lookup_imdb_tmdb_tv`：主程序调用 TMDB MCP external ID/find，程序侧删除 Movie 结果，只返回正整数 TV Series 候选，最终 Series/Season/Episode 逐级验证。
 - [>] AI 和确定性匹配均拒绝 Season 0；确定性流程已拒绝 Season 0，Series/Season 已确认但 Episode 未匹配的文件已持久化 `Other` 及稳定原因，实际整理到 `<TmdbName>/Sxx/Other/` 与 AI 门禁仍待实现。
 - [x] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立统一 AI 阶段已接入且 Series/Season/Episode 结果必须经 TMDB 验证。
 - [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。

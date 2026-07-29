@@ -76,6 +76,35 @@ public sealed class AiDeploymentConfigurationTests
         }
     }
 
+    [Fact]
+    public async Task AniDbMappingEndpointCannotBeRedirectedByDeploymentConfiguration()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-ai-deployment-config",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => AnimeGoApplication.BuildAsync(
+                    Args(
+                        root,
+                        "--ai_anidb_mapping_url_template=http://127.0.0.1/private/{anidbid}"),
+                    runningInContainer: false,
+                    startBackgroundWorkers: false));
+
+            Assert.Contains("fixed", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("127.0.0.1", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     [Theory]
     [InlineData("--ai_use_season_match=true")]
     [InlineData("--ai_use_episode_match=true")]

@@ -100,6 +100,9 @@ public sealed record SeasonFailureOptions
 
 public sealed record AiMatchingOptions
 {
+    public const string FixedAniDbMappingUrlTemplate =
+        "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
+
     public string Provider { get; init; } = "openai_compatible";
 
     public Uri? BaseUrl { get; init; }
@@ -121,7 +124,7 @@ public sealed record AiMatchingOptions
     public Uri BangumiMcpUrl { get; init; } = new("http://bgm.mcp.local/mcp");
 
     public string AniDbMappingUrlTemplate { get; init; } =
-        "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
+        FixedAniDbMappingUrlTemplate;
 }
 
 public sealed record SourceProfileSeed

@@ -10,7 +10,9 @@ namespace AnimeGoNet.App.Metadata;
 public sealed class OpenAiCompatibleMetadataMatcher(
     HttpClient httpClient,
     AiMatchingOptions options,
-    bool ownsHttpClient = false)
+    bool ownsHttpClient = false,
+    HttpClient? referenceHttpClient = null,
+    bool ownsReferenceHttpClient = false)
     : IAiMetadataMatcher, IDisposable
 {
     private const int MaxToolRounds = 8;
@@ -34,6 +36,13 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         if (ownsHttpClient)
         {
             httpClient.Dispose();
+        }
+
+        if (ownsReferenceHttpClient
+            && referenceHttpClient is not null
+            && !ReferenceEquals(referenceHttpClient, httpClient))
+        {
+            referenceHttpClient.Dispose();
         }
     }
 
@@ -71,7 +80,11 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         try
         {
             var prompt = AiMetadataPromptRenderer.LoadAndRender(input);
-            var registry = new AiMetadataToolRegistry(httpClient, options, input);
+            var registry = new AiMetadataToolRegistry(
+                httpClient,
+                options,
+                input,
+                referenceHttpClient);
             await registry.InitializeAsync(timeout.Token).ConfigureAwait(false);
             var messages = new List<ChatMessageState>
             {

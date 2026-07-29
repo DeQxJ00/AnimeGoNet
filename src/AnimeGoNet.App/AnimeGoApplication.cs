@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using AnimeGo.Plugin.Abstractions;
@@ -241,7 +243,9 @@ public static class AnimeGoApplication
         aiMetadataMatcher ??= new OpenAiCompatibleMetadataMatcher(
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
             options.Metadata.Ai,
-            ownsHttpClient: true);
+            ownsHttpClient: true,
+            referenceHttpClient: CreateAiReferenceHttpClient(),
+            ownsReferenceHttpClient: true);
         builder.Services.AddSingleton(aiMetadataMatcher);
         builder.Services.AddSingleton<AiMetadataResultValidator>();
         builder.Services.AddSingleton<AiMetadataTaskResolver>();
@@ -446,6 +450,87 @@ public static class AnimeGoApplication
         }
 
         return parsed;
+    }
+
+    private static HttpClient CreateAiReferenceHttpClient()
+    {
+        var referenceUri = new Uri(
+            AiMatchingOptions.FixedAniDbMappingUrlTemplate.Replace(
+                "{anidbid}",
+                "1",
+                StringComparison.Ordinal));
+        var fixedHost = referenceUri.IdnHost;
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            UseProxy = false,
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                if (!string.Equals(
+                    context.DnsEndPoint.Host,
+                    fixedHost,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new HttpRequestException(
+                        "AI reference lookup connection target is not allowed.");
+                }
+
+                var addresses = await Dns.GetHostAddressesAsync(
+                    fixedHost,
+                    cancellationToken).ConfigureAwait(false);
+                var publicAddresses = addresses
+                    .Where(TorrentNetworkPolicy.IsPublicAddress)
+                    .Distinct()
+                    .ToArray();
+                if (publicAddresses.Length == 0)
+                {
+                    throw new HttpRequestException(
+                        "AI reference lookup host did not resolve to a public address.");
+                }
+
+                SocketException? lastError = null;
+                foreach (var address in publicAddresses)
+                {
+                    var socket = new Socket(
+                        address.AddressFamily,
+                        SocketType.Stream,
+                        ProtocolType.Tcp)
+                    {
+                        NoDelay = true,
+                    };
+                    try
+                    {
+                        await socket.ConnectAsync(
+                            new IPEndPoint(
+                                address,
+                                context.DnsEndPoint.Port),
+                            cancellationToken).ConfigureAwait(false);
+                        return new NetworkStream(socket, ownsSocket: true);
+                    }
+                    catch (SocketException exception)
+                    {
+                        lastError = exception;
+                        socket.Dispose();
+                    }
+                    catch
+                    {
+                        socket.Dispose();
+                        throw;
+                    }
+                }
+
+                throw new HttpRequestException(
+                    "AI reference lookup host was unreachable.",
+                    lastError);
+            },
+        };
+        return new HttpClient(handler)
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
     }
 
     private static bool ParseAiMetadataMatch(

@@ -40,6 +40,8 @@ ai:
 硬性默认超时为 600 秒。AI API key 只保存在服务端配置中，配置 API/WebUI
 仅返回 `api_key_configured`。
 
+`ai_anidb_mapping_url_template` 只保留部署兼容读取，值必须逐字等于程序内置模板；任意其他值会以安全配置错误拒绝启动。实际请求始终使用编译期固定模板、禁止代理与重定向，并在连接前解析 DNS、只连接公网地址，模型不能提供 URL 或替换 `anidbid`。
+
 旧部署键 `ai_use_season_match` 和 `ai_use_episode_match` 仅用于升级读取：未设置规范键时，任一旧键为 `true` 都会启用统一流程；显式 `ai_use_metadata_match` 的值优先。配置 API 仍回显两个旧字段且值与规范字段相同，供旧客户端平滑迁移；WebUI 和新写入只使用 `ai_use_metadata_match`。
 
 ## 3. 最小请求契约
@@ -83,7 +85,7 @@ ai:
 - TMDB MCP：`http://tmdb.mcp.local/mcp`，始终启用，用于搜索和验证候选；最终结果还要由模型外的主程序通过 TMDB API 二次验证。
 - Bangumi MCP：`http://bgm.mcp.local/mcp`，仅 `bgmid != null` 时连接并注册工具。
 - AniDB映射：仅 `anidbid != null` 时注册本地查询工具；固定读取 `api/anidb/{anidbid}.json` 的 `tmdbtv` 字段，作为候选 TMDB TV ID。
-- IMDb：不注册任意 URL 工具；仅 `imdbid != null` 时允许模型通过既有 TMDB MCP external ID/find endpoint 查询该固定 ID，Movie 候选一律拒绝。
+- IMDb：不注册任意 URL 工具；仅 `imdbid != null` 时注册参数为空的 `lookup_imdb_tmdb_tv`。主程序把已规范化的固定 IMDb ID 交给 TMDB MCP external ID/find，程序侧删除 Movie 结果，仅把正整数 TV Series ID 候选返回模型；通用 `tmdb__invoke-api-endpoint` 若调用 `/3/find`，也必须使用同一任务绑定 ID 和 `external_source=imdb_id`，否则在发往 MCP 前拒绝。
 - Web Search：只有适用 MCP 无结果、报错或信息不足后才可调用；不得作为第一数据源。
 
 两个 MCP 当前均实现 Streamable HTTP MCP `2025-03-26`，暴露 `list-api-endpoints`、`get-api-endpoint-schema`、`invoke-api-endpoint`。转换为模型函数时分别增加 `bgm__`、`tmdb__` 前缀，避免同名冲突。实现必须限制工具轮数、超时、参数/响应大小，并支持取消及 JSON/SSE 响应。
@@ -137,7 +139,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 不要求模型返回动画名称、首播日期、Episode标题、置信度或复杂错误枚举。这些内容要么由主程序从 TMDB 获取，要么由主程序根据 HTTP/验证结果分类。
 
-唯一正式 Prompt 见 [`TMDB_AI_MATCH_PROMPT.md`](TMDB_AI_MATCH_PROMPT.md)。本次契约版本为 `tmdb-ai-match-v8`；实现不得维护第二份 Prompt，变更时更新 `prompt_version` 并通过 snapshot review。
+唯一正式 Prompt 见 [`TMDB_AI_MATCH_PROMPT.md`](TMDB_AI_MATCH_PROMPT.md)。本次契约版本为 `tmdb-ai-match-v9`；实现不得维护第二份 Prompt，变更时更新 `prompt_version` 并通过 snapshot review。
 
 ## 6. 未匹配文件与 Other
 

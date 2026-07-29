@@ -151,7 +151,7 @@ public sealed class AnimeGoOptionsValidatorTests
 
         Assert.Contains(errors, error => error.Contains("retry count", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB MCP URL", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("'{anidbid}'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("fixed", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -127,15 +127,12 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("Bangumi MCP URL must be an absolute HTTP(S) URL without credentials.");
         }
 
-        if (string.IsNullOrWhiteSpace(ai.AniDbMappingUrlTemplate)
-            || !ai.AniDbMappingUrlTemplate.Contains("{anidbid}", StringComparison.Ordinal)
-            || !Uri.TryCreate(
-                ai.AniDbMappingUrlTemplate.Replace("{anidbid}", "1", StringComparison.Ordinal),
-                UriKind.Absolute,
-                out var aniDbMappingUri)
-            || !IsHttpEndpoint(aniDbMappingUri))
+        if (!string.Equals(
+            ai.AniDbMappingUrlTemplate,
+            AiMatchingOptions.FixedAniDbMappingUrlTemplate,
+            StringComparison.Ordinal))
         {
-            errors.Add("AniDB mapping URL template must be an absolute HTTP(S) URL containing '{anidbid}'.");
+            errors.Add("AniDB mapping URL template is fixed and cannot be overridden.");
         }
 
         if (!IsMetadataApiBaseUrl(options.Metadata.Tmdb.BaseUrl))
