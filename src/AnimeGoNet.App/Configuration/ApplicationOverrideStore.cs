@@ -67,12 +67,15 @@ public sealed class ApplicationOverrideStore : IDisposable
 {
     private const int CurrentFormatVersion = 1;
     private readonly string _path;
+    private readonly string _backupsPath;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public ApplicationOverrideStore(string configurationPath)
+    public ApplicationOverrideStore(string configurationPath, string backupsPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(backupsPath);
         _path = Path.Combine(configurationPath, "application.private.json");
+        _backupsPath = backupsPath;
     }
 
     public void Dispose() => _gate.Dispose();
@@ -111,6 +114,11 @@ public sealed class ApplicationOverrideStore : IDisposable
                 CurrentFormatVersion,
                 current.Revision + 1,
                 settings);
+            if (File.Exists(_path))
+            {
+                await BackupCoreAsync(current.Revision, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             await SaveCoreAsync(saved, cancellationToken).ConfigureAwait(false);
             return saved;
         }
@@ -143,6 +151,8 @@ public sealed class ApplicationOverrideStore : IDisposable
                 CurrentFormatVersion,
                 current.Revision + 1,
                 null);
+            await BackupCoreAsync(current.Revision, cancellationToken)
+                .ConfigureAwait(false);
             await SaveCoreAsync(saved, cancellationToken).ConfigureAwait(false);
             return saved;
         }
@@ -350,6 +360,72 @@ public sealed class ApplicationOverrideStore : IDisposable
             }
 
             File.Move(temporary, _path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temporary);
+        }
+    }
+
+    private async Task BackupCoreAsync(
+        long revision,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_path))
+        {
+            throw new InvalidOperationException(
+                "Application private configuration disappeared before backup.");
+        }
+
+        Directory.CreateDirectory(_backupsPath);
+        var backup = Path.Combine(
+            _backupsPath,
+            $"application.private.revision-{revision:D20}.json");
+        if (File.Exists(backup))
+        {
+            var sourceBytes = await File.ReadAllBytesAsync(_path, cancellationToken)
+                .ConfigureAwait(false);
+            var backupBytes = await File.ReadAllBytesAsync(backup, cancellationToken)
+                .ConfigureAwait(false);
+            if (!sourceBytes.AsSpan().SequenceEqual(backupBytes))
+            {
+                throw new InvalidOperationException(
+                    $"Application private configuration backup revision {revision} conflicts with existing content.");
+            }
+            return;
+        }
+
+        var temporary = Path.Combine(
+            _backupsPath,
+            $".application.private.backup.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var source = new FileStream(
+                _path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                4096,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var target = new FileStream(
+                temporary,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                4096,
+                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+                await target.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(
+                    temporary,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            File.Move(temporary, backup);
         }
         finally
         {

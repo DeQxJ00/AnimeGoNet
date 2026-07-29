@@ -210,8 +210,8 @@
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
 - [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、做种分钟、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；动态 tag 模板和重复命中通知待实现。
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
-- [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。
-- [>] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件，AI 密钥只写不回显；表单/API/私有配置已完成，原始 YAML 预览、diff 与保存前备份待实现。
+- [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
+- [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥只写不回显，保存前 diff 只显示 `继承/已配置/已清除` 状态，环境锁、即时生效和需重启字段均可见。
 - [x] 动画任务详情同时展示逐文件来源名称/来源 EP/本地候选和最终 TMDB 名称/Season/Episode，以及 AI 调用状态、TMDB 验证可信依据、最终失败原因和策略尝试时间线；不采信或展示模型自报的数字置信度，避免把未验证自评分表示成权威结果。
 - [x] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。列表/详情 API、Cover 安全代理/缓存/占位图和静态 TypeScript 页面均已完成；页面显示 TMDB 规范进度、取得策略、验证状态、一致性警告和可筛选 EP 网格，删除完成记录会立即恢复未下载。
 - [x] 实现作品库服务端分页排序和前端升/降序：服务端与页面支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；排序、方向、页大小、EP 筛选和当前详情保存在浏览器本地。

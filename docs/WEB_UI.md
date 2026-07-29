@@ -103,6 +103,10 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 该接口只返回 `api_key_configured`、`read_access_token_configured` 和 `access_key_configured` 布尔值，绝不返回凭据内容；仍受统一 API 鉴权保护。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，密钥输入为空表示保留，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 
+配置保存采用两个明确步骤。表单提交先调用 `POST /api/v1/config/preview`，服务端使用与实际 PUT 相同的字段锁、规范化和强类型校验，返回字段级 `before/after/effect/sensitive` 投影但不写文件。页面把 `hot_reload` 标为“即时生效”、`restart` 标为“重启生效”；敏感字段无论服务端返回什么都只按 `继承部署配置/已配置（值已隐藏）/已明确清除` 三态渲染。只有预览存在差异时才启用“确认保存并备份”，表单任一输入变化都会使旧预览和待提交对象失效。
+
+确认保存仍使用预览时的 `expected_configuration_revision`；并发变化返回冲突并要求重新预览。覆盖现有私有配置或恢复部署默认前，服务端先把旧 revision 保存到 `data_path/backups/application.private.revision-{20位revision}.json`，再原子替换当前文件。响应只返回被备份的 revision，不返回备份内容或路径；首个私有 revision 没有旧文件可备份。原始部署 YAML 继续只由运维维护，Web 不展示含 secret 的原文，也不改写其注释和格式。
+
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 
 `editable.locked_fields` 为每个环境变量控制的字段返回规范字段名、`source=environment` 和实际命中的环境变量名，但不返回环境变量值。当前覆盖 TMDB 地址/代理/语言/超时/API Key/Read Token、Bangumi 地址/代理/超时，以及统一 AI 开关和超时；旧 `ai_use_season_match`、`ai_use_episode_match` 也会锁定规范的 `ai_use_metadata_match`。页面显示最终有效值和锁来源，禁用对应输入、凭据清除控件与提交语义。服务端不信任前端禁用状态：不同值或显式凭据写入统一返回 `configuration_field_locked`，错误只列字段名，不包含凭据。保存其他未锁字段时，锁字段保留其保存前的底层私有覆盖，首次保存则记录为“继承部署”；因此移除环境变量后不会把当时的环境值误当成新的私有覆盖。
@@ -140,4 +144,4 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 
 离线导入不要求 manifest URL。页面只接受一个 ZIP，并在请求建立后立即清空文件选择；不保存上传文件名、本机路径或 ZIP 本体。ZIP 根目录必须严格等于 `manifest.json + assets[].file_name`，服务端拒绝额外条目、目录、路径穿越、重复名称、长度或 SHA-256 不符。上传先进入 `data_path/data-update/.partial-*`，成功后只保留已验证包目录；失败清理 partial 且不改变 active。
 
-“编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存仍写 `data_path/config/application.private.json` 的 revision 私有覆盖，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
+“编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前先显示脱敏字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。

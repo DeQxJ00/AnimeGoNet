@@ -17,10 +17,10 @@ public sealed class ApplicationOverrideStoreTests
         Directory.CreateDirectory(root);
         try
         {
-            using var store = new ApplicationOverrideStore(root);
+            using var store = new ApplicationOverrideStore(root, Path.Combine(root, "backups"));
             var initial = await store.LoadAsync();
             var saved = await store.SaveAsync(Entry(), 0);
-            using var reloader = new ApplicationOverrideStore(root);
+            using var reloader = new ApplicationOverrideStore(root, Path.Combine(root, "backups"));
             var reloaded = await reloader.LoadAsync();
 
             Assert.Equal(0, initial.Revision);
@@ -48,6 +48,93 @@ public sealed class ApplicationOverrideStoreTests
     }
 
     [Fact]
+    public async Task OverwriteAndDeletePreserveImmutableRevisionBackups()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-application-backups",
+            Guid.NewGuid().ToString("N"));
+        var backups = Path.Combine(root, "backups");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var store = new ApplicationOverrideStore(root, backups);
+            await store.SaveAsync(Entry(), 0);
+            Assert.False(Directory.Exists(backups));
+
+            await store.SaveAsync(Entry() with { TmdbLanguage = "ja-JP" }, 1);
+            var revisionOne = Assert.Single(Directory.GetFiles(
+                backups,
+                "application.private.revision-00000000000000000001.json"));
+            using (var document = JsonDocument.Parse(
+                await File.ReadAllTextAsync(revisionOne)))
+            {
+                Assert.Equal(
+                    1,
+                    document.RootElement.GetProperty("revision").GetInt64());
+                Assert.Equal(
+                    "en-US",
+                    document.RootElement.GetProperty("settings")
+                        .GetProperty("tmdb_language").GetString());
+            }
+
+            await store.DeleteAsync(2);
+            var revisionTwo = Assert.Single(Directory.GetFiles(
+                backups,
+                "application.private.revision-00000000000000000002.json"));
+            using (var document = JsonDocument.Parse(
+                await File.ReadAllTextAsync(revisionTwo)))
+            {
+                Assert.Equal(
+                    2,
+                    document.RootElement.GetProperty("revision").GetInt64());
+                Assert.Equal(
+                    "ja-JP",
+                    document.RootElement.GetProperty("settings")
+                        .GetProperty("tmdb_language").GetString());
+            }
+            Assert.Empty(Directory.GetFiles(backups, "*.tmp"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ConflictingRevisionBackupPreventsPrivateOverrideMutation()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-application-backups",
+            Guid.NewGuid().ToString("N"));
+        var backups = Path.Combine(root, "backups");
+        Directory.CreateDirectory(backups);
+        try
+        {
+            using var store = new ApplicationOverrideStore(root, backups);
+            await store.SaveAsync(Entry(), 0);
+            await File.WriteAllTextAsync(
+                Path.Combine(
+                    backups,
+                    "application.private.revision-00000000000000000001.json"),
+                """{"conflict":true}""");
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.SaveAsync(Entry() with { TmdbLanguage = "ja-JP" }, 1));
+            var current = await store.LoadAsync();
+
+            Assert.Contains("conflicts", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(1, current.Revision);
+            Assert.Equal("en-US", current.Settings?.TmdbLanguage);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ApplicationStartupAppliesPrivateSettingsBeforeClientConstruction()
     {
         var root = Path.Combine(
@@ -59,7 +146,9 @@ public sealed class ApplicationOverrideStoreTests
         layout.CreateDataDirectories();
         try
         {
-            using (var store = new ApplicationOverrideStore(layout.ConfigurationPath))
+            using (var store = new ApplicationOverrideStore(
+                layout.ConfigurationPath,
+                layout.BackupsPath))
             {
                 _ = await store.SaveAsync(Entry(), 0);
             }
@@ -152,7 +241,7 @@ public sealed class ApplicationOverrideStoreTests
             await File.WriteAllTextAsync(
                 Path.Combine(root, "application.private.json"),
                 legacy);
-            using var store = new ApplicationOverrideStore(root);
+            using var store = new ApplicationOverrideStore(root, Path.Combine(root, "backups"));
             var snapshot = await store.LoadAsync();
             var defaults = AnimeGoDefaults.CreateNative(root);
             defaults = defaults with

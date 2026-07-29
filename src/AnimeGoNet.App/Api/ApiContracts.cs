@@ -156,7 +156,22 @@ public sealed record ConfigurationUpdateRequest(
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
     [property: JsonPropertyName("restart_required")] bool RestartRequired,
-    [property: JsonPropertyName("reverted_to_deployment_default")] bool RevertedToDeploymentDefault);
+    [property: JsonPropertyName("reverted_to_deployment_default")] bool RevertedToDeploymentDefault,
+    [property: JsonPropertyName("backup_revision")] long? BackupRevision);
+
+public sealed record ConfigurationPreviewResponse(
+    [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision,
+    [property: JsonPropertyName("current_configuration_revision")] long CurrentConfigurationRevision,
+    [property: JsonPropertyName("restart_required")] bool RestartRequired,
+    [property: JsonPropertyName("data_update_hot_reload")] bool DataUpdateHotReload,
+    [property: JsonPropertyName("changes")] IReadOnlyList<ConfigurationChangeResponse> Changes);
+
+public sealed record ConfigurationChangeResponse(
+    [property: JsonPropertyName("field")] string Field,
+    [property: JsonPropertyName("before")] string? Before,
+    [property: JsonPropertyName("after")] string? After,
+    [property: JsonPropertyName("effect")] string Effect,
+    [property: JsonPropertyName("sensitive")] bool Sensitive);
 
 public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("running_in_container")] bool RunningInContainer,

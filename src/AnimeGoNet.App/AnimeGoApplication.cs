@@ -83,7 +83,9 @@ public static class AnimeGoApplication
                 : DeploymentConfigurationLocks.FromCurrentProcess();
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
-        var applicationOverrides = new ApplicationOverrideStore(layout.ConfigurationPath);
+        var applicationOverrides = new ApplicationOverrideStore(
+            layout.ConfigurationPath,
+            layout.BackupsPath);
         var applicationOverrideSnapshot = await applicationOverrides
             .LoadAsync(cancellationToken)
             .ConfigureAwait(false);

@@ -260,7 +260,7 @@ docs/
   - 下载状态：统一展示多个qBittorrent实例的规范状态、百分比、容量、速度、ETA、Seeds/Peers和文件级priority，同时独立展示AnimeGoNet解析/移动/重命名/字幕/NFO/数据库阶段；qB 100%不等于业务完成。提供暂停、恢复、业务重试及删除中心跳转，详细边界见[`DOWNLOAD_PROGRESS_UI.md`](DOWNLOAD_PROGRESS_UI.md)。
   - 下载器实例：多实例 CRUD、连接/版本/延迟/任务数、路径与硬链接探测、来源引用；活动引用存在时禁止直接删除。
   - 输入源路由：下载器绑定、ID字段约束、过滤/匹配 profile、category/tag、文件/做种策略、重复命中通知和模拟路由预览。
-  - 配置：表单编辑、原始 YAML 预览、校验、变更 diff、保存前备份、需重启提示；季度失败区显示四个确定性策略及一个任务级 AI 元数据开关，AI 密钥只写不回显。
+  - 配置：表单编辑、服务端校验、脱敏变更 diff、保存前 revision 备份、即时/重启生效提示；原始部署 YAML 保持运维只读，不在 Web 展示或改写。季度失败区显示四个确定性策略及一个任务级 AI 元数据开关，AI/TMDB 密钥只写不回显。
   - Mikan 过滤：内置 C# 复现 `Filiter0`～`Filiter4` 的旧规则和 AnimeGoHelper Base64 配置接口；默认 Mikan SourceProfile 提供默认开启的 RSS 过滤总开关，Web 提供开关、五档规则编辑、真实顺序预览、legacy JSON 导入导出、revision 冲突及快照回滚，详见 [`MIKAN_FILTER_COMPAT.md`](MIKAN_FILTER_COMPAT.md)。
   - Mikan 同集优选：一次 RSS 批次内按可靠的 `mikanid+来源EP` 聚合重复选项，使用完全可配置的有序优先级组和组内 `{name, values[]}` 具名数组逐级淘汰，剩一个立即短路；Web 可独立启停、任意增删/排序组与数组并维护具名黑白名单，预设字幕语言/封装/编码/分辨率四组并默认拒绝720p，详见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
   - 动画作品：按 `mikanid` 查看和编辑作品级人工规则，包括关联 Bgm Subject、TMDB Series/Season 与 Episode Offset；保存前预览受影响的未完成任务和样例 EP，支持禁用、清除和显式重新匹配。
@@ -275,7 +275,7 @@ docs/
 - 四类删除使用不同命令和权限检查。组合删除先冻结任务并生成删除计划，再处理媒体库文件、下载器任务/下载源，最后删除业务记录；任一步失败都保留可重试状态和审计，不把部分失败伪装成完成。所有文件路径必须解析并验证位于配置的 `download_path` 或 `save_path` 内，禁止跟随目录逃逸。
 - 前端处理窄屏/桌面布局、中文界面、空状态、加载态和错误态。
 - access-key 默认仅保存在会话内存或 `sessionStorage`，日志/API 响应不得回显密码、Cookie、TMDB key。
-- YAML 是部署配置的唯一持久化来源：Web 保存前校验并显示 diff，原子替换且保留备份；环境变量覆盖的字段显示最终有效值但不可写。SQLite 不复制这些配置作为第二真相源。
+- 部署 YAML 是启动/路径/连接等部署基线，由运维维护；Web 不显示或改写其原文。可编辑应用字段以 `data_path/config/application.private.json` 保存 revision 覆盖，保存前由同一服务端候选逻辑校验并显示脱敏 diff，覆盖/恢复前把旧 revision 原子备份到 `data_path/backups`；环境变量覆盖字段显示最终有效值但不可写。SQLite 不复制这些配置作为第二真相源。
 
 提交：
 

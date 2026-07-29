@@ -784,10 +784,19 @@
           </div>
         </fieldset>
       </div>
+      <section id="configuration-preview" class="configuration-preview" aria-labelledby="configuration-preview-title" hidden>
+        <div class="configuration-preview-heading">
+          <h3 id="configuration-preview-title">保存前差异</h3>
+          <span>服务端验证 · 密钥脱敏</span>
+        </div>
+        <p id="configuration-preview-summary" class="muted" aria-live="polite"></p>
+        <div id="configuration-diff-list" class="configuration-diff-list"></div>
+      </section>
       <p id="configuration-message" class="delete-message" aria-live="polite"></p>
       <div class="delete-actions">
-        <span class="muted">保存采用 revision 乐观并发。</span>
-        <button id="configuration-save" type="submit" class="primary-button">保存配置</button>
+        <span class="muted">预览与保存都采用 revision 乐观并发；覆盖前自动备份。</span>
+        <button id="configuration-save" type="submit" class="secondary-button">预览差异</button>
+        <button id="configuration-confirm" type="button" class="primary-button" disabled>确认保存并备份</button>
       </div>
     </form>
   </dialog>

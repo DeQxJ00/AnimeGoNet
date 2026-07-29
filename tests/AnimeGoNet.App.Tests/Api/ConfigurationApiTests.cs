@@ -189,13 +189,125 @@ public sealed class ConfigurationApiTests
         Assert.Contains("ai_use_metadata_match", script, StringComparison.Ordinal);
         Assert.DoesNotContain("configuration-ai-season", script, StringComparison.Ordinal);
         Assert.DoesNotContain("configuration-ai-episode", script, StringComparison.Ordinal);
-        Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("previewConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("confirmConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/config/preview", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-preview\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-confirm\"", html, StringComparison.Ordinal);
+        Assert.Contains("保存前差异", html, StringComparison.Ordinal);
+        Assert.Contains("确认保存并备份", html, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
         Assert.Contains("locked_fields", script, StringComparison.Ordinal);
         Assert.Contains("data_update_manifest_url", script, StringComparison.Ordinal);
-        Assert.Contains("数据更新策略与 Cron 已即时生效", script, StringComparison.Ordinal);
+        Assert.Contains("修改已即时生效", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PreviewValidatesAndReturnsRedactedEffectAwareDiffWithoutWriting()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/config/preview",
+            DataUpdatePayload(
+                expectedRevision: 0,
+                enabled: true,
+                cron: "0 15 4 * * ?",
+                manifestUrl: "https://updates.test.invalid/manifest.json",
+                tmdbLanguage: "ja-JP",
+                apiKey: "preview-secret-must-not-return"));
+        var text = await preview.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(text);
+
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.Equal(0, json.RootElement
+            .GetProperty("current_configuration_revision").GetInt64());
+        Assert.True(json.RootElement.GetProperty("restart_required").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("data_update_hot_reload").GetBoolean());
+        var changes = json.RootElement.GetProperty("changes")
+            .EnumerateArray()
+            .ToDictionary(item => item.GetProperty("field").GetString()!);
+        Assert.Equal("zh-CN", changes["tmdb_language"].GetProperty("before").GetString());
+        Assert.Equal("ja-JP", changes["tmdb_language"].GetProperty("after").GetString());
+        Assert.Equal("restart", changes["tmdb_language"].GetProperty("effect").GetString());
+        Assert.True(changes["tmdb_api_key"].GetProperty("sensitive").GetBoolean());
+        Assert.Equal("inherit", changes["tmdb_api_key"].GetProperty("before").GetString());
+        Assert.Equal("configured", changes["tmdb_api_key"].GetProperty("after").GetString());
+        Assert.Equal(
+            "hot_reload",
+            changes["data_update_cron"].GetProperty("effect").GetString());
+        Assert.DoesNotContain("preview-secret-must-not-return", text, StringComparison.Ordinal);
+        Assert.Equal(
+            0,
+            (await app.App.Services.GetRequiredService<ApplicationOverrideStore>()
+                .LoadAsync()).Revision);
+        Assert.False(File.Exists(Path.Combine(
+            app.RootPath,
+            "data",
+            "config",
+            "application.private.json")));
+
+        using var stale = await app.Client.PostAsync(
+            "/api/v1/config/preview",
+            DataUpdatePayload(
+                expectedRevision: 1,
+                enabled: false,
+                cron: "0 0 4 * * ?"));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+    }
+
+    [Fact]
+    public async Task OverwriteAndResetReportAndPersistPreviousRevisionBackups()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var first = await app.Client.PutAsync(
+            "/api/v1/config",
+            DataUpdatePayload(
+                expectedRevision: 0,
+                enabled: true,
+                cron: "0 15 4 * * ?",
+                manifestUrl: "https://updates.test.invalid/manifest.json"));
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(JsonValueKind.Null, firstJson.RootElement
+            .GetProperty("backup_revision").ValueKind);
+
+        using var second = await app.Client.PutAsync(
+            "/api/v1/config",
+            DataUpdatePayload(
+                expectedRevision: 1,
+                enabled: true,
+                cron: "0 30 4 * * ?",
+                manifestUrl: "https://updates.test.invalid/manifest.json"));
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(1, secondJson.RootElement.GetProperty("backup_revision").GetInt64());
+
+        var backups = Path.Combine(app.RootPath, "data", "backups");
+        var revisionOne = Assert.Single(Directory.GetFiles(
+            backups,
+            "application.private.revision-00000000000000000001.json"));
+        using (var backup = JsonDocument.Parse(await File.ReadAllTextAsync(revisionOne)))
+        {
+            Assert.Equal(1, backup.RootElement.GetProperty("revision").GetInt64());
+            Assert.Equal(
+                "0 15 4 * * ?",
+                backup.RootElement.GetProperty("settings")
+                    .GetProperty("data_update_cron").GetString());
+        }
+
+        using var reset = await app.Client.DeleteAsync(
+            "/api/v1/config?expected_revision=2");
+        using var resetJson = JsonDocument.Parse(await reset.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+        Assert.Equal(2, resetJson.RootElement.GetProperty("backup_revision").GetInt64());
+        Assert.Single(Directory.GetFiles(
+            backups,
+            "application.private.revision-00000000000000000002.json"));
+        Assert.Null((await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync()).Settings);
     }
 
     [Fact]
@@ -738,7 +850,8 @@ public sealed class ConfigurationApiTests
         bool autoImport = true,
         int keepVersions = 2,
         double timeoutSeconds = 300,
-        string tmdbLanguage = "zh-CN")
+        string tmdbLanguage = "zh-CN",
+        string? apiKey = null)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -746,7 +859,7 @@ public sealed class ConfigurationApiTests
             tmdb_proxy_url = (string?)null,
             tmdb_language = tmdbLanguage,
             tmdb_http_timeout_seconds = 30,
-            tmdb_api_key = (string?)null,
+            tmdb_api_key = apiKey,
             clear_tmdb_api_key = false,
             tmdb_read_access_token = (string?)null,
             clear_tmdb_read_access_token = false,

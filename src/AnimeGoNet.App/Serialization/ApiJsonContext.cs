@@ -20,6 +20,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(ConfigurationResponse))]
 [JsonSerializable(typeof(ConfigurationFieldLockResponse))]
 [JsonSerializable(typeof(ConfigurationUpdateRequest))]
+[JsonSerializable(typeof(ConfigurationPreviewResponse))]
 [JsonSerializable(typeof(ConfigurationWriteResponse))]
 [JsonSerializable(typeof(IngestBatchRequest))]
 [JsonSerializable(typeof(RssIngestRequest))]

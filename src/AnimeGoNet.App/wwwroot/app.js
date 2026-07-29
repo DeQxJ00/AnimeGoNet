@@ -44,6 +44,7 @@ let activeMikanWorkRule = null;
 let loadedMikanWorkId = null;
 let activeMikanWorkImpact = null;
 let activeConfigurationLockedFields = new Set();
+let pendingConfigurationRequest = null;
 const statusLabels = {
     received: "已接收",
     staged: "种子已暂存",
@@ -1108,6 +1109,7 @@ function applyConfigurationLocks(locks) {
 function openConfigurationEditor() {
     if (!currentConfiguration)
         return;
+    clearConfigurationPreview();
     const editable = currentConfiguration.editable;
     setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
     setConfigurationValue("#configuration-tmdb-proxy", editable.tmdb_proxy_url ?? "");
@@ -1149,73 +1151,226 @@ function openConfigurationEditor() {
     syncConfigurationSecretInputs();
     configurationDialog.showModal();
 }
-async function saveConfiguration(event) {
+const configurationFieldLabels = {
+    tmdb_base_url: "TMDB API 地址",
+    tmdb_proxy_url: "TMDB 代理",
+    tmdb_language: "TMDB 语言",
+    tmdb_http_timeout_seconds: "TMDB 超时（秒）",
+    tmdb_api_key: "TMDB API Key",
+    tmdb_read_access_token: "TMDB Read Token",
+    bangumi_base_url: "Bangumi API 地址",
+    bangumi_proxy_url: "Bangumi 代理",
+    bangumi_http_timeout_seconds: "Bangumi 超时（秒）",
+    season_failure_skip: "TMDBFailSkip",
+    season_failure_backtrace: "TMDBFailBacktrace",
+    season_failure_use_title_season: "TMDBFailUseTitleSeason",
+    season_failure_use_first_season: "TMDBFailUseFirstSeason",
+    ai_use_metadata_match: "AI 元数据匹配",
+    ai_http_timeout_seconds: "AI 超时（秒）",
+    tmdb_failure_use_bangumi: "Bangumi 完全兜底",
+    mikan_trusted_offset_cache_enabled: "可信 offset 缓存",
+    torrent_http_timeout_seconds: "Torrent HTTP 超时（秒）",
+    torrent_max_response_bytes: "Torrent 最大响应（bytes）",
+    torrent_max_redirects: "Torrent 最大跳转",
+    torrent_staging_ttl_seconds: "Torrent 暂存 TTL（秒）",
+    data_update_enabled: "AnimeGoNetData 定时更新",
+    data_update_cron: "AnimeGoNetData Cron",
+    data_update_manifest_url: "AnimeGoNetData Manifest URL",
+    data_update_auto_download: "AnimeGoNetData 自动下载",
+    data_update_auto_import: "AnimeGoNetData 自动导入",
+    data_update_keep_versions: "AnimeGoNetData 保留版本数",
+    data_update_http_timeout_seconds: "AnimeGoNetData HTTP 超时（秒）",
+};
+function configurationRequest() {
+    if (!currentConfiguration) {
+        throw new Error("配置尚未载入");
+    }
+    return {
+        tmdb_base_url: element("#configuration-tmdb-url").value,
+        tmdb_proxy_url: element("#configuration-tmdb-proxy").value || null,
+        tmdb_language: element("#configuration-tmdb-language").value,
+        tmdb_http_timeout_seconds: element("#configuration-tmdb-timeout").valueAsNumber,
+        tmdb_api_key: element("#configuration-tmdb-key").value || null,
+        clear_tmdb_api_key: element("#configuration-tmdb-key-clear").checked,
+        tmdb_read_access_token: element("#configuration-tmdb-token").value || null,
+        clear_tmdb_read_access_token: element("#configuration-tmdb-token-clear").checked,
+        bangumi_base_url: element("#configuration-bangumi-url").value,
+        bangumi_proxy_url: element("#configuration-bangumi-proxy").value || null,
+        bangumi_http_timeout_seconds: element("#configuration-bangumi-timeout").valueAsNumber,
+        season_failure_skip: element("#configuration-fail-skip").checked,
+        season_failure_backtrace: element("#configuration-fail-backtrace").checked,
+        season_failure_use_title_season: element("#configuration-fail-title").checked,
+        season_failure_use_first_season: element("#configuration-fail-first").checked,
+        ai_use_metadata_match: element("#configuration-ai-metadata").checked,
+        ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
+        tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
+        mikan_trusted_offset_cache_enabled: element("#configuration-offset-cache").checked,
+        torrent_http_timeout_seconds: element("#configuration-torrent-timeout").valueAsNumber,
+        torrent_max_response_bytes: element("#configuration-torrent-bytes").valueAsNumber,
+        torrent_max_redirects: element("#configuration-torrent-redirects").valueAsNumber,
+        torrent_staging_ttl_seconds: element("#configuration-torrent-ttl").valueAsNumber,
+        data_update_enabled: element("#configuration-data-update-enabled").checked,
+        data_update_cron: element("#configuration-data-update-cron").value,
+        data_update_manifest_url: element("#configuration-data-update-manifest").value || null,
+        data_update_auto_download: element("#configuration-data-update-auto-download").checked,
+        data_update_auto_import: element("#configuration-data-update-auto-import").checked,
+        data_update_keep_versions: element("#configuration-data-update-keep").valueAsNumber,
+        data_update_http_timeout_seconds: element("#configuration-data-update-timeout").valueAsNumber,
+        expected_configuration_revision: currentConfiguration.configuration_revision,
+    };
+}
+function clearConfigurationPreview(message) {
+    pendingConfigurationRequest = null;
+    const preview = element("#configuration-preview");
+    preview.hidden = true;
+    element("#configuration-preview-summary").textContent = "";
+    element("#configuration-diff-list").replaceChildren();
+    element("#configuration-confirm").disabled = true;
+    if (message) {
+        element("#configuration-message").textContent = message;
+    }
+}
+function configurationPreviewValue(value, sensitive) {
+    if (sensitive) {
+        switch (value) {
+            case "inherit": return "继承部署配置";
+            case "configured": return "已配置（值已隐藏）";
+            case "cleared": return "已明确清除";
+            default: return "值已隐藏";
+        }
+    }
+    if (value === null || value.length === 0)
+        return "未配置";
+    if (value === "true")
+        return "已启用";
+    if (value === "false")
+        return "已关闭";
+    return value;
+}
+function renderConfigurationPreview(preview) {
+    const panel = element("#configuration-preview");
+    const summary = element("#configuration-preview-summary");
+    const list = element("#configuration-diff-list");
+    panel.hidden = false;
+    const restartChanges = preview.changes.filter((change) => change.effect === "restart").length;
+    const hotChanges = preview.changes.filter((change) => change.effect === "hot_reload").length;
+    summary.textContent = preview.changes.length === 0
+        ? "没有检测到配置差异，无需保存。"
+        : `共 ${preview.changes.length} 项：${hotChanges} 项保存后即时生效，`
+            + `${restartChanges} 项需要重启；写入前会备份当前私有 revision。`;
+    if (preview.changes.length === 0) {
+        list.replaceChildren();
+        return;
+    }
+    list.replaceChildren(...preview.changes.map((change) => {
+        const item = document.createElement("article");
+        item.className = "configuration-diff-item";
+        const heading = document.createElement("div");
+        heading.className = "configuration-diff-heading";
+        const field = document.createElement("strong");
+        field.textContent = configurationFieldLabels[change.field] ?? change.field;
+        const effect = document.createElement("span");
+        effect.className = `configuration-effect ${change.effect}`;
+        effect.textContent = change.effect === "hot_reload" ? "即时生效" : "重启生效";
+        heading.append(field, effect);
+        const values = document.createElement("div");
+        values.className = "configuration-diff-values";
+        const before = document.createElement("span");
+        before.textContent = configurationPreviewValue(change.before, change.sensitive);
+        const arrow = document.createElement("span");
+        arrow.className = "configuration-diff-arrow";
+        arrow.textContent = "→";
+        const after = document.createElement("span");
+        after.textContent = configurationPreviewValue(change.after, change.sensitive);
+        values.append(before, arrow, after);
+        item.append(heading, values);
+        return item;
+    }));
+}
+async function previewConfiguration(event) {
     event.preventDefault();
     if (!currentConfiguration)
         return;
-    const save = element("#configuration-save");
+    const previewButton = element("#configuration-save");
     const message = element("#configuration-message");
-    save.disabled = true;
-    message.textContent = "正在保存私密配置覆盖…";
+    clearConfigurationPreview();
+    previewButton.disabled = true;
+    message.textContent = "正在验证并生成脱敏差异…";
+    try {
+        const request = configurationRequest();
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch("/api/v1/config/preview", {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify(request),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const preview = await response.json();
+        renderConfigurationPreview(preview);
+        pendingConfigurationRequest = preview.changes.length > 0 ? request : null;
+        element("#configuration-confirm").disabled =
+            pendingConfigurationRequest === null;
+        message.textContent = preview.changes.length === 0
+            ? "服务端验证通过；当前表单与已保存配置一致。"
+            : preview.restart_required
+                ? "服务端验证通过；确认后保存，进程仍需重启以应用非热更新字段。"
+                : "服务端验证通过；确认后保存，所列字段可即时生效。";
+    }
+    catch (error) {
+        clearConfigurationPreview();
+        message.textContent =
+            `预览失败：${errorMessage(error, "未知错误")}；revision 冲突时请刷新后重试。`;
+    }
+    finally {
+        previewButton.disabled = false;
+    }
+}
+async function confirmConfiguration() {
+    const request = pendingConfigurationRequest;
+    if (!request)
+        return;
+    const previewButton = element("#configuration-save");
+    const confirm = element("#configuration-confirm");
+    const message = element("#configuration-message");
+    previewButton.disabled = true;
+    confirm.disabled = true;
+    message.textContent = "正在备份当前 revision 并写入私密配置覆盖…";
     try {
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
         const response = await fetch("/api/v1/config", {
             method: "PUT",
             headers: requestHeaders,
-            body: JSON.stringify({
-                tmdb_base_url: element("#configuration-tmdb-url").value,
-                tmdb_proxy_url: element("#configuration-tmdb-proxy").value || null,
-                tmdb_language: element("#configuration-tmdb-language").value,
-                tmdb_http_timeout_seconds: element("#configuration-tmdb-timeout").valueAsNumber,
-                tmdb_api_key: element("#configuration-tmdb-key").value || null,
-                clear_tmdb_api_key: element("#configuration-tmdb-key-clear").checked,
-                tmdb_read_access_token: element("#configuration-tmdb-token").value || null,
-                clear_tmdb_read_access_token: element("#configuration-tmdb-token-clear").checked,
-                bangumi_base_url: element("#configuration-bangumi-url").value,
-                bangumi_proxy_url: element("#configuration-bangumi-proxy").value || null,
-                bangumi_http_timeout_seconds: element("#configuration-bangumi-timeout").valueAsNumber,
-                season_failure_skip: element("#configuration-fail-skip").checked,
-                season_failure_backtrace: element("#configuration-fail-backtrace").checked,
-                season_failure_use_title_season: element("#configuration-fail-title").checked,
-                season_failure_use_first_season: element("#configuration-fail-first").checked,
-                ai_use_metadata_match: element("#configuration-ai-metadata").checked,
-                ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
-                tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
-                mikan_trusted_offset_cache_enabled: element("#configuration-offset-cache").checked,
-                torrent_http_timeout_seconds: element("#configuration-torrent-timeout").valueAsNumber,
-                torrent_max_response_bytes: element("#configuration-torrent-bytes").valueAsNumber,
-                torrent_max_redirects: element("#configuration-torrent-redirects").valueAsNumber,
-                torrent_staging_ttl_seconds: element("#configuration-torrent-ttl").valueAsNumber,
-                data_update_enabled: element("#configuration-data-update-enabled").checked,
-                data_update_cron: element("#configuration-data-update-cron").value,
-                data_update_manifest_url: element("#configuration-data-update-manifest").value || null,
-                data_update_auto_download: element("#configuration-data-update-auto-download").checked,
-                data_update_auto_import: element("#configuration-data-update-auto-import").checked,
-                data_update_keep_versions: element("#configuration-data-update-keep").valueAsNumber,
-                data_update_http_timeout_seconds: element("#configuration-data-update-timeout").valueAsNumber,
-                expected_configuration_revision: currentConfiguration.configuration_revision,
-            }),
+            body: JSON.stringify(request),
         });
         if (!response.ok)
             throw new Error(await responseError(response));
         const saved = await response.json();
+        clearConfigurationPreview();
+        configurationDialog.close();
         await loadConfiguration();
-        message.textContent = saved.restart_required
-            ? `已保存 revision ${saved.configuration_revision}；数据更新策略已即时生效，其他修改需重启主程序。`
-            : `已保存 revision ${saved.configuration_revision}；数据更新策略与 Cron 已即时生效。`;
+        const backup = saved.backup_revision === null
+            ? "这是首个私有 revision，无旧版本需要备份"
+            : `已备份 revision ${saved.backup_revision}`;
+        element("#configuration-status").textContent = saved.restart_required
+            ? `已保存 revision ${saved.configuration_revision}；${backup}；非热更新字段需重启。`
+            : `已保存 revision ${saved.configuration_revision}；${backup}；修改已即时生效。`;
     }
     catch (error) {
-        message.textContent = `保存失败：${errorMessage(error, "未知错误")}；revision 冲突时请刷新后重试。`;
+        clearConfigurationPreview();
+        message.textContent =
+            `保存失败：${errorMessage(error, "未知错误")}；请重新预览后再保存。`;
     }
     finally {
-        save.disabled = false;
+        previewButton.disabled = false;
     }
 }
 async function resetConfiguration() {
     if (!currentConfiguration || currentConfiguration.configuration_revision === 0)
         return;
-    if (!window.confirm("恢复部署默认配置？数据更新策略会立即恢复，其他修改仍需重启。"))
+    if (!window.confirm("恢复部署默认配置？当前私有 revision 会先备份；数据更新策略会立即恢复，其他修改仍需重启。"))
         return;
     const status = element("#configuration-status");
     status.textContent = "正在移除私密配置覆盖…";
@@ -1223,7 +1378,14 @@ async function resetConfiguration() {
         const response = await fetch(`/api/v1/config?expected_revision=${currentConfiguration.configuration_revision}`, { method: "DELETE", headers });
         if (!response.ok)
             throw new Error(await responseError(response));
+        const saved = await response.json();
         await loadConfiguration();
+        const backup = saved.backup_revision === null
+            ? "没有需要备份的私有 revision"
+            : `已备份 revision ${saved.backup_revision}`;
+        status.textContent = saved.restart_required
+            ? `已恢复部署默认；${backup}；非热更新字段需重启。`
+            : `已恢复部署默认；${backup}；修改已即时生效。`;
     }
     catch (error) {
         status.textContent = `恢复失败：${errorMessage(error, "未知错误")}`;
@@ -3895,7 +4057,19 @@ element("#configuration-reload").addEventListener("click", () => void loadConfig
 element("#configuration-edit").addEventListener("click", openConfigurationEditor);
 element("#configuration-reset").addEventListener("click", () => void resetConfiguration());
 element("#configuration-close").addEventListener("click", () => configurationDialog.close());
-element("#configuration-form").addEventListener("submit", (event) => void saveConfiguration(event));
+element("#configuration-form").addEventListener("submit", (event) => void previewConfiguration(event));
+element("#configuration-confirm").addEventListener("click", () => void confirmConfiguration());
+element("#configuration-form").addEventListener("input", () => {
+    const preview = element("#configuration-preview");
+    if (pendingConfigurationRequest || !preview.hidden) {
+        clearConfigurationPreview("配置已修改，请重新预览差异。");
+    }
+});
+configurationDialog.addEventListener("close", () => {
+    clearConfigurationPreview();
+    element("#configuration-tmdb-key").value = "";
+    element("#configuration-tmdb-token").value = "";
+});
 element("#configuration-tmdb-key-clear").addEventListener("change", syncConfigurationSecretInputs);
 element("#configuration-tmdb-token-clear").addEventListener("change", syncConfigurationSecretInputs);
 element("#rss-save").addEventListener("click", () => void saveRssRules());

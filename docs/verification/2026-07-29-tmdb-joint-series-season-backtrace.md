@@ -23,17 +23,18 @@ Passed: 30, Failed: 0
 
 dotnet test tests/AnimeGoNet.Core.Tests/AnimeGoNet.Core.Tests.csproj --no-restore \
   --filter "FullyQualifiedName~TmdbSeriesResolverTests|FullyQualifiedName~TmdbSeasonSelectorTests"
-Passed: 14, Failed: 0
+Passed: 15, Failed: 0
 
 dotnet test AnimeGoNet.slnx --no-restore --verbosity minimal
-Core: 209 passed
-Data: 99 passed
-App: 271 passed
-Total: 579 passed, 0 failed
+Plugin abstractions: 11 passed
+Core: 264 passed
+Data: 146 passed
+App: 432 passed
+Total: 853 passed, 0 failed
 ```
 
-The focused fixtures include a first candidate whose Season fails followed by a second candidate from the same TMDB response that succeeds, a cleaned title that resolves another Series, Japanese-to-Chinese fallback, missing dates, multi-level predecessor traversal, cycles, and P3 recovery of a different Series after both current titles return no Series.
+The focused fixtures include a first candidate whose Season fails followed by a second candidate from the same TMDB response that succeeds, and the exact cross-search regression where the first search returns a plausible Series whose Season validator rejects it before the next cleaned search title resolves another Series. They also cover Japanese-to-Chinese fallback, missing dates, multi-level predecessor traversal, cycles, and P3 recovery of a different Series after both current titles return no Series.
 
 ## NativeAOT verification
 
-`win-x64` restore and Release NativeAOT publish completed with `PublishAot=true`. `eng/smoke-native.ps1` passed `/ping`, status/schema 22, NativeAOT capability, SQLite initialization, secure ingest rejection, qBittorrent capability, and static WebUI checks.
+`win-x64` restore and Release NativeAOT publish completed with `PublishAot=true`. `eng/smoke-native.ps1` passed `/ping`, status/schema 29, NativeAOT capability, SQLite initialization, secure ingest rejection, qBittorrent capability, and static WebUI checks.

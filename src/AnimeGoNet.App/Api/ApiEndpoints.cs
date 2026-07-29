@@ -42,6 +42,7 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/config", Configuration);
+        app.MapPost("/api/v1/config/preview", PreviewConfiguration);
         app.MapPut("/api/v1/config", PutConfiguration);
         app.MapDelete("/api/v1/config", DeleteConfigurationOverride);
         app.MapGet("/api/v1/downloads", Downloads);
@@ -686,6 +687,62 @@ public static class ApiEndpoints
             applied.AppliedRevision));
     }
 
+    private static async Task<IResult> PreviewConfiguration(
+        ConfigurationUpdateRequest request,
+        DeploymentConfigurationOptions deployment,
+        DeploymentConfigurationLocks locks,
+        ApplicationOverrideStore store,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(
+                request.ExpectedConfigurationRevision);
+            var current = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (current.Revision != request.ExpectedConfigurationRevision)
+            {
+                throw new ApplicationOverrideRevisionException();
+            }
+            var currentDesired = locks.Reapply(
+                deployment.Value,
+                ApplicationOverrideStore.Apply(deployment.Value, current));
+            var (settings, candidate) = BuildConfigurationCandidate(
+                request,
+                current,
+                deployment.Value,
+                locks);
+            var changes = ConfigurationChanges(
+                request,
+                currentDesired,
+                candidate,
+                current.Settings,
+                settings);
+            return TypedResults.Ok(new ConfigurationPreviewResponse(
+                request.ExpectedConfigurationRevision,
+                current.Revision,
+                RequiresRestart(options, candidate),
+                changes.Any(change => change.Effect == "hot_reload"),
+                changes));
+        }
+        catch (ApplicationOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "configuration_revision_conflict",
+                "Configuration changed concurrently; reload before previewing."));
+        }
+        catch (ConfigurationFieldLockedException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "configuration_field_locked",
+                exception.Message));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("configuration_invalid", exception.Message));
+        }
+    }
+
     private static async Task<IResult> PutConfiguration(
         ConfigurationUpdateRequest request,
         DeploymentConfigurationOptions deployment,
@@ -699,64 +756,11 @@ public static class ApiEndpoints
         try
         {
             var current = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
-            if (request.ClearTmdbApiKey && !string.IsNullOrWhiteSpace(request.TmdbApiKey))
-            {
-                throw new ArgumentException("tmdb_api_key and clear_tmdb_api_key cannot both be set.");
-            }
-
-            if (request.ClearTmdbReadAccessToken
-                && !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken))
-            {
-                throw new ArgumentException(
-                    "tmdb_read_access_token and clear_tmdb_read_access_token cannot both be set.");
-            }
-
-            var requestedSettings = CreateApplicationOverride(
+            var (settings, candidate) = BuildConfigurationCandidate(
                 request,
-                current.Settings,
-                DateTimeOffset.UtcNow);
-            var requestedCandidate = ApplicationOverrideStore.Apply(
+                current,
                 deployment.Value,
-                new ApplicationOverrideSnapshot(
-                    1,
-                    current.Revision + 1,
-                    requestedSettings));
-            var changedLockedFields = locks
-                .FindChangedLockedFields(deployment.Value, requestedCandidate)
-                .ToList();
-            if (locks.IsLocked("tmdb_api_key")
-                && (request.ClearTmdbApiKey || !string.IsNullOrWhiteSpace(request.TmdbApiKey)))
-            {
-                changedLockedFields.Add("tmdb_api_key");
-            }
-            if (locks.IsLocked("tmdb_read_access_token")
-                && (request.ClearTmdbReadAccessToken
-                    || !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken)))
-            {
-                changedLockedFields.Add("tmdb_read_access_token");
-            }
-            if (changedLockedFields.Count > 0)
-            {
-                throw new ConfigurationFieldLockedException(
-                    changedLockedFields.Distinct(StringComparer.Ordinal).ToArray());
-            }
-
-            var settings = locks.PreserveLockedOverrides(
-                current.Settings,
-                requestedSettings);
-            var candidate = locks.Reapply(
-                deployment.Value,
-                ApplicationOverrideStore.Apply(
-                    deployment.Value,
-                    new ApplicationOverrideSnapshot(
-                        1,
-                        current.Revision + 1,
-                        settings)));
-            var errors = AnimeGoOptionsValidator.Validate(candidate);
-            if (errors.Count > 0)
-            {
-                throw new ArgumentException(string.Join("; ", errors));
-            }
+                locks);
 
             var saved = await store.SaveAsync(
                 settings,
@@ -772,7 +776,8 @@ public static class ApiEndpoints
             return TypedResults.Ok(new ConfigurationWriteResponse(
                 saved.Revision,
                 RestartRequired: saved.Revision != applied.AppliedRevision,
-                RevertedToDeploymentDefault: false));
+                RevertedToDeploymentDefault: false,
+                BackupRevision: current.Revision > 0 ? current.Revision : null));
         }
         catch (ApplicationOverrideRevisionException)
         {
@@ -825,7 +830,10 @@ public static class ApiEndpoints
             return TypedResults.Ok(new ConfigurationWriteResponse(
                 saved.Revision,
                 RestartRequired: saved.Revision != applied.AppliedRevision,
-                RevertedToDeploymentDefault: true));
+                RevertedToDeploymentDefault: true,
+                BackupRevision: saved.Revision > expectedRevision
+                    ? expectedRevision
+                    : null));
         }
         catch (ApplicationOverrideRevisionException)
         {
@@ -977,6 +985,276 @@ public static class ApiEndpoints
 
     private static string SecretState(bool overridden, string? value) =>
         !overridden ? "inherit" : value is null ? "cleared" : "configured";
+
+    private static (ApplicationOverrideEntry Settings, AnimeGoOptions Candidate)
+        BuildConfigurationCandidate(
+            ConfigurationUpdateRequest request,
+            ApplicationOverrideSnapshot current,
+            AnimeGoOptions deployment,
+            DeploymentConfigurationLocks locks)
+    {
+        if (request.ClearTmdbApiKey && !string.IsNullOrWhiteSpace(request.TmdbApiKey))
+        {
+            throw new ArgumentException(
+                "tmdb_api_key and clear_tmdb_api_key cannot both be set.");
+        }
+        if (request.ClearTmdbReadAccessToken
+            && !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken))
+        {
+            throw new ArgumentException(
+                "tmdb_read_access_token and clear_tmdb_read_access_token cannot both be set.");
+        }
+
+        var requestedSettings = CreateApplicationOverride(
+            request,
+            current.Settings,
+            DateTimeOffset.UtcNow);
+        var requestedCandidate = ApplicationOverrideStore.Apply(
+            deployment,
+            new ApplicationOverrideSnapshot(
+                1,
+                current.Revision + 1,
+                requestedSettings));
+        var changedLockedFields = locks
+            .FindChangedLockedFields(deployment, requestedCandidate)
+            .ToList();
+        if (locks.IsLocked("tmdb_api_key")
+            && (request.ClearTmdbApiKey || !string.IsNullOrWhiteSpace(request.TmdbApiKey)))
+        {
+            changedLockedFields.Add("tmdb_api_key");
+        }
+        if (locks.IsLocked("tmdb_read_access_token")
+            && (request.ClearTmdbReadAccessToken
+                || !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken)))
+        {
+            changedLockedFields.Add("tmdb_read_access_token");
+        }
+        if (changedLockedFields.Count > 0)
+        {
+            throw new ConfigurationFieldLockedException(
+                changedLockedFields.Distinct(StringComparer.Ordinal).ToArray());
+        }
+
+        var settings = locks.PreserveLockedOverrides(
+            current.Settings,
+            requestedSettings);
+        var candidate = locks.Reapply(
+            deployment,
+            ApplicationOverrideStore.Apply(
+                deployment,
+                new ApplicationOverrideSnapshot(
+                    1,
+                    current.Revision + 1,
+                    settings)));
+        var errors = AnimeGoOptionsValidator.Validate(candidate);
+        if (errors.Count > 0)
+        {
+            throw new ArgumentException(string.Join("; ", errors));
+        }
+        return (settings, candidate);
+    }
+
+    private static List<ConfigurationChangeResponse> ConfigurationChanges(
+        ConfigurationUpdateRequest request,
+        AnimeGoOptions current,
+        AnimeGoOptions candidate,
+        ApplicationOverrideEntry? currentSettings,
+        ApplicationOverrideEntry candidateSettings)
+    {
+        var changes = new List<ConfigurationChangeResponse>();
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var beforeTmdb = current.Metadata.Tmdb;
+        var afterTmdb = candidate.Metadata.Tmdb;
+        var beforeBangumi = current.Metadata.Bangumi;
+        var afterBangumi = candidate.Metadata.Bangumi;
+        var beforeSeason = current.Metadata.SeasonFailure;
+        var afterSeason = candidate.Metadata.SeasonFailure;
+        var beforeAi = current.Metadata.Ai;
+        var afterAi = candidate.Metadata.Ai;
+        var beforeTorrent = current.TorrentFetch;
+        var afterTorrent = candidate.TorrentFetch;
+        var beforeDataUpdate = current.DataUpdate;
+        var afterDataUpdate = candidate.DataUpdate;
+
+        Add("tmdb_base_url", beforeTmdb.BaseUrl.AbsoluteUri, afterTmdb.BaseUrl.AbsoluteUri);
+        Add("tmdb_proxy_url", beforeTmdb.ProxyUrl?.AbsoluteUri, afterTmdb.ProxyUrl?.AbsoluteUri);
+        Add("tmdb_language", beforeTmdb.Language, afterTmdb.Language);
+        AddSeconds(
+            "tmdb_http_timeout_seconds",
+            beforeTmdb.HttpTimeout,
+            afterTmdb.HttpTimeout);
+        AddSecret(
+            "tmdb_api_key",
+            request.TmdbApiKey,
+            request.ClearTmdbApiKey,
+            currentSettings?.TmdbApiKeyOverridden == true,
+            currentSettings?.TmdbApiKey);
+        AddSecret(
+            "tmdb_read_access_token",
+            request.TmdbReadAccessToken,
+            request.ClearTmdbReadAccessToken,
+            currentSettings?.TmdbReadAccessTokenOverridden == true,
+            currentSettings?.TmdbReadAccessToken);
+        Add(
+            "bangumi_base_url",
+            beforeBangumi.BaseUrl.AbsoluteUri,
+            afterBangumi.BaseUrl.AbsoluteUri);
+        Add(
+            "bangumi_proxy_url",
+            beforeBangumi.ProxyUrl?.AbsoluteUri,
+            afterBangumi.ProxyUrl?.AbsoluteUri);
+        AddSeconds(
+            "bangumi_http_timeout_seconds",
+            beforeBangumi.HttpTimeout,
+            afterBangumi.HttpTimeout);
+        AddBool("season_failure_skip", beforeSeason.Skip, afterSeason.Skip);
+        AddBool("season_failure_backtrace", beforeSeason.Backtrace, afterSeason.Backtrace);
+        AddBool(
+            "season_failure_use_title_season",
+            beforeSeason.UseTitleSeason,
+            afterSeason.UseTitleSeason);
+        AddBool(
+            "season_failure_use_first_season",
+            beforeSeason.UseFirstSeason,
+            afterSeason.UseFirstSeason);
+        AddBool(
+            "ai_use_metadata_match",
+            beforeAi.UseMetadataMatch,
+            afterAi.UseMetadataMatch);
+        AddSeconds(
+            "ai_http_timeout_seconds",
+            beforeAi.HttpTimeout,
+            afterAi.HttpTimeout);
+        AddBool(
+            "tmdb_failure_use_bangumi",
+            current.Metadata.TmdbFailureUseBangumi,
+            candidate.Metadata.TmdbFailureUseBangumi);
+        AddBool(
+            "mikan_trusted_offset_cache_enabled",
+            current.Metadata.MikanTrustedOffsetCacheEnabled,
+            candidate.Metadata.MikanTrustedOffsetCacheEnabled);
+        AddSeconds(
+            "torrent_http_timeout_seconds",
+            beforeTorrent.Timeout,
+            afterTorrent.Timeout);
+        Add(
+            "torrent_max_response_bytes",
+            beforeTorrent.MaxResponseBytes.ToString(invariant),
+            afterTorrent.MaxResponseBytes.ToString(invariant));
+        Add(
+            "torrent_max_redirects",
+            beforeTorrent.MaxRedirects.ToString(invariant),
+            afterTorrent.MaxRedirects.ToString(invariant));
+        AddSeconds(
+            "torrent_staging_ttl_seconds",
+            beforeTorrent.StagingTtl,
+            afterTorrent.StagingTtl);
+        AddBool(
+            "data_update_enabled",
+            beforeDataUpdate.Enabled,
+            afterDataUpdate.Enabled,
+            "hot_reload");
+        Add(
+            "data_update_cron",
+            beforeDataUpdate.Cron,
+            afterDataUpdate.Cron,
+            "hot_reload");
+        Add(
+            "data_update_manifest_url",
+            beforeDataUpdate.ManifestUrl?.AbsoluteUri,
+            afterDataUpdate.ManifestUrl?.AbsoluteUri,
+            "hot_reload");
+        AddBool(
+            "data_update_auto_download",
+            beforeDataUpdate.AutoDownload,
+            afterDataUpdate.AutoDownload,
+            "hot_reload");
+        AddBool(
+            "data_update_auto_import",
+            beforeDataUpdate.AutoImport,
+            afterDataUpdate.AutoImport,
+            "hot_reload");
+        Add(
+            "data_update_keep_versions",
+            beforeDataUpdate.KeepVersions.ToString(invariant),
+            afterDataUpdate.KeepVersions.ToString(invariant),
+            "hot_reload");
+        AddSeconds(
+            "data_update_http_timeout_seconds",
+            beforeDataUpdate.HttpTimeout,
+            afterDataUpdate.HttpTimeout,
+            "hot_reload");
+        return changes;
+
+        void Add(
+            string field,
+            string? before,
+            string? after,
+            string effect = "restart",
+            bool sensitive = false,
+            bool force = false)
+        {
+            if (!force && string.Equals(before, after, StringComparison.Ordinal))
+            {
+                return;
+            }
+            changes.Add(new ConfigurationChangeResponse(
+                field,
+                before,
+                after,
+                effect,
+                sensitive));
+        }
+
+        void AddBool(
+            string field,
+            bool before,
+            bool after,
+            string effect = "restart") =>
+            Add(
+                field,
+                before ? "true" : "false",
+                after ? "true" : "false",
+                effect);
+
+        void AddSeconds(
+            string field,
+            TimeSpan before,
+            TimeSpan after,
+            string effect = "restart") =>
+            Add(
+                field,
+                before.TotalSeconds.ToString("0.###", invariant),
+                after.TotalSeconds.ToString("0.###", invariant),
+                effect);
+
+        void AddSecret(
+            string field,
+            string? requestedValue,
+            bool clear,
+            bool currentOverridden,
+            string? currentValue)
+        {
+            if (!clear && string.IsNullOrWhiteSpace(requestedValue))
+            {
+                return;
+            }
+            Add(
+                field,
+                SecretState(currentOverridden, currentValue),
+                clear
+                    ? "cleared"
+                    : SecretState(
+                        field == "tmdb_api_key"
+                            ? candidateSettings.TmdbApiKeyOverridden
+                            : candidateSettings.TmdbReadAccessTokenOverridden,
+                        field == "tmdb_api_key"
+                            ? candidateSettings.TmdbApiKey
+                            : candidateSettings.TmdbReadAccessToken),
+                sensitive: true,
+                force: true);
+        }
+    }
 
     private static ApplicationOverrideEntry CreateApplicationOverride(
         ConfigurationUpdateRequest request,
