@@ -168,7 +168,7 @@
 - [>] 移植下载管理状态机和 notifier（staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded、持久化准备租约及安全重试已实现；做种/整理 notifier 待实现）。
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
 - [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：move worker 已在所有文件及原子 `tvshow.nfo` 成功后才执行完成记录/episode claim 事务，qB cleanup 独立在后；完整目录库和 RSS 早期事务复查待实现。
-- [ ] 移植 link/link_delete/move/wait_move。
+- [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。
 - [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 与完整目录库待验收。
 - [>] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：move 文件操作与 qB cleanup 已分阶段；四类删除已按逐项目标独立持久化、租约执行和失败重试，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束；做种目标待实现。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
