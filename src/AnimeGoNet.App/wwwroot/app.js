@@ -128,6 +128,197 @@ async function loadDirectoryDatabase(refresh = false) {
         button.disabled = false;
     }
 }
+let dataUpdateActionRunning = false;
+const dataUpdateStatusLabels = {
+    checking: "正在检查 manifest",
+    update_available: "发现新版本",
+    up_to_date: "已是最新版本",
+    downloading: "正在下载并校验",
+    downloaded: "已下载，等待确认导入",
+    importing: "正在校验并导入",
+    completed: "更新完成",
+    failed: "更新失败",
+    rolled_back: "已回滚",
+};
+function dataUpdateTime(value) {
+    if (!value)
+        return "—";
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleString();
+}
+function setDataUpdateBusy(busy) {
+    dataUpdateActionRunning = busy;
+    for (const button of document.querySelectorAll("#data-update .data-update-actions button, #data-update-downloads button")) {
+        if (busy) {
+            button.disabled = true;
+        }
+        else if (button.id === "data-update-reload") {
+            button.disabled = false;
+        }
+    }
+}
+function renderDataUpdateTransfer(status) {
+    const target = element("#data-update-transfer");
+    const run = status.last_transfer_run;
+    if (!run) {
+        target.replaceChildren(Object.assign(document.createElement("p"), {
+            className: "muted empty",
+            textContent: "暂无检查或下载记录。",
+        }));
+        return;
+    }
+    const heading = document.createElement("div");
+    heading.className = "data-update-transfer-heading";
+    const title = document.createElement("strong");
+    title.textContent = dataUpdateStatusLabels[run.status] ?? run.status;
+    const identity = document.createElement("span");
+    identity.className = `badge ${run.status === "failed" ? "error" : "ready"}`;
+    identity.textContent =
+        `${run.trigger_kind === "scheduled" ? "定时" : "手动"} · ${run.requested_action}`;
+    heading.append(title, identity);
+    const details = document.createElement("p");
+    details.className = "muted";
+    details.textContent =
+        `版本 ${run.data_version ?? "—"} · 开始 ${dataUpdateTime(run.started_at_utc)}`
+            + `${run.completed_at_utc ? ` · 完成 ${dataUpdateTime(run.completed_at_utc)}` : ""}`
+            + `${run.failure_code ? ` · 失败码 ${run.failure_code}` : ""}`;
+    const progress = document.createElement("progress");
+    progress.max = Math.max(run.total_bytes, 1);
+    progress.value = Math.min(run.downloaded_bytes, progress.max);
+    progress.setAttribute("aria-label", `数据包下载 ${formatBytes(run.downloaded_bytes)} / ${formatBytes(run.total_bytes)}`);
+    const progressText = document.createElement("small");
+    progressText.textContent = run.total_bytes > 0
+        ? `${formatBytes(run.downloaded_bytes)} / ${formatBytes(run.total_bytes)}`
+        : "当前阶段没有下载字节";
+    target.replaceChildren(heading, details, progress, progressText);
+}
+function renderDataUpdateVersions(status) {
+    const target = element("#data-update-versions");
+    if (status.versions.length === 0) {
+        target.replaceChildren(Object.assign(document.createElement("p"), {
+            className: "muted empty",
+            textContent: "暂无已安装版本。",
+        }));
+        return;
+    }
+    target.replaceChildren(...status.versions.map(version => {
+        const item = document.createElement("div");
+        item.className = `data-update-item ${version.state}`;
+        const heading = document.createElement("strong");
+        heading.textContent = version.data_version;
+        const state = document.createElement("span");
+        state.className = `badge ${version.state === "active" ? "ready" : "pending"}`;
+        state.textContent = version.state === "active" ? "当前 active" : "可回滚版本";
+        const counts = document.createElement("small");
+        counts.textContent =
+            `${version.subject_count.toLocaleString()} Subject · `
+                + `${version.episode_count.toLocaleString()} Episode · `
+                + `安装 ${dataUpdateTime(version.installed_at_utc)}`;
+        item.append(heading, state, counts);
+        return item;
+    }));
+}
+function renderDataUpdateDownloads(status) {
+    const target = element("#data-update-downloads");
+    if (status.downloads.length === 0) {
+        target.replaceChildren(Object.assign(document.createElement("p"), {
+            className: "muted empty",
+            textContent: "暂无已下载数据包。",
+        }));
+        return;
+    }
+    target.replaceChildren(...status.downloads.map(download => {
+        const item = document.createElement("div");
+        item.className = "data-update-item";
+        const heading = document.createElement("strong");
+        heading.textContent = download.data_version;
+        const state = document.createElement("span");
+        state.className = `badge ${download.state === "imported" ? "ready" : "pending"}`;
+        state.textContent = download.state === "imported" ? "已导入" : "已验证，待导入";
+        const timestamp = document.createElement("small");
+        timestamp.textContent = `下载 ${dataUpdateTime(download.downloaded_at_utc)}`;
+        item.append(heading, state, timestamp);
+        if (download.state === "verified") {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "primary-button";
+            button.textContent = "导入此版本";
+            button.disabled = dataUpdateActionRunning;
+            button.addEventListener("click", () => void runDataUpdateAction(`/api/v1/data-update/downloads/${encodeURIComponent(download.data_version)}/import`, `正在导入 ${download.data_version}…`));
+            item.append(button);
+        }
+        return item;
+    }));
+}
+async function loadDataUpdate(silent = false) {
+    const message = element("#data-update-status");
+    if (!silent)
+        message.textContent = "正在读取数据版本…";
+    try {
+        const response = await fetch("/api/v1/data-update", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const status = await response.json();
+        const policy = !status.scheduled_enabled
+            ? "定时更新关闭（手动可用）"
+            : `定时 ${status.cron} · ${!status.auto_download
+                ? "仅检查"
+                : status.auto_import ? "自动下载并导入" : "自动下载后等待确认"}`;
+        message.textContent =
+            `${policy} · manifest ${status.manifest_configured ? "已配置" : "未配置"} · `
+                + `保留 ${status.keep_versions} 版`;
+        element("#data-update-summary").replaceChildren(configurationCard("版本状态", [
+            ["当前 active", status.active_version ?? "尚未导入"],
+            ["上一可用版", status.previous_version ?? "无"],
+            ["状态更新时间", dataUpdateTime(status.state_updated_at_utc)],
+            [
+                "最近本地导入",
+                status.last_package_run
+                    ? `${status.last_package_run.operation} · ${status.last_package_run.status}`
+                        + `${status.last_package_run.failure_code
+                            ? ` · ${status.last_package_run.failure_code}` : ""}`
+                    : "无",
+            ],
+        ]));
+        renderDataUpdateTransfer(status);
+        renderDataUpdateVersions(status);
+        renderDataUpdateDownloads(status);
+        if (!dataUpdateActionRunning) {
+            const requiresManifest = !status.manifest_configured;
+            element("#data-update-check").disabled = requiresManifest;
+            element("#data-update-download").disabled = requiresManifest;
+            element("#data-update-apply").disabled = requiresManifest;
+            element("#data-update-rollback").disabled =
+                status.previous_version === null;
+        }
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "数据更新状态读取失败");
+    }
+}
+async function runDataUpdateAction(endpoint, pendingMessage, confirmation) {
+    if (confirmation && !window.confirm(confirmation))
+        return;
+    const message = element("#data-update-status");
+    setDataUpdateBusy(true);
+    message.textContent = pendingMessage;
+    try {
+        const response = await fetch(endpoint, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        message.textContent =
+            `${dataUpdateStatusLabels[result.status] ?? result.status} · `
+                + `版本 ${result.data_version ?? result.active_version ?? "—"}`;
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "数据更新操作失败");
+    }
+    finally {
+        setDataUpdateBusy(false);
+        await loadDataUpdate(true);
+    }
+}
 function readLibraryState() {
     const defaults = {
         sort: "last_updated",
@@ -3678,8 +3869,14 @@ element("#downloader-config-close").addEventListener("click", () => downloaderCo
 element("#downloader-config-form").addEventListener("submit", (event) => void saveDownloaderConfig(event));
 element("#downloader-config-delete").addEventListener("click", () => void deleteDownloaderOverride());
 element("#directory-database-refresh").addEventListener("click", () => void loadDirectoryDatabase(true));
+element("#data-update-reload").addEventListener("click", () => void loadDataUpdate());
+element("#data-update-check").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/check", "正在检查 manifest…"));
+element("#data-update-download").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/download", "正在下载并校验数据包…"));
+element("#data-update-apply").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/update", "正在下载、校验并导入数据包…"));
+element("#data-update-rollback").addEventListener("click", () => void runDataUpdateAction("/api/v1/data-update/rollback", "正在回滚上一可用版本…", "确认把上一可用数据版本切换为 active？当前版本仍会保留，可再次回滚。"));
 void loadStatus();
 void loadDirectoryDatabase();
+void loadDataUpdate();
 void loadLibrary();
 void loadConfiguration();
 void loadDownloads();
@@ -3693,6 +3890,10 @@ void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);
 window.setInterval(() => void loadPendingTmdb(), 10000);
+window.setInterval(() => {
+    if (!document.hidden)
+        void loadDataUpdate(true);
+}, 3000);
 window.setInterval(() => {
     if (!document.hidden && activeLibraryDetail === null)
         void loadLibrary();

@@ -127,6 +127,42 @@
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
     </section>
 
+    <section id="data-update" aria-labelledby="data-update-title">
+      <div class="section-heading data-update-heading">
+        <div>
+          <p class="eyebrow">AnimeGoNetData</p>
+          <h2 id="data-update-title">数据版本与更新</h2>
+        </div>
+        <div class="data-update-actions">
+          <button id="data-update-reload" type="button" class="secondary-button">刷新状态</button>
+          <button id="data-update-check" type="button" class="secondary-button" disabled>检查更新</button>
+          <button id="data-update-download" type="button" class="secondary-button" disabled>仅下载</button>
+          <button id="data-update-apply" type="button" class="primary-button" disabled>下载并导入</button>
+          <button id="data-update-rollback" type="button" class="danger-button" disabled>回滚上一版</button>
+        </div>
+      </div>
+      <p class="muted">关闭调度不影响手动操作。只有完整校验通过的数据包才会切换 active；失败继续使用旧版本。</p>
+      <p id="data-update-status" class="muted" role="status">正在读取数据版本…</p>
+      <div id="data-update-summary" class="data-update-summary" aria-live="polite"></div>
+      <article id="data-update-transfer" class="data-update-transfer" aria-live="polite">
+        <p class="muted empty">暂无检查或下载记录。</p>
+      </article>
+      <div class="data-update-columns">
+        <article>
+          <h3>已安装版本</h3>
+          <div id="data-update-versions" class="data-update-list">
+            <p class="muted empty">暂无已安装版本。</p>
+          </div>
+        </article>
+        <article>
+          <h3>已下载数据包</h3>
+          <div id="data-update-downloads" class="data-update-list">
+            <p class="muted empty">暂无已下载数据包。</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section aria-labelledby="metadata-title">
       <div class="section-heading">
         <div>

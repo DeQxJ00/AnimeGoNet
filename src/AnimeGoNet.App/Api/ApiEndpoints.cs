@@ -5,6 +5,7 @@ using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Configuration;
+using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
@@ -19,6 +20,7 @@ using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Cache;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
+using AnimeGoNet.Data.DataUpdate;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
@@ -85,6 +87,14 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
         app.MapPost("/api/v1/library/directory-database/refresh", RefreshDirectoryDatabase);
+        app.MapGet("/api/v1/data-update", GetDataUpdateStatus);
+        app.MapPost("/api/v1/data-update/check", CheckDataUpdate);
+        app.MapPost("/api/v1/data-update/download", DownloadDataUpdate);
+        app.MapPost("/api/v1/data-update/update", ApplyDataUpdate);
+        app.MapPost(
+            "/api/v1/data-update/downloads/{dataVersion}/import",
+            ImportDownloadedDataUpdate);
+        app.MapPost("/api/v1/data-update/rollback", RollbackDataUpdate);
         app.MapGet(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibrarySeasonDetail);
@@ -159,6 +169,183 @@ public static class ApiEndpoints
             status.LastFailureCode,
             status.LastStartedAtUtc,
             status.LastCompletedAtUtc);
+
+    private static async Task<Ok<DataUpdateStatusResponse>> GetDataUpdateStatus(
+        AnimeGoOptions options,
+        DataPackageStore packages,
+        DataUpdateTransferStore transfers,
+        CancellationToken cancellationToken)
+    {
+        var package = await packages.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        var downloads = await transfers.ListDownloadsAsync(cancellationToken).ConfigureAwait(false);
+        var transfer = await transfers.GetLastRunAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new DataUpdateStatusResponse(
+            options.DataUpdate.Enabled,
+            options.DataUpdate.Cron,
+            options.DataUpdate.ManifestUrl is not null,
+            options.DataUpdate.AutoDownload,
+            options.DataUpdate.AutoImport,
+            options.DataUpdate.KeepVersions,
+            package.ActiveVersion,
+            package.PreviousVersion,
+            package.UpdatedAtUtc,
+            package.Versions.Select(version => new DataUpdateVersionResponse(
+                version.DataVersion,
+                version.State,
+                version.SubjectCount,
+                version.EpisodeCount,
+                version.InstalledAtUtc,
+                version.ActivatedAtUtc)).ToArray(),
+            downloads.Select(download => new DataUpdateDownloadResponse(
+                download.DataVersion,
+                download.State,
+                download.DownloadedAtUtc,
+                download.ImportedAtUtc)).ToArray(),
+            package.LastRun is null
+                ? null
+                : new DataUpdatePackageRunResponse(
+                    package.LastRun.RunId,
+                    package.LastRun.Operation,
+                    package.LastRun.DataVersion,
+                    package.LastRun.Status,
+                    package.LastRun.FailureCode,
+                    package.LastRun.SubjectCount,
+                    package.LastRun.EpisodeCount,
+                    package.LastRun.StartedAtUtc,
+                    package.LastRun.CompletedAtUtc),
+            transfer is null
+                ? null
+                : new DataUpdateTransferRunResponse(
+                    transfer.RunId,
+                    transfer.TriggerKind,
+                    transfer.RequestedAction,
+                    transfer.Status,
+                    transfer.DataVersion,
+                    transfer.FailureCode,
+                    transfer.DownloadedBytes,
+                    transfer.TotalBytes,
+                    transfer.StartedAtUtc,
+                    transfer.CompletedAtUtc)));
+    }
+
+    private static Task<IResult> CheckDataUpdate(
+        IDataUpdateService service,
+        CancellationToken cancellationToken) =>
+        ExecuteDataUpdateAsync(service, DataUpdateActions.Check, cancellationToken);
+
+    private static Task<IResult> DownloadDataUpdate(
+        IDataUpdateService service,
+        CancellationToken cancellationToken) =>
+        ExecuteDataUpdateAsync(service, DataUpdateActions.Download, cancellationToken);
+
+    private static Task<IResult> ApplyDataUpdate(
+        IDataUpdateService service,
+        CancellationToken cancellationToken) =>
+        ExecuteDataUpdateAsync(service, DataUpdateActions.DownloadImport, cancellationToken);
+
+    private static async Task<IResult> ExecuteDataUpdateAsync(
+        IDataUpdateService service,
+        string action,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await service.ExecuteAsync(
+                DataUpdateTriggerKinds.Manual,
+                action,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(result));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (DataUpdateServiceException exception)
+        {
+            return DataUpdateFailure(exception);
+        }
+    }
+
+    private static async Task<IResult> ImportDownloadedDataUpdate(
+        string dataVersion,
+        IDataUpdateService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await service.ImportDownloadedAsync(
+                dataVersion,
+                DataUpdateTriggerKinds.Manual,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(result));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (DataUpdateServiceException exception)
+        {
+            return DataUpdateFailure(exception);
+        }
+    }
+
+    private static async Task<IResult> RollbackDataUpdate(
+        DataPackageStore packages,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var rollback = await packages.RollbackAsync(
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new DataUpdateActionResponse(
+                rollback.RunId,
+                "rolled_back",
+                rollback.ActiveVersion,
+                rollback.ActiveVersion,
+                false,
+                false));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (DataPackageException exception)
+        {
+            return DataUpdateFailure(new DataUpdateServiceException(
+                exception.Code,
+                exception.Message,
+                exception));
+        }
+    }
+
+    private static DataUpdateActionResponse ToResponse(DataUpdateExecutionResult result) =>
+        new(
+            result.RunId,
+            result.Status,
+            result.DataVersion,
+            result.ActiveVersion,
+            result.Downloaded,
+            result.Imported);
+
+    private static IResult DataUpdateFailure(DataUpdateServiceException exception)
+    {
+        var statusCode = exception.Code switch
+        {
+            "data_update_busy" => StatusCodes.Status409Conflict,
+            "data_download_not_found" => StatusCodes.Status404NotFound,
+            "data_rollback_version_unavailable" => StatusCodes.Status409Conflict,
+            "data_manifest_url_missing" => StatusCodes.Status400BadRequest,
+            "data_client_version_too_old" => StatusCodes.Status409Conflict,
+            "data_version_immutable_conflict" => StatusCodes.Status409Conflict,
+            "data_update_cancelled" => 499,
+            _ => StatusCodes.Status502BadGateway,
+        };
+        return Results.Json(
+            Error(exception.Code, exception.Message),
+            ApiJsonContext.Default.ApiErrorResponse,
+            statusCode: statusCode);
+    }
 
     private static async Task<Ok<LegacyApiResponse<LegacyPluginResponse?>>> LegacyPluginConfigPost(
         LegacyPluginConfigUploadRequest request,

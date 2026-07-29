@@ -122,3 +122,17 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 `GET /api/v1/mikan/work-rules/{mikanid}/impact` 返回权威任务总数和有限明细，并将任务分为未来自动应用、可显式重试的失败任务、活动中保护、已解析保护、已整理保护和其他状态。页面不会把截断后的明细数量误当作总数。保存、禁用或清除规则本身只影响之后的匹配，不会回溯修改任务或移动文件。
 
 只有存在可重试失败任务时，页面才启用“显式重新匹配失败任务”。`POST /api/v1/mikan/work-rules/{mikanid}/rematch` 再次校验当前规则 revision，只把没有运行租约的 `metadata_failed` 任务恢复到其安全的元数据入口；已解析、正在处理、已整理任务、Episode claim、完成记录和媒体文件均保持不变。规则已被其他操作修改时，本次重匹配整体冲突，不进行部分重置。
+
+## 11. AnimeGoNetData 版本与更新
+
+首页“数据版本与更新”区通过 `GET /api/v1/data-update` 读取当前调度策略、manifest 是否已配置、active/previous 指针、已安装版本、已验证下载包、最近本地导入和最近检查/下载运行。响应不返回 manifest/asset URL、磁盘路径或任何凭据。传输进度使用实际已下载字节与 manifest 总字节；未知总量时只展示字节数，不能伪造百分比。
+
+手动动作与定时调度开关相互独立：
+
+- `POST /api/v1/data-update/check` 只检查并验证 manifest；
+- `POST /api/v1/data-update/download` 下载并完整校验资产，但不切换 active；
+- `POST /api/v1/data-update/update` 下载、校验并事务导入；
+- `POST /api/v1/data-update/downloads/{dataVersion}/import` 导入已经验证的本地下载包，不再次联网；
+- `POST /api/v1/data-update/rollback` 原子切换到 previous。
+
+未配置 manifest 时检查、下载和在线更新按钮禁用；没有 previous 时回滚按钮禁用。执行期间同一区域所有写动作禁用，完成后重新读取服务端状态。回滚必须二次确认。只有完整校验并成功提交 SQLite 事务的数据版本才显示为 active；失败继续显示旧 active 及稳定失败码。关闭 `data_update.enabled` 只关闭 Cron 注册，页面仍允许手动操作。

@@ -956,3 +956,63 @@ public sealed record DirectoryDatabaseStatusResponse(
     [property: JsonPropertyName("last_failure_code")] string? LastFailureCode,
     [property: JsonPropertyName("last_started_at_utc")] DateTimeOffset? LastStartedAtUtc,
     [property: JsonPropertyName("last_completed_at_utc")] DateTimeOffset? LastCompletedAtUtc);
+
+public sealed record DataUpdateVersionResponse(
+    [property: JsonPropertyName("data_version")] string DataVersion,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("subject_count")] long SubjectCount,
+    [property: JsonPropertyName("episode_count")] long EpisodeCount,
+    [property: JsonPropertyName("installed_at_utc")] DateTimeOffset InstalledAtUtc,
+    [property: JsonPropertyName("activated_at_utc")] DateTimeOffset? ActivatedAtUtc);
+
+public sealed record DataUpdateDownloadResponse(
+    [property: JsonPropertyName("data_version")] string DataVersion,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("downloaded_at_utc")] DateTimeOffset DownloadedAtUtc,
+    [property: JsonPropertyName("imported_at_utc")] DateTimeOffset? ImportedAtUtc);
+
+public sealed record DataUpdatePackageRunResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("operation")] string Operation,
+    [property: JsonPropertyName("data_version")] string? DataVersion,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("subject_count")] long SubjectCount,
+    [property: JsonPropertyName("episode_count")] long EpisodeCount,
+    [property: JsonPropertyName("started_at_utc")] DateTimeOffset StartedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc);
+
+public sealed record DataUpdateTransferRunResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("trigger_kind")] string TriggerKind,
+    [property: JsonPropertyName("requested_action")] string RequestedAction,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("data_version")] string? DataVersion,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("downloaded_bytes")] long DownloadedBytes,
+    [property: JsonPropertyName("total_bytes")] long TotalBytes,
+    [property: JsonPropertyName("started_at_utc")] DateTimeOffset StartedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc);
+
+public sealed record DataUpdateStatusResponse(
+    [property: JsonPropertyName("scheduled_enabled")] bool ScheduledEnabled,
+    [property: JsonPropertyName("cron")] string Cron,
+    [property: JsonPropertyName("manifest_configured")] bool ManifestConfigured,
+    [property: JsonPropertyName("auto_download")] bool AutoDownload,
+    [property: JsonPropertyName("auto_import")] bool AutoImport,
+    [property: JsonPropertyName("keep_versions")] int KeepVersions,
+    [property: JsonPropertyName("active_version")] string? ActiveVersion,
+    [property: JsonPropertyName("previous_version")] string? PreviousVersion,
+    [property: JsonPropertyName("state_updated_at_utc")] DateTimeOffset StateUpdatedAtUtc,
+    [property: JsonPropertyName("versions")] IReadOnlyList<DataUpdateVersionResponse> Versions,
+    [property: JsonPropertyName("downloads")] IReadOnlyList<DataUpdateDownloadResponse> Downloads,
+    [property: JsonPropertyName("last_package_run")] DataUpdatePackageRunResponse? LastPackageRun,
+    [property: JsonPropertyName("last_transfer_run")] DataUpdateTransferRunResponse? LastTransferRun);
+
+public sealed record DataUpdateActionResponse(
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("data_version")] string? DataVersion,
+    [property: JsonPropertyName("active_version")] string? ActiveVersion,
+    [property: JsonPropertyName("downloaded")] bool Downloaded,
+    [property: JsonPropertyName("imported")] bool Imported);

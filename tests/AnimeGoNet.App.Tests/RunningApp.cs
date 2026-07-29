@@ -39,6 +39,7 @@ public sealed class RunningApp : IAsyncDisposable
         ITorrentDnsResolver? rssDnsResolver = null,
         ITorrentHttpTransport? rssHttpTransport = null,
         ITmdbPosterTransport? tmdbPosterTransport = null,
+        HttpClient? dataUpdateHttpClient = null,
         IReadOnlyCollection<string>? deploymentEnvironmentVariables = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
@@ -59,6 +60,7 @@ public sealed class RunningApp : IAsyncDisposable
             rssDnsResolver: rssDnsResolver,
             rssHttpTransport: rssHttpTransport,
             tmdbPosterTransport: tmdbPosterTransport,
+            dataUpdateHttpClient: dataUpdateHttpClient,
             startBackgroundWorkers: false,
             deploymentEnvironmentVariables: deploymentEnvironmentVariables);
         app.Urls.Add("http://127.0.0.1:0");

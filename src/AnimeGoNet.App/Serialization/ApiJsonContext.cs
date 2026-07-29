@@ -46,6 +46,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(AnimeSeasonListResponse))]
 [JsonSerializable(typeof(AnimeSeasonDetailResponse))]
 [JsonSerializable(typeof(DirectoryDatabaseStatusResponse))]
+[JsonSerializable(typeof(DataUpdateStatusResponse))]
+[JsonSerializable(typeof(DataUpdateActionResponse))]
 [JsonSerializable(typeof(PendingTmdbListResponse))]
 [JsonSerializable(typeof(PendingTmdbDetailResponse))]
 [JsonSerializable(typeof(PendingTmdbRecoveryRequest))]
