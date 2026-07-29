@@ -29,9 +29,9 @@
 | `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 已验证 | 严格 v1 Bencode、原始 info-hash、单/多文件与安全 staging 已验证；magnet 的 40 hex/32 Base32、首个 xt/dn 和 tracker 计数已按上游 fixture 验证且不保留 tracker/passkey；固定 `c7475df` 的 4 个真实 `.torrent` 已逐项验证 info-hash、名称、总量和全部 17 个文件 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 已验证 | 5 MiB 有界 raw/file/URL 读取、真实 loopback chunked HTTP、原始 path/query/Host、首个 enclosure、缺失跳过、非法 length=0、Mikan pubDate 原文与带偏移规范值、稳定失败码与安全 XML tests 已通过；`/api/rss` 已接入 |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 已验证 | RSS source URL/channel link 的 path/query 正整数 mikanid、Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid`，以及 `/Home/Bangumi/{mikanid}` 中 `p.bangumi-info` 的可信 Bangumi Subject 链接均已覆盖上游 fixture；SourceProfile 级 `.AspNetCore.Identity.Application` Cookie 支持旧 YAML 迁移、SQLite 隔离、只写 CRUD、RSS/Torrent 原始 Host 注入和跨 Host redirect 剥离；SSRF 防护、严格 UTF-8/容量限制、歧义与伪造域名拒绝、schema v26/31 批次及凭据迁移、统一导入 task 持久化和失败重试 tests 已通过 |
-| `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选、逐次超时和安全可取消重试已通过；SQLite cache 待实现 |
+| `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 已验证 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选、逐次超时和安全可取消重试已通过；活动 AnimeGoNet Data 版本的 SQLite Subject/完整 Episode 快照优先读取，缺失/不完整/零集未知回退在线 API，版本激活与回滚无需重启 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选、逐次超时和安全可取消重试及自动 Series/Season/Episode worker tests 已通过；cache 待实现 |
-| Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |
+| Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 进行中 | manifest/asset 下载校验、版本化原子导入、保留/回滚及活动版本 read-through 已验证；原始 Bangumi Archive 清洗/分片/gzip 的发布数据生产流水线待实现 |
 | 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；RSS 请求级 SourceProfile revision/双开关/下载器路由并发快照已验证；双 qB 容器连接、共享路径与 Mikan→bt/U2/TTG→pt 预览门禁已进入 CI，真实统一导入分别落入两实例的 container E2E 待实现 |
 
 ## 解析、规则与元数据编排
@@ -54,7 +54,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 已实现 | schema v22、`bolt`/`bolt_sub` bucket 隔离、JSON upsert/batch、绝对 TTL、惰性/批量过期清理和原子失败 tests 已通过 |
+| `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 已验证 | schema v22、`bolt`/`bolt_sub` bucket 隔离、JSON upsert/batch、绝对 TTL、惰性/批量过期清理和原子失败 tests 已通过 |
 | `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 例外 | migration report |
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 待实现 | scan/upsert/recovery tests |
 | 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 进行中 | ingest command/response 和 JSON context 已验证；其余模型待实现 |

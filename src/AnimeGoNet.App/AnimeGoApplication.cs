@@ -197,6 +197,7 @@ public static class AnimeGoApplication
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var dataPackages = new DataPackageStore(database);
+        var bangumiArchive = new BangumiArchiveStore(database);
         var dataUpdateTransfers = new DataUpdateTransferStore(database);
         var ownsDataUpdateHttpClient = dataUpdateHttpClient is null;
         dataUpdateHttpClient ??= new HttpClient
@@ -353,12 +354,17 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<TmdbSeriesSeasonResolver>();
         if (bangumiSubjectClient is null)
         {
-            var client = new BangumiSubjectClient(
+            var upstream = new BangumiSubjectClient(
                 MetadataHttpClientFactory.Create(options.Metadata.Bangumi.ProxyUrl),
                 options.Metadata.Bangumi,
                 ownsHttpClient: true);
-            bangumiSubjectClient = client;
-            bangumiEpisodeClient ??= client;
+            var cached = new BangumiArchiveCachingClient(
+                bangumiArchive,
+                upstream,
+                upstream,
+                ownsClients: true);
+            bangumiSubjectClient = cached;
+            bangumiEpisodeClient ??= cached;
         }
         else
         {
@@ -366,6 +372,7 @@ public static class AnimeGoApplication
         }
 
         builder.Services.AddSingleton(bangumiSubjectClient);
+        builder.Services.AddSingleton(bangumiArchive);
         if (bangumiEpisodeClient is not null)
         {
             builder.Services.AddSingleton(bangumiEpisodeClient);
