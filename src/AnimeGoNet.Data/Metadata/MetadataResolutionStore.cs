@@ -939,6 +939,16 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             upsertSeason.Parameters.AddWithValue("$episode_count", season.EpisodeCount);
             upsertSeason.Parameters.AddWithValue("$now", now);
             await upsertSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await TmdbEpisodeProjectionWriter.UpsertAsync(
+                connection,
+                transaction,
+                seriesRowId,
+                series.Id,
+                season.SeasonNumber,
+                season.EpisodeCount,
+                season.Episodes,
+                now,
+                cancellationToken).ConfigureAwait(false);
         }
 
         if (defaultSeasonNumber is not null)
@@ -1053,7 +1063,16 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             || season.Id <= 0
             || season.SeriesId != series.Id
             || season.SeasonNumber <= 0
-            || string.IsNullOrWhiteSpace(season.Name))
+            || string.IsNullOrWhiteSpace(season.Name)
+            || (season.Episodes is not null
+                && (season.Episodes.Count != season.EpisodeCount
+                    || season.Episodes.Select(value => value.Id).Distinct().Count() != season.Episodes.Count
+                    || season.Episodes.Select(value => value.EpisodeNumber).Distinct().Count() != season.Episodes.Count
+                    || season.Episodes.Any(value =>
+                        value.Id <= 0
+                        || value.SeriesId != series.Id
+                        || value.SeasonNumber != season.SeasonNumber
+                        || value.EpisodeNumber <= 0))))
         {
             throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(season));
         }
@@ -1063,7 +1082,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             season.Name,
             season.AirDate,
             season.EpisodeCount,
-            season.PosterPath);
+            season.PosterPath,
+            season.Episodes);
     }
 
     private sealed record SeasonCompletion(
@@ -1071,7 +1091,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         string CanonicalName,
         DateOnly? AirDate = null,
         int EpisodeCount = 0,
-        string? PosterPath = null);
+        string? PosterPath = null,
+        IReadOnlyList<TmdbEpisode>? Episodes = null);
 
     public async Task CompleteEpisodesAsync(
         MetadataEpisodeTaskClaim claim,

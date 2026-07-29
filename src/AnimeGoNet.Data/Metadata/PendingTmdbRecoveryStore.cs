@@ -208,7 +208,18 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
                 || mapping.Episode.Id <= 0
                 || mapping.Episode.SeriesId != request.Series.Id
                 || mapping.Episode.SeasonNumber != mapping.Season.SeasonNumber
-                || mapping.Episode.EpisodeNumber <= 0)
+                || mapping.Episode.EpisodeNumber <= 0
+                || (mapping.Season.Episodes is not null
+                    && (mapping.Season.Episodes.Count != mapping.Season.EpisodeCount
+                        || mapping.Season.Episodes.Select(value => value.Id).Distinct().Count()
+                            != mapping.Season.Episodes.Count
+                        || mapping.Season.Episodes.Select(value => value.EpisodeNumber).Distinct().Count()
+                            != mapping.Season.Episodes.Count
+                        || mapping.Season.Episodes.Any(value =>
+                            value.Id <= 0
+                            || value.SeriesId != request.Series.Id
+                            || value.SeasonNumber != mapping.Season.SeasonNumber
+                            || value.EpisodeNumber <= 0))))
             {
                 throw new ArgumentException(
                     "Every recovery mapping requires one validated TMDB Series/Season/Episode identity.",
@@ -488,6 +499,16 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$episode_count", season.EpisodeCount);
         command.Parameters.AddWithValue("$now", now);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await TmdbEpisodeProjectionWriter.UpsertAsync(
+            connection,
+            transaction,
+            canonicalSeriesId,
+            season.SeriesId,
+            season.SeasonNumber,
+            season.EpisodeCount,
+            season.Episodes,
+            now,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task UpsertEpisodeAsync(

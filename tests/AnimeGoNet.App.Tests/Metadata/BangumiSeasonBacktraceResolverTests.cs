@@ -185,7 +185,10 @@ public sealed class BangumiSeasonBacktraceResolverTests
             int seriesId,
             int seasonNumber,
             CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            Task.FromResult<TmdbSeason?>(
+                details.TryGetValue(seriesId, out var value)
+                    ? value.Seasons.SingleOrDefault(season => season.SeasonNumber == seasonNumber)
+                    : null);
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,

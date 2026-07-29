@@ -156,8 +156,12 @@ public sealed class MetadataResolutionStoreTests
             2,
             "烈日的黄金乡",
             new DateOnly(2022, 7, 6),
-            12,
-            "/season-poster.jpg");
+            2,
+            "/season-poster.jpg",
+            [
+                new TmdbEpisode(310001, 72517, 2, 1, "罗盘指向了黑暗", new DateOnly(2022, 7, 6)),
+                new TmdbEpisode(310002, 72517, 2, 2, "不归之都", new DateOnly(2022, 7, 13)),
+            ]);
 
         await fixture.Store.CompleteSeasonAsync(claim, series, season, now);
 
@@ -192,8 +196,25 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal("2017-07-07", reader.GetString(5));
         Assert.Equal("/series-poster.jpg", reader.GetString(6));
         Assert.Equal("2022-07-06", reader.GetString(7));
-        Assert.Equal(12, reader.GetInt32(8));
+        Assert.Equal(2, reader.GetInt32(8));
         Assert.Equal("/season-poster.jpg", reader.GetString(9));
+        await reader.DisposeAsync();
+        command.CommandText = """
+            SELECT tmdb_episode_id, episode_number, name, air_date
+            FROM tmdb_episodes
+            ORDER BY episode_number;
+            """;
+        command.Parameters.Clear();
+        await using var episodeReader = await command.ExecuteReaderAsync();
+        Assert.True(await episodeReader.ReadAsync());
+        Assert.Equal(310001, episodeReader.GetInt32(0));
+        Assert.Equal(1, episodeReader.GetInt32(1));
+        Assert.Equal("罗盘指向了黑暗", episodeReader.GetString(2));
+        Assert.Equal("2022-07-06", episodeReader.GetString(3));
+        Assert.True(await episodeReader.ReadAsync());
+        Assert.Equal(310002, episodeReader.GetInt32(0));
+        Assert.Equal(2, episodeReader.GetInt32(1));
+        Assert.False(await episodeReader.ReadAsync());
     }
 
     [Fact]

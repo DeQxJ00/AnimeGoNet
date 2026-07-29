@@ -104,6 +104,26 @@ public sealed class TmdbClientTests
     }
 
     [Fact]
+    public async Task DuplicateSeasonEpisodeIdentityIsRejected()
+    {
+        const string json = """
+            {"id":204984,"name":"Season 2","season_number":2,"air_date":"2022-07-06","episodes":[
+              {"id":310001,"name":"Episode 1","air_date":"2022-07-06","season_number":2,"episode_number":1},
+              {"id":310002,"name":"Duplicate 1","air_date":"2022-07-13","season_number":2,"episode_number":1}
+            ]}
+            """;
+        using var handler = new RecordingHandler(_ => Json(json));
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+
+        var exception = await Assert.ThrowsAsync<TmdbClientException>(
+            () => client.GetSeasonAsync(72517, 2));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("tmdb_season_episode_identity_duplicate", exception.SafeCode);
+    }
+
+    [Fact]
     public async Task AuthorityValidatesSeriesSeasonAndEpisodeUsingOfficialEndpoints()
     {
         using var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch
@@ -122,6 +142,7 @@ public sealed class TmdbClientTests
         Assert.True(result.IsSuccess);
         Assert.Equal("来自深渊", result.Value!.CanonicalSeriesName);
         Assert.Equal(204984, result.Value.Season.Id);
+        Assert.Single(result.Value.Season.Episodes!);
         Assert.Equal(310001, result.Value.Episode.Id);
         Assert.Equal(
             ["/3/tv/72517", "/3/tv/72517/season/2", "/3/tv/72517/season/2/episode/1"],

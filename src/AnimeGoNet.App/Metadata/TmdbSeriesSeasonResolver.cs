@@ -71,8 +71,25 @@ public sealed class TmdbSeriesSeasonResolver(
                         return false;
                     }
 
+                    var selectedSeason = seasonResult.Value!;
+                    var verifiedSeason = await tmdb.GetSeasonAsync(
+                        details.Series.Id,
+                        selectedSeason.SeasonNumber,
+                        token).ConfigureAwait(false);
+                    if (verifiedSeason is null
+                        || verifiedSeason.Id <= 0
+                        || verifiedSeason.SeriesId != details.Series.Id
+                        || verifiedSeason.SeasonNumber != selectedSeason.SeasonNumber)
+                    {
+                        lastSemanticFailure = new MetadataFailure(
+                            MetadataFailureKind.SemanticNoMatch,
+                            "tmdb_season_not_found",
+                            true);
+                        return false;
+                    }
+
                     matchedDetails = details;
-                    matchedSeason = seasonResult.Value;
+                    matchedSeason = verifiedSeason;
                     return true;
                 },
                 cancellationToken).ConfigureAwait(false);

@@ -213,7 +213,7 @@
 - [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。
 - [>] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件，AI 密钥只写不回显；表单/API/私有配置已完成，原始 YAML 预览、diff 与保存前备份待实现。
 - [ ] 动画条目页同时展示来源名称/集号和最终 TMDB 名称/Season/Episode，以及 AI 匹配状态、置信度、最终失败原因和策略尝试时间线。
-- [>] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径，正常解析和待补全恢复写入路径已统一；以 `TMDB Series + 普通 Season` 为单位的查询、Cover、EP 网格和页面待实现，逐 EP 状态仍只允许由 TMDB Episode 列表与规范完成记录计算。
+- [>] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。以 `TMDB Series + 普通 Season` 为单位的查询、Cover、EP 网格和页面待实现，逐 EP 状态仍只允许由该 snapshot 与规范完成记录计算。
 - [ ] 实现作品库服务端分页排序和前端升/降序：最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期；缺失日期置后并使用 TMDB ID/Season 稳定排序。
 - [ ] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。
 - [ ] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格或完成比例；恢复真实 TMDB 映射后再并入标准作品库。

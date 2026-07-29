@@ -27,7 +27,8 @@ public sealed record TmdbSeason(
     string Name,
     DateOnly? AirDate,
     int EpisodeCount,
-    string? PosterPath = null);
+    string? PosterPath = null,
+    IReadOnlyList<TmdbEpisode>? Episodes = null);
 
 public sealed record TmdbEpisode(
     int Id,

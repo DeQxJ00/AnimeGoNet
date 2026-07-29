@@ -128,20 +128,7 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             return null;
         }
 
-        if (response.Id <= 0
-            || response.SeasonNumber != seasonNumber
-            || response.EpisodeNumber != episodeNumber)
-        {
-            throw Failure(MetadataFailureKind.Protocol, "tmdb_episode_identity_mismatch");
-        }
-
-        return new TmdbEpisode(
-            response.Id,
-            seriesId,
-            response.SeasonNumber,
-            response.EpisodeNumber,
-            response.Name?.Trim() ?? string.Empty,
-            ParseDate(response.AirDate));
+        return MapEpisode(seriesId, seasonNumber, episodeNumber, response);
     }
 
     private async Task<T?> GetAsync<T>(
@@ -249,14 +236,48 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             throw Failure(MetadataFailureKind.Protocol, "tmdb_season_invalid");
         }
 
+        var episodes = response.Episodes?
+            .Select(item => MapEpisode(seriesId, response.SeasonNumber, item.EpisodeNumber, item))
+            .ToArray();
+        if (episodes is not null
+            && (episodes.Select(item => item.Id).Distinct().Count() != episodes.Length
+                || episodes.Select(item => item.EpisodeNumber).Distinct().Count() != episodes.Length))
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_season_episode_identity_duplicate");
+        }
+
         return new TmdbSeason(
             response.Id,
             seriesId,
             response.SeasonNumber,
             response.Name?.Trim() ?? string.Empty,
             ParseDate(response.AirDate),
-            response.Episodes?.Length ?? response.EpisodeCount,
-            NormalizePosterPath(response.PosterPath));
+            episodes?.Length ?? response.EpisodeCount,
+            NormalizePosterPath(response.PosterPath),
+            episodes);
+    }
+
+    private static TmdbEpisode MapEpisode(
+        int seriesId,
+        int expectedSeasonNumber,
+        int expectedEpisodeNumber,
+        TmdbEpisodeDto response)
+    {
+        if (response.Id <= 0
+            || response.SeasonNumber != expectedSeasonNumber
+            || response.EpisodeNumber != expectedEpisodeNumber
+            || response.EpisodeNumber <= 0)
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_episode_identity_mismatch");
+        }
+
+        return new TmdbEpisode(
+            response.Id,
+            seriesId,
+            response.SeasonNumber,
+            response.EpisodeNumber,
+            response.Name?.Trim() ?? string.Empty,
+            ParseDate(response.AirDate));
     }
 
     private static string? NormalizePosterPath(string? value)

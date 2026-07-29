@@ -32,6 +32,8 @@ public sealed class TmdbSeriesSeasonResolverTests
         Assert.Equal(4, result.Season!.SeasonNumber);
         Assert.Equal(["日本語名", "中文名"], client.SearchTitles);
         Assert.Equal([10, 20], client.DetailIds);
+        Assert.Equal([(20, 4)], client.SeasonRequests);
+        Assert.Single(result.Season!.Episodes!);
     }
 
     [Fact]
@@ -144,7 +146,21 @@ public sealed class TmdbSeriesSeasonResolverTests
         new(id, name, originalName, null);
 
     private static TmdbSeason Season(int seriesId, int number, DateOnly airDate) =>
-        new(seriesId * 100 + number, seriesId, number, $"Season {number}", airDate, 12);
+        new(
+            seriesId * 100 + number,
+            seriesId,
+            number,
+            $"Season {number}",
+            airDate,
+            1,
+            null,
+            [new TmdbEpisode(
+                seriesId * 1000 + number,
+                seriesId,
+                number,
+                1,
+                "Episode 1",
+                airDate)]);
 
     private static TmdbSeriesDetails Details(TmdbSeries series, params TmdbSeason[] seasons) =>
         new(series, seasons);
@@ -156,6 +172,8 @@ public sealed class TmdbSeriesSeasonResolverTests
         public List<string> SearchTitles { get; } = [];
 
         public List<int> DetailIds { get; } = [];
+
+        public List<(int SeriesId, int SeasonNumber)> SeasonRequests { get; } = [];
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
             string title,
@@ -181,8 +199,14 @@ public sealed class TmdbSeriesSeasonResolverTests
         public Task<TmdbSeason?> GetSeasonAsync(
             int seriesId,
             int seasonNumber,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default)
+        {
+            SeasonRequests.Add((seriesId, seasonNumber));
+            return Task.FromResult<TmdbSeason?>(
+                details.TryGetValue(seriesId, out var value)
+                    ? value.Seasons.SingleOrDefault(season => season.SeasonNumber == seasonNumber)
+                    : null);
+        }
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,

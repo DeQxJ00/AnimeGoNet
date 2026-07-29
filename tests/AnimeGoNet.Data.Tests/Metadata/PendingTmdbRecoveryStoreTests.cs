@@ -41,6 +41,7 @@ public sealed class PendingTmdbRecoveryStoreTests
         Assert.Equal(1, await ScalarAsync(
             connection,
             "SELECT COUNT(*) FROM task_files WHERE disposition = 'episode' AND other_reason = 'tmdb_recovered';"));
+        Assert.Equal(12, await ScalarAsync(connection, "SELECT COUNT(*) FROM tmdb_episodes;"));
         Assert.Equal(1, await ScalarAsync(
             connection,
             "SELECT COUNT(*) FROM task_files WHERE disposition = 'duplicate' AND other_reason = 'duplicate_after_resolution';"));
@@ -227,7 +228,16 @@ public sealed class PendingTmdbRecoveryStoreTests
                 "Season 1",
                 new DateOnly(2026, 1, 1),
                 12,
-                "/canonical-season.jpg"),
+                "/canonical-season.jpg",
+                Enumerable.Range(1, 12)
+                    .Select(number => new TmdbEpisode(
+                        9000 + number,
+                        700,
+                        1,
+                        number,
+                        $"Episode {number}",
+                        new DateOnly(2026, 1, 1).AddDays(number - 1)))
+                    .ToArray()),
             new TmdbEpisode(
                 episodeId,
                 700,

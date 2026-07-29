@@ -230,7 +230,7 @@ advanced:
 
 确定性流程已确认 Series/Season 后，先执行普通 Episode 校验：
 
-1. 在已确认的 TMDB Season 中读取完整 Episode 列表。
+1. 在已确认的 TMDB Season 中读取完整 Episode 列表。P4/P3 的日期候选只用于选定季度，成功前必须再请求官方 `/tv/{series}/season/{season}` endpoint；该响应的完整普通 Episode snapshot 与季度投影在同一事务保存。待补全 TMDB 的人工恢复同样使用已验证 Season 响应保存 snapshot，不能用 `episode_count` 自行生成不存在的 Episode。
 2. 若与 `SourceEpisodeNumber` 同号的 TMDB Episode 存在，且 Bgm/文件名标题、首播日期没有冲突，则直接采用该 TMDB Episode。
 3. 同号不存在或存在冲突时，使用内部取得的 Bgm Episode 标题/日期在同一 TMDB Season 内做确定性匹配；这些详情不发送给 AI。
 4. 仍有文件无法对应、`ai_use_metadata_match=true` 且该任务此前没有尝试过 AI 时，使用任务总标题和完整候选视频列表发起同一任务级 AI 请求。
