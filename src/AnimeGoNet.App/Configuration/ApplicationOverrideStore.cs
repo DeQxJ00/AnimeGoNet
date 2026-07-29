@@ -32,7 +32,8 @@ public sealed record ApplicationOverrideEntry(
     bool? BangumiProxyUrlOverridden = null,
     string? BangumiProxyUrl = null,
     double? BangumiHttpTimeoutSeconds = null,
-    bool? AiUseMetadataMatch = null);
+    bool? AiUseMetadataMatch = null,
+    IReadOnlyList<string>? InheritedFields = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -144,17 +145,26 @@ public sealed class ApplicationOverrideStore : IDisposable
             return options;
         }
 
-        if (!Uri.TryCreate(settings.TmdbBaseUrl, UriKind.Absolute, out var tmdbBaseUrl))
+        var inheritedFields = settings.InheritedFields?
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+        var tmdbBaseUrl = options.Metadata.Tmdb.BaseUrl;
+        if (!inheritedFields.Contains("tmdb_base_url")
+            && !Uri.TryCreate(settings.TmdbBaseUrl, UriKind.Absolute, out tmdbBaseUrl))
         {
             throw new InvalidOperationException("Application private configuration has an invalid TMDB base URL.");
         }
-        var tmdbProxyUrl = settings.TmdbProxyUrlOverridden == true
+        var tmdbProxyUrl = inheritedFields.Contains("tmdb_proxy_url")
+            ? options.Metadata.Tmdb.ProxyUrl
+            : settings.TmdbProxyUrlOverridden == true
             ? ParseOptionalUri(settings.TmdbProxyUrl, "TMDB proxy URL")
             : options.Metadata.Tmdb.ProxyUrl;
-        var bangumiBaseUrl = settings.BangumiBaseUrl is null
+        var bangumiBaseUrl = inheritedFields.Contains("bangumi_base_url")
+            || settings.BangumiBaseUrl is null
             ? options.Metadata.Bangumi.BaseUrl
             : ParseRequiredUri(settings.BangumiBaseUrl, "Bangumi base URL");
-        var bangumiProxyUrl = settings.BangumiProxyUrlOverridden == true
+        var bangumiProxyUrl = inheritedFields.Contains("bangumi_proxy_url")
+            ? options.Metadata.Bangumi.ProxyUrl
+            : settings.BangumiProxyUrlOverridden == true
             ? ParseOptionalUri(settings.BangumiProxyUrl, "Bangumi proxy URL")
             : options.Metadata.Bangumi.ProxyUrl;
 
@@ -166,12 +176,18 @@ public sealed class ApplicationOverrideStore : IDisposable
                 {
                     BaseUrl = tmdbBaseUrl,
                     ProxyUrl = tmdbProxyUrl,
-                    Language = settings.TmdbLanguage,
-                    HttpTimeout = TimeSpan.FromSeconds(settings.TmdbHttpTimeoutSeconds),
-                    ApiKey = settings.TmdbApiKeyOverridden
+                    Language = inheritedFields.Contains("tmdb_language")
+                        ? options.Metadata.Tmdb.Language
+                        : settings.TmdbLanguage,
+                    HttpTimeout = inheritedFields.Contains("tmdb_http_timeout_seconds")
+                        ? options.Metadata.Tmdb.HttpTimeout
+                        : TimeSpan.FromSeconds(settings.TmdbHttpTimeoutSeconds),
+                    ApiKey = !inheritedFields.Contains("tmdb_api_key")
+                        && settings.TmdbApiKeyOverridden
                         ? settings.TmdbApiKey
                         : options.Metadata.Tmdb.ApiKey,
-                    ReadAccessToken = settings.TmdbReadAccessTokenOverridden
+                    ReadAccessToken = !inheritedFields.Contains("tmdb_read_access_token")
+                        && settings.TmdbReadAccessTokenOverridden
                         ? settings.TmdbReadAccessToken
                         : options.Metadata.Tmdb.ReadAccessToken,
                 },
@@ -179,7 +195,8 @@ public sealed class ApplicationOverrideStore : IDisposable
                 {
                     BaseUrl = bangumiBaseUrl,
                     ProxyUrl = bangumiProxyUrl,
-                    HttpTimeout = settings.BangumiHttpTimeoutSeconds is > 0
+                    HttpTimeout = !inheritedFields.Contains("bangumi_http_timeout_seconds")
+                        && settings.BangumiHttpTimeoutSeconds is > 0
                         ? TimeSpan.FromSeconds(settings.BangumiHttpTimeoutSeconds.Value)
                         : options.Metadata.Bangumi.HttpTimeout,
                 },
@@ -192,9 +209,13 @@ public sealed class ApplicationOverrideStore : IDisposable
                 },
                 Ai = options.Metadata.Ai with
                 {
-                    UseMetadataMatch = settings.AiUseMetadataMatch
+                    UseMetadataMatch = inheritedFields.Contains("ai_use_metadata_match")
+                        ? options.Metadata.Ai.UseMetadataMatch
+                        : settings.AiUseMetadataMatch
                         ?? (settings.AiUseSeasonMatch || settings.AiUseEpisodeMatch),
-                    HttpTimeout = TimeSpan.FromSeconds(settings.AiHttpTimeoutSeconds),
+                    HttpTimeout = inheritedFields.Contains("ai_http_timeout_seconds")
+                        ? options.Metadata.Ai.HttpTimeout
+                        : TimeSpan.FromSeconds(settings.AiHttpTimeoutSeconds),
                 },
                 TmdbFailureUseBangumi = settings.TmdbFailureUseBangumi,
                 MikanTrustedOffsetCacheEnabled = settings.MikanTrustedOffsetCacheEnabled,

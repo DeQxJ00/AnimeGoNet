@@ -49,6 +49,7 @@ public static class AnimeGoApplication
         ITorrentHttpTransport? rssHttpTransport = null,
         ITmdbPosterTransport? tmdbPosterTransport = null,
         bool? startBackgroundWorkers = null,
+        IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
         CancellationToken cancellationToken = default)
     {
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -66,15 +67,23 @@ public static class AnimeGoApplication
         startBackgroundWorkers ??= !bool.TryParse(
             builder.Configuration["background_workers_enabled"],
             out var configuredWorkers) || configuredWorkers;
+        var optionsWereSupplied = options is not null;
         options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
         var deploymentOptions = options;
+        var configurationLocks = deploymentEnvironmentVariables is not null
+            ? DeploymentConfigurationLocks.FromVariableNames(deploymentEnvironmentVariables)
+            : optionsWereSupplied
+                ? DeploymentConfigurationLocks.Empty
+                : DeploymentConfigurationLocks.FromCurrentProcess();
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
         var applicationOverrides = new ApplicationOverrideStore(layout.ConfigurationPath);
         var applicationOverrideSnapshot = await applicationOverrides
             .LoadAsync(cancellationToken)
             .ConfigureAwait(false);
-        options = ApplicationOverrideStore.Apply(options, applicationOverrideSnapshot);
+        options = configurationLocks.Reapply(
+            deploymentOptions,
+            ApplicationOverrideStore.Apply(options, applicationOverrideSnapshot));
         var downloaderOverrides = new DownloaderOverrideStore(layout.ConfigurationPath);
         var downloaderOverrideSnapshot = await downloaderOverrides.LoadAsync(cancellationToken).ConfigureAwait(false);
         options = ApplyDownloaderOverrides(options, downloaderOverrideSnapshot);
@@ -120,6 +129,7 @@ public static class AnimeGoApplication
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new DeploymentConfigurationOptions(deploymentOptions));
+        builder.Services.AddSingleton(configurationLocks);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(new RuntimeConfigurationState(
             runningInContainer.Value,

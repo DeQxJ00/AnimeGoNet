@@ -349,17 +349,21 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         RuntimeConfigurationState runtime,
         DeploymentConfigurationOptions deployment,
+        DeploymentConfigurationLocks locks,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
         CancellationToken cancellationToken)
     {
         var snapshot = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
-        var desired = ApplicationOverrideStore.Apply(deployment.Value, snapshot);
+        var desired = locks.Reapply(
+            deployment.Value,
+            ApplicationOverrideStore.Apply(deployment.Value, snapshot));
         return TypedResults.Ok(ToConfigurationResponse(
             options,
             desired,
             snapshot.Settings,
             runtime,
+            locks,
             snapshot.Revision,
             applied.AppliedRevision));
     }
@@ -367,6 +371,7 @@ public static class ApiEndpoints
     private static async Task<IResult> PutConfiguration(
         ConfigurationUpdateRequest request,
         DeploymentConfigurationOptions deployment,
+        DeploymentConfigurationLocks locks,
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
         CancellationToken cancellationToken)
@@ -386,10 +391,47 @@ public static class ApiEndpoints
                     "tmdb_read_access_token and clear_tmdb_read_access_token cannot both be set.");
             }
 
-            var settings = CreateApplicationOverride(request, current.Settings, DateTimeOffset.UtcNow);
-            var candidate = ApplicationOverrideStore.Apply(
+            var requestedSettings = CreateApplicationOverride(
+                request,
+                current.Settings,
+                DateTimeOffset.UtcNow);
+            var requestedCandidate = ApplicationOverrideStore.Apply(
                 deployment.Value,
-                new ApplicationOverrideSnapshot(1, current.Revision + 1, settings));
+                new ApplicationOverrideSnapshot(
+                    1,
+                    current.Revision + 1,
+                    requestedSettings));
+            var changedLockedFields = locks
+                .FindChangedLockedFields(deployment.Value, requestedCandidate)
+                .ToList();
+            if (locks.IsLocked("tmdb_api_key")
+                && (request.ClearTmdbApiKey || !string.IsNullOrWhiteSpace(request.TmdbApiKey)))
+            {
+                changedLockedFields.Add("tmdb_api_key");
+            }
+            if (locks.IsLocked("tmdb_read_access_token")
+                && (request.ClearTmdbReadAccessToken
+                    || !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken)))
+            {
+                changedLockedFields.Add("tmdb_read_access_token");
+            }
+            if (changedLockedFields.Count > 0)
+            {
+                throw new ConfigurationFieldLockedException(
+                    changedLockedFields.Distinct(StringComparer.Ordinal).ToArray());
+            }
+
+            var settings = locks.PreserveLockedOverrides(
+                current.Settings,
+                requestedSettings);
+            var candidate = locks.Reapply(
+                deployment.Value,
+                ApplicationOverrideStore.Apply(
+                    deployment.Value,
+                    new ApplicationOverrideSnapshot(
+                        1,
+                        current.Revision + 1,
+                        settings)));
             var errors = AnimeGoOptionsValidator.Validate(candidate);
             if (errors.Count > 0)
             {
@@ -410,6 +452,12 @@ public static class ApiEndpoints
             return TypedResults.Conflict(Error(
                 "configuration_revision_conflict",
                 "Configuration changed concurrently; reload before saving."));
+        }
+        catch (ConfigurationFieldLockedException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "configuration_field_locked",
+                exception.Message));
         }
         catch (ArgumentException exception)
         {
@@ -448,6 +496,7 @@ public static class ApiEndpoints
         AnimeGoOptions desired,
         ApplicationOverrideEntry? settings,
         RuntimeConfigurationState runtime,
+        DeploymentConfigurationLocks locks,
         long configurationRevision,
         long appliedConfigurationRevision)
     {
@@ -506,12 +555,13 @@ public static class ApiEndpoints
                 fetch.MaxResponseBytes,
                 fetch.MaxRedirects,
                 fetch.StagingTtl.TotalSeconds),
-            ToEditableConfiguration(desired, settings));
+            ToEditableConfiguration(desired, settings, locks));
     }
 
     private static EditableConfigurationResponse ToEditableConfiguration(
         AnimeGoOptions desired,
-        ApplicationOverrideEntry? settings)
+        ApplicationOverrideEntry? settings,
+        DeploymentConfigurationLocks locks)
     {
         var tmdb = desired.Metadata.Tmdb;
         var bangumi = desired.Metadata.Bangumi;
@@ -543,7 +593,11 @@ public static class ApiEndpoints
             fetch.Timeout.TotalSeconds,
             fetch.MaxResponseBytes,
             fetch.MaxRedirects,
-            fetch.StagingTtl.TotalSeconds);
+            fetch.StagingTtl.TotalSeconds,
+            locks.Items.Select(item => new ConfigurationFieldLockResponse(
+                item.Field,
+                "environment",
+                item.EnvironmentVariables)).ToArray());
     }
 
     private static string SecretState(bool overridden, string? value) =>

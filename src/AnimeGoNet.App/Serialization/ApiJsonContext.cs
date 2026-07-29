@@ -18,6 +18,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(LegacyApiResponse<LegacyBoltDeleteResponse?>))]
 [JsonSerializable(typeof(RuntimeStatus))]
 [JsonSerializable(typeof(ConfigurationResponse))]
+[JsonSerializable(typeof(ConfigurationFieldLockResponse))]
 [JsonSerializable(typeof(ConfigurationUpdateRequest))]
 [JsonSerializable(typeof(ConfigurationWriteResponse))]
 [JsonSerializable(typeof(IngestBatchRequest))]

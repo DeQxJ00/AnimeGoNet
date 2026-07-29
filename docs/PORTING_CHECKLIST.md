@@ -13,7 +13,7 @@
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 待实现 | 12 份历史 YAML golden |
-| `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 进行中 | 路径、凭据、AI 及 TMDB/Bangumi 独立 API 地址/HTTP(S)/SOCKS5 代理/超时绑定与脱敏 tests 已通过；完整旧配置 precedence 待实现 |
+| `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 进行中 | 当前应用配置的 TMDB/Bangumi 地址/代理/超时、凭据、AI 规范/旧别名环境变量均投影为 `locked_fields`，Web 只读且 API 拒绝改写；保存其他字段不会固化环境值，脱敏/precedence/API/browser/AOT tests 已通过；路径及完整旧配置 precedence 待实现 |
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |

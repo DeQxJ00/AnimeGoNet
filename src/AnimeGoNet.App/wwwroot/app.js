@@ -37,6 +37,7 @@ let libraryDetailRequestSequence = 0;
 let activeMikanWorkRule = null;
 let loadedMikanWorkId = null;
 let activeMikanWorkImpact = null;
+let activeConfigurationLockedFields = new Set();
 const statusLabels = {
     received: "已接收",
     staged: "种子已暂存",
@@ -664,12 +665,58 @@ function syncConfigurationSecretInputs() {
     const clearToken = element("#configuration-tmdb-token-clear").checked;
     const key = element("#configuration-tmdb-key");
     const token = element("#configuration-tmdb-token");
-    key.disabled = clearKey;
-    token.disabled = clearToken;
+    const keyLocked = activeConfigurationLockedFields.has("tmdb_api_key");
+    const tokenLocked = activeConfigurationLockedFields.has("tmdb_read_access_token");
+    key.disabled = keyLocked || clearKey;
+    token.disabled = tokenLocked || clearToken;
+    element("#configuration-tmdb-key-clear").disabled = keyLocked;
+    element("#configuration-tmdb-token-clear").disabled = tokenLocked;
     if (clearKey)
         key.value = "";
     if (clearToken)
         token.value = "";
+}
+const configurationLockSelectors = {
+    tmdb_base_url: ["#configuration-tmdb-url"],
+    tmdb_proxy_url: ["#configuration-tmdb-proxy"],
+    tmdb_language: ["#configuration-tmdb-language"],
+    tmdb_http_timeout_seconds: ["#configuration-tmdb-timeout"],
+    tmdb_api_key: ["#configuration-tmdb-key", "#configuration-tmdb-key-clear"],
+    tmdb_read_access_token: ["#configuration-tmdb-token", "#configuration-tmdb-token-clear"],
+    bangumi_base_url: ["#configuration-bangumi-url"],
+    bangumi_proxy_url: ["#configuration-bangumi-proxy"],
+    bangumi_http_timeout_seconds: ["#configuration-bangumi-timeout"],
+    ai_use_metadata_match: ["#configuration-ai-metadata"],
+    ai_http_timeout_seconds: ["#configuration-ai-timeout"],
+};
+function applyConfigurationLocks(locks) {
+    activeConfigurationLockedFields = new Set(locks.map((lock) => lock.field));
+    const lockByField = new Map(locks.map((lock) => [lock.field, lock]));
+    for (const [field, selectors] of Object.entries(configurationLockSelectors)) {
+        const lock = lockByField.get(field);
+        for (const selector of selectors) {
+            const input = element(selector);
+            input.disabled = lock !== undefined;
+            const label = input.closest("label");
+            label?.classList.toggle("configuration-field-locked", lock !== undefined);
+            if (lock) {
+                input.title = `由环境变量 ${lock.environment_variables.join(", ")} 控制`;
+            }
+            else {
+                input.removeAttribute("title");
+            }
+        }
+    }
+    const summary = element("#configuration-lock-summary");
+    if (locks.length === 0) {
+        summary.textContent = "当前没有环境变量锁定的可编辑字段。";
+        summary.className = "configuration-lock-summary muted";
+        return;
+    }
+    summary.textContent = `以下字段由部署环境控制，Web 只读：${locks
+        .map((lock) => `${lock.field} (${lock.environment_variables.join(", ")})`)
+        .join("；")}`;
+    summary.className = "configuration-lock-summary active";
 }
 function openConfigurationEditor() {
     if (!currentConfiguration)
@@ -702,6 +749,7 @@ function openConfigurationEditor() {
     setConfigurationValue("#configuration-torrent-bytes", editable.torrent_max_response_bytes);
     setConfigurationValue("#configuration-torrent-redirects", editable.torrent_max_redirects);
     setConfigurationValue("#configuration-torrent-ttl", editable.torrent_staging_ttl_seconds);
+    applyConfigurationLocks(editable.locked_fields);
     element("#configuration-message").textContent =
         `正在编辑 revision ${currentConfiguration.configuration_revision}`;
     syncConfigurationSecretInputs();

@@ -102,7 +102,13 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
     [property: JsonPropertyName("torrent_max_redirects")] int TorrentMaxRedirects,
-    [property: JsonPropertyName("torrent_staging_ttl_seconds")] double TorrentStagingTtlSeconds);
+    [property: JsonPropertyName("torrent_staging_ttl_seconds")] double TorrentStagingTtlSeconds,
+    [property: JsonPropertyName("locked_fields")] IReadOnlyList<ConfigurationFieldLockResponse> LockedFields);
+
+public sealed record ConfigurationFieldLockResponse(
+    [property: JsonPropertyName("field")] string Field,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("environment_variables")] IReadOnlyList<string> EnvironmentVariables);
 
 public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,

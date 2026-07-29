@@ -454,6 +454,7 @@
         <button id="configuration-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
       <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；所有修改均在重启后生效。</p>
+      <p id="configuration-lock-summary" class="configuration-lock-summary muted" aria-live="polite">正在读取部署环境锁定状态…</p>
       <div class="configuration-form-grid">
         <label class="wide">TMDB API 地址<input id="configuration-tmdb-url" type="url" required placeholder="https://api.themoviedb.org/"></label>
         <label class="wide">TMDB 代理（可选）<input id="configuration-tmdb-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>

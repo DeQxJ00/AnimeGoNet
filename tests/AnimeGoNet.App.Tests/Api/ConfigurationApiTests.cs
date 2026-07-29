@@ -134,6 +134,7 @@ public sealed class ConfigurationApiTests
         Assert.Contains("凭据永不回传", script, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-url\"", html, StringComparison.Ordinal);
@@ -179,6 +180,7 @@ public sealed class ConfigurationApiTests
         Assert.Contains("saveConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
+        Assert.Contains("locked_fields", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
     }
 
@@ -361,6 +363,145 @@ public sealed class ConfigurationApiTests
             "data",
             "config",
             "application.private.json")));
+    }
+
+    [Fact]
+    public async Task EnvironmentControlledFieldsAreProjectedReadOnlyAndRejectedOnWrite()
+    {
+        const string environmentApiKey = "environment-only-secret";
+        var environmentBaseUrl = new Uri("https://environment.invalid/tmdb/");
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Tmdb = options.Metadata.Tmdb with
+                    {
+                        BaseUrl = environmentBaseUrl,
+                        ApiKey = environmentApiKey,
+                    },
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = true },
+                },
+            },
+            deploymentEnvironmentVariables:
+            [
+                "TMDB_BASE_URL",
+                "tmdb_api_key",
+                "ai_use_episode_match",
+            ]);
+
+        using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
+        {
+            var currentText = await currentResponse.Content.ReadAsStringAsync();
+            using var current = JsonDocument.Parse(currentText);
+            var editable = current.RootElement.GetProperty("editable");
+            var locks = editable.GetProperty("locked_fields")
+                .EnumerateArray()
+                .ToDictionary(
+                    item => item.GetProperty("field").GetString()!,
+                    item => item);
+
+            Assert.Equal(environmentBaseUrl.AbsoluteUri, editable
+                .GetProperty("tmdb_base_url").GetString());
+            Assert.Equal("environment", locks["tmdb_base_url"]
+                .GetProperty("source").GetString());
+            Assert.Equal("TMDB_BASE_URL", locks["tmdb_base_url"]
+                .GetProperty("environment_variables")[0].GetString());
+            Assert.True(locks.ContainsKey("tmdb_api_key"));
+            Assert.True(locks.ContainsKey("ai_use_metadata_match"));
+            Assert.DoesNotContain(environmentApiKey, currentText, StringComparison.Ordinal);
+        }
+
+        using var baseUrlWrite = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                baseUrl: "https://private.invalid/tmdb/",
+                aiMetadata: true));
+        var baseUrlError = await baseUrlWrite.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, baseUrlWrite.StatusCode);
+        Assert.Contains("configuration_field_locked", baseUrlError, StringComparison.Ordinal);
+        Assert.Contains("tmdb_base_url", baseUrlError, StringComparison.Ordinal);
+
+        using var secretWrite = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                baseUrl: environmentBaseUrl.AbsoluteUri,
+                apiKey: "must-not-be-written",
+                aiMetadata: true));
+        var secretError = await secretWrite.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, secretWrite.StatusCode);
+        Assert.Contains("configuration_field_locked", secretError, StringComparison.Ordinal);
+        Assert.Contains("tmdb_api_key", secretError, StringComparison.Ordinal);
+        Assert.DoesNotContain("must-not-be-written", secretError, StringComparison.Ordinal);
+
+        using var allowedWrite = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                baseUrl: environmentBaseUrl.AbsoluteUri,
+                aiMetadata: true));
+        Assert.Equal(HttpStatusCode.OK, allowedWrite.StatusCode);
+        var store = app.App.Services.GetRequiredService<ApplicationOverrideStore>();
+        var stored = await store.LoadAsync();
+        Assert.Equal(environmentBaseUrl.AbsoluteUri, stored.Settings?.TmdbBaseUrl);
+        Assert.Null(stored.Settings?.TmdbApiKey);
+        Assert.True(stored.Settings?.SeasonFailureBacktrace);
+        Assert.Contains("tmdb_base_url", stored.Settings?.InheritedFields ?? []);
+        Assert.Contains("tmdb_api_key", stored.Settings?.InheritedFields ?? []);
+        Assert.Contains("ai_use_metadata_match", stored.Settings?.InheritedFields ?? []);
+
+        var withoutEnvironment = AnimeGoDefaults.CreateNative(
+            Path.Combine(app.RootPath, "without-environment"));
+        var reappliedWithoutEnvironment = ApplicationOverrideStore.Apply(
+            withoutEnvironment,
+            stored);
+        Assert.Equal(
+            withoutEnvironment.Metadata.Tmdb.BaseUrl,
+            reappliedWithoutEnvironment.Metadata.Tmdb.BaseUrl);
+        Assert.Equal(
+            withoutEnvironment.Metadata.Tmdb.ApiKey,
+            reappliedWithoutEnvironment.Metadata.Tmdb.ApiKey);
+        Assert.Equal(
+            withoutEnvironment.Metadata.Ai.UseMetadataMatch,
+            reappliedWithoutEnvironment.Metadata.Ai.UseMetadataMatch);
+
+        await store.SaveAsync(
+            stored.Settings! with
+            {
+                TmdbBaseUrl = "https://legacy-private.invalid/tmdb/",
+                InheritedFields = stored.Settings.InheritedFields?
+                    .Where(field => field != "tmdb_base_url")
+                    .ToArray(),
+            },
+            stored.Revision);
+        using var reprojectedResponse = await app.Client.GetAsync("/api/v1/config");
+        using var reprojected = JsonDocument.Parse(
+            await reprojectedResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(
+            environmentBaseUrl.AbsoluteUri,
+            reprojected.RootElement.GetProperty("editable")
+                .GetProperty("tmdb_base_url").GetString());
+        Assert.Equal(
+            environmentBaseUrl.AbsoluteUri,
+            reprojected.RootElement.GetProperty("metadata")
+                .GetProperty("tmdb").GetProperty("base_url").GetString());
+
+        using var saveAlongsideLegacyOverride = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: stored.Revision + 1,
+                baseUrl: environmentBaseUrl.AbsoluteUri,
+                aiMetadata: true));
+        Assert.Equal(HttpStatusCode.OK, saveAlongsideLegacyOverride.StatusCode);
+        var preserved = await store.LoadAsync();
+        Assert.Equal(
+            "https://legacy-private.invalid/tmdb/",
+            preserved.Settings?.TmdbBaseUrl);
+        Assert.DoesNotContain(
+            "tmdb_base_url",
+            preserved.Settings?.InheritedFields ?? []);
     }
 
     private static StringContent Payload(

@@ -126,6 +126,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-guided-option small { color: #a99bc9; font-size: .7rem; line-height: 1.45; }
 .configuration-form-grid input[type="checkbox"] { accent-color: #59d3a5; }
 .configuration-secret-state { margin: -5px 0 2px; color: #8da2c9; font-size: .75rem; }
+.configuration-lock-summary { margin: 0; padding: 9px 11px; border: 1px solid transparent; border-radius: 9px; font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
+.configuration-lock-summary.active { border-color: #8b7130; color: #f0d28c; background: rgba(80,58,13,.28); }
+.configuration-field-locked { color: #9f926f !important; }
+.configuration-field-locked input:disabled { border-color: #62552f; color: #d5c497; opacity: .8; cursor: not-allowed; }
 .downloads { display: grid; gap: 12px; }
 .download-card { border: 1px solid #315f58; border-radius: 18px; padding: 18px 20px; background: rgba(16,22,37,.88); }
 .offset-list { display: grid; gap: 12px; }
