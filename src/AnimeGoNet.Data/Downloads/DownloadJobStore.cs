@@ -35,12 +35,18 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
-        var jobs = new List<(string JobId, string TaskId, string InfoHash)>();
+        var jobs = new List<(
+            string JobId,
+            string TaskId,
+            string InfoHash,
+            string State,
+            bool IsStale)>();
         await using (var query = connection.CreateCommand())
         {
             query.Transaction = transaction;
             query.CommandText = """
-                SELECT download_jobs.id, download_jobs.task_id, download_jobs.info_hash
+                SELECT download_jobs.id, download_jobs.task_id, download_jobs.info_hash,
+                       download_jobs.state, download_jobs.is_stale
                 FROM download_jobs
                 JOIN ingest_tasks ON ingest_tasks.id = download_jobs.task_id
                 WHERE download_jobs.downloader_id = $downloader_id
@@ -50,7 +56,12 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                jobs.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+                jobs.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetInt64(4) != 0));
             }
         }
 
@@ -69,6 +80,14 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 stale.Parameters.AddWithValue("$now", now);
                 stale.Parameters.AddWithValue("$id", job.JobId);
                 await stale.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                if (!job.IsStale)
+                {
+                    await InsertEventAsync(
+                        connection, transaction, job.JobId,
+                        "snapshot_missing", "stale",
+                        job.State, job.State, "downloader_task_not_observed",
+                        now, cancellationToken).ConfigureAwait(false);
+                }
                 continue;
             }
 
@@ -96,6 +115,16 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 update.Parameters.AddWithValue("$now", now);
                 update.Parameters.AddWithValue("$id", job.JobId);
                 await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            var snapshotState = ToDatabaseValue(snapshot.State);
+            if (job.IsStale || !string.Equals(job.State, snapshotState, StringComparison.Ordinal))
+            {
+                await InsertEventAsync(
+                    connection, transaction, job.JobId,
+                    "snapshot_sync", "observed",
+                    job.State, snapshotState, null,
+                    now, cancellationToken).ConfigureAwait(false);
             }
 
             await using var updateTask = connection.CreateCommand();
@@ -162,9 +191,459 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 500);
+        var page = await ListPageAsync(
+            new DownloadJobListQuery(1, limit, null, null, null, null),
+            cancellationToken).ConfigureAwait(false);
+        return page.Items;
+    }
+
+    public async Task<DownloadJobListPage> ListPageAsync(
+        DownloadJobListQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfLessThan(query.Page, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(query.PageSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(query.PageSize, 500);
+        var search = NormalizeSearch(query.Search);
+        var state = NormalizeFilter(query.State, nameof(query.State));
+        var downloaderId = NormalizeFilter(query.DownloaderId, nameof(query.DownloaderId));
+        var sourceId = NormalizeFilter(query.SourceId, nameof(query.SourceId));
+        var where = new List<string>();
+        if (search is not null)
+        {
+            where.Add("""
+                (ingest_tasks.title LIKE $search ESCAPE '\' COLLATE NOCASE
+                 OR download_jobs.task_id LIKE $search ESCAPE '\' COLLATE NOCASE
+                 OR download_jobs.info_hash LIKE $search ESCAPE '\' COLLATE NOCASE)
+                """);
+        }
+
+        if (state is not null)
+        {
+            where.Add("(download_jobs.state = $state OR ingest_tasks.status = $state)");
+        }
+
+        if (downloaderId is not null)
+        {
+            where.Add("download_jobs.downloader_id = $downloader_id");
+        }
+
+        if (sourceId is not null)
+        {
+            where.Add("ingest_tasks.source_id = $source_id");
+        }
+
+        var whereSql = where.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", where);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        int totalItems;
+        await using (var count = connection.CreateCommand())
+        {
+            count.CommandText = """
+                SELECT COUNT(*)
+                FROM download_jobs
+                JOIN ingest_tasks ON ingest_tasks.id = download_jobs.task_id
+                """ + whereSql + ";";
+            AddListParameters(count, search, state, downloaderId, sourceId);
+            totalItems = Convert.ToInt32(
+                await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                CultureInfo.InvariantCulture);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = ListProjectionSelect + whereSql + """
+
+            ORDER BY download_jobs.updated_at_utc DESC, download_jobs.id
+            LIMIT $limit OFFSET $offset;
+            """;
+        AddListParameters(command, search, state, downloaderId, sourceId);
+        command.Parameters.AddWithValue("$limit", query.PageSize);
+        command.Parameters.AddWithValue("$offset", checked((query.Page - 1) * query.PageSize));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var results = new List<DownloadJobListItemRecord>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            results.Add(ReadListItem(reader));
+        }
+
+        return new DownloadJobListPage(query.Page, query.PageSize, totalItems, results);
+    }
+
+    public async Task<DownloadJobDetailRecord?> GetDetailAsync(
+        string jobId,
+        int eventLimit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(eventLimit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(eventLimit, 500);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        DownloadJobListItemRecord? summary;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = ListProjectionSelect + " WHERE download_jobs.id = $job_id;";
+            command.Parameters.AddWithValue("$job_id", jobId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            summary = await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+                ? ReadListItem(reader)
+                : null;
+        }
+
+        if (summary is null)
+        {
+            return null;
+        }
+
+        string? taskFailureKind;
+        string? taskFailureReason;
+        string preparationState;
+        int preparationAttemptCount;
+        DateTimeOffset? preparationNextAttemptAtUtc;
+        string? preparationFailureCode;
+        string organizationState;
+        int organizationAttemptCount;
+        DateTimeOffset? organizationNextAttemptAtUtc;
+        string? organizationFailureCode;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT task.failure_kind, task.failure_reason,
+                       job.preparation_state, job.preparation_attempt_count,
+                       job.preparation_next_attempt_at_utc, job.preparation_failure_code,
+                       job.organization_state, job.organization_attempt_count,
+                       job.organization_next_attempt_at_utc, job.organization_failure_code
+                FROM download_jobs AS job
+                JOIN ingest_tasks AS task ON task.id = job.task_id
+                WHERE job.id = $job_id;
+                """;
+            command.Parameters.AddWithValue("$job_id", jobId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            taskFailureKind = reader.IsDBNull(0) ? null : reader.GetString(0);
+            taskFailureReason = reader.IsDBNull(1) ? null : reader.GetString(1);
+            preparationState = reader.GetString(2);
+            preparationAttemptCount = reader.GetInt32(3);
+            preparationNextAttemptAtUtc = ReadDateTimeOffset(reader, 4);
+            preparationFailureCode = reader.IsDBNull(5) ? null : reader.GetString(5);
+            organizationState = reader.GetString(6);
+            organizationAttemptCount = reader.GetInt32(7);
+            organizationNextAttemptAtUtc = ReadDateTimeOffset(reader, 8);
+            organizationFailureCode = reader.IsDBNull(9) ? null : reader.GetString(9);
+        }
+
+        var files = new List<DownloadJobFileRecord>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT file.relative_path, file.size_bytes, file.download_file_index,
+                       file.download_priority, file.download_wanted,
+                       file.disposition, file.other_reason
+                FROM task_files AS file
+                JOIN download_jobs AS job ON job.task_id = file.task_id
+                WHERE job.id = $job_id
+                ORDER BY COALESCE(file.download_file_index, 2147483647),
+                         file.relative_path COLLATE NOCASE, file.id;
+                """;
+            command.Parameters.AddWithValue("$job_id", jobId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                files.Add(new DownloadJobFileRecord(
+                    reader.GetString(0),
+                    reader.GetInt64(1),
+                    reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                    reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                    reader.IsDBNull(4) ? null : reader.GetInt64(4) != 0,
+                    reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetString(6)));
+            }
+        }
+
+        var events = new List<DownloadJobEventRecord>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT id, kind, result, from_state, to_state, failure_code, created_at_utc
+                FROM download_job_events
+                WHERE job_id = $job_id
+                ORDER BY created_at_utc DESC, id DESC
+                LIMIT $limit;
+                """;
+            command.Parameters.AddWithValue("$job_id", jobId);
+            command.Parameters.AddWithValue("$limit", eventLimit);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                events.Add(new DownloadJobEventRecord(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    ReadDateTimeOffset(reader, 6)!.Value));
+            }
+        }
+
+        return new DownloadJobDetailRecord(
+            summary,
+            taskFailureKind,
+            taskFailureReason,
+            preparationState,
+            preparationAttemptCount,
+            preparationNextAttemptAtUtc,
+            preparationFailureCode,
+            organizationState,
+            organizationAttemptCount,
+            organizationNextAttemptAtUtc,
+            organizationFailureCode,
+            files,
+            events);
+    }
+
+    public async Task<DownloadJobControlTarget?> GetControlTargetAsync(
+        string jobId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
+            SELECT job.id, job.task_id, job.downloader_id, job.info_hash,
+                   job.state, task.status, job.revision,
+                   job.preparation_state, job.preparation_lease_token,
+                   job.preparation_failure_code,
+                   job.organization_state, job.organization_lease_token,
+                   job.organization_failure_code
+            FROM download_jobs AS job
+            JOIN ingest_tasks AS task ON task.id = job.task_id
+            WHERE job.id = $job_id;
+            """;
+        command.Parameters.AddWithValue("$job_id", jobId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new DownloadJobControlTarget(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetInt64(6),
+            reader.GetString(7),
+            reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.GetString(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12));
+    }
+
+    public async Task<DownloadJobControlUpdateResult> ApplyRemoteControlAsync(
+        DownloadJobControlTarget target,
+        string kind,
+        string targetState,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ValidateStableValue(kind, nameof(kind));
+        ValidateStableValue(targetState, nameof(targetState));
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        string? currentState = null;
+        long currentRevision = 0;
+        await using (var query = connection.CreateCommand())
+        {
+            query.Transaction = transaction;
+            query.CommandText = "SELECT state, revision FROM download_jobs WHERE id = $job_id;";
+            query.Parameters.AddWithValue("$job_id", target.JobId);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                currentState = reader.GetString(0);
+                currentRevision = reader.GetInt64(1);
+            }
+        }
+
+        if (currentState is null)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.NotFound;
+        }
+
+        if (currentRevision != target.Revision)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.RevisionConflict;
+        }
+
+        if (!IsRemoteTransitionAllowed(kind, currentState))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.InvalidState;
+        }
+
+        await using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE download_jobs
+                SET state = $state, failure_reason = NULL,
+                    revision = revision + 1, updated_at_utc = $now
+                WHERE id = $job_id AND revision = $revision;
+                """;
+            update.Parameters.AddWithValue("$state", targetState);
+            update.Parameters.AddWithValue("$now", now);
+            update.Parameters.AddWithValue("$job_id", target.JobId);
+            update.Parameters.AddWithValue("$revision", target.Revision);
+            if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return DownloadJobControlUpdateResult.RevisionConflict;
+            }
+        }
+
+        if (kind == "retry_download")
+        {
+            await using var updateTask = connection.CreateCommand();
+            updateTask.Transaction = transaction;
+            updateTask.CommandText = """
+                UPDATE ingest_tasks
+                SET status = 'download_queued', failure_kind = NULL,
+                    failure_reason = NULL, updated_at_utc = $now
+                WHERE id = $task_id AND status = 'download_error';
+                """;
+            updateTask.Parameters.AddWithValue("$now", now);
+            updateTask.Parameters.AddWithValue("$task_id", target.TaskId);
+            await updateTask.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await InsertEventAsync(
+            connection, transaction, target.JobId, kind, "succeeded",
+            currentState, targetState, null, now, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return DownloadJobControlUpdateResult.Updated;
+    }
+
+    public async Task<DownloadJobControlUpdateResult> RetryBusinessStageAsync(
+        DownloadJobControlTarget target,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        string? kind = null;
+        string? fromState = null;
+        string? toState = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            if (target.PreparationState == "pending"
+                && target.PreparationLeaseToken is null
+                && target.PreparationFailureCode is not null)
+            {
+                kind = "retry_preparation";
+                fromState = target.PreparationState;
+                toState = "pending";
+                command.CommandText = """
+                    UPDATE download_jobs
+                    SET preparation_next_attempt_at_utc = $now,
+                        preparation_failure_code = NULL,
+                        revision = revision + 1, updated_at_utc = $now
+                    WHERE id = $job_id AND revision = $revision
+                      AND preparation_state = 'pending'
+                      AND preparation_lease_token IS NULL
+                      AND preparation_failure_code IS NOT NULL;
+                    """;
+            }
+            else if ((target.OrganizationState is "pending" or "cleanup")
+                     && target.OrganizationLeaseToken is null
+                     && target.OrganizationFailureCode is not null)
+            {
+                kind = "retry_organization";
+                fromState = target.OrganizationState;
+                toState = target.OrganizationState;
+                command.CommandText = """
+                    UPDATE download_jobs
+                    SET organization_next_attempt_at_utc = $now,
+                        organization_failure_code = NULL,
+                        revision = revision + 1, updated_at_utc = $now
+                    WHERE id = $job_id AND revision = $revision
+                      AND organization_state = $organization_state
+                      AND organization_lease_token IS NULL
+                      AND organization_failure_code IS NOT NULL;
+                    """;
+                command.Parameters.AddWithValue("$organization_state", target.OrganizationState);
+            }
+            else
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return DownloadJobControlUpdateResult.InvalidState;
+            }
+
+            command.Parameters.AddWithValue("$now", now);
+            command.Parameters.AddWithValue("$job_id", target.JobId);
+            command.Parameters.AddWithValue("$revision", target.Revision);
+            if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return DownloadJobControlUpdateResult.RevisionConflict;
+            }
+        }
+
+        await using (var updateTask = connection.CreateCommand())
+        {
+            updateTask.Transaction = transaction;
+            updateTask.CommandText = """
+                UPDATE ingest_tasks
+                SET failure_kind = NULL, failure_reason = NULL, updated_at_utc = $now
+                WHERE id = $task_id;
+                """;
+            updateTask.Parameters.AddWithValue("$now", now);
+            updateTask.Parameters.AddWithValue("$task_id", target.TaskId);
+            await updateTask.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await InsertEventAsync(
+            connection, transaction, target.JobId, kind!, "scheduled",
+            fromState, toState, null, now, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return DownloadJobControlUpdateResult.Updated;
+    }
+
+    public async Task RecordControlFailureAsync(
+        string jobId,
+        string kind,
+        string failureCode,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
+        ValidateStableValue(kind, nameof(kind));
+        ValidateStableValue(failureCode, nameof(failureCode), 128);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await InsertEventAsync(
+            connection, transaction, jobId, kind, "failed",
+            null, null, failureCode, Format(utcNow), cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private const string ListProjectionSelect = """
             SELECT download_jobs.id, download_jobs.task_id, ingest_tasks.title,
                    ingest_tasks.source_id, download_jobs.downloader_id, download_jobs.info_hash,
                    download_jobs.state, ingest_tasks.status, download_jobs.progress,
@@ -180,41 +659,150 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             JOIN ingest_tasks ON ingest_tasks.id = download_jobs.task_id
             LEFT JOIN downloader_runtime_state
               ON downloader_runtime_state.downloader_id = download_jobs.downloader_id
-            ORDER BY download_jobs.updated_at_utc DESC, download_jobs.id
-            LIMIT $limit;
             """;
-        command.Parameters.AddWithValue("$limit", limit);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        var results = new List<DownloadJobListItemRecord>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+
+    private static DownloadJobListItemRecord ReadListItem(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
+        new(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetString(7),
+            reader.GetDouble(8),
+            reader.GetInt64(9),
+            reader.GetInt64(10),
+            reader.GetInt64(11),
+            reader.IsDBNull(12) ? null : reader.GetInt64(12),
+            reader.GetInt32(13),
+            reader.GetInt32(14),
+            reader.GetInt64(15) != 0,
+            reader.GetInt64(16),
+            ReadDateTimeOffset(reader, 17),
+            ReadDateTimeOffset(reader, 18)!.Value,
+            reader.GetInt64(19) != 0,
+            reader.IsDBNull(20) ? null : reader.GetString(20),
+            ReadDateTimeOffset(reader, 21));
+
+    private static string? NormalizeSearch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
         {
-            results.Add(new DownloadJobListItemRecord(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4),
-                reader.GetString(5),
-                reader.GetString(6),
-                reader.GetString(7),
-                reader.GetDouble(8),
-                reader.GetInt64(9),
-                reader.GetInt64(10),
-                reader.GetInt64(11),
-                reader.IsDBNull(12) ? null : reader.GetInt64(12),
-                reader.GetInt32(13),
-                reader.GetInt32(14),
-                reader.GetInt64(15) != 0,
-                reader.GetInt64(16),
-                ReadDateTimeOffset(reader, 17),
-                ReadDateTimeOffset(reader, 18)!.Value,
-                reader.GetInt64(19) != 0,
-                reader.IsDBNull(20) ? null : reader.GetString(20),
-                ReadDateTimeOffset(reader, 21)));
+            return null;
         }
 
-        return results;
+        var normalized = value.Trim();
+        if (normalized.Length > 200 || normalized.Any(char.IsControl))
+        {
+            throw new ArgumentException("Search must be at most 200 printable characters.", nameof(value));
+        }
+
+        return string.Concat(
+            "%",
+            normalized
+                .Replace(@"\", @"\\", StringComparison.Ordinal)
+                .Replace("%", @"\%", StringComparison.Ordinal)
+                .Replace("_", @"\_", StringComparison.Ordinal),
+            "%");
     }
+
+    private static string? NormalizeFilter(string? value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        ValidateStableValue(normalized, parameterName);
+        return normalized;
+    }
+
+    private static void AddListParameters(
+        Microsoft.Data.Sqlite.SqliteCommand command,
+        string? search,
+        string? state,
+        string? downloaderId,
+        string? sourceId)
+    {
+        if (search is not null)
+        {
+            command.Parameters.AddWithValue("$search", search);
+        }
+
+        if (state is not null)
+        {
+            command.Parameters.AddWithValue("$state", state);
+        }
+
+        if (downloaderId is not null)
+        {
+            command.Parameters.AddWithValue("$downloader_id", downloaderId);
+        }
+
+        if (sourceId is not null)
+        {
+            command.Parameters.AddWithValue("$source_id", sourceId);
+        }
+    }
+
+    private static bool IsRemoteTransitionAllowed(string kind, string currentState) =>
+        kind switch
+        {
+            "pause" => currentState is "waiting" or "downloading" or "moving" or "seeding",
+            "resume" => currentState == "paused",
+            "retry_download" => currentState == "error",
+            _ => false,
+        };
+
+    private static async Task InsertEventAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction transaction,
+        string jobId,
+        string kind,
+        string result,
+        string? fromState,
+        string? toState,
+        string? failureCode,
+        string now,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO download_job_events (
+                id, job_id, kind, result, from_state, to_state, failure_code, created_at_utc)
+            VALUES (
+                $id, $job_id, $kind, $result, $from_state, $to_state, $failure_code, $now);
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+        command.Parameters.AddWithValue("$job_id", jobId);
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$result", result);
+        command.Parameters.AddWithValue("$from_state", (object?)fromState ?? DBNull.Value);
+        command.Parameters.AddWithValue("$to_state", (object?)toState ?? DBNull.Value);
+        command.Parameters.AddWithValue("$failure_code", (object?)failureCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("$now", now);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ValidateStableValue(string value, string parameterName, int maximumLength = 64)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Length > maximumLength
+            || value.Any(character =>
+                !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
+        {
+            throw new ArgumentException(
+                $"{parameterName} must be a stable ASCII identifier.",
+                parameterName);
+        }
+    }
+
+    private static string Format(DateTimeOffset value) =>
+        value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static async Task UpsertRuntimeStateAsync(
         Microsoft.Data.Sqlite.SqliteConnection connection,

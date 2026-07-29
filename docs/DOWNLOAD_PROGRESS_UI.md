@@ -81,6 +81,16 @@ qB离线、认证失败或超时时，页面保留最后快照，显示`Offline/
 
 API、日志、DOM和导出数据不得包含qB密码、Cookie、完整Torrent URL、passkey、announce或宿主绝对敏感路径。普通列表只显示Torrent相对路径；需要诊断绝对路径时必须经过认证、脱敏和明确操作。
 
+当前实现的管理契约为：
+
+- `GET /api/v1/downloads`：接受 `page`、`page_size`、`search`、`state`、`downloader_id` 和 `source`，筛选与分页在 SQLite 查询中执行。
+- `GET /api/v1/downloads/{jobId}`：返回下载/业务两层状态、准备与整理阶段、文件列表和审计时间线。文件列表按 qB 文件 index 优先、规范化相对路径其次，将实时快照与持久化分配合并；尚未写入分配表的 qB 文件仍以 `unassigned` 显示。
+- `POST /api/v1/downloads/{jobId}/pause`、`/resume`、`/retry`：请求体携带 `expected_revision`。暂停/恢复调用任务不可变路由绑定的 qB 实例；业务重试只清理允许重试阶段的安全失败码和下次执行时间，不改写路由快照。
+
+schema v24 的 `download_job_events` 保存调度确认、qB 状态变化、快照缺失、暂停/恢复、业务重试和安全失败码。异常正文、URL和凭据不进入该表。详情读取 qB 失败时仍返回 `200` 和 SQLite 快照，并把 `file_snapshot_state` 标记为 `unavailable`；控制命令则返回稳定的安全错误和 `503`，不回显上游异常正文。
+
+静态 TypeScript 页面提供服务端筛选/翻页、文件级百分比与 priority/wanted、准备/整理失败、时间线、暂停/恢复、业务重试和四类删除预览入口。生成的 `wwwroot/app.js` 必须由 `npm run web:build` 产生，并由 `npm run web:check` 校验类型。
+
 ## 7. 验收边界
 
 至少验证：

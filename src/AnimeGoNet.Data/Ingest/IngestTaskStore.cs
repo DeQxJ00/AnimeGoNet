@@ -469,6 +469,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             }
         }
 
+        var jobId = Guid.NewGuid().ToString("N");
         await using (var insert = connection.CreateCommand())
         {
             insert.Transaction = transaction;
@@ -489,7 +490,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     'pending', 0, $download_root_path, $save_root_path,
                     $organization_state, 0);
                 """;
-            insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            insert.Parameters.AddWithValue("$id", jobId);
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
             insert.Parameters.AddWithValue("$downloader_id", claim.DownloaderId);
             insert.Parameters.AddWithValue("$info_hash", claim.InfoHash);
@@ -510,6 +511,23 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var audit = connection.CreateCommand())
+        {
+            audit.Transaction = transaction;
+            audit.CommandText = """
+                INSERT INTO download_job_events (
+                    id, job_id, kind, result, from_state, to_state, failure_code, created_at_utc)
+                VALUES (
+                    $id, $job_id, 'dispatch_confirmed', 'succeeded',
+                    NULL, $state, NULL, $now);
+                """;
+            audit.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            audit.Parameters.AddWithValue("$job_id", jobId);
+            audit.Parameters.AddWithValue("$state", ToDatabaseValue(snapshot.State));
+            audit.Parameters.AddWithValue("$now", now);
+            await audit.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await using (var finish = connection.CreateCommand())

@@ -235,6 +235,13 @@ public sealed record IngestItemResponse(
     [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);
 
 public sealed record DownloadListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] int TotalItems,
+    [property: JsonPropertyName("search")] string? Search,
+    [property: JsonPropertyName("state")] string? State,
+    [property: JsonPropertyName("downloader_id")] string? DownloaderId,
+    [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("items")] IReadOnlyList<DownloadListItem> Items);
 
 public sealed record DownloadListItem(
@@ -260,6 +267,55 @@ public sealed record DownloadListItem(
     [property: JsonPropertyName("downloader_connected")] bool DownloaderConnected,
     [property: JsonPropertyName("downloader_failure_code")] string? DownloaderFailureCode,
     [property: JsonPropertyName("downloader_last_success_at_utc")] DateTimeOffset? DownloaderLastSuccessAtUtc);
+
+public sealed record DownloadDetailResponse(
+    [property: JsonPropertyName("summary")] DownloadListItem Summary,
+    [property: JsonPropertyName("task_failure_kind")] string? TaskFailureKind,
+    [property: JsonPropertyName("task_failure_reason")] string? TaskFailureReason,
+    [property: JsonPropertyName("preparation")] DownloadStageDetail Preparation,
+    [property: JsonPropertyName("organization")] DownloadStageDetail Organization,
+    [property: JsonPropertyName("file_snapshot_state")] string FileSnapshotState,
+    [property: JsonPropertyName("file_snapshot_failure_code")] string? FileSnapshotFailureCode,
+    [property: JsonPropertyName("can_pause")] bool CanPause,
+    [property: JsonPropertyName("can_resume")] bool CanResume,
+    [property: JsonPropertyName("can_retry")] bool CanRetry,
+    [property: JsonPropertyName("files")] IReadOnlyList<DownloadFileDetail> Files,
+    [property: JsonPropertyName("timeline")] IReadOnlyList<DownloadTimelineItem> Timeline);
+
+public sealed record DownloadStageDetail(
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("attempt_count")] int AttemptCount,
+    [property: JsonPropertyName("next_attempt_at_utc")] DateTimeOffset? NextAttemptAtUtc,
+    [property: JsonPropertyName("failure_code")] string? FailureCode);
+
+public sealed record DownloadFileDetail(
+    [property: JsonPropertyName("relative_path")] string RelativePath,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("file_index")] int? FileIndex,
+    [property: JsonPropertyName("wanted")] bool? Wanted,
+    [property: JsonPropertyName("priority")] int? Priority,
+    [property: JsonPropertyName("progress")] double? Progress,
+    [property: JsonPropertyName("downloaded_bytes")] long? DownloadedBytes,
+    [property: JsonPropertyName("disposition")] string Disposition,
+    [property: JsonPropertyName("other_reason")] string? OtherReason);
+
+public sealed record DownloadTimelineItem(
+    [property: JsonPropertyName("event_id")] string EventId,
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("from_state")] string? FromState,
+    [property: JsonPropertyName("to_state")] string? ToState,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc);
+
+public sealed record DownloadControlRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+
+public sealed record DownloadControlResponse(
+    [property: JsonPropertyName("job_id")] string JobId,
+    [property: JsonPropertyName("action")] string Action,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("revision")] long Revision);
 
 public sealed record MikanWorkRuleRequest(
     [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,

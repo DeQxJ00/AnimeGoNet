@@ -154,9 +154,51 @@
           <h2 id="downloads-title">下载状态</h2>
         </div>
       </div>
+      <form id="download-filters" class="download-filters" aria-label="下载筛选">
+        <label>搜索
+          <input id="download-search" type="search" maxlength="200" placeholder="标题、任务 ID 或 Info Hash">
+        </label>
+        <label>状态
+          <select id="download-state">
+            <option value="">全部状态</option>
+            <option value="waiting">等待</option>
+            <option value="downloading">下载中</option>
+            <option value="paused">已暂停</option>
+            <option value="seeding">做种中</option>
+            <option value="complete">下载完成</option>
+            <option value="error">下载错误</option>
+            <option value="download_preparing">业务准备</option>
+            <option value="metadata_resolving">元数据匹配</option>
+            <option value="organized">已整理</option>
+          </select>
+        </label>
+        <label>下载器
+          <input id="download-downloader" maxlength="64" pattern="[a-z0-9][a-z0-9._-]*" placeholder="bt">
+        </label>
+        <label>来源
+          <input id="download-source" maxlength="64" pattern="[a-z0-9][a-z0-9._-]*" placeholder="mikan">
+        </label>
+        <label>每页
+          <select id="download-page-size">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+        <div class="download-filter-actions">
+          <button type="submit" class="primary-button">应用筛选</button>
+          <button id="download-filter-reset" type="button" class="secondary-button">重置</button>
+        </div>
+      </form>
+      <p id="download-list-status" class="muted" role="status">正在读取下载任务…</p>
       <div id="downloads" class="downloads" aria-live="polite">
         <p class="muted empty">正在读取下载任务…</p>
       </div>
+      <nav class="download-pagination" aria-label="下载任务分页">
+        <button id="download-previous" type="button" class="secondary-button">上一页</button>
+        <span id="download-page-status">第 1 / 1 页</span>
+        <button id="download-next" type="button" class="secondary-button">下一页</button>
+      </nav>
     </section>
 
     <section aria-labelledby="downloaders-title">

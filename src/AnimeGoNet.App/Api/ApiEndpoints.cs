@@ -41,6 +41,10 @@ public static class ApiEndpoints
         app.MapPut("/api/v1/config", PutConfiguration);
         app.MapDelete("/api/v1/config", DeleteConfigurationOverride);
         app.MapGet("/api/v1/downloads", Downloads);
+        app.MapGet("/api/v1/downloads/{jobId}", DownloadDetail);
+        app.MapPost("/api/v1/downloads/{jobId}/pause", PauseDownload);
+        app.MapPost("/api/v1/downloads/{jobId}/resume", ResumeDownload);
+        app.MapPost("/api/v1/downloads/{jobId}/retry", RetryDownload);
         app.MapGet("/api/v1/downloaders", ListDownloaders);
         app.MapPut("/api/v1/downloaders/{downloaderId}", PutDownloader);
         app.MapDelete("/api/v1/downloaders/{downloaderId}", DeleteDownloaderOverride);
@@ -745,34 +749,386 @@ public static class ApiEndpoints
         return normalized;
     }
 
-    private static async Task<Ok<DownloadListResponse>> Downloads(
+    private static async Task<IResult> Downloads(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? search,
+        [FromQuery] string? state,
+        [FromQuery(Name = "downloader_id")] string? downloaderId,
+        [FromQuery] string? source,
         DownloadJobStore jobs,
         CancellationToken cancellationToken)
     {
-        var records = await jobs.ListAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(new DownloadListResponse(records.Select(record => new DownloadListItem(
-            record.JobId,
-            record.TaskId,
-            record.Title,
-            record.SourceId,
-            record.DownloaderId,
-            record.InfoHash,
-            record.State,
-            record.BusinessStatus,
-            record.Progress,
-            record.DownloadedBytes,
-            record.TotalBytes,
-            record.SpeedBytesPerSecond,
-            record.EtaSeconds,
-            record.Seeds,
-            record.Peers,
-            record.IsStale,
-            record.Revision,
-            record.SnapshotAtUtc,
-            record.UpdatedAtUtc,
-            record.DownloaderConnected,
-            record.DownloaderFailureCode,
-            record.DownloaderLastSuccessAtUtc)).ToArray()));
+        var resolvedPage = page ?? 1;
+        var resolvedPageSize = pageSize ?? 25;
+        if (resolvedPage < 1 || resolvedPageSize is < 1 or > 100)
+        {
+            return TypedResults.BadRequest(Error(
+                "download_pagination_invalid",
+                "Download page must be positive and page_size must be between 1 and 100."));
+        }
+
+        try
+        {
+            var records = await jobs.ListPageAsync(
+                new DownloadJobListQuery(
+                    resolvedPage,
+                    resolvedPageSize,
+                    search,
+                    state,
+                    downloaderId,
+                    source),
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new DownloadListResponse(
+                records.Page,
+                records.PageSize,
+                records.TotalItems,
+                NormalizeEcho(search),
+                NormalizeEcho(state),
+                NormalizeEcho(downloaderId),
+                NormalizeEcho(source),
+                records.Items.Select(ToResponse).ToArray()));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.BadRequest(Error(
+                "download_filter_invalid",
+                "Download filters must use short printable search text and stable lowercase identifiers."));
+        }
+    }
+
+    private static async Task<IResult> DownloadDetail(
+        string jobId,
+        [FromQuery(Name = "timeline_limit")] int? timelineLimit,
+        DownloadJobStore jobs,
+        DownloadClientOperationCoordinator clients,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+        {
+            return TypedResults.BadRequest(Error(
+                "download_job_id_invalid",
+                "Download job ID is required."));
+        }
+
+        var resolvedLimit = timelineLimit ?? 100;
+        if (resolvedLimit is < 1 or > 500)
+        {
+            return TypedResults.BadRequest(Error(
+                "download_timeline_limit_invalid",
+                "Download timeline limit must be between 1 and 500."));
+        }
+
+        var detail = await jobs.GetDetailAsync(jobId, resolvedLimit, cancellationToken).ConfigureAwait(false);
+        if (detail is null)
+        {
+            return TypedResults.NotFound(Error(
+                "download_job_not_found",
+                "Download job was not found."));
+        }
+
+        var liveFiles = new Dictionary<int, DownloadFileSnapshot>();
+        var fileSnapshotState = "live";
+        string? fileSnapshotFailureCode = null;
+        try
+        {
+            var snapshots = await clients.ExecuteAsync(
+                detail.Summary.DownloaderId,
+                async (client, token) =>
+                {
+                    await client.ConnectAsync(token).ConfigureAwait(false);
+                    return await client.ListFilesAsync(detail.Summary.InfoHash, token).ConfigureAwait(false);
+                },
+                cancellationToken).ConfigureAwait(false);
+            liveFiles = snapshots
+                .GroupBy(file => file.Index)
+                .ToDictionary(group => group.Key, group => group.First());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (DownloadFailureCode(exception) is not null)
+        {
+            fileSnapshotState = "unavailable";
+            fileSnapshotFailureCode = DownloadFailureCode(exception);
+        }
+
+        var liveFilesByPath = liveFiles.Values
+            .GroupBy(file => NormalizeDownloadFilePath(file.RelativePath), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var matchedLiveFileIndexes = new HashSet<int>();
+        var files = detail.Files.Select(file =>
+        {
+            var normalizedPath = NormalizeDownloadFilePath(file.RelativePath);
+            var live = file.DownloadFileIndex is int index
+                && liveFiles.TryGetValue(index, out var snapshot)
+                    ? snapshot
+                    : liveFilesByPath.GetValueOrDefault(normalizedPath);
+            if (live is not null)
+            {
+                matchedLiveFileIndexes.Add(live.Index);
+            }
+            var wanted = live?.Wanted ?? file.Wanted;
+            var priority = live?.Priority ?? file.Priority;
+            return new DownloadFileDetail(
+                normalizedPath,
+                file.SizeBytes,
+                file.DownloadFileIndex ?? live?.Index,
+                wanted,
+                priority,
+                live?.Progress,
+                live is null
+                    ? null
+                    : (long)Math.Floor(Math.Clamp(live.Progress, 0, 1) * live.SizeBytes),
+                file.Disposition,
+                file.OtherReason);
+        }).ToList();
+        files.AddRange(liveFiles.Values
+            .Where(file => !matchedLiveFileIndexes.Contains(file.Index))
+            .OrderBy(file => file.Index)
+            .Select(file => new DownloadFileDetail(
+                NormalizeDownloadFilePath(file.RelativePath),
+                file.SizeBytes,
+                file.Index,
+                file.Wanted,
+                file.Priority,
+                file.Progress,
+                (long)Math.Floor(Math.Clamp(file.Progress, 0, 1) * file.SizeBytes),
+                "unassigned",
+                null)));
+        var canRetry = CanRetry(detail);
+        return TypedResults.Ok(new DownloadDetailResponse(
+            ToResponse(detail.Summary),
+            detail.TaskFailureKind,
+            detail.TaskFailureReason,
+            new DownloadStageDetail(
+                detail.PreparationState,
+                detail.PreparationAttemptCount,
+                detail.PreparationNextAttemptAtUtc,
+                detail.PreparationFailureCode),
+            new DownloadStageDetail(
+                detail.OrganizationState,
+                detail.OrganizationAttemptCount,
+                detail.OrganizationNextAttemptAtUtc,
+                detail.OrganizationFailureCode),
+            fileSnapshotState,
+            fileSnapshotFailureCode,
+            detail.Summary.State is "waiting" or "downloading" or "moving" or "seeding",
+            detail.Summary.State == "paused",
+            canRetry,
+            files,
+            detail.Events.Select(item => new DownloadTimelineItem(
+                item.EventId,
+                item.Kind,
+                item.Result,
+                item.FromState,
+                item.ToState,
+                item.FailureCode,
+                item.CreatedAtUtc)).ToArray()));
+    }
+
+    private static Task<IResult> PauseDownload(
+        string jobId,
+        DownloadControlRequest request,
+        DownloadJobStore jobs,
+        DownloadClientOperationCoordinator clients,
+        CancellationToken cancellationToken) =>
+        ControlDownload(
+            jobId, request, "pause", "paused", jobs, clients, cancellationToken);
+
+    private static Task<IResult> ResumeDownload(
+        string jobId,
+        DownloadControlRequest request,
+        DownloadJobStore jobs,
+        DownloadClientOperationCoordinator clients,
+        CancellationToken cancellationToken) =>
+        ControlDownload(
+            jobId, request, "resume", "waiting", jobs, clients, cancellationToken);
+
+    private static async Task<IResult> RetryDownload(
+        string jobId,
+        DownloadControlRequest request,
+        DownloadJobStore jobs,
+        DownloadClientOperationCoordinator clients,
+        CancellationToken cancellationToken)
+    {
+        var target = await ValidateControlTargetAsync(
+            jobId, request, jobs, cancellationToken).ConfigureAwait(false);
+        if (target.Error is not null)
+        {
+            return target.Error;
+        }
+
+        var value = target.Value!;
+        if ((value.PreparationState == "pending"
+             && value.PreparationLeaseToken is null
+             && value.PreparationFailureCode is not null)
+            || ((value.OrganizationState is "pending" or "cleanup")
+                && value.OrganizationLeaseToken is null
+                && value.OrganizationFailureCode is not null))
+        {
+            var result = await jobs.RetryBusinessStageAsync(
+                value,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return await ControlResultAsync(
+                value.JobId,
+                "retry",
+                result,
+                jobs,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await ControlDownload(
+            jobId,
+            request,
+            "retry_download",
+            "waiting",
+            jobs,
+            clients,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> ControlDownload(
+        string jobId,
+        DownloadControlRequest request,
+        string kind,
+        string targetState,
+        DownloadJobStore jobs,
+        DownloadClientOperationCoordinator clients,
+        CancellationToken cancellationToken)
+    {
+        var target = await ValidateControlTargetAsync(
+            jobId, request, jobs, cancellationToken).ConfigureAwait(false);
+        if (target.Error is not null)
+        {
+            return target.Error;
+        }
+
+        var value = target.Value!;
+        if (!ControlStateAllowed(kind, value.State))
+        {
+            return TypedResults.Conflict(Error(
+                "download_action_invalid_state",
+                $"Download action '{kind}' is not allowed from state '{value.State}'."));
+        }
+
+        try
+        {
+            await clients.ExecuteAsync(
+                value.DownloaderId,
+                async (client, token) =>
+                {
+                    await client.ConnectAsync(token).ConfigureAwait(false);
+                    if (kind == "pause")
+                    {
+                        await client.PauseAsync([value.InfoHash], token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await client.ResumeAsync([value.InfoHash], token).ConfigureAwait(false);
+                    }
+
+                    return true;
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (DownloadFailureCode(exception) is { } failureCode)
+        {
+            await jobs.RecordControlFailureAsync(
+                value.JobId,
+                kind,
+                failureCode,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Json(
+                Error(failureCode, "Downloader action failed."),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var result = await jobs.ApplyRemoteControlAsync(
+            value,
+            kind,
+            targetState,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return await ControlResultAsync(
+            value.JobId,
+            kind == "retry_download" ? "retry" : kind,
+            result,
+            jobs,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<(
+        DownloadJobControlTarget? Value,
+        IResult? Error)> ValidateControlTargetAsync(
+        string jobId,
+        DownloadControlRequest request,
+        DownloadJobStore jobs,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId) || request.ExpectedRevision <= 0)
+        {
+            return (null, TypedResults.BadRequest(Error(
+                "download_control_invalid",
+                "Download control requires a job ID and positive expected_revision.")));
+        }
+
+        var target = await jobs.GetControlTargetAsync(jobId, cancellationToken).ConfigureAwait(false);
+        if (target is null)
+        {
+            return (null, TypedResults.NotFound(Error(
+                "download_job_not_found",
+                "Download job was not found.")));
+        }
+
+        if (target.Revision != request.ExpectedRevision)
+        {
+            return (null, TypedResults.Conflict(Error(
+                "download_revision_conflict",
+                "Download job changed; reload before retrying the action.")));
+        }
+
+        return (target, null);
+    }
+
+    private static async Task<IResult> ControlResultAsync(
+        string jobId,
+        string action,
+        DownloadJobControlUpdateResult result,
+        DownloadJobStore jobs,
+        CancellationToken cancellationToken)
+    {
+        if (result == DownloadJobControlUpdateResult.Updated)
+        {
+            var updated = await jobs.GetControlTargetAsync(jobId, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Updated download job disappeared.");
+            return TypedResults.Ok(new DownloadControlResponse(
+                updated.JobId,
+                action,
+                updated.State,
+                updated.Revision));
+        }
+
+        return result switch
+        {
+            DownloadJobControlUpdateResult.NotFound => TypedResults.NotFound(Error(
+                "download_job_not_found",
+                "Download job was not found.")),
+            DownloadJobControlUpdateResult.RevisionConflict => TypedResults.Conflict(Error(
+                "download_revision_conflict",
+                "Download job changed; reload before retrying the action.")),
+            _ => TypedResults.Conflict(Error(
+                "download_action_invalid_state",
+                "Download action is not allowed in the current stage.")),
+        };
     }
 
     private static async Task<Ok<DownloaderInstanceListResponse>> ListDownloaders(
@@ -2837,6 +3193,75 @@ public static class ApiEndpoints
     }
 
     private static ApiErrorResponse Error(string code, string message) => new(code, message);
+
+    private static DownloadListItem ToResponse(DownloadJobListItemRecord record) =>
+        new(
+            record.JobId,
+            record.TaskId,
+            record.Title,
+            record.SourceId,
+            record.DownloaderId,
+            record.InfoHash,
+            record.State,
+            record.BusinessStatus,
+            record.Progress,
+            record.DownloadedBytes,
+            record.TotalBytes,
+            record.SpeedBytesPerSecond,
+            record.EtaSeconds,
+            record.Seeds,
+            record.Peers,
+            record.IsStale,
+            record.Revision,
+            record.SnapshotAtUtc,
+            record.UpdatedAtUtc,
+            record.DownloaderConnected,
+            record.DownloaderFailureCode,
+            record.DownloaderLastSuccessAtUtc);
+
+    private static bool CanRetry(DownloadJobDetailRecord detail) =>
+        detail.Summary.State == "error"
+        || (detail.PreparationState == "pending" && detail.PreparationFailureCode is not null)
+        || (detail.OrganizationState is "pending" or "cleanup"
+            && detail.OrganizationFailureCode is not null);
+
+    private static bool ControlStateAllowed(string kind, string state) =>
+        kind switch
+        {
+            "pause" => state is "waiting" or "downloading" or "moving" or "seeding",
+            "resume" => state == "paused",
+            "retry_download" => state == "error",
+            _ => false,
+        };
+
+    private static string? DownloadFailureCode(Exception exception) =>
+        exception switch
+        {
+            DownloadClientCircuitOpenException => "downloader_circuit_open",
+            KeyNotFoundException => "downloader_not_configured",
+            HttpRequestException => "downloader_unavailable",
+            TaskCanceledException => "downloader_timeout",
+            IOException => "downloader_io_error",
+            InvalidOperationException => "downloader_operation_failed",
+            _ => null,
+        };
+
+    private static string? NormalizeEcho(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string NormalizeDownloadFilePath(string value)
+    {
+        var normalized = value.Replace('\\', '/').Trim();
+        if (Path.IsPathFullyQualified(normalized))
+        {
+            return Path.GetFileName(normalized);
+        }
+
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(segment => segment is not "." and not "..");
+        return string.Join('/', segments);
+    }
 
     private static DeleteTargetResponse ToResponse(DeletePlanTarget target) =>
         new(target.ItemKind, target.TargetKey, target.RootPath, target.DownloaderId, target.DisplayValue);

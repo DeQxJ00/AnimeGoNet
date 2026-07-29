@@ -36,6 +36,7 @@ public sealed class SchemaMigrationTests
             "delete_executions",
             "delete_execution_items",
             "download_jobs",
+            "download_job_events",
             "downloader_runtime_state",
             "episode_claims",
             "fallback_claims",
@@ -81,6 +82,77 @@ public sealed class SchemaMigrationTests
         Assert.True(await reader.ReadAsync());
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(0));
         Assert.Equal(DatabaseSchema.CurrentVersion, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task DownloadAuditMigrationPreservesExistingJobAndCreatesInitialEvent()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 23))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-07-29T10:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES (
+                    'task-1', 'mikan', 1, 'mikan', 'Episode',
+                    'fingerprint', 'bt', '{}', 'downloading', $now, $now);
+
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, info_hash, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    eta_seconds, created_at_utc, updated_at_utc)
+                VALUES (
+                    'job-1', 'task-1', 'bt',
+                    'dddddddddddddddddddddddddddddddddddddddd',
+                    'downloading', 0.5, 50, 100, 10, 5, $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(3, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration24 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 24);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration24.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT event.kind, event.result, event.from_state,
+                   event.to_state, event.created_at_utc, job.state
+            FROM download_job_events AS event
+            JOIN download_jobs AS job ON job.id = event.job_id
+            WHERE event.job_id = 'job-1';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("projection_initialized", reader.GetString(0));
+        Assert.Equal("observed", reader.GetString(1));
+        Assert.True(reader.IsDBNull(2));
+        Assert.Equal("downloading", reader.GetString(3));
+        Assert.Equal(now, reader.GetString(4));
+        Assert.Equal("downloading", reader.GetString(5));
+        Assert.False(await reader.ReadAsync());
     }
 
     [Fact]

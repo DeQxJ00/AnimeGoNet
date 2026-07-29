@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 23;
+    public const int CurrentVersion = 24;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -29,6 +29,7 @@ public static class DatabaseSchema
         new SchemaMigration(21, "pending_tmdb_nfo_rewrite_jobs", PendingTmdbNfoRewriteJobs),
         new SchemaMigration(22, "sqlite_json_cache", SqliteJsonCache),
         new SchemaMigration(23, "library_tmdb_projection", LibraryTmdbProjection),
+        new SchemaMigration(24, "download_job_audit_events", DownloadJobAuditEvents),
     ];
 
     private const string InitialBusinessSchema = """
@@ -932,5 +933,30 @@ public static class DatabaseSchema
         ALTER TABLE anime_seasons
             ADD COLUMN episode_count INTEGER NOT NULL DEFAULT 0
                 CHECK (episode_count >= 0);
+        """;
+
+    private const string DownloadJobAuditEvents = """
+        CREATE TABLE download_job_events (
+            id TEXT NOT NULL PRIMARY KEY,
+            job_id TEXT NOT NULL REFERENCES download_jobs(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            result TEXT NOT NULL,
+            from_state TEXT,
+            to_state TEXT,
+            failure_code TEXT,
+            created_at_utc TEXT NOT NULL,
+            CHECK (length(kind) BETWEEN 1 AND 64),
+            CHECK (length(result) BETWEEN 1 AND 64),
+            CHECK (failure_code IS NULL OR length(failure_code) BETWEEN 1 AND 128)
+        ) STRICT;
+
+        CREATE INDEX ix_download_job_events_job_time
+            ON download_job_events(job_id, created_at_utc DESC, id DESC);
+
+        INSERT INTO download_job_events (
+            id, job_id, kind, result, from_state, to_state, failure_code, created_at_utc)
+        SELECT 'migration-' || id, id, 'projection_initialized', 'observed',
+               NULL, state, NULL, updated_at_utc
+        FROM download_jobs;
         """;
 }

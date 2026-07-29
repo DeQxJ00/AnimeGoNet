@@ -89,10 +89,13 @@ interface RuntimeConfiguration {
 }
 
 interface DownloadItem {
+  job_id: string;
   task_id: string;
   title: string;
   source: string;
   downloader_id: string;
+  info_hash: string;
+  state: string;
   business_status: string;
   progress: number;
   downloaded_bytes: number;
@@ -101,7 +104,75 @@ interface DownloadItem {
   seeds: number;
   peers: number;
   is_stale: boolean;
+  revision: number;
   downloader_failure_code: string | null;
+}
+
+interface DownloadListPage {
+  page: number;
+  page_size: number;
+  total_items: number;
+  search: string | null;
+  state: string | null;
+  downloader_id: string | null;
+  source: string | null;
+  items: DownloadItem[];
+}
+
+interface DownloadFileDetail {
+  relative_path: string;
+  size_bytes: number;
+  file_index: number | null;
+  wanted: boolean | null;
+  priority: number | null;
+  progress: number | null;
+  downloaded_bytes: number | null;
+  disposition: string;
+  other_reason: string | null;
+}
+
+interface DownloadTimelineItem {
+  event_id: string;
+  kind: string;
+  result: string;
+  from_state: string | null;
+  to_state: string | null;
+  failure_code: string | null;
+  created_at_utc: string;
+}
+
+interface DownloadDetail {
+  summary: DownloadItem;
+  task_failure_kind: string | null;
+  task_failure_reason: string | null;
+  preparation: {
+    state: string;
+    attempt_count: number;
+    next_attempt_at_utc: string | null;
+    failure_code: string | null;
+  };
+  organization: {
+    state: string;
+    attempt_count: number;
+    next_attempt_at_utc: string | null;
+    failure_code: string | null;
+  };
+  file_snapshot_state: "live" | "unavailable";
+  file_snapshot_failure_code: string | null;
+  can_pause: boolean;
+  can_resume: boolean;
+  can_retry: boolean;
+  files: DownloadFileDetail[];
+  timeline: DownloadTimelineItem[];
+}
+
+interface DownloadUiState {
+  page: number;
+  page_size: 10 | 25 | 50;
+  search: string;
+  state: string;
+  downloader_id: string;
+  source: string;
 }
 
 interface MetadataItem {
@@ -122,6 +193,33 @@ interface MetadataItem {
   other_file_count: number;
   duplicate_file_count: number;
   pending_file_count: number;
+}
+
+interface MetadataTaskDetail {
+  summary: MetadataItem;
+  ai: {
+    status: string;
+    stage: string | null;
+    error_code: string | null;
+    reason: string | null;
+    confidence_basis: "tmdb_verified" | "not_established";
+    duration_ms: number | null;
+    attempted_at_utc: string | null;
+  };
+  files: Array<{
+    source_name: string;
+    size_bytes: number;
+    source_episode: string | null;
+    file_episode_candidate: string | null;
+    disposition: string;
+    other_reason: string | null;
+    tmdb_series_id: number | null;
+    tmdb_series_name: string | null;
+    tmdb_season_number: number | null;
+    tmdb_season_name: string | null;
+    tmdb_episode_number: number | null;
+    tmdb_episode_name: string | null;
+  }>;
 }
 
 interface MetadataAttemptItem {
@@ -586,6 +684,9 @@ let activeDownloaderId: string | null = null;
 let ruleIdSequence = 0;
 const libraryStorageKey = "animegonet.library.v1";
 let libraryState = readLibraryState();
+const downloadStorageKey = "animegonet.downloads.v1";
+let downloadState = readDownloadState();
+const expandedDownloadJobIds = new Set<string>();
 let activeLibraryDetail: AnimeSeasonDetail | null = null;
 let libraryListRequestSequence = 0;
 let libraryDetailRequestSequence = 0;
@@ -693,6 +794,47 @@ function readLibraryState(): AnimeLibraryUiState {
 function saveLibraryState(): void {
   try {
     window.localStorage.setItem(libraryStorageKey, JSON.stringify(libraryState));
+  } catch {
+    // Browser storage is an optional UI preference; business state remains server-side.
+  }
+}
+
+function readDownloadState(): DownloadUiState {
+  const defaults: DownloadUiState = {
+    page: 1,
+    page_size: 25,
+    search: "",
+    state: "",
+    downloader_id: "",
+    source: "",
+  };
+  try {
+    const raw = window.localStorage.getItem(downloadStorageKey);
+    if (!raw) return defaults;
+    const stored = JSON.parse(raw) as Partial<DownloadUiState>;
+    const pageSizes = [10, 25, 50] as const;
+    return {
+      page: Number.isInteger(stored.page) && (stored.page ?? 0) > 0
+        ? stored.page! : defaults.page,
+      page_size: pageSizes.includes(stored.page_size as 10 | 25 | 50)
+        ? stored.page_size as 10 | 25 | 50 : defaults.page_size,
+      search: typeof stored.search === "string"
+        ? stored.search.slice(0, 200) : "",
+      state: typeof stored.state === "string"
+        ? stored.state.slice(0, 64) : "",
+      downloader_id: typeof stored.downloader_id === "string"
+        ? stored.downloader_id.slice(0, 64) : "",
+      source: typeof stored.source === "string"
+        ? stored.source.slice(0, 64) : "",
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveDownloadState(): void {
+  try {
+    window.localStorage.setItem(downloadStorageKey, JSON.stringify(downloadState));
   } catch {
     // Browser storage is an optional UI preference; business state remains server-side.
   }
@@ -1485,56 +1627,280 @@ function formatBytes(value: number): string {
   return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[unit]}`;
 }
 
-async function loadDownloads(): Promise<void> {
-  const container = element<HTMLElement>("#downloads");
+function downloadControlButton(
+  item: DownloadItem,
+  action: "pause" | "resume" | "retry",
+  label: string,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary-button";
+  button.textContent = label;
+  button.addEventListener("click", () =>
+    void controlDownload(item, action, button));
+  return button;
+}
+
+async function controlDownload(
+  item: DownloadItem,
+  action: "pause" | "resume" | "retry",
+  button: HTMLButtonElement,
+): Promise<void> {
+  button.disabled = true;
+  const original = button.textContent ?? action;
+  button.textContent = `${original}…`;
   try {
-    const response = await fetch("/api/v1/downloads", { headers });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body = await response.json() as { items: DownloadItem[] };
-    if (body.items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "muted empty";
-      empty.textContent = "暂无下载任务";
-      container.replaceChildren(empty);
-      return;
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(
+      `/api/v1/downloads/${encodeURIComponent(item.job_id)}/${action}`,
+      {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify({ expected_revision: item.revision }),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadDownloads();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = errorMessage(error, `${original}失败`);
+  }
+}
+
+async function loadDownloadDetail(
+  item: DownloadItem,
+  target: HTMLDivElement,
+  button: HTMLButtonElement,
+): Promise<void> {
+  expandedDownloadJobIds.add(item.job_id);
+  button.disabled = true;
+  button.textContent = "读取文件与时间线…";
+  button.setAttribute("aria-expanded", "true");
+  try {
+    const response = await fetch(
+      `/api/v1/downloads/${encodeURIComponent(item.job_id)}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const detail = await response.json() as DownloadDetail;
+    const stages = document.createElement("dl");
+    stages.className = "download-stage-grid";
+    for (const [label, stage] of [
+      ["下载前准备", detail.preparation],
+      ["整理与清理", detail.organization],
+    ] as const) {
+      const group = document.createElement("div");
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const value = document.createElement("dd");
+      value.textContent = `${stage.state} · 尝试 ${stage.attempt_count}`
+        + (stage.failure_code ? ` · ${stage.failure_code}` : "")
+        + (stage.next_attempt_at_utc
+          ? ` · 下次 ${new Date(stage.next_attempt_at_utc).toLocaleString()}`
+          : "");
+      group.append(term, value);
+      stages.append(group);
+    }
+    if (detail.task_failure_kind || detail.task_failure_reason) {
+      const failure = document.createElement("p");
+      failure.className = "download-detail-failure";
+      failure.textContent =
+        `${textOrDash(detail.task_failure_kind)} · ${textOrDash(detail.task_failure_reason)}`;
+      stages.append(failure);
     }
 
-    const cards = body.items.map((item) => {
-      const card = document.createElement("article");
-      card.className = `download-card ${item.is_stale ? "stale" : ""}`;
-      const heading = document.createElement("div");
-      heading.className = "download-heading";
-      const title = document.createElement("strong");
-      title.textContent = item.title;
-      const state = document.createElement("span");
-      state.className = `badge ${item.is_stale ? "error" : "ready"}`;
-      state.textContent = item.is_stale
-        ? `快照过期 · ${item.downloader_failure_code ?? "离线"}`
-        : statusLabels[item.business_status] ?? item.business_status;
-      heading.append(title, state);
-      const progress = document.createElement("progress");
-      progress.max = 1;
-      progress.value = item.progress;
-      const details = document.createElement("p");
-      details.className = "download-details";
-      details.textContent = `${item.source} → ${item.downloader_id} · ${(item.progress * 100).toFixed(1)}% · ${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)} · ${formatBytes(item.speed_bytes_per_second)}/s · Seeds ${item.seeds} · Peers ${item.peers}`;
-      const actions = document.createElement("div");
-      actions.className = "download-actions";
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "delete-button";
-      remove.textContent = "删除…";
-      remove.addEventListener("click", () => void openDeletePreview(item.task_id));
-      actions.append(remove);
-      card.append(heading, progress, details, actions);
-      return card;
-    });
-    container.replaceChildren(...cards);
+    const snapshot = document.createElement("p");
+    snapshot.className = detail.file_snapshot_state === "live"
+      ? "download-file-snapshot ready"
+      : "download-file-snapshot error";
+    snapshot.textContent = detail.file_snapshot_state === "live"
+      ? "文件进度：qBittorrent 实时快照"
+      : `文件进度不可用：${textOrDash(detail.file_snapshot_failure_code)}；仍显示 SQLite 已保存的 wanted / priority。`;
+
+    const files = document.createElement("div");
+    files.className = "download-file-list";
+    if (detail.files.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted metadata-attempt-empty";
+      empty.textContent = "该任务尚无文件分配记录。";
+      files.append(empty);
+    } else {
+      for (const file of detail.files) {
+        const row = document.createElement("article");
+        row.className = `download-file ${file.wanted === false ? "unwanted" : ""}`;
+        const heading = document.createElement("div");
+        heading.className = "download-file-heading";
+        const name = document.createElement("strong");
+        name.textContent = file.relative_path;
+        const wanted = document.createElement("span");
+        wanted.className = `badge ${file.wanted === false ? "error" : "ready"}`;
+        wanted.textContent = file.wanted === null
+          ? "尚未分配"
+          : file.wanted ? `Wanted · P${file.priority}` : "跳过下载";
+        heading.append(name, wanted);
+        const progress = document.createElement("progress");
+        progress.max = 1;
+        progress.value = file.progress ?? 0;
+        const evidence = document.createElement("p");
+        evidence.textContent = `#${textOrDash(file.file_index)} · ${formatBytes(file.downloaded_bytes ?? 0)} / ${formatBytes(file.size_bytes)} · ${(100 * (file.progress ?? 0)).toFixed(1)}% · ${file.disposition}${file.other_reason ? ` · ${file.other_reason}` : ""}`;
+        row.append(heading, progress, evidence);
+        files.append(row);
+      }
+    }
+
+    const timelineHeading = document.createElement("h4");
+    timelineHeading.textContent = "状态时间线";
+    const timeline = document.createElement("div");
+    timeline.className = "download-timeline";
+    if (detail.timeline.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted metadata-attempt-empty";
+      empty.textContent = "尚无下载审计事件。";
+      timeline.append(empty);
+    } else {
+      for (const event of detail.timeline) {
+        const row = document.createElement("article");
+        row.className = `download-event ${event.result === "failed" ? "failed" : ""}`;
+        const heading = document.createElement("strong");
+        heading.textContent = `${event.kind} · ${event.result}`;
+        const state = document.createElement("p");
+        state.textContent = `${textOrDash(event.from_state)} → ${textOrDash(event.to_state)} · ${new Date(event.created_at_utc).toLocaleString()}${event.failure_code ? ` · ${event.failure_code}` : ""}`;
+        row.append(heading, state);
+        timeline.append(row);
+      }
+    }
+
+    const controls = document.createElement("div");
+    controls.className = "download-detail-actions";
+    if (detail.can_pause) {
+      controls.append(downloadControlButton(detail.summary, "pause", "暂停"));
+    }
+    if (detail.can_resume) {
+      controls.append(downloadControlButton(detail.summary, "resume", "恢复"));
+    }
+    if (detail.can_retry) {
+      controls.append(downloadControlButton(detail.summary, "retry", "业务重试"));
+    }
+    target.replaceChildren(stages, snapshot, files, timelineHeading, timeline, controls);
+    button.disabled = false;
+    button.textContent = "收起文件与时间线";
+    button.onclick = () => {
+      expandedDownloadJobIds.delete(item.job_id);
+      target.replaceChildren();
+      button.textContent = "查看文件与时间线";
+      button.setAttribute("aria-expanded", "false");
+      button.onclick = () => void loadDownloadDetail(item, target, button);
+    };
+  } catch (error) {
+    target.textContent = `下载详情读取失败：${errorMessage(error, "未知错误")}`;
+    button.disabled = false;
+    button.textContent = "重试文件与时间线";
+  }
+}
+
+function renderDownloadPage(body: DownloadListPage): void {
+  const container = element<HTMLElement>("#downloads");
+  const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
+  element<HTMLElement>("#download-list-status").textContent =
+    `${body.total_items} 个任务 · 第 ${body.page} 页`;
+  element<HTMLElement>("#download-page-status").textContent =
+    `第 ${body.page} / ${totalPages} 页`;
+  element<HTMLButtonElement>("#download-previous").disabled = body.page <= 1;
+  element<HTMLButtonElement>("#download-next").disabled = body.page >= totalPages;
+  if (body.items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = body.total_items === 0
+      ? "暂无符合筛选条件的下载任务"
+      : "当前页没有任务，请返回上一页。";
+    container.replaceChildren(empty);
+    return;
+  }
+
+  container.replaceChildren(...body.items.map((item) => {
+    const card = document.createElement("article");
+    card.className = `download-card ${item.is_stale ? "stale" : ""}`;
+    const heading = document.createElement("div");
+    heading.className = "download-heading";
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    const state = document.createElement("span");
+    state.className = `badge ${item.is_stale ? "error" : "ready"}`;
+    state.textContent = item.is_stale
+      ? `快照过期 · ${item.downloader_failure_code ?? "离线"}`
+      : `${item.state} · ${statusLabels[item.business_status] ?? item.business_status}`;
+    heading.append(title, state);
+    const progress = document.createElement("progress");
+    progress.max = 1;
+    progress.value = item.progress;
+    const details = document.createElement("p");
+    details.className = "download-details";
+    details.textContent = `${item.source} → ${item.downloader_id} · ${(item.progress * 100).toFixed(1)}% · ${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)} · ${formatBytes(item.speed_bytes_per_second)}/s · Seeds ${item.seeds} · Peers ${item.peers}`;
+    const actions = document.createElement("div");
+    actions.className = "download-actions";
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "secondary-button";
+    expand.textContent = "查看文件与时间线";
+    expand.setAttribute("aria-expanded", "false");
+    const detailTarget = document.createElement("div");
+    detailTarget.className = "download-detail";
+    expand.onclick = () => void loadDownloadDetail(item, detailTarget, expand);
+    actions.append(expand);
+    if (item.state === "paused") {
+      actions.append(downloadControlButton(item, "resume", "恢复"));
+    } else if (["waiting", "downloading", "moving", "seeding"].includes(item.state)) {
+      actions.append(downloadControlButton(item, "pause", "暂停"));
+    } else if (item.state === "error") {
+      actions.append(downloadControlButton(item, "retry", "业务重试"));
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "delete-button";
+    remove.textContent = "删除…";
+    remove.addEventListener("click", () => void openDeletePreview(item.task_id));
+    actions.append(remove);
+    card.append(heading, progress, details, actions, detailTarget);
+    if (expandedDownloadJobIds.has(item.job_id)) {
+      void loadDownloadDetail(item, detailTarget, expand);
+    }
+    return card;
+  }));
+}
+
+async function loadDownloads(): Promise<void> {
+  const container = element<HTMLElement>("#downloads");
+  const query = new URLSearchParams({
+    page: String(downloadState.page),
+    page_size: String(downloadState.page_size),
+  });
+  if (downloadState.search) query.set("search", downloadState.search);
+  if (downloadState.state) query.set("state", downloadState.state);
+  if (downloadState.downloader_id) {
+    query.set("downloader_id", downloadState.downloader_id);
+  }
+  if (downloadState.source) query.set("source", downloadState.source);
+  try {
+    const response = await fetch(`/api/v1/downloads?${query}`, { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as DownloadListPage;
+    if (body.items.length === 0 && body.total_items > 0 && downloadState.page > 1) {
+      downloadState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
+      saveDownloadState();
+      await loadDownloads();
+      return;
+    }
+    downloadState.page = body.page;
+    downloadState.page_size = body.page_size as 10 | 25 | 50;
+    saveDownloadState();
+    renderDownloadPage(body);
   } catch (error) {
     const failed = document.createElement("p");
     failed.className = "muted empty";
     failed.textContent = `下载状态读取失败：${errorMessage(error, "未知错误")}`;
     container.replaceChildren(failed);
+    element<HTMLElement>("#download-list-status").textContent = "下载任务读取失败";
   }
 }
 
@@ -1721,6 +2087,103 @@ async function retryMetadataTask(taskId: string, button: HTMLButtonElement): Pro
 }
 
 const expandedMetadataTaskIds = new Set<string>();
+const expandedMetadataDetailIds = new Set<string>();
+
+async function loadMetadataDetail(
+  taskId: string,
+  target: HTMLDivElement,
+  button: HTMLButtonElement,
+): Promise<void> {
+  expandedMetadataDetailIds.add(taskId);
+  button.disabled = true;
+  button.textContent = "读取来源 / TMDB 对照…";
+  button.setAttribute("aria-expanded", "true");
+  try {
+    const response = await fetch(
+      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const detail = await response.json() as MetadataTaskDetail;
+    const ai = document.createElement("article");
+    ai.className = `metadata-ai ${detail.ai.status === "matched" ? "verified" : ""}`;
+    const aiHeading = document.createElement("strong");
+    aiHeading.textContent = `AI：${detail.ai.status === "not_attempted" ? "未调用" : detail.ai.status}`;
+    const confidence = document.createElement("span");
+    confidence.className =
+      `badge ${detail.ai.confidence_basis === "tmdb_verified" ? "ready" : ""}`;
+    confidence.textContent = detail.ai.confidence_basis === "tmdb_verified"
+      ? "可信依据：TMDB 已验证"
+      : "可信依据：未建立";
+    const aiMeta = document.createElement("p");
+    aiMeta.textContent = detail.ai.attempted_at_utc
+      ? `${textOrDash(detail.ai.stage)} 阶段 · ${detail.ai.duration_ms} ms · ${new Date(detail.ai.attempted_at_utc).toLocaleString()}`
+      : "模型自报置信度不被采信；只有 TMDB Series / Season / Episode 验证通过才建立可信结果。";
+    ai.append(aiHeading, confidence, aiMeta);
+    if (detail.ai.error_code || detail.ai.reason) {
+      const reason = document.createElement("p");
+      reason.className = "metadata-detail-reason";
+      reason.textContent =
+        `${textOrDash(detail.ai.error_code)} · ${textOrDash(detail.ai.reason)}`;
+      ai.append(reason);
+    }
+
+    const files = document.createElement("div");
+    files.className = "metadata-file-comparisons";
+    if (detail.files.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted metadata-attempt-empty";
+      empty.textContent = "该任务尚无文件条目。";
+      files.append(empty);
+    } else {
+      for (const file of detail.files) {
+        const row = document.createElement("article");
+        row.className = `metadata-file-comparison ${file.disposition}`;
+        const source = document.createElement("div");
+        source.className = "metadata-file-source";
+        const sourceName = document.createElement("strong");
+        sourceName.textContent = file.source_name;
+        const sourceEvidence = document.createElement("p");
+        sourceEvidence.textContent =
+          `来源 EP ${textOrDash(file.source_episode)} · 文件名候选 ${textOrDash(file.file_episode_candidate)} · ${formatBytes(file.size_bytes)}`;
+        source.append(sourceName, sourceEvidence);
+        const arrow = document.createElement("span");
+        arrow.className = "metadata-file-arrow";
+        arrow.textContent = "→";
+        arrow.setAttribute("aria-hidden", "true");
+        const canonical = document.createElement("div");
+        canonical.className = "metadata-file-canonical";
+        const canonicalName = document.createElement("strong");
+        canonicalName.textContent = file.tmdb_series_name
+          ? `${file.tmdb_series_name} / ${textOrDash(file.tmdb_season_name)}`
+          : "尚无经验证的 TMDB 映射";
+        const canonicalEpisode = document.createElement("p");
+        canonicalEpisode.textContent = file.tmdb_episode_number === null
+          ? `${file.disposition} · ${textOrDash(file.other_reason)}`
+          : `TMDB ${file.tmdb_series_id} · S${String(file.tmdb_season_number).padStart(2, "0")}E${String(file.tmdb_episode_number).padStart(3, "0")} · ${textOrDash(file.tmdb_episode_name)}`;
+        canonical.append(canonicalName, canonicalEpisode);
+        row.append(source, arrow, canonical);
+        files.append(row);
+      }
+    }
+
+    target.replaceChildren(ai, files);
+    button.disabled = false;
+    button.textContent = "收起来源 / TMDB 对照";
+    button.onclick = () => {
+      expandedMetadataDetailIds.delete(taskId);
+      target.replaceChildren();
+      button.textContent = "查看来源 / TMDB 对照";
+      button.setAttribute("aria-expanded", "false");
+      button.onclick = () => void loadMetadataDetail(taskId, target, button);
+    };
+  } catch (error) {
+    target.textContent =
+      `任务详情读取失败：${errorMessage(error, "未知错误")}`;
+    button.disabled = false;
+    button.textContent = "重试来源 / TMDB 对照";
+  }
+}
 
 async function loadMetadataAttempts(
   taskId: string,
@@ -1836,6 +2299,15 @@ async function loadMetadataTasks(): Promise<void> {
       }
       const actions = document.createElement("div");
       actions.className = "metadata-actions";
+      const detailButton = document.createElement("button");
+      detailButton.type = "button";
+      detailButton.className = "metadata-attempt-button";
+      detailButton.textContent = "查看来源 / TMDB 对照";
+      detailButton.setAttribute("aria-expanded", "false");
+      const detailTarget = document.createElement("div");
+      detailTarget.className = "metadata-detail";
+      detailButton.onclick = () =>
+        void loadMetadataDetail(item.task_id, detailTarget, detailButton);
       const attempts = document.createElement("button");
       attempts.type = "button";
       attempts.className = "metadata-attempt-button";
@@ -1843,7 +2315,7 @@ async function loadMetadataTasks(): Promise<void> {
       const attemptList = document.createElement("div");
       attemptList.className = "metadata-attempt-list";
       attempts.onclick = () => void loadMetadataAttempts(item.task_id, attemptList, attempts);
-      actions.append(attempts);
+      actions.append(detailButton, attempts);
       if (item.status === "metadata_failed") {
         const retry = document.createElement("button");
         retry.type = "button";
@@ -1852,7 +2324,10 @@ async function loadMetadataTasks(): Promise<void> {
         retry.addEventListener("click", () => void retryMetadataTask(item.task_id, retry));
         actions.append(retry);
       }
-      card.append(actions, attemptList);
+      card.append(actions, detailTarget, attemptList);
+      if (expandedMetadataDetailIds.has(item.task_id)) {
+        void loadMetadataDetail(item.task_id, detailTarget, detailButton);
+      }
       if (expandedMetadataTaskIds.has(item.task_id)) {
         void loadMetadataAttempts(item.task_id, attemptList, attempts);
       }
@@ -3256,6 +3731,54 @@ element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
 element<HTMLSelectElement>("#library-page-size").value = String(libraryState.page_size);
 element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episode_filter;
+element<HTMLInputElement>("#download-search").value = downloadState.search;
+element<HTMLSelectElement>("#download-state").value = downloadState.state;
+element<HTMLInputElement>("#download-downloader").value = downloadState.downloader_id;
+element<HTMLInputElement>("#download-source").value = downloadState.source;
+element<HTMLSelectElement>("#download-page-size").value = String(downloadState.page_size);
+element<HTMLFormElement>("#download-filters").addEventListener("submit", (event) => {
+  event.preventDefault();
+  downloadState.search = element<HTMLInputElement>("#download-search").value.trim();
+  downloadState.state = element<HTMLSelectElement>("#download-state").value;
+  downloadState.downloader_id =
+    element<HTMLInputElement>("#download-downloader").value.trim().toLowerCase();
+  downloadState.source =
+    element<HTMLInputElement>("#download-source").value.trim().toLowerCase();
+  downloadState.page_size = Number(
+    element<HTMLSelectElement>("#download-page-size").value,
+  ) as 10 | 25 | 50;
+  downloadState.page = 1;
+  saveDownloadState();
+  void loadDownloads();
+});
+element<HTMLButtonElement>("#download-filter-reset").addEventListener("click", () => {
+  downloadState = {
+    page: 1,
+    page_size: 25,
+    search: "",
+    state: "",
+    downloader_id: "",
+    source: "",
+  };
+  element<HTMLInputElement>("#download-search").value = "";
+  element<HTMLSelectElement>("#download-state").value = "";
+  element<HTMLInputElement>("#download-downloader").value = "";
+  element<HTMLInputElement>("#download-source").value = "";
+  element<HTMLSelectElement>("#download-page-size").value = "25";
+  saveDownloadState();
+  void loadDownloads();
+});
+element<HTMLButtonElement>("#download-previous").addEventListener("click", () => {
+  if (downloadState.page <= 1) return;
+  downloadState.page--;
+  saveDownloadState();
+  void loadDownloads();
+});
+element<HTMLButtonElement>("#download-next").addEventListener("click", () => {
+  downloadState.page++;
+  saveDownloadState();
+  void loadDownloads();
+});
 element<HTMLButtonElement>("#library-reload").addEventListener("click", () => void loadLibrary());
 element<HTMLSelectElement>("#library-sort").addEventListener("change", changeLibraryOrdering);
 element<HTMLSelectElement>("#library-direction").addEventListener("change", changeLibraryOrdering);

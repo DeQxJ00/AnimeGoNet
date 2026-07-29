@@ -92,6 +92,83 @@ public sealed class DownloadJobStoreTests
         Assert.Equal(1, await fixture.Jobs.CountActiveAsync());
     }
 
+    [Fact]
+    public async Task ListPageFiltersAndDetailExposeFilesAndAuditTimeline()
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+        await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash,
+                "Episode",
+                DownloadTaskState.Downloading,
+                0.5,
+                50,
+                100,
+                10,
+                5)],
+            DateTimeOffset.UtcNow);
+
+        var page = await fixture.Jobs.ListPageAsync(
+            new DownloadJobListQuery(1, 10, "EPISODE", "DOWNLOADING", "BT", "MIKAN"));
+        var item = Assert.Single(page.Items);
+        var detail = Assert.IsType<DownloadJobDetailRecord>(
+            await fixture.Jobs.GetDetailAsync(item.JobId));
+
+        Assert.Equal(1, page.TotalItems);
+        Assert.Equal("episode.mkv", Assert.Single(detail.Files).RelativePath);
+        Assert.Contains(detail.Events, value => value.Kind == "dispatch_confirmed");
+        Assert.Contains(
+            detail.Events,
+            value => value.Kind == "snapshot_sync"
+                && value.FromState == "waiting"
+                && value.ToState == "downloading");
+    }
+
+    [Fact]
+    public async Task RemoteControlUsesRevisionAndRecordsSuccessfulTransition()
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+        await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash,
+                "Episode",
+                DownloadTaskState.Downloading,
+                0.25,
+                25,
+                100,
+                5,
+                15)],
+            DateTimeOffset.UtcNow);
+        var item = Assert.Single(await fixture.Jobs.ListAsync());
+        var target = Assert.IsType<DownloadJobControlTarget>(
+            await fixture.Jobs.GetControlTargetAsync(item.JobId));
+
+        var updated = await fixture.Jobs.ApplyRemoteControlAsync(
+            target,
+            "pause",
+            "paused",
+            DateTimeOffset.UtcNow);
+        var staleUpdate = await fixture.Jobs.ApplyRemoteControlAsync(
+            target,
+            "pause",
+            "paused",
+            DateTimeOffset.UtcNow);
+        var detail = Assert.IsType<DownloadJobDetailRecord>(
+            await fixture.Jobs.GetDetailAsync(item.JobId));
+
+        Assert.Equal(DownloadJobControlUpdateResult.Updated, updated);
+        Assert.Equal(DownloadJobControlUpdateResult.RevisionConflict, staleUpdate);
+        Assert.Equal("paused", detail.Summary.State);
+        Assert.Contains(
+            detail.Events,
+            value => value.Kind == "pause"
+                && value.Result == "succeeded"
+                && value.FromState == "downloading"
+                && value.ToState == "paused");
+    }
+
     private sealed class DownloadJobFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _databaseFixture;

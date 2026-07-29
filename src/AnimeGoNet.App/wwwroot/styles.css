@@ -131,6 +131,11 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-field-locked { color: #9f926f !important; }
 .configuration-field-locked input:disabled { border-color: #62552f; color: #d5c497; opacity: .8; cursor: not-allowed; }
 .downloads { display: grid; gap: 12px; }
+.download-filters { display: grid; grid-template-columns: minmax(220px,2fr) repeat(4,minmax(120px,1fr)) auto; gap: 10px; align-items: end; margin: 0 0 12px; }
+.download-filters label { display: grid; gap: 6px; color: #8da2c9; font-size: .72rem; }
+.download-filters input, .download-filters select { min-width: 0; border: 1px solid #344260; border-radius: 9px; padding: 9px 10px; color: #edf2ff; background: #101827; font: inherit; }
+.download-filter-actions { display: flex; gap: 8px; }
+.download-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; color: #aebbd3; font-size: .8rem; }
 .download-card { border: 1px solid #315f58; border-radius: 18px; padding: 18px 20px; background: rgba(16,22,37,.88); }
 .offset-list { display: grid; gap: 12px; }
 .offset-card { border: 1px solid #344260; border-radius: 16px; padding: 16px 18px; background: rgba(16,22,37,.88); display: flex; justify-content: space-between; gap: 18px; align-items: center; }
@@ -143,7 +148,33 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-heading strong { overflow-wrap: anywhere; }
 .download-card progress { width: 100%; height: 9px; margin: 16px 0 10px; accent-color: #59d3a5; }
 .download-details { margin: 0; color: #aebbd3; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
-.download-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.download-actions, .download-detail-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.download-detail { display: grid; gap: 11px; margin-top: 13px; }
+.download-detail:empty { display: none; }
+.download-stage-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0; }
+.download-stage-grid > div { padding: 10px 12px; border: 1px solid #344260; border-radius: 10px; background: rgba(5,8,16,.5); }
+.download-stage-grid dt { color: #8094b7; font-size: .68rem; }
+.download-stage-grid dd { margin: 4px 0 0; color: #dce7fb; font-size: .74rem; overflow-wrap: anywhere; }
+.download-detail-failure { grid-column: 1 / -1; margin: 0; color: #ffb0b0; font-size: .75rem; }
+.download-file-snapshot { margin: 0; padding: 9px 11px; border: 1px solid #356757; border-radius: 10px; color: #b8efd8; background: rgba(24,67,52,.3); font-size: .73rem; }
+.download-file-snapshot.error { border-color: #813f49; color: #ffb4b4; background: rgba(82,28,37,.28); }
+.download-file-list, .download-timeline { display: grid; gap: 8px; }
+.download-file, .download-event { padding: 10px 12px; border: 1px solid #334565; border-radius: 11px; background: rgba(5,8,16,.52); }
+.download-file.unwanted { border-color: #695736; opacity: .82; }
+.download-file-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.download-file-heading strong, .download-event strong { color: #dce7fb; font-size: .75rem; overflow-wrap: anywhere; }
+.download-file progress { width: 100%; height: 7px; margin: 9px 0 5px; accent-color: #59d3a5; }
+.download-file p, .download-event p { margin: 4px 0 0; color: #94a7c8; font-size: .7rem; line-height: 1.4; overflow-wrap: anywhere; }
+.download-event.failed { border-color: #813f49; }
+.download-detail h4 { margin: 4px 0 0; font-size: .82rem; }
+@media (max-width: 980px) {
+    .download-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .download-filter-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 620px) {
+    .download-filters, .download-stage-grid { grid-template-columns: 1fr; }
+    .download-file-heading { align-items: flex-start; flex-direction: column; }
+}
 .delete-button, .secondary-button, .danger-button, .icon-button { border-radius: 10px; padding: 9px 12px; cursor: pointer; font: inherit; }
 .delete-button { border: 1px solid #6d4950; color: #ffb4b4; background: #2b171b; }
 .delete-button:hover, .danger-button:hover { border-color: #c35c69; }
