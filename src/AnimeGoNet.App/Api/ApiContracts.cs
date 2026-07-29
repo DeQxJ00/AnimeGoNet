@@ -697,6 +697,10 @@ public sealed record RssPriorityGroupResponse(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("arrays")] IReadOnlyList<RssNamedArrayResponse> Arrays);
 
+public sealed record RssRuleSnapshotItem(
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc);
+
 public sealed record RssRuleSetResponse(
     [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
@@ -705,8 +709,13 @@ public sealed record RssRuleSetResponse(
     [property: JsonPropertyName("whitelist")] IReadOnlyList<RssNamedArrayResponse> Whitelist,
     [property: JsonPropertyName("blacklist")] IReadOnlyList<RssNamedArrayResponse> Blacklist,
     [property: JsonPropertyName("priority_groups")] IReadOnlyList<RssPriorityGroupResponse> PriorityGroups,
+    [property: JsonPropertyName("snapshots")] IReadOnlyList<RssRuleSnapshotItem> Snapshots,
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record RssRuleRollbackRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("target_revision")] long TargetRevision);
 
 public sealed record RssPreviewCandidateRequest(
     [property: JsonPropertyName("id")] string? Id,

@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 24;
+    public const int CurrentVersion = 25;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -30,6 +30,7 @@ public static class DatabaseSchema
         new SchemaMigration(22, "sqlite_json_cache", SqliteJsonCache),
         new SchemaMigration(23, "library_tmdb_projection", LibraryTmdbProjection),
         new SchemaMigration(24, "download_job_audit_events", DownloadJobAuditEvents),
+        new SchemaMigration(25, "mikan_rss_rule_snapshots", MikanRssRuleSnapshots),
     ];
 
     private const string InitialBusinessSchema = """
@@ -958,5 +959,97 @@ public static class DatabaseSchema
         SELECT 'migration-' || id, id, 'projection_initialized', 'observed',
                NULL, state, NULL, updated_at_utc
         FROM download_jobs;
+        """;
+
+    private const string MikanRssRuleSnapshots = """
+        CREATE TABLE mikan_rss_rule_snapshots (
+            source_profile_id TEXT NOT NULL REFERENCES source_profiles(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            created_at_utc TEXT NOT NULL,
+            PRIMARY KEY (source_profile_id, revision)
+        ) STRICT;
+
+        CREATE TABLE mikan_rss_snapshot_priority_groups (
+            source_profile_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY (source_profile_id, revision, id),
+            UNIQUE (source_profile_id, revision, position),
+            FOREIGN KEY (source_profile_id, revision)
+                REFERENCES mikan_rss_rule_snapshots(source_profile_id, revision)
+                ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE TABLE mikan_rss_snapshot_match_arrays (
+            source_profile_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            id TEXT NOT NULL,
+            scope TEXT NOT NULL CHECK (scope IN ('whitelist', 'blacklist', 'priority')),
+            group_id TEXT,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+            position INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY (source_profile_id, revision, id),
+            FOREIGN KEY (source_profile_id, revision)
+                REFERENCES mikan_rss_rule_snapshots(source_profile_id, revision)
+                ON DELETE CASCADE,
+            FOREIGN KEY (source_profile_id, revision, group_id)
+                REFERENCES mikan_rss_snapshot_priority_groups(source_profile_id, revision, id)
+                ON DELETE CASCADE,
+            CHECK ((scope = 'priority' AND group_id IS NOT NULL)
+                OR (scope IN ('whitelist', 'blacklist') AND group_id IS NULL))
+        ) STRICT;
+
+        CREATE UNIQUE INDEX ux_mikan_rss_snapshot_array_list_position
+        ON mikan_rss_snapshot_match_arrays(source_profile_id, revision, scope, position)
+        WHERE group_id IS NULL;
+
+        CREATE UNIQUE INDEX ux_mikan_rss_snapshot_array_group_position
+        ON mikan_rss_snapshot_match_arrays(source_profile_id, revision, group_id, position)
+        WHERE group_id IS NOT NULL;
+
+        CREATE TABLE mikan_rss_snapshot_match_values (
+            source_profile_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            array_id TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK (position >= 0),
+            value_lower TEXT NOT NULL CHECK (
+                length(value_lower) > 0 AND value_lower = lower(value_lower)),
+            PRIMARY KEY (source_profile_id, revision, array_id, position),
+            UNIQUE (source_profile_id, revision, array_id, value_lower),
+            FOREIGN KEY (source_profile_id, revision, array_id)
+                REFERENCES mikan_rss_snapshot_match_arrays(source_profile_id, revision, id)
+                ON DELETE CASCADE
+        ) STRICT;
+
+        INSERT INTO mikan_rss_rule_snapshots (
+            source_profile_id, revision, created_at_utc)
+        SELECT source_profile_id, revision, updated_at_utc
+        FROM mikan_rss_rule_sets;
+
+        INSERT INTO mikan_rss_snapshot_priority_groups (
+            source_profile_id, revision, id, name, position)
+        SELECT groups.source_profile_id, sets.revision, groups.id, groups.name, groups.position
+        FROM mikan_rss_priority_groups AS groups
+        JOIN mikan_rss_rule_sets AS sets
+          ON sets.source_profile_id = groups.source_profile_id;
+
+        INSERT INTO mikan_rss_snapshot_match_arrays (
+            source_profile_id, revision, id, scope, group_id, name, enabled, position)
+        SELECT arrays.source_profile_id, sets.revision, arrays.id, arrays.scope,
+               arrays.group_id, arrays.name, arrays.enabled, arrays.position
+        FROM mikan_rss_match_arrays AS arrays
+        JOIN mikan_rss_rule_sets AS sets
+          ON sets.source_profile_id = arrays.source_profile_id;
+
+        INSERT INTO mikan_rss_snapshot_match_values (
+            source_profile_id, revision, array_id, position, value_lower)
+        SELECT rule_values.source_profile_id, sets.revision, rule_values.array_id,
+               rule_values.position, rule_values.value_lower
+        FROM mikan_rss_match_values AS rule_values
+        JOIN mikan_rss_rule_sets AS sets
+          ON sets.source_profile_id = rule_values.source_profile_id;
         """;
 }

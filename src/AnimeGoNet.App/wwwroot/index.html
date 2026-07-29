@@ -532,6 +532,13 @@
         </div>
       </div>
       <p id="rss-rule-status" class="muted">正在读取 Mikan 规则…</p>
+      <div class="rss-history">
+        <label>规则历史
+          <select id="rss-rule-snapshots"></select>
+        </label>
+        <button id="rss-rule-rollback" type="button" class="secondary-button">回滚为所选快照</button>
+        <span class="muted">回滚会创建新的 revision，不删除当前或历史规则。</span>
+      </div>
       <div class="rss-list-columns">
         <section class="rss-rule-panel">
           <div class="rss-panel-heading"><h3>白名单</h3><button id="rss-add-whitelist" type="button">添加</button></div>

@@ -56,6 +56,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(DeleteExecutionStatusResponse))]
 [JsonSerializable(typeof(RssRuleSetRequest))]
 [JsonSerializable(typeof(RssRuleSetResponse))]
+[JsonSerializable(typeof(RssRuleRollbackRequest))]
 [JsonSerializable(typeof(RssRulePreviewRequest))]
 [JsonSerializable(typeof(RssRulePreviewResponse))]
 [JsonSerializable(typeof(SourceProfileCreateRequest))]

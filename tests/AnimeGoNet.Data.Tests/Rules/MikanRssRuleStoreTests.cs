@@ -74,6 +74,46 @@ public sealed class MikanRssRuleStoreTests
         await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() => command.ExecuteNonQueryAsync());
     }
 
+    [Fact]
+    public async Task SnapshotsAreNewestFirstAndRollbackCreatesNewRevision()
+    {
+        await using var fixture = await RuleFixture.CreateAsync();
+        var initial = Assert.IsType<MikanRssRuleSnapshot>(await fixture.Store.GetAsync("mikan"));
+        var second = await fixture.Store.SaveAsync(
+            "mikan",
+            new MikanRssRuleSet(
+                [new NamedMatchArray("second", "Second", true, ["chs"])],
+                [],
+                []),
+            initial.Revision,
+            DateTimeOffset.UtcNow);
+        var third = await fixture.Store.SaveAsync(
+            "mikan",
+            new MikanRssRuleSet(
+                [new NamedMatchArray("third", "Third", true, ["cht"])],
+                [],
+                []),
+            second.Revision,
+            DateTimeOffset.UtcNow.AddMinutes(1));
+
+        var newest = await fixture.Store.ListSnapshotsAsync("MIKAN", 2);
+        Assert.Equal([3L, 2L], newest.Select(item => item.Revision));
+
+        var rolled = await fixture.Store.RollbackAsync(
+            "mikan", second.Revision, third.Revision, DateTimeOffset.UtcNow.AddMinutes(2));
+        Assert.Equal(4, rolled.Revision);
+        Assert.Equal("second", Assert.Single(rolled.Rules.Whitelist).Id);
+        Assert.Equal(
+            [4L, 3L, 2L, 1L],
+            (await fixture.Store.ListSnapshotsAsync("mikan")).Select(item => item.Revision));
+        await Assert.ThrowsAsync<MikanRssRuleRevisionException>(() =>
+            fixture.Store.RollbackAsync(
+                "mikan", 1, third.Revision, DateTimeOffset.UtcNow.AddMinutes(3)));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            fixture.Store.RollbackAsync(
+                "mikan", 999, rolled.Revision, DateTimeOffset.UtcNow.AddMinutes(3)));
+    }
+
     private sealed class RuleFixture : IAsyncDisposable
     {
         private RuleFixture(SqliteDatabaseFixture database, MikanRssRuleStore store)

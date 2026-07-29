@@ -12,6 +12,10 @@ public sealed record MikanRssRuleSnapshot(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
+public sealed record MikanRssRuleSnapshotSummary(
+    long Revision,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed class MikanRssRuleRevisionException : InvalidOperationException;
 
 public sealed class MikanRssRuleStore(AnimeGoSqliteDatabase database)
@@ -34,6 +38,9 @@ public sealed class MikanRssRuleStore(AnimeGoSqliteDatabase database)
         {
             await InsertRuleSetAsync(
                 connection, transaction, normalizedProfile, 1, normalized, utcNow, utcNow, cancellationToken)
+                .ConfigureAwait(false);
+            await InsertSnapshotAsync(
+                connection, transaction, normalizedProfile, 1, normalized, utcNow, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -108,8 +115,58 @@ public sealed class MikanRssRuleStore(AnimeGoSqliteDatabase database)
                 connection, transaction, profile, normalized, cancellationToken).ConfigureAwait(false);
         }
 
+        await InsertSnapshotAsync(
+            connection, transaction, profile, revision, normalized, utcNow, cancellationToken)
+            .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return (await GetAsync(profile, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    public async Task<IReadOnlyList<MikanRssRuleSnapshotSummary>> ListSnapshotsAsync(
+        string sourceProfileId,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = NormalizeProfileId(sourceProfileId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 200);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT revision, created_at_utc
+            FROM mikan_rss_rule_snapshots
+            WHERE source_profile_id = $profile
+            ORDER BY revision DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$profile", profile);
+        command.Parameters.AddWithValue("$limit", limit);
+        var result = new List<MikanRssRuleSnapshotSummary>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add(new MikanRssRuleSnapshotSummary(
+                reader.GetInt64(0),
+                DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture)));
+        }
+        return result;
+    }
+
+    public async Task<MikanRssRuleSnapshot> RollbackAsync(
+        string sourceProfileId,
+        long targetRevision,
+        long expectedRevision,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(targetRevision, 1);
+        var profile = NormalizeProfileId(sourceProfileId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var rules = await ReadSnapshotRulesAsync(
+            connection, profile, targetRevision, cancellationToken).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException("Mikan RSS rule snapshot was not found.");
+        return await SaveAsync(
+            profile, rules, expectedRevision, utcNow, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task InsertRuleSetAsync(
@@ -168,6 +225,112 @@ public sealed class MikanRssRuleStore(AnimeGoSqliteDatabase database)
         {
             await InsertArraysAsync(connection, transaction, profile, "priority", group.Id, group.Arrays, cancellationToken)
                 .ConfigureAwait(false);
+        }
+    }
+
+    private static async Task InsertSnapshotAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string profile,
+        long revision,
+        MikanRssRuleSet rules,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
+    {
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO mikan_rss_rule_snapshots (
+                    source_profile_id, revision, created_at_utc)
+                VALUES ($profile, $revision, $created);
+                """;
+            insert.Parameters.AddWithValue("$profile", profile);
+            insert.Parameters.AddWithValue("$revision", revision);
+            insert.Parameters.AddWithValue("$created", Format(createdAt));
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        for (var position = 0; position < rules.PriorityGroups.Count; position++)
+        {
+            var group = rules.PriorityGroups[position];
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO mikan_rss_snapshot_priority_groups (
+                    source_profile_id, revision, id, name, position)
+                VALUES ($profile, $revision, $id, $name, $position);
+                """;
+            insert.Parameters.AddWithValue("$profile", profile);
+            insert.Parameters.AddWithValue("$revision", revision);
+            insert.Parameters.AddWithValue("$id", group.Id);
+            insert.Parameters.AddWithValue("$name", group.Name);
+            insert.Parameters.AddWithValue("$position", position);
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await InsertSnapshotArraysAsync(
+            connection, transaction, profile, revision, "whitelist", null,
+            rules.Whitelist, cancellationToken).ConfigureAwait(false);
+        await InsertSnapshotArraysAsync(
+            connection, transaction, profile, revision, "blacklist", null,
+            rules.Blacklist, cancellationToken).ConfigureAwait(false);
+        foreach (var group in rules.PriorityGroups)
+        {
+            await InsertSnapshotArraysAsync(
+                connection, transaction, profile, revision, "priority", group.Id,
+                group.Arrays, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task InsertSnapshotArraysAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string profile,
+        long revision,
+        string scope,
+        string? groupId,
+        IReadOnlyList<NamedMatchArray> arrays,
+        CancellationToken cancellationToken)
+    {
+        for (var position = 0; position < arrays.Count; position++)
+        {
+            var array = arrays[position];
+            await using (var insert = connection.CreateCommand())
+            {
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT INTO mikan_rss_snapshot_match_arrays (
+                        source_profile_id, revision, id, scope, group_id, name, enabled, position)
+                    VALUES ($profile, $revision, $id, $scope, $group, $name, $enabled, $position);
+                    """;
+                insert.Parameters.AddWithValue("$profile", profile);
+                insert.Parameters.AddWithValue("$revision", revision);
+                insert.Parameters.AddWithValue("$id", array.Id);
+                insert.Parameters.AddWithValue("$scope", scope);
+                insert.Parameters.AddWithValue("$group", (object?)groupId ?? DBNull.Value);
+                insert.Parameters.AddWithValue("$name", array.Name);
+                insert.Parameters.AddWithValue("$enabled", array.Enabled);
+                insert.Parameters.AddWithValue("$position", position);
+                await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            for (var valuePosition = 0; valuePosition < array.Values.Count; valuePosition++)
+            {
+                await using var value = connection.CreateCommand();
+                value.Transaction = transaction;
+                value.CommandText = """
+                    INSERT INTO mikan_rss_snapshot_match_values (
+                        source_profile_id, revision, array_id, position, value_lower)
+                    VALUES ($profile, $revision, $array, $position, $value);
+                    """;
+                value.Parameters.AddWithValue("$profile", profile);
+                value.Parameters.AddWithValue("$revision", revision);
+                value.Parameters.AddWithValue("$array", array.Id);
+                value.Parameters.AddWithValue("$position", valuePosition);
+                value.Parameters.AddWithValue("$value", array.Values[valuePosition]);
+                await value.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -313,6 +476,115 @@ public sealed class MikanRssRuleStore(AnimeGoSqliteDatabase database)
 
         return new MikanRssRuleSnapshot(
             profile, revision, new MikanRssRuleSet(whitelist, blacklist, groups), created, updated);
+    }
+
+    private static async Task<MikanRssRuleSet?> ReadSnapshotRulesAsync(
+        SqliteConnection connection,
+        string profile,
+        long revision,
+        CancellationToken cancellationToken)
+    {
+        await using (var exists = connection.CreateCommand())
+        {
+            exists.CommandText = """
+                SELECT COUNT(*) FROM mikan_rss_rule_snapshots
+                WHERE source_profile_id = $profile AND revision = $revision;
+                """;
+            exists.Parameters.AddWithValue("$profile", profile);
+            exists.Parameters.AddWithValue("$revision", revision);
+            if (Convert.ToInt32(
+                    await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                    CultureInfo.InvariantCulture) == 0)
+            {
+                return null;
+            }
+        }
+
+        var arrays = new Dictionary<
+            string,
+            (string Scope, string? GroupId, string Name, bool Enabled, int Position, List<string> Values)>(
+            StringComparer.Ordinal);
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT arrays.id, arrays.scope, arrays.group_id, arrays.name,
+                       arrays.enabled, arrays.position, rule_values.value_lower
+                FROM mikan_rss_snapshot_match_arrays AS arrays
+                LEFT JOIN mikan_rss_snapshot_match_values AS rule_values
+                  ON rule_values.source_profile_id = arrays.source_profile_id
+                 AND rule_values.revision = arrays.revision
+                 AND rule_values.array_id = arrays.id
+                WHERE arrays.source_profile_id = $profile
+                  AND arrays.revision = $revision
+                ORDER BY arrays.scope, COALESCE(arrays.group_id, ''),
+                         arrays.position, rule_values.position;
+                """;
+            query.Parameters.AddWithValue("$profile", profile);
+            query.Parameters.AddWithValue("$revision", revision);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var id = reader.GetString(0);
+                if (!arrays.TryGetValue(id, out var row))
+                {
+                    row = (
+                        reader.GetString(1),
+                        reader.IsDBNull(2) ? null : reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetInt64(4) != 0,
+                        reader.GetInt32(5),
+                        []);
+                    arrays.Add(id, row);
+                }
+                if (!reader.IsDBNull(6))
+                {
+                    row.Values.Add(reader.GetString(6));
+                }
+            }
+        }
+
+        var whitelist = arrays
+            .Where(pair => pair.Value.Scope == "whitelist")
+            .OrderBy(pair => pair.Value.Position)
+            .Select(pair => new NamedMatchArray(
+                pair.Key, pair.Value.Name, pair.Value.Enabled, pair.Value.Values))
+            .ToArray();
+        var blacklist = arrays
+            .Where(pair => pair.Value.Scope == "blacklist")
+            .OrderBy(pair => pair.Value.Position)
+            .Select(pair => new NamedMatchArray(
+                pair.Key, pair.Value.Name, pair.Value.Enabled, pair.Value.Values))
+            .ToArray();
+        var groups = new List<PriorityGroup>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT id, name
+                FROM mikan_rss_snapshot_priority_groups
+                WHERE source_profile_id = $profile AND revision = $revision
+                ORDER BY position;
+                """;
+            query.Parameters.AddWithValue("$profile", profile);
+            query.Parameters.AddWithValue("$revision", revision);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var id = reader.GetString(0);
+                groups.Add(new PriorityGroup(
+                    id,
+                    reader.GetString(1),
+                    arrays.Where(pair =>
+                            pair.Value.Scope == "priority" && pair.Value.GroupId == id)
+                        .OrderBy(pair => pair.Value.Position)
+                        .Select(pair => new NamedMatchArray(
+                            pair.Key,
+                            pair.Value.Name,
+                            pair.Value.Enabled,
+                            pair.Value.Values))
+                        .ToArray()));
+            }
+        }
+        return new MikanRssRuleSet(whitelist, blacklist, groups);
     }
 
     private static string NormalizeProfileId(string value)

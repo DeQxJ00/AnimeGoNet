@@ -496,6 +496,7 @@ interface RssRuleSnapshot {
   whitelist: RssNamedArray[];
   blacklist: RssNamedArray[];
   priority_groups: RssPriorityGroup[];
+  snapshots: { revision: number; created_at_utc: string }[];
 }
 
 interface RssRuleDecision {
@@ -3837,6 +3838,14 @@ function renderRssRules(): void {
     `revision ${activeRssRules.revision} · 旧过滤 ${activeRssRules.rss_filter_enabled ? "开启" : "关闭"} · 批次优选 ${activeRssRules.rss_priority_enabled ? "开启" : "关闭"}`;
   renderArrayList(element<HTMLElement>("#rss-whitelist"), activeRssRules.whitelist);
   renderArrayList(element<HTMLElement>("#rss-blacklist"), activeRssRules.blacklist);
+  const snapshots = element<HTMLSelectElement>("#rss-rule-snapshots");
+  snapshots.replaceChildren(...activeRssRules.snapshots.map((snapshot) => {
+    const option = document.createElement("option");
+    option.value = String(snapshot.revision);
+    option.textContent =
+      `r${snapshot.revision} · ${new Date(snapshot.created_at_utc).toLocaleString()}`;
+    return option;
+  }));
   const groupContainer = element<HTMLElement>("#rss-priority-groups");
   groupContainer.replaceChildren(...activeRssRules.priority_groups.map((group, groupIndex) => {
     const card = document.createElement("article");
@@ -3919,6 +3928,40 @@ async function saveRssRules(): Promise<void> {
     status.textContent = `保存失败：${errorMessage(error, "未知错误")}；如有 revision 冲突请重新载入。`;
   } finally {
     save.disabled = false;
+  }
+}
+
+async function rollbackRssRules(): Promise<void> {
+  if (!activeRssRules) return;
+  const target = Number(element<HTMLSelectElement>("#rss-rule-snapshots").value);
+  if (!Number.isInteger(target) || target < 1 || target === activeRssRules.revision) return;
+  if (!window.confirm(
+    `将候选规则回滚为 revision ${target}？系统会创建新的 revision，历史快照不会删除。`,
+  )) return;
+  const status = element<HTMLElement>("#rss-rule-status");
+  const rollback = element<HTMLButtonElement>("#rss-rule-rollback");
+  rollback.disabled = true;
+  status.textContent = `正在回滚到 revision ${target}…`;
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/rss-rules/mikan/rollback", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        expected_revision: activeRssRules.revision,
+        target_revision: target,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    activeRssRules = await response.json() as RssRuleSnapshot;
+    renderRssRules();
+    status.textContent = `已回滚并创建 revision ${activeRssRules.revision}`;
+  } catch (error) {
+    status.textContent =
+      `回滚失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新载入。`;
+  } finally {
+    rollback.disabled = false;
   }
 }
 
@@ -4526,6 +4569,10 @@ element<HTMLInputElement>("#configuration-tmdb-token-clear").addEventListener(
   syncConfigurationSecretInputs,
 );
 element<HTMLButtonElement>("#rss-save").addEventListener("click", () => void saveRssRules());
+element<HTMLButtonElement>("#rss-rule-rollback").addEventListener(
+  "click",
+  () => void rollbackRssRules(),
+);
 element<HTMLButtonElement>("#rss-add-whitelist").addEventListener("click", () => {
   activeRssRules?.whitelist.push({ id: nextRuleId("whitelist"), name: "新白名单", enabled: true, values: [] });
   renderRssRules();

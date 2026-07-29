@@ -60,6 +60,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/rss-rules/{sourceProfileId}", GetRssRules);
         app.MapPut("/api/v1/rss-rules/{sourceProfileId}", PutRssRules);
         app.MapPost("/api/v1/rss-rules/{sourceProfileId}/preview", PreviewRssRules);
+        app.MapPost("/api/v1/rss-rules/{sourceProfileId}/rollback", RollbackRssRules);
         app.MapGet("/api/v1/delete/tasks/{taskId}/preview", DeletePreview);
         app.MapPost("/api/v1/delete/tasks/{taskId}", CreateDeleteExecution);
         app.MapGet("/api/v1/delete/executions/{executionId}", DeleteExecutionStatus);
@@ -1686,7 +1687,8 @@ public static class ApiEndpoints
         var snapshot = await rules.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
         return profile is null || snapshot is null
             ? TypedResults.NotFound(Error("rss_rule_set_not_found", "RSS rule set was not found."))
-            : TypedResults.Ok(ToResponse(profile, snapshot));
+            : TypedResults.Ok(await ToResponseAsync(
+                profile, snapshot, rules, cancellationToken).ConfigureAwait(false));
     }
 
     private static async Task<IResult> PutRssRules(
@@ -1708,7 +1710,8 @@ public static class ApiEndpoints
             var saved = await rules.SaveAsync(
                 profileId, ToRuleSet(request), request.ExpectedRevision,
                 DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-            return TypedResults.Ok(ToResponse(profile, saved));
+            return TypedResults.Ok(await ToResponseAsync(
+                profile, saved, rules, cancellationToken).ConfigureAwait(false));
         }
         catch (MikanRssRuleRevisionException)
         {
@@ -1718,6 +1721,47 @@ public static class ApiEndpoints
         catch (ArgumentException exception)
         {
             return TypedResults.BadRequest(Error("rss_rule_set_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> RollbackRssRules(
+        string sourceProfileId,
+        RssRuleRollbackRequest request,
+        SourceProfileStore profiles,
+        MikanRssRuleStore rules,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var profileId = sourceProfileId.Trim().ToLowerInvariant();
+            var profile = await profiles.GetEnabledAsync(profileId, cancellationToken).ConfigureAwait(false);
+            if (profile is null)
+            {
+                return TypedResults.NotFound(Error(
+                    "rss_rule_set_not_found", "RSS source profile was not found."));
+            }
+            var saved = await rules.RollbackAsync(
+                profileId,
+                request.TargetRevision,
+                request.ExpectedRevision,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(await ToResponseAsync(
+                profile, saved, rules, cancellationToken).ConfigureAwait(false));
+        }
+        catch (MikanRssRuleRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "rss_rule_revision_conflict", "RSS rules changed; reload before rolling back."));
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error(
+                "rss_rule_snapshot_not_found", "RSS rule snapshot was not found."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("rss_rule_rollback_invalid", exception.Message));
         }
     }
 
@@ -3806,17 +3850,26 @@ public static class ApiEndpoints
             (request.Values ?? []).Select(value => value ?? string.Empty).ToArray());
     }
 
-    private static RssRuleSetResponse ToResponse(
+    private static async Task<RssRuleSetResponse> ToResponseAsync(
         SourceProfileRecord profile,
-        MikanRssRuleSnapshot snapshot) =>
-        new(
+        MikanRssRuleSnapshot snapshot,
+        MikanRssRuleStore store,
+        CancellationToken cancellationToken)
+    {
+        var snapshots = await store.ListSnapshotsAsync(
+            snapshot.SourceProfileId,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new(
             snapshot.SourceProfileId, profile.RssFilterEnabled, profile.RssPriorityEnabled,
             snapshot.Revision,
             snapshot.Rules.Whitelist.Select(ToResponse).ToArray(),
             snapshot.Rules.Blacklist.Select(ToResponse).ToArray(),
             snapshot.Rules.PriorityGroups.Select(group => new RssPriorityGroupResponse(
                 group.Id, group.Name, group.Arrays.Select(ToResponse).ToArray())).ToArray(),
+            snapshots.Select(item => new RssRuleSnapshotItem(
+                item.Revision, item.CreatedAtUtc)).ToArray(),
             snapshot.CreatedAtUtc, snapshot.UpdatedAtUtc);
+    }
 
     private static RssNamedArrayResponse ToResponse(NamedMatchArray array) =>
         new(array.Id, array.Name, array.Enabled, array.Values);

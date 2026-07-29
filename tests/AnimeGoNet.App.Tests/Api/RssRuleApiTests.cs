@@ -8,6 +8,8 @@ namespace AnimeGoNet.App.Tests.Api;
 
 public sealed class RssRuleApiTests
 {
+    private static readonly string[] ChsValue = ["chs"];
+
     [Fact]
     public async Task GetPutAndPreviewUseRevisionLowercaseAndOrderedShortCircuit()
     {
@@ -134,9 +136,60 @@ public sealed class RssRuleApiTests
         Assert.Contains("id=\"rss-blacklist\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"rss-priority-groups\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"rss-preview-run\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"rss-rule-snapshots\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"rss-rule-rollback\"", html, StringComparison.Ordinal);
         Assert.Contains("saveRssRules", script, StringComparison.Ordinal);
         Assert.Contains("previewRssRules", script, StringComparison.Ordinal);
+        Assert.Contains("rollbackRssRules", script, StringComparison.Ordinal);
         Assert.Contains("expected_revision", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SnapshotHistoryRollbackIsRevisionSafeAndDoesNotDeleteHistory()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var initialResponse = await app.Client.GetAsync("/api/v1/rss-rules/mikan");
+        using var initial = JsonDocument.Parse(await initialResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(
+            [1L],
+            initial.RootElement.GetProperty("snapshots").EnumerateArray()
+                .Select(item => item.GetProperty("revision").GetInt64()));
+
+        using var put = await app.Client.PutAsync("/api/v1/rss-rules/mikan", Json(new
+        {
+            expected_revision = 1,
+            whitelist = new[]
+            {
+                new { id = "temporary", name = "Temporary", enabled = true, values = ChsValue },
+            },
+            blacklist = Array.Empty<object>(),
+            priority_groups = Array.Empty<object>(),
+        }));
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        using var rollback = await app.Client.PostAsync(
+            "/api/v1/rss-rules/mikan/rollback",
+            Json(new { expected_revision = 2, target_revision = 1 }));
+        Assert.Equal(HttpStatusCode.OK, rollback.StatusCode);
+        using var rolled = JsonDocument.Parse(await rollback.Content.ReadAsStreamAsync());
+        Assert.Equal(3, rolled.RootElement.GetProperty("revision").GetInt64());
+        Assert.Equal(
+            [3L, 2L, 1L],
+            rolled.RootElement.GetProperty("snapshots").EnumerateArray()
+                .Select(item => item.GetProperty("revision").GetInt64()));
+        Assert.Equal(
+            "resolution-720p",
+            Assert.Single(rolled.RootElement.GetProperty("blacklist").EnumerateArray())
+                .GetProperty("id").GetString());
+
+        using var stale = await app.Client.PostAsync(
+            "/api/v1/rss-rules/mikan/rollback",
+            Json(new { expected_revision = 2, target_revision = 1 }));
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        using var missing = await app.Client.PostAsync(
+            "/api/v1/rss-rules/mikan/rollback",
+            Json(new { expected_revision = 3, target_revision = 999 }));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
     private static StringContent Json(object value) =>

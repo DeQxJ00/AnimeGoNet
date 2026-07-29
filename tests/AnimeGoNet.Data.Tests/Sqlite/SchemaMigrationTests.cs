@@ -57,6 +57,10 @@ public sealed class SchemaMigrationTests
             "mikan_rss_match_values",
             "mikan_rss_priority_groups",
             "mikan_rss_rule_sets",
+            "mikan_rss_rule_snapshots",
+            "mikan_rss_snapshot_match_arrays",
+            "mikan_rss_snapshot_match_values",
+            "mikan_rss_snapshot_priority_groups",
             "mikan_trusted_offsets",
             "mikan_work_rules",
             "pending_tmdb_nfo_rewrite_jobs",
@@ -153,6 +157,77 @@ public sealed class SchemaMigrationTests
         Assert.Equal(now, reader.GetString(4));
         Assert.Equal("downloading", reader.GetString(5));
         Assert.False(await reader.ReadAsync());
+    }
+
+    [Fact]
+    public async Task RssRuleSnapshotMigrationPreservesCurrentRevisionAndOrder()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 24))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-07-29T11:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+                INSERT INTO mikan_rss_rule_sets (
+                    source_profile_id, revision, created_at_utc, updated_at_utc)
+                VALUES ('mikan', 7, $now, $now);
+                INSERT INTO mikan_rss_priority_groups (
+                    source_profile_id, id, name, position)
+                VALUES ('mikan', 'language', 'Language', 0);
+                INSERT INTO mikan_rss_match_arrays (
+                    source_profile_id, id, scope, group_id, name, enabled, position)
+                VALUES ('mikan', 'chs', 'priority', 'language', 'CHS', 1, 0);
+                INSERT INTO mikan_rss_match_values (
+                    source_profile_id, array_id, position, value_lower)
+                VALUES ('mikan', 'chs', 0, 'chs');
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(5, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration25 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 25);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration25.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT snapshots.revision, groups.id, arrays.id, rule_values.value_lower
+            FROM mikan_rss_rule_snapshots AS snapshots
+            JOIN mikan_rss_snapshot_priority_groups AS groups
+              ON groups.source_profile_id = snapshots.source_profile_id
+             AND groups.revision = snapshots.revision
+            JOIN mikan_rss_snapshot_match_arrays AS arrays
+              ON arrays.source_profile_id = snapshots.source_profile_id
+             AND arrays.revision = snapshots.revision
+             AND arrays.group_id = groups.id
+            JOIN mikan_rss_snapshot_match_values AS rule_values
+              ON rule_values.source_profile_id = arrays.source_profile_id
+             AND rule_values.revision = arrays.revision
+             AND rule_values.array_id = arrays.id;
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(7, reader.GetInt64(0));
+        Assert.Equal("language", reader.GetString(1));
+        Assert.Equal("chs", reader.GetString(2));
+        Assert.Equal("chs", reader.GetString(3));
     }
 
     [Fact]
