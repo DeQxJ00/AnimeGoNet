@@ -159,8 +159,8 @@
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；qB 专用脚本用 FQN 过滤只启动 `QbittorrentSandboxTests`，不会串跑同项目的 TMDB live 测试；默认 CI 不启动该实例，也未创建 Torrent。
 - [x] 实现下载器路径可见性与硬链接能力探测：仅在显式 API/WebUI 操作时向实例 `download_path` 和全局 `save_path` 写入同名随机临时文件，验证后尽力清理；缺目录、权限、跨文件系统/挂载和平台不支持均返回稳定脱敏错误码，Windows/Linux/macOS 使用 AOT-safe 原生调用。
 - [x] 建立隔离 Docker Compose 下载环境：专用 Compose 只绑定随机回环端口，使用临时 data/download/qB profile 根目录、非 root AnimeGoNet、只读根文件系统和退出清理；不复用 TestSpace 或生产卷。
-- [>] qBittorrent 真实容器 smoke 已接入 Docker CI：从首启日志读取临时密码后设置隔离测试密码，逐实例验证登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete，并使用仅含 `127.0.0.1:9` tracker 的 5 字节 fixture、唯一 category/tag 和整项目清理。本机没有 Docker CLI，首次 GitHub Actions 实跑结果仍待验收。
-- [>] 双实例容器已同时连接并通过各自路径/硬链接探测；CI route-preview 验证 Mikan→bt、U2/TTG→pt，既有并发快照测试验证绑定修改不改写已创建任务。真实统一导入任务分别进入两个 qB 的容器全链仍待安全 fixture HTTP 边界实现。
+- [>] qBittorrent 真实容器 smoke 已接入 Docker CI：从首启日志读取临时密码后设置隔离测试密码，逐实例验证登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete，并使用仅含 `127.0.0.1:9` tracker 的 5 字节 fixture、唯一 category/tag 和整项目清理。本机 TestSpace 现可显式执行同一安全 fixture 的统一导入→SQLite→dispatch→真实 qB 验收；本机没有 Docker CLI，首次 GitHub Actions 实跑结果仍待验收。
+- [>] 双实例容器已同时连接并通过各自路径/硬链接探测；CI route-preview 验证 Mikan→bt、U2/TTG→pt，既有并发快照测试验证绑定修改不改写已创建任务。本机单实例已验证真实统一导入进入绑定 bt、保持暂停、捕获路径快照并彻底清理；统一任务分别进入两个容器的全链仍待 Docker runner 验收。
 - [x] 旧 YAML/环境变量出现 Transmission 时读取并生成 `UnsupportedDownloaderType`：按 `ANIMEGO_CLIENT`→显式 `ANIMEGO_CONFIG`/`--config`→`data_path/animego.yaml` 检测，只读取 `setting.client.client` 且不回显凭据；诊断未解除时强制关闭 workers、替换为空下载器 registry、拒绝导入/恢复/连接与路径测试，Web/API 保持可用并显示修复原因，绝不静默转成 qB。
 
 ## P8 — 下载、重命名、刮削

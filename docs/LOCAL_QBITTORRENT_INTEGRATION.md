@@ -38,9 +38,21 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 ./eng/qbittorrent-local-integration.ps1
 ```
 
-脚本确认端口所有者就是沙箱 `qbittorrent.exe`、portable profile lock 存在，并创建独立的 `animegonet_data`。随后它通过主程序 qBittorrent adapter 完成用户名/密码登录、读取任务列表、核对程序/API 版本和 `download_path`。它不会修改 qBittorrent 偏好、关闭用户已启动的进程或创建 Torrent。
+脚本确认端口所有者就是沙箱 `qbittorrent.exe`、portable profile lock 存在，并创建独立的 `animegonet_data`。默认模式随后通过主程序 qBittorrent adapter 完成用户名/密码登录、读取任务列表、核对程序/API 版本和 `download_path`。默认模式不会修改 qBittorrent 偏好、关闭用户已启动的进程或创建 Torrent。
 
 `AnimeGoNet.LocalIntegration.Tests` 同时包含独立的 TMDB live smoke，因此 qB 脚本必须以 `FullyQualifiedName~QbittorrentSandboxTests` 过滤，只运行 qB 测试。不得通过设置无关 TMDB key 来掩盖脚本串跑。
+
+要显式验收统一导入写入链，使用：
+
+```powershell
+./eng/qbittorrent-local-integration.ps1 -DispatchFixture
+```
+
+该开关只使用仓库中的 `tests/fixtures/animegonet-ci.torrent.b64`：Torrent
+总大小 5 字节，tracker 固定为不可用的 `127.0.0.1:9`，任务从添加到删除始终
+保持暂停。测试经过 `UnifiedIngestProcessor`、隔离 SQLite、staging、
+`StagedTorrentDispatcher` 和真实 qB Web API，并验证任务进入
+`download_preparing`。它不会读取 RSS、私人 Torrent URL 或现有任务内容。
 
 ## 验收
 
@@ -50,13 +62,27 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 - API 版本与 exe 产品版本一致。
 - qBittorrent 默认保存路径是 `TestSpace\download_temp`。
 - `download_path`、`save_path`、`data_path` 三个目录存在且彼此分离。
-- 测试前后没有新增 Torrent、category、tag 或下载文件。
+- 默认测试前后没有新增 Torrent、category、tag 或下载文件。
+- `-DispatchFixture` 使用每次唯一的 category
+  `animegonet-integration-<runid>` 和 tag `animegonet-test-<runid>`；添加结果必须
+  是预期 info-hash、暂停状态、5 字节容量和正确路由快照。
+- 写入测试结束后用 `deleteFiles=false` 删除精确 info-hash，再删除精确
+  category/tag；测试前不存在、测试中也未创建 fixture payload，运行 SQLite
+  位于 `animegonet_data/integration/qbit-dispatch-<runid>` 并在结束后清理。
 
-## 真实 Torrent 的后续测试与清理
+## 真实 Torrent 的安全边界与清理
 
 真实下载必须由测试调用方提供明确、可合法分发的固定输入，禁止接入私人 RSS 或现有私人任务。未来的写入型测试统一使用 category `animegonet-integration`、tag `animegonet-test-<runid>` 和可辨识任务名；测试只清理同时带这些标记且 run ID 匹配的任务及其测试文件。
 
-当前 smoke 是只读的，不创建任何需要清理的 qBittorrent 对象。结束后只需清除当前 PowerShell 中的三个 `ANIMEGONET_QBIT_*` 认证变量；不要删除 portable profile。`animegonet_data` 是独立测试数据目录，可在确认 AnimeGoNet 测试进程已停止后按具体测试文档清理。
+默认 smoke 是只读的，不创建任何需要清理的 qBittorrent 对象。显式
+`-DispatchFixture` 模式会在 `finally` 中清理精确 info-hash、唯一 category/tag、
+可能的精确 fixture payload 和本次 SQLite 根目录；即使断言失败也执行清理。
+它固定使用 `deleteFiles=false`，不会让 qB 递归删除下载目录。若进程被强制终止，
+只可按控制台中的 run ID 清理上述固定前缀对象，不能批量删除其他任务。
+
+结束后清除当前 PowerShell 中的 `ANIMEGONET_QBIT_*` 认证变量；不要删除 portable
+profile。`animegonet_data` 是独立测试数据目录，可在确认 AnimeGoNet 测试进程已
+停止后按具体测试文档清理。
 
 ## 主程序诊断 API
 
