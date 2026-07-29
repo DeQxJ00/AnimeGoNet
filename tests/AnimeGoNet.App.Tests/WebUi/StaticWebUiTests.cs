@@ -17,6 +17,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "TMDB EP snapshot")]
     [InlineData("/app.js", "text/javascript", "not_downloaded")]
     [InlineData("/app.js", "text/javascript", "/api/v1/metadata/tasks")]
+    [InlineData("/app.js", "text/javascript", "查看来源 / TMDB 对照")]
+    [InlineData("/app.js", "text/javascript", "可信依据：TMDB 已验证")]
     [InlineData("/app.js", "text/javascript", "/attempts")]
     [InlineData("/app.js", "text/javascript", "查看策略时间线")]
     [InlineData("/app.js", "text/javascript", "可自动重试")]

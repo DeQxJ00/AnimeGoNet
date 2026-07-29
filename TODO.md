@@ -212,7 +212,7 @@
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。
 - [>] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件，AI 密钥只写不回显；表单/API/私有配置已完成，原始 YAML 预览、diff 与保存前备份待实现。
-- [ ] 动画条目页同时展示来源名称/集号和最终 TMDB 名称/Season/Episode，以及 AI 匹配状态、置信度、最终失败原因和策略尝试时间线。
+- [x] 动画任务详情同时展示逐文件来源名称/来源 EP/本地候选和最终 TMDB 名称/Season/Episode，以及 AI 调用状态、TMDB 验证可信依据、最终失败原因和策略尝试时间线；不采信或展示模型自报的数字置信度，避免把未验证自评分表示成权威结果。
 - [x] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。列表/详情 API、Cover 安全代理/缓存/占位图和静态 TypeScript 页面均已完成；页面显示 TMDB 规范进度、取得策略、验证状态、一致性警告和可筛选 EP 网格，删除完成记录会立即恢复未下载。
 - [x] 实现作品库服务端分页排序和前端升/降序：服务端与页面支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；排序、方向、页大小、EP 筛选和当前详情保存在浏览器本地。
 - [x] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。`poster_url` 只指向同源 `/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}`；Season/Series 回退、5 MiB 流式上限、图片魔数校验、并发合并、磁盘缓存与失败占位均有测试。

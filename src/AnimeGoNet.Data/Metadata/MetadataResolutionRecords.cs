@@ -130,6 +130,33 @@ public sealed record MetadataTaskListProjection(
     int PendingFileCount,
     DateTimeOffset UpdatedAtUtc);
 
+public sealed record MetadataTaskFileDetailProjection(
+    string RelativePath,
+    long SizeBytes,
+    string? SourceEpisode,
+    string? FileEpisodeCandidate,
+    string Disposition,
+    string? OtherReason,
+    int? TmdbSeriesId,
+    string? TmdbSeriesName,
+    int? TmdbSeasonNumber,
+    string? TmdbSeasonName,
+    int? TmdbEpisodeNumber,
+    string? TmdbEpisodeName);
+
+public sealed record MetadataTaskAiProjection(
+    string Stage,
+    string Result,
+    string? ErrorCode,
+    string? Reason,
+    long DurationMilliseconds,
+    DateTimeOffset AttemptedAtUtc);
+
+public sealed record MetadataTaskDetailProjection(
+    MetadataTaskListProjection Summary,
+    MetadataTaskAiProjection? Ai,
+    IReadOnlyList<MetadataTaskFileDetailProjection> Files);
+
 public enum MikanWorkImpactCategory
 {
     Future,

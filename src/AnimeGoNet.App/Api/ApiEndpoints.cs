@@ -69,6 +69,7 @@ public static class ApiEndpoints
             ClearMikanTrustedOffset);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
+        app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapGet(
@@ -1879,6 +1880,80 @@ public static class ApiEndpoints
                 attempt.CreatedAtUtc,
                 attempt.RunStartedAtUtc,
                 attempt.RunCompletedAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> MetadataTaskDetail(
+        string taskId,
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return TypedResults.BadRequest(Error(
+                "metadata_task_id_invalid",
+                "Metadata task ID is required."));
+        }
+
+        var detail = await resolutions.GetTaskDetailAsync(taskId, cancellationToken).ConfigureAwait(false);
+        if (detail is null)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found",
+                "Metadata task was not found."));
+        }
+
+        var item = detail.Summary;
+        var ai = detail.Ai;
+        return TypedResults.Ok(new MetadataTaskDetailResponse(
+            new MetadataTaskListItem(
+                item.TaskId,
+                item.Title,
+                item.SourceId,
+                item.Status,
+                item.MikanId,
+                item.BangumiSubjectId,
+                item.TmdbSeriesId,
+                item.TmdbSeasonNumber,
+                item.SeriesStrategy,
+                item.SeasonStrategy,
+                item.EpisodeStrategy,
+                item.FailureKind,
+                item.FailureReason,
+                item.EpisodeFileCount,
+                item.OtherFileCount,
+                item.DuplicateFileCount,
+                item.PendingFileCount,
+                item.UpdatedAtUtc),
+            ai is null
+                ? new MetadataTaskAiItem(
+                    "not_attempted",
+                    null,
+                    null,
+                    null,
+                    "not_established",
+                    null,
+                    null)
+                : new MetadataTaskAiItem(
+                    ai.Result,
+                    ai.Stage,
+                    ai.ErrorCode,
+                    ai.Reason,
+                    ai.Result == "matched" ? "tmdb_verified" : "not_established",
+                    ai.DurationMilliseconds,
+                    ai.AttemptedAtUtc),
+            detail.Files.Select(file => new MetadataTaskFileItem(
+                file.RelativePath,
+                file.SizeBytes,
+                file.SourceEpisode,
+                file.FileEpisodeCandidate,
+                file.Disposition,
+                file.OtherReason,
+                file.TmdbSeriesId,
+                file.TmdbSeriesName,
+                file.TmdbSeasonNumber,
+                file.TmdbSeasonName,
+                file.TmdbEpisodeNumber,
+                file.TmdbEpisodeName)).ToArray()));
     }
 
     private static async Task<IResult> LibrarySeasons(

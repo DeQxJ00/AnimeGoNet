@@ -195,6 +195,26 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-attempt p { margin: 6px 0 0; color: #94a7c8; font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
 .metadata-attempt .metadata-attempt-reason { color: #ffb0b0; }
 .metadata-attempt-empty { margin: 0; padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.45); }
+.metadata-detail { display: grid; gap: 10px; margin-top: 12px; }
+.metadata-detail:empty { display: none; }
+.metadata-ai { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px 12px; padding: 12px; border: 1px solid #394761; border-radius: 12px; background: rgba(5,8,16,.6); }
+.metadata-ai.verified { border-color: #356757; }
+.metadata-ai strong { color: #dce7fb; font-size: .8rem; }
+.metadata-ai p { grid-column: 1 / -1; margin: 0; color: #94a7c8; font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
+.metadata-ai .metadata-detail-reason { color: #ffb0b0; }
+.metadata-file-comparisons { display: grid; gap: 8px; }
+.metadata-file-comparison { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid #334565; border-radius: 12px; background: rgba(5,8,16,.52); }
+.metadata-file-comparison.other, .metadata-file-comparison.duplicate { border-color: #695736; }
+.metadata-file-source, .metadata-file-canonical { min-width: 0; }
+.metadata-file-source strong, .metadata-file-canonical strong { display: block; color: #dce7fb; font-size: .77rem; overflow-wrap: anywhere; }
+.metadata-file-source p, .metadata-file-canonical p { margin: 5px 0 0; color: #94a7c8; font-size: .7rem; line-height: 1.4; overflow-wrap: anywhere; }
+.metadata-file-arrow { color: #6f91c8; font-weight: 700; }
+@media (max-width: 760px) {
+    .metadata-file-comparison { grid-template-columns: 1fr; }
+    .metadata-file-arrow { transform: rotate(90deg); justify-self: start; }
+    .metadata-ai { grid-template-columns: 1fr; }
+    .metadata-ai p { grid-column: 1; }
+}
 .pending-tmdb-heading { gap: 18px; }
 .pending-tmdb-heading h2 { margin-bottom: 0; }
 .pending-tmdb-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }

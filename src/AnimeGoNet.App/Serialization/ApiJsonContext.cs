@@ -37,6 +37,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MikanTrustedOffsetListResponse))]
 [JsonSerializable(typeof(MetadataRetryResponse))]
 [JsonSerializable(typeof(MetadataTaskListResponse))]
+[JsonSerializable(typeof(MetadataTaskDetailResponse))]
 [JsonSerializable(typeof(MetadataAttemptListResponse))]
 [JsonSerializable(typeof(AnimeSeasonListResponse))]
 [JsonSerializable(typeof(AnimeSeasonDetailResponse))]

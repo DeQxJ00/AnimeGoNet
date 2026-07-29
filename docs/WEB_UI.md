@@ -75,7 +75,7 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 ## 7. 当前任务状态投影
 
-在完整作品库落地前，首页提供只读的“匹配与整理状态”任务投影，用于观察统一导入到元数据解析的实际进度。`GET /api/v1/metadata/tasks` 当前返回标题、来源、任务状态、`mikanid`/Bangumi/TMDB Series/Season、最近成功的 Series/Season/Episode 策略、Episode/Duplicate/Other/Pending 文件计数、脱敏失败分类与原因，以及最后更新时间。
+在完整作品库落地前，首页提供只读的“匹配与整理状态”任务投影，用于观察统一导入到元数据解析的实际进度。`GET /api/v1/metadata/tasks` 当前返回标题、来源、任务状态、`mikanid`/Bangumi/TMDB Series/Season、最近成功的 Series/Season/Episode 策略、Episode/Duplicate/Other/Pending 文件计数、脱敏失败分类与原因，以及最后更新时间。展开“来源 / TMDB 对照”时，`GET /api/v1/metadata/tasks/{taskId}` 返回每个 Torrent 相对文件名、容量、来源 EP、仅供本地审计的文件名 EP 候选，以及经验证后的 TMDB Series 名、Season 名/号和 Episode 名/号；不返回 Torrent URL、passkey、下载绝对路径或媒体绝对路径。详情同时给出统一 AI 是否调用、所在阶段、结果、耗时和安全失败原因。模型自报数字置信度不进入协议或数据库；只有主程序再次验证 TMDB Series/Season/Episode 后，页面才显示“可信依据：TMDB 已验证”，否则明确显示“未建立”。
 
 该投影不返回 Torrent URL、passkey、下载器凭据或文件绝对路径。查询通过单条聚合 SQL 批量产生，避免逐任务读取策略或文件计数。只有已进入 `metadata_failed` 且没有活动租约的任务显示“显式重新匹配”，调用既有重试 API 后刷新状态；它不是自动重试开关，也不会覆盖人工规则。
 

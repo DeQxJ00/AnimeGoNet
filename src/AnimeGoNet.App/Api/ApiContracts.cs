@@ -354,6 +354,34 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MetadataTaskDetailResponse(
+    [property: JsonPropertyName("summary")] MetadataTaskListItem Summary,
+    [property: JsonPropertyName("ai")] MetadataTaskAiItem Ai,
+    [property: JsonPropertyName("files")] IReadOnlyList<MetadataTaskFileItem> Files);
+
+public sealed record MetadataTaskAiItem(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("stage")] string? Stage,
+    [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("confidence_basis")] string ConfidenceBasis,
+    [property: JsonPropertyName("duration_ms")] long? DurationMilliseconds,
+    [property: JsonPropertyName("attempted_at_utc")] DateTimeOffset? AttemptedAtUtc);
+
+public sealed record MetadataTaskFileItem(
+    [property: JsonPropertyName("source_name")] string SourceName,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("source_episode")] string? SourceEpisode,
+    [property: JsonPropertyName("file_episode_candidate")] string? FileEpisodeCandidate,
+    [property: JsonPropertyName("disposition")] string Disposition,
+    [property: JsonPropertyName("other_reason")] string? OtherReason,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_series_name")] string? TmdbSeriesName,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_season_name")] string? TmdbSeasonName,
+    [property: JsonPropertyName("tmdb_episode_number")] int? TmdbEpisodeNumber,
+    [property: JsonPropertyName("tmdb_episode_name")] string? TmdbEpisodeName);
+
 public sealed record MetadataAttemptListResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("items")] IReadOnlyList<MetadataAttemptItemResponse> Items);

@@ -1855,6 +1855,158 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         return items;
     }
 
+    public async Task<MetadataTaskDetailProjection?> GetTaskDetailAsync(
+        string taskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        MetadataTaskListProjection? summary;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT task.id, task.title, task.source_id, task.status,
+                       task.mikanid, task.bangumi_subject_id,
+                       (SELECT run.tmdb_series_id FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id AND run.tmdb_series_id IS NOT NULL
+                        ORDER BY run.attempt_number DESC LIMIT 1),
+                       (SELECT run.tmdb_season_number FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id AND run.tmdb_season_number IS NOT NULL
+                        ORDER BY run.attempt_number DESC LIMIT 1),
+                       (SELECT attempt.strategy
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id AND attempt.stage = 'series' AND attempt.result = 'matched'
+                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT attempt.strategy
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id AND attempt.stage = 'season' AND attempt.result = 'matched'
+                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT attempt.strategy
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id AND attempt.stage = 'episode' AND attempt.result = 'matched'
+                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       task.failure_kind, task.failure_reason,
+                       SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
+                       task.updated_at_utc
+                FROM ingest_tasks AS task
+                LEFT JOIN task_files AS file ON file.task_id = task.id
+                WHERE task.id = $task_id
+                GROUP BY task.id;
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            summary = ReadTaskListProjection(reader);
+        }
+
+        MetadataTaskAiProjection? ai = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT attempt.stage, attempt.result, attempt.error_code, attempt.reason,
+                       attempt.duration_ms, attempt.created_at_utc
+                FROM metadata_resolution_attempts AS attempt
+                JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                WHERE run.task_id = $task_id
+                  AND attempt.strategy = 'ai_metadata'
+                ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                LIMIT 1;
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                ai = new MetadataTaskAiProjection(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.GetInt64(4),
+                    DateTimeOffset.Parse(
+                        reader.GetString(5),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind));
+            }
+        }
+
+        var files = new List<MetadataTaskFileDetailProjection>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT file.relative_path, file.size_bytes, file.source_episode,
+                       file.file_episode_candidate, file.disposition, file.other_reason,
+                       file.tmdb_series_id,
+                       COALESCE(NULLIF(series.canonical_name, ''), NULLIF(series.original_name, '')),
+                       file.tmdb_season_number, season.canonical_name,
+                       file.tmdb_episode_number, episode.name
+                FROM task_files AS file
+                LEFT JOIN anime_series AS series
+                  ON series.tmdb_series_id = file.tmdb_series_id
+                LEFT JOIN anime_seasons AS season
+                  ON season.series_id = series.id
+                 AND season.season_number = file.tmdb_season_number
+                LEFT JOIN tmdb_episodes AS episode
+                  ON episode.tmdb_episode_id = file.tmdb_episode_id
+                WHERE file.task_id = $task_id
+                ORDER BY file.relative_path COLLATE NOCASE, file.id;
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                files.Add(new MetadataTaskFileDetailProjection(
+                    reader.GetString(0),
+                    reader.GetInt64(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                    reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                    reader.IsDBNull(11) ? null : reader.GetString(11)));
+            }
+        }
+
+        return new MetadataTaskDetailProjection(summary, ai, files);
+    }
+
+    private static MetadataTaskListProjection ReadTaskListProjection(SqliteDataReader reader) =>
+        new(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetInt32(4),
+            reader.IsDBNull(5) ? null : reader.GetInt32(5),
+            reader.IsDBNull(6) ? null : reader.GetInt32(6),
+            reader.IsDBNull(7) ? null : reader.GetInt32(7),
+            reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.GetInt32(13),
+            reader.GetInt32(14),
+            reader.GetInt32(15),
+            reader.GetInt32(16),
+            DateTimeOffset.Parse(
+                reader.GetString(17),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind));
+
     public async Task<MikanWorkImpactProjection> GetMikanWorkImpactAsync(
         int mikanId,
         int limit = 100,

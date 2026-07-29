@@ -1071,6 +1071,92 @@ async function retryMetadataTask(taskId, button) {
     }
 }
 const expandedMetadataTaskIds = new Set();
+const expandedMetadataDetailIds = new Set();
+async function loadMetadataDetail(taskId, target, button) {
+    expandedMetadataDetailIds.add(taskId);
+    button.disabled = true;
+    button.textContent = "读取来源 / TMDB 对照…";
+    button.setAttribute("aria-expanded", "true");
+    try {
+        const response = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const detail = await response.json();
+        const ai = document.createElement("article");
+        ai.className = `metadata-ai ${detail.ai.status === "matched" ? "verified" : ""}`;
+        const aiHeading = document.createElement("strong");
+        aiHeading.textContent = `AI：${detail.ai.status === "not_attempted" ? "未调用" : detail.ai.status}`;
+        const confidence = document.createElement("span");
+        confidence.className = `badge ${detail.ai.confidence_basis === "tmdb_verified" ? "ready" : ""}`;
+        confidence.textContent = detail.ai.confidence_basis === "tmdb_verified"
+            ? "可信依据：TMDB 已验证"
+            : "可信依据：未建立";
+        const aiMeta = document.createElement("p");
+        aiMeta.textContent = detail.ai.attempted_at_utc
+            ? `${textOrDash(detail.ai.stage)} 阶段 · ${detail.ai.duration_ms} ms · ${new Date(detail.ai.attempted_at_utc).toLocaleString()}`
+            : "模型自报置信度不被采信；只有 TMDB Series / Season / Episode 验证通过才建立可信结果。";
+        ai.append(aiHeading, confidence, aiMeta);
+        if (detail.ai.error_code || detail.ai.reason) {
+            const reason = document.createElement("p");
+            reason.className = "metadata-detail-reason";
+            reason.textContent = `${textOrDash(detail.ai.error_code)} · ${textOrDash(detail.ai.reason)}`;
+            ai.append(reason);
+        }
+        const files = document.createElement("div");
+        files.className = "metadata-file-comparisons";
+        if (detail.files.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "muted metadata-attempt-empty";
+            empty.textContent = "该任务尚无文件条目。";
+            files.append(empty);
+        }
+        else {
+            for (const file of detail.files) {
+                const row = document.createElement("article");
+                row.className = `metadata-file-comparison ${file.disposition}`;
+                const source = document.createElement("div");
+                source.className = "metadata-file-source";
+                const sourceName = document.createElement("strong");
+                sourceName.textContent = file.source_name;
+                const sourceEvidence = document.createElement("p");
+                sourceEvidence.textContent = `来源 EP ${textOrDash(file.source_episode)} · 文件名候选 ${textOrDash(file.file_episode_candidate)} · ${formatBytes(file.size_bytes)}`;
+                source.append(sourceName, sourceEvidence);
+                const arrow = document.createElement("span");
+                arrow.className = "metadata-file-arrow";
+                arrow.textContent = "→";
+                arrow.setAttribute("aria-hidden", "true");
+                const canonical = document.createElement("div");
+                canonical.className = "metadata-file-canonical";
+                const canonicalName = document.createElement("strong");
+                canonicalName.textContent = file.tmdb_series_name
+                    ? `${file.tmdb_series_name} / ${textOrDash(file.tmdb_season_name)}`
+                    : "尚无经验证的 TMDB 映射";
+                const canonicalEpisode = document.createElement("p");
+                canonicalEpisode.textContent = file.tmdb_episode_number === null
+                    ? `${file.disposition} · ${textOrDash(file.other_reason)}`
+                    : `TMDB ${file.tmdb_series_id} · S${String(file.tmdb_season_number).padStart(2, "0")}E${String(file.tmdb_episode_number).padStart(3, "0")} · ${textOrDash(file.tmdb_episode_name)}`;
+                canonical.append(canonicalName, canonicalEpisode);
+                row.append(source, arrow, canonical);
+                files.append(row);
+            }
+        }
+        target.replaceChildren(ai, files);
+        button.disabled = false;
+        button.textContent = "收起来源 / TMDB 对照";
+        button.onclick = () => {
+            expandedMetadataDetailIds.delete(taskId);
+            target.replaceChildren();
+            button.textContent = "查看来源 / TMDB 对照";
+            button.setAttribute("aria-expanded", "false");
+            button.onclick = () => void loadMetadataDetail(taskId, target, button);
+        };
+    }
+    catch (error) {
+        target.textContent = `任务详情读取失败：${errorMessage(error, "未知错误")}`;
+        button.disabled = false;
+        button.textContent = "重试来源 / TMDB 对照";
+    }
+}
 async function loadMetadataAttempts(taskId, target, button) {
     expandedMetadataTaskIds.add(taskId);
     button.disabled = true;
@@ -1180,6 +1266,14 @@ async function loadMetadataTasks() {
             }
             const actions = document.createElement("div");
             actions.className = "metadata-actions";
+            const detailButton = document.createElement("button");
+            detailButton.type = "button";
+            detailButton.className = "metadata-attempt-button";
+            detailButton.textContent = "查看来源 / TMDB 对照";
+            detailButton.setAttribute("aria-expanded", "false");
+            const detailTarget = document.createElement("div");
+            detailTarget.className = "metadata-detail";
+            detailButton.onclick = () => void loadMetadataDetail(item.task_id, detailTarget, detailButton);
             const attempts = document.createElement("button");
             attempts.type = "button";
             attempts.className = "metadata-attempt-button";
@@ -1187,7 +1281,7 @@ async function loadMetadataTasks() {
             const attemptList = document.createElement("div");
             attemptList.className = "metadata-attempt-list";
             attempts.onclick = () => void loadMetadataAttempts(item.task_id, attemptList, attempts);
-            actions.append(attempts);
+            actions.append(detailButton, attempts);
             if (item.status === "metadata_failed") {
                 const retry = document.createElement("button");
                 retry.type = "button";
@@ -1196,7 +1290,10 @@ async function loadMetadataTasks() {
                 retry.addEventListener("click", () => void retryMetadataTask(item.task_id, retry));
                 actions.append(retry);
             }
-            card.append(actions, attemptList);
+            card.append(actions, detailTarget, attemptList);
+            if (expandedMetadataDetailIds.has(item.task_id)) {
+                void loadMetadataDetail(item.task_id, detailTarget, detailButton);
+            }
             if (expandedMetadataTaskIds.has(item.task_id)) {
                 void loadMetadataAttempts(item.task_id, attemptList, attempts);
             }
