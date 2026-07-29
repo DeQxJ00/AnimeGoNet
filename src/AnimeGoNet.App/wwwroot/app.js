@@ -2998,6 +2998,36 @@ async function probeDownloaderPath(id, button) {
         button.textContent = "探测路径";
     }
 }
+const downloaderEditableFields = [
+    ["base_url", "#downloader-config-url"],
+    ["username", "#downloader-config-username"],
+    ["password", "#downloader-config-password"],
+    ["download_path", "#downloader-config-path"],
+    ["enabled", "#downloader-config-enabled"],
+];
+function applyDownloaderFieldLocks(instance) {
+    const locks = new Map((instance?.locked_fields ?? []).map((lock) => [lock.field, lock]));
+    for (const [field, selector] of downloaderEditableFields) {
+        const input = element(selector);
+        const lock = locks.get(field);
+        input.disabled = lock !== undefined;
+        const label = input.closest("label");
+        label?.classList.toggle("configuration-field-locked", lock !== undefined);
+        if (lock) {
+            label?.setAttribute("title", `由 ${lock.source} 控制：${lock.controlling_keys.join(", ")}`);
+        }
+        else {
+            label?.removeAttribute("title");
+        }
+    }
+    const passwordLocked = locks.has("password");
+    const clearPassword = element("#downloader-config-clear-password");
+    clearPassword.disabled = passwordLocked;
+    clearPassword.closest("label")?.classList.toggle("configuration-field-locked", passwordLocked);
+    element("#downloader-config-save").disabled =
+        instance !== null
+            && downloaderEditableFields.every(([field]) => locks.has(field));
+}
 function openDownloaderConfig(instance) {
     activeDownloaderId = instance?.id ?? null;
     const id = element("#downloader-config-id");
@@ -3009,12 +3039,17 @@ function openDownloaderConfig(instance) {
     element("#downloader-config-path").value = instance?.download_path ?? "";
     element("#downloader-config-enabled").checked = instance?.enabled ?? true;
     element("#downloader-config-clear-password").checked = false;
+    applyDownloaderFieldLocks(instance);
     element("#downloader-config-delete").disabled =
         instance?.configuration_source !== "private_override";
+    const credentialState = instance?.credentials_configured
+        ? "已有凭据已配置；密码字段留空会保留，且不会从服务端读回。"
+        : "当前没有已配置凭据。";
+    const lockState = instance && instance.locked_fields.length > 0
+        ? ` 部署锁：${instance.locked_fields.map((lock) => `${lock.field}（${lock.controlling_keys.join(" / ")}）`).join("、")}；锁定字段只读且不会写入私有覆盖。`
+        : "";
     element("#downloader-config-message").textContent =
-        instance?.credentials_configured
-            ? "已有凭据已配置；密码字段留空会保留，且不会从服务端读回。"
-            : "当前没有已配置凭据。";
+        credentialState + lockState;
     downloaderConfigDialog.showModal();
 }
 async function saveDownloaderConfig(event) {
@@ -3050,7 +3085,10 @@ async function saveDownloaderConfig(event) {
         message.textContent = `保存失败：${errorMessage(error, "未知错误")}`;
     }
     finally {
-        save.disabled = false;
+        const instance = downloaderInstances.find((item) => item.id === activeDownloaderId) ?? null;
+        const allFieldsLocked = instance !== null
+            && downloaderEditableFields.every(([field]) => instance.locked_fields.some((lock) => lock.field === field));
+        save.disabled = allFieldsLocked;
     }
 }
 async function deleteDownloaderOverride() {
@@ -3098,6 +3136,9 @@ async function loadDownloaders() {
             for (const [label, value] of [
                 ["类型", instance.type],
                 ["凭据", instance.credentials_configured ? "已配置" : "未配置"],
+                ["部署锁", instance.locked_fields.length === 0
+                        ? "无"
+                        : instance.locked_fields.map((lock) => lock.field).join("、")],
                 ["来源引用", instance.source_profile_count],
                 ["任务 / 下载", `${instance.ingest_task_count} / ${instance.download_job_count}`],
                 ["熔断", instance.circuit_state === "closed"

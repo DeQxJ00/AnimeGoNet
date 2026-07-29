@@ -1935,6 +1935,7 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         DownloaderAdminStore admin,
         DownloaderOverrideStore overrides,
+        DownloaderDeploymentLocks locks,
         DownloaderConfigurationRuntimeState runtimeState,
         DownloadClientOperationCoordinator clients,
         LegacyDownloaderMigrationState legacyMigration,
@@ -1953,6 +1954,11 @@ public static class ApiEndpoints
             var downloader = pending is null
                 ? options.Downloaders[id]
                 : ToOptions(pending);
+            if (pending is not null
+                && options.Downloaders.TryGetValue(id, out var deployed))
+            {
+                downloader = locks.Reapply(id, deployed, downloader);
+            }
             if (legacyMigration.BlocksDownloads)
             {
                 downloader = downloader with { Enabled = false };
@@ -1963,6 +1969,7 @@ public static class ApiEndpoints
                 legacyMigration.BlocksDownloads
                     ? "blocked_by_legacy_migration"
                     : pending is null ? "deployment" : "private_override",
+                locks.ForDownloader(id),
                 pending?.Revision,
                 restartRequired,
                 clients.GetCircuitSnapshot(id)));
@@ -1982,8 +1989,10 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         DownloaderAdminStore admin,
         DownloaderOverrideStore overrides,
+        DownloaderDeploymentLocks locks,
         CancellationToken cancellationToken)
     {
+        var changedLockedFields = new List<string>();
         try
         {
             var id = RequireCanonicalStableId(downloaderId, "downloader id");
@@ -2010,22 +2019,81 @@ public static class ApiEndpoints
             }
             if (request.ClearPassword && request.Password is not null)
                 throw new ArgumentException("password and clear_password cannot be supplied together.");
-            var password = request.ClearPassword
+            var candidatePassword = request.ClearPassword
                 ? null
                 : request.Password ?? currentOverride?.Password ?? currentRuntime?.Password;
-            var username = request.Username is null
+            var candidateUsername = request.Username is null
                 ? currentOverride?.Username ?? currentRuntime?.Username
                 : string.IsNullOrWhiteSpace(request.Username) ? null : request.Username.Trim();
-            if (password?.Length > 1024)
+            if (candidatePassword?.Length > 1024)
                 throw new ArgumentException("password must not exceed 1024 characters.");
+            AddIfLockedAndChanged(
+                "base_url",
+                currentRuntime?.BaseUrl,
+                baseUrl);
+            AddIfLockedAndChanged(
+                "username",
+                currentRuntime?.Username,
+                request.Username is null && locks.IsLocked(id, "username")
+                    ? currentRuntime?.Username
+                    : candidateUsername);
+            AddIfLockedAndChanged(
+                "password",
+                currentRuntime?.Password,
+                request.Password is null
+                    && !request.ClearPassword
+                    && locks.IsLocked(id, "password")
+                        ? currentRuntime?.Password
+                        : candidatePassword);
+            if (locks.IsLocked(id, "download_path")
+                && currentRuntime is not null
+                && !SamePath(currentRuntime.DownloadPath, downloadPath))
+            {
+                changedLockedFields.Add("download_path");
+            }
+            AddIfLockedAndChanged(
+                "enabled",
+                currentRuntime?.Enabled,
+                request.Enabled);
+            if (changedLockedFields.Count > 0)
+            {
+                return TypedResults.BadRequest(Error(
+                    "downloader_field_locked",
+                    "Downloader field(s) are controlled by deployment configuration: "
+                    + string.Join(
+                        ", ",
+                        changedLockedFields.Distinct(StringComparer.Ordinal))));
+            }
+
+            var storedBaseUrl = locks.IsLocked(id, "base_url")
+                ? currentOverride?.BaseUrl
+                    ?? currentRuntime?.BaseUrl.AbsoluteUri
+                    ?? baseUrl.AbsoluteUri
+                : baseUrl.AbsoluteUri;
+            var storedUsername = locks.IsLocked(id, "username")
+                ? currentOverride?.Username
+                : candidateUsername;
+            var storedPassword = locks.IsLocked(id, "password")
+                ? currentOverride?.Password
+                : candidatePassword;
+            var storedDownloadPath = locks.IsLocked(id, "download_path")
+                ? currentOverride?.DownloadPath
+                    ?? currentRuntime?.DownloadPath
+                    ?? downloadPath
+                : downloadPath;
+            var storedEnabled = locks.IsLocked(id, "enabled")
+                ? currentOverride?.Enabled
+                    ?? currentRuntime?.Enabled
+                    ?? request.Enabled
+                : request.Enabled;
             var saved = await overrides.UpsertAsync(
                 id,
                 new DownloaderOverrideEntry(
-                    baseUrl.AbsoluteUri,
-                    username,
-                    password,
-                    downloadPath,
-                    request.Enabled,
+                    storedBaseUrl,
+                    storedUsername,
+                    storedPassword,
+                    storedDownloadPath,
+                    storedEnabled,
                     0,
                     DateTimeOffset.UtcNow),
                 request.ExpectedConfigurationRevision,
@@ -2043,6 +2111,22 @@ public static class ApiEndpoints
         {
             return TypedResults.BadRequest(Error("downloader_configuration_invalid", exception.Message));
         }
+
+        void AddIfLockedAndChanged<T>(
+            string field,
+            T current,
+            T requested)
+        {
+            if (locks.IsLocked(downloaderId, field)
+                && !EqualityComparer<T>.Default.Equals(current, requested))
+            {
+                changedLockedFields.Add(field);
+            }
+        }
+
+        static bool SamePath(string left, string right) =>
+            PathBoundary.IsWithin(left, right)
+            && PathBoundary.IsWithin(right, left);
     }
 
     private static async Task<IResult> DeleteDownloaderOverride(
@@ -4712,6 +4796,7 @@ public static class ApiEndpoints
         QbittorrentInstanceOptions downloader,
         DownloaderUsageRecord usage,
         string configurationSource,
+        IReadOnlyList<DownloaderDeploymentFieldLock> locks,
         long? overrideRevision,
         bool restartRequired,
         DownloadClientCircuitSnapshot? circuit)
@@ -4731,6 +4816,13 @@ public static class ApiEndpoints
             downloader.Enabled,
             !string.IsNullOrWhiteSpace(downloader.Username) && !string.IsNullOrWhiteSpace(downloader.Password),
             configurationSource,
+            locks.Select(value => new DownloaderFieldLockResponse(
+                value.Field,
+                value.Source,
+                value.EnvironmentVariables
+                    .Concat(value.CommandLineArguments)
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .ToArray())).ToArray(),
             overrideRevision,
             restartRequired,
             usage.SourceProfileCount,

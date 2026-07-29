@@ -956,6 +956,8 @@ public sealed record DownloaderInstanceResponse(
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("credentials_configured")] bool CredentialsConfigured,
     [property: JsonPropertyName("configuration_source")] string ConfigurationSource,
+    [property: JsonPropertyName("locked_fields")]
+    IReadOnlyList<DownloaderFieldLockResponse> LockedFields,
     [property: JsonPropertyName("override_revision")] long? OverrideRevision,
     [property: JsonPropertyName("restart_required")] bool RestartRequired,
     [property: JsonPropertyName("source_profile_count")] long SourceProfileCount,
@@ -968,6 +970,12 @@ public sealed record DownloaderInstanceResponse(
     [property: JsonPropertyName("circuit_state")] string? CircuitState,
     [property: JsonPropertyName("circuit_failure_count")] int CircuitFailureCount,
     [property: JsonPropertyName("circuit_retry_at_utc")] DateTimeOffset? CircuitRetryAtUtc);
+
+public sealed record DownloaderFieldLockResponse(
+    [property: JsonPropertyName("field")] string Field,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("controlling_keys")]
+    IReadOnlyList<string> ControllingKeys);
 
 public sealed record DownloaderInstanceListResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,

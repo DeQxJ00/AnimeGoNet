@@ -35,6 +35,28 @@ secret 回显到浏览器。
 命令行和环境变量锁定的应用字段在 WebUI 中显示为只读；下载器命令行或环境变量
 字段也会在私有下载器覆盖应用后重新生效，私有文件不能盖过部署锁。
 
+下载器部署锁按实例和字段独立计算，支持 `type`、`base_url`、`username`、
+`password`、`download_path`、`enabled`。`GET /api/v1/downloaders` 的每个实例
+通过 `locked_fields` 返回字段、来源和控制键名；只返回环境变量/命令行参数名，
+绝不返回对应值。WebUI 会逐字段禁用编辑并显示这些来源。保存同一实例的其他未锁
+字段时，API 不会把环境变量或命令行中的用户名、密码复制到
+`data_path/config/downloaders.private.json`。若请求确实改变锁字段，则返回
+`400 downloader_field_locked`，并保持全局配置 revision 不变。
+
+规范控制键示例：
+
+```text
+downloaders__bt__base_url
+downloaders__bt__username
+downloaders__bt__password
+downloaders__bt__download_path
+--downloaders:bt:enabled=true
+```
+
+兼容的旧 `ANIMEGO_CLIENT*` 控制键只锁定 `bt` 实例的对应字段。命令行和值同时
+存在时，`locked_fields.source` 为 `environment_and_command_line`；WebUI 私有
+覆盖始终低于两者。
+
 环境变量的嵌套键使用 .NET 双下划线格式，例如：
 
 ```text

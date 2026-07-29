@@ -122,6 +122,112 @@ public sealed class DownloaderAdminApiTests
         Assert.Contains("probeDownloaderPath", script, StringComparison.Ordinal);
         Assert.Contains("client_default_save_path", script, StringComparison.Ordinal);
         Assert.Contains("circuit_retry_at_utc", script, StringComparison.Ordinal);
+        Assert.Contains("locked_fields", script, StringComparison.Ordinal);
+        Assert.Contains("applyDownloaderFieldLocks", script, StringComparison.Ordinal);
+        Assert.Contains("configuration-field-locked", script, StringComparison.Ordinal);
+        Assert.Contains("controlling_keys", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeploymentLocksAreVisibleRejectChangesAndDoNotPersistCredentials()
+    {
+        const string deploymentUsername = "environment-user-must-not-be-returned";
+        const string deploymentPassword = "environment-password-must-not-be-returned";
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Downloaders = options.Downloaders.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Key == "bt"
+                        ? pair.Value with
+                        {
+                            BaseUrl = new Uri("http://127.0.0.1:18080"),
+                            Username = deploymentUsername,
+                            Password = deploymentPassword,
+                        }
+                        : pair.Value,
+                    StringComparer.OrdinalIgnoreCase),
+            },
+            deploymentEnvironmentVariables:
+            [
+                "downloaders__bt__base_url",
+                "ANIMEGO_CLIENT_USERNAME",
+                "downloaders__bt__password",
+            ]);
+
+        using var listedResponse = await app.Client.GetAsync("/api/v1/downloaders");
+        var listedText = await listedResponse.Content.ReadAsStringAsync();
+        using var listed = JsonDocument.Parse(listedText);
+        var bt = Assert.Single(
+            listed.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("id").GetString() == "bt");
+        var fields = bt.GetProperty("locked_fields").EnumerateArray().ToArray();
+        Assert.Equal(HttpStatusCode.OK, listedResponse.StatusCode);
+        Assert.Equal(
+            ["base_url", "password", "username"],
+            fields.Select(item => item.GetProperty("field").GetString()!).ToArray());
+        Assert.All(
+            fields,
+            item => Assert.Equal(
+                "environment",
+                item.GetProperty("source").GetString()));
+        Assert.Contains(
+            fields,
+            item => item.GetProperty("controlling_keys")
+                .EnumerateArray()
+                .Any(key => key.GetString() == "ANIMEGO_CLIENT_USERNAME"));
+        Assert.DoesNotContain(deploymentUsername, listedText, StringComparison.Ordinal);
+        Assert.DoesNotContain(deploymentPassword, listedText, StringComparison.Ordinal);
+
+        using var rejected = await app.Client.PutAsync("/api/v1/downloaders/bt", Json(new
+        {
+            base_url = "http://127.0.0.1:19090",
+            username = "attempted-user",
+            password = "attempted-secret",
+            download_path = Path.Combine(app.RootPath, "download", "incomplete", "bt"),
+            enabled = true,
+            expected_configuration_revision = 0,
+        }));
+        var rejectedText = await rejected.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Contains("downloader_field_locked", rejectedText, StringComparison.Ordinal);
+        Assert.DoesNotContain("attempted-user", rejectedText, StringComparison.Ordinal);
+        Assert.DoesNotContain("attempted-secret", rejectedText, StringComparison.Ordinal);
+
+        var newDownloadPath = Path.Combine(
+            app.RootPath,
+            "download",
+            "incomplete",
+            "bt-override");
+        using var accepted = await app.Client.PutAsync("/api/v1/downloaders/bt", Json(new
+        {
+            base_url = "http://127.0.0.1:18080",
+            username = (string?)null,
+            password = (string?)null,
+            download_path = newDownloadPath,
+            enabled = true,
+            expected_configuration_revision = 0,
+        }));
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        var privateSnapshot = await app.App.Services
+            .GetRequiredService<DownloaderOverrideStore>().LoadAsync();
+        var saved = privateSnapshot.Downloaders["bt"];
+        Assert.Null(saved.Username);
+        Assert.Null(saved.Password);
+        Assert.Equal(newDownloadPath, saved.DownloadPath);
+
+        using var effectiveResponse = await app.Client.GetAsync("/api/v1/downloaders");
+        var effectiveText = await effectiveResponse.Content.ReadAsStringAsync();
+        using var effective = JsonDocument.Parse(effectiveText);
+        var effectiveBt = Assert.Single(
+            effective.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("id").GetString() == "bt");
+        Assert.Equal("http://127.0.0.1:18080", effectiveBt.GetProperty("base_url").GetString());
+        Assert.Equal(newDownloadPath, effectiveBt.GetProperty("download_path").GetString());
+        Assert.True(effectiveBt.GetProperty("credentials_configured").GetBoolean());
+        Assert.DoesNotContain(deploymentUsername, effectiveText, StringComparison.Ordinal);
+        Assert.DoesNotContain(deploymentPassword, effectiveText, StringComparison.Ordinal);
     }
 
     [Fact]

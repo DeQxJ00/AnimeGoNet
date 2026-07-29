@@ -146,6 +146,13 @@ public static class AnimeGoApplication
             : optionsWereSupplied
                 ? DeploymentConfigurationLocks.Empty
                 : DeploymentConfigurationLocks.FromCurrentProcess();
+        var downloaderLocks = deploymentEnvironmentVariables is not null
+            ? DownloaderDeploymentLocks.FromSources(
+                deploymentEnvironmentVariables,
+                args)
+            : optionsWereSupplied
+                ? DownloaderDeploymentLocks.Empty
+                : DownloaderDeploymentLocks.FromCurrentProcess(args);
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
         builder.Services.AddSingleton(
@@ -171,14 +178,7 @@ public static class AnimeGoApplication
         var downloaderOverrides = new DownloaderOverrideStore(layout.ConfigurationPath);
         var downloaderOverrideSnapshot = await downloaderOverrides.LoadAsync(cancellationToken).ConfigureAwait(false);
         options = ApplyDownloaderOverrides(options, downloaderOverrideSnapshot);
-        if (!optionsWereSupplied)
-        {
-            options = ReapplyLockedDownloaderDeploymentValues(
-                deploymentOptions,
-                options,
-                deploymentEnvironmentVariables,
-                args);
-        }
+        options = downloaderLocks.Reapply(deploymentOptions, options);
         accessKey ??= FirstConfigurationValue(
             builder.Configuration,
             "ANIMEGO_WEB_ACCESS_KEY",
@@ -251,6 +251,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new DeploymentConfigurationOptions(deploymentOptions));
         builder.Services.AddSingleton(configurationLocks);
+        builder.Services.AddSingleton(downloaderLocks);
         builder.Services.AddSingleton(dataUpdateRuntime);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(new RuntimeConfigurationState(
@@ -1229,89 +1230,6 @@ public static class AnimeGoApplication
         }
         return options with { Downloaders = downloaders };
     }
-
-    private static AnimeGoOptions ReapplyLockedDownloaderDeploymentValues(
-        AnimeGoOptions deployment,
-        AnimeGoOptions candidate,
-        IReadOnlyCollection<string>? suppliedEnvironmentVariableNames,
-        string[] args)
-    {
-        var names = suppliedEnvironmentVariableNames is null
-            ? Environment.GetEnvironmentVariables()
-                .Keys.Cast<object>()
-                .OfType<string>()
-            : suppliedEnvironmentVariableNames;
-        var keys = names
-            .Select(NormalizeDeploymentKey)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        for (var index = 0; index < args.Length; index++)
-        {
-            var argument = args[index];
-            if (!argument.StartsWith("--", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var separator = argument.IndexOf('=');
-            keys.Add(NormalizeDeploymentKey(
-                separator >= 0
-                    ? argument[2..separator]
-                    : argument[2..]));
-        }
-
-        if (keys.Count == 0)
-        {
-            return candidate;
-        }
-
-        var downloaders = new Dictionary<string, QbittorrentInstanceOptions>(
-            candidate.Downloaders,
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var (id, deployed) in deployment.Downloaders)
-        {
-            if (!downloaders.TryGetValue(id, out var effective))
-            {
-                effective = deployed;
-            }
-
-            var legacyBt = string.Equals(id, "bt", StringComparison.OrdinalIgnoreCase);
-            effective = effective with
-            {
-                Type = IsLocked("type", "ANIMEGO_CLIENT")
-                    ? deployed.Type
-                    : effective.Type,
-                BaseUrl = IsLocked("base_url", "ANIMEGO_CLIENT_URL")
-                    ? deployed.BaseUrl
-                    : effective.BaseUrl,
-                Username = IsLocked("username", "ANIMEGO_CLIENT_USERNAME")
-                    ? deployed.Username
-                    : effective.Username,
-                Password = IsLocked("password", "ANIMEGO_CLIENT_PASSWORD")
-                    ? deployed.Password
-                    : effective.Password,
-                DownloadPath = IsLocked(
-                        "download_path",
-                        "ANIMEGO_CLIENT_DOWNLOAD_PATH")
-                    ? deployed.DownloadPath
-                    : effective.DownloadPath,
-                Enabled = IsLocked("enabled", null)
-                    ? deployed.Enabled
-                    : effective.Enabled,
-            };
-            downloaders[id] = effective;
-
-            bool IsLocked(string field, string? legacyKey) =>
-                keys.Contains($"downloaders:{id}:{field}")
-                || (legacyBt
-                    && legacyKey is not null
-                    && keys.Contains(NormalizeDeploymentKey(legacyKey)));
-        }
-
-        return candidate with { Downloaders = downloaders };
-    }
-
-    private static string NormalizeDeploymentKey(string value) =>
-        value.Trim().Replace("__", ":", StringComparison.Ordinal).ToLowerInvariant();
 
     private static bool HasValidAccessKey(HttpRequest request, string configuredKey)
     {
