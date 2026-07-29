@@ -1170,6 +1170,7 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         SourceProfileStore profiles,
         MikanRssRuleStore rules,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         CancellationToken cancellationToken)
     {
         var profile = await profiles.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
@@ -1191,7 +1192,12 @@ public static class ApiEndpoints
                 request.Title, null, request.SourceItemId, request.SourceWorkId,
                 request.MikanUrl, null, request.MikanId, request.BangumiId,
                 request.AniDbId, request.ImdbId));
-        var validation = IngestCommandNormalizer.Normalize(profile.Adapter, command, requireModernMetadata: true);
+        var validation = await IngestCommandNormalizer.NormalizeAsync(
+            plugins,
+            profile.Adapter,
+            command,
+            requireModernMetadata: true,
+            cancellationToken).ConfigureAwait(false);
         var errors = validation.Errors.ToList();
         if (!profile.Enabled)
         {

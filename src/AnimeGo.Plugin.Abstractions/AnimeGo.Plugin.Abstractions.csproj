@@ -3,8 +3,8 @@
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <IsPackable>true</IsPackable>
+    <PackageId>AnimeGo.Plugin.Abstractions</PackageId>
+    <Description>NativeAOT-safe plugin contracts for AnimeGoNet.</Description>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="../AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj" />
-  </ItemGroup>
 </Project>

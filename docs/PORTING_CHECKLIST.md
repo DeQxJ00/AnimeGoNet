@@ -83,6 +83,7 @@
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
 | `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 已验证 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 feed/Episode 获取、Filiter0..4、批内 identity cache、失败隔离、新优选和 winner 原子 staging Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
+| Mikan/U2/TTG source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出、真实统一导入 normalizer tests |
 | `/api/config` | typed deployment config | 保留+扩展 | 进行中 | 脱敏生效值 GET、safe editable desired projection、版本化 PUT/DELETE、Web 编辑/恢复、TMDB 密钥三态、TMDB/Bangumi 独立 API 地址/代理/超时、application.private.json 原子写入/0600/重启应用与鉴权 tests 已通过；完整配置来源 precedence 待实现 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |

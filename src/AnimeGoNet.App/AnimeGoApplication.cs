@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Downloads;
@@ -11,6 +12,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Plugins;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Cache;
@@ -128,6 +130,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
         builder.Services.AddSingleton(database);
+        builder.Services.AddSingleton<PluginCatalog>(_ => BuiltInPluginCatalog.Create());
         builder.Services.AddSingleton<SqliteJsonCacheStore>();
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);

@@ -1,3 +1,4 @@
+using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
@@ -25,7 +26,8 @@ public sealed class UnifiedIngestProcessor(
     SourceProfileStore profiles,
     IngestTaskStore tasks,
     ITorrentStagingService staging,
-    AnimeGoOptions options)
+    AnimeGoOptions options,
+    PluginCatalog plugins)
 {
     public async Task<UnifiedIngestItemResult> ProcessAsync(
         string source,
@@ -55,7 +57,12 @@ public sealed class UnifiedIngestProcessor(
             return Rejected(["no enabled source profile is configured"]);
         }
 
-        var validation = IngestCommandNormalizer.Normalize(profile.Adapter, command, requireModernMetadata);
+        var validation = await IngestCommandNormalizer.NormalizeAsync(
+            plugins,
+            profile.Adapter,
+            command,
+            requireModernMetadata,
+            cancellationToken).ConfigureAwait(false);
         if (!validation.IsValid)
         {
             return Rejected(validation.Errors);

@@ -7,7 +7,8 @@ AnimeGoNet.slnx
 ├─ src/AnimeGoNet.Core           领域模型、规则、配置与接口；零基础设施依赖
 ├─ src/AnimeGoNet.Data           SQLite 连接、显式 SQL、迁移和 repository
 ├─ src/AnimeGoNet.App            Minimal API、静态 WebUI、DI、后台任务、进程入口
-├─ src/AnimeGoNet.Plugins        编译期注册的内置 C# 实现（后续阶段）
+├─ src/AnimeGo.Plugin.Abstractions  六类稳定 C# 契约与显式 PluginCatalog
+├─ src/AnimeGoNet.Core/Plugins      编译期注册的内置 C# 实现
 ├─ tests/AnimeGoNet.Core.Tests
 ├─ tests/AnimeGoNet.Data.Tests
 └─ tests/AnimeGoNet.App.Tests

@@ -1,10 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj" />
     <Project Path="src/AnimeGoNet.App/AnimeGoNet.App.csproj" />
     <Project Path="src/AnimeGoNet.Core/AnimeGoNet.Core.csproj" />
     <Project Path="src/AnimeGoNet.Data/AnimeGoNet.Data.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AnimeGo.Plugin.Abstractions.Tests/AnimeGo.Plugin.Abstractions.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.App.Tests/AnimeGoNet.App.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.Core.Tests/AnimeGoNet.Core.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.Data.Tests/AnimeGoNet.Data.Tests.csproj" />
