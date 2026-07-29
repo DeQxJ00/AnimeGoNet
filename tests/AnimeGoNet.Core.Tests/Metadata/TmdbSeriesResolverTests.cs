@@ -73,6 +73,40 @@ public sealed class TmdbSeriesResolverTests
     }
 
     [Fact]
+    public async Task SeasonValidationFailureContinuesWithNextCleanedSearchTitle()
+    {
+        const string title = "Re:ゼロから始める異世界生活 4th season 喪失編";
+        var rejected = new TmdbSeries(1, title, title, null);
+        var accepted = new TmdbSeries(
+            65942,
+            "Re：从零开始的异世界生活",
+            "Re:ゼロから始める異世界生活",
+            null);
+        var client = new SearchClient(query => query switch
+        {
+            title => [rejected],
+            "Re:ゼロから始める異世界生活" => [accepted],
+            _ => [],
+        });
+        var inspected = new List<int>();
+
+        var result = await new TmdbSeriesResolver(client).ResolveAsync(
+            title,
+            (candidate, _) =>
+            {
+                inspected.Add(candidate.Id);
+                return ValueTask.FromResult(candidate.Id == accepted.Id);
+            });
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(accepted, result.Value);
+        Assert.Equal([rejected.Id, accepted.Id], inspected);
+        Assert.Equal(
+            [title, "Re:ゼロから始める異世界生活"],
+            result.AttemptedTitles);
+    }
+
+    [Fact]
     public async Task MultipleCandidatesCanMatchLocalizedName()
     {
         const string title = "Re：从零开始的异世界生活 第四季 丧失篇";
