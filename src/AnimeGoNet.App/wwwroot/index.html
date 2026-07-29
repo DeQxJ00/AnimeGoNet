@@ -40,6 +40,71 @@
       <div id="modules" class="grid" aria-live="polite"></div>
     </section>
 
+    <section id="anime-library" aria-labelledby="anime-library-title">
+      <div class="section-heading library-heading">
+        <div>
+          <p class="eyebrow">TMDB canonical library</p>
+          <h2 id="anime-library-title">动画作品库</h2>
+        </div>
+        <button id="library-reload" type="button" class="secondary-button">刷新作品库</button>
+      </div>
+      <p class="muted">每张卡片代表一个已验证的 TMDB Series + 普通 Season；进度和 EP 网格只认 TMDB Episode 与规范完成记录。</p>
+      <div class="library-toolbar" aria-label="作品库排序和分页设置">
+        <label>排序
+          <select id="library-sort">
+            <option value="last_updated">最后更新时间</option>
+            <option value="name">TMDB 名称</option>
+            <option value="air_date">季度开播日期</option>
+            <option value="added_at">本地加入日期</option>
+          </select>
+        </label>
+        <label>方向
+          <select id="library-direction">
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
+        </label>
+        <label>每页
+          <select id="library-page-size">
+            <option value="12">12</option>
+            <option value="24">24</option>
+            <option value="48">48</option>
+          </select>
+        </label>
+        <span id="library-status" class="muted" role="status">正在读取作品库…</span>
+      </div>
+      <div id="library-list" class="library-list" aria-live="polite" aria-busy="true">
+        <p class="muted empty">正在读取 TMDB 季度…</p>
+      </div>
+      <nav class="library-pagination" aria-label="作品库分页">
+        <button id="library-previous" type="button" class="secondary-button">上一页</button>
+        <span id="library-page-label">第 1 页</span>
+        <button id="library-next" type="button" class="secondary-button">下一页</button>
+      </nav>
+
+      <article id="library-detail" class="library-detail" aria-labelledby="library-detail-title" hidden>
+        <div class="library-detail-heading">
+          <div>
+            <p class="eyebrow">TMDB Season detail</p>
+            <h3 id="library-detail-title">季度详情</h3>
+          </div>
+          <button id="library-detail-close" type="button" class="icon-button" aria-label="关闭季度详情">×</button>
+        </div>
+        <div id="library-detail-summary"></div>
+        <div class="library-episode-toolbar">
+          <label>EP 状态
+            <select id="library-episode-filter">
+              <option value="all">全部</option>
+              <option value="downloaded">已下载</option>
+              <option value="not_downloaded">未下载</option>
+            </select>
+          </label>
+          <span id="library-episode-status" class="muted" role="status"></span>
+        </div>
+        <div id="library-episodes" class="library-episodes" aria-live="polite"></div>
+      </article>
+    </section>
+
     <section aria-labelledby="configuration-title">
       <div class="section-heading configuration-heading">
         <div>
@@ -240,7 +305,7 @@
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>脱敏运行视图已接入</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
       <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>管理与预览已接入</span></article>
-      <article><h3>动画库</h3><p>封面、季度、TMDB EP 与下载进度。</p><span>待实现</span></article>
+      <article><h3>动画库</h3><p>封面、季度、TMDB EP 与下载进度。</p><span>列表、排序与 EP 网格已接入</span></article>
       <article><h3>待补全 TMDB</h3><p>查看兜底标题、失败原因与去重范围。</p><span>人工映射与在线验证已接入</span></article>
       <article><h3>任务</h3><p>下载、匹配、整理和删除审计。</p><span>下载状态已接入</span></article>
     </section>

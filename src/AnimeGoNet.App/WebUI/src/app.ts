@@ -138,6 +138,89 @@ interface MetadataAttemptItem {
   run_completed_at_utc: string | null;
 }
 
+type AnimeLibrarySort = "last_updated" | "name" | "air_date" | "added_at";
+type AnimeLibraryDirection = "asc" | "desc";
+type AnimeEpisodeFilter = "all" | "downloaded" | "not_downloaded";
+
+interface AnimeSeasonListItem {
+  id: string;
+  tmdb_series_id: number;
+  tmdb_season_number: number;
+  display_name: string;
+  sort_name: string;
+  season_name: string;
+  poster_path: string | null;
+  poster_source: "season" | "series" | "placeholder";
+  poster_url: string;
+  air_date: string | null;
+  added_at_utc: string;
+  last_updated_at_utc: string;
+  episode_total: number;
+  episode_snapshot_count: number;
+  episode_downloaded: number;
+  series_resolution_source: string | null;
+  season_resolution_source: string | null;
+  validation_status: string;
+  last_resolution_run_id: string | null;
+  warnings: string[];
+}
+
+interface AnimeSeasonListPage {
+  page: number;
+  page_size: number;
+  total_items: number;
+  sort: AnimeLibrarySort;
+  direction: AnimeLibraryDirection;
+  items: AnimeSeasonListItem[];
+}
+
+interface AnimeEpisodeItem {
+  id: string;
+  tmdb_episode_id: number;
+  episode_number: number;
+  name: string | null;
+  air_date: string | null;
+  runtime_minutes: number | null;
+  fetched_at_utc: string;
+  status: "downloaded" | "not_downloaded";
+  source_id: string | null;
+  downloaded_at_utc: string | null;
+  media_path_known: boolean;
+}
+
+interface AnimeSeasonDetail {
+  id: string;
+  tmdb_series_id: number;
+  tmdb_season_number: number;
+  display_name: string;
+  season_name: string;
+  poster_path: string | null;
+  poster_source: "season" | "series" | "placeholder";
+  poster_url: string;
+  air_date: string | null;
+  added_at_utc: string;
+  last_updated_at_utc: string;
+  episode_total: number;
+  episode_snapshot_count: number;
+  episode_downloaded: number;
+  series_resolution_source: string | null;
+  season_resolution_source: string | null;
+  validation_status: string;
+  last_resolution_run_id: string | null;
+  warnings: string[];
+  episodes: AnimeEpisodeItem[];
+}
+
+interface AnimeLibraryUiState {
+  sort: AnimeLibrarySort;
+  direction: AnimeLibraryDirection;
+  page: number;
+  page_size: 12 | 24 | 48;
+  episode_filter: AnimeEpisodeFilter;
+  active_series_id: number | null;
+  active_season_number: number | null;
+}
+
 interface PendingTmdbSummary {
   bgmid: number;
   fallback_name: string;
@@ -407,6 +490,11 @@ let downloaderInstances: DownloaderInstance[] = [];
 let downloaderConfigurationRevision = 0;
 let activeDownloaderId: string | null = null;
 let ruleIdSequence = 0;
+const libraryStorageKey = "animegonet.library.v1";
+let libraryState = readLibraryState();
+let activeLibraryDetail: AnimeSeasonDetail | null = null;
+let libraryListRequestSequence = 0;
+let libraryDetailRequestSequence = 0;
 
 const statusLabels: Record<string, string> = {
   received: "已接收",
@@ -461,6 +549,438 @@ async function loadStatus(): Promise<void> {
     health.textContent = errorMessage(error, "连接失败");
     health.className = "badge error";
   }
+}
+
+function readLibraryState(): AnimeLibraryUiState {
+  const defaults: AnimeLibraryUiState = {
+    sort: "last_updated",
+    direction: "desc",
+    page: 1,
+    page_size: 24,
+    episode_filter: "all",
+    active_series_id: null,
+    active_season_number: null,
+  };
+  try {
+    const raw = window.localStorage.getItem(libraryStorageKey);
+    if (!raw) return defaults;
+    const stored = JSON.parse(raw) as Partial<AnimeLibraryUiState>;
+    const sorts: AnimeLibrarySort[] = ["last_updated", "name", "air_date", "added_at"];
+    const directions: AnimeLibraryDirection[] = ["asc", "desc"];
+    const filters: AnimeEpisodeFilter[] = ["all", "downloaded", "not_downloaded"];
+    const pageSizes = [12, 24, 48] as const;
+    return {
+      sort: sorts.includes(stored.sort as AnimeLibrarySort)
+        ? stored.sort as AnimeLibrarySort : defaults.sort,
+      direction: directions.includes(stored.direction as AnimeLibraryDirection)
+        ? stored.direction as AnimeLibraryDirection : defaults.direction,
+      page: Number.isInteger(stored.page) && (stored.page ?? 0) > 0
+        ? stored.page! : defaults.page,
+      page_size: pageSizes.includes(stored.page_size as 12 | 24 | 48)
+        ? stored.page_size as 12 | 24 | 48 : defaults.page_size,
+      episode_filter: filters.includes(stored.episode_filter as AnimeEpisodeFilter)
+        ? stored.episode_filter as AnimeEpisodeFilter : defaults.episode_filter,
+      active_series_id: Number.isInteger(stored.active_series_id)
+        && (stored.active_series_id ?? 0) > 0
+        ? stored.active_series_id! : null,
+      active_season_number: Number.isInteger(stored.active_season_number)
+        && (stored.active_season_number ?? 0) > 0
+        ? stored.active_season_number! : null,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveLibraryState(): void {
+  try {
+    window.localStorage.setItem(libraryStorageKey, JSON.stringify(libraryState));
+  } catch {
+    // Browser storage is an optional UI preference; business state remains server-side.
+  }
+}
+
+function authorizedAssetUrl(path: string): string {
+  if (!accessKey) return path;
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set("access_key", accessKey);
+  return `${url.pathname}${url.search}`;
+}
+
+function libraryDate(value: string | null, includeTime = false): string {
+  if (!value) return "未提供";
+  if (!includeTime) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
+}
+
+function libraryStrategy(value: string | null): string {
+  const labels: Record<string, string> = {
+    manual_override: "人工覆盖",
+    tmdb_title: "TMDB 标题搜索",
+    tmdb_air_date: "TMDB 开播日期验证",
+    bangumi_backtrace: "P3 Bangumi 回溯验证",
+    ai_metadata: "AI 统一匹配 + TMDB 验证",
+    title_season: "P2 本地任务 title 季度（未验证）",
+    first_season: "P1 本地 S01（未验证）",
+    pending_tmdb_manual: "待补全 TMDB 人工恢复",
+    pending_tmdb_automatic: "待补全 TMDB 自动恢复",
+  };
+  return value ? labels[value] ?? value : "未记录";
+}
+
+function libraryWarning(value: string): string {
+  const labels: Record<string, string> = {
+    episode_snapshot_incomplete: "TMDB EP snapshot 不完整",
+    completion_without_snapshot: "存在 snapshot 外完成记录",
+    completion_media_path_unknown: "完成记录缺少媒体路径",
+    season_not_tmdb_verified: "本地季度尚未通过 TMDB Season 验证",
+  };
+  return labels[value] ?? value;
+}
+
+function libraryValidation(value: string): string {
+  const labels: Record<string, string> = {
+    verified: "TMDB 已验证",
+    local_unverified: "本地季度 · 未验证",
+    projection_only: "仅有 TMDB 投影",
+  };
+  return labels[value] ?? value;
+}
+
+function librarySortLabel(value: AnimeLibrarySort): string {
+  const labels: Record<AnimeLibrarySort, string> = {
+    last_updated: "最后更新时间",
+    name: "TMDB 名称",
+    air_date: "季度开播日期",
+    added_at: "本地加入日期",
+  };
+  return labels[value];
+}
+
+function libraryPoster(
+  url: string,
+  title: string,
+  className: string,
+): HTMLImageElement {
+  const image = document.createElement("img");
+  image.className = className;
+  image.src = authorizedAssetUrl(url);
+  image.alt = `${title} 封面`;
+  image.loading = "lazy";
+  image.width = 500;
+  image.height = 750;
+  image.addEventListener("error", () => {
+    image.classList.add("failed");
+    image.alt = `${title} 封面加载失败`;
+  }, { once: true });
+  return image;
+}
+
+function libraryProgress(
+  downloaded: number,
+  total: number,
+): { progress: HTMLProgressElement; label: HTMLSpanElement } {
+  const progress = document.createElement("progress");
+  progress.max = Math.max(total, 1);
+  progress.value = Math.min(downloaded, progress.max);
+  progress.setAttribute("aria-label", `TMDB EP 完成进度 ${downloaded} / ${total}`);
+  const label = document.createElement("span");
+  label.textContent = total > 0 ? `${downloaded} / ${total} EP` : "尚无完整 TMDB EP snapshot";
+  return { progress, label };
+}
+
+function renderLibraryWarnings(values: string[]): HTMLElement {
+  const warnings = document.createElement("div");
+  warnings.className = "library-warnings";
+  warnings.replaceChildren(...values.map((value) => {
+    const warning = document.createElement("span");
+    warning.textContent = libraryWarning(value);
+    return warning;
+  }));
+  return warnings;
+}
+
+function renderLibraryPage(page: AnimeSeasonListPage): void {
+  const list = element<HTMLElement>("#library-list");
+  list.setAttribute("aria-busy", "false");
+  const pageCount = Math.max(1, Math.ceil(page.total_items / page.page_size));
+  element<HTMLElement>("#library-status").textContent =
+    `${page.total_items} 个季度 · ${librarySortLabel(page.sort)} · `
+    + (page.direction === "asc" ? "升序" : "降序");
+  element<HTMLElement>("#library-page-label").textContent =
+    `第 ${page.page} / ${pageCount} 页`;
+  element<HTMLButtonElement>("#library-previous").disabled = page.page <= 1;
+  element<HTMLButtonElement>("#library-next").disabled = page.page >= pageCount;
+  if (page.items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。";
+    list.replaceChildren(empty);
+    return;
+  }
+
+  list.replaceChildren(...page.items.map((item) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "library-card";
+    if (libraryState.active_series_id === item.tmdb_series_id
+        && libraryState.active_season_number === item.tmdb_season_number) {
+      card.classList.add("active");
+    }
+    card.setAttribute(
+      "aria-label",
+      `查看 ${item.display_name} ${item.season_name} 的 TMDB EP 详情`,
+    );
+    const image = libraryPoster(
+      item.poster_url,
+      `${item.display_name} ${item.season_name}`,
+      "library-poster",
+    );
+    const content = document.createElement("span");
+    content.className = "library-card-content";
+    const heading = document.createElement("span");
+    heading.className = "library-card-heading";
+    const title = document.createElement("strong");
+    title.textContent = item.display_name;
+    const season = document.createElement("span");
+    season.textContent = `${item.season_name} · S${String(item.tmdb_season_number).padStart(2, "0")}`;
+    heading.append(title, season);
+    const identity = document.createElement("span");
+    identity.className = "library-card-identity";
+    identity.textContent =
+      `TMDB ${item.tmdb_series_id} · 开播 ${libraryDate(item.air_date)} · ${libraryValidation(item.validation_status)}`;
+    const progressRow = document.createElement("span");
+    progressRow.className = "library-progress";
+    const progress = libraryProgress(item.episode_downloaded, item.episode_total);
+    progressRow.append(progress.progress, progress.label);
+    content.append(heading, identity, progressRow);
+    if (item.warnings.length > 0) content.append(renderLibraryWarnings(item.warnings));
+    card.append(image, content);
+    card.addEventListener("click", () => {
+      libraryState.active_series_id = item.tmdb_series_id;
+      libraryState.active_season_number = item.tmdb_season_number;
+      saveLibraryState();
+      renderLibraryPage(page);
+      void loadLibraryDetail(item.tmdb_series_id, item.tmdb_season_number, true);
+    });
+    return card;
+  }));
+}
+
+function renderLibraryEpisodes(detail: AnimeSeasonDetail): void {
+  const container = element<HTMLElement>("#library-episodes");
+  const filtered = detail.episodes.filter((episode) =>
+    libraryState.episode_filter === "all"
+      || episode.status === libraryState.episode_filter);
+  element<HTMLElement>("#library-episode-status").textContent =
+    `显示 ${filtered.length} / ${detail.episodes.length} 个 TMDB Episode`;
+  if (filtered.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = libraryState.episode_filter === "all"
+      ? "当前季度没有可展示的 TMDB Episode snapshot。"
+      : "当前筛选条件下没有 Episode。";
+    container.replaceChildren(empty);
+    return;
+  }
+
+  container.replaceChildren(...filtered.map((episode) => {
+    const card = document.createElement("details");
+    card.className = `library-episode ${episode.status}`;
+    const summary = document.createElement("summary");
+    summary.setAttribute("role", "button");
+    summary.setAttribute("aria-expanded", "false");
+    const number = document.createElement("strong");
+    number.textContent = `EP ${String(episode.episode_number).padStart(2, "0")}`;
+    const status = document.createElement("span");
+    status.textContent = episode.status === "downloaded" ? "✓ 已下载" : "○ 未下载";
+    summary.append(number, status);
+    const name = document.createElement("p");
+    name.className = "library-episode-name";
+    name.textContent = episode.name || "TMDB 未提供 Episode 名称";
+    const metadata = document.createElement("p");
+    metadata.className = "library-episode-meta";
+    metadata.textContent =
+      `TMDB Episode ${episode.tmdb_episode_id} · 开播 ${libraryDate(episode.air_date)} · `
+      + `${episode.runtime_minutes === null ? "时长未提供" : `${episode.runtime_minutes} 分钟`} · `
+      + `snapshot ${libraryDate(episode.fetched_at_utc, true)}`;
+    const completion = document.createElement("p");
+    completion.className = "library-episode-completion";
+    completion.textContent = episode.status === "downloaded"
+      ? `完成于 ${libraryDate(episode.downloaded_at_utc, true)} · 来源 ${episode.source_id ?? "未记录"}`
+        + (episode.media_path_known ? "" : " · 媒体路径未记录")
+      : "没有规范完成记录；等待、下载中、整理失败或删除完成记录后都保持未下载。";
+    card.addEventListener("toggle", () => {
+      summary.setAttribute("aria-expanded", String(card.open));
+    });
+    summary.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      card.open = !card.open;
+    });
+    card.append(summary, name, metadata, completion);
+    return card;
+  }));
+}
+
+function renderLibraryDetail(detail: AnimeSeasonDetail, focus: boolean): void {
+  activeLibraryDetail = detail;
+  const panel = element<HTMLElement>("#library-detail");
+  panel.hidden = false;
+  element<HTMLElement>("#library-detail-title").textContent =
+    `${detail.display_name} · ${detail.season_name}`;
+  const summary = element<HTMLElement>("#library-detail-summary");
+  const layout = document.createElement("div");
+  layout.className = "library-detail-layout";
+  const image = libraryPoster(
+    detail.poster_url,
+    `${detail.display_name} ${detail.season_name}`,
+    "library-detail-poster",
+  );
+  const content = document.createElement("div");
+  const progressRow = document.createElement("div");
+  progressRow.className = "library-detail-progress";
+  const progress = libraryProgress(detail.episode_downloaded, detail.episode_total);
+  progressRow.append(progress.progress, progress.label);
+  const facts = document.createElement("dl");
+  facts.className = "library-detail-facts";
+  const values: Array<[string, string]> = [
+    ["TMDB 身份", `Series ${detail.tmdb_series_id} · Season ${detail.tmdb_season_number}`],
+    ["季度开播", libraryDate(detail.air_date)],
+    ["本地加入", libraryDate(detail.added_at_utc, true)],
+    ["最后更新", libraryDate(detail.last_updated_at_utc, true)],
+    ["Series 取得", libraryStrategy(detail.series_resolution_source)],
+    ["Season 取得", libraryStrategy(detail.season_resolution_source)],
+    ["验证状态", libraryValidation(detail.validation_status)],
+    ["最近解析 Run", detail.last_resolution_run_id ?? "未记录"],
+    ["EP snapshot", `${detail.episode_snapshot_count} / TMDB 声明 ${detail.episode_total}`],
+  ];
+  facts.replaceChildren(...values.map(([label, value]) => {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = value;
+    row.append(term, description);
+    return row;
+  }));
+  content.append(progressRow, facts);
+  if (detail.warnings.length > 0) content.append(renderLibraryWarnings(detail.warnings));
+  layout.append(image, content);
+  summary.replaceChildren(layout);
+  renderLibraryEpisodes(detail);
+  if (focus) {
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    element<HTMLButtonElement>("#library-detail-close").focus({ preventScroll: true });
+  }
+}
+
+async function loadLibraryDetail(
+  tmdbSeriesId: number,
+  seasonNumber: number,
+  focus = false,
+): Promise<void> {
+  const sequence = ++libraryDetailRequestSequence;
+  const panel = element<HTMLElement>("#library-detail");
+  panel.hidden = false;
+  element<HTMLElement>("#library-detail-title").textContent = "正在读取季度详情…";
+  element<HTMLElement>("#library-detail-summary").replaceChildren();
+  element<HTMLElement>("#library-episodes").replaceChildren();
+  element<HTMLElement>("#library-episode-status").textContent = "";
+  try {
+    const response = await fetch(
+      `/api/v1/library/seasons/${tmdbSeriesId}/${seasonNumber}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const detail = await response.json() as AnimeSeasonDetail;
+    if (sequence !== libraryDetailRequestSequence) return;
+    renderLibraryDetail(detail, focus);
+  } catch (error) {
+    if (sequence !== libraryDetailRequestSequence) return;
+    activeLibraryDetail = null;
+    const message = document.createElement("p");
+    message.className = "muted empty";
+    message.textContent = `季度详情读取失败：${errorMessage(error, "未知错误")}`;
+    element<HTMLElement>("#library-detail-summary").replaceChildren(message);
+  }
+}
+
+async function loadLibrary(): Promise<void> {
+  const sequence = ++libraryListRequestSequence;
+  const list = element<HTMLElement>("#library-list");
+  list.setAttribute("aria-busy", "true");
+  element<HTMLElement>("#library-status").textContent = "正在读取作品库…";
+  const query = new URLSearchParams({
+    page: String(libraryState.page),
+    page_size: String(libraryState.page_size),
+    sort: libraryState.sort,
+    direction: libraryState.direction,
+  });
+  try {
+    const response = await fetch(`/api/v1/library/seasons?${query}`, { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const page = await response.json() as AnimeSeasonListPage;
+    if (sequence !== libraryListRequestSequence) return;
+    if (page.items.length === 0 && page.total_items > 0 && libraryState.page > 1) {
+      libraryState.page = Math.max(1, Math.ceil(page.total_items / page.page_size));
+      saveLibraryState();
+      await loadLibrary();
+      return;
+    }
+    libraryState.page = page.page;
+    libraryState.page_size = page.page_size as 12 | 24 | 48;
+    libraryState.sort = page.sort;
+    libraryState.direction = page.direction;
+    saveLibraryState();
+    renderLibraryPage(page);
+    if (libraryState.active_series_id !== null
+        && libraryState.active_season_number !== null
+        && page.items.some((item) =>
+          item.tmdb_series_id === libraryState.active_series_id
+          && item.tmdb_season_number === libraryState.active_season_number)) {
+      void loadLibraryDetail(
+        libraryState.active_series_id,
+        libraryState.active_season_number,
+      );
+    } else if (libraryState.active_series_id !== null) {
+      closeLibraryDetail();
+    }
+  } catch (error) {
+    if (sequence !== libraryListRequestSequence) return;
+    list.setAttribute("aria-busy", "false");
+    const failure = document.createElement("p");
+    failure.className = "muted empty";
+    failure.textContent = `作品库读取失败：${errorMessage(error, "未知错误")}`;
+    list.replaceChildren(failure);
+    element<HTMLElement>("#library-status").textContent = "读取失败";
+  }
+}
+
+function closeLibraryDetail(): void {
+  libraryDetailRequestSequence++;
+  activeLibraryDetail = null;
+  libraryState.active_series_id = null;
+  libraryState.active_season_number = null;
+  saveLibraryState();
+  element<HTMLElement>("#library-detail").hidden = true;
+  document.querySelectorAll<HTMLElement>(".library-card.active")
+    .forEach((card) => card.classList.remove("active"));
+}
+
+function changeLibraryOrdering(): void {
+  libraryState.sort = element<HTMLSelectElement>("#library-sort")
+    .value as AnimeLibrarySort;
+  libraryState.direction = element<HTMLSelectElement>("#library-direction")
+    .value as AnimeLibraryDirection;
+  libraryState.page_size = Number(
+    element<HTMLSelectElement>("#library-page-size").value,
+  ) as 12 | 24 | 48;
+  libraryState.page = 1;
+  closeLibraryDetail();
+  saveLibraryState();
+  void loadLibrary();
 }
 
 function configurationCard(title: string, fields: Array<[string, string]>): HTMLElement {
@@ -2106,6 +2626,38 @@ async function previewRssRules(): Promise<void> {
 }
 
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());
+element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
+element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
+element<HTMLSelectElement>("#library-page-size").value = String(libraryState.page_size);
+element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episode_filter;
+element<HTMLButtonElement>("#library-reload").addEventListener("click", () => void loadLibrary());
+element<HTMLSelectElement>("#library-sort").addEventListener("change", changeLibraryOrdering);
+element<HTMLSelectElement>("#library-direction").addEventListener("change", changeLibraryOrdering);
+element<HTMLSelectElement>("#library-page-size").addEventListener("change", changeLibraryOrdering);
+element<HTMLButtonElement>("#library-previous").addEventListener("click", () => {
+  if (libraryState.page <= 1) return;
+  libraryState.page--;
+  closeLibraryDetail();
+  saveLibraryState();
+  void loadLibrary();
+});
+element<HTMLButtonElement>("#library-next").addEventListener("click", () => {
+  libraryState.page++;
+  closeLibraryDetail();
+  saveLibraryState();
+  void loadLibrary();
+});
+element<HTMLButtonElement>("#library-detail-close").addEventListener("click", () => {
+  const activeCard = document.querySelector<HTMLButtonElement>(".library-card.active");
+  closeLibraryDetail();
+  activeCard?.focus();
+});
+element<HTMLSelectElement>("#library-episode-filter").addEventListener("change", () => {
+  libraryState.episode_filter = element<HTMLSelectElement>("#library-episode-filter")
+    .value as AnimeEpisodeFilter;
+  saveLibraryState();
+  if (activeLibraryDetail) renderLibraryEpisodes(activeLibraryDetail);
+});
 element<HTMLButtonElement>("#trusted-offsets-reload").addEventListener(
   "click",
   () => void loadTrustedOffsets(),
@@ -2156,6 +2708,7 @@ element<HTMLFormElement>("#downloader-config-form").addEventListener("submit", (
 element<HTMLButtonElement>("#downloader-config-delete").addEventListener("click", () => void deleteDownloaderOverride());
 
 void loadStatus();
+void loadLibrary();
 void loadConfiguration();
 void loadDownloads();
 void loadMetadataTasks();
@@ -2167,3 +2720,6 @@ void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
 window.setInterval(() => void loadMetadataTasks(), 5000);
 window.setInterval(() => void loadPendingTmdb(), 10000);
+window.setInterval(() => {
+  if (!document.hidden && activeLibraryDetail === null) void loadLibrary();
+}, 15000);
