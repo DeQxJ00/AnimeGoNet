@@ -70,7 +70,10 @@ public sealed class PluginCatalogTests
         public ValueTask<FeedResult> FetchAsync(
             FeedContext context,
             CancellationToken cancellationToken) =>
-            ValueTask.FromResult(new FeedResult([], []));
+            ValueTask.FromResult(new FeedResult(
+                [],
+                [],
+                new Dictionary<string, string>(StringComparer.Ordinal)));
     }
 
     private sealed class MismatchedPlugin : IInputSourceAdapter

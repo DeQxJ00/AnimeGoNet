@@ -78,14 +78,18 @@ public sealed record FeedContext(
 public sealed record FeedItem(
     string Title,
     string TorrentUrl,
+    string? SourceUrl,
     string? SourceItemId,
     string? SourceWorkId,
+    string? ContentType,
+    long Length,
     string? PublishedAtRaw,
     DateTimeOffset? PublishedAt);
 
 public sealed record FeedResult(
     IReadOnlyList<FeedItem> Items,
-    IReadOnlyList<PluginOperationError> Errors);
+    IReadOnlyList<PluginOperationError> Errors,
+    IReadOnlyDictionary<string, string> Metadata);
 
 public interface IFeedPlugin : IAnimeGoPlugin
 {
@@ -103,6 +107,8 @@ public sealed record TitleParseResult(
     string? AnimeTitle,
     int? Season,
     decimal? Episode,
+    string? EpisodeKind,
+    string? EpisodeText,
     string? ReleaseGroup,
     string? Resolution,
     IReadOnlyList<PluginOperationError> Errors);
@@ -118,8 +124,12 @@ public sealed record FilterItem(
     int Index,
     string Title,
     string TorrentUrl,
+    string? SourceUrl,
     string? SourceItemId,
-    string? SourceWorkId);
+    string? SourceWorkId,
+    string? ContentType,
+    long Length,
+    string? PublishedAtRaw);
 
 public sealed record FilterContext(
     string SourceProfileId,
@@ -128,13 +138,16 @@ public sealed record FilterContext(
 
 public sealed record FilterDecision(
     int Index,
+    string Outcome,
     bool Accepted,
     string Reason,
-    int Priority = 0);
+    int Priority,
+    IReadOnlyDictionary<string, string?> Metadata);
 
 public sealed record FilterResult(
     IReadOnlyList<FilterDecision> Decisions,
-    IReadOnlyList<PluginOperationError> Errors);
+    IReadOnlyList<PluginOperationError> Errors,
+    IReadOnlyDictionary<string, string> Metadata);
 
 public interface IFeedFilterPlugin : IAnimeGoPlugin
 {
@@ -145,9 +158,10 @@ public sealed record RenameContext(
     string SourcePath,
     string SeriesName,
     int Season,
-    decimal? Episode,
+    string Disposition,
+    int? Episode,
     string? EpisodeName,
-    string? LanguageSuffix,
+    string? RenameSuffix,
     IReadOnlyDictionary<string, string> Arguments);
 
 public sealed record RenameResult(
@@ -168,7 +182,8 @@ public sealed record ScheduledContext(
 public sealed record ScheduledResult(
     bool Succeeded,
     string? Message,
-    IReadOnlyList<PluginOperationError> Errors);
+    IReadOnlyList<PluginOperationError> Errors,
+    TimeSpan? NextDelay);
 
 public interface IScheduledPlugin : IAnimeGoPlugin
 {

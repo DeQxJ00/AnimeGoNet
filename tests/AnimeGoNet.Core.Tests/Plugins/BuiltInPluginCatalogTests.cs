@@ -15,6 +15,59 @@ public sealed class BuiltInPluginCatalogTests
             ["mikan", "u2", "ttg"],
             catalog.GetAll<IInputSourceAdapter>().Select(plugin => plugin.Descriptor.Id));
         Assert.All(catalog.All, plugin => Assert.True(plugin.Descriptor.IsBuiltIn));
+        Assert.Single(catalog.GetAll<ITitleParserPlugin>());
+        Assert.Single(catalog.GetAll<IRenamePlugin>());
+    }
+
+    [Fact]
+    public async Task BuiltInParserDelegatesToMikanEpisodeSemantics()
+    {
+        var parser = BuiltInPluginCatalog.Create().Require<ITitleParserPlugin>("mikan-title");
+
+        var normal = await parser.ParseAsync(
+            new TitleParseContext(
+                "[Group] Show [48]",
+                null,
+                "mikan",
+                new Dictionary<string, string>(StringComparer.Ordinal)),
+            CancellationToken.None);
+        var fractional = await parser.ParseAsync(
+            new TitleParseContext(
+                "[Group] Show [48.5]",
+                null,
+                "mikan",
+                new Dictionary<string, string>(StringComparer.Ordinal)),
+            CancellationToken.None);
+
+        Assert.True(normal.Matched);
+        Assert.Equal("normal", normal.EpisodeKind);
+        Assert.Equal(48m, normal.Episode);
+        Assert.True(fractional.Matched);
+        Assert.Equal("fractional", fractional.EpisodeKind);
+        Assert.Equal("48.5", fractional.EpisodeText);
+    }
+
+    [Fact]
+    public async Task BuiltInRenameDelegatesToSafeMediaPathPlanner()
+    {
+        var rename = BuiltInPluginCatalog.Create().Require<IRenamePlugin>("anime-library");
+
+        var result = await rename.RenameAsync(
+            new RenameContext(
+                "downloads/episode.mkv",
+                "Series",
+                2,
+                "episode",
+                3,
+                null,
+                null,
+                new Dictionary<string, string>(StringComparer.Ordinal)),
+            CancellationToken.None);
+
+        Assert.True(result.Matched);
+        Assert.Equal(
+            Path.Combine("Series", "S02", "E003.mkv"),
+            result.RelativeTargetPath);
     }
 
     [Fact]

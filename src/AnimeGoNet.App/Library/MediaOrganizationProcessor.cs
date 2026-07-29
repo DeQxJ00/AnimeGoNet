@@ -1,3 +1,4 @@
+using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
@@ -19,6 +20,7 @@ public sealed class MediaOrganizationProcessor(
     SafeFileMover mover,
     SafeFileLinker linker,
     TvShowNfoWriter nfoWriter,
+    PluginCatalog plugins,
     TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -79,7 +81,11 @@ public sealed class MediaOrganizationProcessor(
                     cancellationToken).ConfigureAwait(false);
             }
 
-            var plans = claim.Files.Select(file => Plan(claim, file)).ToArray();
+            var plans = new List<MediaOperationPlan>(claim.Files.Count);
+            foreach (var file in claim.Files)
+            {
+                plans.Add(await PlanAsync(claim, file, cancellationToken).ConfigureAwait(false));
+            }
             var operations = await store.EnsureOperationsAsync(
                 claim, plans, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
             foreach (var operation in operations.Where(operation => operation.State != "completed"))
@@ -135,16 +141,36 @@ public sealed class MediaOrganizationProcessor(
         }
     }
 
-    private static MediaOperationPlan Plan(MediaOrganizationClaim claim, MediaOrganizationFile file)
+    private async ValueTask<MediaOperationPlan> PlanAsync(
+        MediaOrganizationClaim claim,
+        MediaOrganizationFile file,
+        CancellationToken cancellationToken)
     {
         var sourceRelative = file.RelativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
-        var targetRelative = MediaPathPlanner.PlanRelativePath(new MediaPathInput(
-            file.CanonicalSeriesName, file.SeasonNumber, file.Disposition,
-            file.EpisodeNumber, file.RelativePath, file.RenameSuffix));
+        var rename = await plugins.Require<IRenamePlugin>("anime-library").RenameAsync(
+            new RenameContext(
+                file.RelativePath,
+                file.CanonicalSeriesName,
+                file.SeasonNumber,
+                file.Disposition,
+                file.EpisodeNumber,
+                null,
+                file.RenameSuffix,
+                EmptyArguments),
+            cancellationToken).ConfigureAwait(false);
+        if (!rename.Matched || string.IsNullOrWhiteSpace(rename.RelativeTargetPath))
+        {
+            throw new MediaRenamePluginException(
+                rename.Errors.Count > 0 ? rename.Errors[0].Code : "rename_no_match");
+        }
+
         var source = PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
-        var target = PathBoundary.Combine(claim.SaveRootPath, targetRelative);
+        var target = PathBoundary.Combine(claim.SaveRootPath, rename.RelativeTargetPath);
         return new MediaOperationPlan(file.TaskFileId, source, target);
     }
+
+    private static readonly Dictionary<string, string> EmptyArguments =
+        new(StringComparer.Ordinal);
 
     private async Task BestEffortPauseAsync(MediaOrganizationClaim claim, CancellationToken cancellationToken)
     {
@@ -176,6 +202,12 @@ public sealed class MediaOrganizationProcessor(
         TaskCanceledException => "organization_timeout",
         UnauthorizedAccessException => "file_access_denied",
         IOException => "file_move_io_error",
+        MediaRenamePluginException rename => rename.Code,
         _ => "media_organization_error",
     };
+}
+
+internal sealed class MediaRenamePluginException(string code) : Exception(code)
+{
+    public string Code { get; } = code;
 }

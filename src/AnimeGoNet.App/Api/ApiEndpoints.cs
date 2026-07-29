@@ -1908,7 +1908,7 @@ public static class ApiEndpoints
 
     private static async Task<Ok<LegacyApiResponse<MikanRssIngestResult?>>> LegacyRss(
         LegacyRssRequest request,
-        RssFeedReader reader,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         MikanRssIngestProcessor processor,
         CancellationToken cancellationToken)
     {
@@ -1921,7 +1921,39 @@ public static class ApiEndpoints
 
         try
         {
-            var feed = await reader.ParseUrlAsync(request.Rss.Url, cancellationToken).ConfigureAwait(false);
+            var fetched = await plugins
+                .Require<AnimeGo.Plugin.Abstractions.IFeedPlugin>("mikan-rss")
+                .FetchAsync(
+                    new AnimeGo.Plugin.Abstractions.FeedContext(
+                        "mikan",
+                        request.Rss.Url,
+                        EmptyPluginArguments),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var fetchError = fetched.Errors.Count > 0 ? fetched.Errors[0] : null;
+            if (fetchError is not null)
+            {
+                throw new RssFeedException(fetchError.Code, fetchError.Message);
+            }
+
+            var mikanId = fetched.Metadata.TryGetValue("mikanid", out var mikanIdValue)
+                && int.TryParse(
+                    mikanIdValue,
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var parsedMikanId)
+                && parsedMikanId > 0
+                    ? parsedMikanId
+                    : (int?)null;
+            var feed = new RssFeedDocument(
+                fetched.Items.Select(item => new RssFeedItem(
+                    item.Title,
+                    item.SourceUrl ?? string.Empty,
+                    item.TorrentUrl,
+                    item.ContentType ?? string.Empty,
+                    item.Length,
+                    item.PublishedAtRaw)).ToArray(),
+                mikanId);
             if (request.IsSelectEp)
             {
                 var selected = new HashSet<string>(request.EpLinks ?? [], StringComparer.Ordinal);
@@ -1941,6 +1973,9 @@ public static class ApiEndpoints
                 300, $"RSS processing failed: {exception.Code}", null));
         }
     }
+
+    private static readonly Dictionary<string, string> EmptyPluginArguments =
+        new(StringComparer.Ordinal);
 
     private static async Task<Ok<LegacyApiResponse<IngestBatchResponse?>>> LegacyDownloadManager(
         IngestBatchRequest request,

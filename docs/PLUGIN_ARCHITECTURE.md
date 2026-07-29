@@ -67,6 +67,16 @@ services.AddSingleton<IScheduledPlugin, MetadataRefreshTask>();
 
 当前宿主已经落地这一边界：目录构造函数只接受显式实例，验证插件只实现一个类别契约、描述类别一致、ID 为小写稳定格式且全局不重复，并按 `order`、`id` 确定性排序。Mikan、U2、TTG source adapter 在 `BuiltInPluginCatalog.Create()` 中逐项构造；统一导入和来源路由预览都从同一个目录解析 adapter。插件返回的来源 ID、HTTP(S) Torrent URL、标题与 SHA-256 指纹还会由宿主再次验证，不能仅凭插件声明进入 staging。
 
+其余内置实现同样不是 marker 或展示对象：
+
+- `mikan-rss` 委托有界、安全 URL 的 `RssFeedReader`，旧 `/api/rss` 从目录执行它。
+- `mikan-tool` 委托持久化的五级兼容过滤器，返回逐项 outcome/audit metadata；宿主校验数量、索引、状态和 revision 后才能继续。
+- `mikan-title` 委托 Mikan RSS Episode parser，普通、小数与特别篇类型保持分离；批次 planner 消费插件结果。
+- `anime-library` 委托 `MediaPathPlanner`，媒体整理在文件操作落库前消费插件目标并再次执行根目录边界检查。
+- `staged-torrent-dispatch` 委托真实 dispatcher，后台 worker 使用插件的结果与下一次建议延迟。
+
+默认目录不注册 Python 名称，不读取或执行 `.py` 文件；旧 `filter/mikan_tool.py` 只保留为 API 配置别名并映射到 SQLite/C# 实现。
+
 ## 3. 外部 C# 插件包
 
 外部插件按 RID 发布为自包含可执行程序，推荐启用 NativeAOT。一个安装目录示例：

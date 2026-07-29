@@ -7,6 +7,7 @@ using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Plugins;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
@@ -130,7 +131,16 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
         builder.Services.AddSingleton(database);
-        builder.Services.AddSingleton<PluginCatalog>(_ => BuiltInPluginCatalog.Create());
+        builder.Services.AddSingleton<MikanRssFeedPlugin>();
+        builder.Services.AddSingleton<MikanToolFilterPlugin>();
+        builder.Services.AddSingleton<StagedTorrentDispatchSchedulePlugin>();
+        builder.Services.AddSingleton<PluginCatalog>(services =>
+            BuiltInPluginCatalog.Create(
+            [
+                services.GetRequiredService<MikanRssFeedPlugin>(),
+                services.GetRequiredService<MikanToolFilterPlugin>(),
+                services.GetRequiredService<StagedTorrentDispatchSchedulePlugin>(),
+            ]));
         builder.Services.AddSingleton<SqliteJsonCacheStore>();
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);

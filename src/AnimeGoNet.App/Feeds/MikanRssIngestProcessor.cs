@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Ingest;
@@ -38,7 +39,7 @@ public sealed class MikanRssIngestProcessor(
     SourceProfileStore profiles,
     MikanRssRuleStore rules,
     MikanRssBatchStore batches,
-    MikanLegacyFilterProcessor legacyFilter,
+    PluginCatalog plugins,
     UnifiedIngestProcessor ingest)
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
@@ -59,14 +60,31 @@ public sealed class MikanRssIngestProcessor(
 
         var ruleSnapshot = await rules.GetAsync(profile.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new RssFeedException("rss_rules_missing", "RSS rules were not initialized.");
-        var legacy = await legacyFilter.EvaluateAsync(feed, profile, cancellationToken).ConfigureAwait(false);
-        var plan = MikanRssBatchPlanner.Create(
+        var filterResult = await plugins.Require<IFeedFilterPlugin>("mikan-tool").FilterAsync(
+            new FilterContext(
+                profile.Id,
+                feed.Items.Select((item, index) => new FilterItem(
+                    index,
+                    item.Title,
+                    item.TorrentUrl,
+                    item.MikanUrl,
+                    null,
+                    feed.MikanId?.ToString(CultureInfo.InvariantCulture),
+                    item.ContentType,
+                    item.Length,
+                    item.PublishedDate)).ToArray(),
+                EmptyArguments),
+            cancellationToken).ConfigureAwait(false);
+        var legacy = ToLegacyFilterBatch(filterResult, feed.Items.Count);
+        var plan = await MikanRssBatchPlanner.CreateAsync(
             feed,
             ruleSnapshot.Rules,
+            plugins.Require<ITitleParserPlugin>("mikan-title"),
             profile.RssPriorityEnabled,
             legacy.Audits,
             legacy.Revision,
-            legacy.Enabled);
+            legacy.Enabled,
+            cancellationToken).ConfigureAwait(false);
         var stored = await batches.SaveAsync(
             profile.Id, ruleSnapshot.Revision, profile.RssPriorityEnabled,
             plan, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
@@ -156,4 +174,72 @@ public sealed class MikanRssIngestProcessor(
             status,
             ingestTaskId,
             errors);
+
+    private static readonly Dictionary<string, string> EmptyArguments =
+        new(StringComparer.Ordinal);
+
+    private static MikanLegacyFilterBatch ToLegacyFilterBatch(
+        FilterResult result,
+        int expectedItemCount)
+    {
+        var error = result.Errors.Count > 0 ? result.Errors[0] : null;
+        if (error is not null)
+        {
+            throw new RssFeedException(error.Code, error.Message);
+        }
+
+        if (!result.Metadata.TryGetValue("revision", out var revisionValue)
+            || !long.TryParse(
+                revisionValue,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var revision)
+            || revision < 1
+            || !result.Metadata.TryGetValue("enabled", out var enabledValue)
+            || !bool.TryParse(enabledValue, out var enabled)
+            || result.Decisions.Count != expectedItemCount)
+        {
+            throw InvalidFilterResult();
+        }
+
+        var audits = new MikanLegacyFilterAudit[expectedItemCount];
+        var usedIndexes = new HashSet<int>();
+        foreach (var decision in result.Decisions)
+        {
+            if (decision.Index < 0
+                || decision.Index >= expectedItemCount
+                || !usedIndexes.Add(decision.Index)
+                || !Enum.TryParse<MikanLegacyFilterState>(
+                    decision.Outcome,
+                    ignoreCase: false,
+                    out var state)
+                || decision.Accepted != new MikanLegacyFilterAudit(state, decision.Reason).Eligible)
+            {
+                throw InvalidFilterResult();
+            }
+
+            decision.Metadata.TryGetValue("matched_scope", out var matchedScope);
+            decision.Metadata.TryGetValue("matched_key", out var matchedKey);
+            decision.Metadata.TryGetValue("identity_mikanid", out var identityMikanId);
+            decision.Metadata.TryGetValue("identity_groupid", out var identityGroupId);
+            audits[decision.Index] = new MikanLegacyFilterAudit(
+                state,
+                decision.Reason,
+                matchedScope,
+                matchedKey,
+                ParseNullablePositiveInt(identityMikanId),
+                ParseNullablePositiveInt(identityGroupId));
+        }
+
+        return new MikanLegacyFilterBatch(revision, enabled, audits);
+    }
+
+    private static int? ParseNullablePositiveInt(string? value) =>
+        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
+        && parsed > 0
+            ? parsed
+            : null;
+
+    private static RssFeedException InvalidFilterResult() =>
+        new("plugin_filter_invalid_result", "Mikan filter plugin returned an invalid result.");
 }

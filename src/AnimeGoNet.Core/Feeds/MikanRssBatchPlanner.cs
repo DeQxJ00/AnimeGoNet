@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Rules;
 
@@ -32,8 +33,72 @@ public static class MikanRssBatchPlanner
         bool legacyFilterEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(feed);
+        var parsedEpisodes = feed.Items
+            .Select(item => MikanRssEpisodeParser.Parse(item.Title))
+            .ToArray();
+        return CreateCore(
+            feed,
+            rules,
+            parsedEpisodes,
+            priorityEnabled,
+            legacyFilterAudits,
+            legacyFilterRevision,
+            legacyFilterEnabled);
+    }
+
+    public static async ValueTask<MikanRssBatchPlan> CreateAsync(
+        RssFeedDocument feed,
+        MikanRssRuleSet rules,
+        ITitleParserPlugin parser,
+        bool priorityEnabled = true,
+        IReadOnlyList<MikanLegacyFilterAudit>? legacyFilterAudits = null,
+        long legacyFilterRevision = 1,
+        bool legacyFilterEnabled = false,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        ArgumentNullException.ThrowIfNull(parser);
+        var parsedEpisodes = new TorrentEpisodeCandidate[feed.Items.Count];
+        for (var index = 0; index < feed.Items.Count; index++)
+        {
+            var result = await parser.ParseAsync(
+                new TitleParseContext(
+                    feed.Items[index].Title,
+                    null,
+                    "mikan",
+                    EmptyArguments),
+                cancellationToken).ConfigureAwait(false);
+            parsedEpisodes[index] = ToCandidate(result);
+        }
+
+        return CreateCore(
+            feed,
+            rules,
+            parsedEpisodes,
+            priorityEnabled,
+            legacyFilterAudits,
+            legacyFilterRevision,
+            legacyFilterEnabled);
+    }
+
+    private static readonly Dictionary<string, string> EmptyArguments =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    private static MikanRssBatchPlan CreateCore(
+        RssFeedDocument feed,
+        MikanRssRuleSet rules,
+        TorrentEpisodeCandidate[] parsedEpisodes,
+        bool priorityEnabled,
+        IReadOnlyList<MikanLegacyFilterAudit>? legacyFilterAudits,
+        long legacyFilterRevision,
+        bool legacyFilterEnabled)
+    {
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentOutOfRangeException.ThrowIfLessThan(legacyFilterRevision, 1);
+        if (parsedEpisodes.Length != feed.Items.Count)
+        {
+            throw new ArgumentException("Parsed episode count must match feed item count.", nameof(parsedEpisodes));
+        }
         if (legacyFilterAudits is not null && legacyFilterAudits.Count != feed.Items.Count)
         {
             throw new ArgumentException("Legacy filter audit count must match feed item count.", nameof(legacyFilterAudits));
@@ -44,7 +109,7 @@ public static class MikanRssBatchPlanner
         for (var index = 0; index < feed.Items.Count; index++)
         {
             var item = feed.Items[index];
-            var episode = MikanRssEpisodeParser.Parse(item.Title);
+            var episode = parsedEpisodes[index];
             candidates[index] = new MikanRssCandidate(
                 UniqueId(CreateStableId(item), usedIds),
                 item.Title,
@@ -87,6 +152,35 @@ public static class MikanRssBatchPlanner
         }
 
         return new MikanRssBatchPlan(feed.MikanId, planned, legacyFilterRevision, legacyFilterEnabled);
+    }
+
+    private static TorrentEpisodeCandidate ToCandidate(TitleParseResult result)
+    {
+        var kind = result.EpisodeKind switch
+        {
+            "normal" => TorrentEpisodeCandidateKind.Normal,
+            "fractional" => TorrentEpisodeCandidateKind.Fractional,
+            "special" => TorrentEpisodeCandidateKind.Special,
+            _ => TorrentEpisodeCandidateKind.Unknown,
+        };
+        var normalEpisode = kind == TorrentEpisodeCandidateKind.Normal
+            && result.Episode is > 0
+            && decimal.Truncate(result.Episode.Value) == result.Episode.Value
+            && result.Episode <= int.MaxValue
+                ? decimal.ToInt32(result.Episode.Value)
+                : (int?)null;
+        if (kind == TorrentEpisodeCandidateKind.Normal && normalEpisode is null)
+        {
+            kind = TorrentEpisodeCandidateKind.Unknown;
+        }
+
+        return new TorrentEpisodeCandidate(
+            kind,
+            result.EpisodeText,
+            normalEpisode,
+            kind == TorrentEpisodeCandidateKind.Unknown
+                ? result.Errors.Count > 0 ? result.Errors[0].Code : "episode_not_parsed"
+                : null);
     }
 
     private static string CreateStableId(RssFeedItem item)

@@ -14,7 +14,9 @@ AnimeGoNet.slnx
 └─ tests/AnimeGoNet.App.Tests
 ```
 
-依赖只允许从外向内：`App → Data → Core`；内置插件依赖 `Core` 契约，由 `App` 显式注册。Core 不引用 ASP.NET、SQLite、文件系统或下载器实现。
+依赖只允许从外向内：`App/Data → Core → AnimeGo.Plugin.Abstractions`；App 可以同时组合 Data 和 Core。内置插件实现六类 Abstractions 契约，由 `App` 显式注册。Core 不引用 ASP.NET、SQLite 或下载客户端实现。
+
+内置目录当前包含 source `mikan/u2/ttg`、feed `mikan-rss`、parser `mikan-title`、filter `mikan-tool`、rename `anime-library` 和 schedule `staged-torrent-dispatch`。Legacy RSS API、Mikan 批次过滤/解析、媒体整理和 staging worker 都从同一个目录按稳定 ID 取得实现；同步静态入口仅保留为测试/兼容 facade。目录中没有 Python 条目，主程序也没有解释器、脚本执行、程序集扫描或动态 DLL 加载路径。
 
 上游 Go 源码位于独立的 `AnimeGo` 目录和 Git 仓库，仅作为差分 fixture 与业务行为索引；本仓库只保存 `DotnetProject` 的 C# 主程序、测试、文档和交付资产，两边不共享 Git 历史。
 
