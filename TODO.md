@@ -119,7 +119,7 @@
 - [x] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立统一 AI 阶段已接入且 Series/Season/Episode 结果必须经 TMDB 验证。
 - [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。
 - [ ] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试。
-- [>] 移植 Mikan → Bangumi → TMDB 编排与 fallback：携带 `bgmid` 的已下载任务已由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Mikan 页面自动发现 bgmid、Backtrace、AI、Bangumi 完全兜底仍待实现。
+- [>] 移植 Mikan → Bangumi → TMDB 编排与 fallback：携带 `bgmid` 的已下载任务已由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Backtrace、统一 AI 和固定 S01 的 Bangumi 完全兜底已串联，Mikan 页面自动发现 bgmid 待实现。
 - [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖由专用 worker 优先领取并权威验证，EP Offset 已在逐文件 TMDB Episode 验证前应用且无效时阻断静默回退；可信自动 offset 与字幕绑定仍待串联。
 - [x] 人工规则无效时记录人工覆盖策略失败并阻止静默自动覆盖；清除/禁用后可通过 `POST /api/v1/metadata/tasks/{taskId}/retry` 显式重新匹配，事务性恢复自动策略队列且保留历史运行记录，并拒绝活动租约/非失败状态。
 - [>] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误（客户端已稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；重试编排待实现）。
@@ -179,9 +179,9 @@
 - [x] 确定性季度结果先执行同号 EP 快速校验；失败且统一 AI 开启、任务从未尝试 AI 时进行一次任务级映射，返回的 TMDB ID/Season 必须与已确认值相同，结果逐集由 TMDB 验证。
 - [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。
 - [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；已串联 paused qB 的逐文件 priority 与恢复门禁，实际下载/落盘及字幕绑定待实现。
-- [ ] 增加 `advanced.default.tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败即沿用原失败流程，不继续下载/刮削且不生成 NFO。
-- [ ] 开关开启后，仅在权威TMDB访问成功且最终为确定性无匹配、已有有效 Bangumi Subject ID 且季度 fallback 成功时继续；动画根目录 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
-- [ ] 验证已取得 TMDB ID、仅季度匹配失败时仍走原季度 fallback，不误入 Bangumi 完全失败兜底。
+- [x] 增加 `tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败沿用失败流程，不继续下载/刮削且不生成 NFO。
+- [x] 开关开启后，仅在权威 TMDB 成功访问且最终为确定性 Series 无匹配、已有有效 Bangumi Subject ID 时继续；季度固定本地 `S01`，不依赖 P2/P1，不输出有效 TMDB ID，动画根目录 `tvshow.nfo` 写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
+- [x] 验证已取得 TMDB Series、仅季度匹配失败时仍走原季度 fallback，不误入 Bangumi 完全失败兜底；网络/认证/配置/协议/输入失败均禁止兜底。
 - [ ] 通过状态机、文件策略和合法小文件 E2E。
 
 ## P9 — 调度、Web API 与 Web 页面

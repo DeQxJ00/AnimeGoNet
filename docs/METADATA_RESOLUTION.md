@@ -119,9 +119,10 @@ advanced:
 
 - TMDB 搜索请求已经成功到达并取得可解析的权威响应，但在既定策略后仍确定性地无法得到有效 TMDB TV Series ID；最终失败类别必须为 `SemanticNoMatch`。
 - 已取得有效 Bangumi Subject ID。
-- 人工覆盖或既有季度 fallback 最终得到有效 Season Number。
 
 任一前置条件不满足，仍按失败、待确认或跳过处理，不生成失败 NFO。
+
+完全兜底的季度不读取任务 `title`、Bangumi 名称或 P2/P1 开关，固定使用本地 `S01`，且不请求、不验证 TMDB Season。这个 S01 只是待补全目录范围，不得标记为 TMDB Season 来源。
 
 “非网络原因”在此处使用白名单语义，不是简单判断 `retryable=false`。允许进入 `tmdbid=0` 的最终原因仅包括成功 TMDB 查询后的 `SeriesNotFound`、`NoAcceptableTvCandidate` 或等价的确定性无匹配。以下情况即使重试耗尽或表面上属于非网络错误，也一律禁止兜底：
 
@@ -135,19 +136,18 @@ advanced:
 
 ## 3. 状态与输出语义
 
-| TMDB 结果 | Bgm ID | 季度 | 开关 | 结果 |
+| TMDB 结果 | Bgm ID | 兜底季度 | 开关 | 结果 |
 |---|---:|---:|---:|---|
 | 成功 | 有效 | 有效 | 任意 | 使用 TMDB 名称/Season/Episode 继续；`tvshow.nfo` 写真实 `tmdbid` + `bangumiid` |
-| 确定性完全无匹配（`SemanticNoMatch`） | 有效 | 有效 | `true` | 使用 Bangumi 兜底继续；`tvshow.nfo` 写 `tmdbid=0` + `bangumiid` |
-| 网络/服务/认证/配置/协议失败 | 有效 | 有效 | `true` | 禁止兜底；进入重试或配置/人工修复，不下载、不生成 NFO |
-| 完全失败 | 有效 | 有效 | `false` | 原失败流程；不下载、不刮削、不生成 NFO |
+| 确定性完全无匹配（`SemanticNoMatch`） | 有效 | 固定 `S01` | `true` | 使用 Bangumi 兜底继续；`tvshow.nfo` 写 `tmdbid=0` + `bangumiid` |
+| 网络/服务/认证/配置/协议失败 | 有效 | 不适用 | `true` | 禁止兜底；进入重试或配置/人工修复，不下载、不生成 NFO |
+| 完全失败 | 有效 | 不适用 | `false` | 原失败流程；不下载、不刮削、不生成 NFO |
 | 完全失败 | 缺失 | 任意 | `true` | 无法兜底；失败/待确认，不生成 NFO |
-| 完全失败 | 有效 | 未确定 | `true` | 无法安排媒体目录；待确认或跳过，不生成 NFO |
 | TMDB ID 有效、仅季度失败 | 有效 | fallback 后有效 | 任意 | 不属于完全失败；正常继续并写真实 `tmdbid` + `bangumiid` |
 
 本节的 `tmdbid`、`bangumiid` 都指 NFO XML 标签内容。内部 SQLite 分别保存来源值、TMDB 规范值、失败原因和待修复状态，不用 NFO 的 `0` 代替内部身份信息。
 
-当前主程序在权威 Series `SemanticNoMatch` 后先尝试已启用的统一 AI 元数据恢复；仍失败时才评估 Bangumi 兜底。兜底任务在 `anime_series` 保存 `tmdb_series_id=0 + bangumi_subject_id + needs_tmdb_completion=1`，但 `task_files.tmdb_series_id` 和 `metadata_resolution_runs.tmdb_series_id` 保持 `NULL`，避免把例外值混入规范 TMDB 身份。文件只携带已确认的来源季度并以 `Other/tmdb_fallback_pending_completion` 整理，不生成 TMDB Episode 进度或规范 completion record。
+当前主程序在权威 Series `SemanticNoMatch` 后先尝试已启用的统一 AI 元数据恢复；仍失败时才评估 Bangumi 兜底。兜底任务在 `anime_series` 保存 `tmdb_series_id=0 + bangumi_subject_id + needs_tmdb_completion=1`，但 `task_files.tmdb_series_id` 和 `metadata_resolution_runs.tmdb_series_id` 保持 `NULL`，避免把例外值混入规范 TMDB 身份。文件只携带固定的本地 `S01` 范围并以 `Other/tmdb_fallback_pending_completion` 整理，不生成 TMDB Episode 进度或规范 completion record。
 
 ## 4. NFO 文件和内容
 
@@ -224,7 +224,7 @@ advanced:
 - 多个前传按关系距离由近到远遍历；同层按首播日期降序、Subject ID 升序稳定排序，保证相同输入结果确定。
 - 使用 visited Subject ID 防止关系环和重复请求；所有请求支持取消。关系读取失败先按数据源策略重试，耗尽后记录独立 `BacktraceError` 并继续较低优先级策略，不能伪装成正常的“回溯耗尽”。
 
-无论当前搜索是“已有有效 ID 但季度失败”还是“两个名字均未找到可验证 Series”，只要已有 `bgmid`，P3 都可以尝试恢复完整 `tmdbid + Season`。P3、AI 仍失败且 `tmdb_fail_use_bangumi=true` 时，才进入先前确认的 `tmdbid=0` 例外路径；由于没有 TMDB 规范值，该路径只能使用 Bangumi 名称与来源季度/集号，并必须在状态/UI 中明确标记为非 TMDB 规范命名。P2/P1 仍要求已有有效 TMDB Series，因为两者只提供本地 Season Number。
+无论当前搜索是“已有有效 ID 但季度失败”还是“两个名字均未找到可验证 Series”，只要已有 `bgmid`，P3 都可以尝试恢复完整 `tmdbid + Season`。只有后者最终仍没有有效 TMDB Series、失败为权威 `SemanticNoMatch` 且 `tmdb_fail_use_bangumi=true` 时，才进入 `tmdbid=0` 例外路径；该路径使用 Bangumi 名称和固定本地 `S01`，并必须在状态/UI 中明确标记为非 TMDB 规范命名。P2/P1 仍要求已有有效 TMDB Series，因为两者只提供本地 Season Number。
 
 ### 6.2 普通 EP 校验与统一 AI 补全
 
@@ -274,9 +274,9 @@ Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access
 
 1. TMDB 全成功：SQLite 保存来源 ID，动画根目录 `tvshow.nfo` 包含真实 TMDB/Bgm ID。
 2. TMDB 搜索无结果、开关默认关闭：状态进入原失败路径，不创建下载任务，不生成 `tvshow.nfo`。
-3. 同一输入开启开关、Bgm ID 和季度有效：继续下载/刮削，NFO 精确包含 `tmdbid=0` 和对应 `bangumiid`。
+3. 同一输入开启开关且 Bgm ID 有效：固定进入本地 `S01` 继续处理，NFO 精确包含 `tmdbid=0` 和对应 `bangumiid`；标题中的第二季等信息不得改变该季度。
 4. 开关开启但 Bgm ID 缺失：不得继续，不生成 NFO。
-5. 开关开启但季度无法确定：进入待确认或跳过，不生成 NFO。
+5. P2/P1 全部关闭或任务标题没有季度：不影响完全兜底固定使用本地 `S01`。
 6. TMDB 网络错误在重试内恢复：不得提前进入 Bangumi 兜底。
 7. 重试耗尽并成功兜底，后台恢复后用真实 TMDB ID 原子更新 NFO。
 8. 已有 TMDB ID、仅季度失败：不得误判成“TMDB 完全失败”。

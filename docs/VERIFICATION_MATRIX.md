@@ -142,8 +142,8 @@ GET    /websocket/log
 9. 当前作品日文名、中文名均未找到 Series：只要存在 `bgmid`，Backtrace 仍发起关系请求并可由前作恢复不同的 `tmdbid + Season`；耗尽后才进入独立 AI/完全失败兜底，P2/P1 因缺少有效 Series 标记不适用。
 10. Web 配置页修改四个确定性开关及一个任务级 AI 元数据开关后，私有配置、重载值和阶段说明一致；旧双开关仅用于兼容读取。
 11. `Disabled`、`NotApplicable`、`NoMatch`、`Error`、`Succeeded`、`Terminated` 六类策略结果分别持久化正确；最终失败保留已确认的上级 ID。
-12. TMDB搜索成功返回空结果/无可接受TV候选，且bgmid与季度有效、兜底开启：`failure_kind=SemanticNoMatch`、`tmdb_access_confirmed=true`，允许下载并写`tmdbid=0`。
-13. DNS/连接/TLS/代理/超时/取消/408/429/5xx/断路器分别重试耗尽：即使bgmid与季度有效也不得下载或写NFO，状态为重试/服务故障且Web显示兜底拒绝原因。
+12. TMDB搜索成功返回空结果/无可接受TV候选，且bgmid有效、兜底开启：`failure_kind=SemanticNoMatch`、`tmdb_access_confirmed=true`，固定使用本地S01并写`tmdbid=0`；P2/P1开关和标题季度不得改变它。
+13. DNS/连接/TLS/代理/超时/取消/408/429/5xx/断路器分别重试耗尽：即使bgmid有效也不得下载或写NFO，状态为重试/服务故障且Web显示兜底拒绝原因；已验证Series但仅季度失败也不得进入完全兜底。
 14. API Key缺失、401/403、endpoint错误、响应截断/畸形、输入非法、人工规则无效和候选歧义分别验证：全部禁止`tmdbid=0`，进入配置或人工修复。
 15. 首次网络失败、后续重试成功并得到确定性空结果时允许按SemanticNoMatch兜底；仅AI/MCP声称未找到而TMDB权威请求从未成功时禁止。
 16. DNS/超时/429/5xx 标记为可重试，401/403/API Key 缺失标记为配置错误，无结果/歧义/字段冲突标记为需人工处理；所有原因均不泄漏密钥、Authorization 或完整 Prompt。

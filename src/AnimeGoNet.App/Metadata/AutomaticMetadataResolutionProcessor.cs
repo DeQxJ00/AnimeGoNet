@@ -270,26 +270,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return false;
         }
 
-        var policy = options.Metadata.SeasonFailure;
-        int? seasonNumber = policy.UseTitleSeason
-            ? TmdbSeasonFallbackSelector.ParseSeasonNumber(claim.Title)
-                ?? TmdbSeasonFallbackSelector.ParseSeasonNumber(subject.ChineseName)
-                ?? TmdbSeasonFallbackSelector.ParseSeasonNumber(subject.Name)
-            : null;
-        if (seasonNumber is null && policy.UseFirstSeason)
-        {
-            seasonNumber = 1;
-        }
-
         var started = _timeProvider.GetTimestamp();
-        if (seasonNumber is null or <= 0)
-        {
-            await RecordAsync(
-                claim, "season", "bangumi_fallback", null, "not_matched",
-                "bangumi_fallback_season_missing", false, started, cancellationToken).ConfigureAwait(false);
-            return false;
-        }
-
         await RecordAsync(
             claim, "season", "bangumi_fallback", null, "matched",
             null, false, started, cancellationToken).ConfigureAwait(false);
@@ -300,7 +281,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
         await resolutions.CompleteBangumiFallbackAsync(
             claim,
             subject,
-            seasonNumber.Value,
+            1,
             failure,
             bangumiEpisodeIds,
             _timeProvider.GetUtcNow(),

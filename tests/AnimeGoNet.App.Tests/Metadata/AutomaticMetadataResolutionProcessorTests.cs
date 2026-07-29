@@ -40,7 +40,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
-    public async Task AuthoritativeSeriesNoMatchCanCreateBangumiPendingCompletionWithoutFakeEpisode()
+    public async Task AuthoritativeSeriesNoMatchUsesFixedSeasonOneBangumiFallback()
     {
         var tmdb = new FakeTmdbClient(
             Series,
@@ -60,10 +60,6 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 Metadata = options.Metadata with
                 {
                     TmdbFailureUseBangumi = true,
-                    SeasonFailure = options.Metadata.SeasonFailure with
-                    {
-                        UseTitleSeason = true,
-                    },
                 },
             },
             tmdbClient: tmdb,
@@ -79,7 +75,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
         Assert.Equal("fallback_resolved", run.Status);
         Assert.Null(run.TmdbSeriesId);
-        Assert.Equal(2, run.TmdbSeasonNumber);
+        Assert.Equal(1, run.TmdbSeasonNumber);
         Assert.True(run.FallbackEligible);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
         var database = app.App.Services
@@ -107,13 +103,47 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal(547888, reader.GetInt32(1));
         Assert.Equal(1, reader.GetInt64(2));
         Assert.True(reader.IsDBNull(3));
-        Assert.Equal(2, reader.GetInt32(4));
+        Assert.Equal(1, reader.GetInt32(4));
         Assert.True(reader.IsDBNull(5));
         Assert.Equal("other", reader.GetString(6));
         Assert.Equal("tmdb_fallback_pending_completion", reader.GetString(7));
         Assert.Equal("bangumi_episode", reader.GetString(8));
         Assert.Equal("1001", reader.GetString(9));
         Assert.Equal([547888], bangumiEpisodes.SubjectIds);
+    }
+
+    [Fact]
+    public async Task AuthoritativeSeriesNoMatchStopsWhenBangumiFallbackIsDisabled()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            searchReturnsEmpty: true);
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888,
+            "Made in Abyss Season 2",
+            "来自深渊 第二季",
+            new DateOnly(2022, 7, 6),
+            12));
+        await using var app = await RunningApp.StartAsync(
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第二季");
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("failed", run.Status);
+        Assert.False(run.FallbackEligible);
+        Assert.Equal("bangumi_fallback_disabled", run.FallbackDenialReason);
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM anime_series WHERE tmdb_series_id = 0;";
+        Assert.Equal(0L, await command.ExecuteScalarAsync());
     }
 
     [Fact]
@@ -154,6 +184,52 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM anime_series WHERE tmdb_series_id = 0;";
         Assert.Equal(0L, await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task ResolvedSeriesWithSeasonMismatchNeverCreatesBangumiFallback()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888,
+            "メイドインアビス",
+            "来自深渊",
+            new DateOnly(2020, 1, 1),
+            12));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    TmdbFailureUseBangumi = true,
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第二季");
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("failed", run.Status);
+        Assert.False(run.FallbackEligible);
+        Assert.Equal("tmdb_series_resolved", run.FallbackDenialReason);
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM anime_series WHERE tmdb_series_id = 0;";
+        Assert.Equal(0L, await command.ExecuteScalarAsync());
+        command.CommandText = """
+            SELECT attempt.result
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            WHERE run.task_id = $task_id AND attempt.strategy = 'tmdb_title';
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal("matched", await command.ExecuteScalarAsync());
     }
 
     [Fact]
