@@ -81,6 +81,8 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster 路径，并为普通 Season 保存首播日期、TMDB Episode 总数与 poster 路径。正常自动/人工解析和“待补全 TMDB”恢复共用同一投影；这些字段只是作品库查询和 Cover 代理的权威输入，尚未提供浏览器直连 TMDB 图片 URL。
 
+`GET /api/v1/library/seasons` 已提供第 6 节的季度列表基础投影和服务端分页。`sort` 接受 `last_updated`、`name`、`air_date`、`added_at`，`direction` 接受 `asc`/`desc`；空开播日期在两个方向都置后。列表用单次批量查询聚合完整 Episode snapshot 与规范完成记录，返回 snapshot 缺口、snapshot 外完成记录、完成记录缺媒体路径和本地未验证季度警告。`tmdbid=0` 条目始终排除。当前 `poster_path` 只是经过校验的 TMDB 相对路径；Cover 代理完成前页面不得把它拼成携带密钥的外部 URL。
+
 可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同 EP 进度。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
 
 ## 8. 当前生效配置投影

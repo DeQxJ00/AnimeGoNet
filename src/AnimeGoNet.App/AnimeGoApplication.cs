@@ -170,6 +170,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<PendingTmdbRecoveryStore>();
         builder.Services.AddSingleton<PendingTmdbNfoRewriteStore>();
         builder.Services.AddSingleton<CompletionRecordStore>();
+        builder.Services.AddSingleton<AnimeLibraryStore>();
         builder.Services.AddSingleton(downloadClientRegistry);
         builder.Services.AddSingleton<DownloadClientOperationCoordinator>();
         builder.Services.AddSingleton(torrentStagingService);

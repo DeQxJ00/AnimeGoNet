@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 
 namespace AnimeGoNet.Data.Tests.Metadata;
@@ -54,6 +55,12 @@ public sealed class PendingTmdbRecoveryStoreTests
               AND tmdb_series_id = 700
               AND series_directory_name = 'Fallback Anime';
             """));
+        var libraryItem = Assert.Single((await new AnimeLibraryStore(fixture.Database)
+            .ListSeasonsAsync(new AnimeSeasonListQuery())).Items);
+        Assert.Equal("pending_tmdb_manual", libraryItem.SeriesResolutionSource);
+        Assert.Equal("pending_tmdb_manual", libraryItem.SeasonResolutionSource);
+        Assert.Equal("verified", libraryItem.ValidationStatus);
+        Assert.Equal(1, libraryItem.EpisodeDownloaded);
 
         await using (var library = connection.CreateCommand())
         {

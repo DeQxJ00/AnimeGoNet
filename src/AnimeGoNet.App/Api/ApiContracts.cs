@@ -334,6 +334,35 @@ public sealed record MetadataAttemptItemResponse(
     [property: JsonPropertyName("run_started_at_utc")] DateTimeOffset RunStartedAtUtc,
     [property: JsonPropertyName("run_completed_at_utc")] DateTimeOffset? RunCompletedAtUtc);
 
+public sealed record AnimeSeasonListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] int TotalItems,
+    [property: JsonPropertyName("sort")] string Sort,
+    [property: JsonPropertyName("direction")] string Direction,
+    [property: JsonPropertyName("items")] IReadOnlyList<AnimeSeasonListItemResponse> Items);
+
+public sealed record AnimeSeasonListItemResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("sort_name")] string SortName,
+    [property: JsonPropertyName("season_name")] string SeasonName,
+    [property: JsonPropertyName("poster_path")] string? PosterPath,
+    [property: JsonPropertyName("poster_source")] string PosterSource,
+    [property: JsonPropertyName("air_date")] DateOnly? AirDate,
+    [property: JsonPropertyName("added_at_utc")] DateTimeOffset AddedAtUtc,
+    [property: JsonPropertyName("last_updated_at_utc")] DateTimeOffset LastUpdatedAtUtc,
+    [property: JsonPropertyName("episode_total")] int EpisodeTotal,
+    [property: JsonPropertyName("episode_snapshot_count")] int EpisodeSnapshotCount,
+    [property: JsonPropertyName("episode_downloaded")] int EpisodeDownloaded,
+    [property: JsonPropertyName("series_resolution_source")] string? SeriesResolutionSource,
+    [property: JsonPropertyName("season_resolution_source")] string? SeasonResolutionSource,
+    [property: JsonPropertyName("validation_status")] string ValidationStatus,
+    [property: JsonPropertyName("last_resolution_run_id")] string? LastResolutionRunId,
+    [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings);
+
 public sealed record PendingTmdbListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
 

@@ -17,6 +17,7 @@ using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Cache;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Rules;
@@ -66,6 +67,7 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
+        app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
         app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
         app.MapPost(
@@ -1731,6 +1733,124 @@ public static class ApiEndpoints
                 attempt.RunStartedAtUtc,
                 attempt.RunCompletedAtUtc)).ToArray()));
     }
+
+    private static async Task<IResult> LibrarySeasons(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? sort,
+        [FromQuery] string? direction,
+        AnimeLibraryStore library,
+        CancellationToken cancellationToken)
+    {
+        var resolvedPage = page ?? 1;
+        if (resolvedPage < 1)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_page_invalid",
+                "Library page must be a positive integer."));
+        }
+
+        var resolvedPageSize = pageSize ?? 24;
+        if (resolvedPageSize is < 1 or > 100)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_page_size_invalid",
+                "Library page size must be between 1 and 100."));
+        }
+
+        if (!TryParseLibrarySort(sort, out var resolvedSort))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_sort_invalid",
+                "Library sort must be last_updated, name, air_date or added_at."));
+        }
+
+        if (!TryParseLibraryDirection(direction, out var resolvedDirection))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_direction_invalid",
+                "Library direction must be asc or desc."));
+        }
+
+        var result = await library.ListSeasonsAsync(
+            new AnimeSeasonListQuery(
+                resolvedPage,
+                resolvedPageSize,
+                resolvedSort,
+                resolvedDirection),
+            cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new AnimeSeasonListResponse(
+            result.Page,
+            result.PageSize,
+            result.TotalItems,
+            LibrarySortName(resolvedSort),
+            resolvedDirection == AnimeLibrarySortDirection.Ascending ? "asc" : "desc",
+            result.Items.Select(item =>
+            {
+                var posterPath = item.SeasonPosterPath ?? item.SeriesPosterPath;
+                var posterSource = item.SeasonPosterPath is not null
+                    ? "season"
+                    : item.SeriesPosterPath is not null
+                        ? "series"
+                        : "placeholder";
+                return new AnimeSeasonListItemResponse(
+                    $"tmdb:{item.TmdbSeriesId}:s{item.TmdbSeasonNumber}",
+                    item.TmdbSeriesId,
+                    item.TmdbSeasonNumber,
+                    item.DisplayName,
+                    item.SortName,
+                    item.SeasonName,
+                    posterPath,
+                    posterSource,
+                    item.AirDate,
+                    item.AddedAt,
+                    item.LastUpdatedAt,
+                    item.EpisodeTotal,
+                    item.EpisodeSnapshotCount,
+                    item.EpisodeDownloaded,
+                    item.SeriesResolutionSource,
+                    item.SeasonResolutionSource,
+                    item.ValidationStatus,
+                    item.LastResolutionRunId,
+                    item.Warnings);
+            }).ToArray()));
+    }
+
+    private static bool TryParseLibrarySort(string? value, out AnimeLibrarySort sort)
+    {
+        sort = value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "last_updated" => AnimeLibrarySort.LastUpdated,
+            "name" => AnimeLibrarySort.Name,
+            "air_date" => AnimeLibrarySort.AirDate,
+            "added_at" => AnimeLibrarySort.AddedAt,
+            _ => 0,
+        };
+        return sort != 0;
+    }
+
+    private static bool TryParseLibraryDirection(
+        string? value,
+        out AnimeLibrarySortDirection direction)
+    {
+        direction = value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "desc" => AnimeLibrarySortDirection.Descending,
+            "asc" => AnimeLibrarySortDirection.Ascending,
+            _ => 0,
+        };
+        return direction != 0;
+    }
+
+    private static string LibrarySortName(AnimeLibrarySort sort) =>
+        sort switch
+        {
+            AnimeLibrarySort.LastUpdated => "last_updated",
+            AnimeLibrarySort.Name => "name",
+            AnimeLibrarySort.AirDate => "air_date",
+            AnimeLibrarySort.AddedAt => "added_at",
+            _ => throw new ArgumentOutOfRangeException(nameof(sort)),
+        };
 
     private static async Task<Ok<PendingTmdbListResponse>> PendingTmdbSeries(
         PendingTmdbStore pending,
