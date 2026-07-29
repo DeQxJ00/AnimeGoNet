@@ -98,3 +98,11 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 该接口只返回 `api_key_configured`、`read_access_token_configured` 和 `access_key_configured` 布尔值，绝不返回凭据内容；仍受统一 API 鉴权保护。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，密钥输入为空表示保留，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。配置来源和环境变量覆盖提示仍按 TODO 继续实现。
+
+## 9. 手动 Torrent 与 RSS 提交
+
+首页“手动提交”区不建立第二套下载逻辑。单个 Torrent 调用 `POST /api/v1/ingest`，选择值是已启用的 SourceProfile ID，因此自定义 Mikan/U2/TTG 来源继续使用各自不可变的下载器、目录、文件策略、category、tags 和 revision 快照。Mikan 手动导入要求 `mikanid` 与 `bgmid`；U2/TTG 可附带作品级 `anidbid`/`imdbid` 参考。结果显示接受/拒绝数量、任务 ID、实际来源 revision、下载器、文件数、info hash 和不可逆 URL 指纹，不显示原 Torrent URL。
+
+Mikan RSS 调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。服务端必须先确认该 profile 已启用且 adapter 为 Mikan，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。响应显示 batch、mikanid、规则 revision、候选决策和实际任务 ID。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
+
+Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。

@@ -245,6 +245,78 @@
       </div>
     </section>
 
+    <section id="manual-submit" aria-labelledby="manual-submit-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Unified input</p>
+          <h2 id="manual-submit-title">手动提交</h2>
+        </div>
+      </div>
+      <p class="muted">Torrent URL 与 RSS URL 可能包含 passkey：只用于本次请求，提交后立即清空，不保存到浏览器本地存储，也不在结果中回显。</p>
+      <div class="manual-submit-grid">
+        <form id="manual-download-form" class="manual-submit-card">
+          <div>
+            <h3>单个 Torrent</h3>
+            <p class="muted">经统一导入执行匹配、去重、来源路由和 qBittorrent 分发。</p>
+          </div>
+          <div class="manual-submit-fields">
+            <label>输入源
+              <select id="manual-download-source" required></select>
+            </label>
+            <label class="wide">任务 title
+              <input id="manual-download-title" required maxlength="512" autocomplete="off">
+            </label>
+            <label class="wide">Torrent URL（敏感）
+              <input id="manual-download-url" type="password" required inputmode="url" autocomplete="off" spellcheck="false">
+            </label>
+            <label>来源条目 ID
+              <input id="manual-download-item-id" maxlength="256" autocomplete="off">
+            </label>
+            <label>来源作品 ID
+              <input id="manual-download-work-id" maxlength="256" autocomplete="off">
+            </label>
+            <label>mikanid
+              <input id="manual-download-mikanid" type="number" min="1">
+            </label>
+            <label>bgmid
+              <input id="manual-download-bgmid" type="number" min="1">
+            </label>
+            <label>anidbid
+              <input id="manual-download-anidbid" type="number" min="1">
+            </label>
+            <label>imdbid
+              <input id="manual-download-imdbid" placeholder="tt1234567" autocomplete="off">
+            </label>
+          </div>
+          <p id="manual-download-hint" class="manual-submit-hint"></p>
+          <button id="manual-download-submit" type="submit" class="primary-button">提交下载</button>
+          <div id="manual-download-result" class="manual-submit-result" aria-live="polite">
+            <p class="muted">尚未提交。</p>
+          </div>
+        </form>
+
+        <form id="manual-rss-form" class="manual-submit-card">
+          <div>
+            <h3>Mikan RSS</h3>
+            <p class="muted">先执行来源绑定的旧过滤，再执行同集有序优选；候选剩一个立即停止。</p>
+          </div>
+          <div class="manual-submit-fields">
+            <label class="wide">Mikan 输入源
+              <select id="manual-rss-source" required></select>
+            </label>
+            <label class="wide">RSS URL（敏感）
+              <input id="manual-rss-url" type="password" required inputmode="url" autocomplete="off" spellcheck="false">
+            </label>
+          </div>
+          <p class="manual-submit-hint">只列出已启用且 adapter 为 Mikan 的 SourceProfile；任务固化当前 revision、下载器和规则快照。</p>
+          <button id="manual-rss-submit" type="submit" class="primary-button">抓取并处理 RSS</button>
+          <div id="manual-rss-result" class="manual-submit-result" aria-live="polite">
+            <p class="muted">尚未提交。</p>
+          </div>
+        </form>
+      </div>
+    </section>
+
     <section aria-labelledby="trusted-offsets-title">
       <div class="section-heading">
         <div>

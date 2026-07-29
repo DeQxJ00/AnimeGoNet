@@ -190,7 +190,7 @@
 - [ ] 实现 Bangumi/数据库/feed/plugin tasks。
 - [ ] 实现优雅退出和取消传播。
 - [ ] 移植 10 个 HTTP API。
-- [>] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，二者均完成安全 staging 与后台 qB dispatch；`/api/rss` 待接入。
+- [x] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与现代 `/api/v1/rss/ingest` 均已接入来源规则、统一 staging 与后台 qB dispatch。
 - [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
 - [x] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile CRUD/无副作用预览、下载器脱敏投影/连接测试、data_path 私有覆盖文件、凭据只写 create/update/remove、全局 revision、重启应用和引用保护均已完成。
 - [>] 移植 access-key、响应 envelope、参数错误（直接/旧 hash access-key、ping/sha256、legacy manager envelope 和逐项导入错误已验证；其余旧 API 待移植）。
@@ -209,7 +209,7 @@
 - [>] 实现暂停、恢复和AnimeGoNet业务重试；下载任务卡片已只跳转四类删除中心并执行预览/确认，暂停、恢复和业务重试待实现。首版不复刻Tracker/Peer明细、piece图、限速、强制校验/汇报和qB全局设置。
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
 - [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、做种分钟、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；动态 tag 模板和重复命中通知待实现。
-- [ ] 实现手动 RSS/下载提交与操作结果。
+- [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。
 - [>] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件，AI 密钥只写不回显；表单/API/私有配置已完成，原始 YAML 预览、diff 与保存前备份待实现。
 - [ ] 动画条目页同时展示来源名称/集号和最终 TMDB 名称/Season/Episode，以及 AI 匹配状态、置信度、最终失败原因和策略尝试时间线。

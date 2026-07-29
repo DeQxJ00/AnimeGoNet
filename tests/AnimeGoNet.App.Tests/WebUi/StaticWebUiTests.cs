@@ -28,12 +28,17 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "download_skipped_duplicate")]
     [InlineData("/app.js", "text/javascript", "organizing_cleanup")]
     [InlineData("/app.js", "text/javascript", "organized")]
+    [InlineData("/app.js", "text/javascript", "/api/v1/rss/ingest")]
+    [InlineData("/app.js", "text/javascript", "/api/v1/ingest")]
     [InlineData("/", "text/html", "metadata-tasks")]
     [InlineData("/", "text/html", "anime-library")]
+    [InlineData("/", "text/html", "manual-download-form")]
+    [InlineData("/", "text/html", "manual-rss-form")]
     [InlineData("/", "text/html", "library-episode-filter")]
     [InlineData("/", "text/html", "pending-tmdb-list")]
     [InlineData("/styles.css", "text/css", ".pending-tmdb-card")]
     [InlineData("/styles.css", "text/css", ".pending-recovery-form")]
+    [InlineData("/styles.css", "text/css", ".manual-submit-card")]
     public async Task ServesStaticAssets(string path, string mediaType, string marker)
     {
         await using var app = await RunningApp.StartAsync();

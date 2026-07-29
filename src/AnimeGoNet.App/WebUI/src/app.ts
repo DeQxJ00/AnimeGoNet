@@ -360,6 +360,43 @@ interface RssRuleDecision {
   evaluated_priority_groups: string[];
 }
 
+interface ManualIngestItem {
+  index: number;
+  status: string;
+  ingest_id: string | null;
+  source_profile_id: string | null;
+  source_profile_revision: number | null;
+  downloader_id: string | null;
+  torrent_url_fingerprint: string | null;
+  info_hash: string | null;
+  file_count: number | null;
+  errors: string[];
+}
+
+interface ManualIngestResponse {
+  source: string;
+  accepted_count: number;
+  rejected_count: number;
+  items: ManualIngestItem[];
+}
+
+interface ManualRssItem {
+  decision_kind: string;
+  decision_reason: string;
+  status: string;
+  ingest_task_id: string | null;
+  errors: string[];
+}
+
+interface ManualRssResponse {
+  batch_id: string;
+  mikanid: number | null;
+  rule_revision: number;
+  legacy_filter_revision: number;
+  legacy_filter_enabled: boolean;
+  items: ManualRssItem[];
+}
+
 interface SourceProfile {
   id: string;
   display_name: string;
@@ -2318,6 +2355,7 @@ async function loadSources(selectedId?: string): Promise<void> {
     const body = await response.json() as SourceProfileList;
     sourceProfiles = body.items;
     refreshSourceDownloaderOptions();
+    refreshManualSourceOptions();
     const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
       ?? sourceProfiles[0]
       ?? null;
@@ -2326,8 +2364,222 @@ async function loadSources(selectedId?: string): Promise<void> {
   } catch (error) {
     sourceProfiles = [];
     activeSourceId = null;
+    refreshManualSourceOptions();
     renderSourceList();
     status.textContent = `来源读取失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+function setManualSourceOptions(
+  selector: string,
+  profiles: SourceProfile[],
+  emptyLabel: string,
+): void {
+  const select = element<HTMLSelectElement>(selector);
+  const previous = select.value;
+  const options = profiles.map((profile) => {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent =
+      `${profile.display_name} (${profile.id} → ${profile.downloader_id}, rev ${profile.revision})`;
+    return option;
+  });
+  if (options.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = emptyLabel;
+    option.disabled = true;
+    option.selected = true;
+    options.push(option);
+  }
+  select.replaceChildren(...options);
+  if (profiles.some((profile) => profile.id === previous)) select.value = previous;
+  select.disabled = profiles.length === 0;
+}
+
+function refreshManualSourceOptions(): void {
+  const enabled = sourceProfiles.filter((profile) => profile.enabled);
+  setManualSourceOptions(
+    "#manual-download-source",
+    enabled,
+    "没有已启用的输入源",
+  );
+  setManualSourceOptions(
+    "#manual-rss-source",
+    enabled.filter((profile) => profile.adapter === "mikan"),
+    "没有已启用的 Mikan 输入源",
+  );
+  element<HTMLButtonElement>("#manual-rss-submit").disabled =
+    enabled.every((profile) => profile.adapter !== "mikan");
+  updateManualDownloadHint();
+}
+
+function updateManualDownloadHint(): void {
+  const sourceId = element<HTMLSelectElement>("#manual-download-source").value;
+  const profile = sourceProfiles.find((item) => item.id === sourceId);
+  const mikanId = element<HTMLInputElement>("#manual-download-mikanid");
+  const bangumiId = element<HTMLInputElement>("#manual-download-bgmid");
+  const submit = element<HTMLButtonElement>("#manual-download-submit");
+  mikanId.required = profile?.adapter === "mikan";
+  bangumiId.required = profile?.adapter === "mikan";
+  submit.disabled = profile === undefined;
+  element<HTMLElement>("#manual-download-hint").textContent = profile === undefined
+    ? "请先启用一个输入源。"
+    : profile.adapter === "mikan"
+      ? `Mikan 手动导入必须提供 mikanid 与 bgmid；将路由到 ${profile.downloader_id}，使用 ${profile.file_strategy}。`
+      : `${profile.adapter.toUpperCase()} 的作品级参考 ID 可选；将路由到 ${profile.downloader_id}，使用 ${profile.file_strategy}。`;
+}
+
+function manualResultItem(
+  title: string,
+  detail: string,
+  rejected: boolean,
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = `manual-result-item ${rejected ? "rejected" : ""}`;
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const description = document.createElement("span");
+  description.textContent = detail;
+  row.append(heading, description);
+  return row;
+}
+
+async function submitManualDownload(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const sourceId = element<HTMLSelectElement>("#manual-download-source").value;
+  const url = element<HTMLInputElement>("#manual-download-url");
+  const submit = element<HTMLButtonElement>("#manual-download-submit");
+  const result = element<HTMLElement>("#manual-download-result");
+  let requestBody = "";
+  submit.disabled = true;
+  result.replaceChildren(manualResultItem("正在提交", "Torrent URL 已从输入框清除。", false));
+  try {
+    requestBody = JSON.stringify({
+      source: sourceId,
+      data: [{
+        torrent: url.value,
+        info: {
+          title: element<HTMLInputElement>("#manual-download-title").value.trim(),
+          source_item_id:
+            element<HTMLInputElement>("#manual-download-item-id").value.trim() || null,
+          source_work_id:
+            element<HTMLInputElement>("#manual-download-work-id").value.trim() || null,
+          mikanid: optionalPositiveNumber("#manual-download-mikanid"),
+          bgmid: optionalPositiveNumber("#manual-download-bgmid"),
+          anidbid: optionalPositiveNumber("#manual-download-anidbid"),
+          imdbid: element<HTMLInputElement>("#manual-download-imdbid").value.trim() || null,
+        },
+      }],
+    });
+    url.value = "";
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const responsePromise = fetch("/api/v1/ingest", {
+      method: "POST",
+      headers: requestHeaders,
+      body: requestBody,
+    });
+    requestBody = "";
+    const response = await responsePromise;
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as ManualIngestResponse;
+    const summary = document.createElement("p");
+    summary.className = "manual-result-summary";
+    summary.textContent =
+      `${body.source || sourceId}：接受 ${body.accepted_count}，拒绝 ${body.rejected_count}`;
+    result.replaceChildren(
+      summary,
+      ...body.items.map((item) => manualResultItem(
+        item.ingest_id ? `已接收 · ${item.status}` : `已拒绝 · ${item.status}`,
+        item.ingest_id
+          ? [
+              `任务 ${item.ingest_id}`,
+              `来源 ${item.source_profile_id} rev ${item.source_profile_revision}`,
+              `下载器 ${item.downloader_id}`,
+              `文件 ${item.file_count ?? "—"}`,
+              `info hash ${item.info_hash ?? "—"}`,
+              `URL 指纹 ${item.torrent_url_fingerprint ?? "—"}`,
+            ].join(" · ")
+          : item.errors.join("；") || "未提供失败原因",
+        item.ingest_id === null,
+      )),
+    );
+    void loadDownloads();
+    void loadMetadataTasks();
+    void loadSources(sourceId);
+  } catch (error) {
+    result.replaceChildren(manualResultItem(
+      "提交失败",
+      errorMessage(error, "未知错误"),
+      true,
+    ));
+  } finally {
+    requestBody = "";
+    url.value = "";
+    updateManualDownloadHint();
+  }
+}
+
+async function submitManualRss(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const sourceId = element<HTMLSelectElement>("#manual-rss-source").value;
+  const url = element<HTMLInputElement>("#manual-rss-url");
+  const submit = element<HTMLButtonElement>("#manual-rss-submit");
+  const result = element<HTMLElement>("#manual-rss-result");
+  let requestBody = "";
+  submit.disabled = true;
+  result.replaceChildren(manualResultItem("正在处理", "RSS URL 已从输入框清除。", false));
+  try {
+    requestBody = JSON.stringify({
+      source_profile_id: sourceId,
+      url: url.value,
+    });
+    url.value = "";
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const responsePromise = fetch("/api/v1/rss/ingest", {
+      method: "POST",
+      headers: requestHeaders,
+      body: requestBody,
+    });
+    requestBody = "";
+    const response = await responsePromise;
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as ManualRssResponse;
+    const accepted = body.items.filter((item) => item.ingest_task_id !== null).length;
+    const summary = document.createElement("p");
+    summary.className = "manual-result-summary";
+    summary.textContent =
+      `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
+    result.replaceChildren(
+      summary,
+      ...body.items.map((item, index) => manualResultItem(
+        `候选 ${index + 1} · ${item.status}`,
+        [
+          item.decision_kind,
+          item.decision_reason,
+          item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
+          item.errors.length > 0 ? item.errors.join("；") : null,
+        ].filter((value): value is string => value !== null).join(" · "),
+        item.ingest_task_id === null,
+      )),
+    );
+    void loadDownloads();
+    void loadMetadataTasks();
+    void loadSources(sourceId);
+  } catch (error) {
+    result.replaceChildren(manualResultItem(
+      "RSS 处理失败",
+      errorMessage(error, "未知错误"),
+      true,
+    ));
+  } finally {
+    requestBody = "";
+    url.value = "";
+    submit.disabled = sourceProfiles.every(
+      (profile) => !profile.enabled || profile.adapter !== "mikan",
+    );
   }
 }
 
@@ -2701,6 +2953,18 @@ element<HTMLFormElement>("#source-form").addEventListener("submit", (event) => v
 element<HTMLButtonElement>("#source-delete").addEventListener("click", () => void deleteSource());
 element<HTMLSelectElement>("#source-strategy").addEventListener("change", updateSourceWarning);
 element<HTMLButtonElement>("#route-preview-run").addEventListener("click", () => void previewSourceRoute());
+element<HTMLSelectElement>("#manual-download-source").addEventListener(
+  "change",
+  updateManualDownloadHint,
+);
+element<HTMLFormElement>("#manual-download-form").addEventListener(
+  "submit",
+  (event) => void submitManualDownload(event),
+);
+element<HTMLFormElement>("#manual-rss-form").addEventListener(
+  "submit",
+  (event) => void submitManualRss(event),
+);
 element<HTMLButtonElement>("#downloader-reload").addEventListener("click", () => void loadDownloaders());
 element<HTMLButtonElement>("#downloader-new").addEventListener("click", () => openDownloaderConfig(null));
 element<HTMLButtonElement>("#downloader-config-close").addEventListener("click", () => downloaderConfigDialog.close());

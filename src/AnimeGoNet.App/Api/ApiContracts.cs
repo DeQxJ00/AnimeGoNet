@@ -12,6 +12,10 @@ public sealed record LegacyRssRequest(
 public sealed record LegacyRssLocation(
     [property: JsonPropertyName("url")] string? Url);
 
+public sealed record RssIngestRequest(
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("url")] string? Url);
+
 public sealed record LegacyApiResponse<T>(int Code, string Msg, T Data);
 
 public sealed record LegacyPluginConfigUploadRequest(

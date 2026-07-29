@@ -81,6 +81,7 @@ public static class ApiEndpoints
             "/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}/recover",
             RecoverPendingTmdb);
         app.MapPost("/api/v1/ingest", Ingest);
+        app.MapPost("/api/v1/rss/ingest", RssIngest);
         app.MapPost("/api/rss", LegacyRss);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
         app.MapPost("/api/plugin/config", LegacyPluginConfigPost);
@@ -2206,6 +2207,60 @@ public static class ApiEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static async Task<Results<Ok<MikanRssIngestResult>, BadRequest<ApiErrorResponse>>> RssIngest(
+        RssIngestRequest request,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
+        SourceProfileStore profiles,
+        MikanRssIngestProcessor processor,
+        CancellationToken cancellationToken)
+    {
+        var sourceProfileId = request.SourceProfileId?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(sourceProfileId))
+        {
+            return TypedResults.BadRequest(Error(
+                "rss_source_profile_required",
+                "source_profile_id is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Url))
+        {
+            return TypedResults.BadRequest(Error("rss_url_required", "url is required."));
+        }
+
+        var profile = await profiles.GetEnabledAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            return TypedResults.BadRequest(Error(
+                "rss_source_profile_missing",
+                "Enabled RSS source profile was not found."));
+        }
+
+        if (!string.Equals(profile.Adapter, "mikan", StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.BadRequest(Error(
+                "rss_source_profile_invalid",
+                "RSS source profile must use the Mikan adapter."));
+        }
+
+        try
+        {
+            var feed = await FetchMikanFeedAsync(
+                request.Url,
+                plugins,
+                cancellationToken).ConfigureAwait(false);
+            var result = await processor
+                .ProcessAsync(feed, profile.Id, cancellationToken)
+                .ConfigureAwait(false);
+            return TypedResults.Ok(result);
+        }
+        catch (RssFeedException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                exception.Code,
+                "RSS processing failed."));
+        }
+    }
+
     private static async Task<Ok<LegacyApiResponse<MikanRssIngestResult?>>> LegacyRss(
         LegacyRssRequest request,
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
@@ -2221,39 +2276,10 @@ public static class ApiEndpoints
 
         try
         {
-            var fetched = await plugins
-                .Require<AnimeGo.Plugin.Abstractions.IFeedPlugin>("mikan-rss")
-                .FetchAsync(
-                    new AnimeGo.Plugin.Abstractions.FeedContext(
-                        "mikan",
-                        request.Rss.Url,
-                        EmptyPluginArguments),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            var fetchError = fetched.Errors.Count > 0 ? fetched.Errors[0] : null;
-            if (fetchError is not null)
-            {
-                throw new RssFeedException(fetchError.Code, fetchError.Message);
-            }
-
-            var mikanId = fetched.Metadata.TryGetValue("mikanid", out var mikanIdValue)
-                && int.TryParse(
-                    mikanIdValue,
-                    System.Globalization.NumberStyles.None,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var parsedMikanId)
-                && parsedMikanId > 0
-                    ? parsedMikanId
-                    : (int?)null;
-            var feed = new RssFeedDocument(
-                fetched.Items.Select(item => new RssFeedItem(
-                    item.Title,
-                    item.SourceUrl ?? string.Empty,
-                    item.TorrentUrl,
-                    item.ContentType ?? string.Empty,
-                    item.Length,
-                    item.PublishedAtRaw)).ToArray(),
-                mikanId);
+            var feed = await FetchMikanFeedAsync(
+                request.Rss.Url,
+                plugins,
+                cancellationToken).ConfigureAwait(false);
             if (request.IsSelectEp)
             {
                 var selected = new HashSet<string>(request.EpLinks ?? [], StringComparer.Ordinal);
@@ -2272,6 +2298,46 @@ public static class ApiEndpoints
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 300, $"RSS processing failed: {exception.Code}", null));
         }
+    }
+
+    private static async Task<RssFeedDocument> FetchMikanFeedAsync(
+        string url,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
+        CancellationToken cancellationToken)
+    {
+        var fetched = await plugins
+            .Require<AnimeGo.Plugin.Abstractions.IFeedPlugin>("mikan-rss")
+            .FetchAsync(
+                new AnimeGo.Plugin.Abstractions.FeedContext(
+                    "mikan",
+                    url,
+                    EmptyPluginArguments),
+                cancellationToken)
+            .ConfigureAwait(false);
+        var fetchError = fetched.Errors.Count > 0 ? fetched.Errors[0] : null;
+        if (fetchError is not null)
+        {
+            throw new RssFeedException(fetchError.Code, fetchError.Message);
+        }
+
+        var mikanId = fetched.Metadata.TryGetValue("mikanid", out var mikanIdValue)
+            && int.TryParse(
+                mikanIdValue,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var parsedMikanId)
+            && parsedMikanId > 0
+                ? parsedMikanId
+                : (int?)null;
+        return new RssFeedDocument(
+            fetched.Items.Select(item => new RssFeedItem(
+                item.Title,
+                item.SourceUrl ?? string.Empty,
+                item.TorrentUrl,
+                item.ContentType ?? string.Empty,
+                item.Length,
+                item.PublishedAtRaw)).ToArray(),
+            mikanId);
     }
 
     private static readonly Dictionary<string, string> EmptyPluginArguments =

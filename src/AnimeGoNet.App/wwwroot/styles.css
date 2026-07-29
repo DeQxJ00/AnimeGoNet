@@ -265,6 +265,24 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .source-warning { min-height: 22px; margin: 14px 0; color: #ffc985; font-size: .8rem; }
 .source-form-actions { display: flex; justify-content: space-between; gap: 10px; }
 .source-form-actions button:disabled { cursor: not-allowed; opacity: .45; }
+.manual-submit-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.manual-submit-card { display: grid; align-content: start; gap: 14px; min-width: 0; border: 1px solid #344260; border-radius: 18px; padding: 18px; background: rgba(16,22,37,.88); }
+.manual-submit-card h3 { margin: 0; }
+.manual-submit-card h3 + .muted { margin: 6px 0 0; font-size: .78rem; line-height: 1.5; }
+.manual-submit-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.manual-submit-fields label { min-width: 0; color: #8da2c9; font-size: .75rem; }
+.manual-submit-fields .wide { grid-column: 1 / -1; }
+.manual-submit-fields input, .manual-submit-fields select { width: 100%; box-sizing: border-box; margin-top: 6px; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; font: inherit; }
+.manual-submit-fields input[type="password"] { font-family: ui-monospace, monospace; }
+.manual-submit-hint { min-height: 21px; margin: 0; color: #ffc985; font-size: .76rem; line-height: 1.45; }
+.manual-submit-card > .primary-button { justify-self: start; }
+.manual-submit-card > .primary-button:disabled { cursor: wait; opacity: .55; }
+.manual-submit-result { display: grid; gap: 8px; min-height: 58px; padding: 12px; border-radius: 12px; background: rgba(5,8,16,.5); }
+.manual-submit-result > .muted { margin: 0; }
+.manual-result-summary { margin: 0; color: #dce7fb; font-size: .82rem; line-height: 1.5; overflow-wrap: anywhere; }
+.manual-result-item { display: grid; gap: 4px; padding: 9px 10px; border-left: 3px solid #59d3a5; border-radius: 8px; color: #aebbd3; background: rgba(14,29,29,.7); font-size: .76rem; line-height: 1.45; overflow-wrap: anywhere; }
+.manual-result-item.rejected, .manual-result-item.blocked { border-left-color: #e35d6a; background: rgba(40,18,23,.65); }
+.manual-result-item strong { color: #edf2ff; }
 .rss-heading { gap: 18px; }
 .rss-heading h2 { margin-bottom: 0; }
 .rss-actions { display: flex; gap: 9px; }
@@ -316,7 +334,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .configuration-form-grid .wide { grid-column: auto; }
   .metadata-stages { grid-template-columns: 1fr; }
   .delete-options { grid-template-columns: 1fr; }
-  .source-workspace, .source-form-grid { grid-template-columns: 1fr; }
+  .source-workspace, .source-form-grid, .manual-submit-grid, .manual-submit-fields { grid-template-columns: 1fr; }
+  .manual-submit-fields .wide { grid-column: auto; }
   .route-preview-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .source-hosts { grid-column: auto; }
   .rss-list-columns, .rss-preview-panel { grid-template-columns: 1fr; }

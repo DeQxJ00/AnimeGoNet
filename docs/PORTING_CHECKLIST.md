@@ -84,14 +84,15 @@
 | `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 待实现 | clock/cancel/startup tests |
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
 | `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 已验证 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 feed/Episode 获取、Filiter0..4、批内 identity cache、失败隔离、新优选和 winner 原子 staging Kestrel tests |
+| `/api/v1/rss/ingest` | 现代 Mikan RSS 手动导入 | 扩展 | 已验证 | 明确 SourceProfile、adapter 预检后再抓取、规则 revision、winner 原子 staging、错误脱敏和带 passkey URL 不回显 Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
 | Mikan/U2/TTG source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出、真实统一导入 normalizer tests |
 | `/api/config` | typed deployment config | 保留+扩展 | 进行中 | 脱敏生效值 GET、safe editable desired projection、版本化 PUT/DELETE、Web 编辑/恢复、TMDB 密钥三态、TMDB/Bangumi 独立 API 地址/代理/超时、application.private.json 原子写入/0600/重启应用与鉴权 tests 已通过；完整配置来源 precedence 待实现 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 待实现 | auth/stream/cancel tests |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、下载/元数据面板、待补全 TMDB 人工映射、SourceProfile 版本化 CRUD 与下载器编辑器使用安全 DOM API，作品库等完整管理 UI 与发布镜像浏览器 E2E 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试及四类删除 API 已实现；anime CRUD 与 OpenAPI 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、手动 Torrent/RSS 安全提交、下载/元数据面板、待补全 TMDB 人工映射、SourceProfile 版本化 CRUD、下载器编辑器和 TMDB 作品库均使用安全 DOM API；完整管理 UI 与发布镜像浏览器 E2E 待实现 |
 
 ## 构建、发布与平台
 

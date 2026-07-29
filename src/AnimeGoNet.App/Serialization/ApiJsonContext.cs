@@ -21,6 +21,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(ConfigurationUpdateRequest))]
 [JsonSerializable(typeof(ConfigurationWriteResponse))]
 [JsonSerializable(typeof(IngestBatchRequest))]
+[JsonSerializable(typeof(RssIngestRequest))]
+[JsonSerializable(typeof(MikanRssIngestResult))]
 [JsonSerializable(typeof(LegacyRssRequest))]
 [JsonSerializable(typeof(LegacyApiResponse<MikanRssIngestResult?>))]
 [JsonSerializable(typeof(IngestBatchResponse))]
