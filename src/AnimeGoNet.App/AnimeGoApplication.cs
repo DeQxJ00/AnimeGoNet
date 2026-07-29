@@ -47,6 +47,7 @@ public static class AnimeGoApplication
         IAiMetadataMatcher? aiMetadataMatcher = null,
         ITorrentDnsResolver? rssDnsResolver = null,
         ITorrentHttpTransport? rssHttpTransport = null,
+        ITmdbPosterTransport? tmdbPosterTransport = null,
         bool? startBackgroundWorkers = null,
         CancellationToken cancellationToken = default)
     {
@@ -171,6 +172,18 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<PendingTmdbNfoRewriteStore>();
         builder.Services.AddSingleton<CompletionRecordStore>();
         builder.Services.AddSingleton<AnimeLibraryStore>();
+        if (tmdbPosterTransport is null)
+        {
+            builder.Services.AddSingleton<ITmdbPosterTransport>(_ =>
+                new HttpTmdbPosterTransport(
+                    MetadataHttpClientFactory.Create(options.Metadata.Tmdb.ProxyUrl),
+                    ownsHttpClient: true));
+        }
+        else
+        {
+            builder.Services.AddSingleton(tmdbPosterTransport);
+        }
+        builder.Services.AddSingleton<AnimeCoverService>();
         builder.Services.AddSingleton(downloadClientRegistry);
         builder.Services.AddSingleton<DownloadClientOperationCoordinator>();
         builder.Services.AddSingleton(torrentStagingService);

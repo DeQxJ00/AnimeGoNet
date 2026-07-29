@@ -124,6 +124,23 @@ public sealed class AnimeLibraryStoreTests
     }
 
     [Fact]
+    public async Task PosterProjectionUsesSeasonThenSeriesThenPlaceholder()
+    {
+        await using var fixture = await LibraryFixture.CreateAsync();
+
+        Assert.Equal(
+            new AnimePosterProjection("/alpha-s1.jpg", "season"),
+            await fixture.Store.GetPosterAsync(100, 1));
+        Assert.Equal(
+            new AnimePosterProjection("/alpha.jpg", "series"),
+            await fixture.Store.GetPosterAsync(100, 2));
+        Assert.Equal(
+            new AnimePosterProjection(null, "placeholder"),
+            await fixture.Store.GetPosterAsync(200, 1));
+        Assert.Null(await fixture.Store.GetPosterAsync(999, 1));
+    }
+
+    [Fact]
     public async Task InvalidPagingIsRejectedBeforeOpeningAQuery()
     {
         await using var fixture = await LibraryFixture.CreateAsync();

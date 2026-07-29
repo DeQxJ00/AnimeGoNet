@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AnimeGoNet.Data.Sqlite;
+using AnimeGoNet.App.Tests.Library;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
@@ -69,6 +70,8 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("tmdb:100:s1", root.GetProperty("id").GetString());
         Assert.Equal("Alpha", root.GetProperty("display_name").GetString());
+        Assert.Equal("/api/v1/library/covers/100/1",
+            root.GetProperty("poster_url").GetString());
         Assert.Equal(2, root.GetProperty("episode_total").GetInt32());
         Assert.Equal(2, root.GetProperty("episode_snapshot_count").GetInt32());
         Assert.Equal(1, root.GetProperty("episode_downloaded").GetInt32());
@@ -82,6 +85,54 @@ public sealed class AnimeLibraryApiTests
         Assert.DoesNotContain("/media/alpha.mkv", body, StringComparison.Ordinal);
         Assert.DoesNotContain("season-alpha", body, StringComparison.Ordinal);
         Assert.DoesNotContain("series-alpha", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CoverEndpointProxiesCachesAndUsesLocalPlaceholder()
+    {
+        var transport = new RecordingPosterTransport();
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Tmdb = options.Metadata.Tmdb with
+                    {
+                        ApiKey = "test-api-key-never-forward",
+                    },
+                },
+            },
+            tmdbPosterTransport: transport);
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+
+        using var listResponse = await app.Client.GetAsync("/api/v1/library/seasons");
+        using var list = JsonDocument.Parse(await listResponse.Content.ReadAsStreamAsync());
+        var alpha = list.RootElement.GetProperty("items").EnumerateArray().Last();
+        Assert.Equal("/api/v1/library/covers/100/1",
+            alpha.GetProperty("poster_url").GetString());
+
+        using var first = await app.Client.GetAsync("/api/v1/library/covers/100/1");
+        using var second = await app.Client.GetAsync("/api/v1/library/covers/100/1");
+        using var placeholder = await app.Client.GetAsync("/api/v1/library/covers/200/1");
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal("image/jpeg", first.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("season", first.Headers.GetValues("X-AnimeGoNet-Cover-Source").Single());
+        Assert.Equal("miss", first.Headers.GetValues("X-AnimeGoNet-Cover-Cache").Single());
+        Assert.Equal("hit", second.Headers.GetValues("X-AnimeGoNet-Cover-Cache").Single());
+        Assert.Equal("image/svg+xml", placeholder.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("placeholder",
+            placeholder.Headers.GetValues("X-AnimeGoNet-Cover-Source").Single());
+        Assert.Equal(1, transport.CallCount);
+        var upstream = Assert.Single(transport.Requests).AbsoluteUri;
+        Assert.Equal("https://image.tmdb.org/t/p/w500/alpha-season.jpg", upstream);
+        Assert.DoesNotContain("test-api-key-never-forward", upstream, StringComparison.Ordinal);
+
+        using var missing = await app.Client.GetAsync("/api/v1/library/covers/999/1");
+        using var missingJson = JsonDocument.Parse(await missing.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal("library_season_not_found",
+            missingJson.RootElement.GetProperty("code").GetString());
     }
 
     [Theory]

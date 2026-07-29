@@ -137,6 +137,45 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
         return new AnimeSeasonDetailProjection(season, episodes);
     }
 
+    public async Task<AnimePosterProjection?> GetPosterAsync(
+        int tmdbSeriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbSeriesId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(seasonNumber, 1);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT season.poster_path, series.poster_path
+            FROM anime_seasons AS season
+            JOIN anime_series AS series ON series.id = season.series_id
+            WHERE series.tmdb_series_id = $tmdb_series_id
+              AND series.tmdb_series_id > 0
+              AND series.needs_tmdb_completion = 0
+              AND season.season_number = $season_number
+              AND season.season_number > 0
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        command.Parameters.AddWithValue("$season_number", seasonNumber);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        if (!reader.IsDBNull(0))
+        {
+            return new AnimePosterProjection(reader.GetString(0), "season");
+        }
+
+        return !reader.IsDBNull(1)
+            ? new AnimePosterProjection(reader.GetString(1), "series")
+            : new AnimePosterProjection(null, "placeholder");
+    }
+
     private static string BuildListSql(
         AnimeLibrarySort sort,
         AnimeLibrarySortDirection direction)

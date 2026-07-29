@@ -3,6 +3,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.App.Library;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -36,7 +37,8 @@ public sealed class RunningApp : IAsyncDisposable
         IBangumiEpisodeClient? bangumiEpisodeClient = null,
         IAiMetadataMatcher? aiMetadataMatcher = null,
         ITorrentDnsResolver? rssDnsResolver = null,
-        ITorrentHttpTransport? rssHttpTransport = null)
+        ITorrentHttpTransport? rssHttpTransport = null,
+        ITmdbPosterTransport? tmdbPosterTransport = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
@@ -55,6 +57,7 @@ public sealed class RunningApp : IAsyncDisposable
             aiMetadataMatcher: aiMetadataMatcher,
             rssDnsResolver: rssDnsResolver,
             rssHttpTransport: rssHttpTransport,
+            tmdbPosterTransport: tmdbPosterTransport,
             startBackgroundWorkers: false);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();

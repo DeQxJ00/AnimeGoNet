@@ -61,3 +61,7 @@ public sealed record AnimeEpisodeProjection(
 public sealed record AnimeSeasonDetailProjection(
     AnimeSeasonListProjection Season,
     IReadOnlyList<AnimeEpisodeProjection> Episodes);
+
+public sealed record AnimePosterProjection(
+    string? PosterPath,
+    string Source);

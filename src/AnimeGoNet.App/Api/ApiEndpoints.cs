@@ -11,6 +11,7 @@ using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Ingest;
@@ -71,6 +72,9 @@ public static class ApiEndpoints
         app.MapGet(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibrarySeasonDetail);
+        app.MapGet(
+            "/api/v1/library/covers/{tmdbSeriesId:int}/{seasonNumber:int}",
+            LibraryCover);
         app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
         app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
         app.MapPost(
@@ -1805,6 +1809,7 @@ public static class ApiEndpoints
                     item.SeasonName,
                     posterPath,
                     posterSource,
+                    LibraryCoverUrl(item.TmdbSeriesId, item.TmdbSeasonNumber),
                     item.AirDate,
                     item.AddedAt,
                     item.LastUpdatedAt,
@@ -1865,6 +1870,7 @@ public static class ApiEndpoints
             season.SeasonName,
             posterPath,
             posterSource,
+            LibraryCoverUrl(season.TmdbSeriesId, season.TmdbSeasonNumber),
             season.AirDate,
             season.AddedAt,
             season.LastUpdatedAt,
@@ -1889,6 +1895,53 @@ public static class ApiEndpoints
                 episode.DownloadedAtUtc,
                 episode.MediaPathKnown)).ToArray()));
     }
+
+    private static async Task<IResult> LibraryCover(
+        int tmdbSeriesId,
+        int seasonNumber,
+        AnimeCoverService covers,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_series_id_invalid",
+                "TMDB Series ID must be a positive integer."));
+        }
+
+        if (seasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_season_number_invalid",
+                "TMDB Season number must be a positive integer."));
+        }
+
+        var cover = await covers
+            .GetAsync(tmdbSeriesId, seasonNumber, cancellationToken)
+            .ConfigureAwait(false);
+        if (cover is null)
+        {
+            return TypedResults.NotFound(Error(
+                "library_season_not_found",
+                "The requested TMDB season was not found in the local library."));
+        }
+
+        context.Response.Headers["X-AnimeGoNet-Cover-Source"] = cover.Source;
+        context.Response.Headers["X-AnimeGoNet-Cover-Cache"] =
+            cover.CacheHit ? "hit" : "miss";
+        if (cover.WarningCode is not null)
+        {
+            context.Response.Headers["X-AnimeGoNet-Cover-Warning"] = cover.WarningCode;
+        }
+        context.Response.Headers.CacheControl = cover.Source == "placeholder"
+            ? "public, max-age=60"
+            : "public, max-age=86400";
+        return Results.Bytes(cover.Content, cover.ContentType);
+    }
+
+    private static string LibraryCoverUrl(int tmdbSeriesId, int seasonNumber) =>
+        $"/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}";
 
     private static bool TryParseLibrarySort(string? value, out AnimeLibrarySort sort)
     {
