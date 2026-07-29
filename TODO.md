@@ -133,11 +133,11 @@
 - [x] C# 移植 builtin feed/parser/filter/rename/schedule；`mikan-rss`、`mikan-title`、`mikan-tool`、`anime-library`、`staged-torrent-dispatch` 均由编译期目录注册并接入真实 feed→filter→parse→staging、整理与调度入口，默认运行无 Python 运行时或脚本加载路径。
 - [x] 实现内置 C# MikanTool 五级黑白名单规则：纯 C# 引擎、schema v15 规则/快照、legacy `/api/plugin/config`、Episode identity parser、schema v16 逐候选审计，以及 `/api/rss` 的安全页面抓取/批内缓存/Filiter0..4 前置执行均已串联；被拒绝或身份失败的候选不进入新优选与 staging。现代管理 API 与 WebUI 已支持总开关、五档 CRUD/排序/启停、精确 JSON 数组关键词、服务端逐档预览、旧 JSON 导入导出、revision 冲突和快照回滚。
 - [>] 默认 Mikan SourceProfile 的 `mikan_rss_filter_enabled` 已默认 `true` 并真实控制 `/api/rss`；关闭时零页面请求、逐项记录 `SkippedByConfiguration`、继续优选/staging且规则不变。来源 CRUD/UI 改动与“已有任务保持原快照”的跨请求并发验收待实现。
-- [>] 增加独立 `mikan_rss_priority_enabled` 批次优选开关（默认 profile 已启用，schema v13 规则版本、默认初始化与预览 API 已接入；禁用时预览逐项记录 `SkippedByConfiguration` 且不清空规则，真实批次编排待接入）。
+- [x] 增加独立 `mikan_rss_priority_enabled` 批次优选开关：默认 profile 已启用，schema v13 规则版本、默认初始化、预览 API 和真实 `/api/rss`/现代 RSS 批次均已接入；禁用时真实批次逐项记录 `SkippedByConfiguration`、不执行本功能的黑白名单/有序组且不清空规则，SQLite 审计保留当批开关状态。
 - [x] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 支持增删/排序，schema v25 保存每个 revision 的关系型历史快照并支持安全回滚；WebUI 已提供白/黑名单、组/数组 CRUD、启停、上下移动、服务端预览和历史回滚。
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
-- [>] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；SQLite CRUD/审计待实现。
+- [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
 - [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
 - [ ] 实现外部 C# 插件进程的 manifest、JSON Lines 协议、超时、取消、健康检查和退出隔离。

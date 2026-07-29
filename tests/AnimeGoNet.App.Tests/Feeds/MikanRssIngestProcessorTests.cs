@@ -63,6 +63,53 @@ public sealed class MikanRssIngestProcessorTests
     }
 
     [Fact]
+    public async Task DisabledPriorityStagesEveryLegacyEligibleCandidateAndPersistsBatchAudit()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new WorkPageTransport();
+        await using var app = await StartAsync(staging, transport);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE source_profiles
+                SET rss_priority_enabled = 0
+                WHERE id = 'mikan';
+                """;
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        var result = await app.App.Services
+            .GetRequiredService<MikanRssIngestProcessor>()
+            .ProcessAsync(Feed(
+                Item("Show [03] [720p]", "first"),
+                Item("Show [03] [1080p]", "second")));
+
+        Assert.Equal(2, staging.StageCount);
+        Assert.All(result.Items, item =>
+        {
+            Assert.Equal(MikanRssDecisionKind.Winner, item.DecisionKind);
+            Assert.Equal("SkippedByConfiguration", item.DecisionReason);
+            Assert.Equal("staged", item.Status);
+            Assert.NotNull(item.IngestTaskId);
+        });
+
+        var stored = Assert.IsType<MikanRssBatchRecord>(
+            await app.App.Services.GetRequiredService<MikanRssBatchStore>().GetAsync(result.BatchId));
+        Assert.False(stored.PriorityEnabled);
+        Assert.Equal(2, stored.Entries.Count);
+        Assert.All(stored.Entries, entry =>
+        {
+            Assert.Equal(MikanRssDecisionKind.Winner, entry.Decision.Kind);
+            Assert.Equal("SkippedByConfiguration", entry.Decision.Reason);
+            Assert.Empty(entry.Decision.EvaluatedPriorityGroups);
+            Assert.Equal("ingested", entry.EffectState);
+            Assert.NotNull(entry.IngestTaskId);
+        });
+    }
+
+    [Fact]
     public async Task StagingFailureReleasesWinnerForExplicitRetry()
     {
         await using var staging = new CountingStagingService(failuresBeforeSuccess: 1);
