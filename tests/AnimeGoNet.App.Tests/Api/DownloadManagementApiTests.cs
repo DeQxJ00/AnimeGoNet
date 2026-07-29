@@ -26,6 +26,7 @@ public sealed class DownloadManagementApiTests
         using var response = await fixture.App.Client.GetAsync(
             "/api/v1/downloads?page=1&page_size=10"
             + "&search=Download%20management&state=downloading"
+            + "&business_status=downloading"
             + "&downloader_id=bt&source=mikan");
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
         var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
@@ -33,6 +34,14 @@ public sealed class DownloadManagementApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(1, json.RootElement.GetProperty("total_items").GetInt32());
         Assert.Equal(1, json.RootElement.GetProperty("page").GetInt32());
+        Assert.Equal(
+            1,
+            json.RootElement.GetProperty("summary").GetProperty("active_jobs").GetInt32());
+        Assert.Equal(
+            1,
+            json.RootElement.GetProperty("summary")
+                .GetProperty("connected_download_speed_bytes_per_second")
+                .GetInt64());
         Assert.Equal(fixture.JobId, item.GetProperty("job_id").GetString());
 
         using var detailResponse = await fixture.App.Client.GetAsync(

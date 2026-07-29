@@ -131,7 +131,14 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-field-locked { color: #9f926f !important; }
 .configuration-field-locked input:disabled { border-color: #62552f; color: #d5c497; opacity: .8; cursor: not-allowed; }
 .downloads { display: grid; gap: 12px; }
-.download-filters { display: grid; grid-template-columns: minmax(220px,2fr) repeat(4,minmax(120px,1fr)) auto; gap: 10px; align-items: end; margin: 0 0 12px; }
+.download-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin: 0 0 14px; }
+.download-summary-card { display: grid; gap: 3px; min-width: 0; padding: 11px 13px; border: 1px solid #315f58; border-radius: 11px; background: rgba(15,34,39,.52); }
+.download-summary-card span { color: #8da2c9; font-size: .68rem; }
+.download-summary-card strong { color: #e7fff6; font-size: 1.05rem; }
+.download-summary-card small { color: #ffb4b4; overflow-wrap: anywhere; }
+.download-summary-card.error { border-color: #813f49; background: rgba(82,28,37,.25); }
+.download-summary-footer { grid-column: 1 / -1; margin: 0; color: #8da2c9; font-size: .7rem; }
+.download-filters { display: grid; grid-template-columns: minmax(220px,2fr) repeat(5,minmax(120px,1fr)) auto; gap: 10px; align-items: end; margin: 0 0 12px; }
 .download-filters label { display: grid; gap: 6px; color: #8da2c9; font-size: .72rem; }
 .download-filters input, .download-filters select { min-width: 0; border: 1px solid #344260; border-radius: 9px; padding: 9px 10px; color: #edf2ff; background: #101827; font: inherit; }
 .download-filter-actions { display: flex; gap: 8px; }
@@ -168,10 +175,12 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-event.failed { border-color: #813f49; }
 .download-detail h4 { margin: 4px 0 0; font-size: .82rem; }
 @media (max-width: 980px) {
+    .download-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .download-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .download-filter-actions { grid-column: 1 / -1; }
 }
 @media (max-width: 620px) {
+    .download-summary { grid-template-columns: 1fr; }
     .download-filters, .download-stage-grid { grid-template-columns: 1fr; }
     .download-file-heading { align-items: flex-start; flex-direction: column; }
 }

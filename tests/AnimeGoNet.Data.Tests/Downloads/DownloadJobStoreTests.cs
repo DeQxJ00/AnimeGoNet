@@ -54,6 +54,13 @@ public sealed class DownloadJobStoreTests
         Assert.False(item.DownloaderConnected);
         Assert.Equal("qbittorrent_http_error", item.DownloaderFailureCode);
         Assert.Equal(first, item.DownloaderLastSuccessAtUtc);
+        var page = await fixture.Jobs.ListPageAsync(
+            new DownloadJobListQuery(1, 10, null, null, null, null, null));
+        Assert.Equal(1, page.Summary.StaleJobs);
+        Assert.Equal(1, page.Summary.OfflineInstanceCount);
+        Assert.Equal(0, page.Summary.ConnectedDownloadSpeedBytesPerSecond);
+        Assert.Equal("qbittorrent_http_error", page.Summary.LatestFailureCode);
+        Assert.Equal(first, page.Summary.LastDownloaderSuccessAtUtc);
     }
 
     [Fact]
@@ -110,12 +117,16 @@ public sealed class DownloadJobStoreTests
             DateTimeOffset.UtcNow);
 
         var page = await fixture.Jobs.ListPageAsync(
-            new DownloadJobListQuery(1, 10, "EPISODE", "DOWNLOADING", "BT", "MIKAN"));
+            new DownloadJobListQuery(
+                1, 10, "EPISODE", "DOWNLOADING", "DOWNLOADING", "BT", "MIKAN"));
         var item = Assert.Single(page.Items);
         var detail = Assert.IsType<DownloadJobDetailRecord>(
             await fixture.Jobs.GetDetailAsync(item.JobId));
 
         Assert.Equal(1, page.TotalItems);
+        Assert.Equal(1, page.Summary.TotalJobs);
+        Assert.Equal(1, page.Summary.ActiveJobs);
+        Assert.Equal(10, page.Summary.ConnectedDownloadSpeedBytesPerSecond);
         Assert.Equal("episode.mkv", Assert.Single(detail.Files).RelativePath);
         Assert.Contains(detail.Events, value => value.Kind == "dispatch_confirmed");
         Assert.Contains(

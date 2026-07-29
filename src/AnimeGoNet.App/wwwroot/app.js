@@ -151,6 +151,7 @@ function readDownloadState() {
         page_size: 25,
         search: "",
         state: "",
+        business_status: "",
         downloader_id: "",
         source: "",
     };
@@ -169,6 +170,8 @@ function readDownloadState() {
                 ? stored.search.slice(0, 200) : "",
             state: typeof stored.state === "string"
                 ? stored.state.slice(0, 64) : "",
+            business_status: typeof stored.business_status === "string"
+                ? stored.business_status.slice(0, 64) : "",
             downloader_id: typeof stored.downloader_id === "string"
                 ? stored.downloader_id.slice(0, 64) : "",
             source: typeof stored.source === "string"
@@ -1035,7 +1038,47 @@ async function loadDownloadDetail(item, target, button) {
         button.textContent = "重试文件与时间线";
     }
 }
+function renderDownloadSummary(body) {
+    const summary = body.summary;
+    const metrics = [
+        ["活动", String(summary.active_jobs)],
+        ["暂停", String(summary.paused_jobs)],
+        ["失败", String(summary.failed_jobs), summary.latest_failure_code ?? undefined],
+        ["等待整理", String(summary.waiting_organization_jobs)],
+        ["已完成", String(summary.completed_jobs)],
+        ["连接速度", formatBytes(summary.connected_download_speed_bytes_per_second) + "/s"],
+        ["过期快照", String(summary.stale_jobs)],
+        ["离线实例", String(summary.offline_instance_count)],
+    ];
+    const cards = metrics.map(([label, value, detail]) => {
+        const card = document.createElement("article");
+        card.className = label === "失败" && summary.failed_jobs > 0
+            ? "download-summary-card error"
+            : "download-summary-card";
+        const term = document.createElement("span");
+        term.textContent = label;
+        const strong = document.createElement("strong");
+        strong.textContent = value;
+        card.append(term, strong);
+        if (detail) {
+            const note = document.createElement("small");
+            note.textContent = detail;
+            card.append(note);
+        }
+        return card;
+    });
+    const footer = document.createElement("p");
+    footer.className = "download-summary-footer";
+    footer.textContent = `共 ${summary.total_jobs} 个任务`
+        + ` · 准备失败 ${summary.preparation_failed_jobs}`
+        + ` · 整理失败 ${summary.organization_failed_jobs}`
+        + ` · 最近同步成功 ${summary.last_downloader_success_at_utc
+            ? new Date(summary.last_downloader_success_at_utc).toLocaleString()
+            : "尚无"}`;
+    element("#download-summary").replaceChildren(...cards, footer);
+}
 function renderDownloadPage(body) {
+    renderDownloadSummary(body);
     const container = element("#downloads");
     const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
     element("#download-list-status").textContent =
@@ -1115,6 +1158,9 @@ async function loadDownloads() {
         query.set("search", downloadState.search);
     if (downloadState.state)
         query.set("state", downloadState.state);
+    if (downloadState.business_status) {
+        query.set("business_status", downloadState.business_status);
+    }
     if (downloadState.downloader_id) {
         query.set("downloader_id", downloadState.downloader_id);
     }
@@ -2860,6 +2906,8 @@ element("#library-page-size").value = String(libraryState.page_size);
 element("#library-episode-filter").value = libraryState.episode_filter;
 element("#download-search").value = downloadState.search;
 element("#download-state").value = downloadState.state;
+element("#download-business-status").value =
+    downloadState.business_status;
 element("#download-downloader").value = downloadState.downloader_id;
 element("#download-source").value = downloadState.source;
 element("#download-page-size").value = String(downloadState.page_size);
@@ -2867,6 +2915,8 @@ element("#download-filters").addEventListener("submit", (event) => {
     event.preventDefault();
     downloadState.search = element("#download-search").value.trim();
     downloadState.state = element("#download-state").value;
+    downloadState.business_status =
+        element("#download-business-status").value;
     downloadState.downloader_id =
         element("#download-downloader").value.trim().toLowerCase();
     downloadState.source =
@@ -2882,11 +2932,13 @@ element("#download-filter-reset").addEventListener("click", () => {
         page_size: 25,
         search: "",
         state: "",
+        business_status: "",
         downloader_id: "",
         source: "",
     };
     element("#download-search").value = "";
     element("#download-state").value = "";
+    element("#download-business-status").value = "";
     element("#download-downloader").value = "";
     element("#download-source").value = "";
     element("#download-page-size").value = "25";

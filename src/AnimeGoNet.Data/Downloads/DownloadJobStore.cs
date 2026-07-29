@@ -192,7 +192,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 500);
         var page = await ListPageAsync(
-            new DownloadJobListQuery(1, limit, null, null, null, null),
+            new DownloadJobListQuery(1, limit, null, null, null, null, null),
             cancellationToken).ConfigureAwait(false);
         return page.Items;
     }
@@ -207,6 +207,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         ArgumentOutOfRangeException.ThrowIfGreaterThan(query.PageSize, 500);
         var search = NormalizeSearch(query.Search);
         var state = NormalizeFilter(query.State, nameof(query.State));
+        var businessStatus = NormalizeFilter(query.BusinessStatus, nameof(query.BusinessStatus));
         var downloaderId = NormalizeFilter(query.DownloaderId, nameof(query.DownloaderId));
         var sourceId = NormalizeFilter(query.SourceId, nameof(query.SourceId));
         var where = new List<string>();
@@ -221,7 +222,12 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
 
         if (state is not null)
         {
-            where.Add("(download_jobs.state = $state OR ingest_tasks.status = $state)");
+            where.Add("download_jobs.state = $state");
+        }
+
+        if (businessStatus is not null)
+        {
+            where.Add("ingest_tasks.status = $business_status");
         }
 
         if (downloaderId is not null)
@@ -244,19 +250,29 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 FROM download_jobs
                 JOIN ingest_tasks ON ingest_tasks.id = download_jobs.task_id
                 """ + whereSql + ";";
-            AddListParameters(count, search, state, downloaderId, sourceId);
+            AddListParameters(count, search, state, businessStatus, downloaderId, sourceId);
             totalItems = Convert.ToInt32(
                 await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
                 CultureInfo.InvariantCulture);
         }
 
+        var summary = await ReadDashboardSummaryAsync(connection, cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = ListProjectionSelect + whereSql + """
 
-            ORDER BY download_jobs.updated_at_utc DESC, download_jobs.id
+            ORDER BY CASE
+                WHEN download_jobs.state = 'error'
+                  OR ingest_tasks.status = 'download_error'
+                  OR download_jobs.preparation_failure_code IS NOT NULL
+                  OR download_jobs.organization_failure_code IS NOT NULL THEN 0
+                WHEN download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding', 'paused')
+                  OR ingest_tasks.status NOT IN ('organized', 'download_skipped_duplicate') THEN 1
+                ELSE 2
+            END,
+            download_jobs.updated_at_utc DESC, download_jobs.id
             LIMIT $limit OFFSET $offset;
             """;
-        AddListParameters(command, search, state, downloaderId, sourceId);
+        AddListParameters(command, search, state, businessStatus, downloaderId, sourceId);
         command.Parameters.AddWithValue("$limit", query.PageSize);
         command.Parameters.AddWithValue("$offset", checked((query.Page - 1) * query.PageSize));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -266,7 +282,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             results.Add(ReadListItem(reader));
         }
 
-        return new DownloadJobListPage(query.Page, query.PageSize, totalItems, results);
+        return new DownloadJobListPage(query.Page, query.PageSize, totalItems, summary, results);
     }
 
     public async Task<DownloadJobDetailRecord?> GetDetailAsync(
@@ -661,6 +677,83 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
               ON downloader_runtime_state.downloader_id = download_jobs.downloader_id
             """;
 
+    private static async Task<DownloadJobDashboardSummary> ReadDashboardSummaryAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*),
+                   COALESCE(SUM(CASE
+                       WHEN job.state IN ('waiting', 'downloading', 'moving', 'seeding') THEN 1
+                       ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN job.state = 'paused' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN job.state = 'error'
+                         OR task.status = 'download_error'
+                         OR job.preparation_failure_code IS NOT NULL
+                         OR job.organization_failure_code IS NOT NULL THEN 1
+                       ELSE 0 END), 0),
+                   COALESCE(SUM(job.is_stale), 0),
+                   COALESCE(SUM(CASE
+                       WHEN task.status = 'downloaded'
+                         OR job.organization_state IN ('pending', 'organizing', 'cleanup') THEN 1
+                       ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN task.status = 'organized' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN job.preparation_failure_code IS NOT NULL THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN job.organization_failure_code IS NOT NULL THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN job.is_stale = 0 AND COALESCE(runtime.connected, 0) = 1
+                       THEN job.speed_bytes_per_second ELSE 0 END), 0),
+                   COUNT(DISTINCT CASE
+                       WHEN COALESCE(runtime.connected, 0) = 0 THEN job.downloader_id END),
+                   (
+                       SELECT COALESCE(
+                           latest_job.organization_failure_code,
+                           latest_job.preparation_failure_code,
+                           latest_task.failure_kind,
+                           latest_runtime.failure_code)
+                       FROM download_jobs AS latest_job
+                       JOIN ingest_tasks AS latest_task ON latest_task.id = latest_job.task_id
+                       LEFT JOIN downloader_runtime_state AS latest_runtime
+                         ON latest_runtime.downloader_id = latest_job.downloader_id
+                       WHERE latest_job.organization_failure_code IS NOT NULL
+                          OR latest_job.preparation_failure_code IS NOT NULL
+                          OR latest_task.failure_kind IS NOT NULL
+                          OR latest_runtime.failure_code IS NOT NULL
+                       ORDER BY latest_job.updated_at_utc DESC, latest_job.id
+                       LIMIT 1
+                   ),
+                   MAX(runtime.last_success_at_utc)
+            FROM download_jobs AS job
+            JOIN ingest_tasks AS task ON task.id = job.task_id
+            LEFT JOIN downloader_runtime_state AS runtime
+              ON runtime.downloader_id = job.downloader_id;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("Download dashboard summary query returned no row.");
+        }
+
+        return new DownloadJobDashboardSummary(
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            reader.GetInt32(7),
+            reader.GetInt32(8),
+            reader.GetInt64(9),
+            reader.GetInt32(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11),
+            ReadDateTimeOffset(reader, 12));
+    }
+
     private static DownloadJobListItemRecord ReadListItem(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
         new(
             reader.GetString(0),
@@ -724,6 +817,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         Microsoft.Data.Sqlite.SqliteCommand command,
         string? search,
         string? state,
+        string? businessStatus,
         string? downloaderId,
         string? sourceId)
     {
@@ -735,6 +829,11 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         if (state is not null)
         {
             command.Parameters.AddWithValue("$state", state);
+        }
+
+        if (businessStatus is not null)
+        {
+            command.Parameters.AddWithValue("$business_status", businessStatus);
         }
 
         if (downloaderId is not null)
@@ -793,7 +892,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         if (string.IsNullOrWhiteSpace(value)
             || value.Length > maximumLength
             || value.Any(character =>
-                !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
+                !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-' or '.')))
         {
             throw new ArgumentException(
                 $"{parameterName} must be a stable ASCII identifier.",

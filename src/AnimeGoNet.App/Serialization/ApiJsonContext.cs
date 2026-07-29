@@ -29,6 +29,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(IngestBatchResponse))]
 [JsonSerializable(typeof(LegacyApiResponse<IngestBatchResponse?>))]
 [JsonSerializable(typeof(DownloadListResponse))]
+[JsonSerializable(typeof(DownloadDashboardSummary))]
 [JsonSerializable(typeof(DownloadDetailResponse))]
 [JsonSerializable(typeof(DownloadControlRequest))]
 [JsonSerializable(typeof(DownloadControlResponse))]

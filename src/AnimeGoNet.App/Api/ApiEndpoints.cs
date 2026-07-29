@@ -754,6 +754,7 @@ public static class ApiEndpoints
         [FromQuery(Name = "page_size")] int? pageSize,
         [FromQuery] string? search,
         [FromQuery] string? state,
+        [FromQuery(Name = "business_status")] string? businessStatus,
         [FromQuery(Name = "downloader_id")] string? downloaderId,
         [FromQuery] string? source,
         DownloadJobStore jobs,
@@ -776,6 +777,7 @@ public static class ApiEndpoints
                     resolvedPageSize,
                     search,
                     state,
+                    businessStatus,
                     downloaderId,
                     source),
                 cancellationToken).ConfigureAwait(false);
@@ -785,8 +787,23 @@ public static class ApiEndpoints
                 records.TotalItems,
                 NormalizeEcho(search),
                 NormalizeEcho(state),
+                NormalizeEcho(businessStatus),
                 NormalizeEcho(downloaderId),
                 NormalizeEcho(source),
+                new DownloadDashboardSummary(
+                    records.Summary.TotalJobs,
+                    records.Summary.ActiveJobs,
+                    records.Summary.PausedJobs,
+                    records.Summary.FailedJobs,
+                    records.Summary.StaleJobs,
+                    records.Summary.WaitingOrganizationJobs,
+                    records.Summary.CompletedJobs,
+                    records.Summary.PreparationFailedJobs,
+                    records.Summary.OrganizationFailedJobs,
+                    records.Summary.ConnectedDownloadSpeedBytesPerSecond,
+                    records.Summary.OfflineInstanceCount,
+                    records.Summary.LatestFailureCode,
+                    records.Summary.LastDownloaderSuccessAtUtc),
                 records.Items.Select(ToResponse).ToArray()));
         }
         catch (ArgumentException)

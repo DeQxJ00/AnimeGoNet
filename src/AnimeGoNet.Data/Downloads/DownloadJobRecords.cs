@@ -31,6 +31,7 @@ public sealed record DownloadJobListQuery(
     int PageSize,
     string? Search,
     string? State,
+    string? BusinessStatus,
     string? DownloaderId,
     string? SourceId);
 
@@ -38,7 +39,23 @@ public sealed record DownloadJobListPage(
     int Page,
     int PageSize,
     int TotalItems,
+    DownloadJobDashboardSummary Summary,
     IReadOnlyList<DownloadJobListItemRecord> Items);
+
+public sealed record DownloadJobDashboardSummary(
+    int TotalJobs,
+    int ActiveJobs,
+    int PausedJobs,
+    int FailedJobs,
+    int StaleJobs,
+    int WaitingOrganizationJobs,
+    int CompletedJobs,
+    int PreparationFailedJobs,
+    int OrganizationFailedJobs,
+    long ConnectedDownloadSpeedBytesPerSecond,
+    int OfflineInstanceCount,
+    string? LatestFailureCode,
+    DateTimeOffset? LastDownloaderSuccessAtUtc);
 
 public sealed record DownloadJobFileRecord(
     string RelativePath,

@@ -114,8 +114,24 @@ interface DownloadListPage {
   total_items: number;
   search: string | null;
   state: string | null;
+  business_status: string | null;
   downloader_id: string | null;
   source: string | null;
+  summary: {
+    total_jobs: number;
+    active_jobs: number;
+    paused_jobs: number;
+    failed_jobs: number;
+    stale_jobs: number;
+    waiting_organization_jobs: number;
+    completed_jobs: number;
+    preparation_failed_jobs: number;
+    organization_failed_jobs: number;
+    connected_download_speed_bytes_per_second: number;
+    offline_instance_count: number;
+    latest_failure_code: string | null;
+    last_downloader_success_at_utc: string | null;
+  };
   items: DownloadItem[];
 }
 
@@ -171,6 +187,7 @@ interface DownloadUiState {
   page_size: 10 | 25 | 50;
   search: string;
   state: string;
+  business_status: string;
   downloader_id: string;
   source: string;
 }
@@ -805,6 +822,7 @@ function readDownloadState(): DownloadUiState {
     page_size: 25,
     search: "",
     state: "",
+    business_status: "",
     downloader_id: "",
     source: "",
   };
@@ -822,6 +840,8 @@ function readDownloadState(): DownloadUiState {
         ? stored.search.slice(0, 200) : "",
       state: typeof stored.state === "string"
         ? stored.state.slice(0, 64) : "",
+      business_status: typeof stored.business_status === "string"
+        ? stored.business_status.slice(0, 64) : "",
       downloader_id: typeof stored.downloader_id === "string"
         ? stored.downloader_id.slice(0, 64) : "",
       source: typeof stored.source === "string"
@@ -1799,7 +1819,48 @@ async function loadDownloadDetail(
   }
 }
 
+function renderDownloadSummary(body: DownloadListPage): void {
+  const summary = body.summary;
+  const metrics: Array<[string, string, string?]> = [
+    ["活动", String(summary.active_jobs)],
+    ["暂停", String(summary.paused_jobs)],
+    ["失败", String(summary.failed_jobs), summary.latest_failure_code ?? undefined],
+    ["等待整理", String(summary.waiting_organization_jobs)],
+    ["已完成", String(summary.completed_jobs)],
+    ["连接速度", formatBytes(summary.connected_download_speed_bytes_per_second) + "/s"],
+    ["过期快照", String(summary.stale_jobs)],
+    ["离线实例", String(summary.offline_instance_count)],
+  ];
+  const cards = metrics.map(([label, value, detail]) => {
+    const card = document.createElement("article");
+    card.className = label === "失败" && summary.failed_jobs > 0
+      ? "download-summary-card error"
+      : "download-summary-card";
+    const term = document.createElement("span");
+    term.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    card.append(term, strong);
+    if (detail) {
+      const note = document.createElement("small");
+      note.textContent = detail;
+      card.append(note);
+    }
+    return card;
+  });
+  const footer = document.createElement("p");
+  footer.className = "download-summary-footer";
+  footer.textContent = `共 ${summary.total_jobs} 个任务`
+    + ` · 准备失败 ${summary.preparation_failed_jobs}`
+    + ` · 整理失败 ${summary.organization_failed_jobs}`
+    + ` · 最近同步成功 ${summary.last_downloader_success_at_utc
+      ? new Date(summary.last_downloader_success_at_utc).toLocaleString()
+      : "尚无"}`;
+  element<HTMLElement>("#download-summary").replaceChildren(...cards, footer);
+}
+
 function renderDownloadPage(body: DownloadListPage): void {
+  renderDownloadSummary(body);
   const container = element<HTMLElement>("#downloads");
   const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
   element<HTMLElement>("#download-list-status").textContent =
@@ -1877,6 +1938,9 @@ async function loadDownloads(): Promise<void> {
   });
   if (downloadState.search) query.set("search", downloadState.search);
   if (downloadState.state) query.set("state", downloadState.state);
+  if (downloadState.business_status) {
+    query.set("business_status", downloadState.business_status);
+  }
   if (downloadState.downloader_id) {
     query.set("downloader_id", downloadState.downloader_id);
   }
@@ -3733,6 +3797,8 @@ element<HTMLSelectElement>("#library-page-size").value = String(libraryState.pag
 element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episode_filter;
 element<HTMLInputElement>("#download-search").value = downloadState.search;
 element<HTMLSelectElement>("#download-state").value = downloadState.state;
+element<HTMLSelectElement>("#download-business-status").value =
+  downloadState.business_status;
 element<HTMLInputElement>("#download-downloader").value = downloadState.downloader_id;
 element<HTMLInputElement>("#download-source").value = downloadState.source;
 element<HTMLSelectElement>("#download-page-size").value = String(downloadState.page_size);
@@ -3740,6 +3806,8 @@ element<HTMLFormElement>("#download-filters").addEventListener("submit", (event)
   event.preventDefault();
   downloadState.search = element<HTMLInputElement>("#download-search").value.trim();
   downloadState.state = element<HTMLSelectElement>("#download-state").value;
+  downloadState.business_status =
+    element<HTMLSelectElement>("#download-business-status").value;
   downloadState.downloader_id =
     element<HTMLInputElement>("#download-downloader").value.trim().toLowerCase();
   downloadState.source =
@@ -3757,11 +3825,13 @@ element<HTMLButtonElement>("#download-filter-reset").addEventListener("click", (
     page_size: 25,
     search: "",
     state: "",
+    business_status: "",
     downloader_id: "",
     source: "",
   };
   element<HTMLInputElement>("#download-search").value = "";
   element<HTMLSelectElement>("#download-state").value = "";
+  element<HTMLSelectElement>("#download-business-status").value = "";
   element<HTMLInputElement>("#download-downloader").value = "";
   element<HTMLInputElement>("#download-source").value = "";
   element<HTMLSelectElement>("#download-page-size").value = "25";

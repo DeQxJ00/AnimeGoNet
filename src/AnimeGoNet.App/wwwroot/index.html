@@ -154,6 +154,9 @@
           <h2 id="downloads-title">下载状态</h2>
         </div>
       </div>
+      <div id="download-summary" class="download-summary" aria-label="下载仪表盘">
+        <p class="muted empty">正在汇总下载状态…</p>
+      </div>
       <form id="download-filters" class="download-filters" aria-label="下载筛选">
         <label>搜索
           <input id="download-search" type="search" maxlength="200" placeholder="标题、任务 ID 或 Info Hash">
@@ -167,9 +170,19 @@
             <option value="seeding">做种中</option>
             <option value="complete">下载完成</option>
             <option value="error">下载错误</option>
+          </select>
+        </label>
+        <label>业务阶段
+          <select id="download-business-status">
+            <option value="">全部阶段</option>
             <option value="download_preparing">业务准备</option>
             <option value="metadata_resolving">元数据匹配</option>
+            <option value="download_queued">等待下载</option>
+            <option value="downloaded">等待整理</option>
+            <option value="organizing">整理中</option>
+            <option value="organizing_cleanup">整理清理</option>
             <option value="organized">已整理</option>
+            <option value="download_error">下载错误</option>
           </select>
         </label>
         <label>下载器

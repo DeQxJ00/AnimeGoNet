@@ -240,9 +240,26 @@ public sealed record DownloadListResponse(
     [property: JsonPropertyName("total_items")] int TotalItems,
     [property: JsonPropertyName("search")] string? Search,
     [property: JsonPropertyName("state")] string? State,
+    [property: JsonPropertyName("business_status")] string? BusinessStatus,
     [property: JsonPropertyName("downloader_id")] string? DownloaderId,
     [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("summary")] DownloadDashboardSummary Summary,
     [property: JsonPropertyName("items")] IReadOnlyList<DownloadListItem> Items);
+
+public sealed record DownloadDashboardSummary(
+    [property: JsonPropertyName("total_jobs")] int TotalJobs,
+    [property: JsonPropertyName("active_jobs")] int ActiveJobs,
+    [property: JsonPropertyName("paused_jobs")] int PausedJobs,
+    [property: JsonPropertyName("failed_jobs")] int FailedJobs,
+    [property: JsonPropertyName("stale_jobs")] int StaleJobs,
+    [property: JsonPropertyName("waiting_organization_jobs")] int WaitingOrganizationJobs,
+    [property: JsonPropertyName("completed_jobs")] int CompletedJobs,
+    [property: JsonPropertyName("preparation_failed_jobs")] int PreparationFailedJobs,
+    [property: JsonPropertyName("organization_failed_jobs")] int OrganizationFailedJobs,
+    [property: JsonPropertyName("connected_download_speed_bytes_per_second")] long ConnectedDownloadSpeedBytesPerSecond,
+    [property: JsonPropertyName("offline_instance_count")] int OfflineInstanceCount,
+    [property: JsonPropertyName("latest_failure_code")] string? LatestFailureCode,
+    [property: JsonPropertyName("last_downloader_success_at_utc")] DateTimeOffset? LastDownloaderSuccessAtUtc);
 
 public sealed record DownloadListItem(
     [property: JsonPropertyName("job_id")] string JobId,
