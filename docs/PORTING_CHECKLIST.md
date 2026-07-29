@@ -28,7 +28,7 @@
 | `internal/pkg/request` | AOT-safe `HttpClient` pipeline | 保留 | 待实现 | host/proxy/retry fake-server tests |
 | `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 进行中 | 严格v1 Bencode、原始info-hash、单/多文件与安全staging已验证；magnet和4个上游fixture parity待实现 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 已验证 | 5 MiB 有界 raw/file/可注入 URL 读取、首个 enclosure、缺失跳过、非法 length=0、Mikan pubDate 原文与带偏移规范值、稳定失败码与安全 XML tests 已通过；`/api/rss` 已接入 |
-| `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 进行中 | RSS source URL/channel link 的 path/query 正整数 mikanid cases，以及 Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid` 上游 fixture、容错与失败码已通过；安全抓取、缓存、持久化待实现 |
+| `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 已验证 | RSS source URL/channel link 的 path/query 正整数 mikanid、Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid`，以及 `/Home/Bangumi/{mikanid}` 中 `p.bangumi-info` 的可信 Bangumi Subject 链接均已覆盖上游 fixture；SSRF 防护、严格 UTF-8/容量限制、歧义与伪造域名拒绝、schema v26 批次缓存/审计、统一导入 task 持久化和失败重试 tests 已通过 |
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选与自动编排 fake tests 已通过；SQLite cache 待实现 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 进行中 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选与自动 Series/Season/Episode worker tests 已通过；cache 待实现 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 待实现 | archive fixture/migration tests |

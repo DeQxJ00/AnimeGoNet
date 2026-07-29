@@ -1,5 +1,6 @@
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Ingest;
@@ -228,6 +229,63 @@ public sealed class SchemaMigrationTests
         Assert.Equal("language", reader.GetString(1));
         Assert.Equal("chs", reader.GetString(2));
         Assert.Equal("chs", reader.GetString(3));
+    }
+
+    [Fact]
+    public async Task BangumiDiscoveryMigrationPreservesExistingBatchAsNotAttempted()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 25))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-07-29T11:30:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+                INSERT INTO mikan_rss_batches (
+                    id, source_profile_id, rule_revision, fingerprint, mikanid,
+                    priority_enabled, entry_count, created_at_utc,
+                    legacy_filter_revision, legacy_filter_enabled)
+                VALUES (
+                    'batch', 'mikan', 1,
+                    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                    3951, 1, 0, $now, 1, 0);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(2, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration26 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 26);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration26.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT mikanid, bangumi_subject_id, bangumi_discovery_state,
+                   bangumi_discovery_failure_code
+            FROM mikan_rss_batches WHERE id = 'batch';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(3951, reader.GetInt32(0));
+        Assert.True(reader.IsDBNull(1));
+        Assert.Equal(MikanBangumiDiscoveryStates.NotAttempted, reader.GetString(2));
+        Assert.True(reader.IsDBNull(3));
     }
 
     [Fact]

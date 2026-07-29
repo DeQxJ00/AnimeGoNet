@@ -40,8 +40,10 @@ public sealed class LegacyRssApiTests
         Assert.Equal("开始处理1个下载项", json.RootElement.GetProperty("msg").GetString());
         var data = json.RootElement.GetProperty("data");
         Assert.Equal(3951, data.GetProperty("mikanid").GetInt32());
+        Assert.Equal(547888, data.GetProperty("bgmid").GetInt32());
+        Assert.Equal("resolved", data.GetProperty("bgmid_discovery_state").GetString());
         Assert.Equal("staged", data.GetProperty("items")[0].GetProperty("status").GetString());
-        Assert.Single(transport.Requests);
+        Assert.Single(transport.FeedRequests);
     }
 
     [Fact]
@@ -65,7 +67,7 @@ public sealed class LegacyRssApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(300, json.RootElement.GetProperty("code").GetInt32());
         Assert.Equal("RSS processing failed: rss_redirect_rejected", json.RootElement.GetProperty("msg").GetString());
-        Assert.Single(transport.Requests);
+        Assert.Single(transport.FeedRequests);
     }
 
     [Fact]
@@ -120,7 +122,7 @@ public sealed class LegacyRssApiTests
             "RejectedByLegacyMikanTool",
             data.GetProperty("items")[1].GetProperty("legacy_filter_reason").GetString());
         Assert.Equal("Filiter0", data.GetProperty("items")[1].GetProperty("legacy_filter_scope").GetString());
-        Assert.Single(transport.Requests);
+        Assert.Single(transport.FeedRequests);
     }
 
     private static TorrentHttpResponse Response(HttpStatusCode status, string body)
@@ -140,6 +142,9 @@ public sealed class LegacyRssApiTests
     private sealed class StaticTransport(Func<Uri, TorrentHttpResponse> responseFactory) : ITorrentHttpTransport
     {
         public List<Uri> Requests { get; } = [];
+        public Uri[] FeedRequests =>
+            Requests.Where(uri => uri.AbsolutePath.Equals(
+                "/RSS", StringComparison.OrdinalIgnoreCase)).ToArray();
 
         public ValueTask<TorrentHttpResponse> SendAsync(
             Uri uri,
@@ -147,6 +152,14 @@ public sealed class LegacyRssApiTests
             CancellationToken cancellationToken)
         {
             Requests.Add(uri);
+            if (uri.AbsolutePath.StartsWith("/Home/Bangumi/", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValueTask.FromResult(Response(HttpStatusCode.OK, """
+                    <p class="bangumi-info">
+                      <a href="https://bgm.tv/subject/547888">Bangumi</a>
+                    </p>
+                    """));
+            }
             return ValueTask.FromResult(responseFactory(uri));
         }
     }

@@ -30,6 +30,9 @@ public sealed record MikanRssIngestItemResult(
 public sealed record MikanRssIngestResult(
     [property: JsonPropertyName("batch_id")] string BatchId,
     [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("bgmid_discovery_state")] string BangumiDiscoveryState,
+    [property: JsonPropertyName("bgmid_discovery_failure_code")] string? BangumiDiscoveryFailureCode,
     [property: JsonPropertyName("rule_revision")] long RuleRevision,
     [property: JsonPropertyName("legacy_filter_revision")] long LegacyFilterRevision,
     [property: JsonPropertyName("legacy_filter_enabled")] bool LegacyFilterEnabled,
@@ -41,6 +44,7 @@ public sealed class MikanRssIngestProcessor(
     MikanRssBatchStore batches,
     TitleParserManager parsers,
     OrderedFeedFilterManager filters,
+    MikanBangumiSubjectResolver bangumiResolver,
     UnifiedIngestProcessor ingest)
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
@@ -102,6 +106,26 @@ public sealed class MikanRssIngestProcessor(
         var stored = await batches.SaveAsync(
             profile.Id, ruleSnapshot.Revision, profile.RssPriorityEnabled,
             plan, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        var hasWinner = plan.Items.Any(item => item.Decision.Kind == MikanRssDecisionKind.Winner);
+        if (!hasWinner)
+        {
+            if (stored.BangumiDiscovery.State == MikanBangumiDiscoveryStates.NotAttempted)
+            {
+                stored = await batches.SetBangumiDiscoveryAsync(
+                    stored.Id,
+                    new MikanBangumiDiscovery(
+                        null,
+                        MikanBangumiDiscoveryStates.NotApplicable,
+                        "mikan_bgmid_no_winner"),
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else if (!stored.BangumiDiscovery.IsResolved)
+        {
+            var discovery = await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false);
+            stored = await batches.SetBangumiDiscoveryAsync(
+                stored.Id, discovery, cancellationToken).ConfigureAwait(false);
+        }
         var results = new List<MikanRssIngestItemResult>(plan.Items.Count);
 
         foreach (var item in plan.Items)
@@ -109,6 +133,16 @@ public sealed class MikanRssIngestProcessor(
             if (item.Decision.Kind != MikanRssDecisionKind.Winner)
             {
                 results.Add(Result(item, "blocked", null, []));
+                continue;
+            }
+
+            if (!stored.BangumiDiscovery.IsResolved)
+            {
+                results.Add(Result(
+                    item,
+                    "bgmid_discovery_failed",
+                    null,
+                    [stored.BangumiDiscovery.FailureCode ?? "mikan_bgmid_discovery_failed"]));
                 continue;
             }
 
@@ -135,7 +169,7 @@ public sealed class MikanRssIngestProcessor(
                     item.FeedItem.Title, null, item.Candidate.Id,
                     feed.MikanId?.ToString(CultureInfo.InvariantCulture),
                     item.FeedItem.MikanUrl, null, feed.MikanId,
-                    null, null, null),
+                    stored.BangumiDiscovery.BangumiSubjectId, null, null),
                 string.IsNullOrWhiteSpace(item.FeedItem.PublishedDate)
                     ? null
                     : new IngestSourceEvidence(
@@ -164,6 +198,9 @@ public sealed class MikanRssIngestProcessor(
         return new MikanRssIngestResult(
             stored.Id,
             feed.MikanId,
+            stored.BangumiDiscovery.BangumiSubjectId,
+            stored.BangumiDiscovery.State,
+            stored.BangumiDiscovery.FailureCode,
             ruleSnapshot.Revision,
             legacy.Revision,
             legacy.Enabled,

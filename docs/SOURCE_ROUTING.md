@@ -55,6 +55,7 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - filter/rule profile、TMDB/AI策略 profile。
 - 对 Mikan RSS profile 保存 `mikan_rss_filter_enabled`，默认 `true`；AnimeGoHelper legacy `/api/rss` 使用默认 Mikan profile 的当前 revision，开关和规则随任务路由快照固化。
 - 对 Mikan RSS profile 另存独立的 `mikan_rss_priority_enabled` 和版本化优选规则；新安装默认启用，在同批次按可靠 `mikanid+来源EP` 聚合重复RSS选项并逐组淘汰，规则结构见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
+- RSS 产生 winner 后，主程序从其 Mikan Episode URL 取得同源站点 origin，使用受 SourceProfile host 白名单、DNS 公网地址校验、重定向和 2 MiB 上限保护的 HTTP 管道抓取 `/Home/Bangumi/{mikanid}`。只接受 `p.bangumi-info` 内指向 `bgm.tv`/`bangumi.tv` `/subject/{正整数}` 的唯一 Subject；结果以 `bgmid` 写入 RSS 批次和统一导入任务。成功批次不重复抓取；网络/页面/歧义失败保留 winner 为可重试状态，不创建缺 `bgmid` 的 Mikan 下载任务。
 - qB category、静态附加 tags；AnimeGoNet 总会额外加入 `animegonet`、来源 ID 和文件策略三个可识别系统 tag。
 - `file_strategy`：`link`、`link_delete`、`move`、`wait_move`。
 - `seeding_time_minutes` 沿用上游 qB 语义：`0` 不做种、`-1` 无限做种、正数为分钟上限；`move` 必须为 `0`，因为下载完成后移动源文件。

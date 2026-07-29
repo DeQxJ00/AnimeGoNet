@@ -43,6 +43,10 @@ public sealed class ManualSubmissionApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.DoesNotContain("private-passkey", content, StringComparison.Ordinal);
         Assert.Equal(3951, json.RootElement.GetProperty("mikanid").GetInt32());
+        Assert.Equal(547888, json.RootElement.GetProperty("bgmid").GetInt32());
+        Assert.Equal("resolved", json.RootElement.GetProperty("bgmid_discovery_state").GetString());
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty(
+            "bgmid_discovery_failure_code").ValueKind);
         Assert.Equal("staged", json.RootElement.GetProperty("items")[0].GetProperty("status").GetString());
         var batchId = json.RootElement.GetProperty("batch_id").GetString();
         var batch = await app.App.Services
@@ -50,8 +54,8 @@ public sealed class ManualSubmissionApiTests
             .GetAsync(batchId!);
         Assert.NotNull(batch);
         Assert.Equal("mikan-alt", batch.SourceProfileId);
-        Assert.Single(transport.Requests);
-        Assert.Equal(secretUrl, transport.Requests[0].AbsoluteUri);
+        Assert.Single(transport.FeedRequests);
+        Assert.Equal(secretUrl, transport.FeedRequests[0].AbsoluteUri);
     }
 
     [Fact]
@@ -136,6 +140,9 @@ public sealed class ManualSubmissionApiTests
         Func<Uri, TorrentHttpResponse> responseFactory) : ITorrentHttpTransport
     {
         public List<Uri> Requests { get; } = [];
+        public Uri[] FeedRequests =>
+            Requests.Where(uri => uri.AbsolutePath.Equals(
+                "/RSS", StringComparison.OrdinalIgnoreCase)).ToArray();
 
         public ValueTask<TorrentHttpResponse> SendAsync(
             Uri uri,
@@ -143,6 +150,14 @@ public sealed class ManualSubmissionApiTests
             CancellationToken cancellationToken)
         {
             Requests.Add(uri);
+            if (uri.AbsolutePath.StartsWith("/Home/Bangumi/", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValueTask.FromResult(Response(HttpStatusCode.OK, """
+                    <p class="bangumi-info">
+                      <a href="https://bgm.tv/subject/547888">Bangumi</a>
+                    </p>
+                    """));
+            }
             return ValueTask.FromResult(responseFactory(uri));
         }
     }

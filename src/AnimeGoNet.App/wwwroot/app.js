@@ -2460,7 +2460,10 @@ async function submitManualRss(event) {
         const summary = document.createElement("p");
         summary.className = "manual-result-summary";
         summary.textContent =
-            `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
+            `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · `
+                + `bgmid ${body.bgmid ?? "未取得"}（${body.bgmid_discovery_state}`
+                + `${body.bgmid_discovery_failure_code ? ` / ${body.bgmid_discovery_failure_code}` : ""}）`
+                + ` · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
         result.replaceChildren(summary, ...body.items.map((item, index) => manualResultItem(`候选 ${index + 1} · ${item.status}`, [
             item.decision_kind,
             item.decision_reason,

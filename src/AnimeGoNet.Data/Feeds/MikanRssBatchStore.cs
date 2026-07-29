@@ -95,6 +95,32 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             : null;
     }
 
+    public async Task<MikanRssBatchRecord> SetBangumiDiscoveryAsync(
+        string batchId,
+        MikanBangumiDiscovery discovery,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(batchId);
+        ArgumentNullException.ThrowIfNull(discovery);
+        ValidateDiscovery(discovery);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE mikan_rss_batches
+            SET bangumi_subject_id = $bgmid,
+                bangumi_discovery_state = $state,
+                bangumi_discovery_failure_code = $failure
+            WHERE id = $id AND bangumi_discovery_state <> 'resolved';
+            """;
+        command.Parameters.AddWithValue("$id", batchId);
+        command.Parameters.AddWithValue("$bgmid", PositiveOrNull(discovery.BangumiSubjectId));
+        command.Parameters.AddWithValue("$state", discovery.State);
+        command.Parameters.AddWithValue("$failure", (object?)discovery.FailureCode ?? DBNull.Value);
+        _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        return await GetAsync(batchId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Mikan RSS batch was not found.");
+    }
+
     public Task<bool> CompleteWinnerAsync(
         MikanRssWinnerLease lease,
         string ingestTaskId,
@@ -214,12 +240,16 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         bool enabled;
         long legacyRevision;
         bool legacyEnabled;
+        int? bangumiSubjectId;
+        string bangumiDiscoveryState;
+        string? bangumiDiscoveryFailureCode;
         DateTimeOffset created;
         await using (var root = connection.CreateCommand())
         {
             root.CommandText = $"""
                 SELECT id, source_profile_id, rule_revision, fingerprint, mikanid,
-                       priority_enabled, created_at_utc, legacy_filter_revision, legacy_filter_enabled
+                       priority_enabled, created_at_utc, legacy_filter_revision, legacy_filter_enabled,
+                       bangumi_subject_id, bangumi_discovery_state, bangumi_discovery_failure_code
                 FROM mikan_rss_batches WHERE {keyColumn} = $key;
                 """;
             root.Parameters.AddWithValue("$key", key);
@@ -234,6 +264,9 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             created = DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture);
             legacyRevision = reader.GetInt64(7);
             legacyEnabled = reader.GetBoolean(8);
+            bangumiSubjectId = reader.IsDBNull(9) ? null : reader.GetInt32(9);
+            bangumiDiscoveryState = reader.GetString(10);
+            bangumiDiscoveryFailureCode = reader.IsDBNull(11) ? null : reader.GetString(11);
         }
 
         var storedRows = new List<StoredEntryRow>();
@@ -285,7 +318,10 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
 
         return new MikanRssBatchRecord(
             id, profile, revision, fingerprint, mikanId, enabled,
-            legacyRevision, legacyEnabled, created, entries);
+            legacyRevision, legacyEnabled,
+            new MikanBangumiDiscovery(
+                bangumiSubjectId, bangumiDiscoveryState, bangumiDiscoveryFailureCode),
+            created, entries);
     }
 
     private static async Task<IReadOnlyList<string>> ReadGroupsAsync(
@@ -306,7 +342,9 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
 
     private static string Fingerprint(string profile, long revision, bool enabled, MikanRssBatchPlan plan)
     {
-        var value = new StringBuilder().Append(profile).Append('|').Append(revision).Append('|').Append(enabled)
+        var value = new StringBuilder("v2|")
+            .Append(profile).Append('|').Append(revision).Append('|').Append(enabled)
+            .Append('|').Append(plan.MikanId)
             .Append('|').Append(plan.LegacyFilterRevision).Append('|').Append(plan.LegacyFilterEnabled).Append('|');
         foreach (var item in plan.Items)
         {
@@ -326,6 +364,28 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
     private static string Format(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static object PositiveOrNull(int? value) => value is > 0 ? value.Value : DBNull.Value;
+
+    private static void ValidateDiscovery(MikanBangumiDiscovery discovery)
+    {
+        var valid = discovery.State switch
+        {
+            MikanBangumiDiscoveryStates.Resolved =>
+                discovery.BangumiSubjectId is > 0 && discovery.FailureCode is null,
+            MikanBangumiDiscoveryStates.NotAttempted =>
+                discovery.BangumiSubjectId is null && discovery.FailureCode is null,
+            MikanBangumiDiscoveryStates.NotFound
+                or MikanBangumiDiscoveryStates.Failed
+                or MikanBangumiDiscoveryStates.NotApplicable =>
+                discovery.BangumiSubjectId is null
+                && !string.IsNullOrWhiteSpace(discovery.FailureCode)
+                && discovery.FailureCode.Length <= 128,
+            _ => false,
+        };
+        if (!valid)
+        {
+            throw new ArgumentException("Mikan Bangumi discovery result is invalid.", nameof(discovery));
+        }
+    }
 
     private sealed record StoredEntryRow(
         string CandidateId,

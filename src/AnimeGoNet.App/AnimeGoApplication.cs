@@ -163,6 +163,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(ingestTasks);
         builder.Services.AddSingleton<UnifiedIngestProcessor>();
         builder.Services.AddSingleton<MikanRssBatchStore>();
+        builder.Services.AddSingleton<MikanBangumiSubjectResolver>();
         builder.Services.AddSingleton<MikanRssIngestProcessor>();
         rssDnsResolver ??= new SystemTorrentDnsResolver();
         rssHttpTransport ??= new PinnedTorrentHttpTransport();

@@ -32,7 +32,7 @@ public sealed class MikanLegacyFilterProcessorTests
             Item("[Other] Show [03] [720p]", "a", "a"),
             Item("[Group] Show [04] [1080p]", "b", "b")));
 
-        Assert.Empty(transport.Requests);
+        Assert.Empty(transport.EpisodeRequests);
         Assert.Equal(1, staging.StageCount);
         Assert.Equal(MikanRssDecisionKind.RejectedByLegacyFilter, result.Items[0].DecisionKind);
         Assert.Equal("blocked", result.Items[0].Status);
@@ -64,7 +64,7 @@ public sealed class MikanLegacyFilterProcessorTests
             Item("[Group] Show [03] bad", "shared", "a"),
             Item("[Group] Show [04] good", "shared", "b")));
 
-        Assert.Single(transport.Requests);
+        Assert.Single(transport.EpisodeRequests);
         Assert.Equal(1, staging.StageCount);
         Assert.Equal(2, result.LegacyFilterRevision);
         Assert.True(result.LegacyFilterEnabled);
@@ -108,7 +108,7 @@ public sealed class MikanLegacyFilterProcessorTests
         Assert.Equal("blocked", item.Status);
         Assert.Equal("staged", result.Items[1].Status);
         Assert.Equal(1, staging.StageCount);
-        Assert.Equal(2, transport.Requests.Count);
+        Assert.Equal(2, transport.EpisodeRequests.Length);
         var stored = Assert.IsType<MikanRssBatchRecord>(await BatchStore(app).GetAsync(result.BatchId));
         Assert.Equal(
             MikanLegacyFilterState.FilterEvaluationFailed,
@@ -159,7 +159,7 @@ public sealed class MikanLegacyFilterProcessorTests
 
         var result = await Processor(app).ProcessAsync(Feed(Item("[Group] Show [03]", "a", "a")));
 
-        Assert.Empty(transport.Requests);
+        Assert.Empty(transport.EpisodeRequests);
         Assert.Equal(1, staging.StageCount);
         Assert.Equal("staged", result.Items[0].Status);
         var stored = Assert.IsType<MikanRssBatchRecord>(await BatchStore(app).GetAsync(result.BatchId));
@@ -224,6 +224,9 @@ public sealed class MikanLegacyFilterProcessorTests
     private sealed class StaticTransport(Func<Uri, TorrentHttpResponse> responseFactory) : ITorrentHttpTransport
     {
         public List<Uri> Requests { get; } = [];
+        public Uri[] EpisodeRequests =>
+            Requests.Where(uri => uri.AbsolutePath.StartsWith(
+                "/Home/Episode/", StringComparison.OrdinalIgnoreCase)).ToArray();
 
         public ValueTask<TorrentHttpResponse> SendAsync(
             Uri uri,
@@ -231,6 +234,14 @@ public sealed class MikanLegacyFilterProcessorTests
             CancellationToken cancellationToken)
         {
             Requests.Add(uri);
+            if (uri.AbsolutePath.StartsWith("/Home/Bangumi/", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValueTask.FromResult(Html("""
+                    <p class="bangumi-info">
+                      <a href="https://bgm.tv/subject/547888">Bangumi</a>
+                    </p>
+                    """));
+            }
             return ValueTask.FromResult(responseFactory(uri));
         }
     }

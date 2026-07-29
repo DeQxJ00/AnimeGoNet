@@ -1,4 +1,5 @@
 using System.Text;
+using System.Net;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Feeds;
@@ -16,7 +17,8 @@ public sealed class MikanRssIngestProcessorTests
     public async Task OnlyWinnerStagesAndRepeatedBatchReturnsExistingTask()
     {
         await using var staging = new CountingStagingService();
-        await using var app = await RunningApp.StartAsync(stagingService: staging);
+        var transport = new WorkPageTransport();
+        await using var app = await StartAsync(staging, transport);
         var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
         var feed = Feed(
             Item("Show [03] [720p]", "loser"),
@@ -30,15 +32,20 @@ public sealed class MikanRssIngestProcessorTests
         Assert.Equal("staged", first.Items[1].Status);
         Assert.Equal("already_ingested", second.Items[1].Status);
         Assert.Equal(first.Items[1].IngestTaskId, second.Items[1].IngestTaskId);
+        Assert.Equal(547888, first.BangumiSubjectId);
+        Assert.Equal(MikanBangumiDiscoveryStates.Resolved, first.BangumiDiscoveryState);
+        Assert.Null(first.BangumiDiscoveryFailureCode);
+        Assert.Single(transport.Requests);
         var stored = Assert.IsType<MikanRssBatchRecord>(
             await app.App.Services.GetRequiredService<MikanRssBatchStore>().GetAsync(first.BatchId));
+        Assert.Equal(547888, stored.BangumiDiscovery.BangumiSubjectId);
         Assert.Equal("blocked", stored.Entries[0].EffectState);
         Assert.Equal("ingested", stored.Entries[1].EffectState);
         Assert.Equal(first.Items[1].IngestTaskId, stored.Entries[1].IngestTaskId);
         await using var connection = await app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>().OpenConnectionAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT COUNT(*), source_published_at_raw, source_published_at
+            SELECT COUNT(*), source_published_at_raw, source_published_at, bangumi_subject_id
             FROM ingest_tasks;
             """;
         await using var reader = await command.ExecuteReaderAsync();
@@ -52,13 +59,14 @@ public sealed class MikanRssIngestProcessorTests
             DateTimeOffset.Parse(
                 reader.GetString(2),
                 System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(547888, reader.GetInt32(3));
     }
 
     [Fact]
     public async Task StagingFailureReleasesWinnerForExplicitRetry()
     {
         await using var staging = new CountingStagingService(failuresBeforeSuccess: 1);
-        await using var app = await RunningApp.StartAsync(stagingService: staging);
+        await using var app = await StartAsync(staging, new WorkPageTransport());
         var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
         var feed = Feed(Item("Show [03] [1080p]", "winner"));
 
@@ -75,7 +83,7 @@ public sealed class MikanRssIngestProcessorTests
     public async Task UnexpectedFailureAlsoReleasesWinnerBeforeRethrow()
     {
         await using var staging = new CountingStagingService(failuresBeforeSuccess: 1, unexpectedFailure: true);
-        await using var app = await RunningApp.StartAsync(stagingService: staging);
+        await using var app = await StartAsync(staging, new WorkPageTransport());
         var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
         var feed = Feed(Item("Show [03] [1080p]", "winner"));
 
@@ -85,6 +93,36 @@ public sealed class MikanRssIngestProcessorTests
         Assert.Equal("staged", retried.Items[0].Status);
         Assert.Equal(2, staging.StageCount);
     }
+
+    [Fact]
+    public async Task DiscoveryFailureBlocksStagingAndCanRetrySameBatch()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new WorkPageTransport(failuresBeforeSuccess: 1);
+        await using var app = await StartAsync(staging, transport);
+        var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
+        var feed = Feed(Item("Show [03] [1080p]", "winner"));
+
+        var failed = await processor.ProcessAsync(feed);
+        var retried = await processor.ProcessAsync(feed);
+
+        Assert.Equal("bgmid_discovery_failed", failed.Items[0].Status);
+        Assert.Equal("rss_request_failed", Assert.Single(failed.Items[0].Errors));
+        Assert.Equal(MikanBangumiDiscoveryStates.Failed, failed.BangumiDiscoveryState);
+        Assert.Equal("staged", retried.Items[0].Status);
+        Assert.Equal(547888, retried.BangumiSubjectId);
+        Assert.Equal(1, staging.StageCount);
+        Assert.Equal(2, transport.Requests.Count);
+        Assert.Equal(failed.BatchId, retried.BatchId);
+    }
+
+    private static Task<RunningApp> StartAsync(
+        ITorrentStagingService staging,
+        ITorrentHttpTransport transport) =>
+        RunningApp.StartAsync(
+            stagingService: staging,
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
 
     private static RssFeedDocument Feed(params RssFeedItem[] items) => new(items, 3951);
 
@@ -144,6 +182,43 @@ public sealed class MikanRssIngestProcessorTests
         {
             if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class PublicDnsResolver : ITorrentDnsResolver
+    {
+        public ValueTask<IReadOnlyList<IPAddress>> ResolveAsync(
+            string host,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Parse("1.1.1.1")]);
+    }
+
+    private sealed class WorkPageTransport(int failuresBeforeSuccess = 0) : ITorrentHttpTransport
+    {
+        private int _remainingFailures = failuresBeforeSuccess;
+
+        public List<Uri> Requests { get; } = [];
+
+        public ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(uri);
+            if (_remainingFailures-- > 0)
+            {
+                throw new InvalidOperationException("Synthetic transport failure.");
+            }
+            var bytes = Encoding.UTF8.GetBytes("""
+                <p class="bangumi-info">
+                  <a href="https://bgm.tv/subject/547888">Bangumi</a>
+                </p>
+                """);
+            return ValueTask.FromResult(new TorrentHttpResponse(
+                HttpStatusCode.OK,
+                null,
+                bytes.Length,
+                new MemoryStream(bytes, writable: false)));
         }
     }
 }

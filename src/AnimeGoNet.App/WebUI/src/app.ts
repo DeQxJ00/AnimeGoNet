@@ -584,6 +584,9 @@ interface ManualRssItem {
 interface ManualRssResponse {
   batch_id: string;
   mikanid: number | null;
+  bgmid: number | null;
+  bgmid_discovery_state: string;
+  bgmid_discovery_failure_code: string | null;
   rule_revision: number;
   legacy_filter_revision: number;
   legacy_filter_enabled: boolean;
@@ -3378,7 +3381,10 @@ async function submitManualRss(event: SubmitEvent): Promise<void> {
     const summary = document.createElement("p");
     summary.className = "manual-result-summary";
     summary.textContent =
-      `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
+      `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · `
+      + `bgmid ${body.bgmid ?? "未取得"}（${body.bgmid_discovery_state}`
+      + `${body.bgmid_discovery_failure_code ? ` / ${body.bgmid_discovery_failure_code}` : ""}）`
+      + ` · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
     result.replaceChildren(
       summary,
       ...body.items.map((item, index) => manualResultItem(

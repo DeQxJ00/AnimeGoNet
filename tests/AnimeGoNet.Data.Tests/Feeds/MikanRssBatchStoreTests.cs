@@ -175,6 +175,53 @@ public sealed class MikanRssBatchStoreTests
         Assert.Equal(MikanRssDecisionKind.Winner, stored.Entries[1].Decision.Kind);
     }
 
+    [Fact]
+    public async Task PersistsBangumiDiscoveryAndNeverDowngradesResolvedIdentity()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var stored = await fixture.Store.SaveAsync(
+            "mikan",
+            1,
+            true,
+            Plan(),
+            DateTimeOffset.Parse("2026-07-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.Equal(MikanBangumiDiscoveryStates.NotAttempted, stored.BangumiDiscovery.State);
+        var failed = await fixture.Store.SetBangumiDiscoveryAsync(
+            stored.Id,
+            new MikanBangumiDiscovery(
+                null, MikanBangumiDiscoveryStates.Failed, "rss_request_failed"));
+        var resolved = await fixture.Store.SetBangumiDiscoveryAsync(
+            stored.Id,
+            new MikanBangumiDiscovery(
+                547888, MikanBangumiDiscoveryStates.Resolved, null));
+        var protectedResult = await fixture.Store.SetBangumiDiscoveryAsync(
+            stored.Id,
+            new MikanBangumiDiscovery(
+                null, MikanBangumiDiscoveryStates.NotFound, "mikan_bgmid_link_missing"));
+
+        Assert.Equal("rss_request_failed", failed.BangumiDiscovery.FailureCode);
+        Assert.Equal(547888, resolved.BangumiDiscovery.BangumiSubjectId);
+        Assert.Equal(MikanBangumiDiscoveryStates.Resolved, protectedResult.BangumiDiscovery.State);
+        Assert.Equal(547888, protectedResult.BangumiDiscovery.BangumiSubjectId);
+    }
+
+    [Fact]
+    public async Task BatchIdentityIncludesMikanId()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var plan = Plan();
+        var other = plan with { MikanId = 3952 };
+        var now = DateTimeOffset.Parse(
+            "2026-07-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var first = await fixture.Store.SaveAsync("mikan", 1, true, plan, now);
+        var second = await fixture.Store.SaveAsync("mikan", 1, true, other, now);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.NotEqual(first.Fingerprint, second.Fingerprint);
+    }
+
     private static MikanRssBatchPlan Plan()
     {
         var feed = new RssFeedDocument(

@@ -94,6 +94,13 @@ GET    /websocket/log
 
 ## Mikan RSS 同集候选优选场景
 
+Mikan RSS winner 的作品身份补全还必须覆盖：
+
+1. 从 Episode URL 同源构造 `/Home/Bangumi/{mikanid}`，页面中 `p.bangumi-info` 的 `https://bgm.tv/subject/{bgmid}` 写入批次与 `ingest_tasks.bangumi_subject_id`。
+2. 同批次再次处理复用已解析 `bgmid`，不重复抓取作品页；不同 `mikanid` 即使候选 URL 相同也不得共用批次身份。
+3. 链接位于目标段落外、伪造子域名、非 Subject、非正整数、多个冲突 Subject、非法 UTF-8、超限响应和网络失败均返回稳定失败码。
+4. 发现失败时 winner 不进入 Torrent staging；相同批次再次显式处理可重新发现并在成功后继续统一导入。
+
 1. 使用四组预设构造同mikanid/EP的简体H.264、繁体H.265两项，断言第一组后只剩简体并立即短路，封装/编码/分辨率组均未执行。
 2. 构造第一组无法淘汰、第二组外挂命中后剩一项的候选，断言只执行前两组；全部组仍并列时按原RSS顺序稳定选择。
 3. 新增、删除、清空和拖动优先级组与组内具名数组，断言运行顺序与Web预览一致；`name`不参与匹配，只有`values[]`在lowercase后匹配。

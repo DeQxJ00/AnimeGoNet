@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 25;
+    public const int CurrentVersion = 26;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -31,6 +31,7 @@ public static class DatabaseSchema
         new SchemaMigration(23, "library_tmdb_projection", LibraryTmdbProjection),
         new SchemaMigration(24, "download_job_audit_events", DownloadJobAuditEvents),
         new SchemaMigration(25, "mikan_rss_rule_snapshots", MikanRssRuleSnapshots),
+        new SchemaMigration(26, "mikan_bangumi_discovery_audit", MikanBangumiDiscoveryAudit),
     ];
 
     private const string InitialBusinessSchema = """
@@ -1051,5 +1052,53 @@ public static class DatabaseSchema
         FROM mikan_rss_match_values AS rule_values
         JOIN mikan_rss_rule_sets AS sets
           ON sets.source_profile_id = rule_values.source_profile_id;
+        """;
+
+    private const string MikanBangumiDiscoveryAudit = """
+        ALTER TABLE mikan_rss_batches
+        ADD COLUMN bangumi_subject_id INTEGER CHECK (bangumi_subject_id > 0);
+
+        ALTER TABLE mikan_rss_batches
+        ADD COLUMN bangumi_discovery_state TEXT NOT NULL DEFAULT 'not_attempted'
+            CHECK (bangumi_discovery_state IN (
+                'not_attempted', 'resolved', 'not_found', 'failed', 'not_applicable'));
+
+        ALTER TABLE mikan_rss_batches
+        ADD COLUMN bangumi_discovery_failure_code TEXT
+            CHECK (bangumi_discovery_failure_code IS NULL
+                OR length(bangumi_discovery_failure_code) BETWEEN 1 AND 128);
+
+        CREATE TRIGGER tr_mikan_rss_batches_discovery_insert
+        BEFORE INSERT ON mikan_rss_batches
+        WHEN NOT (
+            (NEW.bangumi_discovery_state = 'resolved'
+                AND NEW.bangumi_subject_id IS NOT NULL
+                AND NEW.bangumi_discovery_failure_code IS NULL)
+            OR (NEW.bangumi_discovery_state = 'not_attempted'
+                AND NEW.bangumi_subject_id IS NULL
+                AND NEW.bangumi_discovery_failure_code IS NULL)
+            OR (NEW.bangumi_discovery_state IN ('not_found', 'failed', 'not_applicable')
+                AND NEW.bangumi_subject_id IS NULL
+                AND NEW.bangumi_discovery_failure_code IS NOT NULL))
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid mikan bangumi discovery state');
+        END;
+
+        CREATE TRIGGER tr_mikan_rss_batches_discovery_update
+        BEFORE UPDATE OF bangumi_subject_id, bangumi_discovery_state, bangumi_discovery_failure_code
+        ON mikan_rss_batches
+        WHEN NOT (
+            (NEW.bangumi_discovery_state = 'resolved'
+                AND NEW.bangumi_subject_id IS NOT NULL
+                AND NEW.bangumi_discovery_failure_code IS NULL)
+            OR (NEW.bangumi_discovery_state = 'not_attempted'
+                AND NEW.bangumi_subject_id IS NULL
+                AND NEW.bangumi_discovery_failure_code IS NULL)
+            OR (NEW.bangumi_discovery_state IN ('not_found', 'failed', 'not_applicable')
+                AND NEW.bangumi_subject_id IS NULL
+                AND NEW.bangumi_discovery_failure_code IS NOT NULL))
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid mikan bangumi discovery state');
+        END;
         """;
 }

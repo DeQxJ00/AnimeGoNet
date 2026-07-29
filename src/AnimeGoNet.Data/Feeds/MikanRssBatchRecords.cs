@@ -1,3 +1,4 @@
+using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Rules;
 
 namespace AnimeGoNet.Data.Feeds;
@@ -11,6 +12,7 @@ public sealed record MikanRssBatchRecord(
     bool PriorityEnabled,
     long LegacyFilterRevision,
     bool LegacyFilterEnabled,
+    MikanBangumiDiscovery BangumiDiscovery,
     DateTimeOffset CreatedAtUtc,
     IReadOnlyList<MikanRssBatchEntryRecord> Entries);
 

@@ -102,7 +102,7 @@
 ## P5 — 数据源
 
 - [ ] 移植 Mikan。
-- [>] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`：RSS source URL 优先、channel link 回退及 path/query 解析已验证；批次任务持久化与页面解析仍待串联。
+- [x] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`：RSS source URL 优先、channel link 回退及 path/query 解析已验证；RSS winner 会安全抓取对应作品页，仅接受 `p.bangumi-info` 内 `bgm.tv`/`bangumi.tv` 的正整数 Subject 链接，把 `bgmid` 与发现状态/失败码写入 schema v26 批次和统一导入任务。成功结果按批次复用；失败不下载且允许下一次显式 RSS 处理重试。
 - [>] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}` 与官方 `/v0/subjects/{bgmid}/subjects` 实现 AOT-safe Subject/关系客户端、固定 User-Agent、日期/身份校验和稳定网络/协议失败分类；Episode 与缓存仍待实现。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
 - [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；Bangumi Subject → TMDB Series/Season 与逐文件 Episode worker/运行审计已接入，缓存和 Bangumi Episode 确定性匹配待实现）。
@@ -119,7 +119,7 @@
 - [x] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立统一 AI 阶段已接入且 Series/Season/Episode 结果必须经 TMDB 验证。
 - [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。
 - [ ] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试。
-- [>] 移植 Mikan → Bangumi → TMDB 编排与 fallback：携带 `bgmid` 的已下载任务已由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Backtrace、统一 AI 和固定 S01 的 Bangumi 完全兜底已串联，Mikan 页面自动发现 bgmid 待实现。
+- [x] 移植 Mikan → Bangumi → TMDB 编排与 fallback：RSS winner 已按上游作品页关系自动发现并持久化 `bgmid`，携带 `bgmid` 的已下载任务由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Backtrace、统一 AI 和固定 S01 的 Bangumi 完全兜底均已串联。页面缺链接、歧义、非可信域名、网络失败分别使用稳定失败码，失败批次不提前下载。
 - [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖由专用 worker 优先领取并权威验证，EP Offset 已在逐文件 TMDB Episode 验证前应用且无效时阻断静默回退；可信自动 offset 与字幕绑定仍待串联。
 - [x] 人工规则无效时记录人工覆盖策略失败并阻止静默自动覆盖；清除/禁用后可通过 `POST /api/v1/metadata/tasks/{taskId}/retry` 显式重新匹配，事务性恢复自动策略队列且保留历史运行记录，并拒绝活动租约/非失败状态。
 - [>] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误（客户端已稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；重试编排待实现）。
