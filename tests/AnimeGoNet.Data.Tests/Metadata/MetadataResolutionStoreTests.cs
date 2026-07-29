@@ -55,6 +55,55 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
+    public async Task AttemptTimelinePersistsSafeReasonAndIsQueryableAfterStoreRecreation()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var started = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                started,
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.RecordAttemptAsync(
+            claim,
+            new MetadataAttempt(
+                "series",
+                "tmdb_title",
+                4,
+                "failed",
+                "tmdb_network_error",
+                true,
+                claim.AttemptNumber,
+                125),
+            started.AddSeconds(1));
+        await fixture.Store.RecordAttemptAsync(
+            claim,
+            new MetadataAttempt(
+                "season",
+                "tmdb_fail_first_season",
+                1,
+                "matched",
+                null,
+                false,
+                claim.AttemptNumber,
+                5,
+                "validated local S01 fallback"),
+            started.AddSeconds(2));
+
+        var recreated = new MetadataResolutionStore(fixture.Database);
+        var attempts = await recreated.ListAttemptsAsync(fixture.TaskId);
+
+        Assert.Equal(2, attempts.Count);
+        Assert.Equal("season", attempts[0].Stage);
+        Assert.Equal("validated local S01 fallback", attempts[0].Reason);
+        Assert.Equal("tmdb_network_error", attempts[1].Reason);
+        Assert.True(attempts[1].Retryable);
+        Assert.Equal(125, attempts[1].DurationMilliseconds);
+        Assert.Equal(claim.RunId, attempts[1].RunId);
+        Assert.Equal(claim.AttemptNumber, attempts[1].RunAttemptNumber);
+        Assert.Equal("running", attempts[1].RunStatus);
+    }
+
+    [Fact]
     public async Task ManualClaimRequiresEnabledCompleteTmdbOverride()
     {
         await using var fixture = await MetadataFixture.CreateAsync();

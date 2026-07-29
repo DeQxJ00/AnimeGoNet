@@ -27,7 +27,26 @@ public sealed record MetadataAttempt(
     string? ErrorCode,
     bool Retryable,
     int AttemptNumber,
-    long DurationMilliseconds);
+    long DurationMilliseconds,
+    string? Reason = null);
+
+public sealed record MetadataAttemptProjection(
+    string AttemptId,
+    string RunId,
+    int RunAttemptNumber,
+    string RunStatus,
+    string Stage,
+    string Strategy,
+    int? Priority,
+    string Result,
+    string? ErrorCode,
+    string? Reason,
+    bool Retryable,
+    int AttemptNumber,
+    long DurationMilliseconds,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset RunStartedAtUtc,
+    DateTimeOffset? RunCompletedAtUtc);
 
 public sealed record MetadataRunProjection(
     string RunId,

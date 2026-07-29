@@ -119,6 +119,25 @@ interface MetadataItem {
   pending_file_count: number;
 }
 
+interface MetadataAttemptItem {
+  attempt_id: string;
+  run_id: string;
+  run_attempt_number: number;
+  run_status: string;
+  stage: string;
+  strategy: string;
+  priority: number | null;
+  result: string;
+  error_code: string | null;
+  reason: string | null;
+  retryable: boolean;
+  attempt_number: number;
+  duration_ms: number;
+  created_at_utc: string;
+  run_started_at_utc: string;
+  run_completed_at_utc: string | null;
+}
+
 interface PendingTmdbSummary {
   bgmid: number;
   fallback_name: string;
@@ -1031,6 +1050,67 @@ async function retryMetadataTask(taskId: string, button: HTMLButtonElement): Pro
   }
 }
 
+const expandedMetadataTaskIds = new Set<string>();
+
+async function loadMetadataAttempts(
+  taskId: string,
+  target: HTMLDivElement,
+  button: HTMLButtonElement,
+): Promise<void> {
+  expandedMetadataTaskIds.add(taskId);
+  button.disabled = true;
+  button.textContent = "读取策略时间线…";
+  try {
+    const response = await fetch(
+      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/attempts`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as { items: MetadataAttemptItem[] };
+    if (body.items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted metadata-attempt-empty";
+      empty.textContent = "尚无策略尝试记录。任务进入元数据阶段后会在这里显示。";
+      target.replaceChildren(empty);
+    } else {
+      target.replaceChildren(...body.items.map((attempt) => {
+        const row = document.createElement("article");
+        row.className = `metadata-attempt ${attempt.result === "failed" ? "failed" : ""}`;
+        const heading = document.createElement("div");
+        heading.className = "metadata-attempt-heading";
+        const strategy = document.createElement("strong");
+        strategy.textContent = `${attempt.stage} · ${attempt.strategy}`;
+        const result = document.createElement("span");
+        result.className = `badge ${attempt.result === "failed" ? "error" : "ready"}`;
+        result.textContent = attempt.result;
+        heading.append(strategy, result);
+        const execution = document.createElement("p");
+        execution.textContent = `P${textOrDash(attempt.priority)} · Run #${attempt.run_attempt_number} (${attempt.run_status}) · 尝试 #${attempt.attempt_number} · ${attempt.duration_ms} ms · ${new Date(attempt.created_at_utc).toLocaleString()}`;
+        row.append(heading, execution);
+        if (attempt.error_code || attempt.reason) {
+          const reason = document.createElement("p");
+          reason.className = "metadata-attempt-reason";
+          reason.textContent = `${textOrDash(attempt.error_code)} · ${textOrDash(attempt.reason)} · ${attempt.retryable ? "可自动重试" : "不可自动重试"}`;
+          row.append(reason);
+        }
+        return row;
+      }));
+    }
+    button.disabled = false;
+    button.textContent = "收起策略时间线";
+    button.onclick = () => {
+      expandedMetadataTaskIds.delete(taskId);
+      target.replaceChildren();
+      button.textContent = "查看策略时间线";
+      button.onclick = () => void loadMetadataAttempts(taskId, target, button);
+    };
+  } catch (error) {
+    target.textContent = `策略时间线读取失败：${errorMessage(error, "未知错误")}`;
+    button.disabled = false;
+    button.textContent = "重试策略时间线";
+  }
+}
+
 async function loadMetadataTasks(): Promise<void> {
   const container = element<HTMLElement>("#metadata-tasks");
   try {
@@ -1084,13 +1164,27 @@ async function loadMetadataTasks(): Promise<void> {
         failure.textContent = `${textOrDash(item.failure_kind)} · ${textOrDash(item.failure_reason)}`;
         card.append(failure);
       }
+      const actions = document.createElement("div");
+      actions.className = "metadata-actions";
+      const attempts = document.createElement("button");
+      attempts.type = "button";
+      attempts.className = "metadata-attempt-button";
+      attempts.textContent = "查看策略时间线";
+      const attemptList = document.createElement("div");
+      attemptList.className = "metadata-attempt-list";
+      attempts.onclick = () => void loadMetadataAttempts(item.task_id, attemptList, attempts);
+      actions.append(attempts);
       if (item.status === "metadata_failed") {
         const retry = document.createElement("button");
         retry.type = "button";
         retry.className = "retry-button";
         retry.textContent = "显式重新匹配";
         retry.addEventListener("click", () => void retryMetadataTask(item.task_id, retry));
-        card.append(retry);
+        actions.append(retry);
+      }
+      card.append(actions, attemptList);
+      if (expandedMetadataTaskIds.has(item.task_id)) {
+        void loadMetadataAttempts(item.task_id, attemptList, attempts);
       }
       return card;
     });

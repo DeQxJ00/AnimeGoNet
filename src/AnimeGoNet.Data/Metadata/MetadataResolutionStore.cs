@@ -499,6 +499,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
         ArgumentOutOfRangeException.ThrowIfNegative(attempt.DurationMilliseconds);
         ArgumentOutOfRangeException.ThrowIfLessThan(attempt.AttemptNumber, 1);
+        var reason = NormalizeAttemptReason(attempt.Reason ?? attempt.ErrorCode);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -506,7 +507,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 id, run_id, stage, strategy, priority, result, error_code,
                 reason, retryable, attempt_number, duration_ms, created_at_utc)
             SELECT $id, id, $stage, $strategy, $priority, $result, $error_code,
-                   NULL, $retryable, $attempt_number, $duration_ms, $created_at_utc
+                   $reason, $retryable, $attempt_number, $duration_ms, $created_at_utc
             FROM metadata_resolution_runs
             WHERE id = $run_id AND status = 'running' AND lease_token = $lease_token;
             """;
@@ -518,6 +519,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$priority", (object?)attempt.Priority ?? DBNull.Value);
         command.Parameters.AddWithValue("$result", attempt.Result);
         command.Parameters.AddWithValue("$error_code", (object?)attempt.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("$reason", (object?)reason ?? DBNull.Value);
         command.Parameters.AddWithValue("$retryable", attempt.Retryable ? 1 : 0);
         command.Parameters.AddWithValue("$attempt_number", attempt.AttemptNumber);
         command.Parameters.AddWithValue("$duration_ms", attempt.DurationMilliseconds);
@@ -1657,6 +1659,68 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(9) ? null : reader.GetString(9));
     }
 
+    public async Task<IReadOnlyList<MetadataAttemptProjection>> ListAttemptsAsync(
+        string taskId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 500);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT attempt.id, run.id, run.attempt_number, run.status,
+                   attempt.stage, attempt.strategy, attempt.priority, attempt.result,
+                   attempt.error_code, attempt.reason, attempt.retryable,
+                   attempt.attempt_number, attempt.duration_ms, attempt.created_at_utc,
+                   run.started_at_utc, run.completed_at_utc
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            WHERE run.task_id = $task_id
+            ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId.Trim());
+        command.Parameters.AddWithValue("$limit", limit);
+        var attempts = new List<MetadataAttemptProjection>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            attempts.Add(new MetadataAttemptProjection(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.GetInt64(10) != 0,
+                reader.GetInt32(11),
+                reader.GetInt64(12),
+                DateTimeOffset.Parse(
+                    reader.GetString(13),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind),
+                DateTimeOffset.Parse(
+                    reader.GetString(14),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind),
+                reader.IsDBNull(15)
+                    ? null
+                    : DateTimeOffset.Parse(
+                        reader.GetString(15),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind)));
+        }
+
+        return attempts;
+    }
+
     public async Task<IReadOnlyList<MetadataTaskListProjection>> ListTasksAsync(
         int limit = 100,
         CancellationToken cancellationToken = default)
@@ -1742,6 +1806,25 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
     private static string Format(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static string? NormalizeAttemptReason(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 512
+            || normalized.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "Metadata attempt reason must be at most 512 printable characters.",
+                nameof(value));
+        }
+
+        return normalized;
+    }
 
     private static DateTimeOffset? ParseDateTimeOffset(string value) =>
         DateTimeOffset.TryParse(

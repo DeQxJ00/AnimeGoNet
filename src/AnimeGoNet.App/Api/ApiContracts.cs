@@ -312,6 +312,28 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MetadataAttemptListResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("items")] IReadOnlyList<MetadataAttemptItemResponse> Items);
+
+public sealed record MetadataAttemptItemResponse(
+    [property: JsonPropertyName("attempt_id")] string AttemptId,
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("run_attempt_number")] int RunAttemptNumber,
+    [property: JsonPropertyName("run_status")] string RunStatus,
+    [property: JsonPropertyName("stage")] string Stage,
+    [property: JsonPropertyName("strategy")] string Strategy,
+    [property: JsonPropertyName("priority")] int? Priority,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("retryable")] bool Retryable,
+    [property: JsonPropertyName("attempt_number")] int AttemptNumber,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("run_started_at_utc")] DateTimeOffset RunStartedAtUtc,
+    [property: JsonPropertyName("run_completed_at_utc")] DateTimeOffset? RunCompletedAtUtc);
+
 public sealed record PendingTmdbListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
 

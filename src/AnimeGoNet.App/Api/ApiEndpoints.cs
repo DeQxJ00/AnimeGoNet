@@ -65,6 +65,7 @@ public static class ApiEndpoints
             ClearMikanTrustedOffset);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
+        app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
         app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
         app.MapPost(
@@ -1677,6 +1678,58 @@ public static class ApiEndpoints
             item.DuplicateFileCount,
             item.PendingFileCount,
             item.UpdatedAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> MetadataTaskAttempts(
+        string taskId,
+        [FromQuery] int? limit,
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return TypedResults.BadRequest(Error(
+                "metadata_task_id_invalid",
+                "Metadata task ID is required."));
+        }
+
+        var resolvedLimit = limit ?? 200;
+        if (resolvedLimit is < 1 or > 500)
+        {
+            return TypedResults.BadRequest(Error(
+                "metadata_attempt_limit_invalid",
+                "Metadata attempt limit must be between 1 and 500."));
+        }
+
+        if (await resolutions.GetTaskStatusAsync(taskId, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found",
+                "Metadata task was not found."));
+        }
+
+        var attempts = await resolutions
+            .ListAttemptsAsync(taskId, resolvedLimit, cancellationToken)
+            .ConfigureAwait(false);
+        return TypedResults.Ok(new MetadataAttemptListResponse(
+            taskId,
+            attempts.Select(attempt => new MetadataAttemptItemResponse(
+                attempt.AttemptId,
+                attempt.RunId,
+                attempt.RunAttemptNumber,
+                attempt.RunStatus,
+                attempt.Stage,
+                attempt.Strategy,
+                attempt.Priority,
+                attempt.Result,
+                attempt.ErrorCode,
+                attempt.Reason,
+                attempt.Retryable,
+                attempt.AttemptNumber,
+                attempt.DurationMilliseconds,
+                attempt.CreatedAtUtc,
+                attempt.RunStartedAtUtc,
+                attempt.RunCompletedAtUtc)).ToArray()));
     }
 
     private static async Task<Ok<PendingTmdbListResponse>> PendingTmdbSeries(

@@ -77,7 +77,7 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 该投影不返回 Torrent URL、passkey、下载器凭据或文件绝对路径。查询通过单条聚合 SQL 批量产生，避免逐任务读取策略或文件计数。只有已进入 `metadata_failed` 且没有活动租约的任务显示“显式重新匹配”，调用既有重试 API 后刷新状态；它不是自动重试开关，也不会覆盖人工规则。
 
-当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例，尚未实现的筛选、策略尝试时间线、作品 CRUD、Cover 和 TMDB EP 网格仍按 TODO 独立验收。
+当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例。任务卡片已可按需读取完整策略尝试时间线；尚未实现的筛选、作品 CRUD、Cover 和 TMDB EP 网格仍按 TODO 独立验收。
 
 可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同 EP 进度。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
 
