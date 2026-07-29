@@ -244,6 +244,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<PendingTmdbNfoRewriteStore>();
         builder.Services.AddSingleton<CompletionRecordStore>();
         builder.Services.AddSingleton<AnimeLibraryStore>();
+        builder.Services.AddSingleton<AnimeLibraryAdminStore>();
         if (tmdbPosterTransport is null)
         {
             builder.Services.AddSingleton<ITmdbPosterTransport>(_ =>

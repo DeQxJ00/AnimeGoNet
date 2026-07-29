@@ -476,6 +476,7 @@ interface AnimeSeasonListItem {
   air_date: string | null;
   added_at_utc: string;
   last_updated_at_utc: string;
+  resource_revision: string;
   episode_total: number;
   episode_snapshot_count: number;
   episode_downloaded: number;
@@ -521,6 +522,7 @@ interface AnimeSeasonDetail {
   air_date: string | null;
   added_at_utc: string;
   last_updated_at_utc: string;
+  resource_revision: string;
   episode_total: number;
   episode_snapshot_count: number;
   episode_downloaded: number;
@@ -1938,6 +1940,10 @@ function renderLibraryDetail(detail: AnimeSeasonDetail, focus: boolean): void {
   if (detail.warnings.length > 0) content.append(renderLibraryWarnings(detail.warnings));
   layout.append(image, content);
   summary.replaceChildren(layout);
+  element<HTMLButtonElement>("#library-detail-refresh").disabled = false;
+  element<HTMLButtonElement>("#library-detail-delete").disabled = false;
+  element<HTMLElement>("#library-detail-action-status").textContent =
+    "刷新只更新 TMDB 权威投影；删除不处理业务记录、下载器任务或文件。";
   renderLibraryEpisodes(detail);
   if (focus) {
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1957,6 +1963,9 @@ async function loadLibraryDetail(
   element<HTMLElement>("#library-detail-summary").replaceChildren();
   element<HTMLElement>("#library-episodes").replaceChildren();
   element<HTMLElement>("#library-episode-status").textContent = "";
+  element<HTMLButtonElement>("#library-detail-refresh").disabled = true;
+  element<HTMLButtonElement>("#library-detail-delete").disabled = true;
+  element<HTMLElement>("#library-detail-action-status").textContent = "";
   try {
     const response = await fetch(
       `/api/v1/library/seasons/${tmdbSeriesId}/${seasonNumber}`,
@@ -2024,6 +2033,120 @@ async function loadLibrary(): Promise<void> {
     failure.textContent = `作品库读取失败：${errorMessage(error, "未知错误")}`;
     list.replaceChildren(failure);
     element<HTMLElement>("#library-status").textContent = "读取失败";
+  }
+}
+
+async function createLibrarySeason(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const buttonElement = element<HTMLButtonElement>("#library-create");
+  const status = element<HTMLElement>("#library-admin-status");
+  const tmdbSeriesId = element<HTMLInputElement>("#library-create-series").valueAsNumber;
+  const seasonNumber = element<HTMLInputElement>("#library-create-season").valueAsNumber;
+  if (!Number.isInteger(tmdbSeriesId) || tmdbSeriesId <= 0
+      || !Number.isInteger(seasonNumber) || seasonNumber <= 0) {
+    status.textContent = "TMDB Series ID 与 Season 必须是正整数。";
+    return;
+  }
+
+  buttonElement.disabled = true;
+  status.textContent = `正在通过 TMDB 验证 Series ${tmdbSeriesId} / Season ${seasonNumber}…`;
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/library/seasons", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        tmdb_series_id: tmdbSeriesId,
+        tmdb_season_number: seasonNumber,
+      }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    libraryState.active_series_id = tmdbSeriesId;
+    libraryState.active_season_number = seasonNumber;
+    libraryState.page = 1;
+    saveLibraryState();
+    status.textContent =
+      `已添加 TMDB ${tmdbSeriesId} / S${String(seasonNumber).padStart(2, "0")}，正在刷新作品库。`;
+    await loadLibrary();
+    await loadLibraryDetail(tmdbSeriesId, seasonNumber, true);
+  } catch (error) {
+    status.textContent = `添加失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    buttonElement.disabled = false;
+  }
+}
+
+async function refreshLibrarySeason(): Promise<void> {
+  if (!activeLibraryDetail) return;
+  const detail = activeLibraryDetail;
+  if (!window.confirm(
+    `从 TMDB 重新获取 Series ${detail.tmdb_series_id} / Season ${detail.tmdb_season_number}？`
+    + " 名称、封面、季度和 EP snapshot 将以 TMDB 当前返回值为准；完成记录不会删除。",
+  )) return;
+
+  const refresh = element<HTMLButtonElement>("#library-detail-refresh");
+  const remove = element<HTMLButtonElement>("#library-detail-delete");
+  const status = element<HTMLElement>("#library-detail-action-status");
+  refresh.disabled = true;
+  remove.disabled = true;
+  status.textContent = "正在验证并刷新 TMDB 权威投影…";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch(
+      `/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}`,
+      {
+        method: "PUT",
+        headers: requestHeaders,
+        body: JSON.stringify({ expected_revision: detail.resource_revision }),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    status.textContent = "TMDB 权威投影已刷新。";
+    await loadLibrary();
+    await loadLibraryDetail(detail.tmdb_series_id, detail.tmdb_season_number);
+  } catch (error) {
+    status.textContent =
+      `刷新失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新载入。`;
+    refresh.disabled = false;
+    remove.disabled = false;
+  }
+}
+
+async function deleteLibrarySeason(): Promise<void> {
+  if (!activeLibraryDetail) return;
+  const detail = activeLibraryDetail;
+  if (!window.confirm(
+    `仅删除 ${detail.display_name} / ${detail.season_name} 的本地 TMDB 投影？`
+    + " 服务端会拒绝仍有任务、完成记录、claim、人工规则或待写 NFO 引用的季度。"
+    + " 此操作不会删除下载器任务、下载源文件或媒体文件。",
+  )) return;
+
+  const refresh = element<HTMLButtonElement>("#library-detail-refresh");
+  const remove = element<HTMLButtonElement>("#library-detail-delete");
+  const status = element<HTMLElement>("#library-detail-action-status");
+  refresh.disabled = true;
+  remove.disabled = true;
+  status.textContent = "正在检查引用并删除投影…";
+  try {
+    const query = new URLSearchParams({
+      expected_revision: detail.resource_revision,
+    });
+    const response = await fetch(
+      `/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}?${query}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    closeLibraryDetail();
+    element<HTMLElement>("#library-admin-status").textContent =
+      `已删除 TMDB ${detail.tmdb_series_id} / S${String(detail.tmdb_season_number).padStart(2, "0")} 的无引用投影。`;
+    await loadLibrary();
+  } catch (error) {
+    status.textContent =
+      `删除失败：${errorMessage(error, "未知错误")}；有业务引用时请使用四类删除流程。`;
+    refresh.disabled = false;
+    remove.disabled = false;
   }
 }
 
@@ -5434,6 +5557,10 @@ element<HTMLButtonElement>("#download-next").addEventListener("click", () => {
   void loadDownloads();
 });
 element<HTMLButtonElement>("#library-reload").addEventListener("click", () => void loadLibrary());
+element<HTMLFormElement>("#library-create-form").addEventListener(
+  "submit",
+  (event) => void createLibrarySeason(event),
+);
 element<HTMLSelectElement>("#library-sort").addEventListener("change", changeLibraryOrdering);
 element<HTMLSelectElement>("#library-direction").addEventListener("change", changeLibraryOrdering);
 element<HTMLSelectElement>("#library-page-size").addEventListener("change", changeLibraryOrdering);
@@ -5455,6 +5582,14 @@ element<HTMLButtonElement>("#library-detail-close").addEventListener("click", ()
   closeLibraryDetail();
   activeCard?.focus();
 });
+element<HTMLButtonElement>("#library-detail-refresh").addEventListener(
+  "click",
+  () => void refreshLibrarySeason(),
+);
+element<HTMLButtonElement>("#library-detail-delete").addEventListener(
+  "click",
+  () => void deleteLibrarySeason(),
+);
 element<HTMLSelectElement>("#library-episode-filter").addEventListener("change", () => {
   libraryState.episode_filter = element<HTMLSelectElement>("#library-episode-filter")
     .value as AnimeEpisodeFilter;

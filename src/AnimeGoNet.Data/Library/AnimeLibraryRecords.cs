@@ -31,6 +31,7 @@ public sealed record AnimeSeasonListProjection(
     DateOnly? AirDate,
     DateTimeOffset AddedAt,
     DateTimeOffset LastUpdatedAt,
+    string ResourceRevision,
     int EpisodeTotal,
     int EpisodeSnapshotCount,
     int EpisodeDownloaded,

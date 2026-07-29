@@ -70,7 +70,9 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    episode_snapshot_count, episode_downloaded,
                    series_resolution_source, season_resolution_source,
                    validation_status, last_resolution_run_id,
-                   all_completion_count, missing_media_path_count
+                   all_completion_count, missing_media_path_count,
+                   series_resource_id, series_resource_updated_at,
+                   season_resource_id, season_resource_updated_at
             FROM projection
             WHERE tmdb_series_id = $tmdb_series_id
               AND season_number = $season_number
@@ -202,7 +204,9 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    episode_snapshot_count, episode_downloaded,
                    series_resolution_source, season_resolution_source,
                    validation_status, last_resolution_run_id,
-                   all_completion_count, missing_media_path_count
+                   all_completion_count, missing_media_path_count,
+                   series_resource_id, series_resource_updated_at,
+                   season_resource_id, season_resource_updated_at
             FROM projection
             ORDER BY {{orderBy}}
             LIMIT $limit OFFSET $offset;
@@ -320,7 +324,11 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                     run.id AS last_resolution_run_id,
                     COALESCE(completion.completion_count, 0) AS all_completion_count,
                     COALESCE(completion.missing_media_path_count, 0)
-                        AS missing_media_path_count
+                        AS missing_media_path_count,
+                    series.id AS series_resource_id,
+                    series.updated_at_utc AS series_resource_updated_at,
+                    season.id AS season_resource_id,
+                    season.updated_at_utc AS season_resource_updated_at
                 FROM anime_seasons AS season
                 JOIN anime_series AS series ON series.id = season.series_id
                 LEFT JOIN episode_aggregate AS episodes
@@ -380,6 +388,11 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
         }
 
         var displayName = reader.GetString(2);
+        var resourceRevision = AnimeLibraryResourceRevision.Create(
+            reader.GetString(19),
+            reader.GetString(20),
+            reader.GetString(21),
+            reader.GetString(22));
         return new AnimeSeasonListProjection(
             reader.GetInt32(0),
             reader.GetInt32(1),
@@ -391,6 +404,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             ParseDate(reader, 6),
             ParseTimestamp(reader.GetString(7)),
             ParseTimestamp(reader.GetString(8)),
+            resourceRevision,
             episodeTotal,
             episodeSnapshotCount,
             episodeDownloaded,

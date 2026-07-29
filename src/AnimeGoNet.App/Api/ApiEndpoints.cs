@@ -87,6 +87,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
+        app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
         app.MapPost("/api/v1/library/directory-database/refresh", RefreshDirectoryDatabase);
         app.MapGet("/api/v1/data-update", GetDataUpdateStatus);
@@ -101,6 +102,12 @@ public static class ApiEndpoints
         app.MapGet(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibrarySeasonDetail);
+        app.MapPut(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
+            RefreshLibrarySeason);
+        app.MapDelete(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
+            DeleteLibrarySeason);
         app.MapGet(
             "/api/v1/library/covers/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibraryCover);
@@ -3370,6 +3377,7 @@ public static class ApiEndpoints
                     item.AirDate,
                     item.AddedAt,
                     item.LastUpdatedAt,
+                    item.ResourceRevision,
                     item.EpisodeTotal,
                     item.EpisodeSnapshotCount,
                     item.EpisodeDownloaded,
@@ -3379,6 +3387,90 @@ public static class ApiEndpoints
                     item.LastResolutionRunId,
                     item.Warnings);
             }).ToArray()));
+    }
+
+    private static async Task<IResult> CreateLibrarySeason(
+        AnimeSeasonCreateRequest request,
+        ITmdbClient tmdb,
+        AnimeLibraryAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        if (request.TmdbSeriesId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_series_id_invalid",
+                "TMDB Series ID must be a positive integer."));
+        }
+
+        if (request.TmdbSeasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_season_number_invalid",
+                "TMDB Season number must be a positive integer."));
+        }
+
+        try
+        {
+            var series = await tmdb.GetSeriesAsync(
+                request.TmdbSeriesId,
+                cancellationToken).ConfigureAwait(false);
+            if (series?.Id != request.TmdbSeriesId)
+            {
+                return TypedResults.NotFound(Error(
+                    "library_tmdb_series_not_found",
+                    "TMDB TV Series could not be verified."));
+            }
+
+            var season = await tmdb.GetSeasonAsync(
+                series.Id,
+                request.TmdbSeasonNumber,
+                cancellationToken).ConfigureAwait(false);
+            if (season?.SeriesId != series.Id
+                || season.SeasonNumber != request.TmdbSeasonNumber)
+            {
+                return TypedResults.NotFound(Error(
+                    "library_tmdb_season_not_found",
+                    "TMDB Season could not be verified."));
+            }
+
+            var result = await admin.CreateAsync(
+                series,
+                season,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            if (result.Status == AnimeLibraryMutationStatus.AlreadyExists)
+            {
+                return TypedResults.Conflict(Error(
+                    "library_season_exists",
+                    "The TMDB Season already exists; refresh the existing resource instead."));
+            }
+
+            var response = new AnimeSeasonMutationResponse(
+                "created",
+                result.TmdbSeriesId,
+                result.SeasonNumber,
+                result.ResourceRevision!);
+            return Results.Json(
+                response,
+                ApiJsonContext.Default.AnimeSeasonMutationResponse,
+                statusCode: StatusCodes.Status201Created);
+        }
+        catch (TmdbClientException exception)
+        {
+            return LibraryTmdbFailure(exception, "TMDB library creation failed.");
+        }
+        catch (InvalidOperationException)
+        {
+            return TypedResults.Conflict(Error(
+                "library_tmdb_identity_conflict",
+                "TMDB identity conflicts with the existing canonical library."));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_tmdb_payload_invalid",
+                "TMDB returned an invalid Series or Season snapshot."));
+        }
     }
 
     private static async Task<IResult> LibrarySeasonDetail(
@@ -3431,6 +3523,7 @@ public static class ApiEndpoints
             season.AirDate,
             season.AddedAt,
             season.LastUpdatedAt,
+            season.ResourceRevision,
             season.EpisodeTotal,
             season.EpisodeSnapshotCount,
             season.EpisodeDownloaded,
@@ -3452,6 +3545,213 @@ public static class ApiEndpoints
                 episode.DownloadedAtUtc,
                 episode.MediaPathKnown)).ToArray()));
     }
+
+    private static async Task<IResult> RefreshLibrarySeason(
+        int tmdbSeriesId,
+        int seasonNumber,
+        AnimeSeasonRefreshRequest request,
+        ITmdbClient tmdb,
+        AnimeLibraryStore library,
+        AnimeLibraryAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_series_id_invalid",
+                "TMDB Series ID must be a positive integer."));
+        }
+
+        if (seasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_season_number_invalid",
+                "TMDB Season number must be a positive integer."));
+        }
+
+        if (!IsLibraryRevision(request.ExpectedRevision))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_revision_invalid",
+                "A 64-character resource revision is required."));
+        }
+
+        var current = await library.GetSeasonAsync(
+            tmdbSeriesId,
+            seasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (current is null)
+        {
+            return TypedResults.NotFound(Error(
+                "library_season_not_found",
+                "The requested TMDB season was not found in the local library."));
+        }
+
+        if (!string.Equals(
+            current.Season.ResourceRevision,
+            request.ExpectedRevision,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.Conflict(Error(
+                "library_revision_conflict",
+                "The library season changed; reload it before refreshing."));
+        }
+
+        try
+        {
+            var series = await tmdb.GetSeriesAsync(
+                tmdbSeriesId,
+                cancellationToken).ConfigureAwait(false);
+            if (series?.Id != tmdbSeriesId)
+            {
+                return TypedResults.NotFound(Error(
+                    "library_tmdb_series_not_found",
+                    "TMDB TV Series could not be verified."));
+            }
+
+            var season = await tmdb.GetSeasonAsync(
+                series.Id,
+                seasonNumber,
+                cancellationToken).ConfigureAwait(false);
+            if (season?.SeriesId != series.Id
+                || season.SeasonNumber != seasonNumber)
+            {
+                return TypedResults.NotFound(Error(
+                    "library_tmdb_season_not_found",
+                    "TMDB Season could not be verified."));
+            }
+
+            var result = await admin.RefreshAsync(
+                series,
+                season,
+                request.ExpectedRevision!,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            if (result.Status == AnimeLibraryMutationStatus.NotFound)
+            {
+                return TypedResults.NotFound(Error(
+                    "library_season_not_found",
+                    "The requested TMDB season was not found in the local library."));
+            }
+
+            if (result.Status == AnimeLibraryMutationStatus.RevisionConflict)
+            {
+                return TypedResults.Conflict(Error(
+                    "library_revision_conflict",
+                    "The library season changed; reload it before refreshing."));
+            }
+
+            return TypedResults.Ok(new AnimeSeasonMutationResponse(
+                "refreshed",
+                result.TmdbSeriesId,
+                result.SeasonNumber,
+                result.ResourceRevision!));
+        }
+        catch (TmdbClientException exception)
+        {
+            return LibraryTmdbFailure(exception, "TMDB library refresh failed.");
+        }
+        catch (InvalidOperationException)
+        {
+            return TypedResults.Conflict(Error(
+                "library_tmdb_identity_conflict",
+                "TMDB identity conflicts with the existing canonical library."));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_tmdb_payload_invalid",
+                "TMDB returned an invalid Series or Season snapshot."));
+        }
+    }
+
+    private static async Task<IResult> DeleteLibrarySeason(
+        int tmdbSeriesId,
+        int seasonNumber,
+        [FromQuery(Name = "expected_revision")] string? expectedRevision,
+        AnimeLibraryAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_series_id_invalid",
+                "TMDB Series ID must be a positive integer."));
+        }
+
+        if (seasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_season_number_invalid",
+                "TMDB Season number must be a positive integer."));
+        }
+
+        if (!IsLibraryRevision(expectedRevision))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_revision_invalid",
+                "A 64-character resource revision is required."));
+        }
+
+        var result = await admin.DeleteAsync(
+            tmdbSeriesId,
+            seasonNumber,
+            expectedRevision!,
+            cancellationToken).ConfigureAwait(false);
+        return result.Status switch
+        {
+            AnimeLibraryMutationStatus.Deleted =>
+                TypedResults.Ok(new AnimeSeasonDeleteResponse(
+                    "deleted",
+                    result.TmdbSeriesId,
+                    result.SeasonNumber,
+                    result.SeriesRemoved)),
+            AnimeLibraryMutationStatus.NotFound =>
+                TypedResults.NotFound(Error(
+                    "library_season_not_found",
+                    "The requested TMDB season was not found in the local library.")),
+            AnimeLibraryMutationStatus.RevisionConflict =>
+                TypedResults.Conflict(Error(
+                    "library_revision_conflict",
+                    "The library season changed; reload it before deleting.")),
+            AnimeLibraryMutationStatus.InUse =>
+                TypedResults.Conflict(Error(
+                    "library_season_in_use",
+                    LibraryReferenceMessage(result.References!))),
+            _ => throw new InvalidOperationException(
+                "Unexpected library delete result."),
+        };
+    }
+
+    private static JsonHttpResult<ApiErrorResponse> LibraryTmdbFailure(
+        TmdbClientException exception,
+        string message)
+    {
+        var status = exception.Kind is MetadataFailureKind.Network
+            or MetadataFailureKind.RemoteService
+            ? StatusCodes.Status503ServiceUnavailable
+            : StatusCodes.Status502BadGateway;
+        return TypedResults.Json(
+            Error(exception.SafeCode, message),
+            ApiJsonContext.Default.ApiErrorResponse,
+            statusCode: status);
+    }
+
+    private static bool IsLibraryRevision(string? value) =>
+        value is { Length: 64 }
+        && value.All(Uri.IsHexDigit);
+
+    private static string LibraryReferenceMessage(
+        AnimeLibraryReferenceSummary references) =>
+        "Library projection is still referenced "
+        + $"(task files: {references.TaskFiles}, "
+        + $"completion records: {references.CompletionRecords}, "
+        + $"episode claims: {references.EpisodeClaims}, "
+        + $"Mikan work rules: {references.MikanWorkRules}, "
+        + $"fallback records: {references.FallbackCompletionRecords}, "
+        + $"pending NFO rewrites: {references.PendingNfoRewriteJobs}). "
+        + "Use the four-part deletion workflow for business data, downloader tasks, "
+        + "source files or media files.";
 
     private static async Task<IResult> LibraryCover(
         int tmdbSeriesId,

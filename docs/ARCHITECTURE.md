@@ -68,6 +68,8 @@ AnimeGoNet.slnx
 - 人工覆盖优先；确定性季度失败链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`。P3 需要 `bgmid`，按每个 Bangumi 前作的日文名、中文名和开播日期重新联合验证完整 `tmdbid + Season`，可恢复不同的 TMDB Series。P2 只解析统一导入任务 `title`，P1 固定本地 `S01`，两者都不验证 TMDB Season，并保存实际取得策略供 UI 区分。AI 元数据匹配是一个独立、默认关闭的任务级阶段：一个开关、一个 Prompt、每任务最多一次调用，同时返回 Series/Season/Episode；HTTP 默认超时 600 秒，Backtrace、AI 和后续 Episode 候选仍须由 TMDB 验证。
 - 特别篇、小数集号和无法可靠匹配的文件不转换为普通整数 EP；Series/普通 Season 已确认时保留原名进入该季度 `Other`。
 
+作品库管理继续服从 TMDB 权威边界。创建只以 `TMDB Series ID + Season` 在线验证后写入 Series/Season/完整 Episode snapshot；刷新使用由内部行身份与更新时间计算的 SHA-256 `resource_revision` 做乐观并发，并重新验证相同 TMDB 身份；没有自由文本改名或本地伪造 Season/EP 的写入口。删除只移除无引用的本地投影：事务内检查任务文件、完成记录、Episode claim、Mikan 人工规则、fallback 完成记录和活动 NFO 重写，任何命中都拒绝并引导四类删除流程；下载器任务、源文件和媒体文件永不由作品库 CRUD 处理。
+
 ### 任务、去重与生命周期
 
 - `IngestTask`：接受一个统一导入 item 后的总任务，保存来源/路由/规则快照。

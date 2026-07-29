@@ -85,13 +85,17 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 静态 TypeScript 页面持久化纯 UI 筛选/排序/分页偏好，自动刷新继续沿用当前查询；失败卡片同时展示任务失败分类、最新失败阶段、稳定错误码、可重试性和脱敏原因。筛选 API 最多扫描最近 500 个运维任务，这是首版本地控制面的有界投影，不改变 SQLite 中的完整任务与尝试审计。
 
-当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例。任务卡片已可按需读取完整策略尝试时间线；标准作品库页面已经独立读取季度列表/详情 API。尚未实现的运维筛选和完整作品 CRUD 仍按 TODO 独立验收。
+当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例。任务卡片已可按需读取完整策略尝试时间线；标准作品库页面已经独立读取季度列表/详情 API，并提供 TMDB 权威季度的创建、刷新和安全删除。
 
 SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster 路径，并为普通 Season 保存首播日期、TMDB Episode 总数与 poster 路径。正常自动/人工解析和“待补全 TMDB”恢复共用同一投影；这些字段是作品库查询和 Cover 代理的权威输入，浏览器不直连 TMDB 图片 URL。
 
 `GET /api/v1/library/seasons` 已提供第 6 节的季度列表基础投影和服务端分页。`sort` 接受 `last_updated`、`name`、`air_date`、`added_at`，`direction` 接受 `asc`/`desc`；空开播日期在两个方向都置后。列表用单次批量查询聚合完整 Episode snapshot 与规范完成记录，返回 snapshot 缺口、snapshot 外完成记录、完成记录缺媒体路径和本地未验证季度警告。`tmdbid=0` 条目始终排除。响应中的 `poster_url` 固定指向同源 Cover API；`poster_path` 只是诊断用的经校验 TMDB 相对路径，页面不得自行拼接外部 URL。
 
 `GET /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 返回季度头部和完整 EP 网格。网格只枚举该季度实际保存的 `tmdb_episodes`，不会按 `episode_count` 猜造缺失项；状态只由同一规范 TMDB 三元组的 `completion_records` 决定。响应可显示来源、完成时间和媒体路径是否已记录，但不返回媒体绝对路径、内部 SQLite 行 ID、Torrent URL 或凭据。删除完成记录后下一次读取立即显示 `not_downloaded`。
+
+`POST /api/v1/library/seasons` 只接受正整数 `tmdb_series_id` 与普通 `tmdb_season_number`。服务端必须分别读取并验证 TMDB Series、Season 的身份，再以 TMDB 名称、开播日期、封面和完整 Episode snapshot 创建本地投影；页面不允许手工填写动画名、季度名或 Episode。已存在资源返回冲突，不能用创建请求静默覆盖。
+
+`PUT /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 是权威刷新，不是自由编辑。请求必须提交详情响应中的 64 位 `expected_revision`；服务端在远端请求前和写事务内都检查 revision，再重新验证 Series 与 Season，替换 TMDB 当前 Episode snapshot，并保留规范完成记录。`DELETE` 使用相同 revision；只删除无业务引用的本地 Season/EP 投影，最后一个 Season 删除后才删除 Series。任务文件、完成记录、Episode claim、Mikan 人工规则、fallback 完成记录或活动 NFO 重写仍引用该身份时返回冲突，并要求使用四类删除流程。该操作始终不删除 qBittorrent 任务、源文件或媒体文件。
 
 `GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}` 依次读取 Season poster、Series poster、本地 SVG 占位图。远端图片使用 TMDB 的无密钥图片地址并复用 TMDB 代理设置，限制 5 MiB、校验 JPEG/PNG/WebP 魔数、合并同一 poster 的并发下载，并缓存到 `data_path/cache/covers`。上游超时、不可用或返回非图片时均返回短缓存占位图；响应头标明来源、缓存命中和安全警告码。浏览器请求、URL 和响应中都没有 TMDB API key。
 

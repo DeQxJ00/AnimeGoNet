@@ -55,6 +55,16 @@
         <button id="library-reload" type="button" class="secondary-button">刷新作品库</button>
       </div>
       <p class="muted">每张卡片代表一个已验证的 TMDB Series + 普通 Season；进度和 EP 网格只认 TMDB Episode 与规范完成记录。</p>
+      <form id="library-create-form" class="library-admin-form">
+        <label>TMDB Series ID
+          <input id="library-create-series" type="number" min="1" step="1" required>
+        </label>
+        <label>Season
+          <input id="library-create-season" type="number" min="1" step="1" required>
+        </label>
+        <button id="library-create" type="submit" class="primary-button">从 TMDB 添加</button>
+        <span id="library-admin-status" class="muted" role="status">名称、封面、季度和 EP snapshot 将直接采用 TMDB 返回值。</span>
+      </form>
       <div class="library-toolbar" aria-label="作品库排序和分页设置">
         <label>排序
           <select id="library-sort">
@@ -97,6 +107,11 @@
           <button id="library-detail-close" type="button" class="icon-button" aria-label="关闭季度详情">×</button>
         </div>
         <div id="library-detail-summary"></div>
+        <div class="library-detail-actions">
+          <button id="library-detail-refresh" type="button" class="secondary-button">从 TMDB 刷新</button>
+          <button id="library-detail-delete" type="button" class="danger-button">删除无引用投影</button>
+          <span id="library-detail-action-status" class="muted" role="status"></span>
+        </div>
         <div class="library-episode-toolbar">
           <label>EP 状态
             <select id="library-episode-filter">

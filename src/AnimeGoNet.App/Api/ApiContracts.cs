@@ -547,6 +547,7 @@ public sealed record AnimeSeasonListItemResponse(
     [property: JsonPropertyName("air_date")] DateOnly? AirDate,
     [property: JsonPropertyName("added_at_utc")] DateTimeOffset AddedAtUtc,
     [property: JsonPropertyName("last_updated_at_utc")] DateTimeOffset LastUpdatedAtUtc,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision,
     [property: JsonPropertyName("episode_total")] int EpisodeTotal,
     [property: JsonPropertyName("episode_snapshot_count")] int EpisodeSnapshotCount,
     [property: JsonPropertyName("episode_downloaded")] int EpisodeDownloaded,
@@ -568,6 +569,7 @@ public sealed record AnimeSeasonDetailResponse(
     [property: JsonPropertyName("air_date")] DateOnly? AirDate,
     [property: JsonPropertyName("added_at_utc")] DateTimeOffset AddedAtUtc,
     [property: JsonPropertyName("last_updated_at_utc")] DateTimeOffset LastUpdatedAtUtc,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision,
     [property: JsonPropertyName("episode_total")] int EpisodeTotal,
     [property: JsonPropertyName("episode_snapshot_count")] int EpisodeSnapshotCount,
     [property: JsonPropertyName("episode_downloaded")] int EpisodeDownloaded,
@@ -590,6 +592,25 @@ public sealed record AnimeEpisodeItemResponse(
     [property: JsonPropertyName("source_id")] string? SourceId,
     [property: JsonPropertyName("downloaded_at_utc")] DateTimeOffset? DownloadedAtUtc,
     [property: JsonPropertyName("media_path_known")] bool MediaPathKnown);
+
+public sealed record AnimeSeasonCreateRequest(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber);
+
+public sealed record AnimeSeasonRefreshRequest(
+    [property: JsonPropertyName("expected_revision")] string? ExpectedRevision);
+
+public sealed record AnimeSeasonMutationResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision);
+
+public sealed record AnimeSeasonDeleteResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("series_removed")] bool SeriesRemoved);
 
 public sealed record PendingTmdbListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
