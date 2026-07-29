@@ -76,6 +76,50 @@ public sealed class TorrentStagingServiceTests
         Assert.Equal(2, transport.CallCount);
     }
 
+    [Fact]
+    public async Task MikanCookieIsWithheldFromAllowedCrossHostRedirect()
+    {
+        const string secret = "private-cookie";
+        await using var fixture = new StagingFixture();
+        var transport = new CredentialRecordingTransport(uri =>
+            uri.IdnHost == "mikan.example"
+                ? Response(
+                    HttpStatusCode.Redirect,
+                    [],
+                    new Uri("https://cdn.example/file.torrent"))
+                : Response(HttpStatusCode.OK, ValidTorrent()));
+        var service = fixture.CreateService(
+            new FakeDnsResolver(PublicAddress),
+            transport);
+
+        await using var staged = await service.StageAsync(
+            new Uri("https://mikan.example/private/file.torrent"),
+            new TorrentSourcePolicy(
+                "mikan-private",
+                ["mikan.example", "cdn.example"],
+                secret));
+
+        Assert.Collection(
+            transport.Requests,
+            first =>
+            {
+                Assert.Equal("mikan.example", first.Host);
+                Assert.True(first.CredentialsConfigured);
+            },
+            second =>
+            {
+                Assert.Equal("cdn.example", second.Host);
+                Assert.False(second.CredentialsConfigured);
+            });
+        Assert.DoesNotContain(
+            secret,
+            new TorrentSourcePolicy(
+                "mikan-private",
+                ["mikan.example"],
+                secret).ToString(),
+            StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("127.0.0.1")]
     [InlineData("10.0.0.1")]
@@ -246,6 +290,38 @@ public sealed class TorrentStagingServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
             Addresses = validatedAddresses;
+            return ValueTask.FromResult(responseFactory(uri));
+        }
+    }
+
+    private sealed class CredentialRecordingTransport(
+        Func<Uri, TorrentHttpResponse> responseFactory)
+        : ITorrentHttpTransport
+    {
+        public List<(string Host, bool CredentialsConfigured)> Requests
+        {
+            get;
+        } = [];
+
+        public ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            CancellationToken cancellationToken) =>
+            SendAsync(
+                uri,
+                validatedAddresses,
+                new TorrentHttpRequestOptions(),
+                cancellationToken);
+
+        public ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            TorrentHttpRequestOptions requestOptions,
+            CancellationToken cancellationToken)
+        {
+            _ = validatedAddresses;
+            cancellationToken.ThrowIfCancellationRequested();
+            Requests.Add((uri.IdnHost, requestOptions.CredentialsConfigured));
             return ValueTask.FromResult(responseFactory(uri));
         }
     }

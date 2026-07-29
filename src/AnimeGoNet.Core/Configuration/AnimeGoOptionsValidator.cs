@@ -3,6 +3,8 @@ using AnimeGoNet.Core.Scheduling;
 
 namespace AnimeGoNet.Core.Configuration;
 
+using AnimeGoNet.Core.Sources;
+
 public static partial class AnimeGoOptionsValidator
 {
     public static IReadOnlyList<string> Validate(AnimeGoOptions options)
@@ -66,6 +68,26 @@ public static partial class AnimeGoOptionsValidator
                 {
                     errors.Add($"Source profile '{profile.Id}' has invalid Torrent host pattern '{host}'.");
                 }
+            }
+
+            try
+            {
+                var cookie = MikanIdentityCookie.NormalizeOptional(
+                    profile.MikanIdentityCookie);
+                if (cookie is not null
+                    && !string.Equals(
+                        profile.Adapter,
+                        "mikan",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add(
+                        $"Source profile '{profile.Id}' can only configure a Mikan identity Cookie when adapter is mikan.");
+                }
+            }
+            catch (ArgumentException exception)
+            {
+                errors.Add(
+                    $"Source profile '{profile.Id}' has an invalid Mikan identity Cookie: {exception.Message}");
             }
 
             try

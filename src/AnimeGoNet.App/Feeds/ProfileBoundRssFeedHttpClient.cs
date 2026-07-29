@@ -8,16 +8,36 @@ namespace AnimeGoNet.App.Feeds;
 public sealed class ProfileBoundRssFeedHttpClient(
     SourceProfileStore profiles,
     ITorrentDnsResolver dnsResolver,
-    ITorrentHttpTransport transport) : IRssFeedHttpClient
+    ITorrentHttpTransport transport) : ISourceProfileRssFeedHttpClient
 {
     private const int MaximumRedirects = 5;
 
     public async Task<ReadOnlyMemory<byte>> GetAsync(
         Uri uri,
+        CancellationToken cancellationToken = default) =>
+        await GetAsync(
+            uri,
+            "mikan",
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task<ReadOnlyMemory<byte>> GetAsync(
+        Uri uri,
+        string sourceProfileId,
         CancellationToken cancellationToken = default)
     {
-        var profile = await profiles.GetEnabledAsync("mikan", cancellationToken).ConfigureAwait(false)
+        var profile = await profiles
+            .GetEnabledAsync(sourceProfileId, cancellationToken)
+            .ConfigureAwait(false)
             ?? throw new RssFeedException("rss_source_profile_missing", "Enabled Mikan source profile was not found.");
+        if (!string.Equals(
+            profile.Adapter,
+            "mikan",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new RssFeedException(
+                "rss_source_profile_invalid",
+                "RSS source profile must use the Mikan adapter.");
+        }
         var current = uri;
         for (var redirects = 0; redirects <= MaximumRedirects; redirects++)
         {
@@ -44,7 +64,20 @@ public sealed class ProfileBoundRssFeedHttpClient(
             TorrentHttpResponse response;
             try
             {
-                response = await transport.SendAsync(current, addresses, cancellationToken).ConfigureAwait(false);
+                var requestOptions = string.Equals(
+                        current.IdnHost,
+                        uri.IdnHost,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? new TorrentHttpRequestOptions(
+                        profile.MikanIdentityCookie)
+                    : new TorrentHttpRequestOptions();
+                response = await transport
+                    .SendAsync(
+                        current,
+                        addresses,
+                        requestOptions,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

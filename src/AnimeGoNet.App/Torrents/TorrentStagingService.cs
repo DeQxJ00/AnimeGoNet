@@ -34,7 +34,18 @@ public sealed class TorrentStagingService(
             {
                 ValidateUrl(current, sourcePolicy);
                 var addresses = await ResolveAndValidateAsync(current.IdnHost, timeout.Token).ConfigureAwait(false);
-                await using var response = await SendSafelyAsync(current, addresses, timeout.Token).ConfigureAwait(false);
+                var requestOptions = string.Equals(
+                        current.IdnHost,
+                        secretUrl.IdnHost,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? new TorrentHttpRequestOptions(
+                        sourcePolicy.MikanIdentityCookie)
+                    : new TorrentHttpRequestOptions();
+                await using var response = await SendSafelyAsync(
+                    current,
+                    addresses,
+                    requestOptions,
+                    timeout.Token).ConfigureAwait(false);
                 if (IsRedirect(response.StatusCode))
                 {
                     if (redirectCount >= options.MaxRedirects)
@@ -189,11 +200,18 @@ public sealed class TorrentStagingService(
     private async ValueTask<TorrentHttpResponse> SendSafelyAsync(
         Uri uri,
         IReadOnlyList<IPAddress> addresses,
+        TorrentHttpRequestOptions requestOptions,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await transport.SendAsync(uri, addresses, cancellationToken).ConfigureAwait(false);
+            return await transport
+                .SendAsync(
+                    uri,
+                    addresses,
+                    requestOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

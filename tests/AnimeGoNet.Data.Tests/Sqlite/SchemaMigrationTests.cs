@@ -677,6 +677,57 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task MikanIdentityCookieMigrationPreservesExistingProfiles()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 30))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc, allowed_torrent_hosts_json,
+                    category, tags_json, seeding_time_minutes)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 9, 1, $now, $now, '["mikanani.me"]',
+                    'animegonet', '[]', 0);
+                """;
+            seed.Parameters.AddWithValue(
+                "$now",
+                "2026-07-30T10:00:00.0000000+00:00");
+            Assert.Equal(1, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration31 = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 31);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration31.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT revision, mikan_identity_cookie
+            FROM source_profiles
+            WHERE id = 'mikan';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(9, reader.GetInt64(0));
+        Assert.True(reader.IsDBNull(1));
+    }
+
+    [Fact]
     public async Task FileStrategyMigrationBackfillsExistingNonMoveDownloadJobs()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

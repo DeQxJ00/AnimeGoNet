@@ -220,6 +220,51 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
+    public void RejectsInvalidOrNonMikanIdentityCookieWithoutEchoingValue()
+    {
+        const string secret = "do-not-echo;Injected=true";
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var invalidValue = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    MikanIdentityCookie = secret,
+                },
+            ],
+        };
+        var wrongAdapter = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    Adapter = "u2",
+                    MikanIdentityCookie = "private-cookie",
+                },
+            ],
+        };
+
+        var invalidErrors = AnimeGoOptionsValidator.Validate(invalidValue);
+        var wrongAdapterErrors = AnimeGoOptionsValidator.Validate(wrongAdapter);
+
+        Assert.Contains(
+            invalidErrors,
+            error => error.Contains(
+                "invalid Mikan identity Cookie",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            invalidErrors,
+            error => error.Contains(secret, StringComparison.Ordinal));
+        Assert.Contains(
+            wrongAdapterErrors,
+            error => error.Contains(
+                "only configure a Mikan identity Cookie",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RejectsInvalidDirectoryDatabaseRefreshCron()
     {
         var defaults = AnimeGoDefaults.CreateDocker();

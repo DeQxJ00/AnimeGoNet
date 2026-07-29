@@ -96,6 +96,31 @@ public sealed class LoopbackHttpFixtureTests
         Assert.Equal(1, server.AcceptedConnections);
     }
 
+    [Fact]
+    public async Task PinnedTransportSendsOnlyNormalizedMikanIdentityCookie()
+    {
+        const string secret = "private-cookie-value";
+        await using var server = new OneShotLoopbackServer(
+            BuildResponse(HttpStatusCode.OK, []));
+        var transport = new PinnedTorrentHttpTransport();
+        var options = new TorrentHttpRequestOptions(secret);
+
+        await using var response = await transport.SendAsync(
+            new Uri(
+                $"http://mikanani.example.invalid:{server.Origin.Port}/RSS"),
+            [IPAddress.Loopback],
+            options,
+            CancellationToken.None);
+        var request = await server.RequestHeaders;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(
+            "Cookie: .AspNetCore.Identity.Application=private-cookie-value\r\n",
+            request,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, options.ToString(), StringComparison.Ordinal);
+    }
+
     private static byte[] BuildResponse(
         HttpStatusCode status,
         byte[] body,

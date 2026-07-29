@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 30,
+    [int]$ExpectedSchemaVersion = 31,
 
     [switch]$LegacyYamlUpgrade
 )
@@ -17,6 +17,8 @@ $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'
 $env:background_workers_enabled = 'false'
+$nativeCredential = 'native-aot-private-cookie'
+$env:ANIMEGO_MIKAN_COOKIE = $nativeCredential
 $legacyYamlHash = $null
 if ($LegacyYamlUpgrade) {
     New-Item -ItemType Directory -Path $env:data_path -Force | Out-Null
@@ -89,6 +91,9 @@ try {
     }
 
     $status = Invoke-RestMethod -Uri "$baseUrl/api/v1/status" -TimeoutSec 5
+    $sourceResponse =
+        Invoke-RestMethod -Uri "$baseUrl/api/v1/sources" -TimeoutSec 5
+    $sources = @($sourceResponse.items)
     $cacheBuckets = Invoke-RestMethod -Uri "$baseUrl/api/bolt?type=bucket" -TimeoutSec 5
     $ingestPayload = '{"source":"mikan","data":[{"torrent":"https://tracker.invalid/passkey/smoke.torrent","info":{"title":"NativeAOT smoke","mikanid":3951,"bgmid":547888}}]}'
     $ingestParameters = @{
@@ -114,6 +119,16 @@ try {
 
     if (-not $status.capabilities.qbittorrent) {
         throw 'Published process does not report the qBittorrent capability.'
+    }
+
+    $mikanSource = @($sources | Where-Object { $_.id -eq 'mikan' })
+    $sourcesJson = $sources | ConvertTo-Json -Depth 8 -Compress
+    if (
+        $mikanSource.Count -ne 1 -or
+        -not $mikanSource[0].mikan_identity_cookie_configured -or
+        $sourcesJson.Contains($nativeCredential)
+    ) {
+        throw 'NativeAOT source credential redaction smoke failed.'
     }
 
     if (($ingest.accepted_count -ne 0) -or ($ingest.rejected_count -ne 1) -or (-not $ingest.items[0].errors[0].Contains('HostNotAllowed'))) {
@@ -256,6 +271,7 @@ finally {
     if (Test-Path -LiteralPath $smokeRoot) {
         [IO.Directory]::Delete($smokeRoot, $true)
     }
+    Remove-Item Env:ANIMEGO_MIKAN_COOKIE -ErrorAction SilentlyContinue
     if ($null -ne $shutdownFailure) {
         throw $shutdownFailure
     }

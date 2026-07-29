@@ -23,7 +23,12 @@ internal sealed class MikanRssFeedPlugin(RssFeedReader reader) : IFeedPlugin
     {
         try
         {
-            var feed = await reader.ParseUrlAsync(context.FeedUrl, cancellationToken).ConfigureAwait(false);
+            var feed = await reader
+                .ParseUrlAsync(
+                    context.FeedUrl,
+                    context.SourceProfileId,
+                    cancellationToken)
+                .ConfigureAwait(false);
             var sourceWorkId = feed.MikanId?.ToString(CultureInfo.InvariantCulture);
             return new FeedResult(
                 feed.Items.Select(item => new FeedItem(

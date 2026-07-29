@@ -443,6 +443,11 @@
             <label class="source-hosts">允许的 Torrent Host
               <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
             </label>
+            <label class="source-hosts">Mikan 登录 Cookie（只写）
+              <input id="source-mikan-cookie" type="password" autocomplete="new-password" spellcheck="false" placeholder=".AspNetCore.Identity.Application=...">
+              <small id="source-mikan-cookie-state">仅 Mikan 适配器可配置。</small>
+            </label>
+            <label class="configuration-clear"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
           </div>
           <div class="source-switches">
             <label><input id="source-enabled" type="checkbox">启用来源</label>

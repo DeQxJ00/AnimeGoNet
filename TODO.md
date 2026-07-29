@@ -68,7 +68,7 @@
 - [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
 - [>] 移植环境变量覆盖：规范嵌套键、现有扁平键、旧 qB 兼容键及命令行优先级已接入；应用字段环境锁可视化已完成，下载器部署锁已在私有覆盖后重新生效，下载器锁的 WebUI 逐字段可视化仍待实现。
 - [>] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均已有测试；全部旧 Go 配置异常 parity 仍待补齐。
-- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 qB `setting:`/`advanced:` 现默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/TMDB/代理/失败链/Cron 已迁移，错误值在落盘前拒绝，Transmission 保持原文件并 fail closed。上游动态 tag 与 Mikan Cookie 尚无等价新模型，只保留于备份，因此 parity 仍为进行中。
+- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 qB `setting:`/`advanced:` 现默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/TMDB/代理/失败链/Cron 与 `advanced.source|anidata.mikan.cookie` 已迁移，错误值在落盘前拒绝，Transmission 保持原文件并 fail closed。上游动态 tag 尚无等价新模型，因此 parity 仍为进行中。
 - [x] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取、新安装默认注释及旧 YAML 自动重写新默认值均已完成。
 - [x] 增加 OpenAI-compatible AI 配置 DTO、扁平环境变量、敏感值脱敏和 source-generated JSON 上下文；API 只返回 provider/base/model/工具端点与 `api_key_configured`，不返回密钥。
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
@@ -94,14 +94,14 @@
 
 ## P4 — HTTP、Feed、Torrent
 
-- [>] 移植代理、超时、重试、Host redirect、Cookie/API key：TMDB/Bangumi 已支持独立 API 地址、HTTP(S)/SOCKS5 代理、逐次超时、0～10 次可配置额外重试与 0～300 秒间隔；只重试连接/超时/429/5xx，每次重建请求，404/认证/协议失败不重试，调用方取消立即终止。TMDB API key/Bearer 与 Bangumi User-Agent 已覆盖，Mikan Cookie 等来源级凭据模型待实现。
+- [x] 移植代理、超时、重试、Host redirect、Cookie/API key：TMDB/Bangumi 支持独立 API 地址、HTTP(S)/SOCKS5 代理、逐次超时、0～10 次可配置额外重试与 0～300 秒间隔；只重试连接/超时/429/5xx，每次重建请求，404/认证/协议失败不重试，调用方取消立即终止。TMDB API key/Bearer、Bangumi User-Agent 与 Mikan SourceProfile 级 `.AspNetCore.Identity.Application` Cookie 均已覆盖；Cookie 仅发往原始 Host，跨 Host redirect 必定剥离，API/WebUI 只显示配置状态、不回显值。
 - [x] 移植 RSS 文件/URL/raw parse：已实现 5 MiB 上限、禁用 DTD/外部实体、首个 enclosure、无 enclosure 跳过、非法 length 归零、Mikan `pubDate` 日期兼容和稳定错误码；URL/文件读取边界可注入测试，尚未暴露为公网抓取 API。
 - [x] 实现 Bencode/torrent/magnet/info-hash：严格 v1 Bencode、原始 info 字节 SHA-1、单/多文件清单、padding/路径/数量/总量校验已完成；magnet 现按上游支持首个 `urn:btih` 的 40 位 hex/32 位 Base32、首个 dn 和 tracker 计数，并保证返回/异常不保留 URI、tracker 或 passkey。
 - [x] 通过本地 fixture HTTP、RSS、torrent parity tests：RSS raw/file/注入式 HTTP、缺字段、损坏 XML、DTD、错误脱敏、mikanid、两条 magnet 及上游固定提交四个真实 `.torrent` 的 info-hash/名称/总量/17 个文件 parity 已通过；真实 loopback socket server 另验证 chunked RSS、原始请求 path/query、Host/User-Agent、禁止自动 redirect、固定已校验 IP 连接与流式响应。生产 SSRF 策略仍拒绝 loopback/private 地址。
 
 ## P5 — 数据源
 
-- [ ] 移植 Mikan。
+- [>] 移植 Mikan：RSS/页面身份、`mikanid`/`groupid`、作品页 `bgmid` 发现、五档 legacy filter、新黑白名单与有序优选、SourceProfile 级私有身份 Cookie、winner 统一导入均已接入；完整上游边界仍按本节其他未完成项继续验收。
 - [x] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`：RSS source URL 优先、channel link 回退及 path/query 解析已验证；RSS winner 会安全抓取对应作品页，仅接受 `p.bangumi-info` 内 `bgm.tv`/`bangumi.tv` 的正整数 Subject 链接，把 `bgmid` 与发现状态/失败码写入 schema v26 批次和统一导入任务。成功结果按批次复用；失败不下载且允许下一次显式 RSS 处理重试。
 - [>] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}` 与官方 `/v0/subjects/{bgmid}/subjects` 实现 AOT-safe Subject/关系客户端、固定 User-Agent、日期/身份校验和稳定网络/协议失败分类；Episode 与缓存仍待实现。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
@@ -151,7 +151,7 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [x] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作、失败隔离、可选客户端版本/默认保存路径诊断，以及按实例 2～120 秒指数退避/熔断均已实现。
-- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成；RSS 请求处理中并发修改不会混用新旧过滤开关或下载器路由，历史任务保留原 revision/下载器/下载策略快照。依赖 TMDB/Bangumi 日期与 EP 的上游动态 tag 模板待元数据后置赋值模块实现。
+- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成；Cookie 按来源隔离、写入时规范化、API/WebUI 只返回 configured 状态，RSS/Torrent 只向原始 Host 注入且跨 Host redirect 剥离。RSS 请求处理中并发修改不会混用新旧过滤开关、凭据或下载器路由，历史任务保留原 revision/下载器/下载策略快照。依赖 TMDB/Bangumi 日期与 EP 的上游动态 tag 模板待元数据后置赋值模块实现。
 - [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
 - [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add（category/tags/seedingTimeLimit）、file priority、stop/start/delete、状态映射、严格 hash/index/priority/做种分钟校验与失败响应。
@@ -209,7 +209,7 @@
 - [x] 实现下载列表/详情/文件级 priority 与 wanted 进度、筛选搜索分页和状态时间线；详情合并 SQLite 文件分配与 qB 实时文件快照，qB 离线时保留持久化信息并返回安全失败码，不暴露绝对路径或凭据。
 - [x] 实现暂停、恢复和 AnimeGoNet 业务重试；写操作校验 job revision，成功/失败均写入 schema v24 审计事件，任务卡片的删除操作仍只进入四类删除中心执行预览/确认。首版不复刻 Tracker/Peer 明细、piece 图、限速、强制校验/汇报和 qB 全局设置。
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
-- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、做种分钟、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；动态 tag 模板和重复命中通知待实现。
+- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、做种分钟、Mikan 身份 Cookie 的只写设置/显式清除/已配置状态、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；动态 tag 模板和重复命中通知待实现。
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥只写不回显，保存前 diff 只显示 `继承/已配置/已清除` 状态，环境锁、即时生效和需重启字段均可见。

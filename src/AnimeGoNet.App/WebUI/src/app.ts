@@ -904,6 +904,7 @@ interface SourceProfile {
   rss_filter_enabled: boolean;
   rss_priority_enabled: boolean;
   enabled: boolean;
+  mikan_identity_cookie_configured: boolean;
   revision: number;
   ingest_task_count: number;
   rss_batch_count: number;
@@ -4366,6 +4367,22 @@ function updateSourceWarning(): void {
     : "做种分钟：-1 无限、0 不做种、正数为上限；历史任务继续使用原 revision 路由快照。";
 }
 
+function updateSourceCredentialInputs(): void {
+  const adapter = element<HTMLSelectElement>("#source-adapter").value;
+  const input = element<HTMLInputElement>("#source-mikan-cookie");
+  const clear = element<HTMLInputElement>("#source-mikan-cookie-clear");
+  const current = activeSource();
+  const isMikan = adapter === "mikan";
+  input.disabled = !isMikan || clear.checked;
+  clear.disabled = !isMikan || current === null;
+  if (!isMikan || clear.checked) input.value = "";
+  element<HTMLElement>("#source-mikan-cookie-state").textContent = !isMikan
+    ? "仅 Mikan 适配器可配置登录 Cookie。"
+    : current?.mikan_identity_cookie_configured
+    ? "已配置（值永不回显）；留空保持不变。"
+    : "未配置；可粘贴 Cookie 值或完整 Cookie。";
+}
+
 function populateSourceForm(profile: SourceProfile | null): void {
   activeSourceId = profile?.id ?? null;
   const id = element<HTMLInputElement>("#source-id");
@@ -4385,6 +4402,8 @@ function populateSourceForm(profile: SourceProfile | null): void {
   element<HTMLInputElement>("#source-enabled").checked = profile?.enabled ?? true;
   element<HTMLInputElement>("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
   element<HTMLInputElement>("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
+  element<HTMLInputElement>("#source-mikan-cookie").value = "";
+  element<HTMLInputElement>("#source-mikan-cookie-clear").checked = false;
   const remove = element<HTMLButtonElement>("#source-delete");
   remove.disabled = profile === null || profile.is_default;
   remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
@@ -4393,6 +4412,7 @@ function populateSourceForm(profile: SourceProfile | null): void {
     ? "请先保存来源，再按持久化 revision 计算路由。"
     : `${profile.id} revision ${profile.revision}，等待预览。`;
   updateSourceWarning();
+  updateSourceCredentialInputs();
   renderSourceList();
 }
 
@@ -4417,7 +4437,7 @@ function renderSourceList(): void {
     revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
     heading.append(name, revision);
     const route = document.createElement("p");
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 做种 ${profile.seeding_time_minutes} 分钟 · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
@@ -5004,9 +5024,16 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     rss_filter_enabled: element<HTMLInputElement>("#source-filter-enabled").checked,
     rss_priority_enabled: element<HTMLInputElement>("#source-priority-enabled").checked,
     enabled: element<HTMLInputElement>("#source-enabled").checked,
+    mikan_identity_cookie:
+      element<HTMLInputElement>("#source-mikan-cookie").value || null,
   };
   const payload = current
-    ? { ...common, expected_revision: current.revision }
+    ? {
+        ...common,
+        clear_mikan_identity_cookie:
+          element<HTMLInputElement>("#source-mikan-cookie-clear").checked,
+        expected_revision: current.revision,
+      }
     : {
         ...common,
         id: element<HTMLInputElement>("#source-id").value,
@@ -5953,6 +5980,14 @@ for (const addButton of document.querySelectorAll<HTMLButtonElement>("[data-lega
 }
 element<HTMLButtonElement>("#source-new").addEventListener("click", () => populateSourceForm(null));
 element<HTMLFormElement>("#source-form").addEventListener("submit", (event) => void saveSource(event));
+element<HTMLSelectElement>("#source-adapter").addEventListener(
+  "change",
+  updateSourceCredentialInputs,
+);
+element<HTMLInputElement>("#source-mikan-cookie-clear").addEventListener(
+  "change",
+  updateSourceCredentialInputs,
+);
 element<HTMLButtonElement>("#source-delete").addEventListener("click", () => void deleteSource());
 element<HTMLSelectElement>("#source-strategy").addEventListener("change", updateSourceWarning);
 element<HTMLButtonElement>("#route-preview-run").addEventListener("click", () => void previewSourceRoute());

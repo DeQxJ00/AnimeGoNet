@@ -11,7 +11,14 @@ public sealed record SourceProfileRecord(
     int SeedingTimeMinutes,
     bool RssFilterEnabled,
     bool RssPriorityEnabled,
-    long Revision);
+    long Revision,
+    string? MikanIdentityCookie = null)
+{
+    public override string ToString() =>
+        $"SourceProfileRecord {{ Id = {Id}, Adapter = {Adapter}, "
+        + $"Revision = {Revision}, CredentialsConfigured = "
+        + $"{MikanIdentityCookie is not null} }}";
+}
 
 public sealed record SourceProfileAdminRecord(
     string Id,
@@ -30,7 +37,14 @@ public sealed record SourceProfileAdminRecord(
     long IngestTaskCount,
     long RssBatchCount,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string? MikanIdentityCookie = null)
+{
+    public override string ToString() =>
+        $"SourceProfileAdminRecord {{ Id = {Id}, Adapter = {Adapter}, "
+        + $"Revision = {Revision}, CredentialsConfigured = "
+        + $"{MikanIdentityCookie is not null} }}";
+}
 
 public sealed record SourceProfileDefinition(
     string DisplayName,
@@ -43,7 +57,13 @@ public sealed record SourceProfileDefinition(
     int SeedingTimeMinutes,
     bool RssFilterEnabled,
     bool RssPriorityEnabled,
-    bool Enabled);
+    bool Enabled,
+    string? MikanIdentityCookie = null)
+{
+    public override string ToString() =>
+        $"SourceProfileDefinition {{ Adapter = {Adapter}, "
+        + $"CredentialsConfigured = {MikanIdentityCookie is not null} }}";
+}
 
 public sealed class SourceProfileRevisionException : InvalidOperationException;
 

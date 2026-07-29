@@ -20,6 +20,7 @@ using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Plugins;
 using AnimeGoNet.Core.Rules;
+using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Cache;
 using AnimeGoNet.App.Ingest;
@@ -888,12 +889,14 @@ public static class AnimeGoApplication
         foreach (var child in children.OrderBy(section => section.Key, StringComparer.Ordinal))
         {
             var id = child.Key.Trim().ToLowerInvariant();
+            var adapter = NormalizeOptional(
+                FirstConfigurationValue(child, "adapter")) ?? id;
             var strategyText = NormalizeOptional(
                 FirstConfigurationValue(child, "file_strategy")) ?? "move";
             result.Add(new SourceProfileSeed
             {
                 Id = id,
-                Adapter = NormalizeOptional(FirstConfigurationValue(child, "adapter")) ?? id,
+                Adapter = adapter,
                 DownloaderId = NormalizeOptional(
                     FirstConfigurationValue(child, "downloader_id"))
                     ?? throw new InvalidOperationException(
@@ -928,6 +931,24 @@ public static class AnimeGoApplication
                     FirstConfigurationValue(child, "rss_priority_enabled"),
                     id == "mikan",
                     $"sources:{id}:rss_priority_enabled"),
+                MikanIdentityCookie = string.Equals(
+                    adapter,
+                    "mikan",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? MikanIdentityCookie.NormalizeOptional(
+                        id == "mikan"
+                            ? First(
+                                FirstConfigurationValue(
+                                    configuration,
+                                    "ANIMEGO_MIKAN_COOKIE",
+                                    "mikan_cookie"),
+                                FirstConfigurationValue(
+                                    child,
+                                    "mikan_identity_cookie"))
+                            : FirstConfigurationValue(
+                                child,
+                                "mikan_identity_cookie"))
+                    : null,
             });
         }
 

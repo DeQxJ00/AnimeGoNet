@@ -9,6 +9,7 @@ using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
@@ -2300,6 +2301,8 @@ public static class ApiEndpoints
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
                 request.Enabled,
+                request.MikanIdentityCookie,
+                clearMikanIdentityCookie: false,
                 current: null,
                 options);
             var now = DateTimeOffset.UtcNow;
@@ -2342,6 +2345,13 @@ public static class ApiEndpoints
             {
                 throw new ArgumentException("expected_revision must be at least 1.");
             }
+            if (request.ClearMikanIdentityCookie
+                && !string.IsNullOrWhiteSpace(
+                    request.MikanIdentityCookie))
+            {
+                throw new ArgumentException(
+                    "mikan_identity_cookie and clear_mikan_identity_cookie cannot both be set.");
+            }
             var definition = ToDefinition(
                 request.DisplayName,
                 current.Adapter,
@@ -2354,6 +2364,8 @@ public static class ApiEndpoints
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
                 request.Enabled,
+                request.MikanIdentityCookie,
+                request.ClearMikanIdentityCookie,
                 current,
                 options);
             var saved = await profiles.UpdateAsync(
@@ -4272,6 +4284,7 @@ public static class ApiEndpoints
         {
             var feed = await FetchMikanFeedAsync(
                 request.Url,
+                sourceProfileId,
                 plugins,
                 cancellationToken).ConfigureAwait(false);
             var result = await processor
@@ -4313,6 +4326,7 @@ public static class ApiEndpoints
         {
             var feed = await FetchMikanFeedAsync(
                 request.Rss.Url,
+                "mikan",
                 plugins,
                 cancellationToken).ConfigureAwait(false);
             if (request.IsSelectEp)
@@ -4337,6 +4351,7 @@ public static class ApiEndpoints
 
     private static async Task<RssFeedDocument> FetchMikanFeedAsync(
         string url,
+        string sourceProfileId,
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         CancellationToken cancellationToken)
     {
@@ -4344,7 +4359,7 @@ public static class ApiEndpoints
             .Require<AnimeGo.Plugin.Abstractions.IFeedPlugin>("mikan-rss")
             .FetchAsync(
                 new AnimeGo.Plugin.Abstractions.FeedContext(
-                    "mikan",
+                    sourceProfileId,
                     url,
                     EmptyPluginArguments),
                 cancellationToken)
@@ -4670,6 +4685,7 @@ public static class ApiEndpoints
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
             profile.Enabled,
+            profile.MikanIdentityCookie is not null,
             profile.Revision,
             profile.IngestTaskCount,
             profile.RssBatchCount,
@@ -4760,6 +4776,8 @@ public static class ApiEndpoints
         bool rssFilterEnabled,
         bool rssPriorityEnabled,
         bool enabled,
+        string? mikanIdentityCookie,
+        bool clearMikanIdentityCookie,
         SourceProfileAdminRecord? current,
         AnimeGoOptions options)
     {
@@ -4809,6 +4827,17 @@ public static class ApiEndpoints
                 ?? (current is not null && current.FileStrategy == normalizedStrategy
                     ? current.SeedingTimeMinutes
                     : 0));
+        var normalizedMikanIdentityCookie = clearMikanIdentityCookie
+            ? null
+            : !string.IsNullOrWhiteSpace(mikanIdentityCookie)
+            ? MikanIdentityCookie.NormalizeOptional(mikanIdentityCookie)
+            : current?.MikanIdentityCookie;
+        if (normalizedMikanIdentityCookie is not null
+            && normalizedAdapter != "mikan")
+        {
+            throw new ArgumentException(
+                "mikan_identity_cookie can only be configured for a Mikan adapter.");
+        }
         return new SourceProfileDefinition(
             name,
             normalizedAdapter,
@@ -4820,7 +4849,8 @@ public static class ApiEndpoints
             normalizedSeedingTime,
             rssFilterEnabled,
             rssPriorityEnabled,
-            enabled);
+            enabled,
+            normalizedMikanIdentityCookie);
     }
 
     private static string RequireCanonicalStableId(string? value, string name)

@@ -90,6 +90,66 @@ public sealed class SourceProfileStoreAdminTests
             () => store.CreateAsync("u2", invalid, At(10)));
     }
 
+    [Fact]
+    public async Task MikanCookieIsNormalizedVersionedAndNeverFormatted()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var seed = AnimeGoDefaults.CreateDocker().InitialSourceProfiles[0]
+            with
+            {
+                MikanIdentityCookie =
+                    ".AspNetCore.Identity.Application=first-secret",
+            };
+
+        await store.EnsureSeedsAsync([seed]);
+        await store.EnsureSeedsAsync([seed]);
+        var first = Assert.IsType<SourceProfileAdminRecord>(
+            await store.GetAsync("mikan"));
+
+        Assert.Equal(1, first.Revision);
+        Assert.Equal("first-secret", first.MikanIdentityCookie);
+        Assert.DoesNotContain(
+            "first-secret",
+            first.ToString(),
+            StringComparison.Ordinal);
+
+        await store.EnsureSeedsAsync(
+        [
+            seed with { MikanIdentityCookie = "second-secret" },
+        ]);
+        var second = Assert.IsType<SourceProfileRecord>(
+            await store.GetEnabledAsync("mikan"));
+
+        Assert.Equal(2, second.Revision);
+        Assert.Equal("second-secret", second.MikanIdentityCookie);
+        Assert.DoesNotContain(
+            "second-secret",
+            second.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NonMikanProfileCannotPersistMikanCookie()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var definition = Definition(
+            "U2",
+            "u2",
+            "pt",
+            "link",
+            ["u2.invalid"]) with
+        {
+            MikanIdentityCookie = "must-not-persist",
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CreateAsync("u2", definition, At(10)));
+
+        Assert.Null(await store.GetAsync("u2"));
+    }
+
     private static SourceProfileDefinition Definition(
         string name,
         string adapter,

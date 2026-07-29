@@ -3,7 +3,35 @@ using AnimeGoNet.Core.Torrents;
 
 namespace AnimeGoNet.App.Torrents;
 
-public sealed record TorrentSourcePolicy(string SourceProfileId, IReadOnlyList<string> AllowedHosts);
+public sealed class TorrentSourcePolicy(
+    string sourceProfileId,
+    IReadOnlyList<string> allowedHosts,
+    string? mikanIdentityCookie = null)
+{
+    public string SourceProfileId { get; } = sourceProfileId;
+
+    public IReadOnlyList<string> AllowedHosts { get; } = allowedHosts;
+
+    internal string? MikanIdentityCookie { get; } = mikanIdentityCookie;
+
+    public bool CredentialsConfigured => MikanIdentityCookie is not null;
+
+    public override string ToString() =>
+        $"TorrentSourcePolicy {{ SourceProfileId = {SourceProfileId}, "
+        + $"AllowedHostCount = {AllowedHosts.Count}, "
+        + $"CredentialsConfigured = {CredentialsConfigured} }}";
+}
+
+public sealed class TorrentHttpRequestOptions(
+    string? mikanIdentityCookie = null)
+{
+    internal string? MikanIdentityCookie { get; } = mikanIdentityCookie;
+
+    public bool CredentialsConfigured => MikanIdentityCookie is not null;
+
+    public override string ToString() =>
+        $"TorrentHttpRequestOptions {{ CredentialsConfigured = {CredentialsConfigured} }}";
+}
 
 public enum TorrentStagingFailureCode
 {
@@ -47,6 +75,17 @@ public interface ITorrentHttpTransport
         Uri uri,
         IReadOnlyList<IPAddress> validatedAddresses,
         CancellationToken cancellationToken);
+
+    ValueTask<TorrentHttpResponse> SendAsync(
+        Uri uri,
+        IReadOnlyList<IPAddress> validatedAddresses,
+        TorrentHttpRequestOptions requestOptions,
+        CancellationToken cancellationToken) =>
+        requestOptions.CredentialsConfigured
+            ? ValueTask.FromException<TorrentHttpResponse>(
+                new NotSupportedException(
+                    "This HTTP transport does not support source credentials."))
+            : SendAsync(uri, validatedAddresses, cancellationToken);
 }
 
 public interface ITorrentStagingService

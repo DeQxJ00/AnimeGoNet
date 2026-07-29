@@ -7,6 +7,14 @@ public interface IRssFeedHttpClient
     Task<ReadOnlyMemory<byte>> GetAsync(Uri uri, CancellationToken cancellationToken = default);
 }
 
+public interface ISourceProfileRssFeedHttpClient : IRssFeedHttpClient
+{
+    Task<ReadOnlyMemory<byte>> GetAsync(
+        Uri uri,
+        string sourceProfileId,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed class RssFeedHttpClient(HttpClient httpClient) : IRssFeedHttpClient
 {
     public async Task<ReadOnlyMemory<byte>> GetAsync(Uri uri, CancellationToken cancellationToken = default)
@@ -82,6 +90,15 @@ public sealed class RssFeedReader(IRssFeedHttpClient httpClient)
 
     public async Task<RssFeedDocument> ParseUrlAsync(
         string value,
+        CancellationToken cancellationToken = default) =>
+        await ParseUrlAsync(
+            value,
+            sourceProfileId: null,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task<RssFeedDocument> ParseUrlAsync(
+        string value,
+        string? sourceProfileId,
         CancellationToken cancellationToken = default)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -92,7 +109,14 @@ public sealed class RssFeedReader(IRssFeedHttpClient httpClient)
 
         try
         {
-            var raw = await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+            var raw = sourceProfileId is not null
+                && httpClient is ISourceProfileRssFeedHttpClient profileClient
+                ? await profileClient
+                    .GetAsync(uri, sourceProfileId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await httpClient
+                    .GetAsync(uri, cancellationToken)
+                    .ConfigureAwait(false);
             return RssFeedParser.Parse(raw, uri.AbsoluteUri);
         }
         catch (RssFeedException)

@@ -182,6 +182,12 @@ public sealed record SourceProfileSeed
     public bool RssFilterEnabled { get; init; }
 
     public bool RssPriorityEnabled { get; init; }
+
+    public string? MikanIdentityCookie { get; init; }
+
+    public override string ToString() =>
+        $"SourceProfileSeed {{ Id = {Id}, Adapter = {Adapter}, "
+        + $"CredentialsConfigured = {MikanIdentityCookie is not null} }}";
 }
 
 public enum FileStrategy

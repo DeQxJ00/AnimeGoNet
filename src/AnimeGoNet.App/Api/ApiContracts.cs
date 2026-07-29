@@ -882,7 +882,8 @@ public sealed record SourceProfileCreateRequest(
     [property: JsonPropertyName("seeding_time_minutes")] int? SeedingTimeMinutes,
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
-    [property: JsonPropertyName("enabled")] bool Enabled);
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie);
 
 public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("display_name")] string? DisplayName,
@@ -895,6 +896,8 @@ public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
+    [property: JsonPropertyName("clear_mikan_identity_cookie")] bool ClearMikanIdentityCookie,
     [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
 
 public sealed record SourceProfileResponse(
@@ -910,6 +913,8 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("mikan_identity_cookie_configured")]
+    bool MikanIdentityCookieConfigured,
     [property: JsonPropertyName("revision")] long Revision,
     [property: JsonPropertyName("ingest_task_count")] long IngestTaskCount,
     [property: JsonPropertyName("rss_batch_count")] long RssBatchCount,

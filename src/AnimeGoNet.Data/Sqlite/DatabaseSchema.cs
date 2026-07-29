@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 30;
+    public const int CurrentVersion = 31;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -36,7 +36,16 @@ public static class DatabaseSchema
         new SchemaMigration(28, "animegonet_data_versions", AnimeGoNetDataVersions),
         new SchemaMigration(29, "data_update_transfer_audit", DataUpdateTransferAudit),
         new SchemaMigration(30, "library_metadata_audit_indexes", LibraryMetadataAuditIndexes),
+        new SchemaMigration(31, "source_mikan_identity_cookie", SourceMikanIdentityCookie),
     ];
+
+    private const string SourceMikanIdentityCookie = """
+        ALTER TABLE source_profiles
+        ADD COLUMN mikan_identity_cookie TEXT
+            CHECK (
+                mikan_identity_cookie IS NULL
+                OR length(mikan_identity_cookie) BETWEEN 1 AND 8192);
+        """;
 
     private const string LibraryMetadataAuditIndexes = """
         CREATE INDEX ix_task_files_tmdb_season_task

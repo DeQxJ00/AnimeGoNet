@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using AnimeGoNet.Core.Sources;
 
 namespace AnimeGoNet.App.Torrents;
 
@@ -8,10 +9,22 @@ public sealed class PinnedTorrentHttpTransport : ITorrentHttpTransport
     public async ValueTask<TorrentHttpResponse> SendAsync(
         Uri uri,
         IReadOnlyList<IPAddress> validatedAddresses,
+        CancellationToken cancellationToken) =>
+        await SendAsync(
+            uri,
+            validatedAddresses,
+            new TorrentHttpRequestOptions(),
+            cancellationToken).ConfigureAwait(false);
+
+    public async ValueTask<TorrentHttpResponse> SendAsync(
+        Uri uri,
+        IReadOnlyList<IPAddress> validatedAddresses,
+        TorrentHttpRequestOptions requestOptions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);
         ArgumentNullException.ThrowIfNull(validatedAddresses);
+        ArgumentNullException.ThrowIfNull(requestOptions);
         if (validatedAddresses.Count == 0)
         {
             throw new ArgumentException("At least one validated address is required.", nameof(validatedAddresses));
@@ -62,6 +75,12 @@ public sealed class PinnedTorrentHttpTransport : ITorrentHttpTransport
         };
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.UserAgent.ParseAdd("AnimeGoNet/1.0");
+        if (requestOptions.MikanIdentityCookie is { } cookie)
+        {
+            request.Headers.TryAddWithoutValidation(
+                "Cookie",
+                $"{MikanIdentityCookie.Name}={cookie}");
+        }
         try
         {
             var response = await client.SendAsync(

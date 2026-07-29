@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Data.Sqlite;
+using AnimeGoNet.Data.Sources;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
@@ -288,6 +289,9 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-category\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-tags\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-seeding-time\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-mikan-cookie\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-mikan-cookie-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("值永不回显", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);
@@ -296,6 +300,121 @@ public sealed class SourceProfileApiTests
         Assert.Contains("expected_revision", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/sources/", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MikanCookieIsWriteOnlyPreservedAndExplicitlyClearable()
+    {
+        const string secret = ".AspNetCore.Identity.Application=private-cookie-value";
+        await using var app = await RunningApp.StartAsync();
+        using var create = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "mikan-private",
+                display_name = "Mikan Private",
+                adapter = "mikan",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                mikan_identity_cookie = secret,
+            }));
+        var createText = await create.Content.ReadAsStringAsync();
+        using var created = JsonDocument.Parse(createText);
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.True(created.RootElement
+            .GetProperty("mikan_identity_cookie_configured")
+            .GetBoolean());
+        Assert.DoesNotContain(
+            "private-cookie-value",
+            createText,
+            StringComparison.Ordinal);
+        Assert.False(created.RootElement.TryGetProperty(
+            "mikan_identity_cookie",
+            out _));
+
+        var store = app.App.Services.GetRequiredService<SourceProfileStore>();
+        var stored = Assert.IsType<SourceProfileAdminRecord>(
+            await store.GetAsync("mikan-private"));
+        Assert.Equal("private-cookie-value", stored.MikanIdentityCookie);
+
+        using var preserve = await app.Client.PutAsync(
+            "/api/v1/sources/mikan-private",
+            Json(new
+            {
+                display_name = "Mikan Private",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                expected_revision = 1,
+            }));
+        Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
+        Assert.Equal(
+            "private-cookie-value",
+            (await store.GetAsync("mikan-private"))?.MikanIdentityCookie);
+
+        using var clear = await app.Client.PutAsync(
+            "/api/v1/sources/mikan-private",
+            Json(new
+            {
+                display_name = "Mikan Private",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                clear_mikan_identity_cookie = true,
+                expected_revision = 2,
+            }));
+        using var cleared = JsonDocument.Parse(
+            await clear.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        Assert.False(cleared.RootElement
+            .GetProperty("mikan_identity_cookie_configured")
+            .GetBoolean());
+        Assert.Null(
+            (await store.GetAsync("mikan-private"))?.MikanIdentityCookie);
+    }
+
+    [Fact]
+    public async Task NonMikanAndHeaderInjectionCookiesAreRejectedWithoutEcho()
+    {
+        const string secret = "private-value;Other=injected";
+        await using var app = await RunningApp.StartAsync();
+        using var invalidAdapter = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "u2-cookie",
+                display_name = "U2 Cookie",
+                adapter = "u2",
+                downloader_id = "pt",
+                file_strategy = "link",
+                allowed_torrent_hosts = new List<string> { "u2.invalid" },
+                enabled = true,
+                mikan_identity_cookie = "must-not-persist",
+            }));
+        using var injection = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "mikan-injection",
+                display_name = "Mikan Injection",
+                adapter = "mikan",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                mikan_identity_cookie = secret,
+            }));
+        var injectionText = await injection.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidAdapter.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, injection.StatusCode);
+        Assert.DoesNotContain(secret, injectionText, StringComparison.Ordinal);
     }
 
     [Fact]

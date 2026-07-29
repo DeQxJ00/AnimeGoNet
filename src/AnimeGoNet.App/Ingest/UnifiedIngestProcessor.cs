@@ -107,7 +107,10 @@ public sealed class UnifiedIngestProcessor(
         {
             staged = await staging.StageAsync(
                 normalized.TorrentUrl,
-                new TorrentSourcePolicy(profile.Id, profile.AllowedTorrentHosts),
+                new TorrentSourcePolicy(
+                    profile.Id,
+                    profile.AllowedTorrentHosts,
+                    profile.MikanIdentityCookie),
                 cancellationToken).ConfigureAwait(false);
             var expires = DateTimeOffset.UtcNow + options.TorrentFetch.StagingTtl;
             var task = winnerLease is null

@@ -25,6 +25,9 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(Path.GetFullPath(path), snapshot.FilePath);
             Assert.Equal(defaults.Paths.DataPath, snapshot.Values["paths:data_path"]);
             Assert.Equal("move", snapshot.Values["sources:mikan:file_strategy"]);
+            Assert.Equal(
+                string.Empty,
+                snapshot.Values["sources:mikan:mikan_identity_cookie"]);
             Assert.Equal("false", snapshot.Values["metadata:ai:use_metadata_match"]);
             Assert.Equal("600", snapshot.Values["metadata:ai:timeout_seconds"]);
 
@@ -113,6 +116,7 @@ public sealed class DeploymentYamlConfigurationTests
                     seeding_time_minutes: 0
                     rss_filter_enabled: true
                     rss_priority_enabled: false
+                    mikan_identity_cookie: '.AspNetCore.Identity.Application=yaml-private-cookie'
                 metadata:
                   tmdb:
                     base_url: https://tmdb.example.invalid/api/
@@ -187,6 +191,11 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(["mikan.example.invalid"], source.AllowedTorrentHosts);
             Assert.Equal(["yaml-test"], source.Tags);
             Assert.False(source.RssPriorityEnabled);
+            Assert.Equal("yaml-private-cookie", source.MikanIdentityCookie);
+            Assert.DoesNotContain(
+                "yaml-private-cookie",
+                source.ToString(),
+                StringComparison.Ordinal);
 
             Assert.Equal(new Uri("https://tmdb.example.invalid/api/"), options.Metadata.Tmdb.BaseUrl);
             Assert.Equal(new Uri("http://127.0.0.1:17890/"), options.Metadata.Tmdb.ProxyUrl);
@@ -335,6 +344,8 @@ public sealed class DeploymentYamlConfigurationTests
                     themoviedb: legacy-tmdb-key
                 advanced:
                   anidata:
+                    mikan:
+                      cookie: '.AspNetCore.Identity.Application=legacy-private-cookie'
                     bangumi:
                       redirect: https://bangumi.example.invalid/
                     themoviedb:
@@ -394,6 +405,14 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("6", snapshot.Values["metadata:tmdb:retry_wait_seconds"]);
             Assert.Equal("4", snapshot.Values["metadata:bangumi:retry_count"]);
             Assert.Equal("6", snapshot.Values["metadata:bangumi:retry_wait_seconds"]);
+            Assert.Equal(
+                ".AspNetCore.Identity.Application=legacy-private-cookie",
+                snapshot.Values["sources:mikan:mikan_identity_cookie"]);
+            var upgradedText = await File.ReadAllTextAsync(path);
+            Assert.Contains(
+                "mikan_identity_cookie: '.AspNetCore.Identity.Application=legacy-private-cookie'",
+                upgradedText,
+                StringComparison.Ordinal);
 
             var second = await DeploymentYamlConfiguration.LoadOrCreateAsync(
                 path,

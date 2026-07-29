@@ -1,5 +1,6 @@
 using System.Globalization;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -22,6 +23,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             var tags = SourceDownloadPolicy.NormalizeTags(seed.Tags);
             var seedingTimeMinutes = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
                 fileStrategy, seed.SeedingTimeMinutes);
+            var mikanIdentityCookie = NormalizeMikanIdentityCookie(
+                seed.Adapter,
+                seed.MikanIdentityCookie);
             await using var command = connection.CreateCommand();
             command.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
             command.CommandText = """
@@ -29,17 +33,28 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     id, display_name, adapter, downloader_id, file_strategy,
                     allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
                     rss_filter_enabled, rss_priority_enabled, revision, enabled,
-                    created_at_utc, updated_at_utc)
+                    created_at_utc, updated_at_utc, mikan_identity_cookie)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
                     $allowed_torrent_hosts_json, $category, $tags_json, $seeding_time_minutes,
                     $rss_filter_enabled, $rss_priority_enabled, 1, 1,
-                    $created_at_utc, $updated_at_utc)
+                    $created_at_utc, $updated_at_utc, $mikan_identity_cookie)
                 ON CONFLICT(id) DO UPDATE SET
-                    allowed_torrent_hosts_json = excluded.allowed_torrent_hosts_json,
+                    allowed_torrent_hosts_json = CASE
+                        WHEN source_profiles.allowed_torrent_hosts_json = '[]'
+                            THEN excluded.allowed_torrent_hosts_json
+                        ELSE source_profiles.allowed_torrent_hosts_json
+                    END,
+                    mikan_identity_cookie = COALESCE(
+                        excluded.mikan_identity_cookie,
+                        source_profiles.mikan_identity_cookie),
                     revision = source_profiles.revision + 1,
                     updated_at_utc = excluded.updated_at_utc
-                WHERE source_profiles.allowed_torrent_hosts_json = '[]';
+                WHERE source_profiles.allowed_torrent_hosts_json = '[]'
+                   OR (
+                       excluded.mikan_identity_cookie IS NOT NULL
+                       AND excluded.mikan_identity_cookie
+                           <> COALESCE(source_profiles.mikan_identity_cookie, ''));
                 """;
             command.Parameters.AddWithValue("$id", seed.Id);
             command.Parameters.AddWithValue("$display_name", seed.Id);
@@ -58,6 +73,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             command.Parameters.AddWithValue("$rss_priority_enabled", seed.RssPriorityEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$created_at_utc", now);
             command.Parameters.AddWithValue("$updated_at_utc", now);
+            command.Parameters.AddWithValue(
+                "$mikan_identity_cookie",
+                (object?)mikanIdentityCookie ?? DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -73,7 +91,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.CommandText = """
             SELECT id, adapter, downloader_id, file_strategy,
                    allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
-                   rss_filter_enabled, rss_priority_enabled, revision
+                   rss_filter_enabled, rss_priority_enabled, revision,
+                   mikan_identity_cookie
             FROM source_profiles
             WHERE id = $id AND enabled = 1;
             """;
@@ -95,7 +114,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(7),
             reader.GetInt64(8) != 0,
             reader.GetInt64(9) != 0,
-            reader.GetInt64(10));
+            reader.GetInt64(10),
+            reader.IsDBNull(11) ? null : reader.GetString(11));
     }
 
     public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
@@ -138,10 +158,11 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 id, display_name, adapter, downloader_id, file_strategy,
                 allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
                 rss_filter_enabled, rss_priority_enabled,
-                revision, enabled, created_at_utc, updated_at_utc)
+                revision, enabled, created_at_utc, updated_at_utc,
+                mikan_identity_cookie)
             VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts,
                     $category, $tags, $seeding_time, $filter, $priority,
-                    1, $enabled, $now, $now);
+                    1, $enabled, $now, $now, $mikan_identity_cookie);
             """;
         BindDefinition(command, normalized, definition, utcNow);
         try
@@ -173,6 +194,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 allowed_torrent_hosts_json = $hosts, category = $category, tags_json = $tags,
                 seeding_time_minutes = $seeding_time, rss_filter_enabled = $filter,
                 rss_priority_enabled = $priority, enabled = $enabled,
+                mikan_identity_cookie = $mikan_identity_cookie,
                 revision = revision + 1, updated_at_utc = $now
             WHERE id = $id AND adapter = $adapter AND revision = $expected;
             """;
@@ -238,7 +260,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                p.rss_filter_enabled, p.rss_priority_enabled, p.enabled, p.revision,
                (SELECT COUNT(*) FROM ingest_tasks i WHERE i.source_profile_id = p.id),
                (SELECT COUNT(*) FROM mikan_rss_batches b WHERE b.source_profile_id = p.id),
-               p.created_at_utc, p.updated_at_utc
+               p.created_at_utc, p.updated_at_utc, p.mikan_identity_cookie
         FROM source_profiles p
         """;
 
@@ -259,7 +281,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         reader.GetInt64(13),
         reader.GetInt64(14),
         DateTimeOffset.Parse(reader.GetString(15), CultureInfo.InvariantCulture),
-        DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture));
+        DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture),
+        reader.IsDBNull(17) ? null : reader.GetString(17));
 
     private static void BindDefinition(
         SqliteCommand command,
@@ -271,6 +294,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         var tags = SourceDownloadPolicy.NormalizeTags(definition.Tags);
         var seedingTimeMinutes = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
             definition.FileStrategy, definition.SeedingTimeMinutes);
+        var mikanIdentityCookie = NormalizeMikanIdentityCookie(
+            definition.Adapter,
+            definition.MikanIdentityCookie);
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$name", definition.DisplayName);
         command.Parameters.AddWithValue("$adapter", definition.Adapter);
@@ -289,6 +315,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$filter", definition.RssFilterEnabled);
         command.Parameters.AddWithValue("$priority", definition.RssPriorityEnabled);
         command.Parameters.AddWithValue("$enabled", definition.Enabled);
+        command.Parameters.AddWithValue(
+            "$mikan_identity_cookie",
+            (object?)mikanIdentityCookie ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
     }
 
@@ -317,4 +346,19 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         FileStrategy.WaitMove => "wait_move",
         _ => throw new ArgumentOutOfRangeException(nameof(strategy)),
     };
+
+    private static string? NormalizeMikanIdentityCookie(
+        string adapter,
+        string? value)
+    {
+        var normalized = MikanIdentityCookie.NormalizeOptional(value);
+        if (normalized is not null
+            && !string.Equals(adapter, "mikan", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Mikan identity Cookie can only be configured for a Mikan source profile.");
+        }
+
+        return normalized;
+    }
 }
