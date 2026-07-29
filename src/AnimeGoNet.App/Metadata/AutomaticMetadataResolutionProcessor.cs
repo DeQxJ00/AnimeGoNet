@@ -11,8 +11,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
     MetadataResolutionStore resolutions,
     IBangumiSubjectClient bangumi,
     BangumiSeasonBacktraceResolver backtrace,
-    TmdbSeriesResolver seriesResolver,
-    ITmdbClient tmdb,
+    TmdbSeriesSeasonResolver seriesSeasonResolver,
     IAiMetadataMatcher aiMatcher,
     AiMetadataResultValidator aiValidator,
     AiPublicationEvidenceResolver publicationEvidence,
@@ -50,7 +49,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         BangumiSubject? subject = null;
-        var title = claim.Title;
+        IReadOnlyList<string> titles = [claim.Title];
         if (claim.BangumiSubjectId is not null)
         {
             var started = _timeProvider.GetTimestamp();
@@ -78,84 +77,66 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 return true;
             }
 
-            title = string.IsNullOrWhiteSpace(subject.ChineseName) ? subject.Name : subject.ChineseName;
+            titles = TmdbSeriesSeasonResolver.BangumiTitles(subject);
+            if (titles.Count == 0)
+            {
+                titles = [claim.Title];
+            }
             await RecordAsync(claim, "bangumi", "bangumi_subject", null, "matched", null,
                 false, started, cancellationToken).ConfigureAwait(false);
         }
 
         var seriesStarted = _timeProvider.GetTimestamp();
-        var seriesResult = await seriesResolver.ResolveAsync(title, cancellationToken).ConfigureAwait(false);
-        if (!seriesResult.IsSuccess)
-        {
-            var failure = seriesResult.Failure!;
-            await RecordAsync(claim, "series", "tmdb_title", null, "failed", failure.Code,
-                IsRetryable(failure.Kind), seriesStarted, cancellationToken).ConfigureAwait(false);
-            if (options.Metadata.Ai.UseSeasonMatch
-                && await TryCompleteAiSeasonAsync(claim, cancellationToken).ConfigureAwait(false))
-            {
-                return true;
-            }
-
-            if (await TryCompleteBangumiFallbackAsync(
-                    claim,
-                    subject,
-                    failure,
-                    cancellationToken).ConfigureAwait(false))
-            {
-                return true;
-            }
-
-            await FailAsync(claim, failure, SeriesFailureDenialReason(claim, failure), cancellationToken)
-                .ConfigureAwait(false);
-            return true;
-        }
-
-        TmdbSeriesDetails? details;
-        try
-        {
-            details = await tmdb.GetSeriesDetailsAsync(seriesResult.Value!.Id, cancellationToken).ConfigureAwait(false);
-        }
-        catch (TmdbClientException exception)
-        {
-            var failure = ToFailure(exception);
-            await RecordAsync(claim, "series", "tmdb_title", null, "failed", failure.Code,
-                IsRetryable(failure.Kind), seriesStarted, cancellationToken).ConfigureAwait(false);
-            await FailAsync(claim, failure, SeriesFailureDenialReason(claim, failure), cancellationToken)
-                .ConfigureAwait(false);
-            return true;
-        }
-
-        if (details is null || details.Series.Id != seriesResult.Value.Id)
-        {
-            var failure = new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_series_details_not_found", true);
-            await RecordAsync(claim, "series", "tmdb_title", null, "failed", failure.Code,
-                false, seriesStarted, cancellationToken).ConfigureAwait(false);
-            await FailAsync(claim, failure, SeriesFailureDenialReason(claim, failure), cancellationToken)
-                .ConfigureAwait(false);
-            return true;
-        }
-
-        await RecordAsync(claim, "series", "tmdb_title", null, "matched", null,
-            false, seriesStarted, cancellationToken).ConfigureAwait(false);
-
-        var seasonStarted = _timeProvider.GetTimestamp();
-        var direct = TmdbSeasonSelector.SelectByAirDate(details.Seasons, subject?.AirDate);
+        var direct = await seriesSeasonResolver.ResolveAsync(
+            titles,
+            subject?.AirDate,
+            cancellationToken).ConfigureAwait(false);
         if (direct.IsSuccess)
         {
-            await CompleteSeasonAsync(claim, details.Series, direct.Value!, "tmdb_air_date", null,
-                seasonStarted, cancellationToken).ConfigureAwait(false);
+            await RecordAsync(claim, "series", "tmdb_title", null, "matched", null,
+                false, seriesStarted, cancellationToken).ConfigureAwait(false);
+            await CompleteSeasonAsync(
+                claim,
+                direct.Details!.Series,
+                direct.Season!,
+                "tmdb_air_date",
+                null,
+                seriesStarted,
+                cancellationToken).ConfigureAwait(false);
             return true;
         }
 
-        await RecordAsync(claim, "season", "tmdb_air_date", null, "not_matched", direct.Failure!.Code,
-            false, seasonStarted, cancellationToken).ConfigureAwait(false);
+        var directFailure = direct.Failure!;
+        await RecordAsync(
+            claim,
+            "series",
+            "tmdb_title",
+            null,
+            direct.HasValidatedSeries ? "matched" : "not_matched",
+            direct.HasValidatedSeries ? null : directFailure.Code,
+            IsRetryable(directFailure.Kind),
+            seriesStarted,
+            cancellationToken).ConfigureAwait(false);
+        await RecordAsync(claim, "season", "tmdb_air_date", null, "not_matched", directFailure.Code,
+            IsRetryable(directFailure.Kind), seriesStarted, cancellationToken).ConfigureAwait(false);
+        if (directFailure.Kind != MetadataFailureKind.SemanticNoMatch)
+        {
+            await FailAsync(claim, directFailure, SeriesFailureDenialReason(claim, directFailure), cancellationToken)
+                .ConfigureAwait(false);
+            return true;
+        }
+
+        var details = direct.Details;
+        var terminalFailure = directFailure;
         var policy = options.Metadata.SeasonFailure;
         if (policy.Skip)
         {
-            var failure = new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_season_skipped", true);
-            await RecordAsync(claim, "season", "skip", 4, "skipped", failure.Code,
+            var skipFailure = new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_season_skipped", true);
+            await RecordAsync(claim, "season", "skip", 4, "skipped", skipFailure.Code,
                 false, _timeProvider.GetTimestamp(), cancellationToken).ConfigureAwait(false);
-            await FailAsync(claim, failure, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
+            await FailAsync(claim, skipFailure,
+                details is null ? "tmdb_series_not_resolved" : "tmdb_series_resolved", cancellationToken)
+                .ConfigureAwait(false);
             return true;
         }
 
@@ -166,22 +147,30 @@ public sealed class AutomaticMetadataResolutionProcessor(
             {
                 var result = await backtrace.ResolveAsync(
                     claim.BangumiSubjectId.Value,
-                    details.Seasons,
                     cancellationToken).ConfigureAwait(false);
                 await RecordAsync(claim, "season", "backtrace", 3,
-                    result.IsSuccess ? "matched" : "not_matched",
+                    result.IsSuccess
+                        ? "matched"
+                        : result.Failure!.Kind == MetadataFailureKind.SemanticNoMatch ? "not_matched" : "error",
                     result.Failure?.Code,
-                    false, started, cancellationToken).ConfigureAwait(false);
+                    result.Failure is not null && IsRetryable(result.Failure.Kind),
+                    started, cancellationToken).ConfigureAwait(false);
                 if (result.IsSuccess)
                 {
                     await resolutions.CompleteSeasonAsync(
-                        claim, details.Series, result.Season!, _timeProvider.GetUtcNow(), cancellationToken)
+                        claim, result.Details!.Series, result.Season!, _timeProvider.GetUtcNow(), cancellationToken)
                         .ConfigureAwait(false);
                     return true;
+                }
+
+                if (result.Failure!.Kind != MetadataFailureKind.SemanticNoMatch)
+                {
+                    terminalFailure = result.Failure;
                 }
             }
             catch (BangumiClientException exception)
             {
+                terminalFailure = new MetadataFailure(exception.Kind, exception.SafeCode, false);
                 await RecordAsync(claim, "season", "backtrace", 3, "error", exception.SafeCode,
                     IsRetryable(exception.Kind), started, cancellationToken).ConfigureAwait(false);
             }
@@ -198,41 +187,73 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (policy.UseTitleSeason)
         {
             var started = _timeProvider.GetTimestamp();
-            var seasonNumber = TmdbSeasonFallbackSelector.ParseSeasonNumber(claim.Title);
-            var matched = seasonNumber is > 0;
-            await RecordAsync(claim, "season", "title_season", 2,
-                matched ? "matched" : "not_matched",
-                matched ? null : "title_season_not_found",
-                false, started, cancellationToken).ConfigureAwait(false);
-            if (matched)
+            if (details is null)
             {
-                await resolutions.CompleteLocalSeasonAsync(
-                    claim,
-                    details.Series,
-                    seasonNumber!.Value,
-                    _timeProvider.GetUtcNow(),
-                    cancellationToken).ConfigureAwait(false);
-                return true;
+                await RecordAsync(claim, "season", "title_season", 2, "not_applicable",
+                    "title_season_tmdb_series_required", false, started, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                var seasonNumber = TmdbSeasonFallbackSelector.ParseSeasonNumber(claim.Title);
+                var matched = seasonNumber is > 0;
+                await RecordAsync(claim, "season", "title_season", 2,
+                    matched ? "matched" : "not_matched",
+                    matched ? null : "title_season_not_found",
+                    false, started, cancellationToken).ConfigureAwait(false);
+                if (matched)
+                {
+                    await resolutions.CompleteLocalSeasonAsync(
+                        claim,
+                        details.Series,
+                        seasonNumber!.Value,
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                    return true;
+                }
             }
         }
 
         if (policy.UseFirstSeason)
         {
             var started = _timeProvider.GetTimestamp();
-            await RecordAsync(claim, "season", "first_season", 1,
-                "matched",
-                null,
-                false, started, cancellationToken).ConfigureAwait(false);
-            await resolutions.CompleteLocalSeasonAsync(
+            if (details is null)
+            {
+                await RecordAsync(claim, "season", "first_season", 1, "not_applicable",
+                    "first_season_tmdb_series_required", false, started, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await RecordAsync(claim, "season", "first_season", 1,
+                    "matched",
+                    null,
+                    false, started, cancellationToken).ConfigureAwait(false);
+                await resolutions.CompleteLocalSeasonAsync(
+                    claim,
+                    details.Series,
+                    1,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+        }
+
+        if (details is null
+            && await TryCompleteBangumiFallbackAsync(
                 claim,
-                details.Series,
-                1,
-                _timeProvider.GetUtcNow(),
-                cancellationToken).ConfigureAwait(false);
+                subject,
+                terminalFailure,
+                cancellationToken).ConfigureAwait(false))
+        {
             return true;
         }
 
-        await FailAsync(claim, direct.Failure!, "tmdb_series_resolved", cancellationToken).ConfigureAwait(false);
+        await FailAsync(
+            claim,
+            terminalFailure,
+            details is null ? SeriesFailureDenialReason(claim, terminalFailure) : "tmdb_series_resolved",
+            cancellationToken).ConfigureAwait(false);
         return true;
     }
 

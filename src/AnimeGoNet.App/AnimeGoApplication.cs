@@ -175,6 +175,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(tmdbClient);
         builder.Services.AddSingleton<TmdbAuthority>();
         builder.Services.AddSingleton<TmdbSeriesResolver>();
+        builder.Services.AddSingleton<TmdbSeriesSeasonResolver>();
         if (bangumiSubjectClient is null)
         {
             var client = new BangumiSubjectClient(

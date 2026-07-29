@@ -280,7 +280,7 @@
             </li>
             <li class="failure-priority-step" data-priority="3">
               <span class="failure-priority-badge">P3</span>
-              <label><input id="configuration-fail-backtrace" type="checkbox"><span><strong>TMDBFailBacktrace</strong><small>仅有 bgmid 时可用；沿 Bangumi 前传关系回溯季度</small></span></label>
+              <label><input id="configuration-fail-backtrace" type="checkbox"><span><strong>TMDBFailBacktrace</strong><small>需要 bgmid；当前 tmdbid + Season 联合匹配失败后，逐层回溯 Bangumi 前传，用每个前作的日文名、中文名和开播日期重新搜索并验证完整 tmdbid + Season</small></span></label>
             </li>
             <li class="failure-priority-step independent" data-priority="independent">
               <span class="failure-priority-badge">独立 AI</span>

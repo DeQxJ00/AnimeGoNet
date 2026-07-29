@@ -134,18 +134,19 @@ GET    /websocket/log
 1. Backtrace 关闭：保持 AnimeGo `develop` 行为，不读取 Bangumi 前传关系。
 2. Skip 与 Backtrace 同时开启：Skip 优先级 4 立即终止，前传请求数为 0。
 3. 当前 Bgm 首播日期已命中：即使 Backtrace 开启也不读取前传。
-4. 第一层或更深前传命中：采用同一 TMDB 剧集内命中的季度，TitleSeason/FirstSeason 不执行。
-5. 回溯到首部仍无匹配：依次尝试 `TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；P2 只读取任务 `title` 并采用本地解析季度，P1 固定采用本地 `S01`，两者都不请求或验证 TMDB Season。
-6. 前传缺日期、多前传及循环：遍历次序稳定、无重复请求、可终止。
-7. 前传请求瞬时错误恢复；重试耗尽时记录 `BacktraceError`，然后执行较低优先级策略。
-8. TMDB 完全失败：Backtrace 不适用且不发起关系请求，与 `tmdb_fail_use_bangumi` 的完整失败兜底保持独立。
-9. Web 配置页修改四个确定性开关及独立季度 AI/EP-AI 开关后，YAML diff、备份、重载值和阶段说明一致。
-10. `Disabled`、`NotApplicable`、`NoMatch`、`Error`、`Succeeded`、`Terminated` 六类策略结果分别持久化正确；最终失败保留已确认的上级 ID。
-11. TMDB搜索成功返回空结果/无可接受TV候选，且bgmid与季度有效、兜底开启：`failure_kind=SemanticNoMatch`、`tmdb_access_confirmed=true`，允许下载并写`tmdbid=0`。
-12. DNS/连接/TLS/代理/超时/取消/408/429/5xx/断路器分别重试耗尽：即使bgmid与季度有效也不得下载或写NFO，状态为重试/服务故障且Web显示兜底拒绝原因。
-13. API Key缺失、401/403、endpoint错误、响应截断/畸形、输入非法、人工规则无效和候选歧义分别验证：全部禁止`tmdbid=0`，进入配置或人工修复。
-14. 首次网络失败、后续重试成功并得到确定性空结果时允许按SemanticNoMatch兜底；仅AI/MCP声称未找到而TMDB权威请求从未成功时禁止。
-11. DNS/超时/429/5xx 标记为可重试，401/403/API Key 缺失标记为配置错误，无结果/歧义/字段冲突标记为需人工处理；所有原因均不泄漏密钥、Authorization 或完整 Prompt。
+4. 第一层或更深前传命中：对该前作按日文名、中文名、首播日期重新验证完整 `tmdbid + Season`，允许采用与当前候选不同的 TMDB Series；TitleSeason/FirstSeason 不执行。
+5. 同一搜索词返回多个合格 Series：按精确名称、相似度、返回顺序逐个验证，首个候选季度失败后继续第二候选；本轮耗尽后才进入下一清理搜索词。
+6. 回溯到首部仍无匹配：依次尝试 `TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；P2 只读取任务 `title` 并采用本地解析季度，P1 固定采用本地 `S01`，两者都不请求或验证 TMDB Season。
+7. 前传缺日期、多前传及循环：遍历次序稳定、无重复请求、可终止。
+8. 前传请求瞬时错误恢复；重试耗尽时记录 `BacktraceError`，然后执行较低优先级策略。
+9. 当前作品日文名、中文名均未找到 Series：只要存在 `bgmid`，Backtrace 仍发起关系请求并可由前作恢复不同的 `tmdbid + Season`；耗尽后才进入独立 AI/完全失败兜底，P2/P1 因缺少有效 Series 标记不适用。
+10. Web 配置页修改四个确定性开关及独立季度 AI/EP-AI 开关后，YAML diff、备份、重载值和阶段说明一致。
+11. `Disabled`、`NotApplicable`、`NoMatch`、`Error`、`Succeeded`、`Terminated` 六类策略结果分别持久化正确；最终失败保留已确认的上级 ID。
+12. TMDB搜索成功返回空结果/无可接受TV候选，且bgmid与季度有效、兜底开启：`failure_kind=SemanticNoMatch`、`tmdb_access_confirmed=true`，允许下载并写`tmdbid=0`。
+13. DNS/连接/TLS/代理/超时/取消/408/429/5xx/断路器分别重试耗尽：即使bgmid与季度有效也不得下载或写NFO，状态为重试/服务故障且Web显示兜底拒绝原因。
+14. API Key缺失、401/403、endpoint错误、响应截断/畸形、输入非法、人工规则无效和候选歧义分别验证：全部禁止`tmdbid=0`，进入配置或人工修复。
+15. 首次网络失败、后续重试成功并得到确定性空结果时允许按SemanticNoMatch兜底；仅AI/MCP声称未找到而TMDB权威请求从未成功时禁止。
+16. DNS/超时/429/5xx 标记为可重试，401/403/API Key 缺失标记为配置错误，无结果/歧义/字段冲突标记为需人工处理；所有原因均不泄漏密钥、Authorization 或完整 Prompt。
 
 ## AI 与 TMDB 规范命名场景
 

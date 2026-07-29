@@ -38,7 +38,7 @@ public sealed class TmdbSeasonSelectorTests
     }
 
     [Fact]
-    public void MissingDateKeepsUpstreamZeroDifferenceCompatibility()
+    public void SeasonWithoutAirDateIsIgnored()
     {
         var result = TmdbSeasonSelector.SelectByAirDate(
         [
@@ -46,11 +46,23 @@ public sealed class TmdbSeasonSelectorTests
             Season(2, 1, "Season 1", null),
             Season(3, 2, "Season 2", new DateOnly(2024, 1, 1)),
         ],
-        new DateOnly(2022, 1, 1));
+        new DateOnly(2024, 1, 2));
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, result.Value!.SeasonNumber);
-        Assert.Equal(0, result.AirDateDifferenceDays);
+        Assert.Equal(2, result.Value!.SeasonNumber);
+        Assert.Equal(1, result.AirDateDifferenceDays);
+    }
+
+    [Fact]
+    public void MissingSourceDateIsSemanticNoMatch()
+    {
+        var result = TmdbSeasonSelector.SelectByAirDate(
+            [Season(3, 2, "Season 2", new DateOnly(2024, 1, 1))],
+            null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("tmdb_season_source_air_date_required", result.Failure!.Code);
+        Assert.True(result.Failure.TmdbAccessConfirmed);
     }
 
     [Fact]

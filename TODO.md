@@ -106,7 +106,7 @@
 - [>] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}` 与官方 `/v0/subjects/{bgmid}/subjects` 实现 AOT-safe Subject/关系客户端、固定 User-Agent、日期/身份校验和稳定网络/协议失败分类；Episode 与缓存仍待实现。
 - [ ] 移植 Bangumi Archive 下载/缓存刷新。
 - [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；Bangumi Subject → TMDB Series/Season 与逐文件 Episode worker/运行审计已接入，缓存和 Bangumi Episode 确定性匹配待实现）。
-- [>] 按 issue #15 实现 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：已接入 Bangumi“前传”多层回溯、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；网络重试策略与受控 live fixture 仍待实现。
+- [>] 实现 AnimeGoNet 新增的 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：日文名、中文名、各自多轮清理及每轮全部合格 Series 均以完整 `tmdbid+Season` 为成功条件；P3 已按每个 Bangumi 前作的日文名、中文名和开播日期重新联合搜索，可恢复不同 TMDB Series，并覆盖多层、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；网络重试策略与受控 live fixture 仍待实现。
 - [ ] 实现 `TMDBFailUseAIMatchSeason` / `tmdb_fail_use_ai_match_season`（默认 `false`），每个下载任务只向大模型发送总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [ ] 实现 `TMDBFailEpUseAIMatchSeason` / `tmdb_failep_use_ai_match_season`（按指定拼写，默认 `false`）：非 AI 季度匹配成功后先验证来源 EP；存在不对应时按下载任务执行一次 AI EP 匹配。
 - [ ] 实现 Mikan 单文件发布日期Prompt门禁和显式开关：保留完整 `pubDate`，无偏移时按SourceProfile时区解析；即使开关开启也仅在Torrent实际文件条目数1、bgmid/日期有效且主程序成功计算 `bgm_episode_candidate` 时为真，Prompt直接结合文件名EP定向查TMDB，失败回通用流程。

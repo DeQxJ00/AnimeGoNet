@@ -492,7 +492,8 @@ function seasonFailurePriority(metadata: RuntimeConfiguration["metadata"]): HTML
     {
       priority: "3",
       title: "TMDBFailBacktrace",
-      description: "仅有 bgmid 时可用；沿 Bangumi 前传关系回溯季度",
+      description: "需要 bgmid；当前 tmdbid + Season 联合匹配失败后，逐层回溯 Bangumi 前传，"
+        + "用每个前作的日文名、中文名和开播日期重新搜索并验证完整 tmdbid + Season",
       enabled: metadata.season_failure.backtrace,
     },
     {

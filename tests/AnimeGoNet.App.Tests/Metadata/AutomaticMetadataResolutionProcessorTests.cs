@@ -36,7 +36,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal("season_resolved", run.Status);
         Assert.Equal(72517, run.TmdbSeriesId);
         Assert.Equal(2, run.TmdbSeasonNumber);
-        Assert.Equal(["来自深渊 烈日的黄金乡"], tmdb.SearchTitles);
+        Assert.Equal(["メイドインアビス 烈日の黄金郷"], tmdb.SearchTitles);
     }
 
     [Fact]
@@ -322,6 +322,65 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
             .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
         Assert.Equal(2, run.TmdbSeasonNumber);
+        var strategies = await ReadStrategiesAsync(app, taskId);
+        Assert.Contains("backtrace", strategies);
+        Assert.DoesNotContain("title_season", strategies);
+        Assert.DoesNotContain("first_season", strategies);
+    }
+
+    [Fact]
+    public async Task BacktraceCanRecoverDifferentSeriesWhenCurrentTitlesFindNoSeries()
+    {
+        var predecessorSeries = new TmdbSeries(900, "Previous", "Previous JP", null);
+        var predecessorSeason = new TmdbSeason(
+            90001,
+            predecessorSeries.Id,
+            1,
+            "Season 1",
+            new DateOnly(2018, 1, 1),
+            12);
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            searchFactory: title => title == "Previous JP" ? [predecessorSeries] : [],
+            detailsFactory: seriesId => seriesId == predecessorSeries.Id
+                ? new TmdbSeriesDetails(predecessorSeries, [predecessorSeason])
+                : null);
+        var bangumi = new GraphBangumiClient(
+            new Dictionary<int, BangumiSubject>
+            {
+                [547888] = new(547888, "Current JP", "Current CN", new DateOnly(2026, 4, 1), 12),
+                [1000] = new(1000, "Previous JP", "Previous CN", new DateOnly(2018, 1, 1), 12),
+            },
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>
+            {
+                [547888] = [new BangumiSubjectRelation(1000, 2, "Previous JP", "Previous CN", "前传")],
+            });
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    SeasonFailure = options.Metadata.SeasonFailure with
+                    {
+                        Backtrace = true,
+                        UseTitleSeason = true,
+                        UseFirstSeason = true,
+                    },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi);
+        var taskId = await AddDownloadedTaskAsync(app, "Current Season 4");
+
+        Assert.True(await app.App.Services.GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("season_resolved", run.Status);
+        Assert.Equal(900, run.TmdbSeriesId);
+        Assert.Equal(1, run.TmdbSeasonNumber);
+        Assert.Equal(["Current JP", "Current", "Current CN", "Current", "Previous JP"], tmdb.SearchTitles);
         var strategies = await ReadStrategiesAsync(app, taskId);
         Assert.Contains("backtrace", strategies);
         Assert.DoesNotContain("title_season", strategies);
@@ -1329,7 +1388,9 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Func<int, TmdbEpisode?>? episodeFactory = null,
         Func<int, int, TmdbEpisode?>? seasonEpisodeFactory = null,
         bool searchReturnsEmpty = false,
-        TmdbClientException? searchFailure = null) : ITmdbClient
+        TmdbClientException? searchFailure = null,
+        Func<string, IReadOnlyList<TmdbSeries>>? searchFactory = null,
+        Func<int, TmdbSeriesDetails?>? detailsFactory = null) : ITmdbClient
     {
         public List<string> SearchTitles { get; } = [];
 
@@ -1345,18 +1406,24 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                 return Task.FromException<IReadOnlyList<TmdbSeries>>(searchFailure);
             }
 
-            return Task.FromResult<IReadOnlyList<TmdbSeries>>(
-                searchReturnsEmpty ? [] : [series]);
+            return Task.FromResult(
+                searchFactory?.Invoke(title)
+                ?? (searchReturnsEmpty ? [] : (IReadOnlyList<TmdbSeries>)[series]));
         }
 
         public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeries?>(series);
+            Task.FromResult<TmdbSeries?>(detailsFactory?.Invoke(seriesId)?.Series ?? series);
 
         public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(int seriesId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeriesDetails?>(new TmdbSeriesDetails(series, seasons));
+            Task.FromResult(
+                detailsFactory is null
+                    ? new TmdbSeriesDetails(series, seasons)
+                    : detailsFactory(seriesId));
 
         public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
-            Task.FromResult(seasons.FirstOrDefault(value => value.SeasonNumber == seasonNumber));
+            Task.FromResult(
+                detailsFactory?.Invoke(seriesId)?.Seasons.FirstOrDefault(value => value.SeasonNumber == seasonNumber)
+                ?? seasons.FirstOrDefault(value => value.SeasonNumber == seasonNumber));
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,

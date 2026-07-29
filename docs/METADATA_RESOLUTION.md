@@ -208,7 +208,7 @@ advanced:
 季度策略按数值从高到低执行：
 
 1. `tmdb_fail_skip=true`：优先级 4，立即跳过当前项，不执行其他策略。
-2. `tmdb_fail_backtrace=true`：优先级 3，按 [AnimeGo issue #15](https://github.com/wetor/AnimeGo/issues/15) 沿 Bangumi“前传”关系逐项回溯；成功即采用，耗尽则继续下一策略。
+2. `tmdb_fail_backtrace=true`：优先级 3，AnimeGoNet 沿 Bangumi“前传”关系逐项回溯；每个前作重新联合匹配完整 `tmdbid + Season`，成功即采用，耗尽则继续下一策略。
 3. `tmdb_fail_use_ai_match_season=true`：独立可选阶段，使用下载任务总标题、候选视频的相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid` 请求大模型，一次返回整个任务的 TMDB Series/Season/Episode 候选。非空 ID 已绑定当前任务，但跨站标题、季度和 EP 编号可能不同，只能作参考；结果必须通过官方 TMDB API 二次验证，详细协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
 4. `tmdb_fail_use_title_season=true`（`TMDBFailUseTitleSeason`）：优先级 2。前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器；解析出正季度后直接使用该本地季度，不验证 TMDB Season，解析不到时继续 P1。
 5. `tmdb_fail_use_first_season=true`（`TMDBFailUseFirstSeason`）：优先级 1。前序策略全部失败后直接使用本地 `S01`，不验证 TMDB Season。
@@ -218,14 +218,16 @@ advanced:
 
 ### 6.1 回溯算法边界
 
-- 只在已经取得有效 `TmdbSeriesId`、但当前 Bgm 首播日期与所有有效 TMDB 季度的最小差值仍超过 `ThemoviedbMatchSeasonDays` 时运行。
-- 复用同一 TMDB 剧集的季度列表；从当前 `BangumiSubjectId` 查询“前传”关系，并以每个前传的首播日期重新执行相同的日期差匹配。
-- 命中阈值内季度立即结束回溯；没有前传即视为回溯到首部，转入较低优先级策略。
+- 正常确定性搜索按 Bangumi 日文原名、中文名顺序执行。每个名字先搜索原文，再依次执行四级后缀清理；同一名字中未发生变化的重复搜索词不再次请求。
+- 每个搜索词返回的合格 Series 按“名称精确匹配、相似度降序、TMDB 返回顺序”稳定排列，并逐个读取官方 TMDB 详情，以当前 Bangumi Subject 的首播日期匹配普通 Season。只有 `tmdbid` 与 Season 同时通过验证才停止；本轮全部候选均失败后继续同一名字的后续清理轮次，再继续中文名。
+- P3 需要有效 `bgmid`，但不要求当前搜索已经取得 `TmdbSeriesId`。当前作品的 `tmdbid + Season` 联合匹配失败后，从当前 `BangumiSubjectId` 查询“前传”关系。
+- 每个前作作为新的完整匹配节点，按其日文原名、中文名和首播日期重新执行 Series 搜索、官方详情读取和普通 Season 日期验证；不得锁定当前候选的 `tmdbid`，允许前作命中不同的 TMDB Series。
+- 任一前作的 `tmdbid + Season` 同时验证成功即结束回溯；没有前传即视为回溯到首部，转入较低优先级策略。
 - 前传缺少首播日期时不参与日期匹配，但仍可继续查询它的前传。
 - 多个前传按关系距离由近到远遍历；同层按首播日期降序、Subject ID 升序稳定排序，保证相同输入结果确定。
 - 使用 visited Subject ID 防止关系环和重复请求；所有请求支持取消。关系读取失败先按数据源策略重试，耗尽后记录独立 `BacktraceError` 并继续较低优先级策略，不能伪装成正常的“回溯耗尽”。
 
-TMDB 已有有效 ID但季度失败时执行完整策略。TMDB 完全失败时 Backtrace 不适用，但 AI 可以尝试恢复 ID/Season/Episode。AI 仍失败且 `tmdb_fail_use_bangumi=true` 时进入先前确认的 `tmdbid=0` 例外路径；由于没有 TMDB 规范值，该路径只能使用 Bangumi 名称与来源季度/集号，并必须在状态/UI 中明确标记为非 TMDB 规范命名。
+无论当前搜索是“已有有效 ID 但季度失败”还是“两个名字均未找到可验证 Series”，只要已有 `bgmid`，P3 都可以尝试恢复完整 `tmdbid + Season`。P3、AI 仍失败且 `tmdb_fail_use_bangumi=true` 时，才进入先前确认的 `tmdbid=0` 例外路径；由于没有 TMDB 规范值，该路径只能使用 Bangumi 名称与来源季度/集号，并必须在状态/UI 中明确标记为非 TMDB 规范命名。P2/P1 仍要求已有有效 TMDB Series，因为两者只提供本地 Season Number。
 
 ### 6.2 非 AI 季度成功后的 EP 校验
 
@@ -287,7 +289,7 @@ Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access
 12. Backtrace 回溯到首部仍无匹配：按顺序继续 TitleSeason，再继续 FirstSeason。
 13. 前传缺日期、多前传和循环关系：遍历结果确定、无死循环、同一 Subject 不重复请求。
 14. 前传请求瞬时失败后恢复：继续回溯；重试耗尽：记录 `BacktraceError` 后执行较低优先级策略。
-15. TMDB 完全失败且仅 Backtrace 开启：不发起无意义的前传请求，最终仍解析失败；若 TitleSeason/FirstSeason 同时开启则可由它们确定季度。
+15. 当前作品的日文名、中文名均未取得可验证 Series，但存在 `bgmid` 且 Backtrace 开启：必须逐项查询前传，并允许前作恢复一个不同的有效 `tmdbid + Season`；P3 耗尽且仍无有效 Series 时，TitleSeason/FirstSeason 标记不适用。
 16. Backtrace 或 AI 返回的 Series/Season/Episode 均验证成功时，目录名、季度和集号使用 TMDB 值，来源值只保留审计；P2/P1 是明确的本地 Season 回退例外，分别使用任务 `title` 解析季度或固定 `S01`，不验证 TMDB Season，且必须保存取得策略。
 17. AI 返回有效 Series/Season 但 Episode 不存在：不得下载/重命名，不允许退回来源 EP 冒充 TMDB EP。
 18. `tmdb_fail_use_bangumi=true` 的 `tmdbid=0` 路径明确标记为例外，不得把其名称/季度/集号记录为 TMDB 来源。

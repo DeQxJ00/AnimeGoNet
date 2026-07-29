@@ -206,7 +206,7 @@ docs/
 - TMDB 搜索、相似度、季度/首播日期匹配及 fallback。
 - 明确区分 Mikan `bangumiId`、Bangumi Subject ID、TMDB Series ID、Season Number 和 AnimeGoNet 内部 ID；详细状态机见 [`METADATA_RESOLUTION.md`](METADATA_RESOLUTION.md)。
 - “TMDB 完全失败”与“已经得到 TMDB ID 但季度未匹配”分开；确定性链按适用条件执行 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`，AI 是独立可选阶段，Backtrace 在没有 `bgmid` 时不适用。P2 仅本地解析任务 `title`，P1 固定本地 `S01`，均不验证 TMDB Season。
-- 按 [AnimeGo issue #15](https://github.com/wetor/AnimeGo/issues/15) 新增 `TMDBFailBacktrace` / `advanced.default.tmdb_fail_backtrace`（默认 `false`）：当前 Bgm 首播日期无法匹配时，沿 Bangumi“前传”关系逐项回溯，用前传首播日期重新匹配同一 TMDB 剧集季度，直到命中或没有可继续回溯的前传。
+- AnimeGoNet 新增 `TMDBFailBacktrace` / `advanced.default.tmdb_fail_backtrace`（默认 `false`），不属于 AnimeGo `develop` 的原始行为：当前作品无法联合确认 `tmdbid + Season` 时，沿 Bangumi“前传”关系逐项回溯；每个前作分别使用 Bangumi 日文原名、中文名和该前作首播日期重新搜索并验证完整 `tmdbid + Season`，允许命中与当前搜索候选不同的 TMDB Series。
 - 回溯实现必须可取消并使用 visited Subject ID 防止关系环；缺日期时继续查找其前传，多前传按最近关系优先且稳定排序；回溯耗尽后继续较低优先级策略。
 - 新增 `advanced.default.tmdb_fail_use_ai_match_season`（默认 `false`）：每个下载任务使用总标题、候选视频的相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid` 请求一次大模型，返回整个任务的 TMDB Series/Season/Episode 候选。Mikan日期优先开关开启且单文件、`bgmid/pubDate` 等运行条件满足时，主程序先按Bangumi播出日期计算 `bgm_episode_candidate`；候选成功后才开启固定Prompt区块，结合文件名EP定向查询TMDB。非空 ID 已由来源链路绑定当前任务，但只提供作品级上下文；跨站标题、季度拆分和 Episode 编号可不同，不能直接复制。完整协议见 [`AI_METADATA_MATCHING.md`](AI_METADATA_MATCHING.md)。
 - 本地桥接 TMDB/Bangumi Streamable HTTP MCP为模型 function tools；TMDB始终启用，Bangumi仅有 `bgmid` 时启用。`anidbid` 存在时增加固定 AniDB→`tmdbtv` 候选工具；适用 MCP不足后才启用 Web Search。

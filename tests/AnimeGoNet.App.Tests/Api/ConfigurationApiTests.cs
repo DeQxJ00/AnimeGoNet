@@ -145,7 +145,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("data-priority=\"2\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"1\"", html, StringComparison.Ordinal);
         Assert.Contains("默认关闭，不占确定性优先级", html, StringComparison.Ordinal);
-        Assert.Contains("仅有 bgmid 时可用", html, StringComparison.Ordinal);
+        Assert.Contains("需要 bgmid；当前 tmdbid + Season 联合匹配失败后", html, StringComparison.Ordinal);
+        Assert.Contains("用每个前作的日文名、中文名和开播日期重新搜索并验证完整 tmdbid + Season", html, StringComparison.Ordinal);
         Assert.Contains("TMDBFailUseTitleSeason", html, StringComparison.Ordinal);
         Assert.Contains("只用本地标题解析器读取任务 title", html, StringComparison.Ordinal);
         Assert.Contains("不验证 TMDB Season；解析不到继续 P1", html, StringComparison.Ordinal);
@@ -156,7 +157,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
         Assert.Contains("seasonFailurePriority", script, StringComparison.Ordinal);
         Assert.Contains("独立可选阶段，不占确定性优先级", script, StringComparison.Ordinal);
-        Assert.Contains("仅有 bgmid 时可用", script, StringComparison.Ordinal);
+        Assert.Contains("需要 bgmid；当前 tmdbid + Season 联合匹配失败后", script, StringComparison.Ordinal);
+        Assert.Contains("用每个前作的日文名、中文名和开播日期重新搜索并验证完整 tmdbid + Season", script, StringComparison.Ordinal);
         Assert.Contains("TMDBFailUseTitleSeason", script, StringComparison.Ordinal);
         Assert.Contains("只用本地标题解析器读取任务 title", script, StringComparison.Ordinal);
         Assert.Contains("不验证 TMDB Season；解析不到继续 P1", script, StringComparison.Ordinal);

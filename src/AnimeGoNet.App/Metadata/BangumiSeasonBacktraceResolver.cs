@@ -3,22 +3,23 @@ using AnimeGoNet.Core.Metadata;
 namespace AnimeGoNet.App.Metadata;
 
 public sealed record BangumiSeasonBacktraceResult(
+    TmdbSeriesDetails? Details,
     TmdbSeason? Season,
     MetadataFailure? Failure,
     int VisitedSubjectCount)
 {
-    public bool IsSuccess => Season is not null && Failure is null;
+    public bool IsSuccess => Details is not null && Season is not null && Failure is null;
 }
 
-public sealed class BangumiSeasonBacktraceResolver(IBangumiSubjectClient bangumi)
+public sealed class BangumiSeasonBacktraceResolver(
+    IBangumiSubjectClient bangumi,
+    TmdbSeriesSeasonResolver seriesSeasonResolver)
 {
     public async Task<BangumiSeasonBacktraceResult> ResolveAsync(
         int subjectId,
-        IReadOnlyList<TmdbSeason> seasons,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(subjectId, 0);
-        ArgumentNullException.ThrowIfNull(seasons);
         var visited = new HashSet<int> { subjectId };
         int[] currentLevel = [subjectId];
 
@@ -67,10 +68,26 @@ public sealed class BangumiSeasonBacktraceResolver(IBangumiSubjectClient bangumi
                     continue;
                 }
 
-                var selected = TmdbSeasonSelector.SelectByAirDate(seasons, predecessor.AirDate);
+                var selected = await seriesSeasonResolver.ResolveAsync(
+                    TmdbSeriesSeasonResolver.BangumiTitles(predecessor),
+                    predecessor.AirDate,
+                    cancellationToken).ConfigureAwait(false);
                 if (selected.IsSuccess)
                 {
-                    return new BangumiSeasonBacktraceResult(selected.Value, null, visited.Count);
+                    return new BangumiSeasonBacktraceResult(
+                        selected.Details,
+                        selected.Season,
+                        null,
+                        visited.Count);
+                }
+
+                if (selected.Failure!.Kind != MetadataFailureKind.SemanticNoMatch)
+                {
+                    return new BangumiSeasonBacktraceResult(
+                        null,
+                        null,
+                        selected.Failure,
+                        visited.Count);
                 }
             }
 
@@ -78,6 +95,7 @@ public sealed class BangumiSeasonBacktraceResolver(IBangumiSubjectClient bangumi
         }
 
         return new BangumiSeasonBacktraceResult(
+            null,
             null,
             new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_backtrace_exhausted", true),
             visited.Count);

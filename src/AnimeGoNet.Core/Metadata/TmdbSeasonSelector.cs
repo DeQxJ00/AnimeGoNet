@@ -14,18 +14,23 @@ public static class TmdbSeasonSelector
             return Failed("tmdb_seasons_empty");
         }
 
-        TmdbSeason? selected = seasons[0];
+        if (sourceAirDate is null)
+        {
+            return Failed("tmdb_season_source_air_date_required");
+        }
+
+        TmdbSeason? selected = null;
         var minimum = 36_500;
         foreach (var season in seasons)
         {
-            if (season.SeasonNumber == 0 || string.Equals(season.Name, "Specials", StringComparison.Ordinal))
+            if (season.SeasonNumber == 0
+                || string.Equals(season.Name, "Specials", StringComparison.Ordinal)
+                || season.AirDate is null)
             {
                 continue;
             }
 
-            var difference = season.AirDate is null || sourceAirDate is null
-                ? 0
-                : Math.Abs(season.AirDate.Value.DayNumber - sourceAirDate.Value.DayNumber);
+            var difference = Math.Abs(season.AirDate.Value.DayNumber - sourceAirDate.Value.DayNumber);
             if (difference < minimum)
             {
                 minimum = difference;
@@ -33,7 +38,7 @@ public static class TmdbSeasonSelector
             }
         }
 
-        return minimum > MaximumAirDateDifferenceDays
+        return selected is null || minimum > MaximumAirDateDifferenceDays
             ? Failed("tmdb_season_air_date_not_matched")
             : new TmdbSeasonResolutionResult(selected, null, minimum);
     }

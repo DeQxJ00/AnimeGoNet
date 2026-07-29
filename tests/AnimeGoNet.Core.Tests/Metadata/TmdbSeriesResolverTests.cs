@@ -14,9 +14,7 @@ public sealed class TmdbSeriesResolverTests
 
         Assert.True(result.IsSuccess);
         Assert.Same(found, result.Value);
-        Assert.Equal(
-            ["オーバーロードIV", "オーバーロードIV", "オーバーロードIV", "オーバーロードIV", "オーバーロード"],
-            result.AttemptedTitles);
+        Assert.Equal(["オーバーロードIV", "オーバーロード"], result.AttemptedTitles);
     }
 
     [Fact]
@@ -50,6 +48,77 @@ public sealed class TmdbSeriesResolverTests
 
         Assert.True(result.IsSuccess);
         Assert.Same(similar, result.Value);
+    }
+
+    [Fact]
+    public async Task CandidateValidatorChecksEveryEligibleSeriesInRankedOrder()
+    {
+        var first = new TmdbSeries(1, "同名作品", "同名作品", null);
+        var second = new TmdbSeries(2, "同名作品", "同名作品", null);
+        var client = new SearchClient(_ => [first, second]);
+        var inspected = new List<int>();
+
+        var result = await new TmdbSeriesResolver(client).ResolveAsync(
+            "同名作品",
+            (candidate, _) =>
+            {
+                inspected.Add(candidate.Id);
+                return ValueTask.FromResult(candidate.Id == second.Id);
+            });
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(second, result.Value);
+        Assert.Equal([1, 2], inspected);
+        Assert.Single(result.AttemptedTitles);
+    }
+
+    [Fact]
+    public async Task MultipleCandidatesCanMatchLocalizedName()
+    {
+        const string title = "Re：从零开始的异世界生活 第四季 丧失篇";
+        var localized = new TmdbSeries(
+            65942,
+            "Re：从零开始的异世界生活",
+            "Re:ゼロから始める異世界生活",
+            null);
+        var client = new SearchClient(_ =>
+        [
+            new TmdbSeries(1, "其他动画", "別のアニメ", null),
+            localized,
+        ]);
+
+        var result = await new TmdbSeriesResolver(client).ResolveAsync(title);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(localized, result.Value);
+    }
+
+    [Fact]
+    public async Task UnrelatedCandidatesDoNotPreventChangedSuffixRetry()
+    {
+        var found = new TmdbSeries(
+            65942,
+            "Re：从零开始的异世界生活",
+            "Re:ゼロから始める異世界生活",
+            null);
+        var client = new SearchClient(title => title switch
+        {
+            "Re:ゼロから始める異世界生活" => [found],
+            _ =>
+            [
+                new TmdbSeries(1, "A", "zzzzz", null),
+                new TmdbSeries(2, "B", "yyyyy", null),
+            ],
+        });
+
+        var result = await new TmdbSeriesResolver(client).ResolveAsync(
+            "Re:ゼロから始める異世界生活 4th season 喪失編");
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(found, result.Value);
+        Assert.Equal(
+            ["Re:ゼロから始める異世界生活 4th season 喪失編", "Re:ゼロから始める異世界生活"],
+            result.AttemptedTitles);
     }
 
     [Fact]

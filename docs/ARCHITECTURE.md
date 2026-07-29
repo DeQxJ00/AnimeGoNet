@@ -58,7 +58,7 @@ AnimeGoNet.slnx
 - `AnimeSeason`：普通正季度；Season 0 不进入普通季度候选。
 - `TmdbEpisode`：经 TMDB 验证的 Episode 全集，是 WebUI EP 网格和进度分母的唯一来源。
 - `MetadataResolutionRun` / `MetadataResolutionAttempt`：分别保存 Series/Season/Episode 的来源、阶段、策略优先级、结果、失败分类、脱敏原因、可重试性、次数、耗时和时间。
-- 人工覆盖优先；确定性季度失败链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`。P2 只解析统一导入任务 `title`，P1 固定本地 `S01`，两者都不验证 TMDB Season，并保存实际取得策略供 UI 区分。AI 季度/EP 匹配是独立默认关闭阶段，HTTP 默认超时 600 秒；Backtrace、AI 和后续 Episode 候选仍须由 TMDB 验证。
+- 人工覆盖优先；确定性季度失败链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`。P3 需要 `bgmid`，按每个 Bangumi 前作的日文名、中文名和开播日期重新联合验证完整 `tmdbid + Season`，可恢复不同的 TMDB Series。P2 只解析统一导入任务 `title`，P1 固定本地 `S01`，两者都不验证 TMDB Season，并保存实际取得策略供 UI 区分。AI 季度/EP 匹配是独立默认关闭阶段，HTTP 默认超时 600 秒；Backtrace、AI 和后续 Episode 候选仍须由 TMDB 验证。
 - 特别篇、小数集号和无法可靠匹配的文件不转换为普通整数 EP；Series/普通 Season 已确认时保留原名进入该季度 `Other`。
 
 ### 任务、去重与生命周期

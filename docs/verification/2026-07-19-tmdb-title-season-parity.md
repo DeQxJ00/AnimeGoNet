@@ -9,7 +9,7 @@ The implementation is a direct behavioral port of:
 - `upstream/develop:internal/animego/anisource/themoviedb/themoviedb.go`
 - `upstream/develop:internal/constant/anisource.go`
 
-`TmdbTitleHeuristics` preserves all four ordered suffix-removal regular expressions. `TmdbSeriesResolver` intentionally retries the current title once per upstream step even when a regular expression does not match, then applies the next transformation. A single candidate wins; multiple candidates first prefer `original_name == original input`, otherwise the original UTF-8 byte-based longest-common-substring algorithm selects the first maximum at the upstream `0.75` threshold.
+`TmdbTitleHeuristics` preserves all four ordered suffix-removal regular expressions. `TmdbSeriesResolver` applies every step but suppresses identical search strings, so a suffix rule that makes no change does not repeat the same HTTP request. Eligible candidates prefer exact localized/original names, then the original UTF-8 byte-based longest-common-substring similarity at the upstream `0.75` threshold, and finally TMDB response order. The joint resolver validates every eligible candidate's official Series details and air-date Season before moving to the next cleaned title.
 
 `TmdbSeasonSelector` excludes Season 0 and the exact upstream `Specials` label, selects the smallest absolute air-date difference and accepts exactly 90 days. For strict parity, a missing source or TMDB air date retains the upstream zero-difference behavior. A later safety policy may reject missing-date ambiguity, but that must be a documented layer above this compatibility selector rather than an untracked change to the baseline.
 
