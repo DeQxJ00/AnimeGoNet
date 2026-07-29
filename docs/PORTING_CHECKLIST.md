@@ -26,7 +26,7 @@
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | `internal/pkg/request` | AOT-safe `HttpClient` pipeline | 保留 | 待实现 | host/proxy/retry fake-server tests |
-| `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 进行中 | 严格v1 Bencode、原始info-hash、单/多文件与安全staging已验证；magnet和4个上游fixture parity待实现 |
+| `internal/pkg/torrent` | torrent/magnet/bencode parser | 保留 | 进行中 | 严格 v1 Bencode、原始 info-hash、单/多文件与安全 staging 已验证；magnet 的 40 hex/32 Base32、首个 xt/dn 和 tracker 计数已按上游 fixture 验证且不保留 tracker/passkey；4 个上游真实 `.torrent` fixture parity 待实现 |
 | `internal/animego/feed/rss.go` | RSS URL/file/raw parser | 保留 | 已验证 | 5 MiB 有界 raw/file/可注入 URL 读取、首个 enclosure、缺失跳过、非法 length=0、Mikan pubDate 原文与带偏移规范值、稳定失败码与安全 XML tests 已通过；`/api/rss` 已接入 |
 | `anisource/mikan` | Mikan 页面/RSS、`mikanid`、groupid | 保留+扩展 | 已验证 | RSS source URL/channel link 的 path/query 正整数 mikanid、Episode HTML `.mikan-rss` 的 `bangumiId/subgroupid`，以及 `/Home/Bangumi/{mikanid}` 中 `p.bangumi-info` 的可信 Bangumi Subject 链接均已覆盖上游 fixture；SSRF 防护、严格 UTF-8/容量限制、歧义与伪造域名拒绝、schema v26 批次缓存/审计、统一导入 task 持久化和失败重试 tests 已通过 |
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 进行中 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选与自动编排 fake tests 已通过；SQLite cache 待实现 |

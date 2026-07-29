@@ -96,8 +96,8 @@
 
 - [ ] 移植代理、超时、重试、Host redirect、Cookie/API key。
 - [x] 移植 RSS 文件/URL/raw parse：已实现 5 MiB 上限、禁用 DTD/外部实体、首个 enclosure、无 enclosure 跳过、非法 length 归零、Mikan `pubDate` 日期兼容和稳定错误码；URL/文件读取边界可注入测试，尚未暴露为公网抓取 API。
-- [>] 实现 Bencode/torrent/magnet/info-hash（严格 v1 Bencode、原始 info 字节 SHA-1、单/多文件清单、padding/路径/数量/总量校验已完成；magnet 与上游 fixture parity 待实现）。
-- [>] 通过本地 fixture HTTP、RSS、torrent parity tests：RSS raw/file/注入式 HTTP、缺字段、损坏 XML、DTD、错误脱敏和 mikanid fixture 已通过；上游全部 fixture、真实本地 fixture server 与 torrent magnet parity 待完成。
+- [x] 实现 Bencode/torrent/magnet/info-hash：严格 v1 Bencode、原始 info 字节 SHA-1、单/多文件清单、padding/路径/数量/总量校验已完成；magnet 现按上游支持首个 `urn:btih` 的 40 位 hex/32 位 Base32、首个 dn 和 tracker 计数，并保证返回/异常不保留 URI、tracker 或 passkey。
+- [>] 通过本地 fixture HTTP、RSS、torrent parity tests：RSS raw/file/注入式 HTTP、缺字段、损坏 XML、DTD、错误脱敏、mikanid 以及上游两条 magnet fixture parity 已通过；上游四个真实 `.torrent` fixture 和真实本地 fixture server 待完成。
 
 ## P5 — 数据源
 
