@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 29;
+    public const int CurrentVersion = 30;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -35,7 +35,23 @@ public static class DatabaseSchema
         new SchemaMigration(27, "directory_database_index", DirectoryDatabaseIndex),
         new SchemaMigration(28, "animegonet_data_versions", AnimeGoNetDataVersions),
         new SchemaMigration(29, "data_update_transfer_audit", DataUpdateTransferAudit),
+        new SchemaMigration(30, "library_metadata_audit_indexes", LibraryMetadataAuditIndexes),
     ];
+
+    private const string LibraryMetadataAuditIndexes = """
+        CREATE INDEX ix_task_files_tmdb_season_task
+            ON task_files(tmdb_series_id, tmdb_season_number, task_id);
+
+        CREATE INDEX ix_metadata_runs_tmdb_season_task
+            ON metadata_resolution_runs(
+                tmdb_series_id, tmdb_season_number, task_id, started_at_utc DESC);
+
+        CREATE INDEX ix_metadata_attempts_run_created
+            ON metadata_resolution_attempts(run_id, created_at_utc DESC);
+
+        CREATE INDEX ix_mikan_work_rules_tmdb_season
+            ON mikan_work_rules(tmdb_series_id, tmdb_season_number, mikanid);
+        """;
 
     private const string DataUpdateTransferAudit = """
         CREATE TABLE data_update_transfer_runs (

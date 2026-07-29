@@ -102,6 +102,62 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task LibraryMetadataAuditMigrationCreatesTargetedIndexes()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT name
+            FROM sqlite_schema
+            WHERE type = 'index'
+              AND name IN (
+                  'ix_task_files_tmdb_season_task',
+                  'ix_metadata_runs_tmdb_season_task',
+                  'ix_metadata_attempts_run_created',
+                  'ix_mikan_work_rules_tmdb_season')
+            ORDER BY name;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        var indexes = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            indexes.Add(reader.GetString(0));
+        }
+
+        Assert.Equal(
+            [
+                "ix_metadata_attempts_run_created",
+                "ix_metadata_runs_tmdb_season_task",
+                "ix_mikan_work_rules_tmdb_season",
+                "ix_task_files_tmdb_season_task",
+            ],
+            indexes);
+    }
+
+    [Fact]
+    public async Task NativeSmokeDefaultTracksCurrentSchemaVersion()
+    {
+        var scriptPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "eng",
+            "smoke-native.ps1"));
+        Assert.True(File.Exists(scriptPath), $"Native smoke script was not found: {scriptPath}");
+
+        var script = await File.ReadAllTextAsync(scriptPath);
+
+        Assert.Contains(
+            $"[int]$ExpectedSchemaVersion = {DatabaseSchema.CurrentVersion}",
+            script,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DataUpdateTransferMigrationPreservesVersion28ActiveData()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

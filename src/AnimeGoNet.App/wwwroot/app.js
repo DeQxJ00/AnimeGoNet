@@ -754,6 +754,9 @@ function libraryStrategy(value) {
         first_season: "P1 本地 S01（未验证）",
         pending_tmdb_manual: "待补全 TMDB 人工恢复",
         pending_tmdb_automatic: "待补全 TMDB 自动恢复",
+        manual_mikan_offset: "人工 Mikan EP offset + TMDB 验证",
+        trusted_mikan_offset: "可信 Mikan EP offset + TMDB 验证",
+        tmdb_episode_number: "文件名 EP + TMDB Episode 验证",
     };
     return value ? labels[value] ?? value : "未记录";
 }
@@ -929,6 +932,108 @@ function renderLibraryEpisodes(detail) {
         return card;
     }));
 }
+function libraryAuditGroup(title, total, truncated, items, open = false) {
+    const group = document.createElement("details");
+    group.className = "library-audit-group";
+    group.open = open;
+    const summary = document.createElement("summary");
+    summary.textContent = `${title} · ${total}${truncated ? "（仅显示最新一部分）" : ""}`;
+    const content = document.createElement("div");
+    content.className = "library-audit-list";
+    if (items.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "muted empty";
+        empty.textContent = "暂无记录。";
+        content.append(empty);
+    }
+    else {
+        content.append(...items);
+    }
+    group.append(summary, content);
+    return group;
+}
+function renderLibraryAudit(detail) {
+    const container = element("#library-audit");
+    const heading = document.createElement("div");
+    heading.className = "library-audit-heading";
+    const title = document.createElement("h4");
+    title.textContent = "元数据审计";
+    const status = document.createElement("span");
+    status.className = "muted";
+    status.textContent =
+        `${detail.related_task_total} 个关联任务 · ${detail.resolution_attempt_total} 次策略验证`;
+    heading.append(title, status);
+    const offsets = detail.manual_offsets.map((offset) => {
+        const row = document.createElement("article");
+        row.className = `library-audit-item ${offset.enabled ? "ready" : "disabled"}`;
+        const name = document.createElement("strong");
+        const signedOffset = offset.episode_offset >= 0
+            ? `+${offset.episode_offset}` : String(offset.episode_offset);
+        name.textContent = `mikanid ${offset.mikanid} · EP ${signedOffset}`;
+        const scope = document.createElement("p");
+        scope.textContent =
+            `当前规则 ${offset.enabled ? "已启用（人工优先级最高）" : "已禁用"}`
+                + ` · TMDB ${textOrDash(offset.tmdb_series_id)}`
+                + ` / ${offset.tmdb_season_number === null
+                    ? "全部季度" : `S${String(offset.tmdb_season_number).padStart(2, "0")}`}`;
+        const metadata = document.createElement("p");
+        metadata.textContent =
+            `bgmid ${textOrDash(offset.bgmid)} · revision ${offset.revision}`
+                + ` · 更新 ${libraryDate(offset.updated_at_utc, true)}`;
+        row.append(name, scope, metadata);
+        return row;
+    });
+    const tasks = detail.related_tasks.map((task) => {
+        const row = document.createElement("article");
+        row.className = "library-audit-item";
+        const name = document.createElement("strong");
+        name.textContent = task.title;
+        const identity = document.createElement("p");
+        identity.textContent =
+            `${task.task_id} · ${task.source_id} · ${task.status}`
+                + ` · mikanid ${textOrDash(task.mikanid)} · bgmid ${textOrDash(task.bgmid)}`;
+        const run = document.createElement("p");
+        run.textContent = task.latest_run_attempt_number === null
+            ? `尚无解析 Run · 更新 ${libraryDate(task.updated_at_utc, true)}`
+            : `最近 Run #${task.latest_run_attempt_number}`
+                + `（${textOrDash(task.latest_run_status)}）`
+                + ` · 更新 ${libraryDate(task.updated_at_utc, true)}`;
+        row.append(name, identity, run);
+        return row;
+    });
+    const attempts = detail.resolution_attempts.map((attempt) => {
+        const row = document.createElement("article");
+        row.className =
+            `metadata-attempt ${attempt.result === "failed" ? "failed" : ""}`;
+        const attemptHeading = document.createElement("div");
+        attemptHeading.className = "metadata-attempt-heading";
+        const strategy = document.createElement("strong");
+        strategy.textContent =
+            `${attempt.stage} · ${libraryStrategy(attempt.strategy)}`;
+        const result = document.createElement("span");
+        result.className = `badge ${attempt.result === "failed" ? "error" : "ready"}`;
+        result.textContent = attempt.result;
+        attemptHeading.append(strategy, result);
+        const task = document.createElement("p");
+        task.textContent = `${attempt.task_title} · ${attempt.task_id}`;
+        const execution = document.createElement("p");
+        execution.textContent =
+            `P${textOrDash(attempt.priority)} · Run #${attempt.run_attempt_number}`
+                + `（${attempt.run_status}）· 尝试 #${attempt.attempt_number}`
+                + ` · ${attempt.duration_ms} ms · ${libraryDate(attempt.created_at_utc, true)}`;
+        row.append(attemptHeading, task, execution);
+        if (attempt.error_code || attempt.reason) {
+            const reason = document.createElement("p");
+            reason.className = "metadata-attempt-reason";
+            reason.textContent =
+                `${textOrDash(attempt.error_code)} · ${textOrDash(attempt.reason)}`
+                    + ` · ${attempt.retryable ? "可重试" : "不可重试"}`;
+            row.append(reason);
+        }
+        return row;
+    });
+    container.replaceChildren(heading, libraryAuditGroup("当前人工 EP offset", detail.manual_offsets.length, false, offsets, detail.manual_offsets.length > 0), libraryAuditGroup("关联任务", detail.related_task_total, detail.related_tasks_truncated, tasks), libraryAuditGroup("季度级逐次验证时间线", detail.resolution_attempt_total, detail.resolution_attempts_truncated, attempts));
+}
 function renderLibraryDetail(detail, focus) {
     activeLibraryDetail = detail;
     const panel = element("#library-detail");
@@ -975,6 +1080,7 @@ function renderLibraryDetail(detail, focus) {
     element("#library-detail-delete").disabled = false;
     element("#library-detail-action-status").textContent =
         "刷新只更新 TMDB 权威投影；删除不处理业务记录、下载器任务或文件。";
+    renderLibraryAudit(detail);
     renderLibraryEpisodes(detail);
     if (focus) {
         panel.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -987,6 +1093,7 @@ async function loadLibraryDetail(tmdbSeriesId, seasonNumber, focus = false) {
     panel.hidden = false;
     element("#library-detail-title").textContent = "正在读取季度详情…";
     element("#library-detail-summary").replaceChildren();
+    element("#library-audit").replaceChildren();
     element("#library-episodes").replaceChildren();
     element("#library-episode-status").textContent = "";
     element("#library-detail-refresh").disabled = true;

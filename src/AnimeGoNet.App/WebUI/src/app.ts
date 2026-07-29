@@ -510,6 +510,46 @@ interface AnimeEpisodeItem {
   media_path_known: boolean;
 }
 
+interface AnimeSeasonManualOffset {
+  mikanid: number;
+  bgmid: number | null;
+  tmdb_series_id: number | null;
+  tmdb_season_number: number | null;
+  episode_offset: number;
+  enabled: boolean;
+  revision: number;
+  updated_at_utc: string;
+}
+
+interface AnimeSeasonRelatedTask {
+  task_id: string;
+  title: string;
+  source_id: string;
+  status: string;
+  mikanid: number | null;
+  bgmid: number | null;
+  latest_run_attempt_number: number | null;
+  latest_run_status: string | null;
+  updated_at_utc: string;
+}
+
+interface AnimeSeasonResolutionAttempt {
+  task_id: string;
+  task_title: string;
+  run_attempt_number: number;
+  run_status: string;
+  stage: string;
+  strategy: string;
+  priority: number | null;
+  result: string;
+  error_code: string | null;
+  reason: string | null;
+  retryable: boolean;
+  attempt_number: number;
+  duration_ms: number;
+  created_at_utc: string;
+}
+
 interface AnimeSeasonDetail {
   id: string;
   tmdb_series_id: number;
@@ -532,6 +572,13 @@ interface AnimeSeasonDetail {
   last_resolution_run_id: string | null;
   warnings: string[];
   episodes: AnimeEpisodeItem[];
+  manual_offsets: AnimeSeasonManualOffset[];
+  related_task_total: number;
+  related_tasks_truncated: boolean;
+  related_tasks: AnimeSeasonRelatedTask[];
+  resolution_attempt_total: number;
+  resolution_attempts_truncated: boolean;
+  resolution_attempts: AnimeSeasonResolutionAttempt[];
 }
 
 interface AnimeLibraryUiState {
@@ -1696,6 +1743,9 @@ function libraryStrategy(value: string | null): string {
     first_season: "P1 本地 S01（未验证）",
     pending_tmdb_manual: "待补全 TMDB 人工恢复",
     pending_tmdb_automatic: "待补全 TMDB 自动恢复",
+    manual_mikan_offset: "人工 Mikan EP offset + TMDB 验证",
+    trusted_mikan_offset: "可信 Mikan EP offset + TMDB 验证",
+    tmdb_episode_number: "文件名 EP + TMDB Episode 验证",
   };
   return value ? labels[value] ?? value : "未记录";
 }
@@ -1895,6 +1945,140 @@ function renderLibraryEpisodes(detail: AnimeSeasonDetail): void {
   }));
 }
 
+function libraryAuditGroup(
+  title: string,
+  total: number,
+  truncated: boolean,
+  items: HTMLElement[],
+  open = false,
+): HTMLDetailsElement {
+  const group = document.createElement("details");
+  group.className = "library-audit-group";
+  group.open = open;
+  const summary = document.createElement("summary");
+  summary.textContent = `${title} · ${total}${truncated ? "（仅显示最新一部分）" : ""}`;
+  const content = document.createElement("div");
+  content.className = "library-audit-list";
+  if (items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = "暂无记录。";
+    content.append(empty);
+  } else {
+    content.append(...items);
+  }
+  group.append(summary, content);
+  return group;
+}
+
+function renderLibraryAudit(detail: AnimeSeasonDetail): void {
+  const container = element<HTMLElement>("#library-audit");
+  const heading = document.createElement("div");
+  heading.className = "library-audit-heading";
+  const title = document.createElement("h4");
+  title.textContent = "元数据审计";
+  const status = document.createElement("span");
+  status.className = "muted";
+  status.textContent =
+    `${detail.related_task_total} 个关联任务 · ${detail.resolution_attempt_total} 次策略验证`;
+  heading.append(title, status);
+
+  const offsets = detail.manual_offsets.map((offset) => {
+    const row = document.createElement("article");
+    row.className = `library-audit-item ${offset.enabled ? "ready" : "disabled"}`;
+    const name = document.createElement("strong");
+    const signedOffset = offset.episode_offset >= 0
+      ? `+${offset.episode_offset}` : String(offset.episode_offset);
+    name.textContent = `mikanid ${offset.mikanid} · EP ${signedOffset}`;
+    const scope = document.createElement("p");
+    scope.textContent =
+      `当前规则 ${offset.enabled ? "已启用（人工优先级最高）" : "已禁用"}`
+      + ` · TMDB ${textOrDash(offset.tmdb_series_id)}`
+      + ` / ${offset.tmdb_season_number === null
+        ? "全部季度" : `S${String(offset.tmdb_season_number).padStart(2, "0")}`}`;
+    const metadata = document.createElement("p");
+    metadata.textContent =
+      `bgmid ${textOrDash(offset.bgmid)} · revision ${offset.revision}`
+      + ` · 更新 ${libraryDate(offset.updated_at_utc, true)}`;
+    row.append(name, scope, metadata);
+    return row;
+  });
+
+  const tasks = detail.related_tasks.map((task) => {
+    const row = document.createElement("article");
+    row.className = "library-audit-item";
+    const name = document.createElement("strong");
+    name.textContent = task.title;
+    const identity = document.createElement("p");
+    identity.textContent =
+      `${task.task_id} · ${task.source_id} · ${task.status}`
+      + ` · mikanid ${textOrDash(task.mikanid)} · bgmid ${textOrDash(task.bgmid)}`;
+    const run = document.createElement("p");
+    run.textContent = task.latest_run_attempt_number === null
+      ? `尚无解析 Run · 更新 ${libraryDate(task.updated_at_utc, true)}`
+      : `最近 Run #${task.latest_run_attempt_number}`
+        + `（${textOrDash(task.latest_run_status)}）`
+        + ` · 更新 ${libraryDate(task.updated_at_utc, true)}`;
+    row.append(name, identity, run);
+    return row;
+  });
+
+  const attempts = detail.resolution_attempts.map((attempt) => {
+    const row = document.createElement("article");
+    row.className =
+      `metadata-attempt ${attempt.result === "failed" ? "failed" : ""}`;
+    const attemptHeading = document.createElement("div");
+    attemptHeading.className = "metadata-attempt-heading";
+    const strategy = document.createElement("strong");
+    strategy.textContent =
+      `${attempt.stage} · ${libraryStrategy(attempt.strategy)}`;
+    const result = document.createElement("span");
+    result.className = `badge ${attempt.result === "failed" ? "error" : "ready"}`;
+    result.textContent = attempt.result;
+    attemptHeading.append(strategy, result);
+    const task = document.createElement("p");
+    task.textContent = `${attempt.task_title} · ${attempt.task_id}`;
+    const execution = document.createElement("p");
+    execution.textContent =
+      `P${textOrDash(attempt.priority)} · Run #${attempt.run_attempt_number}`
+      + `（${attempt.run_status}）· 尝试 #${attempt.attempt_number}`
+      + ` · ${attempt.duration_ms} ms · ${libraryDate(attempt.created_at_utc, true)}`;
+    row.append(attemptHeading, task, execution);
+    if (attempt.error_code || attempt.reason) {
+      const reason = document.createElement("p");
+      reason.className = "metadata-attempt-reason";
+      reason.textContent =
+        `${textOrDash(attempt.error_code)} · ${textOrDash(attempt.reason)}`
+        + ` · ${attempt.retryable ? "可重试" : "不可重试"}`;
+      row.append(reason);
+    }
+    return row;
+  });
+
+  container.replaceChildren(
+    heading,
+    libraryAuditGroup(
+      "当前人工 EP offset",
+      detail.manual_offsets.length,
+      false,
+      offsets,
+      detail.manual_offsets.length > 0,
+    ),
+    libraryAuditGroup(
+      "关联任务",
+      detail.related_task_total,
+      detail.related_tasks_truncated,
+      tasks,
+    ),
+    libraryAuditGroup(
+      "季度级逐次验证时间线",
+      detail.resolution_attempt_total,
+      detail.resolution_attempts_truncated,
+      attempts,
+    ),
+  );
+}
+
 function renderLibraryDetail(detail: AnimeSeasonDetail, focus: boolean): void {
   activeLibraryDetail = detail;
   const panel = element<HTMLElement>("#library-detail");
@@ -1944,6 +2128,7 @@ function renderLibraryDetail(detail: AnimeSeasonDetail, focus: boolean): void {
   element<HTMLButtonElement>("#library-detail-delete").disabled = false;
   element<HTMLElement>("#library-detail-action-status").textContent =
     "刷新只更新 TMDB 权威投影；删除不处理业务记录、下载器任务或文件。";
+  renderLibraryAudit(detail);
   renderLibraryEpisodes(detail);
   if (focus) {
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1961,6 +2146,7 @@ async function loadLibraryDetail(
   panel.hidden = false;
   element<HTMLElement>("#library-detail-title").textContent = "正在读取季度详情…";
   element<HTMLElement>("#library-detail-summary").replaceChildren();
+  element<HTMLElement>("#library-audit").replaceChildren();
   element<HTMLElement>("#library-episodes").replaceChildren();
   element<HTMLElement>("#library-episode-status").textContent = "";
   element<HTMLButtonElement>("#library-detail-refresh").disabled = true;

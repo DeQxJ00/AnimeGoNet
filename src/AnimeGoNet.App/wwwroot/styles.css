@@ -73,6 +73,21 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-detail-facts div { min-width: 0; padding: 10px 11px; border-radius: 11px; background: rgba(5,8,16,.55); }
 .library-detail-facts dt { color: #8da2c9; font-size: .67rem; }
 .library-detail-facts dd { margin: 5px 0 0; font-size: .76rem; line-height: 1.4; overflow-wrap: anywhere; }
+.library-audit { display: grid; gap: 10px; margin: 16px 0; }
+.library-audit:empty { display: none; }
+.library-audit-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 14px; }
+.library-audit-heading h4 { margin: 0; font-size: .95rem; }
+.library-audit-heading span { font-size: .72rem; }
+.library-audit-group { border: 1px solid #344260; border-radius: 13px; background: rgba(5,8,16,.38); overflow: hidden; }
+.library-audit-group > summary { padding: 11px 13px; color: #d6e2f7; cursor: pointer; font-size: .78rem; font-weight: 700; }
+.library-audit-group > summary:focus-visible { outline: 3px solid #6d94cc; outline-offset: -3px; }
+.library-audit-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; padding: 0 11px 11px; }
+.library-audit-list > .empty { grid-column: 1 / -1; margin: 0; padding: 9px 10px; background: rgba(5,8,16,.45); }
+.library-audit-item { min-width: 0; padding: 10px 11px; border: 1px solid #334565; border-radius: 11px; background: rgba(5,8,16,.6); }
+.library-audit-item.ready { border-color: #31755f; background: rgba(14,43,35,.55); }
+.library-audit-item.disabled { opacity: .7; }
+.library-audit-item strong { color: #dce7fb; font-size: .78rem; overflow-wrap: anywhere; }
+.library-audit-item p { margin: 6px 0 0; color: #94a7c8; font-size: .7rem; line-height: 1.45; overflow-wrap: anywhere; }
 .library-episodes { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
 .library-episodes > .empty { grid-column: 1 / -1; }
 .library-episode { min-width: 0; border: 1px solid #44526c; border-radius: 13px; background: rgba(5,8,16,.52); overflow: hidden; }
@@ -463,6 +478,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .library-detail { padding: 18px; }
   .library-detail-layout { grid-template-columns: 1fr; }
   .library-detail-poster { width: min(230px,100%); height: auto; aspect-ratio: 2 / 3; justify-self: center; }
+  .library-audit-list { grid-template-columns: 1fr; }
   .library-episodes { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .metadata-tasks { grid-template-columns: 1fr; }
   .pending-tmdb-list { grid-template-columns: 1fr; }

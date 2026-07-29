@@ -24,7 +24,7 @@ public sealed class AnimeLibraryStoreTests
         Assert.Equal("tmdb_title", alpha.SeriesResolutionSource);
         Assert.Equal("tmdb_air_date", alpha.SeasonResolutionSource);
         Assert.Equal("verified", alpha.ValidationStatus);
-        Assert.Equal("run-alpha-1", alpha.LastResolutionRunId);
+        Assert.Equal("run-alpha-2", alpha.LastResolutionRunId);
         Assert.Contains("completion_without_snapshot", alpha.Warnings);
         Assert.Contains("completion_media_path_unknown", alpha.Warnings);
         Assert.DoesNotContain("episode_snapshot_incomplete", alpha.Warnings);
@@ -108,6 +108,37 @@ public sealed class AnimeLibraryStoreTests
         Assert.Equal(1, afterDeletion.Season.EpisodeDownloaded);
         Assert.False(afterDeletion.Episodes[2].Downloaded);
         Assert.Null(afterDeletion.Episodes[2].DownloadedAtUtc);
+    }
+
+    [Fact]
+    public async Task SeasonDetailIncludesManualOffsetsRelatedTasksAndCompleteAttemptTimeline()
+    {
+        await using var fixture = await LibraryFixture.CreateAsync();
+
+        var detail = await fixture.Store.GetSeasonAsync(100, 1);
+
+        Assert.NotNull(detail);
+        Assert.Equal([7788, 7789], detail.Audit.ManualOffsets
+            .Select(value => value.MikanId)
+            .ToArray());
+        Assert.Equal([2, -1], detail.Audit.ManualOffsets
+            .Select(value => value.EpisodeOffset)
+            .ToArray());
+        Assert.True(detail.Audit.ManualOffsets[0].Enabled);
+        Assert.False(detail.Audit.ManualOffsets[1].Enabled);
+        Assert.Equal(2, detail.Audit.RelatedTaskTotal);
+        Assert.False(detail.Audit.RelatedTasksTruncated);
+        Assert.Equal(["task-alpha-2", "task-alpha-1"], detail.Audit.RelatedTasks
+            .Select(value => value.TaskId)
+            .ToArray());
+        Assert.Equal(6, detail.Audit.ResolutionAttemptTotal);
+        Assert.False(detail.Audit.ResolutionAttemptsTruncated);
+        Assert.Equal("manual_mikan_offset", detail.Audit.ResolutionAttempts[0].Strategy);
+        Assert.Contains(
+            detail.Audit.ResolutionAttempts,
+            value => value.TaskId == "task-alpha-1"
+                && value.Strategy == "old_failed_search"
+                && value.Result == "failed");
     }
 
     [Fact]
@@ -244,13 +275,21 @@ public sealed class AnimeLibraryStoreTests
                      '2026-01-07T00:00:00.0000000+00:00');
 
                 INSERT INTO ingest_tasks (
-                    id, source_profile_id, source_profile_revision, source_id, title,
+                    id, source_profile_id, source_profile_revision, source_id,
+                    mikanid, bangumi_subject_id, title,
                     torrent_url_fingerprint, downloader_id, route_snapshot_json,
                     status, created_at_utc, updated_at_utc)
-                VALUES (
-                    'task-alpha-1', 'test', 1, 'test', 'Alpha',
+                VALUES
+                (
+                    'task-alpha-1', 'test', 1, 'test', 7788, 42,
+                    'Alpha',
                     'fingerprint-alpha', 'bt', '{}', 'metadata_resolved',
-                    $base_time, '2026-01-07T00:00:00.0000000+00:00');
+                    $base_time, '2026-01-07T00:00:00.0000000+00:00'),
+                (
+                    'task-alpha-2', 'test', 1, 'test', 7789, 43,
+                    'Alpha Again',
+                    'fingerprint-alpha-2', 'bt', '{}', 'metadata_resolved',
+                    $base_time, '2026-01-09T00:00:00.0000000+00:00');
 
                 INSERT INTO task_files (
                     id, task_id, relative_path, size_bytes, tmdb_series_id,
@@ -263,18 +302,52 @@ public sealed class AnimeLibraryStoreTests
                     id, task_id, status, tmdb_access_confirmed, fallback_eligible,
                     started_at_utc, completed_at_utc, attempt_number,
                     tmdb_series_id, tmdb_season_number)
-                VALUES (
+                VALUES
+                (
                     'run-alpha-1', 'task-alpha-1', 'season_resolved', 1, 0,
-                    $base_time, '2026-01-08T00:00:00.0000000+00:00', 1, 100, 1);
+                    $base_time, '2026-01-08T00:00:00.0000000+00:00', 2, 100, 1),
+                (
+                    'run-alpha-0', 'task-alpha-1', 'failed', 1, 0,
+                    '2025-12-31T00:00:00.0000000+00:00',
+                    '2025-12-31T00:00:01.0000000+00:00', 1, NULL, NULL),
+                (
+                    'run-alpha-2', 'task-alpha-2', 'episode_resolved', 1, 0,
+                    '2026-01-09T00:00:00.0000000+00:00',
+                    '2026-01-09T00:00:01.0000000+00:00', 1, 100, 1);
 
                 INSERT INTO metadata_resolution_attempts (
-                    id, run_id, stage, strategy, result, retryable,
+                    id, run_id, stage, strategy, priority, result,
+                    error_code, reason, retryable,
                     attempt_number, duration_ms, created_at_utc)
                 VALUES
                     ('attempt-series', 'run-alpha-1', 'series', 'tmdb_title',
-                     'matched', 0, 1, 10, $base_time),
+                     NULL, 'matched', NULL, NULL, 0, 1, 10, $base_time),
                     ('attempt-season', 'run-alpha-1', 'season', 'tmdb_air_date',
-                     'matched', 0, 1, 20, $base_time);
+                     3, 'matched', NULL, NULL, 0, 1, 20, $base_time),
+                    ('attempt-old', 'run-alpha-0', 'series', 'old_failed_search',
+                     NULL, 'failed', 'tmdb_no_match', 'No verified Series.', 0,
+                     1, 30, '2025-12-31T00:00:01.0000000+00:00'),
+                    ('attempt-alpha-2-series', 'run-alpha-2', 'series', 'tmdb_title',
+                     NULL, 'matched', NULL, NULL, 0,
+                     1, 10, '2026-01-09T00:00:00.0000000+00:00'),
+                    ('attempt-alpha-2-season', 'run-alpha-2', 'season', 'tmdb_air_date',
+                     3, 'matched', NULL, NULL, 0,
+                     1, 10, '2026-01-09T00:00:00.0000000+00:00'),
+                    ('attempt-offset', 'run-alpha-2', 'episode', 'manual_mikan_offset',
+                     100, 'matched', NULL, 'Applied +2.', 0,
+                     1, 5, '2026-01-09T00:00:01.0000000+00:00');
+
+                INSERT INTO mikan_work_rules (
+                    mikanid, bangumi_subject_id, tmdb_series_id,
+                    tmdb_season_number, episode_offset, enabled, revision,
+                    created_at_utc, updated_at_utc)
+                VALUES
+                    (7788, 42, 100, 1, 2, 1, 3, $base_time,
+                     '2026-01-09T00:00:00.0000000+00:00'),
+                    (7789, 43, NULL, NULL, -1, 0, 2, $base_time,
+                     '2026-01-08T00:00:00.0000000+00:00'),
+                    (7790, 44, 200, 1, 9, 1, 1, $base_time,
+                     '2026-01-07T00:00:00.0000000+00:00');
                 """;
             command.Parameters.AddWithValue("$base_time", "2026-01-01T00:00:00.0000000+00:00");
             await command.ExecuteNonQueryAsync();

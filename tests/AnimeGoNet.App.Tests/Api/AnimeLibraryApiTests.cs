@@ -82,6 +82,20 @@ public sealed class AnimeLibraryApiTests
         Assert.True(episodes[0].GetProperty("media_path_known").GetBoolean());
         Assert.Equal("not_downloaded", episodes[1].GetProperty("status").GetString());
         Assert.Equal(JsonValueKind.Null, episodes[1].GetProperty("downloaded_at_utc").ValueKind);
+        var manualOffset = Assert.Single(root.GetProperty("manual_offsets").EnumerateArray());
+        Assert.Equal(7788, manualOffset.GetProperty("mikanid").GetInt32());
+        Assert.Equal(2, manualOffset.GetProperty("episode_offset").GetInt32());
+        Assert.Equal(1, root.GetProperty("related_task_total").GetInt32());
+        Assert.False(root.GetProperty("related_tasks_truncated").GetBoolean());
+        var relatedTask = Assert.Single(root.GetProperty("related_tasks").EnumerateArray());
+        Assert.Equal("task-alpha", relatedTask.GetProperty("task_id").GetString());
+        Assert.Equal(2, root.GetProperty("resolution_attempt_total").GetInt32());
+        Assert.False(root.GetProperty("resolution_attempts_truncated").GetBoolean());
+        var attempts = root.GetProperty("resolution_attempts").EnumerateArray().ToArray();
+        Assert.Equal(["season", "series"], attempts
+            .Select(value => value.GetProperty("stage").GetString()!)
+            .ToArray());
+        Assert.Equal("tmdb_air_date", attempts[0].GetProperty("strategy").GetString());
         Assert.DoesNotContain("/media/alpha.mkv", body, StringComparison.Ordinal);
         Assert.DoesNotContain("season-alpha", body, StringComparison.Ordinal);
         Assert.DoesNotContain("series-alpha", body, StringComparison.Ordinal);
@@ -175,6 +189,14 @@ public sealed class AnimeLibraryApiTests
         await using var connection = await database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
+            INSERT INTO source_profiles (
+                id, display_name, adapter, downloader_id, file_strategy,
+                rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                created_at_utc, updated_at_utc)
+            VALUES (
+                'test', 'Test', 'mikan', 'bt', 'move',
+                1, 1, 1, 1, $now, $now);
+
             INSERT INTO anime_series (
                 id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
                 poster_path, needs_tmdb_completion, created_at_utc, updated_at_utc,
@@ -216,6 +238,50 @@ public sealed class AnimeLibraryApiTests
                 source_id, media_path, completed_at_utc)
             VALUES (
                 'completion-alpha', 100, 1, 1, 'test', '/media/alpha.mkv',
+                '2026-01-02T00:00:00.0000000+00:00');
+
+            INSERT INTO ingest_tasks (
+                id, source_profile_id, source_profile_revision, source_id,
+                mikanid, bangumi_subject_id, title, torrent_url_fingerprint,
+                downloader_id, route_snapshot_json, status,
+                created_at_utc, updated_at_utc)
+            VALUES (
+                'task-alpha', 'test', 1, 'test', 7788, 42, 'Alpha release',
+                'fingerprint-alpha', 'bt', '{}', 'metadata_resolved',
+                $now, '2026-01-02T00:00:00.0000000+00:00');
+
+            INSERT INTO task_files (
+                id, task_id, relative_path, size_bytes, tmdb_series_id,
+                tmdb_season_number, tmdb_episode_number, tmdb_episode_id,
+                disposition)
+            VALUES (
+                'file-alpha', 'task-alpha', 'alpha.mkv', 100,
+                100, 1, 1, 1001, 'episode');
+
+            INSERT INTO metadata_resolution_runs (
+                id, task_id, status, tmdb_access_confirmed, fallback_eligible,
+                started_at_utc, completed_at_utc, attempt_number,
+                tmdb_series_id, tmdb_season_number)
+            VALUES (
+                'run-alpha', 'task-alpha', 'episode_resolved', 1, 0,
+                $now, '2026-01-02T00:00:00.0000000+00:00', 1, 100, 1);
+
+            INSERT INTO metadata_resolution_attempts (
+                id, run_id, stage, strategy, priority, result,
+                retryable, attempt_number, duration_ms, created_at_utc)
+            VALUES
+                ('attempt-alpha-series', 'run-alpha', 'series', 'tmdb_title',
+                 NULL, 'matched', 0, 1, 10, $now),
+                ('attempt-alpha-season', 'run-alpha', 'season', 'tmdb_air_date',
+                 3, 'matched', 0, 1, 20,
+                 '2026-01-01T00:00:01.0000000+00:00');
+
+            INSERT INTO mikan_work_rules (
+                mikanid, bangumi_subject_id, tmdb_series_id,
+                tmdb_season_number, episode_offset, enabled, revision,
+                created_at_utc, updated_at_utc)
+            VALUES (
+                7788, 42, 100, 1, 2, 1, 3, $now,
                 '2026-01-02T00:00:00.0000000+00:00');
             """;
         command.Parameters.AddWithValue("$now", "2026-01-01T00:00:00.0000000+00:00");

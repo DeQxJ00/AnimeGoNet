@@ -3543,7 +3543,48 @@ public static class ApiEndpoints
                 episode.Downloaded ? "downloaded" : "not_downloaded",
                 episode.DownloadSourceId,
                 episode.DownloadedAtUtc,
-                episode.MediaPathKnown)).ToArray()));
+                episode.MediaPathKnown)).ToArray(),
+            detail.Audit.ManualOffsets.Select(value =>
+                new AnimeSeasonManualOffsetResponse(
+                    value.MikanId,
+                    value.BangumiSubjectId,
+                    value.TmdbSeriesId,
+                    value.TmdbSeasonNumber,
+                    value.EpisodeOffset,
+                    value.Enabled,
+                    value.Revision,
+                    value.UpdatedAtUtc)).ToArray(),
+            detail.Audit.RelatedTaskTotal,
+            detail.Audit.RelatedTasksTruncated,
+            detail.Audit.RelatedTasks.Select(value =>
+                new AnimeSeasonRelatedTaskResponse(
+                    value.TaskId,
+                    value.Title,
+                    value.SourceId,
+                    value.Status,
+                    value.MikanId,
+                    value.BangumiSubjectId,
+                    value.LatestRunAttemptNumber,
+                    value.LatestRunStatus,
+                    value.UpdatedAtUtc)).ToArray(),
+            detail.Audit.ResolutionAttemptTotal,
+            detail.Audit.ResolutionAttemptsTruncated,
+            detail.Audit.ResolutionAttempts.Select(value =>
+                new AnimeSeasonResolutionAttemptResponse(
+                    value.TaskId,
+                    value.TaskTitle,
+                    value.RunAttemptNumber,
+                    value.RunStatus,
+                    value.Stage,
+                    value.Strategy,
+                    value.Priority,
+                    value.Result,
+                    value.ErrorCode,
+                    value.Reason,
+                    value.Retryable,
+                    value.AttemptNumber,
+                    value.DurationMilliseconds,
+                    value.CreatedAtUtc)).ToArray()));
     }
 
     private static async Task<IResult> RefreshLibrarySeason(

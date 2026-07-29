@@ -578,7 +578,14 @@ public sealed record AnimeSeasonDetailResponse(
     [property: JsonPropertyName("validation_status")] string ValidationStatus,
     [property: JsonPropertyName("last_resolution_run_id")] string? LastResolutionRunId,
     [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings,
-    [property: JsonPropertyName("episodes")] IReadOnlyList<AnimeEpisodeItemResponse> Episodes);
+    [property: JsonPropertyName("episodes")] IReadOnlyList<AnimeEpisodeItemResponse> Episodes,
+    [property: JsonPropertyName("manual_offsets")] IReadOnlyList<AnimeSeasonManualOffsetResponse> ManualOffsets,
+    [property: JsonPropertyName("related_task_total")] int RelatedTaskTotal,
+    [property: JsonPropertyName("related_tasks_truncated")] bool RelatedTasksTruncated,
+    [property: JsonPropertyName("related_tasks")] IReadOnlyList<AnimeSeasonRelatedTaskResponse> RelatedTasks,
+    [property: JsonPropertyName("resolution_attempt_total")] int ResolutionAttemptTotal,
+    [property: JsonPropertyName("resolution_attempts_truncated")] bool ResolutionAttemptsTruncated,
+    [property: JsonPropertyName("resolution_attempts")] IReadOnlyList<AnimeSeasonResolutionAttemptResponse> ResolutionAttempts);
 
 public sealed record AnimeEpisodeItemResponse(
     [property: JsonPropertyName("id")] string Id,
@@ -592,6 +599,43 @@ public sealed record AnimeEpisodeItemResponse(
     [property: JsonPropertyName("source_id")] string? SourceId,
     [property: JsonPropertyName("downloaded_at_utc")] DateTimeOffset? DownloadedAtUtc,
     [property: JsonPropertyName("media_path_known")] bool MediaPathKnown);
+
+public sealed record AnimeSeasonManualOffsetResponse(
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("episode_offset")] int EpisodeOffset,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record AnimeSeasonRelatedTaskResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("source_id")] string SourceId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("latest_run_attempt_number")] int? LatestRunAttemptNumber,
+    [property: JsonPropertyName("latest_run_status")] string? LatestRunStatus,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record AnimeSeasonResolutionAttemptResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("task_title")] string TaskTitle,
+    [property: JsonPropertyName("run_attempt_number")] int RunAttemptNumber,
+    [property: JsonPropertyName("run_status")] string RunStatus,
+    [property: JsonPropertyName("stage")] string Stage,
+    [property: JsonPropertyName("strategy")] string Strategy,
+    [property: JsonPropertyName("priority")] int? Priority,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("retryable")] bool Retryable,
+    [property: JsonPropertyName("attempt_number")] int AttemptNumber,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc);
 
 public sealed record AnimeSeasonCreateRequest(
     [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,

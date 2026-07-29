@@ -59,9 +59,56 @@ public sealed record AnimeEpisodeProjection(
     DateTimeOffset? DownloadedAtUtc,
     bool MediaPathKnown);
 
+public sealed record AnimeSeasonManualOffsetProjection(
+    int MikanId,
+    int? BangumiSubjectId,
+    int? TmdbSeriesId,
+    int? TmdbSeasonNumber,
+    int EpisodeOffset,
+    bool Enabled,
+    long Revision,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record AnimeSeasonRelatedTaskProjection(
+    string TaskId,
+    string Title,
+    string SourceId,
+    string Status,
+    int? MikanId,
+    int? BangumiSubjectId,
+    int? LatestRunAttemptNumber,
+    string? LatestRunStatus,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record AnimeSeasonResolutionAttemptProjection(
+    string TaskId,
+    string TaskTitle,
+    int RunAttemptNumber,
+    string RunStatus,
+    string Stage,
+    string Strategy,
+    int? Priority,
+    string Result,
+    string? ErrorCode,
+    string? Reason,
+    bool Retryable,
+    int AttemptNumber,
+    long DurationMilliseconds,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record AnimeSeasonAuditProjection(
+    IReadOnlyList<AnimeSeasonManualOffsetProjection> ManualOffsets,
+    int RelatedTaskTotal,
+    bool RelatedTasksTruncated,
+    IReadOnlyList<AnimeSeasonRelatedTaskProjection> RelatedTasks,
+    int ResolutionAttemptTotal,
+    bool ResolutionAttemptsTruncated,
+    IReadOnlyList<AnimeSeasonResolutionAttemptProjection> ResolutionAttempts);
+
 public sealed record AnimeSeasonDetailProjection(
     AnimeSeasonListProjection Season,
-    IReadOnlyList<AnimeEpisodeProjection> Episodes);
+    IReadOnlyList<AnimeEpisodeProjection> Episodes,
+    AnimeSeasonAuditProjection Audit);
 
 public sealed record AnimePosterProjection(
     string? PosterPath,

@@ -1,10 +1,14 @@
 using System.Globalization;
 using AnimeGoNet.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Library;
 
 public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
 {
+    private const int RelatedTaskLimit = 50;
+    private const int ResolutionAttemptLimit = 200;
+
     public async Task<AnimeSeasonListPage> ListSeasonsAsync(
         AnimeSeasonListQuery query,
         CancellationToken cancellationToken = default)
@@ -136,7 +140,12 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 episodeReader.GetInt32(9) == 1));
         }
 
-        return new AnimeSeasonDetailProjection(season, episodes);
+        var audit = await ReadAuditAsync(
+            connection,
+            tmdbSeriesId,
+            seasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        return new AnimeSeasonDetailProjection(season, episodes, audit);
     }
 
     public async Task<AnimePosterProjection?> GetPosterAsync(
@@ -358,7 +367,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             """;
 
     private static AnimeSeasonListProjection ReadSeasonProjection(
-        Microsoft.Data.Sqlite.SqliteDataReader reader)
+        SqliteDataReader reader)
     {
         var episodeTotal = reader.GetInt32(10);
         var episodeSnapshotCount = reader.GetInt32(11);
@@ -415,7 +424,263 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             warnings);
     }
 
-    private static DateOnly? ParseDate(Microsoft.Data.Sqlite.SqliteDataReader reader, int ordinal) =>
+    private static async Task<AnimeSeasonAuditProjection> ReadAuditAsync(
+        SqliteConnection connection,
+        int tmdbSeriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken)
+    {
+        var manualOffsets = await ReadManualOffsetsAsync(
+            connection,
+            tmdbSeriesId,
+            seasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        var (relatedTaskTotal, relatedTasks) = await ReadRelatedTasksAsync(
+            connection,
+            tmdbSeriesId,
+            seasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        var (resolutionAttemptTotal, resolutionAttempts) = await ReadResolutionAttemptsAsync(
+            connection,
+            tmdbSeriesId,
+            seasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        return new AnimeSeasonAuditProjection(
+            manualOffsets,
+            relatedTaskTotal,
+            relatedTaskTotal > relatedTasks.Count,
+            relatedTasks,
+            resolutionAttemptTotal,
+            resolutionAttemptTotal > resolutionAttempts.Count,
+            resolutionAttempts);
+    }
+
+    private static async Task<IReadOnlyList<AnimeSeasonManualOffsetProjection>> ReadManualOffsetsAsync(
+        SqliteConnection connection,
+        int tmdbSeriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT rule.mikanid, rule.bangumi_subject_id,
+                   rule.tmdb_series_id, rule.tmdb_season_number,
+                   rule.episode_offset, rule.enabled, rule.revision,
+                   rule.updated_at_utc
+            FROM mikan_work_rules AS rule
+            WHERE rule.episode_offset IS NOT NULL
+              AND (
+                    (
+                        rule.tmdb_series_id = $tmdb_series_id
+                        AND (
+                            rule.tmdb_season_number IS NULL
+                            OR rule.tmdb_season_number = $season_number
+                        )
+                    )
+                    OR (
+                        rule.tmdb_series_id IS NULL
+                        AND EXISTS (
+                            SELECT 1
+                            FROM ingest_tasks AS task
+                            WHERE task.mikanid = rule.mikanid
+                              AND (
+                                    EXISTS (
+                                        SELECT 1
+                                        FROM task_files AS file
+                                        WHERE file.task_id = task.id
+                                          AND file.tmdb_series_id = $tmdb_series_id
+                                          AND file.tmdb_season_number = $season_number
+                                    )
+                                    OR EXISTS (
+                                        SELECT 1
+                                        FROM metadata_resolution_runs AS run
+                                        WHERE run.task_id = task.id
+                                          AND run.tmdb_series_id = $tmdb_series_id
+                                          AND run.tmdb_season_number = $season_number
+                                    )
+                              )
+                        )
+                    )
+              )
+            ORDER BY rule.enabled DESC,
+                     rule.tmdb_season_number = $season_number DESC,
+                     rule.mikanid ASC;
+            """;
+        command.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        command.Parameters.AddWithValue("$season_number", seasonNumber);
+        var values = new List<AnimeSeasonManualOffsetProjection>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            values.Add(new AnimeSeasonManualOffsetProjection(
+                reader.GetInt32(0),
+                OptionalInt32(reader, 1),
+                OptionalInt32(reader, 2),
+                OptionalInt32(reader, 3),
+                reader.GetInt32(4),
+                reader.GetInt64(5) != 0,
+                reader.GetInt64(6),
+                ParseTimestamp(reader.GetString(7))));
+        }
+
+        return values;
+    }
+
+    private static async Task<(int Total, IReadOnlyList<AnimeSeasonRelatedTaskProjection> Items)>
+        ReadRelatedTasksAsync(
+            SqliteConnection connection,
+            int tmdbSeriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH related_tasks AS (
+                SELECT task.id, task.title, task.source_id, task.status,
+                       task.mikanid, task.bangumi_subject_id, task.updated_at_utc
+                FROM ingest_tasks AS task
+                WHERE EXISTS (
+                        SELECT 1
+                        FROM task_files AS file
+                        WHERE file.task_id = task.id
+                          AND file.tmdb_series_id = $tmdb_series_id
+                          AND file.tmdb_season_number = $season_number
+                    )
+                   OR EXISTS (
+                        SELECT 1
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.tmdb_series_id = $tmdb_series_id
+                          AND run.tmdb_season_number = $season_number
+                    )
+            ),
+            ranked_runs AS (
+                SELECT run.task_id, run.attempt_number, run.status,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY run.task_id
+                           ORDER BY run.attempt_number DESC, run.id DESC
+                       ) AS row_number
+                FROM metadata_resolution_runs AS run
+                JOIN related_tasks AS task ON task.id = run.task_id
+            )
+            SELECT task.id, task.title, task.source_id, task.status,
+                   task.mikanid, task.bangumi_subject_id,
+                   run.attempt_number, run.status, task.updated_at_utc,
+                   COUNT(*) OVER()
+            FROM related_tasks AS task
+            LEFT JOIN ranked_runs AS run
+              ON run.task_id = task.id AND run.row_number = 1
+            ORDER BY task.updated_at_utc DESC, task.id DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        command.Parameters.AddWithValue("$season_number", seasonNumber);
+        command.Parameters.AddWithValue("$limit", RelatedTaskLimit + 1);
+        var values = new List<AnimeSeasonRelatedTaskProjection>(RelatedTaskLimit);
+        var total = 0;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            total = checked((int)reader.GetInt64(9));
+            if (values.Count == RelatedTaskLimit)
+            {
+                continue;
+            }
+
+            values.Add(new AnimeSeasonRelatedTaskProjection(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                OptionalInt32(reader, 4),
+                OptionalInt32(reader, 5),
+                OptionalInt32(reader, 6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                ParseTimestamp(reader.GetString(8))));
+        }
+
+        return (total, values);
+    }
+
+    private static async Task<(int Total, IReadOnlyList<AnimeSeasonResolutionAttemptProjection> Items)>
+        ReadResolutionAttemptsAsync(
+            SqliteConnection connection,
+            int tmdbSeriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH related_task_ids AS (
+                SELECT task.id
+                FROM ingest_tasks AS task
+                WHERE EXISTS (
+                        SELECT 1
+                        FROM task_files AS file
+                        WHERE file.task_id = task.id
+                          AND file.tmdb_series_id = $tmdb_series_id
+                          AND file.tmdb_season_number = $season_number
+                    )
+                   OR EXISTS (
+                        SELECT 1
+                        FROM metadata_resolution_runs AS related_run
+                        WHERE related_run.task_id = task.id
+                          AND related_run.tmdb_series_id = $tmdb_series_id
+                          AND related_run.tmdb_season_number = $season_number
+                    )
+            )
+            SELECT task.id, task.title,
+                   run.attempt_number, run.status,
+                   attempt.stage, attempt.strategy, attempt.priority,
+                   attempt.result, attempt.error_code, attempt.reason,
+                   attempt.retryable, attempt.attempt_number,
+                   attempt.duration_ms, attempt.created_at_utc,
+                   COUNT(*) OVER()
+            FROM related_task_ids AS related
+            JOIN ingest_tasks AS task ON task.id = related.id
+            JOIN metadata_resolution_runs AS run ON run.task_id = task.id
+            JOIN metadata_resolution_attempts AS attempt ON attempt.run_id = run.id
+            ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        command.Parameters.AddWithValue("$season_number", seasonNumber);
+        command.Parameters.AddWithValue("$limit", ResolutionAttemptLimit + 1);
+        var values = new List<AnimeSeasonResolutionAttemptProjection>(ResolutionAttemptLimit);
+        var total = 0;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            total = checked((int)reader.GetInt64(14));
+            if (values.Count == ResolutionAttemptLimit)
+            {
+                continue;
+            }
+
+            values.Add(new AnimeSeasonResolutionAttemptProjection(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetString(5),
+                OptionalInt32(reader, 6),
+                reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.GetInt64(10) != 0,
+                reader.GetInt32(11),
+                reader.GetInt64(12),
+                ParseTimestamp(reader.GetString(13))));
+        }
+
+        return (total, values);
+    }
+
+    private static int? OptionalInt32(SqliteDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetInt32(ordinal);
+
+    private static DateOnly? ParseDate(SqliteDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal)
             ? null
             : DateOnly.ParseExact(
