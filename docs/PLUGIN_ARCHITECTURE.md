@@ -77,6 +77,10 @@ services.AddSingleton<IScheduledPlugin, MetadataRefreshTask>();
 
 默认目录不注册 Python 名称，不读取或执行 `.py` 文件；旧 `filter/mikan_tool.py` 只保留为 API 配置别名并映射到 SQLite/C# 实现。
 
+`TitleParserManager` 保留上游 `cmd/animego/main.go` 的选择语义：未指定 ID 时使用目录顺序中的第一个 parser；显式 ID 只执行该 parser。一次返回无匹配或错误不会隐式尝试下一个 parser，避免改变解析优先级。
+
+`OrderedFeedFilterManager` 保留上游 `filter.Manager.Update` 的串联语义：每个 filter 只接收前一层 accepted items，并按照显式 ID 列表或目录确定性顺序执行；任一插件返回错误就终止，不执行后续插件。宿主额外验证决定数量、原始 item index 全覆盖/不重复、outcome/reason 非空；无效结果以 `filter_result_invalid` 终止。显式空链用于明确跳过所有插件，和“未提供链时使用目录顺序”严格区分。
+
 ## 3. 外部 C# 插件包
 
 外部插件按 RID 发布为自包含可执行程序，推荐启用 NativeAOT。一个安装目录示例：

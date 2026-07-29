@@ -17,6 +17,7 @@
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |
+| parser 首个启用实现、filter 顺序串联 | `TitleParserManager` / `OrderedFeedFilterManager` | 保留 | 已验证 | 首个/显式 parser 不 fallback；filter accepted 逐级传递、错误短路、无效/重复 index、空链 tests；Mikan RSS 生产链回归 |
 | `internal/constant`、`exceptions` | 强类型常量、稳定错误码 | 保留 | 待实现 | domain tests |
 | `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 待实现 | redaction/stream tests |
 

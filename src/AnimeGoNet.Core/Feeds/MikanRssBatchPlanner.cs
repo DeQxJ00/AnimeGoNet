@@ -49,7 +49,8 @@ public static class MikanRssBatchPlanner
     public static async ValueTask<MikanRssBatchPlan> CreateAsync(
         RssFeedDocument feed,
         MikanRssRuleSet rules,
-        ITitleParserPlugin parser,
+        TitleParserManager parserManager,
+        string parserPluginId,
         bool priorityEnabled = true,
         IReadOnlyList<MikanLegacyFilterAudit>? legacyFilterAudits = null,
         long legacyFilterRevision = 1,
@@ -57,16 +58,17 @@ public static class MikanRssBatchPlanner
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(feed);
-        ArgumentNullException.ThrowIfNull(parser);
+        ArgumentNullException.ThrowIfNull(parserManager);
         var parsedEpisodes = new TorrentEpisodeCandidate[feed.Items.Count];
         for (var index = 0; index < feed.Items.Count; index++)
         {
-            var result = await parser.ParseAsync(
+            var result = await parserManager.ParseAsync(
                 new TitleParseContext(
                     feed.Items[index].Title,
                     null,
                     "mikan",
                     EmptyArguments),
+                parserPluginId,
                 cancellationToken).ConfigureAwait(false);
             parsedEpisodes[index] = ToCandidate(result);
         }

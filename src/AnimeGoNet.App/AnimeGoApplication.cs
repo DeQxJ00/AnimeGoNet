@@ -141,6 +141,8 @@ public static class AnimeGoApplication
                 services.GetRequiredService<MikanToolFilterPlugin>(),
                 services.GetRequiredService<StagedTorrentDispatchSchedulePlugin>(),
             ]));
+        builder.Services.AddSingleton<TitleParserManager>();
+        builder.Services.AddSingleton<OrderedFeedFilterManager>();
         builder.Services.AddSingleton<SqliteJsonCacheStore>();
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);

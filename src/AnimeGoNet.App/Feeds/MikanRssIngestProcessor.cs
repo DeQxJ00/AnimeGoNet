@@ -39,7 +39,8 @@ public sealed class MikanRssIngestProcessor(
     SourceProfileStore profiles,
     MikanRssRuleStore rules,
     MikanRssBatchStore batches,
-    PluginCatalog plugins,
+    TitleParserManager parsers,
+    OrderedFeedFilterManager filters,
     UnifiedIngestProcessor ingest)
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
@@ -60,7 +61,7 @@ public sealed class MikanRssIngestProcessor(
 
         var ruleSnapshot = await rules.GetAsync(profile.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new RssFeedException("rss_rules_missing", "RSS rules were not initialized.");
-        var filterResult = await plugins.Require<IFeedFilterPlugin>("mikan-tool").FilterAsync(
+        var filterExecution = await filters.ExecuteAsync(
             new FilterContext(
                 profile.Id,
                 feed.Items.Select((item, index) => new FilterItem(
@@ -74,12 +75,25 @@ public sealed class MikanRssIngestProcessor(
                     item.Length,
                     item.PublishedDate)).ToArray(),
                 EmptyArguments),
+            MikanFilterChain,
             cancellationToken).ConfigureAwait(false);
+        if (!filterExecution.Succeeded)
+        {
+            var filterError = filterExecution.Errors[0];
+            throw new RssFeedException(filterError.Code, filterError.Message);
+        }
+        if (filterExecution.Runs.Count != 1)
+        {
+            throw InvalidFilterResult();
+        }
+
+        var filterResult = filterExecution.Runs[0].Result;
         var legacy = ToLegacyFilterBatch(filterResult, feed.Items.Count);
         var plan = await MikanRssBatchPlanner.CreateAsync(
             feed,
             ruleSnapshot.Rules,
-            plugins.Require<ITitleParserPlugin>("mikan-title"),
+            parsers,
+            "mikan-title",
             profile.RssPriorityEnabled,
             legacy.Audits,
             legacy.Revision,
@@ -177,6 +191,7 @@ public sealed class MikanRssIngestProcessor(
 
     private static readonly Dictionary<string, string> EmptyArguments =
         new(StringComparer.Ordinal);
+    private static readonly string[] MikanFilterChain = ["mikan-tool"];
 
     private static MikanLegacyFilterBatch ToLegacyFilterBatch(
         FilterResult result,
