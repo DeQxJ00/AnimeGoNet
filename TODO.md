@@ -86,8 +86,8 @@
 - [ ] 实现 bucket/list/get/delete 兼容接口。
 - [ ] 移植目录 JSON 数据库扫描/索引/写入。
 - [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；删除执行器已按精确记录 ID 事务删除 completion/alias 并释放对应 completed claim，通用 alias repository 待实现）。
-- [>] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键（schema/约束已完成；事务 store 与早停编排待实现）。
-- [ ] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件。
+- [x] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键：schema/约束、事务 claim/release/complete、同作用域早停、同任务多文件共享 claim，以及失败释放后重试均已接入。
+- [x] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件；恢复前逐级在线验证 TMDB Series/Season/Episode。
 - [ ] 移植 `tvshow.nfo` 生成和更新。
 - [ ] 按需实现旧 Go 已知 bucket → JSON 导出及 .NET 幂等导入，不阻塞首版。
 - [ ] 通过存储故障恢复、并发和迁移测试。
@@ -216,8 +216,8 @@
 - [x] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。列表/详情 API、Cover 安全代理/缓存/占位图和静态 TypeScript 页面均已完成；页面显示 TMDB 规范进度、取得策略、验证状态、一致性警告和可筛选 EP 网格，删除完成记录会立即恢复未下载。
 - [x] 实现作品库服务端分页排序和前端升/降序：服务端与页面支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；排序、方向、页大小、EP 筛选和当前详情保存在浏览器本地。
 - [x] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。`poster_url` 只指向同源 `/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}`；Season/Series 回退、5 MiB 流式上限、图片魔数校验、并发合并、磁盘缓存与失败占位均有测试。
-- [ ] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格或完成比例；恢复真实 TMDB 映射后再并入标准作品库。
-- [ ] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态。
+- [x] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格、季度封面或完成比例；逐项恢复并验证真实 TMDB 映射后，再事务并入标准作品库。
+- [x] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态；API 不暴露内部 scope key、媒体路径或伪造 TMDB 身份。
 - [x] 增加 Mikan 作品规则 CRUD：原生 TypeScript 页面按 `mikanid` 读取并以 expected revision 创建/更新/禁用/清除 Bgm/TMDB Series/Season/EP Offset；影响预览权威区分未来自动应用、可显式重试的失败任务、活动中保护、已解析保护和已整理保护。显式重新匹配只重置未持有运行租约的 `metadata_failed` 任务，不改写已解析/已整理任务、完成记录或媒体文件；可选样例来源 EP 继续执行保存前 TMDB Series→Season→目标 Episode 在线验证。
 - [>] 作品详情展示 Series/Season/Episode 的 TMDB 获取阶段、验证状态、人工偏移和最后解析时间（任务状态投影已展示最近成功策略和更新时间，任务卡片可展开全部策略尝试；季度详情 API 已展示 Series/Season 取得策略、验证状态、最后 run 与 EP snapshot 获取时间，人工偏移、关联任务和季度级逐次验证时间线待实现）。
 - [x] 实现四类删除命令及组合删除计划：schema v12 已完成指纹预览、逐项冻结、租约恢复、稳定失败码和部分失败重试；执行顺序为 qB 任务（永不带文件）→源文件→媒体文件→业务记录/claim，文件只允许捕获根目录内精确普通文件且不递归删目录；Minimal API 和 WebUI 四类独立勾选、目标预览、明确确认及 execution 状态查询已接入。
