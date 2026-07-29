@@ -6,6 +6,19 @@ interface RuntimeStatus {
   capabilities: Record<string, boolean>;
 }
 
+interface DirectoryDatabaseStatus {
+  refresh_cron: string;
+  entry_count: number;
+  last_run_id: string | null;
+  last_run_status: "running" | "completed" | "failed" | null;
+  last_scanned_count: number;
+  last_indexed_count: number;
+  last_rejected_count: number;
+  last_failure_code: string | null;
+  last_started_at_utc: string | null;
+  last_completed_at_utc: string | null;
+}
+
 interface RuntimeConfiguration {
   configuration_revision: number;
   applied_configuration_revision: number;
@@ -843,6 +856,36 @@ async function loadStatus(): Promise<void> {
   } catch (error) {
     health.textContent = errorMessage(error, "连接失败");
     health.className = "badge error";
+  }
+}
+
+async function loadDirectoryDatabase(refresh = false): Promise<void> {
+  const target = element<HTMLElement>("#directory-database-status");
+  const button = element<HTMLButtonElement>("#directory-database-refresh");
+  button.disabled = true;
+  if (refresh) target.textContent = "正在刷新…";
+  try {
+    const response = await fetch(
+      refresh
+        ? "/api/v1/library/directory-database/refresh"
+        : "/api/v1/library/directory-database",
+      { method: refresh ? "POST" : "GET", headers },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const status = await response.json() as DirectoryDatabaseStatus;
+    const rejected = status.last_rejected_count > 0
+      ? `，拒绝 ${status.last_rejected_count}`
+      : "";
+    const failure = status.last_failure_code
+      ? `，失败 ${status.last_failure_code}`
+      : "";
+    target.textContent =
+      `${status.entry_count} 条索引；最近扫描 ${status.last_scanned_count}，`
+      + `写入 ${status.last_indexed_count}${rejected}${failure}；Cron ${status.refresh_cron}`;
+  } catch (error) {
+    target.textContent = errorMessage(error, "目录数据库状态读取失败");
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -4669,8 +4712,13 @@ element<HTMLButtonElement>("#downloader-new").addEventListener("click", () => op
 element<HTMLButtonElement>("#downloader-config-close").addEventListener("click", () => downloaderConfigDialog.close());
 element<HTMLFormElement>("#downloader-config-form").addEventListener("submit", (event) => void saveDownloaderConfig(event));
 element<HTMLButtonElement>("#downloader-config-delete").addEventListener("click", () => void deleteDownloaderOverride());
+element<HTMLButtonElement>("#directory-database-refresh").addEventListener(
+  "click",
+  () => void loadDirectoryDatabase(true),
+);
 
 void loadStatus();
+void loadDirectoryDatabase();
 void loadLibrary();
 void loadConfiguration();
 void loadDownloads();

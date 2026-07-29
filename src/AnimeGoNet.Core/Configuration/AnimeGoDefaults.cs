@@ -67,6 +67,7 @@ public static class AnimeGoDefaults
                 MikanTrustedOffsetCacheEnabled = false,
             },
             TorrentFetch = new TorrentFetchOptions(),
+            Schedule = new ScheduleOptions(),
             InitialSourceProfiles =
             [
                 new SourceProfileSeed

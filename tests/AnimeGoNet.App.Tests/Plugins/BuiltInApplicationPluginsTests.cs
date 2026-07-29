@@ -16,7 +16,7 @@ public sealed class BuiltInApplicationPluginsTests
         Assert.Single(catalog.GetAll<ITitleParserPlugin>());
         Assert.Single(catalog.GetAll<IFeedFilterPlugin>());
         Assert.Single(catalog.GetAll<IRenamePlugin>());
-        Assert.Single(catalog.GetAll<IScheduledPlugin>());
+        Assert.Equal(2, catalog.GetAll<IScheduledPlugin>().Count);
         Assert.DoesNotContain(catalog.All, plugin =>
             plugin.Descriptor.Id.EndsWith(".py", StringComparison.Ordinal)
             || plugin.Descriptor.Id.Contains("python", StringComparison.Ordinal));
@@ -93,5 +93,25 @@ public sealed class BuiltInApplicationPluginsTests
         Assert.True(result.Succeeded);
         Assert.Equal("NoWork", result.Message);
         Assert.Equal(TimeSpan.FromSeconds(2), result.NextDelay);
+    }
+
+    [Fact]
+    public async Task DirectoryDatabaseSchedulePluginRefreshesThePersistedIndex()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var plugin = app.App.Services
+            .GetRequiredService<PluginCatalog>()
+            .Require<IScheduledPlugin>("refresh-directory-database");
+
+        var result = await plugin.ExecuteAsync(
+            new ScheduledContext(
+                "refresh-test",
+                DateTimeOffset.UtcNow,
+                new Dictionary<string, string>(StringComparer.Ordinal)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("indexed=0;rejected=0", result.Message);
+        Assert.Null(result.NextDelay);
     }
 }

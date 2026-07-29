@@ -84,11 +84,11 @@
 - [x] 建立 SQLite schema v1、幂等事务迁移器与显式 SQL 完成记录 store；启用 foreign key/WAL/busy timeout。
 - [ ] 实现 SQLite KV/TTL store。
 - [ ] 实现 bucket/list/get/delete 兼容接口。
-- [ ] 移植目录 JSON 数据库扫描/索引/写入。
+- [x] 移植目录 JSON 数据库扫描/索引/写入：按上游结构原子写 `anime.a_json`、`anime.s_json`、`*.e_json`，启动扫描并以 schema v27 建立 SQLite 索引/运行/拒绝审计；每日 6 点六字段 Cron 刷新，API/WebUI 可查看和手动刷新。
 - [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；删除执行器已按精确记录 ID 事务删除 completion/alias 并释放对应 completed claim，通用 alias repository 待实现）。
 - [x] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键：schema/约束、事务 claim/release/complete、同作用域早停、同任务多文件共享 claim，以及失败释放后重试均已接入。
 - [x] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件；恢复前逐级在线验证 TMDB Series/Season/Episode。
-- [ ] 移植 `tvshow.nfo` 生成和更新。
+- [x] 移植 `tvshow.nfo` 生成和更新：整理时原子生成，TMDB fallback 恢复后以持久化重写作业更新，均限制在捕获的 save root 内。
 - [ ] 按需实现旧 Go 已知 bucket → JSON 导出及 .NET 幂等导入，不阻塞首版。
 - [ ] 通过存储故障恢复、并发和迁移测试。
 
@@ -167,14 +167,14 @@
 
 - [>] 移植下载管理状态机和 notifier（staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded、持久化准备租约及安全重试已实现；做种/整理 notifier 待实现）。
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
-- [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：move worker 已在所有文件及原子 `tvshow.nfo` 成功后才执行完成记录/episode claim 事务，qB cleanup 独立在后；完整目录库和 RSS 早期事务复查待实现。
+- [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：worker 已在所有文件、原子 `tvshow.nfo`、上游兼容目录 JSON 及 schema v27 索引全部成功后才执行 completion/episode claim 事务，qB cleanup 独立在后；RSS 早期事务复查待实现。
 - [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。
-- [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 与完整目录库待验收。
+- [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、目录 JSON/SQLite 索引、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 待验收。
 - [>] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：move 文件操作与 qB cleanup 已分阶段；四类删除已按逐项目标独立持久化、租约执行和失败重试，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束；做种目标待实现。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
 - [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [x] 实现字幕识别与唯一绑定：同目录同 stem 优先、语言/default/forced/SDH 后缀原样保留、不同 stem 按来源 EP 唯一匹配、`.idx/.sub` 分别绑定并保留扩展；匹配后只复用视频的已验证 TMDB EP/claim/priority，未匹配或歧义进入已确认季度 `Other`，整理不产生重复完成记录。
-- [ ] 串联媒体目录 DB 与 NFO。
+- [x] 串联媒体目录 DB 与 NFO：NFO 与三层目录侧车都位于业务完成记录之前；侧车损坏、越界或索引失败会保持可重试且不写完成记录。
 - [x] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`；字幕生成 `Eyyy.<保留后缀>.<字幕扩展>`，Other 保留安全清洗后的原文件名，均已串联持久化 move worker。
 - [x] 确定性季度结果先执行同号 EP 快速校验；失败且统一 AI 开启、任务从未尝试 AI 时进行一次任务级映射，返回的 TMDB ID/Season 必须与已确认值相同，结果逐集由 TMDB 验证。
 - [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。

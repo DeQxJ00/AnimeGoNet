@@ -26,11 +26,33 @@ public sealed class MediaOrganizationProcessorTests
 
         var target = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
         var nfo = Path.Combine(paths.SavePath, "Series", "tvshow.nfo");
+        var animeSidecar = Path.Combine(paths.SavePath, "Series", "anime.a_json");
+        var seasonSidecar = Path.Combine(paths.SavePath, "Series", "S01", "anime.s_json");
+        var episodeSidecar = Path.Combine(paths.SavePath, "Series", "S01", "E001.e_json");
         Assert.True(File.Exists(target));
         Assert.True(File.Exists(nfo));
+        Assert.True(File.Exists(animeSidecar));
+        Assert.True(File.Exists(seasonSidecar));
+        Assert.True(File.Exists(episodeSidecar));
         var document = XDocument.Load(nfo);
         Assert.Equal("100", document.Root?.Element("tmdbid")?.Value);
         Assert.Equal("547888", document.Root?.Element("bangumiid")?.Value);
+        using (var sidecar = JsonDocument.Parse(await File.ReadAllTextAsync(episodeSidecar)))
+        {
+            Assert.Equal(1, sidecar.RootElement.GetProperty("season").GetInt32());
+            Assert.Equal(1, sidecar.RootElement.GetProperty("ep").GetInt32());
+            Assert.True(sidecar.RootElement.GetProperty("state").GetProperty("downloaded").GetBoolean());
+        }
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var indexConnection = await database.OpenConnectionAsync())
+        await using (var index = indexConnection.CreateCommand())
+        {
+            index.CommandText = """
+                SELECT COUNT(*) FROM directory_database_entries
+                WHERE anime_name = 'Series';
+                """;
+            Assert.Equal(3L, await index.ExecuteScalarAsync());
+        }
         Assert.Empty(client.Deleted);
         var intermediate = await ReadStateAsync(app, taskId);
         Assert.Equal(("organizing_cleanup", "cleanup", 1), intermediate);
@@ -62,6 +84,40 @@ public sealed class MediaOrganizationProcessorTests
             new byte[] { 6, 7, 8 },
             await File.ReadAllBytesAsync(Path.Combine(paths.SavePath, "Series", "S01", "E001.zh-Hans.forced.ass")));
         Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task InvalidDirectorySidecarPreventsBusinessCompletionAndSchedulesRetry()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var seriesDirectory = Path.Combine(paths.SavePath, "Series");
+        Directory.CreateDirectory(seriesDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(seriesDirectory, "anime.a_json"),
+            """{"info":{"hash":"broken"}}""");
+
+        Assert.Equal(
+            MediaOrganizationResult.RetryScheduled,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM completion_records),
+                (SELECT organization_state FROM download_jobs WHERE task_id = $task_id),
+                (SELECT status FROM ingest_tasks WHERE id = $task_id);
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0, reader.GetInt32(0));
+        Assert.Equal("pending", reader.GetString(1));
+        Assert.Equal("downloaded", reader.GetString(2));
     }
 
     [Fact]

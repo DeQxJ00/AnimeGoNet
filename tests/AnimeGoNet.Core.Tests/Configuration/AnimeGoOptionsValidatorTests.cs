@@ -211,6 +211,20 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Contains(errors, error => error.Contains("download policy", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RejectsInvalidDirectoryDatabaseRefreshCron()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Schedule = defaults.Schedule with { RefreshDatabaseCron = "every morning" },
+        };
+
+        Assert.Contains(
+            AnimeGoOptionsValidator.Validate(options),
+            error => error.Contains("refresh cron", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("/download/incomplete", "/download/incomplete/bt", true)]
     [InlineData("/download/incomplete", "/download/incomplete-other", false)]

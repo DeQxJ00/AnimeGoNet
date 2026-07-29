@@ -83,6 +83,8 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
+        app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
+        app.MapPost("/api/v1/library/directory-database/refresh", RefreshDirectoryDatabase);
         app.MapGet(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibrarySeasonDetail);
@@ -120,6 +122,43 @@ public static class ApiEndpoints
             System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(accessKey)));
         return TypedResults.Ok(new LegacyApiResponse<string>(200, "Access-Key", hash));
     }
+
+    private static async Task<Ok<DirectoryDatabaseStatusResponse>> DirectoryDatabaseStatus(
+        DirectoryDatabaseIndexStore store,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        var status = await store.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(ToResponse(status, options.Schedule.RefreshDatabaseCron));
+    }
+
+    private static async Task<Ok<DirectoryDatabaseStatusResponse>> RefreshDirectoryDatabase(
+        DirectoryDatabaseIndexStore store,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        await store.RefreshAsync(
+            options.Paths.SavePath,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        var status = await store.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(ToResponse(status, options.Schedule.RefreshDatabaseCron));
+    }
+
+    private static DirectoryDatabaseStatusResponse ToResponse(
+        DirectoryDatabaseStatus status,
+        string refreshCron) =>
+        new(
+            refreshCron,
+            status.EntryCount,
+            status.LastRunId,
+            status.LastRunStatus,
+            status.LastScannedCount,
+            status.LastIndexedCount,
+            status.LastRejectedCount,
+            status.LastFailureCode,
+            status.LastStartedAtUtc,
+            status.LastCompletedAtUtc);
 
     private static async Task<Ok<LegacyApiResponse<LegacyPluginResponse?>>> LegacyPluginConfigPost(
         LegacyPluginConfigUploadRequest request,

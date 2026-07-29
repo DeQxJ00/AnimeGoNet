@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 26;
+    public const int CurrentVersion = 27;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -32,7 +32,76 @@ public static class DatabaseSchema
         new SchemaMigration(24, "download_job_audit_events", DownloadJobAuditEvents),
         new SchemaMigration(25, "mikan_rss_rule_snapshots", MikanRssRuleSnapshots),
         new SchemaMigration(26, "mikan_bangumi_discovery_audit", MikanBangumiDiscoveryAudit),
+        new SchemaMigration(27, "directory_database_index", DirectoryDatabaseIndex),
     ];
+
+    private const string DirectoryDatabaseIndex = """
+        CREATE TABLE directory_database_scan_runs (
+            id TEXT NOT NULL PRIMARY KEY,
+            status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+            scanned_count INTEGER NOT NULL CHECK (scanned_count >= 0),
+            indexed_count INTEGER NOT NULL CHECK (indexed_count >= 0),
+            rejected_count INTEGER NOT NULL CHECK (rejected_count >= 0),
+            failure_code TEXT,
+            started_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT
+        ) STRICT;
+
+        CREATE TABLE directory_database_scan_issues (
+            run_id TEXT NOT NULL REFERENCES directory_database_scan_runs(id) ON DELETE CASCADE,
+            relative_path TEXT NOT NULL,
+            error_code TEXT NOT NULL,
+            PRIMARY KEY (run_id, relative_path)
+        ) STRICT;
+
+        CREATE TABLE directory_database_entries (
+            relative_path TEXT NOT NULL PRIMARY KEY,
+            entry_kind TEXT NOT NULL CHECK (entry_kind IN ('anime', 'season', 'episode')),
+            info_hash TEXT NOT NULL,
+            anime_name TEXT NOT NULL,
+            season_number INTEGER,
+            episode_type INTEGER,
+            episode_number INTEGER,
+            seeded INTEGER CHECK (seeded IN (0, 1)),
+            downloaded INTEGER CHECK (downloaded IN (0, 1)),
+            renamed INTEGER CHECK (renamed IN (0, 1)),
+            scraped INTEGER CHECK (scraped IN (0, 1)),
+            create_at_unix INTEGER NOT NULL CHECK (create_at_unix >= 0),
+            update_at_unix INTEGER NOT NULL CHECK (update_at_unix >= 0),
+            indexed_at_utc TEXT NOT NULL,
+            CHECK (
+                (entry_kind = 'anime'
+                 AND season_number IS NULL
+                 AND episode_type IS NULL
+                 AND episode_number IS NULL
+                 AND seeded IS NULL
+                 AND downloaded IS NULL
+                 AND renamed IS NULL
+                 AND scraped IS NULL)
+                OR
+                (entry_kind = 'season'
+                 AND season_number > 0
+                 AND episode_type IS NULL
+                 AND episode_number IS NULL
+                 AND seeded IS NULL
+                 AND downloaded IS NULL
+                 AND renamed IS NULL
+                 AND scraped IS NULL)
+                OR
+                (entry_kind = 'episode'
+                 AND season_number > 0
+                 AND episode_type BETWEEN 0 AND 2
+                 AND episode_number >= 0
+                 AND seeded IS NOT NULL
+                 AND downloaded IS NOT NULL
+                 AND renamed IS NOT NULL
+                 AND scraped IS NOT NULL)
+            )
+        ) STRICT;
+
+        CREATE INDEX ix_directory_database_entries_identity
+            ON directory_database_entries(anime_name, season_number, episode_number);
+        """;
 
     private const string InitialBusinessSchema = """
         CREATE TABLE source_profiles (

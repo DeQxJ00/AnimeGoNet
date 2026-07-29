@@ -3,6 +3,8 @@ using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.Core.Feeds;
+using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Sources;
 
 namespace AnimeGoNet.App.Plugins;
@@ -173,6 +175,51 @@ internal sealed class StagedTorrentDispatchSchedulePlugin(
                 null,
                 [new PluginOperationError("staged_dispatch_failed", exception.Message)],
                 TimeSpan.FromSeconds(5));
+        }
+    }
+}
+
+internal sealed class DirectoryDatabaseRefreshSchedulePlugin(
+    DirectoryDatabaseIndexStore index,
+    AnimeGoOptions options) : IScheduledPlugin
+{
+    public PluginDescriptor Descriptor { get; } =
+        new(
+            "refresh-directory-database",
+            "Refresh directory database",
+            "1.0.0",
+            PluginCategory.Schedule,
+            110);
+
+    public async ValueTask<ScheduledResult> ExecuteAsync(
+        ScheduledContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await index.RefreshAsync(
+                options.Paths.SavePath,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return new ScheduledResult(
+                true,
+                $"indexed={result.IndexedCount};rejected={result.RejectedCount}",
+                [],
+                null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return new ScheduledResult(
+                false,
+                null,
+                [new PluginOperationError(
+                    "directory_database_refresh_failed",
+                    "Directory database refresh failed.")],
+                null);
         }
     }
 }

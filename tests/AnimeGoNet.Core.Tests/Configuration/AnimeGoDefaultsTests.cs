@@ -46,6 +46,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(new Uri("https://api.bgm.tv/"), options.Metadata.Bangumi.BaseUrl);
         Assert.Null(options.Metadata.Bangumi.ProxyUrl);
         Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Bangumi.HttpTimeout);
+        Assert.Equal("0 0 6 * * *", options.Schedule.RefreshDatabaseCron);
     }
 
     [Fact]

@@ -25,6 +25,8 @@ EP 网格的全集合来自已验证 TMDB Season 的 Episode 列表。来源站�
 - `Downloaded`：规范键 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)` 存在有效的下载完成记录，并且下载、整理、重命名及必要的 NFO/目录数据库写入已全部成功。
 - `NotDownloaded`：TMDB 中存在该 Episode，但没有有效完成记录。尚未开始、下载中、等待整理、整理失败、已取消和删除完成记录后的 Episode 都属于“未下载完成”；页面可以附加显示其当前任务状态，但不能把它标成已完成。
 
+首页运行状态同时展示目录数据库的当前索引数、最近扫描/写入/拒绝数、稳定失败码和六字段 Cron；“立即刷新”调用 `POST /api/v1/library/directory-database/refresh`。只读状态使用 `GET /api/v1/library/directory-database`。默认 Cron 与上游一致为 `0 0 6 * * *`，配置键为 `refresh_database_cron`。
+
 删除某集的下载完成记录后，该 EP 立即恢复为 `NotDownloaded`。只删除下载器任务、源文件或媒体库文件而保留完成记录时，页面必须显示数据/文件不一致警告，不能静默改变完成状态；用户可通过删除业务完成记录或修复操作纠正。
 
 同一 TMDB Episode 即使有多个来源 alias、字幕组或 Torrent，也只显示一个 EP 标记。字幕和 `Other` 文件不独立计数，不影响季度完成数。季度进度使用 `已完成 TMDB EP 数 / TMDB 普通 EP 总数`。

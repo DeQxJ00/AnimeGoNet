@@ -98,6 +98,36 @@ async function loadStatus() {
         health.className = "badge error";
     }
 }
+async function loadDirectoryDatabase(refresh = false) {
+    const target = element("#directory-database-status");
+    const button = element("#directory-database-refresh");
+    button.disabled = true;
+    if (refresh)
+        target.textContent = "正在刷新…";
+    try {
+        const response = await fetch(refresh
+            ? "/api/v1/library/directory-database/refresh"
+            : "/api/v1/library/directory-database", { method: refresh ? "POST" : "GET", headers });
+        if (!response.ok)
+            throw new Error(`HTTP ${response.status}`);
+        const status = await response.json();
+        const rejected = status.last_rejected_count > 0
+            ? `，拒绝 ${status.last_rejected_count}`
+            : "";
+        const failure = status.last_failure_code
+            ? `，失败 ${status.last_failure_code}`
+            : "";
+        target.textContent =
+            `${status.entry_count} 条索引；最近扫描 ${status.last_scanned_count}，`
+                + `写入 ${status.last_indexed_count}${rejected}${failure}；Cron ${status.refresh_cron}`;
+    }
+    catch (error) {
+        target.textContent = errorMessage(error, "目录数据库状态读取失败");
+    }
+    finally {
+        button.disabled = false;
+    }
+}
 function readLibraryState() {
     const defaults = {
         sort: "last_updated",
@@ -3647,7 +3677,9 @@ element("#downloader-new").addEventListener("click", () => openDownloaderConfig(
 element("#downloader-config-close").addEventListener("click", () => downloaderConfigDialog.close());
 element("#downloader-config-form").addEventListener("submit", (event) => void saveDownloaderConfig(event));
 element("#downloader-config-delete").addEventListener("click", () => void deleteDownloaderOverride());
+element("#directory-database-refresh").addEventListener("click", () => void loadDirectoryDatabase(true));
 void loadStatus();
+void loadDirectoryDatabase();
 void loadLibrary();
 void loadConfiguration();
 void loadDownloads();

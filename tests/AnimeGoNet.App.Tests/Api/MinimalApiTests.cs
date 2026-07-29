@@ -58,6 +58,30 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
+    public async Task DirectoryDatabaseStatusAndExplicitRefreshAreExposed()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var initial = await app.Client.GetAsync("/api/v1/library/directory-database");
+        initial.EnsureSuccessStatusCode();
+        using var initialJson = JsonDocument.Parse(await initial.Content.ReadAsStringAsync());
+        Assert.Equal("0 0 6 * * *", initialJson.RootElement.GetProperty("refresh_cron").GetString());
+        Assert.Equal("completed", initialJson.RootElement.GetProperty("last_run_status").GetString());
+        Assert.Equal(0, initialJson.RootElement.GetProperty("entry_count").GetInt32());
+
+        using var refresh = await app.Client.PostAsync(
+            "/api/v1/library/directory-database/refresh",
+            content: null);
+        refresh.EnsureSuccessStatusCode();
+        using var refreshJson = JsonDocument.Parse(await refresh.Content.ReadAsStringAsync());
+        Assert.Equal("completed", refreshJson.RootElement.GetProperty("last_run_status").GetString());
+        Assert.Equal(0, refreshJson.RootElement.GetProperty("last_rejected_count").GetInt32());
+        Assert.NotEqual(
+            initialJson.RootElement.GetProperty("last_run_id").GetString(),
+            refreshJson.RootElement.GetProperty("last_run_id").GetString());
+    }
+
+    [Fact]
     public async Task StatusReportsConfiguredTmdbWithoutEchoingCredential()
     {
         await using var app = await RunningApp.StartAsync(configure: options => options with

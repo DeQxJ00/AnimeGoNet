@@ -10,7 +10,14 @@ public sealed record AnimeGoOptions
 
     public required TorrentFetchOptions TorrentFetch { get; init; }
 
+    public required ScheduleOptions Schedule { get; init; }
+
     public required IReadOnlyList<SourceProfileSeed> InitialSourceProfiles { get; init; }
+}
+
+public sealed record ScheduleOptions
+{
+    public string RefreshDatabaseCron { get; init; } = "0 0 6 * * *";
 }
 
 public sealed record TorrentFetchOptions

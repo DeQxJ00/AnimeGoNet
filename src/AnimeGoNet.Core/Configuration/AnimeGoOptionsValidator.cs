@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AnimeGoNet.Core.Scheduling;
 
 namespace AnimeGoNet.Core.Configuration;
 
@@ -190,6 +191,15 @@ public static partial class AnimeGoOptionsValidator
         if (options.TorrentFetch.StagingTtl <= TimeSpan.Zero)
         {
             errors.Add("Torrent staging TTL must be positive.");
+        }
+
+        try
+        {
+            _ = SixFieldCronExpression.Parse(options.Schedule.RefreshDatabaseCron);
+        }
+        catch (CronExpressionException exception)
+        {
+            errors.Add($"Directory database refresh cron is invalid: {exception.Code}.");
         }
 
         return errors;

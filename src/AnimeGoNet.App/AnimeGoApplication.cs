@@ -100,9 +100,16 @@ public static class AnimeGoApplication
         {
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
         }
-
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var directoryDatabaseScanner = new DirectoryDatabaseScanner();
+        var directoryDatabaseIndex = new DirectoryDatabaseIndexStore(
+            database,
+            directoryDatabaseScanner);
+        await directoryDatabaseIndex.RefreshAsync(
+            options.Paths.SavePath,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
         var sourceProfiles = new SourceProfileStore(database);
         await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
         var rssRules = new MikanRssRuleStore(database);
@@ -148,16 +155,21 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanRssFeedPlugin>();
         builder.Services.AddSingleton<MikanToolFilterPlugin>();
         builder.Services.AddSingleton<StagedTorrentDispatchSchedulePlugin>();
+        builder.Services.AddSingleton<DirectoryDatabaseRefreshSchedulePlugin>();
         builder.Services.AddSingleton<PluginCatalog>(services =>
             BuiltInPluginCatalog.Create(
             [
                 services.GetRequiredService<MikanRssFeedPlugin>(),
                 services.GetRequiredService<MikanToolFilterPlugin>(),
                 services.GetRequiredService<StagedTorrentDispatchSchedulePlugin>(),
+                services.GetRequiredService<DirectoryDatabaseRefreshSchedulePlugin>(),
             ]));
         builder.Services.AddSingleton<TitleParserManager>();
         builder.Services.AddSingleton<OrderedFeedFilterManager>();
         builder.Services.AddSingleton<SqliteJsonCacheStore>();
+        builder.Services.AddSingleton(directoryDatabaseScanner);
+        builder.Services.AddSingleton(directoryDatabaseIndex);
+        builder.Services.AddSingleton<DirectoryDatabaseWriter>();
         builder.Services.AddSingleton(sourceProfiles);
         builder.Services.AddSingleton(rssRules);
         builder.Services.AddSingleton(legacyMikanFilters);
@@ -375,6 +387,12 @@ public static class AnimeGoApplication
                         configuration["ai_anidb_mapping_url_template"])
                         ?? defaults.Metadata.Ai.AniDbMappingUrlTemplate,
                 },
+            },
+            Schedule = defaults.Schedule with
+            {
+                RefreshDatabaseCron = NormalizeOptional(
+                    configuration["refresh_database_cron"])
+                    ?? defaults.Schedule.RefreshDatabaseCron,
             },
             Downloaders = defaults.Downloaders.ToDictionary(
                 pair => pair.Key,

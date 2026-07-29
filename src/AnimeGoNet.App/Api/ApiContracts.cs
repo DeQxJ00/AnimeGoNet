@@ -944,3 +944,15 @@ public sealed record LegacyMikanFilterPreviewResponse(
     [property: JsonPropertyName("matched_key")] string? MatchedKey,
     [property: JsonPropertyName("derived_group_name")] string DerivedGroupName,
     [property: JsonPropertyName("steps")] IReadOnlyList<LegacyMikanFilterTraceItem> Steps);
+
+public sealed record DirectoryDatabaseStatusResponse(
+    [property: JsonPropertyName("refresh_cron")] string RefreshCron,
+    [property: JsonPropertyName("entry_count")] int EntryCount,
+    [property: JsonPropertyName("last_run_id")] string? LastRunId,
+    [property: JsonPropertyName("last_run_status")] string? LastRunStatus,
+    [property: JsonPropertyName("last_scanned_count")] int LastScannedCount,
+    [property: JsonPropertyName("last_indexed_count")] int LastIndexedCount,
+    [property: JsonPropertyName("last_rejected_count")] int LastRejectedCount,
+    [property: JsonPropertyName("last_failure_code")] string? LastFailureCode,
+    [property: JsonPropertyName("last_started_at_utc")] DateTimeOffset? LastStartedAtUtc,
+    [property: JsonPropertyName("last_completed_at_utc")] DateTimeOffset? LastCompletedAtUtc);

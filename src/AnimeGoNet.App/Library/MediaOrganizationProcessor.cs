@@ -20,6 +20,8 @@ public sealed class MediaOrganizationProcessor(
     SafeFileMover mover,
     SafeFileLinker linker,
     TvShowNfoWriter nfoWriter,
+    DirectoryDatabaseWriter directoryDatabaseWriter,
+    DirectoryDatabaseIndexStore directoryDatabaseIndex,
     PluginCatalog plugins,
     TimeProvider? timeProvider = null)
 {
@@ -117,6 +119,35 @@ public sealed class MediaOrganizationProcessor(
                 await nfoWriter.WriteAsync(
                     claim.SaveRootPath, series.CanonicalSeriesName, series.TmdbSeriesId,
                     claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var seasonGroup in claim.Files.GroupBy(file =>
+                         (file.TmdbSeriesId, file.CanonicalSeriesName, file.SeasonNumber)))
+            {
+                var episodeSidecars = seasonGroup
+                    .Where(file => file.Disposition == "episode" && file.AssociatedFileId is null)
+                    .Select(file =>
+                    {
+                        var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
+                        return new DirectoryDatabaseEpisodeWrite(
+                            operation.TargetPath,
+                            file.EpisodeNumber is > 0 ? 1 : 0,
+                            file.EpisodeNumber ?? 0);
+                    })
+                    .ToArray();
+                var directoryEntries = await directoryDatabaseWriter.WriteAsync(
+                    new DirectoryDatabaseWriteRequest(
+                        claim.SaveRootPath,
+                        claim.InfoHash,
+                        seasonGroup.Key.CanonicalSeriesName,
+                        seasonGroup.Key.SeasonNumber,
+                        episodeSidecars),
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
+                await directoryDatabaseIndex.UpsertAsync(
+                    directoryEntries,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
             }
 
             await store.CompleteMovesAsync(claim, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
