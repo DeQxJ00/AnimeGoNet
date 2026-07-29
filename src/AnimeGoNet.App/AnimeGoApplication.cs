@@ -66,9 +66,10 @@ public static class AnimeGoApplication
             ContentRootPath = AppContext.BaseDirectory,
             WebRootPath = webRootPath,
         });
-        var webSocketLogs = new WebSocketLogHub();
-        builder.Logging.AddProvider(webSocketLogs);
-        builder.Services.AddSingleton(webSocketLogs);
+        builder.Services.AddSingleton<WebSocketLogHub>();
+        builder.Services.AddSingleton<ILoggerProvider>(
+            static services =>
+                services.GetRequiredService<WebSocketLogHub>());
 
         runningInContainer ??= string.Equals(
             builder.Configuration["DOTNET_RUNNING_IN_CONTAINER"],
@@ -87,6 +88,17 @@ public static class AnimeGoApplication
                 : DeploymentConfigurationLocks.FromCurrentProcess();
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
+        builder.Services.AddSingleton(
+            _ => new RollingFileLoggerProvider(
+                new RollingFileLogOptions
+                {
+                    FilePath = Path.Combine(
+                        layout.LogsPath,
+                        "animego.log"),
+                }));
+        builder.Services.AddSingleton<ILoggerProvider>(
+            static services =>
+                services.GetRequiredService<RollingFileLoggerProvider>());
         var applicationOverrides = new ApplicationOverrideStore(
             layout.ConfigurationPath,
             layout.BackupsPath);

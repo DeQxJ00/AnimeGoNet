@@ -108,6 +108,7 @@ Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可
 - passkey URL 抓取关闭自动 redirect，每跳重新校验 SourceProfile host 和全部 DNS 地址；`SocketsHttpHandler.ConnectCallback` 只连接本跳已校验 IP，避免校验后再次解析造成 DNS rebinding。
 - 静态 WebUI 唯一源码位于 `src/AnimeGoNet.App/WebUI/src`，使用固定 TypeScript 版本、strict 模式和 DOM 类型编译到 `wwwroot`，不引入浏览器运行时框架。编译产物随主程序作为 static content 发布；CI 同时执行 `--noEmit` 类型检查并验证重新编译后 Git 无差异。
 - `/websocket/log` 使用原生 ASP.NET Core WebSocket 和编译期 `ILoggerProvider` fan-out；控制命令只由有界 `JsonDocument` 读取，日志帧显式构造，不使用反射 DTO。每个连接独立暂停，最多缓存最新 1000 条；发送队列最多 256 帧并丢弃最旧帧，避免慢浏览器无界占用内存。进入 WebSocket 前统一验证 access-key，输出先用 `GeneratedRegex` 脱敏 URL、Bearer、Cookie、Authorization、密码及常见 token/key。
+- 文件日志使用自有 `ILoggerProvider`，固定写入 `data_path/logs/animego.log`，不依赖 Serilog/NLog 或运行时模板。与上游一致只保存 Information 以上，每 2 MiB 轮转，最多 14 份并删除超过 14 天的受管数字后缀备份；写入与轮转在进程内串行，单行即时 flush 以支持运维 tail。两个 provider 均由 DI 工厂创建并以 `ILoggerProvider` 映射到同一实例，provider 的释放幂等，宿主停止后不遗留文件句柄；Unix 新文件权限固定 `0640`。
 
 禁止进入生产路径：
 

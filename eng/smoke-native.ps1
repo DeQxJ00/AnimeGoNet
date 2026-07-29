@@ -137,10 +137,21 @@ try {
         throw 'SQLite database was not initialized.'
     }
 
+    $logFile = Join-Path $env:data_path 'logs/animego.log'
+    if (
+        -not (Test-Path -LiteralPath $logFile) -or
+        (Get-Item -LiteralPath $logFile).Length -le 0
+    ) {
+        throw 'Rolling file log was not initialized under data_path.'
+    }
+
     Write-Output "Native smoke passed: $resolvedExecutable"
 }
 finally {
-    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    if (-not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        [void]$process.WaitForExit(5000)
+    }
     if (Test-Path -LiteralPath $smokeRoot) {
         [IO.Directory]::Delete($smokeRoot, $true)
     }
