@@ -379,15 +379,17 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
             upsert.CommandText = """
                 INSERT INTO anime_series (
                     id, tmdb_series_id, bangumi_subject_id, canonical_name,
-                    original_name, poster_path, needs_tmdb_completion,
+                    original_name, poster_path, needs_tmdb_completion, first_air_date,
                     created_at_utc, updated_at_utc)
                 VALUES (
                     $id, $tmdb_id, $bgmid, $canonical_name,
-                    $original_name, NULL, 0, $now, $now)
+                    $original_name, $poster_path, 0, $first_air_date, $now, $now)
                 ON CONFLICT(tmdb_series_id) WHERE tmdb_series_id > 0 DO UPDATE SET
                     bangumi_subject_id = COALESCE(anime_series.bangumi_subject_id, excluded.bangumi_subject_id),
                     canonical_name = excluded.canonical_name,
                     original_name = excluded.original_name,
+                    poster_path = COALESCE(excluded.poster_path, anime_series.poster_path),
+                    first_air_date = COALESCE(excluded.first_air_date, anime_series.first_air_date),
                     updated_at_utc = excluded.updated_at_utc;
                 """;
             upsert.Parameters.AddWithValue("$id", seriesRowId);
@@ -395,6 +397,14 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
             upsert.Parameters.AddWithValue("$bgmid", request.BangumiSubjectId);
             upsert.Parameters.AddWithValue("$canonical_name", request.Series.Name);
             upsert.Parameters.AddWithValue("$original_name", request.Series.OriginalName);
+            upsert.Parameters.AddWithValue(
+                "$poster_path",
+                (object?)request.Series.PosterPath ?? DBNull.Value);
+            upsert.Parameters.AddWithValue(
+                "$first_air_date",
+                request.Series.FirstAirDate is null
+                    ? DBNull.Value
+                    : request.Series.FirstAirDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
             upsert.Parameters.AddWithValue("$now", now);
             await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -448,16 +458,34 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         command.CommandText = """
             INSERT INTO anime_seasons (
                 id, series_id, season_number, canonical_name, poster_path,
-                created_at_utc, updated_at_utc)
-            VALUES ($id, $series_id, $season_number, $name, NULL, $now, $now)
+                created_at_utc, updated_at_utc, air_date, episode_count)
+            VALUES (
+                $id, $series_id, $season_number, $name, $poster_path,
+                $now, $now, $air_date, $episode_count)
             ON CONFLICT(series_id, season_number) DO UPDATE SET
                 canonical_name = excluded.canonical_name,
+                poster_path = COALESCE(excluded.poster_path, anime_seasons.poster_path),
+                air_date = COALESCE(excluded.air_date, anime_seasons.air_date),
+                episode_count = CASE
+                    WHEN excluded.episode_count > 0 OR anime_seasons.episode_count = 0
+                        THEN excluded.episode_count
+                    ELSE anime_seasons.episode_count
+                END,
                 updated_at_utc = excluded.updated_at_utc;
             """;
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("$series_id", canonicalSeriesId);
         command.Parameters.AddWithValue("$season_number", season.SeasonNumber);
         command.Parameters.AddWithValue("$name", season.Name);
+        command.Parameters.AddWithValue(
+            "$poster_path",
+            (object?)season.PosterPath ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$air_date",
+            season.AirDate is null
+                ? DBNull.Value
+                : season.AirDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$episode_count", season.EpisodeCount);
         command.Parameters.AddWithValue("$now", now);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }

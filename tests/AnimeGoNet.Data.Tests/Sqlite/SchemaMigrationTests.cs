@@ -222,6 +222,59 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task LibraryProjectionMigrationPreservesRowsAndAddsTmdbSeasonMetadata()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 22))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, canonical_name, needs_tmdb_completion,
+                    created_at_utc, updated_at_utc)
+                VALUES ('series-1', 72517, '来自深渊', 0, $now, $now);
+
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name,
+                    created_at_utc, updated_at_utc)
+                VALUES ('season-1', 'series-1', 2, '烈日的黄金乡', $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-07-29T10:00:00.0000000+00:00");
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        var migration23 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 23);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration23.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT series.canonical_name, series.first_air_date,
+                   season.canonical_name, season.air_date, season.episode_count
+            FROM anime_series AS series
+            JOIN anime_seasons AS season ON season.series_id = series.id
+            WHERE series.id = 'series-1' AND season.id = 'season-1';
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("来自深渊", reader.GetString(0));
+        Assert.True(reader.IsDBNull(1));
+        Assert.Equal("烈日的黄金乡", reader.GetString(2));
+        Assert.True(reader.IsDBNull(3));
+        Assert.Equal(0, reader.GetInt32(4));
+    }
+
+    [Fact]
     public async Task RssBatchAuditIncludesVersionedLegacyFilterColumns()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

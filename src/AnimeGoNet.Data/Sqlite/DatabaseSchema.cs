@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 22;
+    public const int CurrentVersion = 23;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -28,6 +28,7 @@ public static class DatabaseSchema
         new SchemaMigration(20, "pending_tmdb_recovery", PendingTmdbRecovery),
         new SchemaMigration(21, "pending_tmdb_nfo_rewrite_jobs", PendingTmdbNfoRewriteJobs),
         new SchemaMigration(22, "sqlite_json_cache", SqliteJsonCache),
+        new SchemaMigration(23, "library_tmdb_projection", LibraryTmdbProjection),
     ];
 
     private const string InitialBusinessSchema = """
@@ -919,5 +920,17 @@ public static class DatabaseSchema
         CREATE INDEX ix_cache_entries_expiry
         ON cache_entries(expires_at_utc)
         WHERE expires_at_utc IS NOT NULL;
+        """;
+
+    private const string LibraryTmdbProjection = """
+        ALTER TABLE anime_series
+            ADD COLUMN first_air_date TEXT;
+
+        ALTER TABLE anime_seasons
+            ADD COLUMN air_date TEXT;
+
+        ALTER TABLE anime_seasons
+            ADD COLUMN episode_count INTEGER NOT NULL DEFAULT 0
+                CHECK (episode_count >= 0);
         """;
 }

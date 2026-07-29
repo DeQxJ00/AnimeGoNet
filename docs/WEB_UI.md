@@ -79,6 +79,8 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例。任务卡片已可按需读取完整策略尝试时间线；尚未实现的筛选、作品 CRUD、Cover 和 TMDB EP 网格仍按 TODO 独立验收。
 
+SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster 路径，并为普通 Season 保存首播日期、TMDB Episode 总数与 poster 路径。正常自动/人工解析和“待补全 TMDB”恢复共用同一投影；这些字段只是作品库查询和 Cover 代理的权威输入，尚未提供浏览器直连 TMDB 图片 URL。
+
 可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同 EP 进度。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
 
 ## 8. 当前生效配置投影

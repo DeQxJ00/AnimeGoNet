@@ -144,8 +144,20 @@ public sealed class MetadataResolutionStoreTests
             claim,
             new MetadataAttempt("series", "tmdb_title", null, "matched", null, false, 1, 12),
             now);
-        var series = new TmdbSeries(72517, "来自深渊", "メイドインアビス", new DateOnly(2017, 7, 7));
-        var season = new TmdbSeason(204984, 72517, 2, "烈日的黄金乡", new DateOnly(2022, 7, 6), 12);
+        var series = new TmdbSeries(
+            72517,
+            "来自深渊",
+            "メイドインアビス",
+            new DateOnly(2017, 7, 7),
+            "/series-poster.jpg");
+        var season = new TmdbSeason(
+            204984,
+            72517,
+            2,
+            "烈日的黄金乡",
+            new DateOnly(2022, 7, 6),
+            12,
+            "/season-poster.jpg");
 
         await fixture.Store.CompleteSeasonAsync(claim, series, season, now);
 
@@ -159,7 +171,9 @@ public sealed class MetadataResolutionStoreTests
         command.CommandText = """
             SELECT ingest_tasks.status, anime_series.canonical_name,
                    anime_seasons.season_number, task_files.tmdb_series_id,
-                   task_files.tmdb_season_number
+                   task_files.tmdb_season_number, anime_series.first_air_date,
+                   anime_series.poster_path, anime_seasons.air_date,
+                   anime_seasons.episode_count, anime_seasons.poster_path
             FROM ingest_tasks
             JOIN task_files ON task_files.task_id = ingest_tasks.id
             JOIN anime_series ON anime_series.tmdb_series_id = task_files.tmdb_series_id
@@ -175,6 +189,11 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(2, reader.GetInt32(2));
         Assert.Equal(72517, reader.GetInt32(3));
         Assert.Equal(2, reader.GetInt32(4));
+        Assert.Equal("2017-07-07", reader.GetString(5));
+        Assert.Equal("/series-poster.jpg", reader.GetString(6));
+        Assert.Equal("2022-07-06", reader.GetString(7));
+        Assert.Equal(12, reader.GetInt32(8));
+        Assert.Equal("/season-poster.jpg", reader.GetString(9));
     }
 
     [Fact]

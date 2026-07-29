@@ -54,6 +54,24 @@ public sealed class PendingTmdbRecoveryStoreTests
               AND series_directory_name = 'Fallback Anime';
             """));
 
+        await using (var library = connection.CreateCommand())
+        {
+            library.CommandText = """
+                SELECT series.first_air_date, series.poster_path,
+                       season.air_date, season.episode_count, season.poster_path
+                FROM anime_series AS series
+                JOIN anime_seasons AS season ON season.series_id = series.id
+                WHERE series.tmdb_series_id = 700 AND season.season_number = 1;
+                """;
+            await using var reader = await library.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("2026-01-01", reader.GetString(0));
+            Assert.Equal("/canonical-series.jpg", reader.GetString(1));
+            Assert.Equal("2026-01-01", reader.GetString(2));
+            Assert.Equal(12, reader.GetInt32(3));
+            Assert.Equal("/canonical-season.jpg", reader.GetString(4));
+        }
+
         await using (var query = connection.CreateCommand())
         {
             query.CommandText = "SELECT media_path, completed_at_utc FROM completion_records;";
@@ -187,7 +205,12 @@ public sealed class PendingTmdbRecoveryStoreTests
         params PendingTmdbRecoveryMapping[] mappings) =>
         new(
             547888,
-            new TmdbSeries(700, "Canonical Anime", "Canonical Anime", new DateOnly(2026, 1, 1)),
+            new TmdbSeries(
+                700,
+                "Canonical Anime",
+                "Canonical Anime",
+                new DateOnly(2026, 1, 1),
+                "/canonical-series.jpg"),
             mappings,
             "manual");
 
@@ -197,7 +220,14 @@ public sealed class PendingTmdbRecoveryStoreTests
         int episodeNumber) =>
         new(
             fallbackId,
-            new TmdbSeason(800, 700, 1, "Season 1", new DateOnly(2026, 1, 1), 12),
+            new TmdbSeason(
+                800,
+                700,
+                1,
+                "Season 1",
+                new DateOnly(2026, 1, 1),
+                12,
+                "/canonical-season.jpg"),
             new TmdbEpisode(
                 episodeId,
                 700,

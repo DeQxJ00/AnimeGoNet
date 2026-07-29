@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 22
+    [int]$ExpectedSchemaVersion = 23
 )
 
 $ErrorActionPreference = 'Stop'

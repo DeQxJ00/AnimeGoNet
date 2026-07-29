@@ -13,7 +13,7 @@ public sealed class TmdbClientTests
     public async Task SearchPreservesUpstreamDiscoverParametersAndMapsCanonicalFields()
     {
         const string json = """
-            {"total_results":1,"results":[{"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07"}]}
+            {"total_results":1,"results":[{"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07","poster_path":"/series.jpg"}]}
             """;
         using var handler = new RecordingHandler(_ => Json(json));
         using var http = new HttpClient(handler);
@@ -24,6 +24,7 @@ public sealed class TmdbClientTests
         Assert.Equal(72517, series.Id);
         Assert.Equal("来自深渊", series.Name);
         Assert.Equal(new DateOnly(2017, 7, 7), series.FirstAirDate);
+        Assert.Equal("/series.jpg", series.PosterPath);
         var request = Assert.Single(handler.Requests);
         Assert.Equal("/3/discover/tv", request.Path);
         Assert.Contains("language=zh-CN", request.Query, StringComparison.Ordinal);
@@ -57,9 +58,9 @@ public sealed class TmdbClientTests
     public async Task SeriesDetailsExposeOrdinarySeasonSummariesForDateMatching()
     {
         const string json = """
-            {"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07","seasons":[
+            {"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07","poster_path":"/series.jpg","seasons":[
               {"id":100,"name":"Specials","season_number":0,"air_date":"2017-01-01","episode_count":3},
-              {"id":204984,"name":"烈日的黄金乡","season_number":2,"air_date":"2022-07-06","episode_count":12}
+              {"id":204984,"name":"烈日的黄金乡","season_number":2,"air_date":"2022-07-06","episode_count":12,"poster_path":"/season-2.jpg"}
             ]}
             """;
         using var handler = new RecordingHandler(_ => Json(json));
@@ -69,6 +70,7 @@ public sealed class TmdbClientTests
         var details = Assert.IsType<TmdbSeriesDetails>(await client.GetSeriesDetailsAsync(72517));
 
         Assert.Equal(72517, details.Series.Id);
+        Assert.Equal("/series.jpg", details.Series.PosterPath);
         Assert.Collection(
             details.Seasons,
             season => Assert.Equal(0, season.SeasonNumber),
@@ -77,7 +79,28 @@ public sealed class TmdbClientTests
                 Assert.Equal(2, season.SeasonNumber);
                 Assert.Equal(12, season.EpisodeCount);
                 Assert.Equal(new DateOnly(2022, 7, 6), season.AirDate);
+                Assert.Equal("/season-2.jpg", season.PosterPath);
             });
+    }
+
+    [Theory]
+    [InlineData("https://image.tmdb.org/poster.jpg")]
+    [InlineData("\\poster.jpg")]
+    [InlineData("/poster\r.jpg")]
+    public async Task InvalidPosterPathIsRejectedAsProtocolFailure(string posterPath)
+    {
+        var json = $$"""
+            {"id":72517,"name":"来自深渊","original_name":"メイドインアビス","first_air_date":"2017-07-07","poster_path":{{System.Text.Json.JsonSerializer.Serialize(posterPath)}}}
+            """;
+        using var handler = new RecordingHandler(_ => Json(json));
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+
+        var exception = await Assert.ThrowsAsync<TmdbClientException>(
+            () => client.GetSeriesAsync(72517));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("tmdb_poster_path_invalid", exception.SafeCode);
     }
 
     [Fact]

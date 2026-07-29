@@ -865,18 +865,30 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             upsertSeries.CommandText = """
                 INSERT INTO anime_series (
                     id, tmdb_series_id, bangumi_subject_id, canonical_name,
-                    original_name, poster_path, needs_tmdb_completion,
+                    original_name, poster_path, needs_tmdb_completion, first_air_date,
                     created_at_utc, updated_at_utc)
-                VALUES ($id, $tmdb_id, NULL, $canonical_name, $original_name, NULL, 0, $now, $now)
+                VALUES (
+                    $id, $tmdb_id, NULL, $canonical_name, $original_name,
+                    $poster_path, 0, $first_air_date, $now, $now)
                 ON CONFLICT(tmdb_series_id) WHERE tmdb_series_id > 0 DO UPDATE SET
                     canonical_name = excluded.canonical_name,
                     original_name = excluded.original_name,
+                    poster_path = COALESCE(excluded.poster_path, anime_series.poster_path),
+                    first_air_date = COALESCE(excluded.first_air_date, anime_series.first_air_date),
                     updated_at_utc = excluded.updated_at_utc;
                 """;
             upsertSeries.Parameters.AddWithValue("$id", seriesRowId);
             upsertSeries.Parameters.AddWithValue("$tmdb_id", series.Id);
             upsertSeries.Parameters.AddWithValue("$canonical_name", CanonicalName(series));
             upsertSeries.Parameters.AddWithValue("$original_name", series.OriginalName);
+            upsertSeries.Parameters.AddWithValue(
+                "$poster_path",
+                (object?)series.PosterPath ?? DBNull.Value);
+            upsertSeries.Parameters.AddWithValue(
+                "$first_air_date",
+                series.FirstAirDate is null
+                    ? DBNull.Value
+                    : series.FirstAirDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
             upsertSeries.Parameters.AddWithValue("$now", now);
             await upsertSeries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -897,16 +909,34 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             upsertSeason.CommandText = """
                 INSERT INTO anime_seasons (
                     id, series_id, season_number, canonical_name, poster_path,
-                    created_at_utc, updated_at_utc)
-                VALUES ($id, $series_id, $season_number, $canonical_name, NULL, $now, $now)
+                    created_at_utc, updated_at_utc, air_date, episode_count)
+                VALUES (
+                    $id, $series_id, $season_number, $canonical_name, $poster_path,
+                    $now, $now, $air_date, $episode_count)
                 ON CONFLICT(series_id, season_number) DO UPDATE SET
                     canonical_name = excluded.canonical_name,
+                    poster_path = COALESCE(excluded.poster_path, anime_seasons.poster_path),
+                    air_date = COALESCE(excluded.air_date, anime_seasons.air_date),
+                    episode_count = CASE
+                        WHEN excluded.episode_count > 0 OR anime_seasons.episode_count = 0
+                            THEN excluded.episode_count
+                        ELSE anime_seasons.episode_count
+                    END,
                     updated_at_utc = excluded.updated_at_utc;
                 """;
             upsertSeason.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             upsertSeason.Parameters.AddWithValue("$series_id", seriesRowId);
             upsertSeason.Parameters.AddWithValue("$season_number", season.SeasonNumber);
             upsertSeason.Parameters.AddWithValue("$canonical_name", season.CanonicalName);
+            upsertSeason.Parameters.AddWithValue(
+                "$poster_path",
+                (object?)season.PosterPath ?? DBNull.Value);
+            upsertSeason.Parameters.AddWithValue(
+                "$air_date",
+                season.AirDate is null
+                    ? DBNull.Value
+                    : season.AirDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            upsertSeason.Parameters.AddWithValue("$episode_count", season.EpisodeCount);
             upsertSeason.Parameters.AddWithValue("$now", now);
             await upsertSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -1028,10 +1058,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             throw new ArgumentException("TMDB Series/Season identity is invalid.", nameof(season));
         }
 
-        return new SeasonCompletion(season.SeasonNumber, season.Name);
+        return new SeasonCompletion(
+            season.SeasonNumber,
+            season.Name,
+            season.AirDate,
+            season.EpisodeCount,
+            season.PosterPath);
     }
 
-    private sealed record SeasonCompletion(int SeasonNumber, string CanonicalName);
+    private sealed record SeasonCompletion(
+        int SeasonNumber,
+        string CanonicalName,
+        DateOnly? AirDate = null,
+        int EpisodeCount = 0,
+        string? PosterPath = null);
 
     public async Task CompleteEpisodesAsync(
         MetadataEpisodeTaskClaim claim,

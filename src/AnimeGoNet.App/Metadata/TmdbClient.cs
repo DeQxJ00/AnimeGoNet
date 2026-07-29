@@ -238,7 +238,8 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             response.Id,
             response.Name?.Trim() ?? string.Empty,
             response.OriginalName?.Trim() ?? string.Empty,
-            ParseDate(response.FirstAirDate));
+            ParseDate(response.FirstAirDate),
+            NormalizePosterPath(response.PosterPath));
     }
 
     private static TmdbSeason MapSeason(int seriesId, TmdbSeasonDto response)
@@ -254,7 +255,27 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             response.SeasonNumber,
             response.Name?.Trim() ?? string.Empty,
             ParseDate(response.AirDate),
-            response.Episodes?.Length ?? response.EpisodeCount);
+            response.Episodes?.Length ?? response.EpisodeCount,
+            NormalizePosterPath(response.PosterPath));
+    }
+
+    private static string? NormalizePosterPath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 256
+            || normalized[0] != '/'
+            || normalized.Contains('\\')
+            || normalized.Any(char.IsControl))
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_poster_path_invalid");
+        }
+
+        return normalized;
     }
 
     private static DateOnly? ParseDate(string? value)

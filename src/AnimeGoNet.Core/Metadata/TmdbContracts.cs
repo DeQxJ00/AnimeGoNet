@@ -17,7 +17,8 @@ public sealed record TmdbSeries(
     int Id,
     string Name,
     string OriginalName,
-    DateOnly? FirstAirDate);
+    DateOnly? FirstAirDate,
+    string? PosterPath = null);
 
 public sealed record TmdbSeason(
     int Id,
@@ -25,7 +26,8 @@ public sealed record TmdbSeason(
     int SeasonNumber,
     string Name,
     DateOnly? AirDate,
-    int EpisodeCount);
+    int EpisodeCount,
+    string? PosterPath = null);
 
 public sealed record TmdbEpisode(
     int Id,
