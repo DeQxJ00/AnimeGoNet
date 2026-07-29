@@ -45,3 +45,19 @@ public sealed record AnimeSeasonListPage(
     int PageSize,
     int TotalItems,
     IReadOnlyList<AnimeSeasonListProjection> Items);
+
+public sealed record AnimeEpisodeProjection(
+    int TmdbEpisodeId,
+    int EpisodeNumber,
+    string? Name,
+    DateOnly? AirDate,
+    int? RuntimeMinutes,
+    DateTimeOffset FetchedAtUtc,
+    bool Downloaded,
+    string? DownloadSourceId,
+    DateTimeOffset? DownloadedAtUtc,
+    bool MediaPathKnown);
+
+public sealed record AnimeSeasonDetailProjection(
+    AnimeSeasonListProjection Season,
+    IReadOnlyList<AnimeEpisodeProjection> Episodes);

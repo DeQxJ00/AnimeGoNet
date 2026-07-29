@@ -54,6 +54,55 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal(JsonValueKind.Null, item.GetProperty("air_date").ValueKind);
     }
 
+    [Fact]
+    public async Task SeasonDetailReturnsOfficialEpisodeGridWithoutLocalMediaPaths()
+    {
+        await using var app = await RunningApp.StartAsync();
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+
+        using var response = await app.Client.GetAsync("/api/v1/library/seasons/100/1");
+        var body = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+        var root = json.RootElement;
+        var episodes = root.GetProperty("episodes").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("tmdb:100:s1", root.GetProperty("id").GetString());
+        Assert.Equal("Alpha", root.GetProperty("display_name").GetString());
+        Assert.Equal(2, root.GetProperty("episode_total").GetInt32());
+        Assert.Equal(2, root.GetProperty("episode_snapshot_count").GetInt32());
+        Assert.Equal(1, root.GetProperty("episode_downloaded").GetInt32());
+        Assert.Equal(2, episodes.Length);
+        Assert.Equal("tmdb-episode:1001", episodes[0].GetProperty("id").GetString());
+        Assert.Equal("downloaded", episodes[0].GetProperty("status").GetString());
+        Assert.Equal("test", episodes[0].GetProperty("source_id").GetString());
+        Assert.True(episodes[0].GetProperty("media_path_known").GetBoolean());
+        Assert.Equal("not_downloaded", episodes[1].GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, episodes[1].GetProperty("downloaded_at_utc").ValueKind);
+        Assert.DoesNotContain("/media/alpha.mkv", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("season-alpha", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("series-alpha", body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/library/seasons/0/1", HttpStatusCode.BadRequest, "library_series_id_invalid")]
+    [InlineData("/api/v1/library/seasons/100/0", HttpStatusCode.BadRequest, "library_season_number_invalid")]
+    [InlineData("/api/v1/library/seasons/999/1", HttpStatusCode.NotFound, "library_season_not_found")]
+    public async Task SeasonDetailUsesStableErrors(
+        string path,
+        HttpStatusCode expectedStatus,
+        string expectedCode)
+    {
+        await using var app = await RunningApp.StartAsync();
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+
+        using var response = await app.Client.GetAsync(path);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        Assert.Equal(expectedCode, json.RootElement.GetProperty("code").GetString());
+    }
+
     [Theory]
     [InlineData("?page=0", "library_page_invalid")]
     [InlineData("?page_size=101", "library_page_size_invalid")]

@@ -1,4 +1,5 @@
 using AnimeGoNet.Data.Library;
+using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Tests.Library;
 
@@ -74,6 +75,55 @@ public sealed class AnimeLibraryStoreTests
     }
 
     [Fact]
+    public async Task SeasonDetailUsesOfficialEpisodeSnapshotAndReflectsCompletionDeletion()
+    {
+        await using var fixture = await LibraryFixture.CreateAsync();
+
+        var detail = await fixture.Store.GetSeasonAsync(100, 1);
+
+        Assert.NotNull(detail);
+        Assert.Equal(3, detail.Season.EpisodeTotal);
+        Assert.Equal(3, detail.Season.EpisodeSnapshotCount);
+        Assert.Equal(2, detail.Season.EpisodeDownloaded);
+        Assert.Equal([1, 2, 3], detail.Episodes.Select(episode => episode.EpisodeNumber).ToArray());
+        Assert.Equal([1001, 1002, 1003], detail.Episodes.Select(episode => episode.TmdbEpisodeId).ToArray());
+        Assert.Equal([true, false, true], detail.Episodes.Select(episode => episode.Downloaded).ToArray());
+        Assert.Equal(24, detail.Episodes[0].RuntimeMinutes);
+        Assert.Equal("test", detail.Episodes[0].DownloadSourceId);
+        Assert.False(detail.Episodes[0].MediaPathKnown);
+        Assert.Null(detail.Episodes[1].DownloadSourceId);
+        Assert.Null(detail.Episodes[1].DownloadedAtUtc);
+        Assert.True(detail.Episodes[2].MediaPathKnown);
+        Assert.Contains("completion_without_snapshot", detail.Season.Warnings);
+
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "DELETE FROM completion_records WHERE id = 'completion-3';";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var afterDeletion = await fixture.Store.GetSeasonAsync(100, 1);
+        Assert.NotNull(afterDeletion);
+        Assert.Equal(1, afterDeletion.Season.EpisodeDownloaded);
+        Assert.False(afterDeletion.Episodes[2].Downloaded);
+        Assert.Null(afterDeletion.Episodes[2].DownloadedAtUtc);
+    }
+
+    [Fact]
+    public async Task SeasonDetailRejectsInvalidKeysAndExcludesFallbackOrMissingSeasons()
+    {
+        await using var fixture = await LibraryFixture.CreateAsync();
+
+        Assert.Null(await fixture.Store.GetSeasonAsync(999, 1));
+        Assert.Null(await fixture.Store.GetSeasonAsync(100, 9));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => fixture.Store.GetSeasonAsync(0, 1));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => fixture.Store.GetSeasonAsync(100, 0));
+    }
+
+    [Fact]
     public async Task InvalidPagingIsRejectedBeforeOpeningAQuery()
     {
         await using var fixture = await LibraryFixture.CreateAsync();
@@ -98,6 +148,8 @@ public sealed class AnimeLibraryStoreTests
         }
 
         public AnimeLibraryStore Store { get; }
+
+        public AnimeGoSqliteDatabase Database => _databaseFixture.Database;
 
         public static async Task<LibraryFixture> CreateAsync()
         {
@@ -155,13 +207,13 @@ public sealed class AnimeLibraryStoreTests
 
                 INSERT INTO tmdb_episodes (
                     tmdb_episode_id, series_id, season_number, episode_number,
-                    name, air_date, fetched_at_utc)
+                    name, air_date, runtime_minutes, fetched_at_utc)
                 VALUES
-                    (1001, 'alpha', 1, 1, 'Alpha 1', '2024-01-01', $base_time),
-                    (1002, 'alpha', 1, 2, 'Alpha 2', '2024-01-08', $base_time),
-                    (1003, 'alpha', 1, 3, 'Alpha 3', '2024-01-15', $base_time),
-                    (2001, 'alpha', 2, 1, 'Alpha S2 1', '2025-01-01', $base_time),
-                    (2002, 'alpha', 2, 2, 'Alpha S2 2', '2025-01-08', $base_time);
+                    (1001, 'alpha', 1, 1, 'Alpha 1', '2024-01-01', 24, $base_time),
+                    (1002, 'alpha', 1, 2, 'Alpha 2', '2024-01-08', 25, $base_time),
+                    (1003, 'alpha', 1, 3, 'Alpha 3', '2024-01-15', 26, $base_time),
+                    (2001, 'alpha', 2, 1, 'Alpha S2 1', '2025-01-01', 24, $base_time),
+                    (2002, 'alpha', 2, 2, 'Alpha S2 2', '2025-01-08', 24, $base_time);
 
                 INSERT INTO completion_records (
                     id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,

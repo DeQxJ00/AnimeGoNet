@@ -46,56 +46,95 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            var episodeTotal = reader.GetInt32(10);
-            var episodeSnapshotCount = reader.GetInt32(11);
-            var episodeDownloaded = reader.GetInt32(12);
-            var allCompletionCount = reader.GetInt32(17);
-            var missingMediaPathCount = reader.GetInt32(18);
-            var validationStatus = reader.GetString(15);
-            var warnings = new List<string>(3);
-            if (episodeSnapshotCount != episodeTotal)
-            {
-                warnings.Add("episode_snapshot_incomplete");
-            }
-
-            if (allCompletionCount != episodeDownloaded)
-            {
-                warnings.Add("completion_without_snapshot");
-            }
-
-            if (missingMediaPathCount > 0)
-            {
-                warnings.Add("completion_media_path_unknown");
-            }
-
-            if (validationStatus == "local_unverified")
-            {
-                warnings.Add("season_not_tmdb_verified");
-            }
-
-            var displayName = reader.GetString(2);
-            items.Add(new AnimeSeasonListProjection(
-                reader.GetInt32(0),
-                reader.GetInt32(1),
-                displayName,
-                displayName.ToLowerInvariant(),
-                reader.GetString(3),
-                reader.IsDBNull(4) ? null : reader.GetString(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                ParseDate(reader, 6),
-                ParseTimestamp(reader.GetString(7)),
-                ParseTimestamp(reader.GetString(8)),
-                episodeTotal,
-                episodeSnapshotCount,
-                episodeDownloaded,
-                reader.IsDBNull(13) ? null : reader.GetString(13),
-                reader.IsDBNull(14) ? null : reader.GetString(14),
-                validationStatus,
-                reader.IsDBNull(16) ? null : reader.GetString(16),
-                warnings));
+            items.Add(ReadSeasonProjection(reader));
         }
 
         return new AnimeSeasonListPage(query.Page, query.PageSize, totalItems, items);
+    }
+
+    public async Task<AnimeSeasonDetailProjection?> GetSeasonAsync(
+        int tmdbSeriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbSeriesId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(seasonNumber, 1);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var seasonCommand = connection.CreateCommand();
+        seasonCommand.CommandText = LibraryProjectionSql + """
+
+            SELECT tmdb_series_id, season_number, display_name, season_name,
+                   series_poster_path, season_poster_path, air_date, added_at,
+                   last_updated_at, display_name AS sort_name, episode_total,
+                   episode_snapshot_count, episode_downloaded,
+                   series_resolution_source, season_resolution_source,
+                   validation_status, last_resolution_run_id,
+                   all_completion_count, missing_media_path_count
+            FROM projection
+            WHERE tmdb_series_id = $tmdb_series_id
+              AND season_number = $season_number
+            LIMIT 1;
+            """;
+        seasonCommand.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        seasonCommand.Parameters.AddWithValue("$season_number", seasonNumber);
+        AnimeSeasonListProjection season;
+        await using (var reader = await seasonCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            season = ReadSeasonProjection(reader);
+        }
+
+        await using var episodeCommand = connection.CreateCommand();
+        episodeCommand.CommandText = """
+            SELECT episode.tmdb_episode_id,
+                   episode.episode_number,
+                   episode.name,
+                   episode.air_date,
+                   episode.runtime_minutes,
+                   episode.fetched_at_utc,
+                   completion.id,
+                   completion.source_id,
+                   completion.completed_at_utc,
+                   CASE WHEN completion.media_path IS NOT NULL THEN 1 ELSE 0 END
+            FROM tmdb_episodes AS episode
+            JOIN anime_series AS series ON series.id = episode.series_id
+            LEFT JOIN completion_records AS completion
+              ON completion.tmdb_series_id = series.tmdb_series_id
+             AND completion.tmdb_season_number = episode.season_number
+             AND completion.tmdb_episode_number = episode.episode_number
+            WHERE series.tmdb_series_id = $tmdb_series_id
+              AND series.needs_tmdb_completion = 0
+              AND episode.season_number = $season_number
+            ORDER BY episode.episode_number ASC, episode.tmdb_episode_id ASC;
+            """;
+        episodeCommand.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        episodeCommand.Parameters.AddWithValue("$season_number", seasonNumber);
+        var episodes = new List<AnimeEpisodeProjection>(season.EpisodeSnapshotCount);
+        await using var episodeReader = await episodeCommand
+            .ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await episodeReader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var downloaded = !episodeReader.IsDBNull(6);
+            episodes.Add(new AnimeEpisodeProjection(
+                episodeReader.GetInt32(0),
+                episodeReader.GetInt32(1),
+                episodeReader.IsDBNull(2) ? null : episodeReader.GetString(2),
+                ParseDate(episodeReader, 3),
+                episodeReader.IsDBNull(4) ? null : episodeReader.GetInt32(4),
+                ParseTimestamp(episodeReader.GetString(5)),
+                downloaded,
+                downloaded ? episodeReader.GetString(7) : null,
+                downloaded ? ParseTimestamp(episodeReader.GetString(8)) : null,
+                episodeReader.GetInt32(9) == 1));
+        }
+
+        return new AnimeSeasonDetailProjection(season, episodes);
     }
 
     private static string BuildListSql(
@@ -116,7 +155,22 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 $"added_at {sqlDirection}, tmdb_series_id ASC, season_number ASC",
             _ => throw new ArgumentOutOfRangeException(nameof(sort)),
         };
-        return $$"""
+        return LibraryProjectionSql + $$"""
+
+            SELECT tmdb_series_id, season_number, display_name, season_name,
+                   series_poster_path, season_poster_path, air_date, added_at,
+                   last_updated_at, display_name AS sort_name, episode_total,
+                   episode_snapshot_count, episode_downloaded,
+                   series_resolution_source, season_resolution_source,
+                   validation_status, last_resolution_run_id,
+                   all_completion_count, missing_media_path_count
+            FROM projection
+            ORDER BY {{orderBy}}
+            LIMIT $limit OFFSET $offset;
+            """;
+    }
+
+    private const string LibraryProjectionSql = """
             WITH episode_aggregate AS (
                 SELECT series_id, season_number, COUNT(*) AS snapshot_count
                 FROM tmdb_episodes
@@ -254,17 +308,58 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                   AND series.needs_tmdb_completion = 0
                   AND season.season_number > 0
             )
-            SELECT tmdb_series_id, season_number, display_name, season_name,
-                   series_poster_path, season_poster_path, air_date, added_at,
-                   last_updated_at, display_name AS sort_name, episode_total,
-                   episode_snapshot_count, episode_downloaded,
-                   series_resolution_source, season_resolution_source,
-                   validation_status, last_resolution_run_id,
-                   all_completion_count, missing_media_path_count
-            FROM projection
-            ORDER BY {{orderBy}}
-            LIMIT $limit OFFSET $offset;
             """;
+
+    private static AnimeSeasonListProjection ReadSeasonProjection(
+        Microsoft.Data.Sqlite.SqliteDataReader reader)
+    {
+        var episodeTotal = reader.GetInt32(10);
+        var episodeSnapshotCount = reader.GetInt32(11);
+        var episodeDownloaded = reader.GetInt32(12);
+        var allCompletionCount = reader.GetInt32(17);
+        var missingMediaPathCount = reader.GetInt32(18);
+        var validationStatus = reader.GetString(15);
+        var warnings = new List<string>(3);
+        if (episodeSnapshotCount != episodeTotal)
+        {
+            warnings.Add("episode_snapshot_incomplete");
+        }
+
+        if (allCompletionCount != episodeDownloaded)
+        {
+            warnings.Add("completion_without_snapshot");
+        }
+
+        if (missingMediaPathCount > 0)
+        {
+            warnings.Add("completion_media_path_unknown");
+        }
+
+        if (validationStatus == "local_unverified")
+        {
+            warnings.Add("season_not_tmdb_verified");
+        }
+
+        var displayName = reader.GetString(2);
+        return new AnimeSeasonListProjection(
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            displayName,
+            displayName.ToLowerInvariant(),
+            reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            ParseDate(reader, 6),
+            ParseTimestamp(reader.GetString(7)),
+            ParseTimestamp(reader.GetString(8)),
+            episodeTotal,
+            episodeSnapshotCount,
+            episodeDownloaded,
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            reader.IsDBNull(14) ? null : reader.GetString(14),
+            validationStatus,
+            reader.IsDBNull(16) ? null : reader.GetString(16),
+            warnings);
     }
 
     private static DateOnly? ParseDate(Microsoft.Data.Sqlite.SqliteDataReader reader, int ordinal) =>

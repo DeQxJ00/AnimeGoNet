@@ -363,6 +363,40 @@ public sealed record AnimeSeasonListItemResponse(
     [property: JsonPropertyName("last_resolution_run_id")] string? LastResolutionRunId,
     [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings);
 
+public sealed record AnimeSeasonDetailResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("season_name")] string SeasonName,
+    [property: JsonPropertyName("poster_path")] string? PosterPath,
+    [property: JsonPropertyName("poster_source")] string PosterSource,
+    [property: JsonPropertyName("air_date")] DateOnly? AirDate,
+    [property: JsonPropertyName("added_at_utc")] DateTimeOffset AddedAtUtc,
+    [property: JsonPropertyName("last_updated_at_utc")] DateTimeOffset LastUpdatedAtUtc,
+    [property: JsonPropertyName("episode_total")] int EpisodeTotal,
+    [property: JsonPropertyName("episode_snapshot_count")] int EpisodeSnapshotCount,
+    [property: JsonPropertyName("episode_downloaded")] int EpisodeDownloaded,
+    [property: JsonPropertyName("series_resolution_source")] string? SeriesResolutionSource,
+    [property: JsonPropertyName("season_resolution_source")] string? SeasonResolutionSource,
+    [property: JsonPropertyName("validation_status")] string ValidationStatus,
+    [property: JsonPropertyName("last_resolution_run_id")] string? LastResolutionRunId,
+    [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings,
+    [property: JsonPropertyName("episodes")] IReadOnlyList<AnimeEpisodeItemResponse> Episodes);
+
+public sealed record AnimeEpisodeItemResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("tmdb_episode_id")] int TmdbEpisodeId,
+    [property: JsonPropertyName("episode_number")] int EpisodeNumber,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("air_date")] DateOnly? AirDate,
+    [property: JsonPropertyName("runtime_minutes")] int? RuntimeMinutes,
+    [property: JsonPropertyName("fetched_at_utc")] DateTimeOffset FetchedAtUtc,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("source_id")] string? SourceId,
+    [property: JsonPropertyName("downloaded_at_utc")] DateTimeOffset? DownloadedAtUtc,
+    [property: JsonPropertyName("media_path_known")] bool MediaPathKnown);
+
 public sealed record PendingTmdbListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
 

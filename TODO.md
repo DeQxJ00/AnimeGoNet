@@ -213,13 +213,13 @@
 - [ ] 实现配置表单、YAML 预览、校验、diff 和保存备份。
 - [>] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件，AI 密钥只写不回显；表单/API/私有配置已完成，原始 YAML 预览、diff 与保存前备份待实现。
 - [ ] 动画条目页同时展示来源名称/集号和最终 TMDB 名称/Season/Episode，以及 AI 匹配状态、置信度、最终失败原因和策略尝试时间线。
-- [>] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。`GET /api/v1/library/seasons` 已按 `TMDB Series + 普通 Season` 批量聚合正式作品、snapshot、规范完成记录、解析来源和一致性警告；季度详情、Cover 代理、EP 网格和页面待实现。
+- [>] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。`GET /api/v1/library/seasons` 已按 `TMDB Series + 普通 Season` 批量聚合正式作品、snapshot、规范完成记录、解析来源和一致性警告；`GET /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 已提供只认官方 snapshot 与规范完成记录的 EP 网格，删除完成记录会立即恢复未下载。Cover 代理和前端页面待实现。
 - [>] 实现作品库服务端分页排序和前端升/降序：服务端已支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；前端控件与状态保持待实现。
 - [ ] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。
 - [ ] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格或完成比例；恢复真实 TMDB 映射后再并入标准作品库。
 - [ ] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态。
 - [ ] 增加 Mikan 作品规则 CRUD：按 `mikanid` 编辑 Bgm/TMDB Series/Season/EP Offset，预览影响范围，支持禁用、清除和显式重新匹配；已完成文件不自动移动。
-- [>] 作品详情展示 Series/Season/Episode 的 TMDB 获取阶段、验证状态、人工偏移和最后解析时间（任务状态投影已展示最近成功策略和更新时间，任务卡片可展开全部策略尝试；季度详情、人工偏移与季度级逐次验证时间线待实现）。
+- [>] 作品详情展示 Series/Season/Episode 的 TMDB 获取阶段、验证状态、人工偏移和最后解析时间（任务状态投影已展示最近成功策略和更新时间，任务卡片可展开全部策略尝试；季度详情 API 已展示 Series/Season 取得策略、验证状态、最后 run 与 EP snapshot 获取时间，人工偏移、关联任务和季度级逐次验证时间线待实现）。
 - [x] 实现四类删除命令及组合删除计划：schema v12 已完成指纹预览、逐项冻结、租约恢复、稳定失败码和部分失败重试；执行顺序为 qB 任务（永不带文件）→源文件→媒体文件→业务记录/claim，文件只允许捕获根目录内精确普通文件且不递归删目录；Minimal API 和 WebUI 四类独立勾选、目标预览、明确确认及 execution 状态查询已接入。
 - [>] Web UI 支持按失败阶段、错误码、可重试性和处理状态筛选；提供安全的“重新匹配”，并区分待自动重试、需配置修复、需人工处理、已跳过和已兜底（失败任务显式重新匹配、脱敏失败原因及逐策略错误码/可重试性时间线已实现；筛选和完整分类待实现）。
 - [ ] 对环境变量覆盖字段显示有效值和只读锁定状态，禁止 Web 保存造成“已修改但不生效”的假象。

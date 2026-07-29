@@ -68,6 +68,9 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
+        app.MapGet(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
+            LibrarySeasonDetail);
         app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
         app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
         app.MapPost(
@@ -1814,6 +1817,77 @@ public static class ApiEndpoints
                     item.LastResolutionRunId,
                     item.Warnings);
             }).ToArray()));
+    }
+
+    private static async Task<IResult> LibrarySeasonDetail(
+        int tmdbSeriesId,
+        int seasonNumber,
+        AnimeLibraryStore library,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_series_id_invalid",
+                "TMDB Series ID must be a positive integer."));
+        }
+
+        if (seasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_season_number_invalid",
+                "TMDB Season number must be a positive integer."));
+        }
+
+        var detail = await library.GetSeasonAsync(
+            tmdbSeriesId,
+            seasonNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (detail is null)
+        {
+            return TypedResults.NotFound(Error(
+                "library_season_not_found",
+                "The requested TMDB season was not found in the local library."));
+        }
+
+        var season = detail.Season;
+        var posterPath = season.SeasonPosterPath ?? season.SeriesPosterPath;
+        var posterSource = season.SeasonPosterPath is not null
+            ? "season"
+            : season.SeriesPosterPath is not null
+                ? "series"
+                : "placeholder";
+        return TypedResults.Ok(new AnimeSeasonDetailResponse(
+            $"tmdb:{season.TmdbSeriesId}:s{season.TmdbSeasonNumber}",
+            season.TmdbSeriesId,
+            season.TmdbSeasonNumber,
+            season.DisplayName,
+            season.SeasonName,
+            posterPath,
+            posterSource,
+            season.AirDate,
+            season.AddedAt,
+            season.LastUpdatedAt,
+            season.EpisodeTotal,
+            season.EpisodeSnapshotCount,
+            season.EpisodeDownloaded,
+            season.SeriesResolutionSource,
+            season.SeasonResolutionSource,
+            season.ValidationStatus,
+            season.LastResolutionRunId,
+            season.Warnings,
+            detail.Episodes.Select(episode => new AnimeEpisodeItemResponse(
+                $"tmdb-episode:{episode.TmdbEpisodeId}",
+                episode.TmdbEpisodeId,
+                episode.EpisodeNumber,
+                episode.Name,
+                episode.AirDate,
+                episode.RuntimeMinutes,
+                episode.FetchedAtUtc,
+                episode.Downloaded ? "downloaded" : "not_downloaded",
+                episode.DownloadSourceId,
+                episode.DownloadedAtUtc,
+                episode.MediaPathKnown)).ToArray()));
     }
 
     private static bool TryParseLibrarySort(string? value, out AnimeLibrarySort sort)
