@@ -37,6 +37,13 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - name: Check out pinned AnimeGo behavior fixtures
+        uses: actions/checkout@v6
+        with:
+          repository: wetor/AnimeGo
+          ref: c7475dfc55a374cd0dd08821bf17125dab1e3145
+          path: upstream-animego
+          persist-credentials: false
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
@@ -46,6 +53,8 @@ jobs:
         run: dotnet build AnimeGoNet.slnx --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
       - name: Test
         run: dotnet test AnimeGoNet.slnx --configuration Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+        env:
+          ANIMEGO_UPSTREAM_REPO: ${{ github.workspace }}/upstream-animego
       - uses: actions/upload-artifact@v7
         if: always()
         with:

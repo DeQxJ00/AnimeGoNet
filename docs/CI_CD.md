@@ -8,6 +8,11 @@
 
 原上游 Go 工作流保留作为行为基准，没有覆盖或删除。
 
+`.NET` build-test job 另把公开 `wetor/AnimeGo@c7475dfc55a374cd0dd08821bf17125dab1e3145`
+检出到独立 `upstream-animego` 子目录，只供 parity tests 读取。当前四个真实
+`.torrent` 测试直接解析原文件，但 DTO/断言/TRX 均不投影 announce 或 tracker；
+fixture 不复制进 AnimeGoNet Git 历史。
+
 ## NativeAOT runner 矩阵
 
 | RID | GitHub runner | 冒烟入口 |
