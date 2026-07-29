@@ -64,17 +64,13 @@
 - 学习
 
 ## 目前进度
-- 可使用配置、筛选和下载等功能
-- 比较高度自由的插件配置  
-- python编写插件 [帮助文档](assets/plugin/README.md) 
-  - 定时订阅，[帮助文档](assets/plugin/feed/README.md)
-  - 筛选器，[帮助文档](assets/plugin/filter/README.md)
-  - 重命名规则，[帮助文档](assets/plugin/rename/README.md)
-  - 定时任务，[帮助文档](assets/plugin/schedule/README.md)
+- .NET 10 / NativeAOT 主程序、Minimal API 与静态 TypeScript WebUI
+- C# 编译期注册的内置 feed/filter/parser/schedule 插件；不加载 Python 插件
+- 统一 Mikan/U2/TTG 导入、SQLite 状态、TMDB/Bangumi 匹配和媒体整理
 - 支持Tampermonkey(油猴)插件 [AnimeGo\[Mikan快速订阅\]](https://greasyfork.org/zh-CN/scripts/449596) 快速订阅下载
 - Jellyfin支持
-- qBittorrent支持
-- Transmission支持
+- 多命名 qBittorrent 实例与按来源路由
+- Transmission 不提供适配器；旧配置会显示 `UnsupportedDownloaderType` 并安全阻断下载，等待迁移到 qBittorrent
 
 ## 开发计划
 - [x] 增加读取网站离线Archive的缓存功能 降低网站请求
@@ -82,11 +78,10 @@
   - [ ] [Mikan数据](https://github.com/MikanProject/bangumi-data/blob/master/dist/data.json)
 - [x] [Mikan Project](https://mikanani.me) 订阅支持
 - [x] [Jellyfin](https://jellyfin.org/) 媒体库软件识别 会写入bgmid到tvshow.nfo 可以配合[jellyfin-plugin-bangumi](https://github.com/kookxiang/jellyfin-plugin-bangumi)使用
-- [ ] 多种下载器支持
+- [x] qBittorrent 下载器支持
   - [x] [qBittorrent](https://qbittorrent.org) 支持
-  - [x] [Transmission](https://transmissionbt.com/) 支持
-  - [ ] [Aria2](https://aria2.github.io/) 支持
-- [ ] Web界面支持
+- [x] 多命名实例与来源路由
+- [x] Web界面支持
 - [x] 模块化与高级自定义功能支持
   - [x] 独立的订阅支持
   - [x] 独立下载控制

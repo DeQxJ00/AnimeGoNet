@@ -4,6 +4,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Configuration;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -41,6 +42,7 @@ public sealed class RunningApp : IAsyncDisposable
         ITmdbPosterTransport? tmdbPosterTransport = null,
         HttpClient? dataUpdateHttpClient = null,
         IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
+        LegacyDownloaderMigrationState? legacyDownloaderMigrationState = null,
         bool startBackgroundWorkers = false)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
@@ -63,7 +65,8 @@ public sealed class RunningApp : IAsyncDisposable
             tmdbPosterTransport: tmdbPosterTransport,
             dataUpdateHttpClient: dataUpdateHttpClient,
             startBackgroundWorkers: startBackgroundWorkers,
-            deploymentEnvironmentVariables: deploymentEnvironmentVariables);
+            deploymentEnvironmentVariables: deploymentEnvironmentVariables,
+            legacyDownloaderMigrationState: legacyDownloaderMigrationState);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();
         var server = app.Services.GetRequiredService<IServer>();

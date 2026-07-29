@@ -57,6 +57,7 @@ public static class AnimeGoApplication
         HttpClient? dataUpdateHttpClient = null,
         bool? startBackgroundWorkers = null,
         IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
+        LegacyDownloaderMigrationState? legacyDownloaderMigrationState = null,
         CancellationToken cancellationToken = default)
     {
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
@@ -82,6 +83,17 @@ public static class AnimeGoApplication
             out var configuredWorkers) || configuredWorkers;
         var optionsWereSupplied = options is not null;
         options ??= LoadOptions(builder.Configuration, runningInContainer.Value);
+        legacyDownloaderMigrationState ??= optionsWereSupplied
+            ? LegacyDownloaderMigrationState.None
+            : LegacyDownloaderMigrationDetector.Detect(
+                builder.Configuration["ANIMEGO_CLIENT"],
+                options.Paths.DataPath,
+                builder.Configuration["ANIMEGO_CONFIG"]
+                    ?? builder.Configuration["config"]);
+        if (legacyDownloaderMigrationState.BlocksDownloads)
+        {
+            startBackgroundWorkers = false;
+        }
         var deploymentOptions = options;
         var configurationLocks = deploymentEnvironmentVariables is not null
             ? DeploymentConfigurationLocks.FromVariableNames(deploymentEnvironmentVariables)
@@ -173,7 +185,9 @@ public static class AnimeGoApplication
         }
 
         await torrentStagingService.CleanupExpiredAsync(cancellationToken).ConfigureAwait(false);
-        downloadClientRegistry ??= new QbittorrentClientRegistry(options);
+        downloadClientRegistry = legacyDownloaderMigrationState.BlocksDownloads
+            ? new BlockedDownloadClientRegistry()
+            : downloadClientRegistry ?? new QbittorrentClientRegistry(options);
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new DeploymentConfigurationOptions(deploymentOptions));
@@ -184,6 +198,7 @@ public static class AnimeGoApplication
             runningInContainer.Value,
             startBackgroundWorkers.Value,
             !string.IsNullOrWhiteSpace(accessKey)));
+        builder.Services.AddSingleton(legacyDownloaderMigrationState);
         builder.Services.AddSingleton(applicationOverrides);
         builder.Services.AddSingleton(
             new ApplicationConfigurationRuntimeState(applicationOverrideSnapshot.Revision));

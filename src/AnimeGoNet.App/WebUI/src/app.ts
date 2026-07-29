@@ -111,6 +111,8 @@ interface RuntimeConfiguration {
   configuration_revision: number;
   applied_configuration_revision: number;
   restart_required: boolean;
+  downloads_blocked: boolean;
+  migration_diagnostics: ConfigurationMigrationDiagnostic[];
   paths: {
     data_path: string;
     download_path: string;
@@ -204,6 +206,14 @@ interface RuntimeConfiguration {
       environment_variables: string[];
     }>;
   };
+}
+
+interface ConfigurationMigrationDiagnostic {
+  code: string;
+  source: string;
+  legacy_downloader_type: string;
+  message: string;
+  blocks_downloads: boolean;
 }
 
 interface ConfigurationUpdatePayload {
@@ -937,6 +947,8 @@ interface DownloaderInstanceList {
   configuration_revision: number;
   applied_configuration_revision: number;
   restart_required: boolean;
+  downloads_blocked: boolean;
+  migration_diagnostics: ConfigurationMigrationDiagnostic[];
   items: DownloaderInstance[];
 }
 
@@ -2499,7 +2511,7 @@ async function loadConfiguration(): Promise<void> {
     currentConfiguration = config;
     element<HTMLButtonElement>("#configuration-reset").disabled =
       config.configuration_revision === 0;
-    container.replaceChildren(
+    const cards = [
       configurationCard("目录", [
         ["data_path", config.paths.data_path],
         ["download_path", config.paths.download_path],
@@ -2545,8 +2557,20 @@ async function loadConfiguration(): Promise<void> {
         ["HTTP 超时", `${config.data_update.http_timeout_seconds} 秒`],
         ["修改生效", config.data_update.hot_reload_supported ? "即时热重排" : "需要重启"],
       ]),
-    );
-    status.textContent = config.restart_required
+    ];
+    if (config.migration_diagnostics.length > 0) {
+      cards.unshift(configurationCard(
+        "旧配置迁移阻断",
+        config.migration_diagnostics.map((item) => [
+          item.code,
+          `${item.legacy_downloader_type} · ${item.source} · ${item.message}`,
+        ]),
+      ));
+    }
+    container.replaceChildren(...cards);
+    status.textContent = config.downloads_blocked
+      ? "检测到不支持或无法安全读取的旧下载器配置；下载与后台 workers 已强制停用，请先按迁移提示修复并重启。"
+      : config.restart_required
       ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
         + `当前应用 revision ${config.applied_configuration_revision}`
       : `当前进程的生效值 · revision ${config.configuration_revision}；凭据永不回传。`;
@@ -4249,7 +4273,9 @@ async function loadDownloaders(): Promise<void> {
       card.append(heading, facts, endpoint, actions);
       return card;
     }));
-    status.textContent = body.restart_required
+    status.textContent = body.downloads_blocked
+      ? `下载已被 ${body.migration_diagnostics.map((item) => item.code).join("、")} 阻断；不会连接或启动任何下载器任务`
+      : body.restart_required
       ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
       : `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
   } catch (error) {

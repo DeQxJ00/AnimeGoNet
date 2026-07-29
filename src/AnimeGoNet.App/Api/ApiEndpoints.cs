@@ -645,7 +645,9 @@ public static class ApiEndpoints
         }
     }
 
-    private static Ok<RuntimeStatus> Status(AnimeGoOptions options)
+    private static Ok<RuntimeStatus> Status(
+        AnimeGoOptions options,
+        LegacyDownloaderMigrationState legacyMigration)
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         return TypedResults.Ok(new RuntimeStatus(
@@ -660,13 +662,15 @@ public static class ApiEndpoints
             new RuntimeCapabilities(
                 Configuration: true,
                 Sqlite: true,
-                UnifiedIngest: true,
+                UnifiedIngest: !legacyMigration.BlocksDownloads,
                 RssRules: true,
-                Qbittorrent: true,
+                Qbittorrent: !legacyMigration.BlocksDownloads,
                 Tmdb: !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ApiKey)
                     || !string.IsNullOrWhiteSpace(options.Metadata.Tmdb.ReadAccessToken),
                 Organizer: true,
-                Deletion: true)));
+                Deletion: true),
+            legacyMigration.BlocksDownloads,
+            ToResponse(legacyMigration)));
     }
 
     private static async Task<Ok<ConfigurationResponse>> Configuration(
@@ -677,6 +681,7 @@ public static class ApiEndpoints
         ApplicationOverrideStore store,
         ApplicationConfigurationRuntimeState applied,
         DataUpdateRuntimeState dataUpdateRuntime,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken)
     {
         var snapshot = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -691,7 +696,8 @@ public static class ApiEndpoints
             runtime,
             locks,
             snapshot.Revision,
-            applied.AppliedRevision));
+            applied.AppliedRevision,
+            legacyMigration));
     }
 
     private static async Task<IResult> PreviewConfiguration(
@@ -872,7 +878,8 @@ public static class ApiEndpoints
         RuntimeConfigurationState runtime,
         DeploymentConfigurationLocks locks,
         long configurationRevision,
-        long appliedConfigurationRevision)
+        long appliedConfigurationRevision,
+        LegacyDownloaderMigrationState legacyMigration)
     {
         var tmdb = options.Metadata.Tmdb;
         var bangumi = options.Metadata.Bangumi;
@@ -884,6 +891,8 @@ public static class ApiEndpoints
             configurationRevision,
             appliedConfigurationRevision,
             configurationRevision != appliedConfigurationRevision,
+            legacyMigration.BlocksDownloads,
+            ToResponse(legacyMigration),
             new RuntimePaths(
                 options.Paths.DataPath,
                 options.Paths.DownloadPath,
@@ -1636,26 +1645,38 @@ public static class ApiEndpoints
         DownloadControlRequest request,
         DownloadJobStore jobs,
         DownloadClientOperationCoordinator clients,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken) =>
-        ControlDownload(
-            jobId, request, "pause", "paused", jobs, clients, cancellationToken);
+        legacyMigration.BlockingDiagnostic is { } diagnostic
+            ? Task.FromResult<IResult>(MigrationBlocked(diagnostic))
+            : ControlDownload(
+                jobId, request, "pause", "paused", jobs, clients, cancellationToken);
 
     private static Task<IResult> ResumeDownload(
         string jobId,
         DownloadControlRequest request,
         DownloadJobStore jobs,
         DownloadClientOperationCoordinator clients,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken) =>
-        ControlDownload(
-            jobId, request, "resume", "waiting", jobs, clients, cancellationToken);
+        legacyMigration.BlockingDiagnostic is { } diagnostic
+            ? Task.FromResult<IResult>(MigrationBlocked(diagnostic))
+            : ControlDownload(
+                jobId, request, "resume", "waiting", jobs, clients, cancellationToken);
 
     private static async Task<IResult> RetryDownload(
         string jobId,
         DownloadControlRequest request,
         DownloadJobStore jobs,
         DownloadClientOperationCoordinator clients,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken)
     {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return MigrationBlocked(diagnostic);
+        }
+
         var target = await ValidateControlTargetAsync(
             jobId, request, jobs, cancellationToken).ConfigureAwait(false);
         if (target.Error is not null)
@@ -1840,6 +1861,7 @@ public static class ApiEndpoints
         DownloaderOverrideStore overrides,
         DownloaderConfigurationRuntimeState runtimeState,
         DownloadClientOperationCoordinator clients,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken)
     {
         var snapshot = await overrides.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -1855,16 +1877,27 @@ public static class ApiEndpoints
             var downloader = pending is null
                 ? options.Downloaders[id]
                 : ToOptions(pending);
+            if (legacyMigration.BlocksDownloads)
+            {
+                downloader = downloader with { Enabled = false };
+            }
             var usage = await admin.GetUsageAsync(id, cancellationToken).ConfigureAwait(false);
             items.Add(ToResponse(
                 id, downloader, usage,
-                pending is null ? "deployment" : "private_override",
+                legacyMigration.BlocksDownloads
+                    ? "blocked_by_legacy_migration"
+                    : pending is null ? "deployment" : "private_override",
                 pending?.Revision,
                 restartRequired,
                 clients.GetCircuitSnapshot(id)));
         }
         return TypedResults.Ok(new DownloaderInstanceListResponse(
-            snapshot.Revision, runtimeState.AppliedRevision, restartRequired, items));
+            snapshot.Revision,
+            runtimeState.AppliedRevision,
+            restartRequired,
+            legacyMigration.BlocksDownloads,
+            ToResponse(legacyMigration),
+            items));
     }
 
     private static async Task<IResult> PutDownloader(
@@ -1980,8 +2013,14 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         DownloadClientOperationCoordinator clients,
         DownloaderAdminStore admin,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken)
     {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return MigrationBlocked(diagnostic);
+        }
+
         var id = downloaderId.Trim().ToLowerInvariant();
         if (!options.Downloaders.TryGetValue(id, out var optionsForInstance))
         {
@@ -2056,8 +2095,14 @@ public static class ApiEndpoints
 
     private static IResult ProbeDownloaderPath(
         string downloaderId,
-        AnimeGoOptions options)
+        AnimeGoOptions options,
+        LegacyDownloaderMigrationState legacyMigration)
     {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return MigrationBlocked(diagnostic);
+        }
+
         var id = downloaderId.Trim().ToLowerInvariant();
         if (!options.Downloaders.TryGetValue(id, out var downloader))
         {
@@ -4104,13 +4149,22 @@ public static class ApiEndpoints
         return TypedResults.Ok(response);
     }
 
-    private static async Task<Results<Ok<MikanRssIngestResult>, BadRequest<ApiErrorResponse>>> RssIngest(
+    private static async Task<Results<
+        Ok<MikanRssIngestResult>,
+        BadRequest<ApiErrorResponse>,
+        Conflict<ApiErrorResponse>>> RssIngest(
         RssIngestRequest request,
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         SourceProfileStore profiles,
         MikanRssIngestProcessor processor,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken)
     {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return MigrationBlocked(diagnostic);
+        }
+
         var sourceProfileId = request.SourceProfileId?.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(sourceProfileId))
         {
@@ -4162,8 +4216,17 @@ public static class ApiEndpoints
         LegacyRssRequest request,
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         MikanRssIngestProcessor processor,
+        LegacyDownloaderMigrationState legacyMigration,
         CancellationToken cancellationToken)
     {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
+                300,
+                $"{diagnostic.Code}: {diagnostic.Message}",
+                null));
+        }
+
         if (!string.Equals(request.Source?.Trim(), "mikan", StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrWhiteSpace(request.Rss?.Url))
         {
@@ -4698,6 +4761,19 @@ public static class ApiEndpoints
     }
 
     private static ApiErrorResponse Error(string code, string message) => new(code, message);
+
+    private static ConfigurationMigrationDiagnosticResponse[] ToResponse(
+        LegacyDownloaderMigrationState state) =>
+        state.Diagnostics.Select(item => new ConfigurationMigrationDiagnosticResponse(
+            item.Code,
+            item.Source,
+            item.LegacyDownloaderType,
+            item.Message,
+            item.BlocksDownloads)).ToArray();
+
+    private static Conflict<ApiErrorResponse> MigrationBlocked(
+        LegacyConfigurationDiagnostic diagnostic) =>
+        TypedResults.Conflict(Error(diagnostic.Code, diagnostic.Message));
 
     private static MetadataTaskListItem ToResponse(MetadataTaskListProjection item) =>
         new(

@@ -19,6 +19,15 @@ RSS 请求在确认来源已启用时取得一次完整 SourceProfile 快照。�
 
 唯一支持的下载器类型是 `qbittorrent`，但允许任意多个命名实例。旧配置中的 `transmission` 只可被读取并显示永久 `UnsupportedDownloaderType`，不能启用、路由任务或在 Web 新建，也不得自动转换成 qBittorrent；项目路线图不包含该适配器。
 
+启动时按旧程序的有效覆盖顺序检查 `ANIMEGO_CLIENT`，否则检查
+`ANIMEGO_CONFIG`/`--config` 指向的旧 YAML，最后检查
+`data_path/animego.yaml`。YAML 检测器限制 1 MiB，只读取
+`setting.client.client` 标量，不解析或返回 URL、用户名、密码。检测到
+Transmission/其他非 qB 类型，或显式旧配置无法安全读取时，主程序仍开放 Web
+修复界面，但本次进程强制关闭后台 workers、安装空下载器 registry，并拒绝统一
+导入、下载恢复、连接测试和路径探测。必须移除/修复旧覆盖并重启，不能通过新增
+私有 qB 覆盖绕过仍生效的旧 Transmission 环境变量。
+
 ## 2. 下载器实例
 
 YAML 保存连接和部署信息，因为 URL、凭据、容器路径和超时属于部署配置：

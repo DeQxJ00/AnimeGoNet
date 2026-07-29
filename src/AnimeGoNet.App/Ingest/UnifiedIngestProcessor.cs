@@ -1,4 +1,5 @@
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
@@ -27,7 +28,8 @@ public sealed class UnifiedIngestProcessor(
     IngestTaskStore tasks,
     ITorrentStagingService staging,
     AnimeGoOptions options,
-    PluginCatalog plugins)
+    PluginCatalog plugins,
+    LegacyDownloaderMigrationState legacyMigration)
 {
     public async Task<UnifiedIngestItemResult> ProcessAsync(
         string source,
@@ -66,6 +68,11 @@ public sealed class UnifiedIngestProcessor(
         SourceProfileRecord? sourceProfileSnapshot,
         CancellationToken cancellationToken)
     {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return Rejected([$"{diagnostic.Code}: {diagnostic.Message}"]);
+        }
+
         var profileId = (source ?? string.Empty).Trim().ToLowerInvariant();
         if (sourceProfileSnapshot is not null
             && !string.Equals(sourceProfileSnapshot.Id, profileId, StringComparison.Ordinal))

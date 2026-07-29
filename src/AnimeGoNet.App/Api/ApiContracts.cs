@@ -52,7 +52,10 @@ public sealed record RuntimeStatus(
     [property: JsonPropertyName("native_aot")] bool NativeAot,
     [property: JsonPropertyName("runtime_identifier")] string RuntimeIdentifier,
     [property: JsonPropertyName("paths")] RuntimePaths Paths,
-    [property: JsonPropertyName("capabilities")] RuntimeCapabilities Capabilities);
+    [property: JsonPropertyName("capabilities")] RuntimeCapabilities Capabilities,
+    [property: JsonPropertyName("downloads_blocked")] bool DownloadsBlocked,
+    [property: JsonPropertyName("migration_diagnostics")]
+    IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics);
 
 public sealed record RuntimePaths(
     [property: JsonPropertyName("data_path")] string DataPath,
@@ -73,12 +76,22 @@ public sealed record ConfigurationResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
     [property: JsonPropertyName("applied_configuration_revision")] long AppliedConfigurationRevision,
     [property: JsonPropertyName("restart_required")] bool RestartRequired,
+    [property: JsonPropertyName("downloads_blocked")] bool DownloadsBlocked,
+    [property: JsonPropertyName("migration_diagnostics")]
+    IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics,
     [property: JsonPropertyName("paths")] RuntimePaths Paths,
     [property: JsonPropertyName("deployment")] DeploymentConfigurationResponse Deployment,
     [property: JsonPropertyName("metadata")] MetadataConfigurationResponse Metadata,
     [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch,
     [property: JsonPropertyName("data_update")] DataUpdateConfigurationResponse DataUpdate,
     [property: JsonPropertyName("editable")] EditableConfigurationResponse Editable);
+
+public sealed record ConfigurationMigrationDiagnosticResponse(
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("legacy_downloader_type")] string LegacyDownloaderType,
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("blocks_downloads")] bool BlocksDownloads);
 
 public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("tmdb_base_url")] string TmdbBaseUrl,
@@ -925,6 +938,9 @@ public sealed record DownloaderInstanceListResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
     [property: JsonPropertyName("applied_configuration_revision")] long AppliedConfigurationRevision,
     [property: JsonPropertyName("restart_required")] bool RestartRequired,
+    [property: JsonPropertyName("downloads_blocked")] bool DownloadsBlocked,
+    [property: JsonPropertyName("migration_diagnostics")]
+    IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics,
     [property: JsonPropertyName("items")] IReadOnlyList<DownloaderInstanceResponse> Items);
 
 public sealed record DownloaderConnectionTestResponse(

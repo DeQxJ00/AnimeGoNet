@@ -1421,49 +1421,64 @@ async function loadConfiguration() {
         currentConfiguration = config;
         element("#configuration-reset").disabled =
             config.configuration_revision === 0;
-        container.replaceChildren(configurationCard("目录", [
-            ["data_path", config.paths.data_path],
-            ["download_path", config.paths.download_path],
-            ["save_path", config.paths.save_path],
-            ["修改生效", config.deployment.paths_restart_required ? "需要重启" : "即时生效"],
-        ]), configurationCard("部署与安全", [
-            ["容器模式", enabledLabel(config.deployment.running_in_container)],
-            ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
-            ["Access-Key", config.deployment.access_key_configured ? "已配置（值已隐藏）" : "未配置"],
-        ]), metadataConfigurationCard(config), configurationCard("AI、偏移与 Torrent", [
-            [
-                "AI 匹配",
-                `任务级 ${enabledLabel(config.metadata.ai.use_metadata_match)} · 单提示词 · `
-                    + `${config.metadata.ai.http_timeout_seconds} 秒`,
-            ],
-            ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
-            [
-                "Torrent HTTP",
-                `${config.torrent_fetch.http_timeout_seconds} 秒 · `
-                    + `${config.torrent_fetch.max_redirects} 次跳转 · `
-                    + `${config.torrent_fetch.max_response_bytes} bytes`,
-            ],
-            ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
-        ]), configurationCard("AnimeGoNetData 更新", [
-            ["定时更新", enabledLabel(config.data_update.enabled)],
-            ["Cron", config.data_update.cron],
-            ["Manifest", config.data_update.manifest_url ?? "未配置（仍可离线导入）"],
-            [
-                "策略",
-                !config.data_update.auto_download
-                    ? "仅检查"
-                    : config.data_update.auto_import
-                        ? "自动下载并导入"
-                        : "自动下载后等待确认",
-            ],
-            ["保留版本", `${config.data_update.keep_versions} 版`],
-            ["HTTP 超时", `${config.data_update.http_timeout_seconds} 秒`],
-            ["修改生效", config.data_update.hot_reload_supported ? "即时热重排" : "需要重启"],
-        ]));
-        status.textContent = config.restart_required
-            ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
-                + `当前应用 revision ${config.applied_configuration_revision}`
-            : `当前进程的生效值 · revision ${config.configuration_revision}；凭据永不回传。`;
+        const cards = [
+            configurationCard("目录", [
+                ["data_path", config.paths.data_path],
+                ["download_path", config.paths.download_path],
+                ["save_path", config.paths.save_path],
+                ["修改生效", config.deployment.paths_restart_required ? "需要重启" : "即时生效"],
+            ]),
+            configurationCard("部署与安全", [
+                ["容器模式", enabledLabel(config.deployment.running_in_container)],
+                ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
+                ["Access-Key", config.deployment.access_key_configured ? "已配置（值已隐藏）" : "未配置"],
+            ]),
+            metadataConfigurationCard(config),
+            configurationCard("AI、偏移与 Torrent", [
+                [
+                    "AI 匹配",
+                    `任务级 ${enabledLabel(config.metadata.ai.use_metadata_match)} · 单提示词 · `
+                        + `${config.metadata.ai.http_timeout_seconds} 秒`,
+                ],
+                ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
+                [
+                    "Torrent HTTP",
+                    `${config.torrent_fetch.http_timeout_seconds} 秒 · `
+                        + `${config.torrent_fetch.max_redirects} 次跳转 · `
+                        + `${config.torrent_fetch.max_response_bytes} bytes`,
+                ],
+                ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
+            ]),
+            configurationCard("AnimeGoNetData 更新", [
+                ["定时更新", enabledLabel(config.data_update.enabled)],
+                ["Cron", config.data_update.cron],
+                ["Manifest", config.data_update.manifest_url ?? "未配置（仍可离线导入）"],
+                [
+                    "策略",
+                    !config.data_update.auto_download
+                        ? "仅检查"
+                        : config.data_update.auto_import
+                            ? "自动下载并导入"
+                            : "自动下载后等待确认",
+                ],
+                ["保留版本", `${config.data_update.keep_versions} 版`],
+                ["HTTP 超时", `${config.data_update.http_timeout_seconds} 秒`],
+                ["修改生效", config.data_update.hot_reload_supported ? "即时热重排" : "需要重启"],
+            ]),
+        ];
+        if (config.migration_diagnostics.length > 0) {
+            cards.unshift(configurationCard("旧配置迁移阻断", config.migration_diagnostics.map((item) => [
+                item.code,
+                `${item.legacy_downloader_type} · ${item.source} · ${item.message}`,
+            ])));
+        }
+        container.replaceChildren(...cards);
+        status.textContent = config.downloads_blocked
+            ? "检测到不支持或无法安全读取的旧下载器配置；下载与后台 workers 已强制停用，请先按迁移提示修复并重启。"
+            : config.restart_required
+                ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
+                    + `当前应用 revision ${config.applied_configuration_revision}`
+                : `当前进程的生效值 · revision ${config.configuration_revision}；凭据永不回传。`;
     }
     catch (error) {
         currentConfiguration = null;
@@ -3048,9 +3063,11 @@ async function loadDownloaders() {
             card.append(heading, facts, endpoint, actions);
             return card;
         }));
-        status.textContent = body.restart_required
-            ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
-            : `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
+        status.textContent = body.downloads_blocked
+            ? `下载已被 ${body.migration_diagnostics.map((item) => item.code).join("、")} 阻断；不会连接或启动任何下载器任务`
+            : body.restart_required
+                ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
+                : `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
     }
     catch (error) {
         const failed = document.createElement("p");
