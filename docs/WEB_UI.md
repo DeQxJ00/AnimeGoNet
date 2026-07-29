@@ -79,6 +79,10 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 该投影不返回 Torrent URL、passkey、下载器凭据或文件绝对路径。查询通过单条聚合 SQL 批量产生，避免逐任务读取策略或文件计数。只有已进入 `metadata_failed` 且没有活动租约的任务显示“显式重新匹配”，调用既有重试 API 后刷新状态；它不是自动重试开关，也不会覆盖人工规则。
 
+`GET /api/v1/metadata/tasks` 现支持 `page/page_size`、标题/任务/来源/错误码搜索、任务状态、最新失败阶段、错误码、可重试性、处理分类，以及最后更新/标题/状态/失败分类排序。每个任务返回最新 `result=failed` 尝试的阶段、稳定错误码和 `retryable`，并由服务端给出处理分类：`explicit_retry`、`configuration`、`manual`、`skipped`、`fallback`、`active`、`resolved` 或 `other`。`Authentication`、`Configuration`、`InvalidInput` 归入配置修复；`metadata_failed + retryable` 只标为“可安全重试（需显式）”，不能在尚无自动重试调度器时表示成“待自动重试”。Bangumi 兜底 `tmdb_completion_pending` 独立标为待补全 TMDB，重复跳过也不显示成失败。
+
+静态 TypeScript 页面持久化纯 UI 筛选/排序/分页偏好，自动刷新继续沿用当前查询；失败卡片同时展示任务失败分类、最新失败阶段、稳定错误码、可重试性和脱敏原因。筛选 API 最多扫描最近 500 个运维任务，这是首版本地控制面的有界投影，不改变 SQLite 中的完整任务与尝试审计。
+
 当前面板属于运维任务视图，不等同于第 1～6 节定义的 TMDB 作品库：文件归类计数不能用作季度完成比例。任务卡片已可按需读取完整策略尝试时间线；标准作品库页面已经独立读取季度列表/详情 API。尚未实现的运维筛选和完整作品 CRUD 仍按 TODO 独立验收。
 
 SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster 路径，并为普通 Season 保存首播日期、TMDB Episode 总数与 poster 路径。正常自动/人工解析和“待补全 TMDB”恢复共用同一投影；这些字段是作品库查询和 Cover 代理的权威输入，浏览器不直连 TMDB 图片 URL。

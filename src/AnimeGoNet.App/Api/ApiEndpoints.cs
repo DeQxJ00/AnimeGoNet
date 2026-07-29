@@ -2177,30 +2177,116 @@ public static class ApiEndpoints
         };
     }
 
-    private static async Task<Ok<MetadataTaskListResponse>> MetadataTasks(
+    private static async Task<IResult> MetadataTasks(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? search,
+        [FromQuery] string? status,
+        [FromQuery(Name = "failure_stage")] string? failureStage,
+        [FromQuery(Name = "error_code")] string? errorCode,
+        [FromQuery] string? retryability,
+        [FromQuery] string? handling,
+        [FromQuery] string? sort,
+        [FromQuery] string? direction,
         MetadataResolutionStore resolutions,
         CancellationToken cancellationToken)
     {
-        var items = await resolutions.ListTasksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(new MetadataTaskListResponse(items.Select(item => new MetadataTaskListItem(
-            item.TaskId,
-            item.Title,
-            item.SourceId,
-            item.Status,
-            item.MikanId,
-            item.BangumiSubjectId,
-            item.TmdbSeriesId,
-            item.TmdbSeasonNumber,
-            item.SeriesStrategy,
-            item.SeasonStrategy,
-            item.EpisodeStrategy,
-            item.FailureKind,
-            item.FailureReason,
-            item.EpisodeFileCount,
-            item.OtherFileCount,
-            item.DuplicateFileCount,
-            item.PendingFileCount,
-            item.UpdatedAtUtc)).ToArray()));
+        var resolvedPage = page ?? 1;
+        var resolvedPageSize = pageSize ?? 25;
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "updated" : sort.Trim().ToLowerInvariant();
+        var resolvedDirection = string.IsNullOrWhiteSpace(direction)
+            ? "desc"
+            : direction.Trim().ToLowerInvariant();
+        var resolvedRetryability = string.IsNullOrWhiteSpace(retryability)
+            ? "all"
+            : retryability.Trim().ToLowerInvariant();
+        var resolvedHandling = string.IsNullOrWhiteSpace(handling)
+            ? "all"
+            : handling.Trim().ToLowerInvariant();
+        var resolvedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        var resolvedStatus = NormalizeMetadataFilter(status);
+        var resolvedFailureStage = NormalizeMetadataFilter(failureStage);
+        var resolvedErrorCode = NormalizeMetadataFilter(errorCode);
+        if (resolvedPage < 1
+            || resolvedPageSize is < 1 or > 100
+            || resolvedSearch is { Length: > 200 }
+            || resolvedSearch?.Any(char.IsControl) == true
+            || !IsMetadataFilterValid(resolvedStatus)
+            || !IsMetadataFilterValid(resolvedFailureStage)
+            || !IsMetadataFilterValid(resolvedErrorCode)
+            || resolvedSort is not ("updated" or "title" or "status" or "failure")
+            || resolvedDirection is not ("asc" or "desc")
+            || resolvedRetryability is not ("all" or "retryable" or "non_retryable" or "unknown")
+            || resolvedHandling is not ("all" or "explicit_retry" or "configuration"
+                or "manual" or "skipped" or "fallback" or "active" or "resolved" or "other"))
+        {
+            return TypedResults.BadRequest(Error(
+                "metadata_task_filter_invalid",
+                "Metadata task filters, sorting or pagination are invalid."));
+        }
+
+        IEnumerable<MetadataTaskListProjection> filtered =
+            await resolutions.ListTasksAsync(500, cancellationToken).ConfigureAwait(false);
+        if (resolvedSearch is not null)
+        {
+            filtered = filtered.Where(item =>
+                item.Title.Contains(resolvedSearch, StringComparison.OrdinalIgnoreCase)
+                || item.TaskId.Contains(resolvedSearch, StringComparison.OrdinalIgnoreCase)
+                || item.SourceId.Contains(resolvedSearch, StringComparison.OrdinalIgnoreCase)
+                || (item.FailureCode?.Contains(resolvedSearch, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (item.FailureReason?.Contains(resolvedSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        if (resolvedStatus is not null)
+        {
+            filtered = filtered.Where(item =>
+                string.Equals(item.Status, resolvedStatus, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (resolvedFailureStage is not null)
+        {
+            filtered = filtered.Where(item =>
+                string.Equals(item.FailureStage, resolvedFailureStage, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (resolvedErrorCode is not null)
+        {
+            filtered = filtered.Where(item =>
+                string.Equals(item.FailureCode, resolvedErrorCode, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.FailureKind, resolvedErrorCode, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.FailureReason, resolvedErrorCode, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (resolvedRetryability != "all")
+        {
+            filtered = filtered.Where(item => resolvedRetryability switch
+            {
+                "retryable" => item.FailureRetryable == true,
+                "non_retryable" => item.FailureRetryable == false,
+                _ => item.FailureRetryable is null,
+            });
+        }
+
+        if (resolvedHandling != "all")
+        {
+            filtered = filtered.Where(item =>
+                string.Equals(item.HandlingCategory, resolvedHandling, StringComparison.Ordinal));
+        }
+
+        var ordered = OrderMetadataTasks(filtered, resolvedSort, resolvedDirection);
+        var materialized = ordered.ToArray();
+        var pageItems = materialized
+            .Skip(checked((resolvedPage - 1) * resolvedPageSize))
+            .Take(resolvedPageSize)
+            .Select(ToResponse)
+            .ToArray();
+        return TypedResults.Ok(new MetadataTaskListResponse(
+            resolvedPage,
+            resolvedPageSize,
+            materialized.Length,
+            resolvedSort,
+            resolvedDirection,
+            pageItems));
     }
 
     private static async Task<IResult> MetadataTaskAttempts(
@@ -2278,25 +2364,7 @@ public static class ApiEndpoints
         var item = detail.Summary;
         var ai = detail.Ai;
         return TypedResults.Ok(new MetadataTaskDetailResponse(
-            new MetadataTaskListItem(
-                item.TaskId,
-                item.Title,
-                item.SourceId,
-                item.Status,
-                item.MikanId,
-                item.BangumiSubjectId,
-                item.TmdbSeriesId,
-                item.TmdbSeasonNumber,
-                item.SeriesStrategy,
-                item.SeasonStrategy,
-                item.EpisodeStrategy,
-                item.FailureKind,
-                item.FailureReason,
-                item.EpisodeFileCount,
-                item.OtherFileCount,
-                item.DuplicateFileCount,
-                item.PendingFileCount,
-                item.UpdatedAtUtc),
+            ToResponse(item),
             ai is null
                 ? new MetadataTaskAiItem(
                     "not_attempted",
@@ -3210,6 +3278,67 @@ public static class ApiEndpoints
     }
 
     private static ApiErrorResponse Error(string code, string message) => new(code, message);
+
+    private static MetadataTaskListItem ToResponse(MetadataTaskListProjection item) =>
+        new(
+            item.TaskId,
+            item.Title,
+            item.SourceId,
+            item.Status,
+            item.MikanId,
+            item.BangumiSubjectId,
+            item.TmdbSeriesId,
+            item.TmdbSeasonNumber,
+            item.SeriesStrategy,
+            item.SeasonStrategy,
+            item.EpisodeStrategy,
+            item.FailureKind,
+            item.FailureReason,
+            item.FailureStage,
+            item.FailureCode,
+            item.FailureRetryable,
+            item.HandlingCategory,
+            item.EpisodeFileCount,
+            item.OtherFileCount,
+            item.DuplicateFileCount,
+            item.PendingFileCount,
+            item.UpdatedAtUtc);
+
+    private static IOrderedEnumerable<MetadataTaskListProjection> OrderMetadataTasks(
+        IEnumerable<MetadataTaskListProjection> items,
+        string sort,
+        string direction)
+    {
+        var descending = direction == "desc";
+        IOrderedEnumerable<MetadataTaskListProjection> ordered = sort switch
+        {
+            "title" when descending => items.OrderByDescending(
+                item => item.Title, StringComparer.OrdinalIgnoreCase),
+            "title" => items.OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase),
+            "status" when descending => items.OrderByDescending(
+                item => item.Status, StringComparer.Ordinal),
+            "status" => items.OrderBy(item => item.Status, StringComparer.Ordinal),
+            "failure" when descending => items.OrderByDescending(
+                item => $"{item.HandlingCategory}\u001f{item.FailureCode}",
+                StringComparer.OrdinalIgnoreCase),
+            "failure" => items.OrderBy(
+                item => $"{item.HandlingCategory}\u001f{item.FailureCode}",
+                StringComparer.OrdinalIgnoreCase),
+            _ when descending => items.OrderByDescending(item => item.UpdatedAtUtc),
+            _ => items.OrderBy(item => item.UpdatedAtUtc),
+        };
+        return ordered.ThenBy(item => item.TaskId, StringComparer.Ordinal);
+    }
+
+    private static string? NormalizeMetadataFilter(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+
+    private static bool IsMetadataFilterValid(string? value) =>
+        value is null
+        || (value.Length <= 128
+            && value.All(character =>
+                char.IsAsciiLetterOrDigit(character)
+                || character is '_' or '-' or '.'));
 
     private static DownloadListItem ToResponse(DownloadJobListItemRecord record) =>
         new(

@@ -1815,6 +1815,21 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     WHERE run.task_id = task.id AND attempt.stage = 'episode' AND attempt.result = 'matched'
                     ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
                    task.failure_kind, task.failure_reason,
+                   (SELECT attempt.stage
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id AND attempt.result = 'failed'
+                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT attempt.error_code
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id AND attempt.result = 'failed'
+                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT attempt.retryable
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id AND attempt.result = 'failed'
+                    ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
                    SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
@@ -1831,25 +1846,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            items.Add(new MetadataTaskListProjection(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.IsDBNull(4) ? null : reader.GetInt32(4),
-                reader.IsDBNull(5) ? null : reader.GetInt32(5),
-                reader.IsDBNull(6) ? null : reader.GetInt32(6),
-                reader.IsDBNull(7) ? null : reader.GetInt32(7),
-                reader.IsDBNull(8) ? null : reader.GetString(8),
-                reader.IsDBNull(9) ? null : reader.GetString(9),
-                reader.IsDBNull(10) ? null : reader.GetString(10),
-                reader.IsDBNull(11) ? null : reader.GetString(11),
-                reader.IsDBNull(12) ? null : reader.GetString(12),
-                reader.GetInt32(13),
-                reader.GetInt32(14),
-                reader.GetInt32(15),
-                reader.GetInt32(16),
-                DateTimeOffset.Parse(reader.GetString(17), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
+            items.Add(ReadTaskListProjection(reader));
         }
 
         return items;
@@ -1889,6 +1886,21 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                         WHERE run.task_id = task.id AND attempt.stage = 'episode' AND attempt.result = 'matched'
                         ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
                        task.failure_kind, task.failure_reason,
+                       (SELECT attempt.stage
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id AND attempt.result = 'failed'
+                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT attempt.error_code
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id AND attempt.result = 'failed'
+                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT attempt.retryable
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id AND attempt.result = 'failed'
+                        ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
                        SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
@@ -1983,12 +1995,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         return new MetadataTaskDetailProjection(summary, ai, files);
     }
 
-    private static MetadataTaskListProjection ReadTaskListProjection(SqliteDataReader reader) =>
-        new(
+    private static MetadataTaskListProjection ReadTaskListProjection(SqliteDataReader reader)
+    {
+        var status = reader.GetString(3);
+        var failureKind = reader.IsDBNull(11) ? null : reader.GetString(11);
+        var failureStage = reader.IsDBNull(13) ? null : reader.GetString(13);
+        var failureCode = reader.IsDBNull(14) ? null : reader.GetString(14);
+        bool? failureRetryable = reader.IsDBNull(15) ? null : reader.GetInt64(15) != 0;
+        return new MetadataTaskListProjection(
             reader.GetString(0),
             reader.GetString(1),
             reader.GetString(2),
-            reader.GetString(3),
+            status,
             reader.IsDBNull(4) ? null : reader.GetInt32(4),
             reader.IsDBNull(5) ? null : reader.GetInt32(5),
             reader.IsDBNull(6) ? null : reader.GetInt32(6),
@@ -1996,16 +2014,56 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(8) ? null : reader.GetString(8),
             reader.IsDBNull(9) ? null : reader.GetString(9),
             reader.IsDBNull(10) ? null : reader.GetString(10),
-            reader.IsDBNull(11) ? null : reader.GetString(11),
+            failureKind,
             reader.IsDBNull(12) ? null : reader.GetString(12),
-            reader.GetInt32(13),
-            reader.GetInt32(14),
-            reader.GetInt32(15),
+            failureStage,
+            failureCode,
+            failureRetryable,
+            ClassifyHandling(status, failureKind, failureRetryable),
             reader.GetInt32(16),
+            reader.GetInt32(17),
+            reader.GetInt32(18),
+            reader.GetInt32(19),
             DateTimeOffset.Parse(
-                reader.GetString(17),
+                reader.GetString(20),
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind));
+    }
+
+    private static string ClassifyHandling(
+        string status,
+        string? failureKind,
+        bool? failureRetryable)
+    {
+        if (string.Equals(failureKind, "tmdb_completion_pending", StringComparison.Ordinal))
+        {
+            return "fallback";
+        }
+
+        if (status is "download_skipped_duplicate")
+        {
+            return "skipped";
+        }
+
+        if (status is "metadata_resolving" or "metadata_episode_resolving")
+        {
+            return "active";
+        }
+
+        if (status == "metadata_failed")
+        {
+            if (failureKind is "Authentication" or "Configuration" or "InvalidInput")
+            {
+                return "configuration";
+            }
+
+            return failureRetryable == true ? "explicit_retry" : "manual";
+        }
+
+        return status is "metadata_resolved" or "metadata_season_resolved"
+            ? "resolved"
+            : "other";
+    }
 
     public async Task<MikanWorkImpactProjection> GetMikanWorkImpactAsync(
         int mikanId,

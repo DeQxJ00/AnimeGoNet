@@ -208,11 +208,21 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .danger-button { border: 1px solid #924854; color: white; background: #8f3340; }
 .danger-button:disabled { cursor: not-allowed; opacity: .45; }
 .empty { border: 1px dashed #344260; border-radius: 18px; padding: 22px; }
+.metadata-filters { display: grid; grid-template-columns: minmax(200px,2fr) repeat(4,minmax(120px,1fr)); gap: 9px; align-items: end; margin-bottom: 12px; }
+.metadata-filters label { display: grid; gap: 6px; color: #8da2c9; font-size: .72rem; }
+.metadata-filters input, .metadata-filters select { min-width: 0; border: 1px solid #344260; border-radius: 9px; padding: 9px 10px; color: #edf2ff; background: #101827; font: inherit; }
+.metadata-filter-actions { display: flex; gap: 8px; }
+.metadata-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; color: #aebbd3; font-size: .8rem; }
 .metadata-tasks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .metadata-card { border: 1px solid #344260; border-radius: 18px; padding: 20px; background: rgba(16,22,37,.88); }
 .metadata-card.failed { border-color: #813f49; }
 .metadata-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .metadata-heading strong { overflow-wrap: anywhere; }
+.metadata-handling { display: inline-flex; margin: 12px 0 0; padding: 5px 8px; border: 1px solid #405f8d; border-radius: 999px; color: #dbeaff; background: rgba(24,41,67,.65); font-size: .7rem; }
+.metadata-handling.explicit_retry { border-color: #6c526f; color: #f2d9ff; }
+.metadata-handling.configuration, .metadata-handling.manual { border-color: #813f49; color: #ffb4b4; }
+.metadata-handling.fallback { border-color: #7c6835; color: #ffe09a; }
+.metadata-handling.resolved, .metadata-handling.skipped { border-color: #356757; color: #b8efd8; }
 .metadata-identity, .metadata-files, .metadata-failure { color: #aebbd3; font-size: .84rem; line-height: 1.55; overflow-wrap: anywhere; }
 .metadata-identity { margin: 15px 0; }
 .metadata-files { margin: 15px 0 0; }
@@ -416,6 +426,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding: 30px 24px; }
   .grid { grid-template-columns: 1fr; }
+  .metadata-filters { grid-template-columns: 1fr; }
   .library-list { grid-template-columns: 1fr; }
   .library-toolbar #library-status, .library-episode-toolbar #library-episode-status { width: 100%; margin-left: 0; }
   .library-detail { padding: 18px; }

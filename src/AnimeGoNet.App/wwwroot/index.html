@@ -128,9 +128,82 @@
           <h2 id="metadata-title">匹配与整理状态</h2>
         </div>
       </div>
+      <form id="metadata-filters" class="metadata-filters" aria-label="元数据任务筛选">
+        <label>搜索
+          <input id="metadata-search" type="search" maxlength="200" placeholder="标题、任务 ID、来源或错误码">
+        </label>
+        <label>任务状态
+          <select id="metadata-status-filter">
+            <option value="">全部状态</option>
+            <option value="metadata_resolving">季度匹配中</option>
+            <option value="metadata_episode_resolving">EP 匹配中</option>
+            <option value="metadata_failed">匹配失败</option>
+            <option value="metadata_resolved">匹配完成</option>
+            <option value="download_skipped_duplicate">重复跳过</option>
+          </select>
+        </label>
+        <label>处理分类
+          <select id="metadata-handling-filter">
+            <option value="all">全部分类</option>
+            <option value="explicit_retry">可安全重试（需显式）</option>
+            <option value="configuration">需修复配置</option>
+            <option value="manual">需人工处理</option>
+            <option value="skipped">已跳过</option>
+            <option value="fallback">已兜底 / 待补全 TMDB</option>
+            <option value="active">处理中</option>
+            <option value="resolved">已解析</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+        <label>失败阶段
+          <input id="metadata-failure-stage" maxlength="64" placeholder="series / season / episode">
+        </label>
+        <label>错误码
+          <input id="metadata-error-code" maxlength="128" placeholder="tmdb_network">
+        </label>
+        <label>可重试性
+          <select id="metadata-retryability-filter">
+            <option value="all">全部</option>
+            <option value="retryable">可重试</option>
+            <option value="non_retryable">不可重试</option>
+            <option value="unknown">未建立</option>
+          </select>
+        </label>
+        <label>排序
+          <select id="metadata-sort">
+            <option value="updated">最后更新</option>
+            <option value="title">标题</option>
+            <option value="status">状态</option>
+            <option value="failure">失败分类</option>
+          </select>
+        </label>
+        <label>方向
+          <select id="metadata-direction">
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
+        </label>
+        <label>每页
+          <select id="metadata-page-size">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+        <div class="metadata-filter-actions">
+          <button type="submit" class="primary-button">应用筛选</button>
+          <button id="metadata-filter-reset" type="button" class="secondary-button">重置</button>
+        </div>
+      </form>
+      <p id="metadata-list-status" class="muted" role="status">正在读取元数据任务…</p>
       <div id="metadata-tasks" class="metadata-tasks" aria-live="polite">
         <p class="muted empty">正在读取元数据任务…</p>
       </div>
+      <nav class="metadata-pagination" aria-label="元数据任务分页">
+        <button id="metadata-previous" type="button" class="secondary-button">上一页</button>
+        <span id="metadata-page-status">第 1 / 1 页</span>
+        <button id="metadata-next" type="button" class="secondary-button">下一页</button>
+      </nav>
     </section>
 
     <section aria-labelledby="pending-tmdb-title">

@@ -206,10 +206,36 @@ interface MetadataItem {
   episode_strategy: string | null;
   failure_kind: string | null;
   failure_reason: string | null;
+  failure_stage: string | null;
+  failure_code: string | null;
+  failure_retryable: boolean | null;
+  handling_category: string;
   episode_file_count: number;
   other_file_count: number;
   duplicate_file_count: number;
   pending_file_count: number;
+}
+
+interface MetadataTaskListPage {
+  page: number;
+  page_size: number;
+  total_items: number;
+  sort: "updated" | "title" | "status" | "failure";
+  direction: "asc" | "desc";
+  items: MetadataItem[];
+}
+
+interface MetadataUiState {
+  page: number;
+  page_size: 10 | 25 | 50;
+  search: string;
+  status: string;
+  handling: string;
+  failure_stage: string;
+  error_code: string;
+  retryability: string;
+  sort: "updated" | "title" | "status" | "failure";
+  direction: "asc" | "desc";
 }
 
 interface MetadataTaskDetail {
@@ -703,6 +729,8 @@ const libraryStorageKey = "animegonet.library.v1";
 let libraryState = readLibraryState();
 const downloadStorageKey = "animegonet.downloads.v1";
 let downloadState = readDownloadState();
+const metadataStorageKey = "animegonet.metadata-tasks.v1";
+let metadataState = readMetadataState();
 const expandedDownloadJobIds = new Set<string>();
 let activeLibraryDetail: AnimeSeasonDetail | null = null;
 let libraryListRequestSequence = 0;
@@ -857,6 +885,56 @@ function saveDownloadState(): void {
     window.localStorage.setItem(downloadStorageKey, JSON.stringify(downloadState));
   } catch {
     // Browser storage is an optional UI preference; business state remains server-side.
+  }
+}
+
+function readMetadataState(): MetadataUiState {
+  const defaults: MetadataUiState = {
+    page: 1,
+    page_size: 25,
+    search: "",
+    status: "",
+    handling: "all",
+    failure_stage: "",
+    error_code: "",
+    retryability: "all",
+    sort: "updated",
+    direction: "desc",
+  };
+  try {
+    const raw = window.localStorage.getItem(metadataStorageKey);
+    if (!raw) return defaults;
+    const stored = JSON.parse(raw) as Partial<MetadataUiState>;
+    const pageSizes = [10, 25, 50] as const;
+    const sorts = ["updated", "title", "status", "failure"] as const;
+    return {
+      page: Number.isInteger(stored.page) && (stored.page ?? 0) > 0
+        ? stored.page! : 1,
+      page_size: pageSizes.includes(stored.page_size as 10 | 25 | 50)
+        ? stored.page_size as 10 | 25 | 50 : 25,
+      search: typeof stored.search === "string" ? stored.search.slice(0, 200) : "",
+      status: typeof stored.status === "string" ? stored.status.slice(0, 64) : "",
+      handling: typeof stored.handling === "string" ? stored.handling : "all",
+      failure_stage: typeof stored.failure_stage === "string"
+        ? stored.failure_stage.slice(0, 64) : "",
+      error_code: typeof stored.error_code === "string"
+        ? stored.error_code.slice(0, 128) : "",
+      retryability: typeof stored.retryability === "string"
+        ? stored.retryability : "all",
+      sort: sorts.includes(stored.sort as MetadataUiState["sort"])
+        ? stored.sort as MetadataUiState["sort"] : "updated",
+      direction: stored.direction === "asc" ? "asc" : "desc",
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveMetadataState(): void {
+  try {
+    window.localStorage.setItem(metadataStorageKey, JSON.stringify(metadataState));
+  } catch {
+    // Optional UI preference only.
   }
 }
 
@@ -2310,14 +2388,43 @@ async function loadMetadataAttempts(
 
 async function loadMetadataTasks(): Promise<void> {
   const container = element<HTMLElement>("#metadata-tasks");
+  const query = new URLSearchParams({
+    page: String(metadataState.page),
+    page_size: String(metadataState.page_size),
+    handling: metadataState.handling,
+    retryability: metadataState.retryability,
+    sort: metadataState.sort,
+    direction: metadataState.direction,
+  });
+  if (metadataState.search) query.set("search", metadataState.search);
+  if (metadataState.status) query.set("status", metadataState.status);
+  if (metadataState.failure_stage) {
+    query.set("failure_stage", metadataState.failure_stage);
+  }
+  if (metadataState.error_code) query.set("error_code", metadataState.error_code);
   try {
-    const response = await fetch("/api/v1/metadata/tasks", { headers });
+    const response = await fetch(`/api/v1/metadata/tasks?${query}`, { headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body = await response.json() as { items: MetadataItem[] };
+    const body = await response.json() as MetadataTaskListPage;
+    if (body.items.length === 0 && body.total_items > 0 && metadataState.page > 1) {
+      metadataState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
+      saveMetadataState();
+      await loadMetadataTasks();
+      return;
+    }
+    metadataState.page = body.page;
+    metadataState.page_size = body.page_size as 10 | 25 | 50;
+    const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
+    element<HTMLElement>("#metadata-list-status").textContent =
+      `${body.total_items} 个任务 · 第 ${body.page} 页 · ${body.sort} ${body.direction}`;
+    element<HTMLElement>("#metadata-page-status").textContent =
+      `第 ${body.page} / ${totalPages} 页`;
+    element<HTMLButtonElement>("#metadata-previous").disabled = body.page <= 1;
+    element<HTMLButtonElement>("#metadata-next").disabled = body.page >= totalPages;
     if (body.items.length === 0) {
       const empty = document.createElement("p");
       empty.className = "muted empty";
-      empty.textContent = "暂无元数据任务";
+      empty.textContent = "暂无符合筛选条件的元数据任务";
       container.replaceChildren(empty);
       return;
     }
@@ -2333,6 +2440,20 @@ async function loadMetadataTasks(): Promise<void> {
       state.className = `badge ${item.status === "metadata_failed" ? "error" : "ready"}`;
       state.textContent = statusLabels[item.status] ?? item.status;
       heading.append(title, state);
+      const handling = document.createElement("p");
+      handling.className = `metadata-handling ${item.handling_category}`;
+      const handlingLabels: Record<string, string> = {
+        explicit_retry: "可安全重试（需显式）",
+        configuration: "需修复配置",
+        manual: "需人工处理",
+        skipped: "已跳过",
+        fallback: "已兜底 · 待补全 TMDB",
+        active: "处理中",
+        resolved: "已解析",
+        other: "其他",
+      };
+      handling.textContent = handlingLabels[item.handling_category]
+        ?? item.handling_category;
       const identity = document.createElement("p");
       identity.className = "metadata-identity";
       identity.textContent = `${item.source} · mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)} · TMDB ${textOrDash(item.tmdb_series_id)} / S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`;
@@ -2354,11 +2475,16 @@ async function loadMetadataTasks(): Promise<void> {
       const files = document.createElement("p");
       files.className = "metadata-files";
       files.textContent = `已确认 ${item.episode_file_count} · 已跳过重复 ${item.duplicate_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
-      card.append(heading, identity, stages, files);
+      card.append(heading, handling, identity, stages, files);
       if (item.failure_kind || item.failure_reason) {
         const failure = document.createElement("p");
         failure.className = "metadata-failure";
-        failure.textContent = `${textOrDash(item.failure_kind)} · ${textOrDash(item.failure_reason)}`;
+        failure.textContent =
+          `${textOrDash(item.failure_stage)} · ${textOrDash(item.failure_code ?? item.failure_kind)}`
+          + ` · ${item.failure_retryable === null
+            ? "可重试性未建立"
+            : item.failure_retryable ? "可重试" : "不可重试"}`
+          + ` · ${textOrDash(item.failure_reason)}`;
         card.append(failure);
       }
       const actions = document.createElement("div");
@@ -3795,6 +3921,75 @@ element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
 element<HTMLSelectElement>("#library-page-size").value = String(libraryState.page_size);
 element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episode_filter;
+element<HTMLInputElement>("#metadata-search").value = metadataState.search;
+element<HTMLSelectElement>("#metadata-status-filter").value = metadataState.status;
+element<HTMLSelectElement>("#metadata-handling-filter").value = metadataState.handling;
+element<HTMLInputElement>("#metadata-failure-stage").value = metadataState.failure_stage;
+element<HTMLInputElement>("#metadata-error-code").value = metadataState.error_code;
+element<HTMLSelectElement>("#metadata-retryability-filter").value =
+  metadataState.retryability;
+element<HTMLSelectElement>("#metadata-sort").value = metadataState.sort;
+element<HTMLSelectElement>("#metadata-direction").value = metadataState.direction;
+element<HTMLSelectElement>("#metadata-page-size").value = String(metadataState.page_size);
+element<HTMLFormElement>("#metadata-filters").addEventListener("submit", (event) => {
+  event.preventDefault();
+  metadataState.search = element<HTMLInputElement>("#metadata-search").value.trim();
+  metadataState.status = element<HTMLSelectElement>("#metadata-status-filter").value;
+  metadataState.handling =
+    element<HTMLSelectElement>("#metadata-handling-filter").value;
+  metadataState.failure_stage =
+    element<HTMLInputElement>("#metadata-failure-stage").value.trim().toLowerCase();
+  metadataState.error_code =
+    element<HTMLInputElement>("#metadata-error-code").value.trim().toLowerCase();
+  metadataState.retryability =
+    element<HTMLSelectElement>("#metadata-retryability-filter").value;
+  metadataState.sort =
+    element<HTMLSelectElement>("#metadata-sort").value as MetadataUiState["sort"];
+  metadataState.direction =
+    element<HTMLSelectElement>("#metadata-direction").value as "asc" | "desc";
+  metadataState.page_size = Number(
+    element<HTMLSelectElement>("#metadata-page-size").value,
+  ) as 10 | 25 | 50;
+  metadataState.page = 1;
+  saveMetadataState();
+  void loadMetadataTasks();
+});
+element<HTMLButtonElement>("#metadata-filter-reset").addEventListener("click", () => {
+  metadataState = {
+    page: 1,
+    page_size: 25,
+    search: "",
+    status: "",
+    handling: "all",
+    failure_stage: "",
+    error_code: "",
+    retryability: "all",
+    sort: "updated",
+    direction: "desc",
+  };
+  element<HTMLInputElement>("#metadata-search").value = "";
+  element<HTMLSelectElement>("#metadata-status-filter").value = "";
+  element<HTMLSelectElement>("#metadata-handling-filter").value = "all";
+  element<HTMLInputElement>("#metadata-failure-stage").value = "";
+  element<HTMLInputElement>("#metadata-error-code").value = "";
+  element<HTMLSelectElement>("#metadata-retryability-filter").value = "all";
+  element<HTMLSelectElement>("#metadata-sort").value = "updated";
+  element<HTMLSelectElement>("#metadata-direction").value = "desc";
+  element<HTMLSelectElement>("#metadata-page-size").value = "25";
+  saveMetadataState();
+  void loadMetadataTasks();
+});
+element<HTMLButtonElement>("#metadata-previous").addEventListener("click", () => {
+  if (metadataState.page <= 1) return;
+  metadataState.page--;
+  saveMetadataState();
+  void loadMetadataTasks();
+});
+element<HTMLButtonElement>("#metadata-next").addEventListener("click", () => {
+  metadataState.page++;
+  saveMetadataState();
+  void loadMetadataTasks();
+});
 element<HTMLInputElement>("#download-search").value = downloadState.search;
 element<HTMLSelectElement>("#download-state").value = downloadState.state;
 element<HTMLSelectElement>("#download-business-status").value =

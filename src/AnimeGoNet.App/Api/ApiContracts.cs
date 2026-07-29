@@ -405,6 +405,11 @@ public sealed record MetadataRetryResponse(
     [property: JsonPropertyName("status")] string Status);
 
 public sealed record MetadataTaskListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] int TotalItems,
+    [property: JsonPropertyName("sort")] string Sort,
+    [property: JsonPropertyName("direction")] string Direction,
     [property: JsonPropertyName("items")] IReadOnlyList<MetadataTaskListItem> Items);
 
 public sealed record MetadataTaskListItem(
@@ -421,6 +426,10 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("episode_strategy")] string? EpisodeStrategy,
     [property: JsonPropertyName("failure_kind")] string? FailureKind,
     [property: JsonPropertyName("failure_reason")] string? FailureReason,
+    [property: JsonPropertyName("failure_stage")] string? FailureStage,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("failure_retryable")] bool? FailureRetryable,
+    [property: JsonPropertyName("handling_category")] string HandlingCategory,
     [property: JsonPropertyName("episode_file_count")] int EpisodeFileCount,
     [property: JsonPropertyName("other_file_count")] int OtherFileCount,
     [property: JsonPropertyName("duplicate_file_count")] int DuplicateFileCount,
