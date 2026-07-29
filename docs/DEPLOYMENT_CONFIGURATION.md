@@ -186,9 +186,28 @@ profile。二进制、profile、下载内容、Cookie、凭据、passkey 和生�
 
 ## 旧版配置
 
-当前可读取 `1.1.0`～`1.7.1`，并把旧 `setting:`/`advanced:` 中的路径、
-qBittorrent、Mikan、TMDB、代理、季度失败和刷新 Cron 映射为规范键。出现旧
-Transmission 配置时仍明确阻断下载 worker，不会静默转换。
+当前识别 `1.1.0`～`1.7.1`。旧 `setting:`/`advanced:` qBittorrent 配置会把
+路径、连接凭据、Mikan 文件策略/category/做种时间、Access Key、TMDB key、
+TMDB/Bangumi redirect、全局代理、请求超时、季度失败开关和刷新 Cron 映射到
+规范键，并显式补入所有新增安全默认值。
 
-这只是兼容读取：当前版本不会重写旧 YAML，也不会创建旧 YAML 备份。完成
-`1.1.0 → 1.7.1` 逐版可恢复重写和备份演练前，不应把“配置升级链”标记为完成。
+默认升级顺序：
+
+1. 严格解析原文件、验证版本和将要迁移的布尔/数字/文件策略；失败时原文件不变。
+2. 以 `CreateNew` 在同目录写入原字节备份：
+   `animego-<旧版本>-<UTC yyyyMMddHHmmss>[-NNN].yaml`。已存在名称永不覆盖，
+   Unix 权限为 `0600`。
+3. 在同目录写完并 flush 唯一临时文件，然后原子替换原路径。
+4. 新文件固定 `version: 1.7.1`；再次启动不重复升级或备份。
+
+和上游一致，备份默认开启。仅在已经自行制作等价备份时才可用
+`--backup=false` 或 `ANIMEGO_CONFIG_BACKUP=false` 关闭。
+
+旧 `setting.client.client` 为 Transmission 或其他非 qBittorrent 值时不会备份或
+重写，下载 worker 继续 fail closed，WebUI 显示迁移诊断。必须由用户明确配置
+qBittorrent，不能自动猜测。
+
+Python/JavaScript 插件、旧缓存/日志路径和旧 Bolt 数据副作用不会进入新主程序；
+它们只保留在原字节备份中。旧 `setting.tag` 是动态模板，而当前
+`SourceProfile.tags` 是静态 tag，因此也不会被错误转换成字面量静态 tag。Mikan
+Cookie 和动态 tag 的专用新模型尚未完成时，同样以备份作为恢复真相源。

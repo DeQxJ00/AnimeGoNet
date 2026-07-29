@@ -68,8 +68,8 @@
 - [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
 - [>] 移植环境变量覆盖：规范嵌套键、现有扁平键、旧 qB 兼容键及命令行优先级已接入；应用字段环境锁可视化已完成，下载器部署锁已在私有覆盖后重新生效，下载器锁的 WebUI 逐字段可视化仍待实现。
 - [>] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均已有测试；全部旧 Go 配置异常 parity 仍待补齐。
-- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 `setting:`/`advanced:` 已安全兼容读取并映射 qB/Mikan/TMDB/代理/失败链/Cron，但尚不逐版重写旧 YAML，也未生成升级前备份。
-- [>] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取和新安装默认注释已完成，旧 YAML 自动重写新默认值仍待实现。
+- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 qB `setting:`/`advanced:` 现默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/TMDB/代理/失败链/Cron 已迁移，错误值在落盘前拒绝，Transmission 保持原文件并 fail closed。上游动态 tag 与 Mikan Cookie 尚无等价新模型，只保留于备份，因此 parity 仍为进行中。
+- [x] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取、新安装默认注释及旧 YAML 自动重写新默认值均已完成。
 - [x] 增加 OpenAI-compatible AI 配置 DTO、扁平环境变量、敏感值脱敏和 source-generated JSON 上下文；API 只返回 provider/base/model/工具端点与 `api_key_configured`，不返回密钥。
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
@@ -246,7 +246,7 @@
 - [ ] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [ ] 生成 checksums、SBOM、第三方许可证。
-- [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；旧 YAML 只完成兼容读取，自动备份重写和旧业务数据演练待实现。
+- [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；最新 win-x64 原生二进制也完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt/目录业务数据迁移演练仍待实现。
 - [ ] 完成全链路 JIT/AOT/Docker E2E。
 - [ ] 用发布镜像完成 Web UI Playwright E2E。
 - [>] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker 路径和本机 qB 隔离验收文档已完成；旧配置迁移、外部插件和完整运维手册待完成。

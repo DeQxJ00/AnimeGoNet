@@ -18,7 +18,7 @@
 | `linux-arm64` | `ubuntu-24.04-arm` | `AnimeGoNet.App` |
 | `osx-arm64` | `macos-15` | `AnimeGoNet.App` |
 
-`eng/smoke-native.ps1` 使用随机本地端口和独立临时目录，验证 `/ping`、受保护状态 API、SQLite schema、NativeAOT 标识、静态 WebUI、`data_path/logs/animego.log` 非空，以及 `/websocket/log` 的原生 upgrade 和 pause 控制帧，并在结束时回收进程和临时目录。
+`eng/smoke-native.ps1` 使用随机本地端口和独立临时目录，验证 `/ping`、受保护状态 API、SQLite schema、NativeAOT 标识、静态 WebUI、`data_path/logs/animego.log` 非空，以及 `/websocket/log` 的原生 upgrade 和 pause 控制帧。五 RID 还以 `-LegacyYamlUpgrade` 再启动一次同一原生二进制，验证旧 1.6.1 YAML 原字节备份、规范 1.7.1 替换和动态 tag 模板不误入静态 tag；两种模式结束时均回收进程和临时目录。
 
 ## Docker 契约
 

@@ -12,6 +12,8 @@ internal sealed record DeploymentYamlSnapshot(
     string Version,
     bool Created,
     bool LegacyLayout,
+    bool Upgraded,
+    string? BackupFilePath,
     IReadOnlyDictionary<string, string?> Values);
 
 internal static class DeploymentYamlConfiguration
@@ -48,6 +50,7 @@ internal static class DeploymentYamlConfiguration
     public static async Task<DeploymentYamlSnapshot> LoadOrCreateAsync(
         string filePath,
         AnimeGoOptions defaults,
+        bool backupLegacy = true,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -119,9 +122,38 @@ internal static class DeploymentYamlConfiguration
         ValidateVersion(version);
         var legacy = values.Keys.Any(key =>
             key.StartsWith("setting:", StringComparison.Ordinal));
+        string? backupFilePath = null;
+        var upgraded = false;
         if (legacy)
         {
             AddLegacyAliases(values);
+            var downloaderType =
+                LegacyDownloaderMigrationDetector.ReadDownloaderType(text);
+            if (downloaderType is null
+                || string.Equals(
+                    downloaderType,
+                    DownloaderTypes.Qbittorrent,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var upgradedText = RenderLegacyUpgrade(defaults, values);
+                if (backupLegacy)
+                {
+                    backupFilePath = await WriteBackupAsync(
+                        absolutePath,
+                        version,
+                        bytes,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                await ReplaceAtomicallyAsync(
+                    absolutePath,
+                    upgradedText,
+                    cancellationToken).ConfigureAwait(false);
+                values = Parse(upgradedText);
+                version = CurrentVersion;
+                legacy = false;
+                upgraded = true;
+            }
         }
 
         return new DeploymentYamlSnapshot(
@@ -129,6 +161,8 @@ internal static class DeploymentYamlConfiguration
             version,
             created,
             legacy,
+            upgraded,
+            backupFilePath,
             values);
     }
 
@@ -239,6 +273,18 @@ internal static class DeploymentYamlConfiguration
             "metadata:season_failure:use_first_season");
         Alias(
             values,
+            "advanced:default:tmdb_fail_backtrace",
+            "metadata:season_failure:backtrace");
+        Alias(
+            values,
+            "advanced:default:tmdb_fail_use_bangumi",
+            "metadata:tmdb_failure_use_bangumi");
+        Alias(
+            values,
+            "advanced:default:mikan_trusted_offset_cache_enabled",
+            "metadata:mikan_trusted_offset_cache_enabled");
+        Alias(
+            values,
             "advanced:source:themoviedb:api_key",
             "metadata:tmdb:api_key");
         Alias(values, "setting:key:themoviedb", "metadata:tmdb:api_key");
@@ -285,22 +331,41 @@ internal static class DeploymentYamlConfiguration
         Add(values, "sources:mikan:allowed_torrent_hosts:0", "mikanani.me");
         Alias(values, "setting:category", "sources:mikan:category");
         Add(values, "sources:mikan:category", "animegonet");
-        Alias(
+        AliasAny(
             values,
-            "advanced:client:seeding_time_minute",
+            [
+                "advanced:client:seeding_time_minute",
+                "advanced:download:seeding_time_minute",
+            ],
             "sources:mikan:seeding_time_minutes");
         Add(values, "sources:mikan:seeding_time_minutes", "0");
         Add(values, "sources:mikan:rss_filter_enabled", "true");
         Add(values, "sources:mikan:rss_priority_enabled", "true");
 
-        AliasAbsoluteUrl(
+        AliasAnyAbsoluteUrl(
             values,
-            "advanced:source:bangumi:redirect",
+            [
+                "advanced:source:bangumi:redirect",
+                "advanced:anidata:bangumi:redirect",
+                "advanced:redirect:bangumi",
+            ],
             "metadata:bangumi:base_url");
-        AliasAbsoluteUrl(
+        AliasAnyAbsoluteUrl(
             values,
-            "advanced:source:themoviedb:redirect",
+            [
+                "advanced:source:themoviedb:redirect",
+                "advanced:anidata:themoviedb:redirect",
+                "advanced:redirect:themoviedb",
+            ],
             "metadata:tmdb:base_url");
+        Alias(
+            values,
+            "advanced:request:timeout_second",
+            "metadata:tmdb:timeout_seconds");
+        Alias(
+            values,
+            "advanced:request:timeout_second",
+            "metadata:bangumi:timeout_seconds");
         if (string.Equals(
                 Value(values, "setting:proxy:enable"),
                 "true",
@@ -351,6 +416,312 @@ internal static class DeploymentYamlConfiguration
         await writer.WriteAsync(content.AsMemory(), cancellationToken).ConfigureAwait(false);
         await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<string> WriteBackupAsync(
+        string filePath,
+        string version,
+        byte[] originalBytes,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(filePath)
+            ?? throw new DeploymentYamlException(
+                "Deployment YAML path has no parent directory.");
+        var extension = Path.GetExtension(filePath);
+        if (extension.Length == 0)
+        {
+            extension = ".yaml";
+        }
+        var stem = Path.GetFileNameWithoutExtension(filePath);
+        var timestamp = DateTimeOffset.UtcNow.ToString(
+            "yyyyMMddHHmmss",
+            CultureInfo.InvariantCulture);
+        for (var sequence = 0; sequence < 1000; sequence++)
+        {
+            var suffix = sequence == 0
+                ? string.Empty
+                : $"-{sequence.ToString("D3", CultureInfo.InvariantCulture)}";
+            var backupPath = Path.Combine(
+                directory,
+                $"{stem}-{version}-{timestamp}{suffix}{extension}");
+            try
+            {
+                await WriteExclusiveBytesAsync(
+                    backupPath,
+                    originalBytes,
+                    cancellationToken).ConfigureAwait(false);
+                return backupPath;
+            }
+            catch (IOException) when (File.Exists(backupPath))
+            {
+                // A backup with this second/sequence already exists. Never overwrite it.
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                throw new DeploymentYamlException(
+                    "Legacy deployment YAML backup could not be created.",
+                    exception);
+            }
+        }
+
+        throw new DeploymentYamlException(
+            "Legacy deployment YAML backup name space was exhausted.");
+    }
+
+    private static async Task ReplaceAtomicallyAsync(
+        string filePath,
+        string content,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(filePath)
+            ?? throw new DeploymentYamlException(
+                "Deployment YAML path has no parent directory.");
+        var temporaryPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(filePath)}.upgrade-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await WriteExclusiveBytesAsync(
+                temporaryPath,
+                StrictUtf8.GetBytes(content),
+                cancellationToken).ConfigureAwait(false);
+            File.Move(temporaryPath, filePath, overwrite: true);
+        }
+        catch (DeploymentYamlException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            throw new DeploymentYamlException(
+                "Legacy deployment YAML could not be replaced atomically.",
+                exception);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                // The original file is still authoritative; a uniquely named temp is harmless.
+            }
+        }
+    }
+
+    private static async Task WriteExclusiveBytesAsync(
+        string filePath,
+        ReadOnlyMemory<byte> content,
+        CancellationToken cancellationToken)
+    {
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            BufferSize = 16 * 1024,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+        };
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        await using var stream = new FileStream(filePath, options);
+        await stream.WriteAsync(content, cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        stream.Flush(flushToDisk: true);
+    }
+
+    private static string RenderLegacyUpgrade(
+        AnimeGoOptions defaults,
+        IReadOnlyDictionary<string, string?> values)
+    {
+        var bt = defaults.Downloaders["bt"];
+        return $$"""
+            # AnimeGoNet 部署配置。此文件由旧版 {{Required(values, "version")}} 配置迁移；
+            # 如启用 backup，原文件已按版本和 UTC 时间备份。Python 插件及动态 tag
+            # 模板不会被误写为当前静态配置。
+            version: {{CurrentVersion}}
+
+            paths:
+              data_path: {{Scalar(Configured(values, "paths:data_path", defaults.Paths.DataPath))}}
+              download_path: {{Scalar(Configured(values, "paths:download_path", defaults.Paths.DownloadPath))}}
+              save_path: {{Scalar(Configured(values, "paths:save_path", defaults.Paths.SavePath))}}
+
+            web:
+              access_key: {{Scalar(Configured(values, "web:access_key", string.Empty))}}
+              background_workers_enabled: true
+
+            downloaders:
+              bt:
+                type: qbittorrent
+                base_url: {{Scalar(Configured(values, "downloaders:bt:base_url", bt.BaseUrl.AbsoluteUri))}}
+                username: {{Scalar(Configured(values, "downloaders:bt:username", string.Empty))}}
+                password: {{Scalar(Configured(values, "downloaders:bt:password", string.Empty))}}
+                download_path: {{Scalar(Configured(values, "downloaders:bt:download_path", bt.DownloadPath))}}
+                enabled: true
+
+            sources:
+              mikan:
+                adapter: mikan
+                downloader_id: bt
+                file_strategy: {{LegacyFileStrategy(values)}}
+                allowed_torrent_hosts:
+                  - mikanani.me
+                category: {{Scalar(Configured(values, "sources:mikan:category", "animegonet"))}}
+                tags: []
+                seeding_time_minutes: {{Integer(values, "sources:mikan:seeding_time_minutes", 0)}}
+                rss_filter_enabled: true
+                rss_priority_enabled: true
+
+            metadata:
+              tmdb:
+                base_url: {{Scalar(Configured(values, "metadata:tmdb:base_url", defaults.Metadata.Tmdb.BaseUrl.AbsoluteUri))}}
+                proxy_url: {{Scalar(Configured(values, "metadata:tmdb:proxy_url", string.Empty))}}
+                api_key: {{Scalar(Configured(values, "metadata:tmdb:api_key", string.Empty))}}
+                read_access_token: ''
+                language: {{Scalar(defaults.Metadata.Tmdb.Language)}}
+                timeout_seconds: {{Number(values, "metadata:tmdb:timeout_seconds", defaults.Metadata.Tmdb.HttpTimeout.TotalSeconds)}}
+              bangumi:
+                base_url: {{Scalar(Configured(values, "metadata:bangumi:base_url", defaults.Metadata.Bangumi.BaseUrl.AbsoluteUri))}}
+                proxy_url: {{Scalar(Configured(values, "metadata:bangumi:proxy_url", string.Empty))}}
+                timeout_seconds: {{Number(values, "metadata:bangumi:timeout_seconds", defaults.Metadata.Bangumi.HttpTimeout.TotalSeconds)}}
+              season_failure:
+                # P4→P3→P2→P1；AI 是独立的一次任务级流程。
+                skip: {{Boolean(values, "metadata:season_failure:skip", false)}}
+                backtrace: {{Boolean(values, "metadata:season_failure:backtrace", false)}}
+                use_title_season: {{Boolean(values, "metadata:season_failure:use_title_season", false)}}
+                use_first_season: {{Boolean(values, "metadata:season_failure:use_first_season", false)}}
+              tmdb_failure_use_bangumi: {{Boolean(values, "metadata:tmdb_failure_use_bangumi", false)}}
+              mikan_trusted_offset_cache_enabled: {{Boolean(values, "metadata:mikan_trusted_offset_cache_enabled", false)}}
+              ai:
+                provider: openai_compatible
+                base_url: ''
+                api_key: ''
+                model: ''
+                use_metadata_match: false
+                timeout_seconds: 600
+                retry_count: 2
+                use_bangumi_pubdate_first: true
+
+            torrent_fetch:
+              timeout_seconds: {{defaults.TorrentFetch.Timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}
+              max_response_bytes: {{defaults.TorrentFetch.MaxResponseBytes.ToString(CultureInfo.InvariantCulture)}}
+              max_redirects: {{defaults.TorrentFetch.MaxRedirects.ToString(CultureInfo.InvariantCulture)}}
+              staging_ttl_seconds: {{defaults.TorrentFetch.StagingTtl.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}
+
+            schedule:
+              refresh_database_cron: {{Scalar(Configured(values, "schedule:refresh_database_cron", defaults.Schedule.RefreshDatabaseCron))}}
+
+            data_update:
+              enabled: false
+              cron: {{Scalar(defaults.DataUpdate.Cron)}}
+              manifest_url: ''
+              auto_download: true
+              auto_import: true
+              keep_versions: {{defaults.DataUpdate.KeepVersions.ToString(CultureInfo.InvariantCulture)}}
+              timeout_seconds: {{defaults.DataUpdate.HttpTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}
+            """.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
+    }
+
+    private static string Configured(
+        IReadOnlyDictionary<string, string?> values,
+        string key,
+        string fallback) =>
+        Optional(values, key) ?? fallback;
+
+    private static string? Optional(
+        IReadOnlyDictionary<string, string?> values,
+        string key) =>
+        First(Value(values, key));
+
+    private static string Boolean(
+        IReadOnlyDictionary<string, string?> values,
+        string key,
+        bool fallback)
+    {
+        var value = Optional(values, key);
+        if (value is null)
+        {
+            return fallback ? "true" : "false";
+        }
+        if (!bool.TryParse(value, out var parsed))
+        {
+            throw new DeploymentYamlException(
+                $"Legacy deployment YAML field '{key}' must be a boolean.");
+        }
+
+        return parsed ? "true" : "false";
+    }
+
+    private static string Integer(
+        IReadOnlyDictionary<string, string?> values,
+        string key,
+        int fallback)
+    {
+        var value = Optional(values, key);
+        if (value is null)
+        {
+            return fallback.ToString(CultureInfo.InvariantCulture);
+        }
+        if (!int.TryParse(
+                value,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsed))
+        {
+            throw new DeploymentYamlException(
+                $"Legacy deployment YAML field '{key}' must be an integer.");
+        }
+
+        return parsed.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string Number(
+        IReadOnlyDictionary<string, string?> values,
+        string key,
+        double fallback)
+    {
+        var value = Optional(values, key);
+        if (value is null)
+        {
+            return fallback.ToString(CultureInfo.InvariantCulture);
+        }
+        if (!double.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsed)
+            || !double.IsFinite(parsed))
+        {
+            throw new DeploymentYamlException(
+                $"Legacy deployment YAML field '{key}' must be a finite number.");
+        }
+
+        return parsed.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string LegacyFileStrategy(
+        IReadOnlyDictionary<string, string?> values)
+    {
+        var strategy = Configured(
+            values,
+            "sources:mikan:file_strategy",
+            "move").ToLowerInvariant();
+        return strategy switch
+        {
+            "link" or "link_delete" or "move" or "wait_move" => strategy,
+            _ => throw new DeploymentYamlException(
+                "Legacy deployment YAML Mikan file strategy is unsupported."),
+        };
     }
 
     private static string RenderDefault(AnimeGoOptions options)
@@ -509,12 +880,26 @@ internal static class DeploymentYamlConfiguration
         Dictionary<string, string?> values,
         string legacyKey,
         string currentKey)
+        => AliasAnyAbsoluteUrl(values, [legacyKey], currentKey);
+
+    private static void AliasAnyAbsoluteUrl(
+        Dictionary<string, string?> values,
+        IReadOnlyList<string> legacyKeys,
+        string currentKey)
     {
-        var value = First(Value(values, legacyKey));
-        if (!values.ContainsKey(currentKey)
-            && Uri.TryCreate(value, UriKind.Absolute, out _))
+        if (values.ContainsKey(currentKey))
         {
-            values[currentKey] = value;
+            return;
+        }
+
+        foreach (var legacyKey in legacyKeys)
+        {
+            var value = First(Value(values, legacyKey));
+            if (Uri.TryCreate(value, UriKind.Absolute, out _))
+            {
+                values[currentKey] = value;
+                return;
+            }
         }
     }
 

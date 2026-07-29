@@ -29,9 +29,9 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 ```
 
 配置优先级为命令行/环境变量高于部署 YAML；WebUI 的安全私有覆盖低于被标记为
-环境锁的字段。旧 `1.1.0`–`1.7.1` YAML 可读取并映射到新模型；旧
-Transmission 配置会 fail closed，必须先迁移到 qBittorrent，绝不会静默改成默认
-实例。
+环境锁的字段。旧 `1.1.0`–`1.7.1` qBittorrent YAML 默认先保存原字节备份，再
+原子升级为规范 1.7.1；旧 Transmission 配置保持原文件并 fail closed，必须先
+人工迁移到 qBittorrent，绝不会静默改成默认实例。
 
 部署 YAML 支持：
 

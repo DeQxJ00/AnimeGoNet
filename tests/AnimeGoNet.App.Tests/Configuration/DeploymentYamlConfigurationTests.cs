@@ -271,11 +271,14 @@ public sealed class DeploymentYamlConfigurationTests
 
             var snapshot = await DeploymentYamlConfiguration.LoadOrCreateAsync(
                 path,
-                AnimeGoDefaults.CreateNative(root));
+                AnimeGoDefaults.CreateNative(root),
+                backupLegacy: false);
 
             Assert.False(snapshot.Created);
-            Assert.True(snapshot.LegacyLayout);
-            Assert.Equal(version, snapshot.Version);
+            Assert.False(snapshot.LegacyLayout);
+            Assert.True(snapshot.Upgraded);
+            Assert.Null(snapshot.BackupFilePath);
+            Assert.Equal(DeploymentYamlConfiguration.CurrentVersion, snapshot.Version);
             Assert.Equal("legacy-data", snapshot.Values["paths:data_path"]);
             Assert.Equal("http://127.0.0.1:18080/", snapshot.Values["downloaders:bt:base_url"]);
             Assert.Equal("legacy-download", snapshot.Values["downloaders:bt:download_path"]);
@@ -283,6 +286,265 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("30", snapshot.Values["sources:mikan:seeding_time_minutes"]);
             Assert.Equal("true", snapshot.Values["metadata:season_failure:skip"]);
             Assert.Equal("0 0 7 * * *", snapshot.Values["schedule:refresh_database_cron"]);
+            var upgraded = await File.ReadAllTextAsync(path);
+            Assert.Contains("version: 1.7.1", upgraded, StringComparison.Ordinal);
+            Assert.DoesNotContain("\nsetting:", upgraded, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task LegacyUpgradeBacksUpExactOriginalAndIsIdempotent()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var path = Path.Combine(root, "animego.yaml");
+            var original =
+                """
+                version: 1.6.1
+                setting:
+                  client:
+                    qbittorrent:
+                      url: http://127.0.0.1:18080/
+                      username: legacy-user
+                      password: legacy-secret
+                      download_path: ''
+                  data_path: legacy-data
+                  download_path: legacy-download
+                  save_path: legacy-save
+                  category: LegacyAnime
+                  tag: legacy-tag
+                  webapi:
+                    access_key: legacy-access
+                  proxy:
+                    enable: true
+                    url: http://127.0.0.1:17890/
+                  key:
+                    themoviedb: legacy-tmdb-key
+                advanced:
+                  anidata:
+                    bangumi:
+                      redirect: https://bangumi.example.invalid/
+                    themoviedb:
+                      redirect: https://tmdb.example.invalid/
+                  request:
+                    timeout_second: 47
+                  download:
+                    rename: wait_move
+                    seeding_time_minute: 15
+                  default:
+                    tmdb_fail_skip: true
+                    tmdb_fail_use_title_season: false
+                    tmdb_fail_use_first_season: true
+                  database:
+                    refresh_database_cron: '0 0 8 * * *'
+                """;
+            await File.WriteAllTextAsync(path, original);
+
+            var snapshot = await DeploymentYamlConfiguration.LoadOrCreateAsync(
+                path,
+                AnimeGoDefaults.CreateNative(root));
+
+            Assert.True(snapshot.Upgraded);
+            Assert.False(snapshot.LegacyLayout);
+            Assert.NotNull(snapshot.BackupFilePath);
+            Assert.Matches(
+                @"animego-1\.6\.1-\d{14}(?:-\d{3})?\.yaml$",
+                snapshot.BackupFilePath);
+            Assert.Equal(
+                System.Text.Encoding.UTF8.GetBytes(original),
+                await File.ReadAllBytesAsync(snapshot.BackupFilePath!));
+            Assert.Equal(
+                original.Replace("\r\n", "\n", StringComparison.Ordinal),
+                (await File.ReadAllTextAsync(snapshot.BackupFilePath!))
+                    .Replace("\r\n", "\n", StringComparison.Ordinal));
+            Assert.DoesNotContain(
+                snapshot.Values.Keys,
+                key => key.StartsWith(
+                    "sources:mikan:tags:",
+                    StringComparison.Ordinal));
+            Assert.Equal("wait_move", snapshot.Values["sources:mikan:file_strategy"]);
+            Assert.Equal("15", snapshot.Values["sources:mikan:seeding_time_minutes"]);
+            Assert.Equal(
+                "https://tmdb.example.invalid/",
+                snapshot.Values["metadata:tmdb:base_url"]);
+            Assert.Equal(
+                "https://bangumi.example.invalid/",
+                snapshot.Values["metadata:bangumi:base_url"]);
+            Assert.Equal(
+                "http://127.0.0.1:17890/",
+                snapshot.Values["metadata:tmdb:proxy_url"]);
+            Assert.Equal("legacy-tmdb-key", snapshot.Values["metadata:tmdb:api_key"]);
+            Assert.Equal("47", snapshot.Values["metadata:tmdb:timeout_seconds"]);
+
+            var second = await DeploymentYamlConfiguration.LoadOrCreateAsync(
+                path,
+                AnimeGoDefaults.CreateNative(root));
+
+            Assert.False(second.Upgraded);
+            Assert.False(second.LegacyLayout);
+            Assert.Null(second.BackupFilePath);
+            Assert.Single(
+                Directory.GetFiles(
+                    root,
+                    "animego-1.6.1-*.yaml",
+                    SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task UnsupportedLegacyDownloaderIsNotRewrittenOrBackedUp()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var path = Path.Combine(root, "animego.yaml");
+            var original =
+                """
+                version: 1.7.1
+                setting:
+                  client:
+                    client: Transmission
+                    url: http://127.0.0.1:9091/
+                    username: transmission-user
+                    password: transmission-secret
+                  data_path: legacy-data
+                  download_path: legacy-download
+                  save_path: legacy-save
+                """;
+            await File.WriteAllTextAsync(path, original);
+
+            var snapshot = await DeploymentYamlConfiguration.LoadOrCreateAsync(
+                path,
+                AnimeGoDefaults.CreateNative(root));
+
+            Assert.True(snapshot.LegacyLayout);
+            Assert.False(snapshot.Upgraded);
+            Assert.Null(snapshot.BackupFilePath);
+            Assert.Equal(original, await File.ReadAllTextAsync(path));
+            Assert.Empty(
+                Directory.GetFiles(
+                    root,
+                    "animego-1.7.1-*.yaml",
+                    SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidLegacyValueLeavesOriginalUntouchedWithoutBackup()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var path = Path.Combine(root, "animego.yaml");
+            var original =
+                """
+                version: 1.7.1
+                setting:
+                  data_path: legacy-data
+                  download_path: legacy-download
+                  save_path: legacy-save
+                advanced:
+                  default:
+                    tmdb_fail_skip: definitely-not-a-boolean
+                """;
+            await File.WriteAllTextAsync(path, original);
+
+            var exception = await Assert.ThrowsAsync<DeploymentYamlException>(
+                () => DeploymentYamlConfiguration.LoadOrCreateAsync(
+                    path,
+                    AnimeGoDefaults.CreateNative(root)));
+
+            Assert.Contains(
+                "must be a boolean",
+                exception.Message,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "definitely-not-a-boolean",
+                exception.ToString(),
+                StringComparison.Ordinal);
+            Assert.Equal(original, await File.ReadAllTextAsync(path));
+            Assert.Empty(
+                Directory.GetFiles(
+                    root,
+                    "animego-1.7.1-*.yaml",
+                    SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task BackupFalseCommandLineUpgradeProducesBuildableApplication()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var path = Path.Combine(root, "animego.yaml");
+            var data = Path.Combine(root, "data");
+            var download = Path.Combine(root, "download");
+            var save = Path.Combine(root, "save");
+            await File.WriteAllTextAsync(
+                path,
+                $$"""
+                version: 1.7.1
+                setting:
+                  client:
+                    client: QBittorrent
+                    url: http://127.0.0.1:18080/
+                    username: legacy-user
+                    password: legacy-password
+                    download_path: ''
+                  data_path: '{{Yaml(data)}}'
+                  download_path: '{{Yaml(download)}}'
+                  save_path: '{{Yaml(save)}}'
+                  category: LegacyAnime
+                advanced:
+                  download:
+                    rename: move
+                  client:
+                    seeding_time_minute: 0
+                """);
+
+            await using var app = await AnimeGoApplication.BuildAsync(
+                [
+                    "--config", path,
+                    "--backup=false",
+                ],
+                runningInContainer: false,
+                startBackgroundWorkers: false);
+            var options = app.Services.GetRequiredService<AnimeGoOptions>();
+
+            Assert.Equal(Path.GetFullPath(data), options.Paths.DataPath);
+            Assert.Equal(Path.GetFullPath(download), options.Paths.DownloadPath);
+            Assert.Equal(Path.GetFullPath(save), options.Paths.SavePath);
+            var downloader = Assert.Single(options.Downloaders);
+            Assert.Equal("bt", downloader.Key);
+            Assert.Equal(Path.GetFullPath(download), downloader.Value.DownloadPath);
+            Assert.Equal("bt", Assert.Single(options.InitialSourceProfiles).DownloaderId);
+            Assert.Empty(
+                Directory.GetFiles(
+                    root,
+                    "animego-1.7.1-*.yaml",
+                    SearchOption.TopDirectoryOnly));
+            Assert.DoesNotContain(
+                "\nsetting:",
+                await File.ReadAllTextAsync(path),
+                StringComparison.Ordinal);
         }
         finally
         {

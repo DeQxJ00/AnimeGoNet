@@ -4,7 +4,9 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 30
+    [int]$ExpectedSchemaVersion = 30,
+
+    [switch]$LegacyYamlUpgrade
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +17,44 @@ $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'
 $env:background_workers_enabled = 'false'
+$legacyYamlHash = $null
+if ($LegacyYamlUpgrade) {
+    New-Item -ItemType Directory -Path $env:data_path -Force | Out-Null
+    $yamlDataPath = $env:data_path.Replace("'", "''")
+    $yamlDownloadPath = $env:download_path.Replace("'", "''")
+    $yamlSavePath = $env:save_path.Replace("'", "''")
+    $legacyYaml = @"
+version: 1.6.1
+setting:
+  client:
+    qbittorrent:
+      url: http://127.0.0.1:18080/
+      username: smoke-user
+      password: smoke-password
+      download_path: ''
+  data_path: '$yamlDataPath'
+  download_path: '$yamlDownloadPath'
+  save_path: '$yamlSavePath'
+  category: NativeSmoke
+  tag: '{year}-legacy-template'
+advanced:
+  request:
+    timeout_second: 31
+  download:
+    rename: move
+    seeding_time_minute: 0
+  default:
+    tmdb_fail_skip: false
+    tmdb_fail_use_title_season: true
+    tmdb_fail_use_first_season: false
+"@
+    $legacyYamlBytes = [Text.UTF8Encoding]::new($false).GetBytes($legacyYaml)
+    $legacyYamlHash = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData($legacyYamlBytes))
+    [IO.File]::WriteAllBytes(
+        (Join-Path $env:data_path 'animego.yaml'),
+        $legacyYamlBytes)
+}
 $baseUrl = "http://127.0.0.1:$Port"
 $startParameters = @{
     FilePath = $resolvedExecutable
@@ -153,6 +193,27 @@ try {
     ) {
         throw 'NativeAOT deployment YAML does not contain the effective safe defaults.'
     }
+    if ($LegacyYamlUpgrade) {
+        if ($deploymentYamlText.Contains("`nsetting:")) {
+            throw 'NativeAOT legacy deployment YAML was not rewritten to the canonical layout.'
+        }
+        if ($deploymentYamlText.Contains('{year}-legacy-template')) {
+            throw 'NativeAOT legacy dynamic tag template was incorrectly migrated as a static tag.'
+        }
+        $backups = @(
+            Get-ChildItem -LiteralPath $env:data_path `
+                -Filter 'animego-1.6.1-*.yaml' `
+                -File)
+        if ($backups.Count -ne 1) {
+            throw "NativeAOT legacy YAML expected one backup, found $($backups.Count)."
+        }
+        $backupHash = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData(
+                [IO.File]::ReadAllBytes($backups[0].FullName)))
+        if ($backupHash -ne $legacyYamlHash) {
+            throw 'NativeAOT legacy YAML backup does not exactly match the original bytes.'
+        }
+    }
 
     $logFile = Join-Path $env:data_path 'logs/animego.log'
     if (
@@ -162,7 +223,8 @@ try {
         throw 'Rolling file log was not initialized under data_path.'
     }
 
-    Write-Output "Native smoke passed: $resolvedExecutable"
+    $mode = if ($LegacyYamlUpgrade) { 'legacy-yaml-upgrade' } else { 'first-start' }
+    Write-Output "Native smoke passed ($mode): $resolvedExecutable"
     $smokePassed = $true
 }
 finally {

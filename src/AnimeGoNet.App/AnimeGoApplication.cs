@@ -91,8 +91,19 @@ public static class AnimeGoApplication
             var yamlPath = DeploymentYamlConfiguration.ResolvePath(
                 builder.Configuration,
                 yamlDefaults);
+            var backupLegacy = ParseOptionalBool(
+                FirstConfigurationValue(
+                    builder.Configuration,
+                    "ANIMEGO_CONFIG_BACKUP",
+                    "backup"),
+                true,
+                "backup");
             deploymentYaml = await DeploymentYamlConfiguration
-                .LoadOrCreateAsync(yamlPath, yamlDefaults, cancellationToken)
+                .LoadOrCreateAsync(
+                    yamlPath,
+                    yamlDefaults,
+                    backupLegacy,
+                    cancellationToken)
                 .ConfigureAwait(false);
             builder.Configuration.AddInMemoryCollection(deploymentYaml.Values);
             builder.Configuration.AddEnvironmentVariables();

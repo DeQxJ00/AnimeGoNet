@@ -51,7 +51,9 @@ jobs:
         run: dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/publish/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
       - name: Smoke published binary
         shell: pwsh
-        run: ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
+        run: |
+          ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
+          ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" -LegacyYamlUpgrade
       - uses: actions/upload-artifact@v7
         with:
           name: animegonet-${{ matrix.rid }}
