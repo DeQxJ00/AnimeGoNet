@@ -69,6 +69,21 @@ public sealed class PluginManagerTests
     }
 
     [Fact]
+    public async Task UnexpectedFilterExceptionPropagatesAndStopsTheChain()
+    {
+        var throwing = new FilterPlugin("throwing", 10, throwException: true);
+        var never = new FilterPlugin("never", 20);
+        var manager = new OrderedFeedFilterManager(new PluginCatalog([never, throwing]));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await manager.ExecuteAsync(FilterContext()));
+
+        Assert.Equal("filter_exception", exception.Message);
+        Assert.Equal(1, throwing.CallCount);
+        Assert.Equal(0, never.CallCount);
+    }
+
+    [Fact]
     public async Task InvalidFilterResultStopsBeforeTheNextPlugin()
     {
         var invalid = new FilterPlugin("invalid", 10, returnDuplicateIndex: true);
@@ -198,7 +213,8 @@ public sealed class PluginManagerTests
         IReadOnlyList<int>? rejectedIndexes = null,
         string? errorCode = null,
         bool returnDuplicateIndex = false,
-        bool isBuiltIn = true) : IFeedFilterPlugin
+        bool isBuiltIn = true,
+        bool throwException = false) : IFeedFilterPlugin
     {
         private readonly HashSet<int> rejected = (rejectedIndexes ?? []).ToHashSet();
 
@@ -215,6 +231,11 @@ public sealed class PluginManagerTests
         {
             CallCount++;
             ObservedIndexes = context.Items.Select(item => item.Index).ToArray();
+            if (throwException)
+            {
+                throw new InvalidOperationException("filter_exception");
+            }
+
             if (errorCode is not null)
             {
                 return ValueTask.FromResult(new FilterResult(

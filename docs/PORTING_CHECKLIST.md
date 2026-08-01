@@ -42,7 +42,7 @@
 | `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 进行中 | Go ParseEp 整数模式与安全小数/特别篇分类已由 NativeAOT C# parser 覆盖；Torrent 文件入库和 Mikan RSS title 最后可靠标记均有独立 tests，完整 parser fixtures/字幕组待实现 |
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 已验证 | 与 raw_parser.py 共用的完整解析主体已由 `AutoBangumiRawParser` 编译期替换；无 Python 运行时，develop Python golden fixture 逐字段通过 |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 已验证 | 19 组 develop Python golden 覆盖全部输出字段和原始 E04/EP04 不识别语义；独立安全层才拒绝年份/分辨率/歧义/非正片，数据层证明只对 Mikan adapter 落候选 |
-| `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 待实现 | 顺序、skip、异常 tests |
+| `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 已验证 | 编译期注册过滤器按稳定顺序串行执行；上一规则仅将 accepted 候选传给下一规则；显式空链等价于上游 `skipFilter`；业务错误、无效结果与意外异常均立即停止且后续规则不执行；生产 Mikan RSS 显式使用 `mikan-tool` 链，外部过滤器必须显式启用；PluginManager 回归 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 已验证 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit、安全页面抓取/批内缓存/真实 RSS 前置执行，以及五档 WebUI CRUD/排序、开关、可解释预览、legacy JSON 导入导出和快照回滚均已验证；原油猴发布镜像浏览器 E2E 待总体验收 |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 已验证 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss`、winner→统一 staging，以及 schema v25 关系型历史快照和 revision 安全回滚均已验证；首版以可键盘操作的上下移动排序代替拖拽 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 已验证 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断及可选 `sample_source_episode` 保存前 Series→Season→目标 Episode 预验证；管理 API/WebUI 已支持 revision-safe 创建/更新/禁用/清除、权威影响分类和只重置无租约失败任务的显式重匹配，已解析/已整理/完成记录/媒体文件保持不变 |
