@@ -70,7 +70,13 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `tmdb_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`bangumi_proxy_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
-`ANIMEGO_CATEGORY`。推荐新部署优先使用规范嵌套键。
+`ANIMEGO_CATEGORY`、`ANIMEGO_WEB_HOST`、`ANIMEGO_WEB_PORT`。标准 ASP.NET Core
+`--urls` / `ASPNETCORE_URLS` 覆盖 `web.host` / `web.port`；推荐新部署优先使用
+规范嵌套键。
+
+原生默认监听 `127.0.0.1:7991`，不会默认暴露到局域网。Docker 默认监听
+`0.0.0.0:7991`，并继续强制要求非空 Access Key。host 只接受 DNS 名或 IP 地址，
+port 必须在 0～65535；`0` 只用于由操作系统分配临时测试端口。
 
 不要把密码、Access Key、TMDB/AI key、Cookie、passkey Torrent URL 或真实配置
 文件提交到 Git。仓库和 CI 只使用空 secret、fake transport 或隔离测试凭据。
@@ -86,6 +92,8 @@ paths:
   save_path: 'E:\AnimeGoNet\library'
 
 web:
+  host: 127.0.0.1
+  port: 7991
   access_key: ''
   background_workers_enabled: true
 

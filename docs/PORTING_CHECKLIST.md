@@ -10,10 +10,10 @@
 |---|---|---:|---:|---|
 | `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 待验证 |
 | `cmd/plugin` | `AnimeGo.PluginTool` validate/run/pack | 替换 | 已验证 | 严格 fixture/config/typed-result tests、确定性 ZIP、真实 NativeAOT 插件进程 smoke |
-| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
+| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认路径、下载器及 Web 监听强类型配置通过；12 份旧 YAML 已验证，剩余配置字段 parity 按环境变量行继续跟踪 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 已验证 | 固定 `develop@c7475df` 的 12 份历史 YAML 均以 SHA-256 锁定并迁移到规范 1.7.1；只接受上游 13 个精确版本，范围内伪版本在备份/写入前拒绝；原字节备份、原子替换、幂等、无备份开关与非 qB fail-closed tests |
-| `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 进行中 | 当前应用配置及每个下载器实例的环境/命令行字段均投影为 `locked_fields`，Web 逐字段只读且 API 拒绝改写；下载器锁覆盖 type/base URL/用户名/密码/download path/enabled，保存其他字段不会复制环境凭据或固化环境值，脱敏/precedence/API/WebUI/AOT tests 已通过；路径及完整旧配置 precedence 待实现 |
+| `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 进行中 | 上游 `ANIMEGO_WEB_HOST/PORT`、原生/Docker 安全默认和 `--urls`/`ASPNETCORE_URLS` 优先级已有真实 Kestrel tests；当前应用配置及每个下载器实例的环境/命令行字段均投影为 `locked_fields`，Web 逐字段只读且 API 拒绝改写；下载器锁覆盖 type/base URL/用户名/密码/download path/enabled，保存其他字段不会复制环境凭据或固化环境值；路径、旧全局 proxy/tag 及完整旧配置 precedence 待实现 |
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |

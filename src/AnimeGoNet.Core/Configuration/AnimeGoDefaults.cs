@@ -15,6 +15,7 @@ public static class AnimeGoDefaults
 
         return Create(
             paths,
+            "0.0.0.0",
             new Uri("http://qbittorrent-bt:8080"),
             new Uri("http://qbittorrent-pt:8080"));
     }
@@ -32,15 +33,25 @@ public static class AnimeGoDefaults
 
         return Create(
             paths,
+            "127.0.0.1",
             new Uri("http://127.0.0.1:8080"),
             new Uri("http://127.0.0.1:8081"));
     }
 
-    private static AnimeGoOptions Create(PathOptions paths, Uri btDownloaderBaseUrl, Uri ptDownloaderBaseUrl)
+    private static AnimeGoOptions Create(
+        PathOptions paths,
+        string webHost,
+        Uri btDownloaderBaseUrl,
+        Uri ptDownloaderBaseUrl)
     {
         return new AnimeGoOptions
         {
             Paths = paths,
+            Web = new WebBindingOptions
+            {
+                Host = webHost,
+                Port = 7991,
+            },
             Downloaders = new Dictionary<string, QbittorrentInstanceOptions>(StringComparer.OrdinalIgnoreCase)
             {
                 ["bt"] = new()

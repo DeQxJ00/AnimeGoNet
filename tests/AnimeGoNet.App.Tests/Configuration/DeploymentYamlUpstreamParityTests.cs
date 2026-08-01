@@ -63,6 +63,8 @@ public sealed class DeploymentYamlUpstreamParityTests
             Assert.Equal("data", snapshot.Values["paths:data_path"]);
             Assert.Equal("download/incomplete", snapshot.Values["paths:download_path"]);
             Assert.Equal("download/anime", snapshot.Values["paths:save_path"]);
+            Assert.Equal("localhost", snapshot.Values["web:host"]);
+            Assert.Equal("7991", snapshot.Values["web:port"]);
             Assert.Equal("qbittorrent", snapshot.Values["downloaders:bt:type"]);
             Assert.Equal("http://127.0.0.1:8080", snapshot.Values["downloaders:bt:base_url"]);
             Assert.Equal("download/incomplete", snapshot.Values["downloaders:bt:download_path"]);

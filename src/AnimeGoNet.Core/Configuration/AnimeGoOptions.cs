@@ -4,6 +4,8 @@ public sealed record AnimeGoOptions
 {
     public required PathOptions Paths { get; init; }
 
+    public required WebBindingOptions Web { get; init; }
+
     public required IReadOnlyDictionary<string, QbittorrentInstanceOptions> Downloaders { get; init; }
 
     public required MetadataMatchingOptions Metadata { get; init; }
@@ -15,6 +17,13 @@ public sealed record AnimeGoOptions
     public required DataUpdateOptions DataUpdate { get; init; }
 
     public required IReadOnlyList<SourceProfileSeed> InitialSourceProfiles { get; init; }
+}
+
+public sealed record WebBindingOptions
+{
+    public required string Host { get; init; }
+
+    public int Port { get; init; } = 7991;
 }
 
 public sealed record ScheduleOptions

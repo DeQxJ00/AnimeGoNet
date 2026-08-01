@@ -12,8 +12,20 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal("/data", options.Paths.DataPath);
         Assert.Equal("/download/incomplete", options.Paths.DownloadPath);
         Assert.Equal("/download/anime", options.Paths.SavePath);
+        Assert.Equal("0.0.0.0", options.Web.Host);
+        Assert.Equal(7991, options.Web.Port);
         Assert.Equal("/download/incomplete/bt", options.Downloaders["bt"].DownloadPath);
         Assert.Equal("/download/incomplete/pt", options.Downloaders["pt"].DownloadPath);
+        Assert.Empty(AnimeGoOptionsValidator.Validate(options));
+    }
+
+    [Fact]
+    public void NativeDefaultsBindOnlyToLoopback()
+    {
+        var options = AnimeGoDefaults.CreateNative(Path.GetTempPath());
+
+        Assert.Equal("127.0.0.1", options.Web.Host);
+        Assert.Equal(7991, options.Web.Port);
         Assert.Empty(AnimeGoOptionsValidator.Validate(options));
     }
 

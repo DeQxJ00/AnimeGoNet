@@ -200,6 +200,10 @@ public static class AnimeGoApplication
         {
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
         }
+        if (!optionsWereSupplied)
+        {
+            ConfigureWebBinding(builder, options.Web);
+        }
         var dataUpdateRuntime = new DataUpdateRuntimeState(options.DataUpdate);
         var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -513,10 +517,28 @@ public static class AnimeGoApplication
         };
         var downloaders = LoadDownloaders(configuration, defaults, downloadPath);
         var sources = LoadSourceProfiles(configuration, defaults);
+        var web = new WebBindingOptions
+        {
+            Host = NormalizeOptional(FirstConfigurationValue(
+                    configuration,
+                    "ANIMEGO_WEB_HOST",
+                    "web_host",
+                    "web:host"))
+                ?? defaults.Web.Host,
+            Port = ParseOptionalInt(
+                FirstConfigurationValue(
+                    configuration,
+                    "ANIMEGO_WEB_PORT",
+                    "web_port",
+                    "web:port"),
+                defaults.Web.Port,
+                "web_port"),
+        };
 
         return defaults with
         {
             Paths = paths,
+            Web = web,
             Metadata = defaults.Metadata with
             {
                 Tmdb = defaults.Metadata.Tmdb with
@@ -812,6 +834,24 @@ public static class AnimeGoApplication
             Downloaders = downloaders,
             InitialSourceProfiles = sources,
         };
+    }
+
+    private static void ConfigureWebBinding(
+        WebApplicationBuilder builder,
+        WebBindingOptions web)
+    {
+        if (!string.IsNullOrWhiteSpace(FirstConfigurationValue(
+                builder.Configuration,
+                "urls",
+                "ASPNETCORE_URLS")))
+        {
+            return;
+        }
+
+        var host = Uri.CheckHostName(web.Host) == UriHostNameType.IPv6
+            ? $"[{web.Host}]"
+            : web.Host;
+        builder.WebHost.UseUrls($"http://{host}:{web.Port}");
     }
 
     private static AnimeGoOptions ApplyBootstrapPaths(

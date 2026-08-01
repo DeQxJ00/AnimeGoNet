@@ -277,6 +277,8 @@ internal static class DeploymentYamlConfiguration
         Alias(values, "setting:download_path", "paths:download_path");
         Alias(values, "setting:save_path", "paths:save_path");
         Alias(values, "setting:webapi:access_key", "web:access_key");
+        Alias(values, "setting:webapi:host", "web:host");
+        Alias(values, "setting:webapi:port", "web:port");
         Alias(values, "advanced:database:refresh_database_cron", "schedule:refresh_database_cron");
         Alias(values, "advanced:default:tmdb_fail_skip", "metadata:season_failure:skip");
         Alias(
@@ -596,6 +598,8 @@ internal static class DeploymentYamlConfiguration
               save_path: {{Scalar(Configured(values, "paths:save_path", defaults.Paths.SavePath))}}
 
             web:
+              host: {{Scalar(Configured(values, "web:host", defaults.Web.Host))}}
+              port: {{Integer(values, "web:port", defaults.Web.Port)}}
               access_key: {{Scalar(Configured(values, "web:access_key", string.Empty))}}
               background_workers_enabled: true
 
@@ -784,7 +788,9 @@ internal static class DeploymentYamlConfiguration
               save_path: {{Scalar(options.Paths.SavePath)}}
 
             web:
-              # 原生默认回环可留空；Docker 必须设置 access_key。
+              # 原生默认 127.0.0.1:7991；Docker 默认 0.0.0.0:7991 且必须设置 access_key。
+              host: {{Scalar(options.Web.Host)}}
+              port: {{options.Web.Port}}
               access_key: ''
               background_workers_enabled: true
 

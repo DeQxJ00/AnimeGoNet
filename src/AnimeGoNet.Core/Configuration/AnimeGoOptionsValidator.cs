@@ -17,6 +17,19 @@ public static partial class AnimeGoOptionsValidator
         ValidateAbsolutePath(options.Paths.DownloadPath, "download_path", errors);
         ValidateAbsolutePath(options.Paths.SavePath, "save_path", errors);
 
+        if (string.IsNullOrWhiteSpace(options.Web.Host)
+            || !string.Equals(options.Web.Host, options.Web.Host.Trim(), StringComparison.Ordinal)
+            || options.Web.Host.Length > 253
+            || Uri.CheckHostName(options.Web.Host) == UriHostNameType.Unknown)
+        {
+            errors.Add("Web host must be a valid trimmed DNS name or IP address.");
+        }
+
+        if (options.Web.Port is < 0 or > 65535)
+        {
+            errors.Add("Web port must be between 0 and 65535.");
+        }
+
         if (options.Downloaders.Count == 0)
         {
             errors.Add("At least one qBittorrent instance is required.");

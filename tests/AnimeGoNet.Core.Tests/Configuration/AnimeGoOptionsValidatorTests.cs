@@ -4,6 +4,25 @@ namespace AnimeGoNet.Core.Tests.Configuration;
 
 public sealed class AnimeGoOptionsValidatorTests
 {
+    [Theory]
+    [InlineData("http://127.0.0.1", 7991)]
+    [InlineData("127.0.0.1/path", 7991)]
+    [InlineData(" localhost", 7991)]
+    [InlineData("localhost", -1)]
+    [InlineData("localhost", 65536)]
+    public void RejectsInvalidWebBinding(string host, int port)
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Web = defaults.Web with { Host = host, Port = port },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.StartsWith("Web ", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void RejectsDownloaderOutsideSharedDownloadRoot()
     {
