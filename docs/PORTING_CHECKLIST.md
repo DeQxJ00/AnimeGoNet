@@ -12,7 +12,7 @@
 | `cmd/plugin` | `AnimeGo.PluginTool` validate/run/pack | 替换 | 已验证 | 严格 fixture/config/typed-result tests、确定性 ZIP、真实 NativeAOT 插件进程 smoke |
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
-| `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 待实现 | 12 份历史 YAML golden |
+| `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 已验证 | 固定 `develop@c7475df` 的 12 份历史 YAML 均以 SHA-256 锁定并迁移到规范 1.7.1；只接受上游 13 个精确版本，范围内伪版本在备份/写入前拒绝；原字节备份、原子替换、幂等、无备份开关与非 qB fail-closed tests |
 | `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 进行中 | 当前应用配置及每个下载器实例的环境/命令行字段均投影为 `locked_fields`，Web 逐字段只读且 API 拒绝改写；下载器锁覆盖 type/base URL/用户名/密码/download path/enabled，保存其他字段不会复制环境凭据或固化环境值，脱敏/precedence/API/WebUI/AOT tests 已通过；路径及完整旧配置 precedence 待实现 |
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |

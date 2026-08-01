@@ -19,6 +19,22 @@ internal sealed record DeploymentYamlSnapshot(
 internal static class DeploymentYamlConfiguration
 {
     internal const string CurrentVersion = "1.7.1";
+    private static readonly string[] SupportedVersions =
+    [
+        "1.1.0",
+        "1.2.0",
+        "1.3.0",
+        "1.4.0",
+        "1.4.1",
+        "1.5.0",
+        "1.5.1",
+        "1.5.2",
+        "1.6.0",
+        "1.6.1",
+        "1.6.2",
+        "1.7.0",
+        CurrentVersion,
+    ];
     private const int MaximumBytes = 1024 * 1024;
     private const int MaximumDepth = 32;
     private const int MaximumNodes = 4096;
@@ -409,12 +425,10 @@ internal static class DeploymentYamlConfiguration
 
     private static void ValidateVersion(string version)
     {
-        if (!System.Version.TryParse(version, out var parsed)
-            || parsed < new System.Version(1, 1, 0)
-            || parsed > new System.Version(1, 7, 1))
+        if (!SupportedVersions.Contains(version, StringComparer.Ordinal))
         {
             throw new DeploymentYamlException(
-                $"Deployment YAML version '{version}' is unsupported; expected 1.1.0 through {CurrentVersion}.");
+                $"Deployment YAML version '{version}' is unsupported; expected a recognized AnimeGo version from 1.1.0 through {CurrentVersion}.");
         }
     }
 
