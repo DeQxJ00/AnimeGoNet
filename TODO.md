@@ -117,7 +117,7 @@
 - [x] 实现可空 `imdbid` 规范化和固定零参数 `lookup_imdb_tmdb_tv`：主程序调用 TMDB MCP external ID/find，程序侧删除 Movie 结果，只返回正整数 TV Series 候选，最终 Series/Season/Episode 逐级验证。
 - [>] AI 和确定性匹配均拒绝 Season 0；确定性流程已拒绝 Season 0，Series/Season 已确认但 Episode 未匹配的文件已持久化 `Other` 及稳定原因，实际整理到 `<TmdbName>/Sxx/Other/` 与 AI 门禁仍待实现。
 - [x] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立统一 AI 阶段已接入且 Series/Season/Episode 结果必须经 TMDB 验证。
-- [ ] 为前传缺失、日期缺失、多前传、关系循环、回溯到首部仍不匹配、请求失败和取消建立 fixture。
+- [x] 为 P3 建立完整图/故障 fixture：无前传直接穷尽；缺日期仍继续遍历；同层多前传按开播日期降序/ID 升序；关系循环由 visited 终止；回溯到首部仍不匹配会穷尽日文/中文名及每名清理词；TMDB 网络失败保留稳定类型/码且不伪装成无匹配；Bangumi 请求失败向编排层传播；取消立即中断且不产生 fallback 结果。
 - [ ] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试。
 - [x] 移植 Mikan → Bangumi → TMDB 编排与 fallback：RSS winner 已按上游作品页关系自动发现并持久化 `bgmid`，携带 `bgmid` 的已下载任务由内置 worker 执行 Bangumi Subject → TMDB Series → 日期季度，并持久化每次策略；Backtrace、统一 AI 和固定 S01 的 Bangumi 完全兜底均已串联。页面缺链接、歧义、非可信域名、网络失败分别使用稳定失败码，失败批次不提前下载。
 - [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖由专用 worker 优先领取并权威验证，EP Offset 已在逐文件 TMDB Episode 验证前应用且无效时阻断静默回退；可信自动 offset 与字幕绑定仍待串联。

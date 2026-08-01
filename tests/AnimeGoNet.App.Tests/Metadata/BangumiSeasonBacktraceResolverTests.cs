@@ -142,6 +142,125 @@ public sealed class BangumiSeasonBacktraceResolverTests
         Assert.Equal(["日本語名", "中文名"], tmdb.SearchTitles);
     }
 
+    [Fact]
+    public async Task MissingPredecessorTerminatesWithoutTmdbRequest()
+    {
+        var bangumi = new GraphClient(
+            new Dictionary<int, BangumiSubject>(),
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>());
+        var tmdb = new FakeTmdbClient(
+            new Dictionary<string, IReadOnlyList<TmdbSeries>>(),
+            new Dictionary<int, TmdbSeriesDetails>());
+
+        var result = await CreateResolver(bangumi, tmdb).ResolveAsync(1);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("tmdb_backtrace_exhausted", result.Failure!.Code);
+        Assert.Equal(1, result.VisitedSubjectCount);
+        Assert.Equal([1], bangumi.RelationRequests);
+        Assert.Empty(tmdb.SearchTitles);
+    }
+
+    [Fact]
+    public async Task FirstWorkStillNotMatchingReturnsExhaustedAfterFullSearch()
+    {
+        var bangumi = new GraphClient(
+            new Dictionary<int, BangumiSubject>
+            {
+                [2] = Subject(2, new DateOnly(2018, 1, 1)),
+            },
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>
+            {
+                [1] = [Predecessor(2)],
+            });
+        var wrong = Series(20, "Subject 2");
+        var tmdb = new FakeTmdbClient(
+            new Dictionary<string, IReadOnlyList<TmdbSeries>>(StringComparer.Ordinal)
+            {
+                ["Subject 2"] = [wrong],
+            },
+            new Dictionary<int, TmdbSeriesDetails>
+            {
+                [20] = Details(wrong, Season(20, 1, new DateOnly(2010, 1, 1))),
+            });
+
+        var result = await CreateResolver(bangumi, tmdb).ResolveAsync(1);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("tmdb_backtrace_exhausted", result.Failure!.Code);
+        Assert.Equal(2, result.VisitedSubjectCount);
+        Assert.Equal([1, 2], bangumi.RelationRequests);
+        Assert.Equal(["Subject 2", "Subject"], tmdb.SearchTitles);
+    }
+
+    [Fact]
+    public async Task TmdbRequestFailureReturnsStableFailureInsteadOfPretendingExhaustion()
+    {
+        var bangumi = new GraphClient(
+            new Dictionary<int, BangumiSubject>
+            {
+                [2] = Subject(2, new DateOnly(2018, 1, 1)),
+            },
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>
+            {
+                [1] = [Predecessor(2)],
+            });
+        var tmdb = new FakeTmdbClient(
+            new Dictionary<string, IReadOnlyList<TmdbSeries>>(),
+            new Dictionary<int, TmdbSeriesDetails>(),
+            new TmdbClientException(
+                MetadataFailureKind.Network,
+                "tmdb_network_error",
+                tmdbAccessConfirmed: false));
+
+        var result = await CreateResolver(bangumi, tmdb).ResolveAsync(1);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(MetadataFailureKind.Network, result.Failure!.Kind);
+        Assert.Equal("tmdb_network_error", result.Failure.Code);
+        Assert.False(result.Failure.TmdbAccessConfirmed);
+        Assert.Equal(2, result.VisitedSubjectCount);
+    }
+
+    [Fact]
+    public async Task BangumiRequestFailurePropagatesStableFailure()
+    {
+        var bangumi = new GraphClient(
+            new Dictionary<int, BangumiSubject>(),
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>(),
+            new BangumiClientException(
+                MetadataFailureKind.Network,
+                "bangumi_network_error"));
+        var tmdb = new FakeTmdbClient(
+            new Dictionary<string, IReadOnlyList<TmdbSeries>>(),
+            new Dictionary<int, TmdbSeriesDetails>());
+
+        var exception = await Assert.ThrowsAsync<BangumiClientException>(() =>
+            CreateResolver(bangumi, tmdb).ResolveAsync(1));
+
+        Assert.Equal(MetadataFailureKind.Network, exception.Kind);
+        Assert.Equal("bangumi_network_error", exception.SafeCode);
+        Assert.Empty(tmdb.SearchTitles);
+    }
+
+    [Fact]
+    public async Task CancellationInterruptsRelationRequestWithoutFallbackResult()
+    {
+        var tmdb = new FakeTmdbClient(
+            new Dictionary<string, IReadOnlyList<TmdbSeries>>(),
+            new Dictionary<int, TmdbSeriesDetails>());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new BangumiSeasonBacktraceResolver(
+                new CancellingBangumiClient(),
+                new TmdbSeriesSeasonResolver(new TmdbSeriesResolver(tmdb), tmdb))
+            .ResolveAsync(1, cancellation.Token));
+
+        Assert.Empty(tmdb.SearchTitles);
+    }
+
     private static BangumiSeasonBacktraceResolver CreateResolver(
         GraphClient bangumi,
         FakeTmdbClient tmdb) =>
@@ -157,7 +276,8 @@ public sealed class BangumiSeasonBacktraceResolverTests
 
     private sealed class FakeTmdbClient(
         IReadOnlyDictionary<string, IReadOnlyList<TmdbSeries>> searches,
-        IReadOnlyDictionary<int, TmdbSeriesDetails> details) : ITmdbClient
+        IReadOnlyDictionary<int, TmdbSeriesDetails> details,
+        TmdbClientException? searchFailure = null) : ITmdbClient
     {
         public List<string> SearchTitles { get; } = [];
 
@@ -166,6 +286,10 @@ public sealed class BangumiSeasonBacktraceResolverTests
             CancellationToken cancellationToken = default)
         {
             SearchTitles.Add(title);
+            if (searchFailure is not null)
+            {
+                return Task.FromException<IReadOnlyList<TmdbSeries>>(searchFailure);
+            }
             return Task.FromResult(searches.TryGetValue(title, out var value)
                 ? value
                 : (IReadOnlyList<TmdbSeries>)[]);
@@ -206,7 +330,8 @@ public sealed class BangumiSeasonBacktraceResolverTests
 
     private sealed class GraphClient(
         IReadOnlyDictionary<int, BangumiSubject> subjects,
-        IReadOnlyDictionary<int, IReadOnlyList<BangumiSubjectRelation>> relations) : IBangumiSubjectClient
+        IReadOnlyDictionary<int, IReadOnlyList<BangumiSubjectRelation>> relations,
+        BangumiClientException? relationFailure = null) : IBangumiSubjectClient
     {
         public List<int> RelationRequests { get; } = [];
 
@@ -218,9 +343,30 @@ public sealed class BangumiSeasonBacktraceResolverTests
             CancellationToken cancellationToken = default)
         {
             RelationRequests.Add(subjectId);
+            if (relationFailure is not null)
+            {
+                return Task.FromException<IReadOnlyList<BangumiSubjectRelation>>(relationFailure);
+            }
             return Task.FromResult(relations.TryGetValue(subjectId, out var values)
                 ? values
                 : (IReadOnlyList<BangumiSubjectRelation>)[]);
+        }
+    }
+
+    private sealed class CancellingBangumiClient : IBangumiSubjectClient
+    {
+        public Task<BangumiSubject?> GetSubjectAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public async Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            _ = subjectId;
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return [];
         }
     }
 }
