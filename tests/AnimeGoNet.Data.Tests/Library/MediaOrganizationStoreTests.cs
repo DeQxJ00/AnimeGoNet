@@ -109,6 +109,46 @@ public sealed class MediaOrganizationStoreTests
             operations.Select(operation => operation.TaskFileId));
     }
 
+    [Fact]
+    public async Task FailedCleanupCanBeReleasedAndCompletedByNextLease()
+    {
+        await using var fixture = await OrganizationFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var move = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        var file = Assert.Single(move.Files);
+        var operation = Assert.Single(await fixture.Store.EnsureOperationsAsync(
+            move,
+            [new MediaOperationPlan(
+                file.TaskFileId,
+                "/download/incomplete/bt/episode.mkv",
+                "/download/anime/Series/S01/E001.mkv")],
+            now));
+        await fixture.Store.CompleteFileAsync(move, operation.OperationId, file.SizeBytes, now);
+        await fixture.Store.CompleteMovesAsync(move, now);
+        var failedCleanup = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now.AddSeconds(1),
+            TimeSpan.FromMinutes(1)));
+
+        await fixture.Store.ReleaseAsync(
+            failedCleanup,
+            "qbittorrent_http_error",
+            now.AddSeconds(31),
+            now.AddSeconds(1));
+        var retry = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now.AddSeconds(31),
+            TimeSpan.FromMinutes(1)));
+        Assert.Equal(MediaOrganizationStage.CleanupDownloader, retry.Stage);
+
+        await fixture.Store.CompleteCleanupAsync(retry, now.AddSeconds(31));
+
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("organized", state.TaskStatus);
+        Assert.Equal("completed", state.OrganizationState);
+        Assert.Equal(1, state.CompletionCount);
+    }
+
     private sealed class OrganizationFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _database;

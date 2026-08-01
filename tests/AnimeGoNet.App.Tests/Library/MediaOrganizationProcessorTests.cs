@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
@@ -112,6 +113,49 @@ public sealed class MediaOrganizationProcessorTests
             new byte[] { 6, 7, 8 },
             await File.ReadAllBytesAsync(Path.Combine(paths.SavePath, "Series", "S01", "E001.zh-Hans.forced.ass")));
         Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task DownloaderCleanupCallbackRetriesWithoutDeletingOrganizedMedia()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(
+            downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
+
+        Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
+        var target = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
+        Assert.True(File.Exists(target));
+        client.DeleteFailure = new HttpRequestException("fake qB unavailable");
+
+        Assert.Equal(MediaOrganizationResult.RetryScheduled, await processor.RunOnceAsync());
+
+        Assert.True(File.Exists(target));
+        Assert.Equal(("organizing_cleanup", "cleanup", 1), await ReadStateAsync(app, taskId));
+        Assert.Single(client.Deleted);
+        Assert.False(client.Deleted[0].DeleteFiles);
+
+        client.DeleteFailure = null;
+        await app.App.Services.GetRequiredService<DownloadClientOperationCoordinator>()
+            .ExecuteProbeAsync(
+                "bt",
+                async (downloadClient, cancellationToken) =>
+                {
+                    await downloadClient.ConnectAsync(cancellationToken);
+                    return true;
+                });
+        await MakeOrganizationRetryReadyAsync(app, taskId);
+
+        var retryResult = await processor.RunOnceAsync();
+        Assert.True(
+            retryResult == MediaOrganizationResult.CleanupCompleted,
+            $"Cleanup retry returned {retryResult}: {await ReadOrganizationFailureCodeAsync(app, taskId)}");
+        Assert.True(File.Exists(target));
+        Assert.Equal(("organized", "completed", 1), await ReadStateAsync(app, taskId));
+        Assert.Equal(2, client.Deleted.Count);
+        Assert.All(client.Deleted, attempt => Assert.False(attempt.DeleteFiles));
     }
 
     [Fact]
@@ -458,7 +502,7 @@ public sealed class MediaOrganizationProcessorTests
         command.CommandText = """
             UPDATE download_jobs
             SET organization_next_attempt_at_utc = $now
-            WHERE task_id = $task_id AND organization_state = 'pending';
+            WHERE task_id = $task_id AND organization_state IN ('pending', 'cleanup');
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
         command.Parameters.AddWithValue(
@@ -668,6 +712,22 @@ public sealed class MediaOrganizationProcessorTests
         return (reader.GetString(0), reader.GetString(1), reader.GetInt32(2));
     }
 
+    private static async Task<string?> ReadOrganizationFailureCodeAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT organization_failure_code
+            FROM download_jobs
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
     private sealed class FakeRegistry(IDownloadClient client) : IDownloadClientRegistry
     {
         public IReadOnlyCollection<string> InstanceIds => ["bt"];
@@ -681,6 +741,8 @@ public sealed class MediaOrganizationProcessorTests
         public List<string> Paused { get; } = [];
 
         public List<(string[] Hashes, bool DeleteFiles)> Deleted { get; } = [];
+
+        public Exception? DeleteFailure { get; set; }
 
         public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<DownloadTaskSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
@@ -702,7 +764,9 @@ public sealed class MediaOrganizationProcessorTests
         public Task DeleteAsync(IReadOnlyList<string> hashes, bool deleteFiles, CancellationToken cancellationToken = default)
         {
             Deleted.Add((hashes.ToArray(), deleteFiles));
-            return Task.CompletedTask;
+            return DeleteFailure is null
+                ? Task.CompletedTask
+                : Task.FromException(DeleteFailure);
         }
     }
 }

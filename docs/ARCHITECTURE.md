@@ -87,7 +87,7 @@ AnimeGoNet.slnx
 
 媒体目标路径只由已持久化的 TMDB 规范名称、Season、Episode 和捕获的 save root 生成；所有跨平台非法字符、控制字符、Windows 保留名及尾随点/空格都做确定性清洗。实际 `move` 必须先验证源路径和目标路径仍位于捕获根目录内并拒绝符号链接穿越；同卷优先原子 rename，跨卷使用同目录 task-owned partial、SHA-256 双向校验、原子提交目标后才删除源。多文件 operation 按 Torrent 相对路径、文件 ID 稳定执行；部分文件已完成后发生冲突只释放 job 租约，不提前写业务 completion，重试跳过 completed operation 并继续 pending operation。目标已存在仅在容量与内容一致时清理源，否则保留双方并报告冲突。
 
-Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可变逐文件计划，逐项完成安全 move，再以原子临时文件写入系列根 `tvshow.nfo` 以及与上游兼容的系列、季度、Episode 目录 JSON；侧车同步写入 schema v27 的 SQLite 目录索引。只有这些步骤全部成功，才在 SQLite 同事务写 completion record 并完成 episode claim。随后任务进入独立 `organizing_cleanup`，另一次租约只调用 qB `deleteFiles=false`，成功后才成为 `organized`。下载器离线或进程崩溃不会重做已完成文件，也不会删除媒体库目标。
+Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可变逐文件计划，逐项完成安全 move，再以原子临时文件写入系列根 `tvshow.nfo` 以及与上游兼容的系列、季度、Episode 目录 JSON；侧车同步写入 schema v27 的 SQLite 目录索引。只有这些步骤全部成功，才在 SQLite 同事务写 completion record 并完成 episode claim。随后任务进入独立 `organizing_cleanup`，另一次租约只调用 qB `deleteFiles=false`，成功后才成为 `organized`。这是对上游 `clientnotifier` 完成 callback 调用 `DeleteFile:true` 的明确安全偏差：源/媒体文件只能由受根目录约束的主程序操作，不能委托 qB 递归删除。下载器离线时 cleanup 释放为持久化重试且实例 circuit 打开；健康探测成功关闭 circuit 后只重试 qB 任务清理，不重做已完成文件，也不删除媒体库目标。
 
 下载前门禁固定为：安全暂存并解析 Torrent → qB paused add/同 hash 接管并再次显式暂停 → `download_preparing` 下完成 Series/Season/Episode 与逐集 claim → 再次暂停并精确核对 qB 文件 index/path/size → duplicate/ignored 设 priority 0、episode/other 设 priority 1 → 仅存在 wanted 文件时恢复并进入 `download_queued`。若全部文件均被逐集去重，则保持不恢复、持久化 `download_skipped_duplicate`，并仅允许 `deleteFiles=false` 清除下载器任务；核对失败按持久化租约重试，不能启动下载。
 
