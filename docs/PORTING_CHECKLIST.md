@@ -92,7 +92,7 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 已验证 | 非 upgrade 兼容响应、直接/旧 hash 鉴权、旧帧 envelope、逐连接 pause/resume/terminate、1000 条缓存、异常命令、敏感字段脱敏、WebUI 和 win-x64 NativeAOT upgrade/control smoke 已通过 |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配、TMDB 权威季度 CRUD 及四类删除 API 已实现；OpenAPI 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配、TMDB 权威季度 CRUD 及四类删除 API 已实现；官方 .NET 10 AOT-safe OpenAPI 覆盖全部当前路由和 12 个上游 operation，确定性与不泄密测试及原生进程 smoke 已通过；删除 executor 等完整管理闭环仍待实现 |
 | `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；运行配置私密覆盖编辑/恢复（含 P4→P1 季度失败链与独立 AI 分支）、手动 Torrent/RSS 安全提交、下载/元数据面板、待补全 TMDB 人工映射、Mikan 人工作品规则 revision-safe CRUD/影响/显式重匹配、SourceProfile 版本化 CRUD、下载器编辑器、TMDB 作品库 CRUD/人工 offset/关联任务/季度验证时间线及实时日志筛选/pause/reconnect 均使用安全 DOM API；完整管理 UI 与发布镜像总体验收待实现 |
 
 ## 构建、发布与平台

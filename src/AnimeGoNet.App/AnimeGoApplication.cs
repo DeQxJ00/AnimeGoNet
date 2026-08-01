@@ -448,6 +448,7 @@ public static class AnimeGoApplication
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
+        builder.Services.AddAnimeGoOpenApi();
 
         var app = builder.Build();
         app.UseWebSockets(new WebSocketOptions
@@ -472,6 +473,7 @@ public static class AnimeGoApplication
 
         ApiEndpoints.Map(app);
         WebSocketLogEndpoint.Map(app);
+        app.MapOpenApi().ExcludeFromDescription();
         app.MapFallbackToFile("index.html");
         return app;
     }

@@ -36,6 +36,7 @@ obj/
 .vs/
 TestResults/
 artifacts/
+.artifacts/
 publish/
 
 # Local qBittorrent integration sandbox and secrets

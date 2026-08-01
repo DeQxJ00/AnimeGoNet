@@ -200,8 +200,8 @@
 - [x] 将旧插件名 `filter/mikan_tool.py` 及等价别名映射到 SQLite 过滤规则；Base64 JSON 可无损同构往返、并发 legacy 上传完整提交，不查找、不创建且不执行 Python 文件。
 - [x] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停/排序、关键词 JSON 数组编辑、服务端样例预览及逐档决策详情、旧 JSON 导入导出、revision 冲突和快照回滚均已接入；页面明确警告多 F0“最后结果生效”、空关键词匹配全部标题和区分大小写语义。
 - [x] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、SourceProfile 独立开关、expected-revision 保存、真实服务端批次 preview（名单结果、winner、实际执行组），以及 schema v25 历史快照选择与 revision 安全回滚；首版使用可键盘操作的上下移动，不依赖拖拽。
-- [ ] 移植静态页并生成 OpenAPI。
-- [>] 通过 API/WS 契约差分测试：上游 OpenAPI 12 个 operation 的 method/path 表面已逐项自动对比，legacy config/rss/plugin/manager/Bolt、access-key 与 WebSocket 控制帧已有 Kestrel 契约；全响应字段 golden 与原油猴浏览器 E2E 仍待完成。
+- [x] 移植静态页并生成 OpenAPI：静态 TypeScript/HTML/CSS 页面由 Kestrel/AOT smoke 覆盖；官方 .NET 10 AOT-safe 生成器在 `/openapi/v1.json` 输出完整当前 Minimal API 契约，具有确定性 operationId/标签、现代及旧 Access-Key 安全说明、无运行端口/路径/密钥泄露，并由原生进程 smoke 验证。
+- [>] 通过 API/WS 契约差分测试：生成文档与所有当前非排除 HTTP endpoint 的 method/path 精确相等，上游 OpenAPI 12 个 operation 也逐项自动对比；legacy config/rss/plugin/manager/Bolt、access-key 与 WebSocket 控制帧已有 Kestrel 契约，全响应字段 golden 与原油猴浏览器 E2E 仍待完成。
 - [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。
 - [x] 实现仪表盘和下载器/任务状态：下载状态卡片、进度、连接且非 stale 的跨实例速度汇总、活动/暂停/失败/等待整理/完成/离线指标、qB 状态与 AnimeGoNet 业务阶段独立筛选，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、策略尝试时间线、文件归类计数、准备/整理失败详情和显式重试入口均已接入。
 - [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；下载 API/WebUI 另显示持久化做种目标、状态、累计时间、百分比和完成时间。解析/移动/重命名/字幕/NFO的更细粒度进度仍待串联。

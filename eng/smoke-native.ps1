@@ -159,6 +159,11 @@ try {
         TimeoutSec = 5
     }
     $ingest = Invoke-RestMethod @ingestParameters
+    $openApiResponse = Invoke-WebRequest `
+        -UseBasicParsing `
+        -Uri "$baseUrl/openapi/v1.json" `
+        -TimeoutSec 10
+    $openApi = $openApiResponse.Content | ConvertFrom-Json
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
     $appScript = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/app.js" -TimeoutSec 5
     if ($status.database_schema_version -ne $ExpectedSchemaVersion) {
@@ -177,6 +182,16 @@ try {
 
     if (-not $status.native_aot) {
         throw 'Published process does not report NativeAOT.'
+    }
+
+    if ($openApiResponse.StatusCode -ne 200 `
+        -or $openApi.info.title -ne 'AnimeGoNet API' `
+        -or $null -eq $openApi.paths.'/api/v1/status' `
+        -or $null -eq $openApi.paths.'/api/download/manager' `
+        -or $openApiResponse.Content.Contains($nativeCredential) `
+        -or $openApiResponse.Content.Contains($smokeRoot) `
+        -or $openApiResponse.Content.Contains($baseUrl)) {
+        throw 'NativeAOT deterministic OpenAPI document smoke failed.'
     }
 
     $externalPackages = @($status.external_plugins.packages)
