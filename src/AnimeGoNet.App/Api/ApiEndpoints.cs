@@ -123,6 +123,8 @@ public static class ApiEndpoints
         app.MapPost("/api/download/manager", LegacyDownloadManager);
         app.MapPost("/api/plugin/config", LegacyPluginConfigPost);
         app.MapGet("/api/plugin/config", LegacyPluginConfigGet);
+        app.MapGet("/api/config", LegacyConfigurationGet);
+        app.MapPut("/api/config", LegacyConfigurationPut);
         app.MapGet("/api/bolt", LegacyBoltList);
         app.MapGet("/api/bolt/value", LegacyBoltGet);
         app.MapDelete("/api/bolt/value", LegacyBoltDelete);
@@ -143,6 +145,172 @@ public static class ApiEndpoints
             System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(accessKey)));
         return TypedResults.Ok(new LegacyApiResponse<string>(200, "Access-Key", hash));
     }
+
+    private static async Task<Ok<LegacyApiResponse<JsonElement>>> LegacyConfigurationGet(
+        [FromQuery] string? key,
+        LegacyDeploymentConfigurationFile configuration,
+        CancellationToken cancellationToken)
+    {
+        var normalized = string.IsNullOrWhiteSpace(key)
+            ? "raw"
+            : key.Trim().ToLowerInvariant();
+        try
+        {
+            var data = normalized switch
+            {
+                "all" => await configuration.ReadJsonAsync(
+                    useDefaults: false,
+                    cancellationToken).ConfigureAwait(false),
+                "default" => await configuration.ReadJsonAsync(
+                    useDefaults: true,
+                    cancellationToken).ConfigureAwait(false),
+                "comment" => LegacyConfigurationComments,
+                "raw" => JsonSerializer.SerializeToElement(
+                    Convert.ToBase64String(await configuration.ReadRawAsync(
+                        useDefaults: false,
+                        cancellationToken).ConfigureAwait(false)),
+                    ApiJsonContext.Default.String),
+                _ => LegacyJsonNull,
+            };
+            if (normalized is not ("all" or "default" or "comment" or "raw"))
+            {
+                return LegacyConfigurationFailure(
+                    $"暂不支持 {normalized}，目前仅支持 'all', 'default', 'comment', 'raw'");
+            }
+
+            var message = normalized switch
+            {
+                "all" => "配置项值",
+                "default" => "配置项默认值",
+                "comment" => "配置项说明",
+                _ => "配置文件",
+            };
+            return TypedResults.Ok(new LegacyApiResponse<JsonElement>(200, message, data));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is DeploymentYamlException
+                or IOException
+                or UnauthorizedAccessException)
+        {
+            return LegacyConfigurationFailure("打开配置文件失败");
+        }
+    }
+
+    private static async Task<Ok<LegacyApiResponse<JsonElement>>> LegacyConfigurationPut(
+        HttpContext context,
+        [FromQuery] string? key,
+        [FromQuery] bool? backup,
+        LegacyDeploymentConfigurationFile configuration,
+        CancellationToken cancellationToken)
+    {
+        LegacyConfigurationPutRequest? request;
+        try
+        {
+            request = await JsonSerializer.DeserializeAsync(
+                context.Request.Body,
+                ApiJsonContext.Default.LegacyConfigurationPutRequest,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException)
+        {
+            return LegacyConfigurationFailure("参数错误");
+        }
+        if (request is null)
+        {
+            return LegacyConfigurationFailure("参数错误");
+        }
+
+        var normalized = string.IsNullOrWhiteSpace(key)
+            ? string.IsNullOrWhiteSpace(request.Key) ? "raw" : request.Key.Trim().ToLowerInvariant()
+            : key.Trim().ToLowerInvariant();
+        var createBackup = backup ?? request.Backup ?? true;
+        try
+        {
+            if (normalized == "raw")
+            {
+                if (request.ConfigRaw is null)
+                {
+                    return LegacyConfigurationFailure("参数错误，未传入对应数据");
+                }
+                byte[] decoded;
+                try
+                {
+                    decoded = Convert.FromBase64String(request.ConfigRaw);
+                }
+                catch (FormatException)
+                {
+                    return LegacyConfigurationFailure("参数格式错误");
+                }
+                await configuration.WriteRawAsync(
+                    decoded,
+                    createBackup,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else if (normalized == "all")
+            {
+                if (request.Config.ValueKind != JsonValueKind.Object)
+                {
+                    return LegacyConfigurationFailure("参数错误，未传入对应数据");
+                }
+                await configuration.WriteJsonAsync(
+                    request.Config,
+                    createBackup,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                return LegacyConfigurationFailure(
+                    $"暂不支持 {normalized}，目前仅支持 'all', 'raw'");
+            }
+
+            return TypedResults.Ok(new LegacyApiResponse<JsonElement>(
+                200,
+                "更新成功，需要重启AnimeGo以应用配置",
+                LegacyJsonNull));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is DeploymentYamlException
+                or DecoderFallbackException
+                or IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException
+                or ArgumentException)
+        {
+            return LegacyConfigurationFailure("参数格式错误");
+        }
+    }
+
+    private static Ok<LegacyApiResponse<JsonElement>> LegacyConfigurationFailure(string message) =>
+        TypedResults.Ok(new LegacyApiResponse<JsonElement>(300, message, LegacyJsonNull));
+
+    private static readonly JsonElement LegacyJsonNull =
+        JsonDocument.Parse("null").RootElement.Clone();
+
+    private static readonly JsonElement LegacyConfigurationComments = JsonDocument.Parse(
+        """
+        {
+          "version": "配置文件版本；当前为 1.7.1",
+          "paths": {
+            "data_path": "AnimeGoNet 私有数据目录",
+            "download_path": "下载器与主程序共享的下载目录",
+            "save_path": "整理后的媒体库目录"
+          },
+          "web": { "access_key": "Web/API 访问密钥" },
+          "downloaders": "按稳定 ID 配置 qBittorrent 实例",
+          "sources": "按输入源绑定下载器、规则与文件策略",
+          "metadata": "TMDB、Bangumi、AI 与季度失败链",
+          "torrent_fetch": "Torrent URL 安全获取边界",
+          "data_update": "Bangumi Archive 数据更新策略"
+        }
+        """).RootElement.Clone();
 
     private static async Task<Ok<DirectoryDatabaseStatusResponse>> DirectoryDatabaseStatus(
         DirectoryDatabaseIndexStore store,

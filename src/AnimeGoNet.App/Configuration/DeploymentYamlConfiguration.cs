@@ -443,7 +443,7 @@ internal static class DeploymentYamlConfiguration
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string> WriteBackupAsync(
+    internal static async Task<string> WriteBackupAsync(
         string filePath,
         string version,
         byte[] originalBytes,
@@ -494,7 +494,7 @@ internal static class DeploymentYamlConfiguration
             "Legacy deployment YAML backup name space was exhausted.");
     }
 
-    private static async Task ReplaceAtomicallyAsync(
+    internal static async Task ReplaceAtomicallyAsync(
         string filePath,
         string content,
         CancellationToken cancellationToken)
@@ -755,7 +755,7 @@ internal static class DeploymentYamlConfiguration
         };
     }
 
-    private static string RenderDefault(AnimeGoOptions options)
+    internal static string RenderDefault(AnimeGoOptions options)
     {
         var bt = options.Downloaders["bt"];
         var pt = options.Downloaders["pt"];

@@ -253,6 +253,14 @@ public static class AnimeGoApplication
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new DeploymentConfigurationOptions(deploymentOptions));
+        builder.Services.AddSingleton(new LegacyDeploymentConfigurationFile(
+            deploymentYaml?.FilePath
+                ?? Path.Combine(options.Paths.DataPath, "animego.yaml"),
+            deploymentOptions,
+            runningInContainer.Value
+                ? AnimeGoDefaults.CreateDocker()
+                : AnimeGoDefaults.CreateNative(AppContext.BaseDirectory),
+            runningInContainer.Value));
         builder.Services.AddSingleton(configurationLocks);
         builder.Services.AddSingleton(downloaderLocks);
         builder.Services.AddSingleton(dataUpdateRuntime);
@@ -443,7 +451,7 @@ public static class AnimeGoApplication
         return app;
     }
 
-    private static AnimeGoOptions LoadOptions(ConfigurationManager configuration, bool inContainer)
+    internal static AnimeGoOptions LoadOptions(ConfigurationManager configuration, bool inContainer)
     {
         var defaults = inContainer
             ? AnimeGoDefaults.CreateDocker()

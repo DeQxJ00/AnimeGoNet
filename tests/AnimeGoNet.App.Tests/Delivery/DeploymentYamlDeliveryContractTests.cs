@@ -32,6 +32,9 @@ public sealed class DeploymentYamlDeliveryContractTests
         Assert.Contains("animego-1.6.1-*.yaml", smoke, StringComparison.Ordinal);
         Assert.Contains("backup does not exactly match", smoke, StringComparison.Ordinal);
         Assert.Contains("incorrectly migrated as a static tag", smoke, StringComparison.Ordinal);
+        Assert.Contains("$baseUrl/api/config?key=all", smoke, StringComparison.Ordinal);
+        Assert.Contains("$baseUrl/api/config?key=raw", smoke, StringComparison.Ordinal);
+        Assert.Contains("NativeAOT legacy configuration API smoke failed", smoke, StringComparison.Ordinal);
         Assert.DoesNotContain("TestSpace", workflow + smoke, StringComparison.OrdinalIgnoreCase);
     }
 

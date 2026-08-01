@@ -75,7 +75,7 @@ POST   /api/download/manager
 GET    /websocket/log
 ```
 
-注意：上游实际是 11 个 HTTP 路由（其中 `/websocket/log` 进行 WebSocket upgrade），常规 REST API 为 10 个。计划中所有“10 个 HTTP API + 1 个 WebSocket”均按此口径。
+注意：早期计划写作“10 个 HTTP API + 1 个 WebSocket”，但权威上游 OpenAPI 实际列出 11 个 REST operation + 1 个 WebSocket operation（合计 12 个 operation，分布在 9 个 path template）。移植验收以 OpenAPI method+path 为准，不按旧文案少算 `/sha256` 或同一路径上的不同 method。
 
 ## AnimeGoHelper 兼容场景
 

@@ -30,6 +30,12 @@ public sealed record LegacyPluginConfigResponse(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("data")] string Data);
 
+public sealed record LegacyConfigurationPutRequest(
+    [property: JsonPropertyName("key")] string? Key,
+    [property: JsonPropertyName("backup")] bool? Backup,
+    [property: JsonPropertyName("config")] JsonElement Config,
+    [property: JsonPropertyName("config_raw")] string? ConfigRaw);
+
 public sealed record LegacyBoltListResponse(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("bucket")]

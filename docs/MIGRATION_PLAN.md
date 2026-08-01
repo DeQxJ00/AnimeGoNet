@@ -10,7 +10,7 @@
 - 内置订阅、解析、过滤、重命名和定时任务无需外部 Python 即可运行。
 - 项目下载器只支持 qBittorrent，但支持多个命名实例并通过真实容器集成测试；Transmission 明确排除，不在后续路线图中。
 - RSS → 解析 → 去重 → 下载 → 做种 → 重命名/移动 → NFO 的端到端链路通过。
-- 10 个 HTTP API 和 WebSocket 日志端点通过契约测试。
+- 上游 OpenAPI 的 11 个 REST operation 和 1 个 WebSocket operation 全部通过契约测试；旧文档中的“10 个 HTTP API”仅为早期误计数。
 - `win-x64` 与 `linux-x64` 的 NativeAOT 产物发布成功、无未批准的 trim/AOT 警告，并用发布后的原生二进制重跑 smoke/E2E。
 - Docker 镜像用 NativeAOT 二进制运行，数据卷路径与原项目兼容。
 - 新增 Web 管理页面，能完成日常查看、配置和操作，不只是 Swagger/占位页。

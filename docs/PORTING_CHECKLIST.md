@@ -87,7 +87,7 @@
 | `/api/v1/rss/ingest` | 现代 Mikan RSS 手动导入 | 扩展 | 已验证 | 明确 SourceProfile、adapter 预检后再抓取、规则 revision、winner 原子 staging、错误脱敏和带 passkey URL 不回显 Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
 | Mikan/U2/TTG source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出、真实统一导入 normalizer tests |
-| `/api/config` | typed deployment config | 保留+扩展 | 进行中 | 脱敏生效值 GET、safe editable desired projection、无副作用字段 diff 预览、版本化 PUT/DELETE、Web 两步确认/恢复、TMDB 密钥三态、TMDB/Bangumi 独立 API 地址/代理/超时、application.private.json 原子写入/0600、不可变旧 revision 备份、重启/热更新效果与鉴权 tests 已通过；部署 YAML 保持只读，完整旧配置来源 precedence 待实现 |
+| `/api/config` | legacy deployment config + typed private overrides | 保留+扩展 | 已验证 | legacy `all/default/comment/raw` GET 与 `all/raw` PUT 保持 HTTP 200 + code 200/300、query 覆盖 body、Access-Key 和“重启后应用”；JSON/Base64/YAML/版本/强类型值先在同目录隔离文件验证，通过后才以 CreateNew 保存可选原字节备份并原子替换。现代 `/api/v1/config` 继续只返回脱敏生效值/safe editable desired projection，并通过 preview、revision PUT/DELETE、私有 0600 覆盖和 Web 两步确认管理；WebUI 不调用会回传 secret 的 legacy raw/all 接口 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 已验证 | 非 upgrade 兼容响应、直接/旧 hash 鉴权、旧帧 envelope、逐连接 pause/resume/terminate、1000 条缓存、异常命令、敏感字段脱敏、WebUI 和 win-x64 NativeAOT upgrade/control smoke 已通过 |

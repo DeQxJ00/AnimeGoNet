@@ -95,6 +95,19 @@ try {
         Invoke-RestMethod -Uri "$baseUrl/api/v1/sources" -TimeoutSec 5
     $sources = @($sourceResponse.items)
     $cacheBuckets = Invoke-RestMethod -Uri "$baseUrl/api/bolt?type=bucket" -TimeoutSec 5
+    $legacyConfig = Invoke-RestMethod -Uri "$baseUrl/api/config?key=all" -TimeoutSec 5
+    $legacyRaw = Invoke-RestMethod -Uri "$baseUrl/api/config?key=raw" -TimeoutSec 5
+    $legacyPutPayload = @{
+        key = 'raw'
+        backup = $false
+        config_raw = $legacyRaw.data
+    } | ConvertTo-Json -Compress
+    $legacyPut = Invoke-RestMethod `
+        -Uri "$baseUrl/api/config" `
+        -Method Put `
+        -ContentType 'application/json' `
+        -Body $legacyPutPayload `
+        -TimeoutSec 5
     $ingestPayload = '{"source":"mikan","data":[{"torrent":"https://tracker.invalid/passkey/smoke.torrent","info":{"title":"NativeAOT smoke","mikanid":3951,"bgmid":547888}}]}'
     $ingestParameters = @{
         Uri = "$baseUrl/api/v1/ingest"
@@ -111,6 +124,12 @@ try {
 
     if ($cacheBuckets.code -ne 200 -or $cacheBuckets.data.type -ne 'bucket') {
         throw 'NativeAOT SQLite cache compatibility API smoke failed.'
+    }
+
+    if ($legacyConfig.code -ne 200 -or $legacyConfig.data.version -ne '1.7.1' `
+        -or $legacyRaw.code -ne 200 -or [string]::IsNullOrWhiteSpace($legacyRaw.data) `
+        -or $legacyPut.code -ne 200) {
+        throw 'NativeAOT legacy configuration API smoke failed.'
     }
 
     if (-not $status.native_aot) {

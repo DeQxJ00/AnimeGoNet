@@ -26,7 +26,7 @@
 - 文件流程：hard link、link+delete、move、wait_move、重命名、`tvshow.nfo`。
 - 持久化：Bolt 缓存、目录 JSON 数据库、缓存 TTL、Bangumi Archive 缓存。
 - 调度：六字段（含秒）Cron、启动即运行、取消与优雅退出。
-- Web：10 个 HTTP API、1 个 WebSocket 日志端点、静态页、Swagger、access-key 校验。
+- Web：权威 OpenAPI 列出 11 个 REST operation、1 个 WebSocket operation（早期计划误记为“10 个 HTTP API”）、静态页、Swagger、access-key 校验。
 - 发布：Windows/Linux/macOS 多架构二进制、Docker、嵌入资源。
 
 ## 上游测试基线

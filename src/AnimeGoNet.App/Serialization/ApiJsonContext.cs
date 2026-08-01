@@ -9,10 +9,13 @@ namespace AnimeGoNet.App.Serialization;
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     GenerationMode = JsonSourceGenerationMode.Default)]
 [JsonSerializable(typeof(LegacyApiResponse<PingData>))]
+[JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(LegacyApiResponse<string>))]
 [JsonSerializable(typeof(LegacyPluginConfigUploadRequest))]
 [JsonSerializable(typeof(LegacyApiResponse<LegacyPluginResponse?>))]
 [JsonSerializable(typeof(LegacyApiResponse<LegacyPluginConfigResponse?>))]
+[JsonSerializable(typeof(LegacyConfigurationPutRequest))]
+[JsonSerializable(typeof(LegacyApiResponse<System.Text.Json.JsonElement>))]
 [JsonSerializable(typeof(LegacyApiResponse<LegacyBoltListResponse?>))]
 [JsonSerializable(typeof(LegacyApiResponse<LegacyBoltGetResponse?>))]
 [JsonSerializable(typeof(LegacyApiResponse<LegacyBoltDeleteResponse?>))]
