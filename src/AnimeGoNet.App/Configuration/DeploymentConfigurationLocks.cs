@@ -5,38 +5,61 @@ namespace AnimeGoNet.App.Configuration;
 
 public sealed record DeploymentConfigurationLock(
     string Field,
-    IReadOnlyList<string> EnvironmentVariables);
+    IReadOnlyList<string> EnvironmentVariables,
+    IReadOnlyList<string> CommandLineArguments)
+{
+    public string Source =>
+        EnvironmentVariables.Count > 0 && CommandLineArguments.Count > 0
+            ? "environment_and_command_line"
+            : EnvironmentVariables.Count > 0
+                ? "environment"
+                : "command_line";
+
+    public IReadOnlyList<string> ControllingKeys =>
+        EnvironmentVariables
+            .Concat(CommandLineArguments)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+}
 
 public sealed class DeploymentConfigurationLocks
 {
     private static readonly LockDefinition[] Definitions =
     [
-        new("tmdb_base_url", ["tmdb_base_url"]),
-        new("tmdb_proxy_url", ["tmdb_proxy_url", "ANIMEGO_PROXY_URL"]),
-        new("tmdb_language", ["tmdb_language"]),
-        new("tmdb_http_timeout_seconds", ["tmdb_timeout_second"]),
-        new("tmdb_retry_count", ["tmdb_retry_count"]),
-        new("tmdb_retry_delay_seconds", ["tmdb_retry_wait_second"]),
-        new("tmdb_api_key", ["tmdb_api_key", "ANIMEGO_THEMOVIEDB_KEY"]),
-        new("tmdb_read_access_token", ["tmdb_read_access_token"]),
-        new("bangumi_base_url", ["bangumi_base_url"]),
-        new("bangumi_proxy_url", ["bangumi_proxy_url", "ANIMEGO_PROXY_URL"]),
-        new("bangumi_http_timeout_seconds", ["bangumi_timeout_second"]),
-        new("bangumi_retry_count", ["bangumi_retry_count"]),
-        new(
-            "bangumi_retry_delay_seconds",
-            ["bangumi_retry_wait_second"]),
+        new("tmdb_base_url", ["tmdb_base_url", "metadata:tmdb:base_url"]),
+        new("tmdb_proxy_url", ["tmdb_proxy_url", "ANIMEGO_PROXY_URL", "metadata:tmdb:proxy_url"]),
+        new("tmdb_language", ["tmdb_language", "metadata:tmdb:language"]),
+        new("tmdb_http_timeout_seconds", ["tmdb_timeout_second", "metadata:tmdb:timeout_seconds"]),
+        new("tmdb_retry_count", ["tmdb_retry_count", "metadata:tmdb:retry_count"]),
+        new("tmdb_retry_delay_seconds", ["tmdb_retry_wait_second", "metadata:tmdb:retry_wait_seconds"]),
+        new("tmdb_api_key", ["tmdb_api_key", "ANIMEGO_THEMOVIEDB_KEY", "metadata:tmdb:api_key"]),
+        new("tmdb_read_access_token", ["tmdb_read_access_token", "metadata:tmdb:read_access_token"]),
+        new("bangumi_base_url", ["bangumi_base_url", "metadata:bangumi:base_url"]),
+        new("bangumi_proxy_url", ["bangumi_proxy_url", "ANIMEGO_PROXY_URL", "metadata:bangumi:proxy_url"]),
+        new("bangumi_http_timeout_seconds", ["bangumi_timeout_second", "metadata:bangumi:timeout_seconds"]),
+        new("bangumi_retry_count", ["bangumi_retry_count", "metadata:bangumi:retry_count"]),
+        new("bangumi_retry_delay_seconds", ["bangumi_retry_wait_second", "metadata:bangumi:retry_wait_seconds"]),
+        new("season_failure_skip", ["tmdb_fail_skip", "metadata:season_failure:skip"]),
+        new("season_failure_backtrace", ["tmdb_fail_backtrace", "metadata:season_failure:backtrace"]),
+        new("season_failure_use_title_season", ["tmdb_fail_use_title_season", "metadata:season_failure:use_title_season"]),
+        new("season_failure_use_first_season", ["tmdb_fail_use_first_season", "metadata:season_failure:use_first_season"]),
         new(
             "ai_use_metadata_match",
-            ["ai_use_metadata_match", "ai_use_season_match", "ai_use_episode_match"]),
-        new("ai_http_timeout_seconds", ["ai_timeout_second"]),
-        new("data_update_enabled", ["data_update_enabled"]),
-        new("data_update_cron", ["data_update_cron"]),
-        new("data_update_manifest_url", ["data_update_manifest_url"]),
-        new("data_update_auto_download", ["data_update_auto_download"]),
-        new("data_update_auto_import", ["data_update_auto_import"]),
-        new("data_update_keep_versions", ["data_update_keep_versions"]),
-        new("data_update_http_timeout_seconds", ["data_update_timeout_second"]),
+            ["ai_use_metadata_match", "ai_use_season_match", "ai_use_episode_match", "metadata:ai:use_metadata_match"]),
+        new("ai_http_timeout_seconds", ["ai_timeout_second", "metadata:ai:timeout_seconds"]),
+        new("tmdb_failure_use_bangumi", ["tmdb_fail_use_bangumi", "metadata:tmdb_failure_use_bangumi"]),
+        new("mikan_trusted_offset_cache_enabled", ["mikan_trusted_offset_cache_enabled", "metadata:mikan_trusted_offset_cache_enabled"]),
+        new("torrent_http_timeout_seconds", ["torrent_http_timeout_seconds", "torrent_fetch:timeout_seconds"]),
+        new("torrent_max_response_bytes", ["torrent_max_response_bytes", "torrent_fetch:max_response_bytes"]),
+        new("torrent_max_redirects", ["torrent_max_redirects", "torrent_fetch:max_redirects"]),
+        new("torrent_staging_ttl_seconds", ["torrent_staging_ttl_seconds", "torrent_fetch:staging_ttl_seconds"]),
+        new("data_update_enabled", ["data_update_enabled", "data_update:enabled"]),
+        new("data_update_cron", ["data_update_cron", "data_update:cron"]),
+        new("data_update_manifest_url", ["data_update_manifest_url", "data_update:manifest_url"]),
+        new("data_update_auto_download", ["data_update_auto_download", "data_update:auto_download"]),
+        new("data_update_auto_import", ["data_update_auto_import", "data_update:auto_import"]),
+        new("data_update_keep_versions", ["data_update_keep_versions", "data_update:keep_versions"]),
+        new("data_update_http_timeout_seconds", ["data_update_timeout_second", "data_update:timeout_seconds"]),
     ];
 
     private readonly HashSet<string> _fields;
@@ -51,7 +74,11 @@ public sealed class DeploymentConfigurationLocks
 
     public static DeploymentConfigurationLocks Empty { get; } = new([]);
 
-    public static DeploymentConfigurationLocks FromCurrentProcess()
+    public static DeploymentConfigurationLocks FromCurrentProcess() =>
+        FromCurrentProcess([]);
+
+    public static DeploymentConfigurationLocks FromCurrentProcess(
+        IReadOnlyCollection<string> commandLineArguments)
     {
         var names = new List<string>();
         foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
@@ -62,31 +89,78 @@ public sealed class DeploymentConfigurationLocks
             }
         }
 
-        return FromVariableNames(names);
+        return FromSources(names, commandLineArguments);
     }
 
     public static DeploymentConfigurationLocks FromVariableNames(
-        IEnumerable<string> variableNames)
+        IEnumerable<string> variableNames) =>
+        FromSources(variableNames, []);
+
+    public static DeploymentConfigurationLocks FromSources(
+        IEnumerable<string> variableNames,
+        IEnumerable<string> commandLineArguments)
     {
         ArgumentNullException.ThrowIfNull(variableNames);
-        var present = variableNames
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim())
-            .GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.First(),
-                StringComparer.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(commandLineArguments);
+        var values = Definitions.ToDictionary(
+            definition => definition.Field,
+            _ => new MutableLock(),
+            StringComparer.Ordinal);
+
+        foreach (var rawName in variableNames)
+        {
+            Add(rawName, rawName?.Trim(), isEnvironment: true);
+        }
+
+        foreach (var rawArgument in commandLineArguments)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgument)
+                || !rawArgument.StartsWith("--", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var separator = rawArgument.IndexOf('=');
+            var rawKey = separator >= 0
+                ? rawArgument[2..separator]
+                : rawArgument[2..];
+            Add(rawKey, $"--{rawKey}", isEnvironment: false);
+        }
+
         var locks = Definitions
-            .Select(definition => new DeploymentConfigurationLock(
-                definition.Field,
-                definition.EnvironmentVariables
-                    .Where(present.ContainsKey)
-                    .Select(name => present[name])
-                    .ToArray()))
-            .Where(item => item.EnvironmentVariables.Count > 0)
+            .Select(definition => (Definition: definition, Value: values[definition.Field]))
+            .Where(pair => pair.Value.EnvironmentVariables.Count > 0
+                || pair.Value.CommandLineArguments.Count > 0)
+            .Select(pair => new DeploymentConfigurationLock(
+                pair.Definition.Field,
+                pair.Value.EnvironmentVariables.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                pair.Value.CommandLineArguments.Order(StringComparer.OrdinalIgnoreCase).ToArray()))
             .ToArray();
         return locks.Length == 0 ? Empty : new DeploymentConfigurationLocks(locks);
+
+        void Add(string? rawKey, string? controllingKey, bool isEnvironment)
+        {
+            if (string.IsNullOrWhiteSpace(rawKey)
+                || string.IsNullOrWhiteSpace(controllingKey))
+            {
+                return;
+            }
+
+            var normalized = rawKey.Trim().Replace("__", ":", StringComparison.Ordinal);
+            foreach (var definition in Definitions.Where(definition =>
+                definition.ConfigurationKeys.Contains(normalized, StringComparer.OrdinalIgnoreCase)))
+            {
+                var target = values[definition.Field];
+                if (isEnvironment)
+                {
+                    target.EnvironmentVariables.Add(controllingKey);
+                }
+                else
+                {
+                    target.CommandLineArguments.Add(controllingKey);
+                }
+            }
+        }
     }
 
     public bool IsLocked(string field) => _fields.Contains(field);
@@ -181,6 +255,22 @@ public sealed class DeploymentConfigurationLocks
                     "bangumi_retry_delay_seconds",
                     current.BangumiRetryDelaySeconds,
                     candidate.BangumiRetryDelaySeconds),
+                SeasonFailureSkip = Preserve(
+                    "season_failure_skip",
+                    current.SeasonFailureSkip,
+                    candidate.SeasonFailureSkip),
+                SeasonFailureBacktrace = Preserve(
+                    "season_failure_backtrace",
+                    current.SeasonFailureBacktrace,
+                    candidate.SeasonFailureBacktrace),
+                SeasonFailureUseTitleSeason = Preserve(
+                    "season_failure_use_title_season",
+                    current.SeasonFailureUseTitleSeason,
+                    candidate.SeasonFailureUseTitleSeason),
+                SeasonFailureUseFirstSeason = Preserve(
+                    "season_failure_use_first_season",
+                    current.SeasonFailureUseFirstSeason,
+                    candidate.SeasonFailureUseFirstSeason),
                 AiUseSeasonMatch = Preserve(
                     "ai_use_metadata_match",
                     current.AiUseSeasonMatch,
@@ -197,6 +287,30 @@ public sealed class DeploymentConfigurationLocks
                     "ai_http_timeout_seconds",
                     current.AiHttpTimeoutSeconds,
                     candidate.AiHttpTimeoutSeconds),
+                TmdbFailureUseBangumi = Preserve(
+                    "tmdb_failure_use_bangumi",
+                    current.TmdbFailureUseBangumi,
+                    candidate.TmdbFailureUseBangumi),
+                MikanTrustedOffsetCacheEnabled = Preserve(
+                    "mikan_trusted_offset_cache_enabled",
+                    current.MikanTrustedOffsetCacheEnabled,
+                    candidate.MikanTrustedOffsetCacheEnabled),
+                TorrentHttpTimeoutSeconds = Preserve(
+                    "torrent_http_timeout_seconds",
+                    current.TorrentHttpTimeoutSeconds,
+                    candidate.TorrentHttpTimeoutSeconds),
+                TorrentMaxResponseBytes = Preserve(
+                    "torrent_max_response_bytes",
+                    current.TorrentMaxResponseBytes,
+                    candidate.TorrentMaxResponseBytes),
+                TorrentMaxRedirects = Preserve(
+                    "torrent_max_redirects",
+                    current.TorrentMaxRedirects,
+                    candidate.TorrentMaxRedirects),
+                TorrentStagingTtlSeconds = Preserve(
+                    "torrent_staging_ttl_seconds",
+                    current.TorrentStagingTtlSeconds,
+                    candidate.TorrentStagingTtlSeconds),
                 DataUpdateEnabled = Preserve(
                     "data_update_enabled",
                     current.DataUpdateEnabled,
@@ -321,6 +435,36 @@ public sealed class DeploymentConfigurationLocks
             };
         }
 
+        var seasonFailure = candidate.Metadata.SeasonFailure;
+        if (IsLocked("season_failure_skip"))
+        {
+            seasonFailure = seasonFailure with
+            {
+                Skip = deployment.Metadata.SeasonFailure.Skip,
+            };
+        }
+        if (IsLocked("season_failure_backtrace"))
+        {
+            seasonFailure = seasonFailure with
+            {
+                Backtrace = deployment.Metadata.SeasonFailure.Backtrace,
+            };
+        }
+        if (IsLocked("season_failure_use_title_season"))
+        {
+            seasonFailure = seasonFailure with
+            {
+                UseTitleSeason = deployment.Metadata.SeasonFailure.UseTitleSeason,
+            };
+        }
+        if (IsLocked("season_failure_use_first_season"))
+        {
+            seasonFailure = seasonFailure with
+            {
+                UseFirstSeason = deployment.Metadata.SeasonFailure.UseFirstSeason,
+            };
+        }
+
         var ai = candidate.Metadata.Ai;
         if (IsLocked("ai_use_metadata_match"))
         {
@@ -332,6 +476,44 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("ai_http_timeout_seconds"))
         {
             ai = ai with { HttpTimeout = deployment.Metadata.Ai.HttpTimeout };
+        }
+
+        var tmdbFailureUseBangumi = IsLocked("tmdb_failure_use_bangumi")
+            ? deployment.Metadata.TmdbFailureUseBangumi
+            : candidate.Metadata.TmdbFailureUseBangumi;
+        var mikanTrustedOffsetCacheEnabled = IsLocked(
+            "mikan_trusted_offset_cache_enabled")
+            ? deployment.Metadata.MikanTrustedOffsetCacheEnabled
+            : candidate.Metadata.MikanTrustedOffsetCacheEnabled;
+
+        var torrentFetch = candidate.TorrentFetch;
+        if (IsLocked("torrent_http_timeout_seconds"))
+        {
+            torrentFetch = torrentFetch with
+            {
+                Timeout = deployment.TorrentFetch.Timeout,
+            };
+        }
+        if (IsLocked("torrent_max_response_bytes"))
+        {
+            torrentFetch = torrentFetch with
+            {
+                MaxResponseBytes = deployment.TorrentFetch.MaxResponseBytes,
+            };
+        }
+        if (IsLocked("torrent_max_redirects"))
+        {
+            torrentFetch = torrentFetch with
+            {
+                MaxRedirects = deployment.TorrentFetch.MaxRedirects,
+            };
+        }
+        if (IsLocked("torrent_staging_ttl_seconds"))
+        {
+            torrentFetch = torrentFetch with
+            {
+                StagingTtl = deployment.TorrentFetch.StagingTtl,
+            };
         }
 
         var dataUpdate = candidate.DataUpdate;
@@ -373,8 +555,12 @@ public sealed class DeploymentConfigurationLocks
             {
                 Tmdb = tmdb,
                 Bangumi = bangumi,
+                SeasonFailure = seasonFailure,
                 Ai = ai,
+                TmdbFailureUseBangumi = tmdbFailureUseBangumi,
+                MikanTrustedOffsetCacheEnabled = mikanTrustedOffsetCacheEnabled,
             },
+            TorrentFetch = torrentFetch,
             DataUpdate = dataUpdate,
         };
     }
@@ -431,6 +617,22 @@ public sealed class DeploymentConfigurationLocks
             deployment.Metadata.Bangumi.RetryDelay,
             candidate.Metadata.Bangumi.RetryDelay);
         AddIfChanged(
+            "season_failure_skip",
+            deployment.Metadata.SeasonFailure.Skip,
+            candidate.Metadata.SeasonFailure.Skip);
+        AddIfChanged(
+            "season_failure_backtrace",
+            deployment.Metadata.SeasonFailure.Backtrace,
+            candidate.Metadata.SeasonFailure.Backtrace);
+        AddIfChanged(
+            "season_failure_use_title_season",
+            deployment.Metadata.SeasonFailure.UseTitleSeason,
+            candidate.Metadata.SeasonFailure.UseTitleSeason);
+        AddIfChanged(
+            "season_failure_use_first_season",
+            deployment.Metadata.SeasonFailure.UseFirstSeason,
+            candidate.Metadata.SeasonFailure.UseFirstSeason);
+        AddIfChanged(
             "ai_use_metadata_match",
             deployment.Metadata.Ai.UseMetadataMatch,
             candidate.Metadata.Ai.UseMetadataMatch);
@@ -438,6 +640,30 @@ public sealed class DeploymentConfigurationLocks
             "ai_http_timeout_seconds",
             deployment.Metadata.Ai.HttpTimeout,
             candidate.Metadata.Ai.HttpTimeout);
+        AddIfChanged(
+            "tmdb_failure_use_bangumi",
+            deployment.Metadata.TmdbFailureUseBangumi,
+            candidate.Metadata.TmdbFailureUseBangumi);
+        AddIfChanged(
+            "mikan_trusted_offset_cache_enabled",
+            deployment.Metadata.MikanTrustedOffsetCacheEnabled,
+            candidate.Metadata.MikanTrustedOffsetCacheEnabled);
+        AddIfChanged(
+            "torrent_http_timeout_seconds",
+            deployment.TorrentFetch.Timeout,
+            candidate.TorrentFetch.Timeout);
+        AddIfChanged(
+            "torrent_max_response_bytes",
+            deployment.TorrentFetch.MaxResponseBytes,
+            candidate.TorrentFetch.MaxResponseBytes);
+        AddIfChanged(
+            "torrent_max_redirects",
+            deployment.TorrentFetch.MaxRedirects,
+            candidate.TorrentFetch.MaxRedirects);
+        AddIfChanged(
+            "torrent_staging_ttl_seconds",
+            deployment.TorrentFetch.StagingTtl,
+            candidate.TorrentFetch.StagingTtl);
         AddIfChanged(
             "data_update_enabled",
             deployment.DataUpdate.Enabled,
@@ -480,7 +706,16 @@ public sealed class DeploymentConfigurationLocks
 
     private sealed record LockDefinition(
         string Field,
-        IReadOnlyList<string> EnvironmentVariables);
+        IReadOnlyList<string> ConfigurationKeys);
+
+    private sealed class MutableLock
+    {
+        public HashSet<string> EnvironmentVariables { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public HashSet<string> CommandLineArguments { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+    }
 }
 
 public sealed class ConfigurationFieldLockedException(

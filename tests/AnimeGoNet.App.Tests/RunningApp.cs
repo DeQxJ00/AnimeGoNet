@@ -44,7 +44,8 @@ public sealed class RunningApp : IAsyncDisposable
         IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
         LegacyDownloaderMigrationState? legacyDownloaderMigrationState = null,
         bool startBackgroundWorkers = false,
-        Action<DirectoryLayout>? prepareData = null)
+        Action<DirectoryLayout>? prepareData = null,
+        string[]? args = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
@@ -53,7 +54,7 @@ public sealed class RunningApp : IAsyncDisposable
         stagingService ??= new TestTorrentStagingService(
             DirectoryLayout.From(options.Paths).StagingPath);
         var app = await AnimeGoApplication.BuildAsync(
-            [],
+            args ?? [],
             options,
             accessKey,
             torrentStagingService: stagingService,

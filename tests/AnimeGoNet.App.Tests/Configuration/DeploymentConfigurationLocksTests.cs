@@ -1,5 +1,6 @@
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Configuration;
 
@@ -39,6 +40,65 @@ public sealed class DeploymentConfigurationLocksTests
         Assert.All(
             locks.Items,
             item => Assert.Equal(["animego_proxy_url"], item.EnvironmentVariables));
+    }
+
+    [Fact]
+    public void CanonicalEnvironmentAndCommandLineAliasesShareOneSafeLockProjection()
+    {
+        var locks = DeploymentConfigurationLocks.FromSources(
+            ["metadata__tmdb__base_url"],
+            ["--tmdb_base_url=https://command.invalid/private"]);
+
+        var value = Assert.Single(locks.Items);
+        Assert.Equal("tmdb_base_url", value.Field);
+        Assert.Equal("environment_and_command_line", value.Source);
+        Assert.Equal(["metadata__tmdb__base_url"], value.EnvironmentVariables);
+        Assert.Equal(["--tmdb_base_url"], value.CommandLineArguments);
+        Assert.Equal(
+            ["--tmdb_base_url", "metadata__tmdb__base_url"],
+            value.ControllingKeys);
+        Assert.DoesNotContain(
+            value.ControllingKeys,
+            key => key.Contains("command.invalid", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ApplicationCompositionDetectsAndAppliesActualCommandLineLock()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-command-line-locks",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var app = await AnimeGoApplication.BuildAsync(
+            [
+                $"--data_path={Path.Combine(root, "data")}",
+                $"--download_path={Path.Combine(root, "download")}",
+                $"--save_path={Path.Combine(root, "library")}",
+                "--background_workers_enabled=false",
+                "--tmdb_fail_backtrace=true",
+            ],
+                runningInContainer: false,
+                startBackgroundWorkers: false);
+
+            var options = app.Services.GetRequiredService<AnimeGoOptions>();
+            var locks = app.Services.GetRequiredService<DeploymentConfigurationLocks>();
+
+            Assert.True(options.Metadata.SeasonFailure.Backtrace);
+            var value = Assert.Single(
+                locks.Items,
+                item => item.Field == "season_failure_backtrace");
+            Assert.Equal("command_line", value.Source);
+            Assert.Equal(["--tmdb_fail_backtrace"], value.CommandLineArguments);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -196,5 +256,74 @@ public sealed class DeploymentConfigurationLocksTests
             "bangumi_retry_delay_seconds",
         ],
             locks.FindChangedLockedFields(deployment, candidate));
+    }
+
+    [Fact]
+    public void AllEditableSeasonFallbackAndTorrentFieldsAreLockedAndReapplied()
+    {
+        var defaults = AnimeGoDefaults.CreateNative(Path.GetTempPath());
+        var deployment = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                SeasonFailure = new SeasonFailureOptions
+                {
+                    Skip = true,
+                    Backtrace = true,
+                    UseTitleSeason = true,
+                    UseFirstSeason = true,
+                },
+                TmdbFailureUseBangumi = true,
+                MikanTrustedOffsetCacheEnabled = true,
+            },
+            TorrentFetch = defaults.TorrentFetch with
+            {
+                Timeout = TimeSpan.FromSeconds(41),
+                MaxResponseBytes = 123456,
+                MaxRedirects = 2,
+                StagingTtl = TimeSpan.FromSeconds(901),
+            },
+        };
+        var candidate = deployment with
+        {
+            Metadata = deployment.Metadata with
+            {
+                SeasonFailure = new SeasonFailureOptions(),
+                TmdbFailureUseBangumi = false,
+                MikanTrustedOffsetCacheEnabled = false,
+            },
+            TorrentFetch = deployment.TorrentFetch with
+            {
+                Timeout = TimeSpan.FromSeconds(9),
+                MaxResponseBytes = 654321,
+                MaxRedirects = 1,
+                StagingTtl = TimeSpan.FromSeconds(99),
+            },
+        };
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+        [
+            "TMDB_FAIL_SKIP",
+            "TMDB_FAIL_BACKTRACE",
+            "TMDB_FAIL_USE_TITLE_SEASON",
+            "TMDB_FAIL_USE_FIRST_SEASON",
+            "TMDB_FAIL_USE_BANGUMI",
+            "MIKAN_TRUSTED_OFFSET_CACHE_ENABLED",
+            "TORRENT_HTTP_TIMEOUT_SECONDS",
+            "TORRENT_MAX_RESPONSE_BYTES",
+            "TORRENT_MAX_REDIRECTS",
+            "TORRENT_STAGING_TTL_SECONDS",
+        ]);
+
+        var result = locks.Reapply(deployment, candidate);
+
+        Assert.Equal(deployment.Metadata.SeasonFailure, result.Metadata.SeasonFailure);
+        Assert.Equal(
+            deployment.Metadata.TmdbFailureUseBangumi,
+            result.Metadata.TmdbFailureUseBangumi);
+        Assert.Equal(
+            deployment.Metadata.MikanTrustedOffsetCacheEnabled,
+            result.Metadata.MikanTrustedOffsetCacheEnabled);
+        Assert.Equal(deployment.TorrentFetch, result.TorrentFetch);
+        Assert.Equal(10, locks.FindChangedLockedFields(deployment, candidate).Count);
     }
 }

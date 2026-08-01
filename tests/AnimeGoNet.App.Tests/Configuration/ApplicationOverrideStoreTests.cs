@@ -290,6 +290,63 @@ public sealed class ApplicationOverrideStoreTests
         }
     }
 
+    [Fact]
+    public void InheritedSeasonFallbackAndTorrentFieldsKeepDeploymentValues()
+    {
+        var defaults = AnimeGoDefaults.CreateNative(Path.GetTempPath());
+        var deployment = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                SeasonFailure = new SeasonFailureOptions
+                {
+                    Skip = true,
+                    Backtrace = false,
+                    UseTitleSeason = true,
+                    UseFirstSeason = false,
+                },
+                TmdbFailureUseBangumi = true,
+                MikanTrustedOffsetCacheEnabled = false,
+            },
+            TorrentFetch = defaults.TorrentFetch with
+            {
+                Timeout = TimeSpan.FromSeconds(61),
+                MaxResponseBytes = 7654321,
+                MaxRedirects = 1,
+                StagingTtl = TimeSpan.FromSeconds(1201),
+            },
+        };
+        var inherited = new[]
+        {
+            "season_failure_skip",
+            "season_failure_backtrace",
+            "season_failure_use_title_season",
+            "season_failure_use_first_season",
+            "tmdb_failure_use_bangumi",
+            "mikan_trusted_offset_cache_enabled",
+            "torrent_http_timeout_seconds",
+            "torrent_max_response_bytes",
+            "torrent_max_redirects",
+            "torrent_staging_ttl_seconds",
+        };
+
+        var applied = ApplicationOverrideStore.Apply(
+            deployment,
+            new ApplicationOverrideSnapshot(
+                1,
+                1,
+                Entry() with { InheritedFields = inherited }));
+
+        Assert.Equal(deployment.Metadata.SeasonFailure, applied.Metadata.SeasonFailure);
+        Assert.Equal(
+            deployment.Metadata.TmdbFailureUseBangumi,
+            applied.Metadata.TmdbFailureUseBangumi);
+        Assert.Equal(
+            deployment.Metadata.MikanTrustedOffsetCacheEnabled,
+            applied.Metadata.MikanTrustedOffsetCacheEnabled);
+        Assert.Equal(deployment.TorrentFetch, applied.TorrentFetch);
+    }
+
     private static ApplicationOverrideEntry Entry() => new(
         "https://tmdb.test.invalid/",
         "en-US",

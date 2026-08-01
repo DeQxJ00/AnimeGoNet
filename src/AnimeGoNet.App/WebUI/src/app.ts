@@ -316,8 +316,10 @@ interface RuntimeConfiguration {
     data_update_http_timeout_seconds: number;
     locked_fields: Array<{
       field: string;
-      source: "environment";
+      source: "environment" | "command_line" | "environment_and_command_line";
       environment_variables: string[];
+      command_line_arguments: string[];
+      controlling_keys: string[];
     }>;
   };
 }
@@ -3502,7 +3504,7 @@ function applyConfigurationLocks(
       const label = input.closest("label");
       label?.classList.toggle("configuration-field-locked", lock !== undefined);
       if (lock) {
-        input.title = `由环境变量 ${lock.environment_variables.join(", ")} 控制`;
+        input.title = `由部署键 ${lock.controlling_keys.join(", ")} 控制`;
       } else {
         input.removeAttribute("title");
       }
@@ -3511,13 +3513,13 @@ function applyConfigurationLocks(
 
   const summary = element<HTMLElement>("#configuration-lock-summary");
   if (locks.length === 0) {
-    summary.textContent = "当前没有环境变量锁定的可编辑字段。";
+    summary.textContent = "当前没有环境变量或命令行锁定的可编辑字段。";
     summary.className = "configuration-lock-summary muted";
     return;
   }
 
-  summary.textContent = `以下字段由部署环境控制，Web 只读：${locks
-    .map((lock) => `${lock.field} (${lock.environment_variables.join(", ")})`)
+  summary.textContent = `以下字段由部署环境或命令行控制，Web 只读：${locks
+    .map((lock) => `${lock.field} (${lock.controlling_keys.join(", ")})`)
     .join("；")}`;
   summary.className = "configuration-lock-summary active";
 }

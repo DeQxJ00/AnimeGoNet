@@ -247,7 +247,9 @@ public sealed record EditableConfigurationResponse(
 public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
     [property: JsonPropertyName("source")] string Source,
-    [property: JsonPropertyName("environment_variables")] IReadOnlyList<string> EnvironmentVariables);
+    [property: JsonPropertyName("environment_variables")] IReadOnlyList<string> EnvironmentVariables,
+    [property: JsonPropertyName("command_line_arguments")] IReadOnlyList<string> CommandLineArguments,
+    [property: JsonPropertyName("controlling_keys")] IReadOnlyList<string> ControllingKeys);
 
 public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,

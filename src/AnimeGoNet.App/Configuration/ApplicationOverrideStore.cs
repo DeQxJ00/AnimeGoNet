@@ -279,10 +279,20 @@ public sealed class ApplicationOverrideStore : IDisposable
                 },
                 SeasonFailure = new SeasonFailureOptions
                 {
-                    Skip = settings.SeasonFailureSkip,
-                    Backtrace = settings.SeasonFailureBacktrace,
-                    UseTitleSeason = settings.SeasonFailureUseTitleSeason,
-                    UseFirstSeason = settings.SeasonFailureUseFirstSeason,
+                    Skip = inheritedFields.Contains("season_failure_skip")
+                        ? options.Metadata.SeasonFailure.Skip
+                        : settings.SeasonFailureSkip,
+                    Backtrace = inheritedFields.Contains("season_failure_backtrace")
+                        ? options.Metadata.SeasonFailure.Backtrace
+                        : settings.SeasonFailureBacktrace,
+                    UseTitleSeason = inheritedFields.Contains(
+                        "season_failure_use_title_season")
+                        ? options.Metadata.SeasonFailure.UseTitleSeason
+                        : settings.SeasonFailureUseTitleSeason,
+                    UseFirstSeason = inheritedFields.Contains(
+                        "season_failure_use_first_season")
+                        ? options.Metadata.SeasonFailure.UseFirstSeason
+                        : settings.SeasonFailureUseFirstSeason,
                 },
                 Ai = options.Metadata.Ai with
                 {
@@ -294,15 +304,29 @@ public sealed class ApplicationOverrideStore : IDisposable
                         ? options.Metadata.Ai.HttpTimeout
                         : TimeSpan.FromSeconds(settings.AiHttpTimeoutSeconds),
                 },
-                TmdbFailureUseBangumi = settings.TmdbFailureUseBangumi,
-                MikanTrustedOffsetCacheEnabled = settings.MikanTrustedOffsetCacheEnabled,
+                TmdbFailureUseBangumi = inheritedFields.Contains(
+                    "tmdb_failure_use_bangumi")
+                    ? options.Metadata.TmdbFailureUseBangumi
+                    : settings.TmdbFailureUseBangumi,
+                MikanTrustedOffsetCacheEnabled = inheritedFields.Contains(
+                    "mikan_trusted_offset_cache_enabled")
+                    ? options.Metadata.MikanTrustedOffsetCacheEnabled
+                    : settings.MikanTrustedOffsetCacheEnabled,
             },
             TorrentFetch = options.TorrentFetch with
             {
-                Timeout = TimeSpan.FromSeconds(settings.TorrentHttpTimeoutSeconds),
-                MaxResponseBytes = settings.TorrentMaxResponseBytes,
-                MaxRedirects = settings.TorrentMaxRedirects,
-                StagingTtl = TimeSpan.FromSeconds(settings.TorrentStagingTtlSeconds),
+                Timeout = inheritedFields.Contains("torrent_http_timeout_seconds")
+                    ? options.TorrentFetch.Timeout
+                    : TimeSpan.FromSeconds(settings.TorrentHttpTimeoutSeconds),
+                MaxResponseBytes = inheritedFields.Contains("torrent_max_response_bytes")
+                    ? options.TorrentFetch.MaxResponseBytes
+                    : settings.TorrentMaxResponseBytes,
+                MaxRedirects = inheritedFields.Contains("torrent_max_redirects")
+                    ? options.TorrentFetch.MaxRedirects
+                    : settings.TorrentMaxRedirects,
+                StagingTtl = inheritedFields.Contains("torrent_staging_ttl_seconds")
+                    ? options.TorrentFetch.StagingTtl
+                    : TimeSpan.FromSeconds(settings.TorrentStagingTtlSeconds),
             },
             DataUpdate = dataUpdate,
         };

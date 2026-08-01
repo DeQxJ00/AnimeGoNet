@@ -142,10 +142,12 @@ public static class AnimeGoApplication
         }
         var deploymentOptions = options;
         var configurationLocks = deploymentEnvironmentVariables is not null
-            ? DeploymentConfigurationLocks.FromVariableNames(deploymentEnvironmentVariables)
+            ? DeploymentConfigurationLocks.FromSources(
+                deploymentEnvironmentVariables,
+                args)
             : optionsWereSupplied
                 ? DeploymentConfigurationLocks.Empty
-                : DeploymentConfigurationLocks.FromCurrentProcess();
+                : DeploymentConfigurationLocks.FromCurrentProcess(args);
         var downloaderLocks = deploymentEnvironmentVariables is not null
             ? DownloaderDeploymentLocks.FromSources(
                 deploymentEnvironmentVariables,
@@ -942,40 +944,56 @@ public static class AnimeGoApplication
             }
 
             var baseUrlText = id == "bt"
-                ? First(
-                    FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_URL"),
-                    FirstConfigurationValue(child, "base_url"))
-                : FirstConfigurationValue(child, "base_url");
+                ? FirstConfigurationValue(
+                    configuration,
+                    "ANIMEGO_CLIENT_URL",
+                    $"downloaders:{id}:base_url")
+                : FirstConfigurationValue(
+                    configuration,
+                    $"downloaders:{id}:base_url");
             var baseUrl = ParseOptionalAbsoluteUri(
                 baseUrlText,
                 $"downloaders:{id}:base_url")
                 ?? throw new InvalidOperationException(
                     $"downloaders:{id}:base_url is required.");
             var configuredDownloadPath = id == "bt"
-                ? First(
-                    FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_DOWNLOAD_PATH"),
-                    FirstConfigurationValue(child, "download_path"))
-                : FirstConfigurationValue(child, "download_path");
+                ? FirstConfigurationValue(
+                    configuration,
+                    "ANIMEGO_CLIENT_DOWNLOAD_PATH",
+                    $"downloaders:{id}:download_path")
+                : FirstConfigurationValue(
+                    configuration,
+                    $"downloaders:{id}:download_path");
             result.Add(id, new QbittorrentInstanceOptions
             {
-                Type = NormalizeOptional(FirstConfigurationValue(child, "type"))
+                Type = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        $"downloaders:{id}:type"))
                     ?? DownloaderTypes.Qbittorrent,
                 BaseUrl = baseUrl,
                 Username = NormalizeOptional(id == "bt"
-                    ? First(
-                        FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_USERNAME"),
-                        FirstConfigurationValue(child, "username"))
-                    : FirstConfigurationValue(child, "username")),
+                    ? FirstConfigurationValue(
+                        configuration,
+                        "ANIMEGO_CLIENT_USERNAME",
+                        $"downloaders:{id}:username")
+                    : FirstConfigurationValue(
+                        configuration,
+                        $"downloaders:{id}:username")),
                 Password = NormalizeOptional(id == "bt"
-                    ? First(
-                        FirstConfigurationValue(configuration, "ANIMEGO_CLIENT_PASSWORD"),
-                        FirstConfigurationValue(child, "password"))
-                    : FirstConfigurationValue(child, "password")),
+                    ? FirstConfigurationValue(
+                        configuration,
+                        "ANIMEGO_CLIENT_PASSWORD",
+                        $"downloaders:{id}:password")
+                    : FirstConfigurationValue(
+                        configuration,
+                        $"downloaders:{id}:password")),
                 DownloadPath = ResolveConfiguredPath(
                     configuredDownloadPath
                     ?? PathBoundary.Combine(globalDownloadPath, id)),
                 Enabled = ParseOptionalBool(
-                    FirstConfigurationValue(child, "enabled"),
+                    FirstConfigurationValue(
+                        configuration,
+                        $"downloaders:{id}:enabled"),
                     true,
                     $"downloaders:{id}:enabled"),
             });
@@ -1022,10 +1040,13 @@ public static class AnimeGoApplication
                 AllowedTorrentHosts = ReadScalarList(
                     child.GetSection("allowed_torrent_hosts")),
                 Category = NormalizeOptional(id == "mikan"
-                    ? First(
-                        FirstConfigurationValue(configuration, "ANIMEGO_CATEGORY"),
-                        FirstConfigurationValue(child, "category"))
-                    : FirstConfigurationValue(child, "category"))
+                    ? FirstConfigurationValue(
+                        configuration,
+                        "ANIMEGO_CATEGORY",
+                        $"sources:{id}:category")
+                    : FirstConfigurationValue(
+                        configuration,
+                        $"sources:{id}:category"))
                     ?? "animegonet",
                 Tags = ReadScalarList(child.GetSection("tags")),
                 DynamicTagTemplate = DownloadDynamicTagTemplate.Normalize(
@@ -1085,34 +1106,13 @@ public static class AnimeGoApplication
 
     private static string? FirstConfigurationValue(
         IConfiguration configuration,
-        params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            var value = configuration[key];
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
-        return null;
-    }
+        params string[] keys) =>
+        ConfigurationAliasResolver.FirstNonEmpty(configuration, keys);
 
     private static string? FirstPresentConfigurationValue(
         ConfigurationManager configuration,
-        params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (configuration[key] is { } value)
-            {
-                return value.Trim();
-            }
-        }
-
-        return null;
-    }
+        params string[] keys) =>
+        ConfigurationAliasResolver.FirstPresent(configuration, keys);
 
     private static string ResolveConfiguredPath(string value) =>
         Path.GetFullPath(
@@ -1298,8 +1298,14 @@ public static class AnimeGoApplication
         ConfigurationManager configuration,
         bool defaultValue)
     {
-        var canonical = NormalizeOptional(configuration["ai_use_metadata_match"]);
-        if (canonical is not null)
+        var values = ConfigurationAliasResolver.HighestPriorityValues(
+            configuration,
+            "ai_use_metadata_match",
+            "metadata:ai:use_metadata_match",
+            "ai_use_season_match",
+            "ai_use_episode_match");
+        if (values.TryGetValue("ai_use_metadata_match", out var canonical)
+            || values.TryGetValue("metadata:ai:use_metadata_match", out canonical))
         {
             return ParseOptionalBool(
                 canonical,
@@ -1308,21 +1314,20 @@ public static class AnimeGoApplication
         }
 
         var legacySeason = ParseOptionalBool(
-            configuration["ai_use_season_match"],
-            defaultValue,
+            values.GetValueOrDefault("ai_use_season_match"),
+            false,
             "ai_use_season_match");
         var legacyEpisode = ParseOptionalBool(
-            configuration["ai_use_episode_match"],
-            defaultValue,
+            values.GetValueOrDefault("ai_use_episode_match"),
+            false,
             "ai_use_episode_match");
-        return legacySeason || legacyEpisode;
+        return values.Count == 0
+            ? defaultValue
+            : legacySeason || legacyEpisode;
     }
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string? First(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private static AnimeGoOptions ApplyDownloaderOverrides(
         AnimeGoOptions options,

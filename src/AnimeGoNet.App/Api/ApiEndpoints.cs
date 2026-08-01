@@ -1504,8 +1504,10 @@ public static class ApiEndpoints
             dataUpdate.HttpTimeout.TotalSeconds,
             locks.Items.Select(item => new ConfigurationFieldLockResponse(
                 item.Field,
-                "environment",
-                item.EnvironmentVariables)).ToArray());
+                item.Source,
+                item.EnvironmentVariables,
+                item.CommandLineArguments,
+                item.ControllingKeys)).ToArray());
     }
 
     private static string SecretState(bool overridden, string? value) =>

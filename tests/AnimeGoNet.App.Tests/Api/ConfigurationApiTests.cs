@@ -211,6 +211,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("确认保存并备份", html, StringComparison.Ordinal);
         Assert.Contains("expected_configuration_revision", script, StringComparison.Ordinal);
         Assert.Contains("locked_fields", script, StringComparison.Ordinal);
+        Assert.Contains("controlling_keys", script, StringComparison.Ordinal);
+        Assert.Contains("环境变量或命令行", script, StringComparison.Ordinal);
         Assert.Contains("data_update_manifest_url", script, StringComparison.Ordinal);
         Assert.Contains("修改已即时生效", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
@@ -803,6 +805,66 @@ public sealed class ConfigurationApiTests
         Assert.DoesNotContain(
             "tmdb_base_url",
             preserved.Settings?.InheritedFields ?? []);
+    }
+
+    [Fact]
+    public async Task CommandLineAndCanonicalEnvironmentLocksAreProjectedWithoutValues()
+    {
+        var deployedBaseUrl = new Uri("https://command.invalid/tmdb/");
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Tmdb = options.Metadata.Tmdb with { BaseUrl = deployedBaseUrl },
+                },
+            },
+            deploymentEnvironmentVariables: ["metadata__tmdb__base_url"],
+            args:
+            [
+                $"--tmdb_base_url={deployedBaseUrl.AbsoluteUri}",
+                "--tmdb_fail_backtrace=false",
+            ]);
+
+        using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
+        using (var current = JsonDocument.Parse(
+            await currentResponse.Content.ReadAsStreamAsync()))
+        {
+            var locks = current.RootElement.GetProperty("editable")
+                .GetProperty("locked_fields")
+                .EnumerateArray()
+                .ToDictionary(item => item.GetProperty("field").GetString()!);
+            var baseUrlLock = locks["tmdb_base_url"];
+            Assert.Equal(
+                "environment_and_command_line",
+                baseUrlLock.GetProperty("source").GetString());
+            Assert.Equal(
+                "metadata__tmdb__base_url",
+                baseUrlLock.GetProperty("environment_variables")[0].GetString());
+            Assert.Equal(
+                "--tmdb_base_url",
+                baseUrlLock.GetProperty("command_line_arguments")[0].GetString());
+            Assert.Equal(2, baseUrlLock.GetProperty("controlling_keys").GetArrayLength());
+            Assert.Equal(
+                "command_line",
+                locks["season_failure_backtrace"].GetProperty("source").GetString());
+            Assert.Equal(
+                "--tmdb_fail_backtrace",
+                locks["season_failure_backtrace"]
+                    .GetProperty("controlling_keys")[0].GetString());
+        }
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                baseUrl: deployedBaseUrl.AbsoluteUri));
+        var error = await write.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, write.StatusCode);
+        Assert.Contains("configuration_field_locked", error, StringComparison.Ordinal);
+        Assert.Contains("season_failure_backtrace", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("command.invalid/tmdb/", error, StringComparison.Ordinal);
     }
 
     [Fact]

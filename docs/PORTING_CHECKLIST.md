@@ -13,7 +13,7 @@
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认路径、下载器及 Web 监听强类型配置通过；12 份旧 YAML 已验证，剩余配置字段 parity 按环境变量行继续跟踪 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 已验证 | 固定 `develop@c7475df` 的 12 份历史 YAML 均以 SHA-256 锁定并迁移到规范 1.7.1；只接受上游 13 个精确版本，范围内伪版本在备份/写入前拒绝；原字节备份、原子替换、幂等、无备份开关与非 qB fail-closed tests |
-| `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 进行中 | 上游 `ANIMEGO_WEB_HOST/PORT`、原生/Docker 安全默认和 `--urls`/`ASPNETCORE_URLS` 优先级已有真实 Kestrel tests；旧 `ANIMEGO_PROXY_URL` 已保持全局双客户端语义、专用变量优先、空值关闭和 TMDB/Bangumi 双字段锁；`ANIMEGO_CATEGORY/TAG/MIKAN_COOKIE` 与规范 `sources__<id>__*` 已按 SourceProfile 字段在 SQLite seed 后启动重断言并投影 API/WebUI 锁，Cookie 不回显；应用与下载器实例字段也投影 `locked_fields`，API 拒绝改写且保存其他字段不会固化部署凭据；路径及完整旧配置 precedence 待实现 |
+| `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 已验证 | 上游全部 `ANIMEGO_*`、规范嵌套键、扁平键和命令行按实际 Provider 层级解析，跨别名保持命令行→环境→YAML；三路径、命名下载器、SourceProfile、统一 AI 旧双键和显式空值均有冲突层 tests。应用全部可编辑字段、下载器实例与来源字段投影环境/命令行 `locked_fields`，API/WebUI 拒绝越级改写且私有 JSON/SQLite 不固化部署凭据；Cookie、secret 与命令行值不回显；Web 安全默认、标准 URL 覆盖和真实 Kestrel tests 已验证 |
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |

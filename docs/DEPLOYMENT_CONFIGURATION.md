@@ -32,8 +32,23 @@ secret 回显到浏览器。
 4. 部署 YAML
 5. 编译期安全默认值
 
+同一逻辑字段存在旧扁平键与规范嵌套键时，先比较配置 Provider 层级，再比较同一
+Provider 内的兼容别名。因此更高层的 `--data_path`、
+`--downloaders:bt:base_url` 或 `--sources:mikan:category` 可以覆盖较低层的
+`ANIMEGO_DATA_PATH`、`ANIMEGO_CLIENT_URL` 或 `ANIMEGO_CATEGORY`；旧别名不会因
+代码中的排列顺序越过命令行层。显式空的可空字段也只屏蔽更低层值，不会意外回落。
+
 命令行和环境变量锁定的应用字段在 WebUI 中显示为只读；下载器命令行或环境变量
 字段也会在私有下载器覆盖应用后重新生效，私有文件不能盖过部署锁。
+
+应用配置的 `editable.locked_fields` 同时保留 `environment_variables` 兼容字段，
+并返回 `command_line_arguments`、统一的 `controlling_keys` 以及
+`environment` / `command_line` / `environment_and_command_line` 来源。命令行只
+投影参数名，不投影 `=` 后的 URL 或 secret。当前全部可编辑字段均参与部署锁：
+TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时、Bangumi 完全兜底、
+可信 offset 缓存、Torrent HTTP/容量/redirect/staging 以及数据更新设置。锁定值
+在读取 `application.private.json` 后重新应用；保存其他字段不会把部署值固化到
+私有文件。
 
 下载器部署锁按实例和字段独立计算，支持 `type`、`base_url`、`username`、
 `password`、`download_path`、`enabled`。`GET /api/v1/downloaders` 的每个实例
@@ -105,6 +120,9 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 原生默认监听 `127.0.0.1:7991`，不会默认暴露到局域网。Docker 默认监听
 `0.0.0.0:7991`，并继续强制要求非空 Access Key。host 只接受 DNS 名或 IP 地址，
 port 必须在 0～65535；`0` 只用于由操作系统分配临时测试端口。
+
+三路径和 Web 监听不属于 WebUI 可编辑配置，因此不产生表单锁；`/api/v1/status`
+始终显示最终生效的路径。它们仍严格遵循命令行→环境→YAML 顺序。
 
 不要把密码、Access Key、TMDB/AI key、Cookie、passkey Torrent URL 或真实配置
 文件提交到 Git。仓库和 CI 只使用空 secret、fake transport 或隔离测试凭据。

@@ -46,17 +46,19 @@ internal static class DeploymentYamlConfiguration
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(defaults);
-        var explicitPath = First(
-            configuration["ANIMEGO_CONFIG"],
-            configuration["config"]);
+        var explicitPath = ConfigurationAliasResolver.FirstNonEmpty(
+            configuration,
+            "ANIMEGO_CONFIG",
+            "config");
         if (explicitPath is not null)
         {
             return ResolveAgainstApplication(explicitPath);
         }
 
-        var dataPath = First(
-            configuration["ANIMEGO_DATA_PATH"],
-            configuration["data_path"])
+        var dataPath = ConfigurationAliasResolver.FirstNonEmpty(
+            configuration,
+            "ANIMEGO_DATA_PATH",
+            "data_path")
             ?? defaults.Paths.DataPath;
         return Path.Combine(
             ResolveAgainstApplication(dataPath),
