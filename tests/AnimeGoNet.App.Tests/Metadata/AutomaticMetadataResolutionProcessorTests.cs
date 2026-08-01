@@ -1,4 +1,6 @@
 using System.Text;
+using AnimeGoNet.App.Downloads;
+using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
@@ -917,6 +919,11 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
         var ai = new FakeAiMetadataMatcher();
+        var downloadClient = new PipelineDownloadClient(
+        [
+            new DownloadFileSnapshot(0, "[04].mkv", 5, 0, 0),
+            new DownloadFileSnapshot(1, "[04].zh-Hans.ass", 10, 0, 0),
+        ]);
         await using var app = await RunningApp.StartAsync(
             configure: options => options with
             {
@@ -931,7 +938,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             },
             tmdbClient: tmdb,
             bangumiSubjectClient: new FakeBangumiClient((BangumiSubject?)null),
-            aiMetadataMatcher: ai);
+            aiMetadataMatcher: ai,
+            downloadClientRegistry: new PipelineRegistry(downloadClient));
         await SeedCanonicalSeasonAsync(app);
         var offsets = app.App.Services.GetRequiredService<MikanTrustedOffsetStore>();
         for (var episode = 1; episode <= 3; episode++)
@@ -966,6 +974,57 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Empty(tmdb.SearchTitles);
         Assert.Empty(tmdb.EpisodeIdentities);
         Assert.Contains("trusted_mikan_offset", await ReadStrategiesAsync(app, taskId));
+
+        Assert.Equal(
+            DownloadPreparationResult.Completed,
+            await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync());
+        var priority = Assert.Single(downloadClient.PriorityCalls);
+        Assert.Equal([0, 1], priority.Indexes);
+        Assert.Equal(1, priority.Priority);
+        Assert.Single(downloadClient.Resumed);
+
+        var jobPaths = await ReadJobPathsAsync(app, taskId);
+        Directory.CreateDirectory(jobPaths.DownloadRoot);
+        await File.WriteAllBytesAsync(
+            Path.Combine(jobPaths.DownloadRoot, "[04].mkv"),
+            [1, 2, 3, 4, 5]);
+        await File.WriteAllBytesAsync(
+            Path.Combine(jobPaths.DownloadRoot, "[04].zh-Hans.ass"),
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        await app.App.Services.GetRequiredService<DownloadJobStore>().ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                jobPaths.InfoHash,
+                "来自深渊 第四话",
+                DownloadTaskState.Complete,
+                1,
+                15,
+                15,
+                0,
+                0)],
+            DateTimeOffset.UtcNow);
+
+        var organizer = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
+        var organizationResult = await organizer.RunOnceAsync();
+        Assert.True(
+            organizationResult == MediaOrganizationResult.FilesCompleted,
+            $"Organization result was {organizationResult}: {await ReadOrganizationFailureAsync(app, taskId)}");
+        Assert.True(File.Exists(Path.Combine(
+            jobPaths.SaveRoot,
+            "来自深渊",
+            "S02",
+            "E017.mkv")));
+        Assert.True(File.Exists(Path.Combine(
+            jobPaths.SaveRoot,
+            "来自深渊",
+            "S02",
+            "E017.zh-Hans.ass")));
+        Assert.Equal(1, await CountCompletionRecordsAsync(app, taskId));
+        Assert.Equal(MediaOrganizationResult.CleanupCompleted, await organizer.RunOnceAsync());
+        Assert.Single(downloadClient.Deleted);
+        Assert.False(downloadClient.Deleted[0].DeleteFiles);
+        Assert.Empty(ai.Requests);
+        Assert.Empty(tmdb.EpisodeIdentities);
     }
 
     [Fact]
@@ -1499,6 +1558,57 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
+    private static async Task<JobPaths> ReadJobPathsAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT info_hash, download_root_path, save_root_path
+            FROM download_jobs
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new JobPaths(reader.GetString(0), reader.GetString(1), reader.GetString(2));
+    }
+
+    private static async Task<int> CountCompletionRecordsAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM completion_records AS completion
+            JOIN completion_aliases AS alias ON alias.completion_id = completion.id
+            JOIN download_jobs AS job ON job.info_hash = alias.info_hash
+            WHERE job.task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<string?> ReadOrganizationFailureAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT organization_failure_code
+            FROM download_jobs
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
     private sealed class FakeBangumiClient : IBangumiSubjectClient
     {
         private readonly BangumiSubject? _subject;
@@ -1517,6 +1627,79 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             int subjectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<BangumiSubjectRelation>>([]);
+    }
+
+    private sealed class PipelineRegistry(IDownloadClient client) : IDownloadClientRegistry
+    {
+        public IReadOnlyCollection<string> InstanceIds => ["bt"];
+
+        public IDownloadClient GetRequired(string instanceId) =>
+            instanceId == "bt" ? client : throw new KeyNotFoundException();
+    }
+
+    private sealed class PipelineDownloadClient(
+        IReadOnlyList<DownloadFileSnapshot> files) : IDownloadClient
+    {
+        public List<(int[] Indexes, int Priority)> PriorityCalls { get; } = [];
+
+        public List<string> Resumed { get; } = [];
+
+        public List<(string[] Hashes, bool DeleteFiles)> Deleted { get; } = [];
+
+        public Task ConnectAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<DownloadTaskSnapshot>> ListAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<DownloadTaskSnapshot>>([]);
+
+        public Task AddTorrentAsync(
+            AddTorrentCommand command,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<DownloadFileSnapshot>> ListFilesAsync(
+            string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(files);
+
+        public Task SetFilePriorityAsync(
+            string hash,
+            IReadOnlyList<int> fileIndexes,
+            int priority,
+            CancellationToken cancellationToken = default)
+        {
+            PriorityCalls.Add((fileIndexes.ToArray(), priority));
+            return Task.CompletedTask;
+        }
+
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes,
+            IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PauseAsync(
+            IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ResumeAsync(
+            IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default)
+        {
+            Resumed.AddRange(hashes);
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(
+            IReadOnlyList<string> hashes,
+            bool deleteFiles,
+            CancellationToken cancellationToken = default)
+        {
+            Deleted.Add((hashes.ToArray(), deleteFiles));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeBangumiEpisodeClient(
@@ -1544,6 +1727,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         int? EpisodeNumber,
         string Disposition,
         string? RenameSuffix);
+
+    private sealed record JobPaths(string InfoHash, string DownloadRoot, string SaveRoot);
 
     private sealed class FakeTmdbClient(
         TmdbSeries series,

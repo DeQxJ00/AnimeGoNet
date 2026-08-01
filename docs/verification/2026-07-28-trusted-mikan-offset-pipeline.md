@@ -24,6 +24,10 @@
 - `TrustedMikanOffsetBypassesAiAndTmdbEpisodeRequests` verifies Trusted offset
   `+13` maps source EP4 to TMDB EP17, completes the task, records
   `trusted_mikan_offset`, and makes zero AI, TMDB search and TMDB Episode calls.
+  The same fixture now continues through fake-qB manifest validation and wanted
+  priorities, resumes the task, observes download completion, moves real temporary
+  video/subtitle files to `S02/E017.mkv` and `E017.zh-Hans.ass`, creates exactly one
+  completion, and performs the separate `deleteFiles=false` cleanup.
 - `VerifiedEpisodeCompletesThirdTrustedOffsetObservation` starts with two distinct
   observations, follows the normal AI/TMDB validation path for source EP4→EP17,
   and promotes the signature to Trusted with `3/3` evidence.
