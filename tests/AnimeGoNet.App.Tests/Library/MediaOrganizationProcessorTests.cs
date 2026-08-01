@@ -208,6 +208,85 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     [Theory]
+    [InlineData("Show [48.5].mkv", "48.5", "fractional_episode")]
+    [InlineData("Show [SP01].mkv", "sp01", "special_episode")]
+    [InlineData("Show unmatched.mkv", null, "tmdb_episode_not_found")]
+    [InlineData("Show AI other.mkv", null, "ai_episode_unmatched")]
+    [InlineData("Show commentary.zh-Hans.ass", null, "subtitle_unmatched")]
+    public async Task ConfirmedSeasonOtherMovesOriginalNameWithoutInventingEpisodeProgress(
+        string relativePath,
+        string? sourceEpisode,
+        string otherReason)
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(
+            downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var downloadRoot = Path.Combine(paths.DownloadPath, "bt");
+        File.Move(
+            Path.Combine(downloadRoot, "episode.mkv"),
+            Path.Combine(downloadRoot, relativePath));
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var update = connection.CreateCommand())
+        {
+            update.CommandText = """
+                UPDATE task_files
+                SET relative_path = $relative_path,
+                    source_episode = $source_episode,
+                    file_episode_candidate = NULL,
+                    tmdb_episode_number = NULL,
+                    tmdb_episode_id = NULL,
+                    disposition = 'other',
+                    other_reason = $other_reason,
+                    episode_resolution_source = NULL,
+                    episode_resolution_run_id = NULL,
+                    episode_resolution_attempt_id = NULL
+                WHERE task_id = $task_id;
+                """;
+            update.Parameters.AddWithValue("$task_id", taskId);
+            update.Parameters.AddWithValue("$relative_path", relativePath);
+            update.Parameters.AddWithValue(
+                "$source_episode",
+                (object?)sourceEpisode ?? DBNull.Value);
+            update.Parameters.AddWithValue("$other_reason", otherReason);
+            Assert.Equal(1, await update.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var target = Path.Combine(paths.SavePath, "Series", "S01", "Other", relativePath);
+        Assert.True(File.Exists(target));
+        Assert.False(File.Exists(Path.Combine(downloadRoot, relativePath)));
+        Assert.True(File.Exists(Path.Combine(paths.SavePath, "Series", "S01", "anime.s_json")));
+        Assert.Empty(Directory.GetFiles(
+            Path.Combine(paths.SavePath, "Series", "S01"),
+            "*.e_json",
+            SearchOption.TopDirectoryOnly));
+        await using var verifyConnection = await database.OpenConnectionAsync();
+        await using var verify = verifyConnection.CreateCommand();
+        verify.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM completion_records),
+                (SELECT COUNT(*) FROM completion_aliases),
+                (SELECT COUNT(*) FROM episode_claims WHERE state = 'completed'),
+                (SELECT disposition FROM task_files WHERE task_id = $task_id),
+                (SELECT other_reason FROM task_files WHERE task_id = $task_id);
+            """;
+        verify.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0, reader.GetInt32(0));
+        Assert.Equal(0, reader.GetInt32(1));
+        Assert.Equal(0, reader.GetInt32(2));
+        Assert.Equal("other", reader.GetString(3));
+        Assert.Equal(otherReason, reader.GetString(4));
+    }
+
+    [Theory]
     [InlineData("link", true)]
     [InlineData("link_delete", false)]
     public async Task LinkStrategiesPublishBeforeSeedingEndsAndCleanupAfterCompletion(

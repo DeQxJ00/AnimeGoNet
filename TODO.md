@@ -115,7 +115,7 @@
 - [x] 实现 AOT-safe 本地 Streamable HTTP MCP 客户端和 function-calling 工具循环；BGM/TMDB 工具使用命名空间，覆盖 JSON/SSE、session、工具 schema 缓存、超时、取消、响应上限和失败隔离。
 - [x] 实现可空 `anidbid` → `tmdbtv` 候选查询：URL 固定、模型零参数、响应有界、禁止重定向/代理并将 DNS 连接钉在公网地址；候选仍需 TMDB MCP 与主程序 API 验证。
 - [x] 实现可空 `imdbid` 规范化和固定零参数 `lookup_imdb_tmdb_tv`：主程序调用 TMDB MCP external ID/find，程序侧删除 Movie 结果，只返回正整数 TV Series 候选，最终 Series/Season/Episode 逐级验证。
-- [>] AI 和确定性匹配均拒绝 Season 0；确定性流程已拒绝 Season 0，Series/Season 已确认但 Episode 未匹配的文件已持久化 `Other` 及稳定原因，实际整理到 `<TmdbName>/Sxx/Other/` 与 AI 门禁仍待实现。
+- [x] AI 和确定性匹配均拒绝 Season 0；Series/Season 已确认但 Episode 未匹配的小数集、特别篇、普通 TMDB EP 不存在、AI 未匹配和孤立字幕均持久化 `Other` 及稳定原因，实际保留原名整理到 `<TmdbName>/Sxx/Other/`；不生成 Episode completion/alias/claim 或 `Eyyy.e_json` 伪进度。AI 仅在统一开关开启且任务此前未尝试时调用，季度阶段尝试后不会在 Episode 阶段重复调用。
 - [x] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立统一 AI 阶段已接入且 Series/Season/Episode 结果必须经 TMDB 验证。
 - [x] 为 P3 建立完整图/故障 fixture：无前传直接穷尽；缺日期仍继续遍历；同层多前传按开播日期降序/ID 升序；关系循环由 visited 终止；回溯到首部仍不匹配会穷尽日文/中文名及每名清理词；TMDB 网络失败保留稳定类型/码且不伪装成无匹配；Bangumi 请求失败向编排层传播；取消立即中断且不产生 fallback 结果。
 - [x] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件列表冲突/缓存建立 fake-server 测试：统一开关关闭时零请求/零审计；配置缺失在联网前失败；超时、429 重试与耗尽、认证和外层/模型 JSON 错误使用稳定安全分类；多个 provider `choices` 作为歧义拒绝；不存在的 TMDB Series 经权威二次验证拒绝；文件身份冲突在 TMDB 访问前拒绝；同 MCP endpoint 的工具 schema 只发现一次但每次会话仍重新初始化。
