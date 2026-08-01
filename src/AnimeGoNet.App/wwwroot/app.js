@@ -3899,15 +3899,18 @@ function updateSourceCredentialInputs() {
     const clear = element("#source-mikan-cookie-clear");
     const current = activeSource();
     const isMikan = adapter === "mikan";
-    input.disabled = !isMikan || clear.checked;
-    clear.disabled = !isMikan || current === null;
+    const cookieLock = current?.locked_fields.find((lock) => lock.field === "mikan_identity_cookie");
+    input.disabled = !isMikan || clear.checked || cookieLock !== undefined;
+    clear.disabled = !isMikan || current === null || cookieLock !== undefined;
     if (!isMikan || clear.checked)
         input.value = "";
-    element("#source-mikan-cookie-state").textContent = !isMikan
-        ? "仅 Mikan 适配器可配置登录 Cookie。"
-        : current?.mikan_identity_cookie_configured
-            ? "已配置（值永不回显）；留空保持不变。"
-            : "未配置；可粘贴 Cookie 值或完整 Cookie。";
+    element("#source-mikan-cookie-state").textContent = cookieLock
+        ? `部署锁只读（${cookieLock.controlling_keys.join(" / ")}），值永不回显。`
+        : !isMikan
+            ? "仅 Mikan 适配器可配置登录 Cookie。"
+            : current?.mikan_identity_cookie_configured
+                ? "已配置（值永不回显）；留空保持不变。"
+                : "未配置；可粘贴 Cookie 值或完整 Cookie。";
     const rssUrl = element("#source-rss-url");
     const clearRssUrl = element("#source-rss-url-clear");
     const rssCron = element("#source-rss-cron");
@@ -3958,9 +3961,21 @@ function populateSourceForm(profile) {
     adapter.value = profile?.adapter ?? "u2";
     element("#source-downloader").value = profile?.downloader_id ?? "pt";
     element("#source-strategy").value = profile?.file_strategy ?? "link";
-    element("#source-category").value = profile?.category ?? "animegonet";
+    const category = element("#source-category");
+    const dynamicTag = element("#source-dynamic-tag");
+    const categoryLock = profile?.locked_fields.find((lock) => lock.field === "category");
+    const dynamicTagLock = profile?.locked_fields.find((lock) => lock.field === "dynamic_tag_template");
+    category.value = profile?.category ?? "animegonet";
+    category.disabled = categoryLock !== undefined;
+    category.title = categoryLock
+        ? `部署锁：${categoryLock.controlling_keys.join(" / ")}`
+        : "";
     element("#source-tags").value = profile?.tags.join(", ") ?? "";
-    element("#source-dynamic-tag").value = profile?.dynamic_tag_template ?? "";
+    dynamicTag.value = profile?.dynamic_tag_template ?? "";
+    dynamicTag.disabled = dynamicTagLock !== undefined;
+    dynamicTag.title = dynamicTagLock
+        ? `部署锁：${dynamicTagLock.controlling_keys.join(" / ")}`
+        : "";
     element("#source-seeding-time").value =
         String(profile?.seeding_time_minutes ?? 0);
     element("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
@@ -4007,7 +4022,10 @@ function renderSourceList() {
         revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
         heading.append(name, revision);
         const route = document.createElement("p");
-        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+        const lockState = profile.locked_fields.length > 0
+            ? ` · 部署锁 ${profile.locked_fields.map((lock) => lock.field).join("/")}`
+            : "";
+        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
         card.append(heading, route);
         card.addEventListener("click", () => populateSourceForm(profile));
         return card;

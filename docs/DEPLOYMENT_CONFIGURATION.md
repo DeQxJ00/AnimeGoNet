@@ -57,6 +57,27 @@ downloaders__bt__download_path
 存在时，`locked_fields.source` 为 `environment_and_command_line`；WebUI 私有
 覆盖始终低于两者。
 
+来源部署锁按 SourceProfile ID 和字段独立计算，当前支持 `category`、
+`dynamic_tag_template`、`mikan_identity_cookie`。规范键示例：
+
+```text
+sources__mikan__category=Anime
+sources__mikan__dynamic_tag_template={year}-{quarter_name}
+sources__mikan__mikan_identity_cookie=...
+--sources:u2:category=PT
+```
+
+上游扁平变量 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE` 分别
+控制默认 `mikan` 来源的上述三个字段。环境或命令行值会在每次启动、SQLite seed
+之后重新应用，因此 WebUI 曾保存的旧值不能在重启后盖过部署值。显式空
+`ANIMEGO_TAG` / `ANIMEGO_MIKAN_COOKIE` 分别表示关闭动态 Tag / 清除 Cookie；
+Cookie 值从不进入响应、日志或控制键投影。
+
+`GET /api/v1/sources` 和单项 API 通过 `locked_fields` 只返回字段、来源和控制键名。
+WebUI 禁用对应输入；API 若实际改变锁定值则返回
+`400 source_profile_field_locked`，但保持锁定值不变时仍可保存该来源的下载器、
+规则开关等未锁字段。
+
 环境变量的嵌套键使用 .NET 双下划线格式，例如：
 
 ```text
@@ -70,7 +91,8 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `tmdb_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`bangumi_proxy_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
-`ANIMEGO_CATEGORY`、`ANIMEGO_PROXY_URL`、`ANIMEGO_WEB_HOST`、
+`ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
+`ANIMEGO_PROXY_URL`、`ANIMEGO_WEB_HOST`、
 `ANIMEGO_WEB_PORT`。标准 ASP.NET Core
 `--urls` / `ASPNETCORE_URLS` 覆盖 `web.host` / `web.port`；推荐新部署优先使用
 规范嵌套键。

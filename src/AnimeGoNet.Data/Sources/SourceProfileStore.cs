@@ -121,6 +121,74 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> ApplyDeploymentOverrideAsync(
+        SourceProfileDeploymentOverride value,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var id = NormalizeId(value.Id);
+        var category = value.OverrideCategory
+            ? SourceDownloadPolicy.NormalizeCategory(value.Category)
+            : null;
+        var dynamicTagTemplate = value.OverrideDynamicTagTemplate
+            ? DownloadDynamicTagTemplate.Normalize(value.DynamicTagTemplate)
+            : null;
+        var mikanIdentityCookie = value.OverrideMikanIdentityCookie
+            ? NormalizeMikanIdentityCookie(value.Adapter, value.MikanIdentityCookie)
+            : null;
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET category = CASE
+                    WHEN $override_category = 1 THEN $category
+                    ELSE category
+                END,
+                dynamic_tag_template = CASE
+                    WHEN $override_dynamic_tag_template = 1
+                        THEN $dynamic_tag_template
+                    ELSE dynamic_tag_template
+                END,
+                mikan_identity_cookie = CASE
+                    WHEN $override_mikan_identity_cookie = 1
+                        THEN $mikan_identity_cookie
+                    ELSE mikan_identity_cookie
+                END,
+                revision = revision + 1,
+                updated_at_utc = $updated_at_utc
+            WHERE id = $id
+              AND (
+                    ($override_category = 1 AND category IS NOT $category)
+                 OR ($override_dynamic_tag_template = 1
+                     AND dynamic_tag_template IS NOT $dynamic_tag_template)
+                 OR ($override_mikan_identity_cookie = 1
+                     AND mikan_identity_cookie IS NOT $mikan_identity_cookie)
+              );
+            """;
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$override_category", value.OverrideCategory ? 1 : 0);
+        command.Parameters.AddWithValue("$category", (object?)category ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$override_dynamic_tag_template",
+            value.OverrideDynamicTagTemplate ? 1 : 0);
+        command.Parameters.AddWithValue(
+            "$dynamic_tag_template",
+            (object?)dynamicTagTemplate ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$override_mikan_identity_cookie",
+            value.OverrideMikanIdentityCookie ? 1 : 0);
+        command.Parameters.AddWithValue(
+            "$mikan_identity_cookie",
+            (object?)mikanIdentityCookie ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$updated_at_utc",
+            utcNow.ToString("O", CultureInfo.InvariantCulture));
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
+
     public async Task<SourceProfileRecord?> GetEnabledAsync(
         string id,
         CancellationToken cancellationToken = default)

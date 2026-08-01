@@ -2844,23 +2844,28 @@ public static class ApiEndpoints
     private static async Task<Ok<SourceProfileListResponse>> ListSourceProfiles(
         SourceProfileStore profiles,
         SourceRssScheduleManager schedules,
+        SourceProfileDeploymentLocks locks,
         CancellationToken cancellationToken)
     {
         var records = await profiles.ListAsync(cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(new SourceProfileListResponse(
-            records.Select(profile => ToResponse(profile, schedules)).ToArray()));
+            records.Select(profile => ToResponse(
+                profile,
+                schedules,
+                locks.ForSource(profile.Id))).ToArray()));
     }
 
     private static async Task<IResult> GetSourceProfile(
         string sourceProfileId,
         SourceProfileStore profiles,
         SourceRssScheduleManager schedules,
+        SourceProfileDeploymentLocks locks,
         CancellationToken cancellationToken)
     {
         var record = await profiles.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
         return record is null
             ? TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."))
-            : TypedResults.Ok(ToResponse(record, schedules));
+            : TypedResults.Ok(ToResponse(record, schedules, locks.ForSource(record.Id)));
     }
 
     private static async Task<IResult> CreateSourceProfile(
@@ -2871,6 +2876,7 @@ public static class ApiEndpoints
         MikanRssRuleStore rules,
         LegacyMikanFilterStore legacyFilters,
         SourceRssScheduleManager schedules,
+        SourceProfileDeploymentLocks locks,
         IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
@@ -2912,7 +2918,7 @@ public static class ApiEndpoints
                 applicationLifetime.ApplicationStopping).ConfigureAwait(false);
             return TypedResults.Created(
                 $"/api/v1/sources/{id}",
-                ToResponse(created, schedules));
+                ToResponse(created, schedules, locks.ForSource(created.Id)));
         }
         catch (SourceProfileDuplicateException)
         {
@@ -2932,6 +2938,7 @@ public static class ApiEndpoints
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         SourceProfileStore profiles,
         SourceRssScheduleManager schedules,
+        SourceProfileDeploymentLocks locks,
         IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
@@ -2985,13 +2992,42 @@ public static class ApiEndpoints
                 current,
                 options,
                 plugins);
+            var changedLockedFields = new List<string>();
+            AddLockedChange("category", current.Category, definition.Category);
+            AddLockedChange(
+                "dynamic_tag_template",
+                current.DynamicTagTemplate,
+                definition.DynamicTagTemplate);
+            AddLockedChange(
+                "mikan_identity_cookie",
+                current.MikanIdentityCookie,
+                definition.MikanIdentityCookie);
+            if (changedLockedFields.Count > 0)
+            {
+                return TypedResults.BadRequest(Error(
+                    "source_profile_field_locked",
+                    "Deployment-controlled source fields cannot be changed: "
+                    + string.Join(", ", changedLockedFields)));
+            }
             var saved = await profiles.UpdateAsync(
                 id, definition, request.ExpectedRevision, DateTimeOffset.UtcNow, cancellationToken)
                 .ConfigureAwait(false);
             await schedules.ApplyAsync(
                 saved,
                 applicationLifetime.ApplicationStopping).ConfigureAwait(false);
-            return TypedResults.Ok(ToResponse(saved, schedules));
+            return TypedResults.Ok(ToResponse(
+                saved,
+                schedules,
+                locks.ForSource(saved.Id)));
+
+            void AddLockedChange(string field, string? before, string? after)
+            {
+                if (locks.IsLocked(id, field)
+                    && !string.Equals(before, after, StringComparison.Ordinal))
+                {
+                    changedLockedFields.Add(field);
+                }
+            }
         }
         catch (SourceProfileRevisionException)
         {
@@ -5310,7 +5346,8 @@ public static class ApiEndpoints
 
     private static SourceProfileResponse ToResponse(
         SourceProfileAdminRecord profile,
-        SourceRssScheduleManager schedules)
+        SourceRssScheduleManager schedules,
+        IReadOnlyList<SourceProfileDeploymentFieldLock> locks)
     {
         var schedule = schedules.Get(profile.Id);
         return new(
@@ -5327,6 +5364,10 @@ public static class ApiEndpoints
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
             profile.Enabled,
+            locks.Select(value => new SourceProfileFieldLockResponse(
+                value.Field,
+                value.Source,
+                value.ControllingKeys)).ToArray(),
             profile.MikanIdentityCookie is not null,
             profile.Revision,
             profile.IngestTaskCount,

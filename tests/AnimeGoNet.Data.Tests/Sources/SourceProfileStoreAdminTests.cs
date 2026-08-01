@@ -146,6 +146,65 @@ public sealed class SourceProfileStoreAdminTests
     }
 
     [Fact]
+    public async Task DeploymentOverrideRemainsAuthoritativeAndIsIdempotent()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var seed = AnimeGoDefaults.CreateDocker().InitialSourceProfiles[0];
+        await store.EnsureSeedsAsync([seed]);
+        var initial = Assert.IsType<SourceProfileAdminRecord>(await store.GetAsync("mikan"));
+        var userValue = await store.UpdateAsync(
+            "mikan",
+            Definition("Mikan", "mikan", "bt", "move", ["mikanani.me"]) with
+            {
+                Category = "user-category",
+                DynamicTagTemplate = "{year}-user",
+                MikanIdentityCookie = "user-cookie",
+            },
+            initial.Revision,
+            At(10));
+
+        var deploymentOverride = new SourceProfileDeploymentOverride(
+            "mikan",
+            "mikan",
+            OverrideCategory: true,
+            Category: "environment-category",
+            OverrideDynamicTagTemplate: true,
+            DynamicTagTemplate: "{year}-environment",
+            OverrideMikanIdentityCookie: true,
+            MikanIdentityCookie: "environment-cookie");
+        Assert.True(await store.ApplyDeploymentOverrideAsync(
+            deploymentOverride,
+            At(11)));
+        var applied = Assert.IsType<SourceProfileAdminRecord>(await store.GetAsync("mikan"));
+
+        Assert.Equal(userValue.Revision + 1, applied.Revision);
+        Assert.Equal("environment-category", applied.Category);
+        Assert.Equal("{year}-environment", applied.DynamicTagTemplate);
+        Assert.Equal("environment-cookie", applied.MikanIdentityCookie);
+        Assert.DoesNotContain("environment-cookie", deploymentOverride.ToString(), StringComparison.Ordinal);
+        Assert.False(await store.ApplyDeploymentOverrideAsync(
+            deploymentOverride,
+            At(12)));
+        Assert.Equal(
+            applied.Revision,
+            (await store.GetAsync("mikan"))!.Revision);
+
+        Assert.True(await store.ApplyDeploymentOverrideAsync(
+            deploymentOverride with
+            {
+                OverrideCategory = false,
+                DynamicTagTemplate = null,
+                MikanIdentityCookie = null,
+            },
+            At(13)));
+        var cleared = Assert.IsType<SourceProfileAdminRecord>(await store.GetAsync("mikan"));
+        Assert.Equal("environment-category", cleared.Category);
+        Assert.Null(cleared.DynamicTagTemplate);
+        Assert.Null(cleared.MikanIdentityCookie);
+    }
+
+    [Fact]
     public async Task NonMikanProfileCannotPersistMikanCookie()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

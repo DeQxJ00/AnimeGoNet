@@ -153,6 +153,13 @@ public static class AnimeGoApplication
             : optionsWereSupplied
                 ? DownloaderDeploymentLocks.Empty
                 : DownloaderDeploymentLocks.FromCurrentProcess(args);
+        var sourceProfileLocks = deploymentEnvironmentVariables is not null
+            ? SourceProfileDeploymentLocks.FromSources(
+                deploymentEnvironmentVariables,
+                args)
+            : optionsWereSupplied
+                ? SourceProfileDeploymentLocks.Empty
+                : SourceProfileDeploymentLocks.FromCurrentProcess(args);
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
         var externalPluginLoader = new ExternalPluginManifestLoader(layout.PluginsPath);
@@ -232,6 +239,16 @@ public static class AnimeGoApplication
             cancellationToken).ConfigureAwait(false);
         var sourceProfiles = new SourceProfileStore(database);
         await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
+        foreach (var seed in options.InitialSourceProfiles)
+        {
+            if (sourceProfileLocks.CreateOverride(seed) is { } deploymentOverride)
+            {
+                await sourceProfiles.ApplyDeploymentOverrideAsync(
+                    deploymentOverride,
+                    DateTimeOffset.UtcNow,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
         await sourceProfiles.RecoverInterruptedScheduledRunsAsync(
             DateTimeOffset.UtcNow,
             cancellationToken).ConfigureAwait(false);
@@ -274,6 +291,7 @@ public static class AnimeGoApplication
             runningInContainer.Value));
         builder.Services.AddSingleton(configurationLocks);
         builder.Services.AddSingleton(downloaderLocks);
+        builder.Services.AddSingleton(sourceProfileLocks);
         builder.Services.AddSingleton(dataUpdateRuntime);
         builder.Services.AddSingleton(layout);
         builder.Services.AddSingleton(new RuntimeConfigurationState(
@@ -1011,7 +1029,12 @@ public static class AnimeGoApplication
                     ?? "animegonet",
                 Tags = ReadScalarList(child.GetSection("tags")),
                 DynamicTagTemplate = DownloadDynamicTagTemplate.Normalize(
-                    FirstConfigurationValue(child, "dynamic_tag_template")),
+                    id == "mikan"
+                        ? FirstPresentConfigurationValue(
+                            configuration,
+                            "ANIMEGO_TAG",
+                            "sources:mikan:dynamic_tag_template")
+                        : FirstConfigurationValue(child, "dynamic_tag_template")),
                 SeedingTimeMinutes = ParseOptionalInt(
                     FirstConfigurationValue(child, "seeding_time_minutes"),
                     0,
@@ -1030,14 +1053,11 @@ public static class AnimeGoApplication
                     StringComparison.OrdinalIgnoreCase)
                     ? MikanIdentityCookie.NormalizeOptional(
                         id == "mikan"
-                            ? First(
-                                FirstConfigurationValue(
-                                    configuration,
-                                    "ANIMEGO_MIKAN_COOKIE",
-                                    "mikan_cookie"),
-                                FirstConfigurationValue(
-                                    child,
-                                    "mikan_identity_cookie"))
+                            ? FirstPresentConfigurationValue(
+                                configuration,
+                                "ANIMEGO_MIKAN_COOKIE",
+                                "mikan_cookie",
+                                "sources:mikan:mikan_identity_cookie")
                             : FirstConfigurationValue(
                                 child,
                                 "mikan_identity_cookie"))

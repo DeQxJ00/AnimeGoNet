@@ -1040,6 +1040,11 @@ interface SourceProfile {
   rss_filter_enabled: boolean;
   rss_priority_enabled: boolean;
   enabled: boolean;
+  locked_fields: Array<{
+    field: "category" | "dynamic_tag_template" | "mikan_identity_cookie";
+    source: "environment" | "command_line" | "environment_and_command_line";
+    controlling_keys: string[];
+  }>;
   mikan_identity_cookie_configured: boolean;
   rss_feed_url_configured: boolean;
   rss_schedule_enabled: boolean;
@@ -5374,10 +5379,15 @@ function updateSourceCredentialInputs(): void {
   const clear = element<HTMLInputElement>("#source-mikan-cookie-clear");
   const current = activeSource();
   const isMikan = adapter === "mikan";
-  input.disabled = !isMikan || clear.checked;
-  clear.disabled = !isMikan || current === null;
+  const cookieLock = current?.locked_fields.find(
+    (lock) => lock.field === "mikan_identity_cookie",
+  );
+  input.disabled = !isMikan || clear.checked || cookieLock !== undefined;
+  clear.disabled = !isMikan || current === null || cookieLock !== undefined;
   if (!isMikan || clear.checked) input.value = "";
-  element<HTMLElement>("#source-mikan-cookie-state").textContent = !isMikan
+  element<HTMLElement>("#source-mikan-cookie-state").textContent = cookieLock
+    ? `部署锁只读（${cookieLock.controlling_keys.join(" / ")}），值永不回显。`
+    : !isMikan
     ? "仅 Mikan 适配器可配置登录 Cookie。"
     : current?.mikan_identity_cookie_configured
     ? "已配置（值永不回显）；留空保持不变。"
@@ -5431,9 +5441,23 @@ function populateSourceForm(profile: SourceProfile | null): void {
   adapter.value = profile?.adapter ?? "u2";
   element<HTMLInputElement>("#source-downloader").value = profile?.downloader_id ?? "pt";
   element<HTMLSelectElement>("#source-strategy").value = profile?.file_strategy ?? "link";
-  element<HTMLInputElement>("#source-category").value = profile?.category ?? "animegonet";
+  const category = element<HTMLInputElement>("#source-category");
+  const dynamicTag = element<HTMLInputElement>("#source-dynamic-tag");
+  const categoryLock = profile?.locked_fields.find((lock) => lock.field === "category");
+  const dynamicTagLock = profile?.locked_fields.find(
+    (lock) => lock.field === "dynamic_tag_template",
+  );
+  category.value = profile?.category ?? "animegonet";
+  category.disabled = categoryLock !== undefined;
+  category.title = categoryLock
+    ? `部署锁：${categoryLock.controlling_keys.join(" / ")}`
+    : "";
   element<HTMLInputElement>("#source-tags").value = profile?.tags.join(", ") ?? "";
-  element<HTMLInputElement>("#source-dynamic-tag").value = profile?.dynamic_tag_template ?? "";
+  dynamicTag.value = profile?.dynamic_tag_template ?? "";
+  dynamicTag.disabled = dynamicTagLock !== undefined;
+  dynamicTag.title = dynamicTagLock
+    ? `部署锁：${dynamicTagLock.controlling_keys.join(" / ")}`
+    : "";
   element<HTMLInputElement>("#source-seeding-time").value =
     String(profile?.seeding_time_minutes ?? 0);
   element<HTMLTextAreaElement>("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
@@ -5481,7 +5505,10 @@ function renderSourceList(): void {
     revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
     heading.append(name, revision);
     const route = document.createElement("p");
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    const lockState = profile.locked_fields.length > 0
+      ? ` · 部署锁 ${profile.locked_fields.map((lock) => lock.field).join("/")}`
+      : "";
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;

@@ -66,7 +66,7 @@
 - [>] 固化 JSON source-generation context（状态、统一导入和 legacy manager DTO 已覆盖；后续 API DTO 持续加入）。
 - [ ] 移植 hash、name、path、时间等纯函数。
 - [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
-- [>] 移植环境变量覆盖：规范嵌套键、现有扁平键、旧 qB 兼容键及命令行优先级已接入；上游 `ANIMEGO_WEB_HOST/PORT`、原生 `127.0.0.1:7991`、Docker `0.0.0.0:7991` 和标准 `--urls`/`ASPNETCORE_URLS` 高优先级均有真实 Kestrel 监听测试；旧 `ANIMEGO_PROXY_URL` 同时映射并锁定 TMDB/Bangumi 独立代理，专用变量优先且显式空值同时关闭；应用字段和下载器实例字段的部署锁均在 API/WebUI 逐字段显示来源，拒绝改写且保存其他字段时不把环境凭据复制进私有覆盖。路径、旧全局 tag 及完整旧配置 precedence parity 仍待补齐。
+- [>] 移植环境变量覆盖：规范嵌套键、现有扁平键、旧 qB 兼容键及命令行优先级已接入；上游 `ANIMEGO_WEB_HOST/PORT`、原生 `127.0.0.1:7991`、Docker `0.0.0.0:7991` 和标准 `--urls`/`ASPNETCORE_URLS` 高优先级均有真实 Kestrel 监听测试；旧 `ANIMEGO_PROXY_URL` 同时映射并锁定 TMDB/Bangumi 独立代理，专用变量优先且显式空值同时关闭；`ANIMEGO_CATEGORY/TAG/MIKAN_COOKIE` 与规范 `sources__<id>__*` 已按 SourceProfile 字段建立启动重断言、API/WebUI 锁定和 Cookie 不回显；应用字段和下载器实例字段也逐字段显示来源、拒绝改写且保存其他字段时不复制部署凭据。路径及完整旧配置 precedence parity 仍待补齐。
 - [>] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均已有测试；全部旧 Go 配置异常 parity 仍待补齐。
 - [x] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：只接受上游明确列出的 13 个版本，12 份固定 `develop@c7475df` 历史 YAML 以 SHA-256 锁定并逐份迁移验证；旧 qB `setting:`/`advanced:` 默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/动态 tag 模板/TMDB/代理/失败链/Cron 与 `advanced.source|anidata.mikan.cookie` 已迁移，错误值及上游不存在的范围内版本均在落盘前拒绝，Transmission 保持原文件并 fail closed。
 - [x] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取、新安装默认注释及旧 YAML 自动重写新默认值均已完成。

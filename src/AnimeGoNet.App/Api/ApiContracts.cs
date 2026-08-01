@@ -1067,6 +1067,8 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("locked_fields")]
+    IReadOnlyList<SourceProfileFieldLockResponse> LockedFields,
     [property: JsonPropertyName("mikan_identity_cookie_configured")]
     bool MikanIdentityCookieConfigured,
     [property: JsonPropertyName("revision")] long Revision,
@@ -1087,6 +1089,11 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("rss_last_completed_at_utc")] DateTimeOffset? RssLastCompletedAtUtc = null,
     [property: JsonPropertyName("rss_last_failure_code")] string? RssLastFailureCode = null,
     [property: JsonPropertyName("rss_last_batch_id")] string? RssLastBatchId = null);
+
+public sealed record SourceProfileFieldLockResponse(
+    [property: JsonPropertyName("field")] string Field,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("controlling_keys")] IReadOnlyList<string> ControllingKeys);
 
 public sealed record SourceProfileListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<SourceProfileResponse> Items);

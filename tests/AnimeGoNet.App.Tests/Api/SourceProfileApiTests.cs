@@ -214,6 +214,95 @@ public sealed class SourceProfileApiTests
         Assert.Equal(HttpStatusCode.Conflict, defaultDelete.StatusCode);
     }
 
+    [Fact]
+    public async Task DeploymentControlledMikanFieldsAreProjectedAndCannotBeChanged()
+    {
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                InitialSourceProfiles =
+                [
+                    options.InitialSourceProfiles[0] with
+                    {
+                        Category = "environment-category",
+                        DynamicTagTemplate = "{year}-environment",
+                        MikanIdentityCookie = "environment-private-cookie",
+                    },
+                ],
+            },
+            deploymentEnvironmentVariables:
+            [
+                "ANIMEGO_CATEGORY",
+                "ANIMEGO_TAG",
+                "ANIMEGO_MIKAN_COOKIE",
+            ]);
+
+        using var get = await app.Client.GetAsync("/api/v1/sources/mikan");
+        var getText = await get.Content.ReadAsStringAsync();
+        using var current = JsonDocument.Parse(getText);
+        var item = current.RootElement;
+        Assert.Equal("environment-category", item.GetProperty("category").GetString());
+        Assert.Equal("{year}-environment", item.GetProperty("dynamic_tag_template").GetString());
+        Assert.True(item.GetProperty("mikan_identity_cookie_configured").GetBoolean());
+        var locks = item.GetProperty("locked_fields").EnumerateArray().ToArray();
+        Assert.Equal(3, locks.Length);
+        Assert.All(locks, value => Assert.Equal("environment", value
+            .GetProperty("source").GetString()));
+        Assert.Contains(locks, value => value.GetProperty("field").GetString() == "category"
+            && value.GetProperty("controlling_keys")[0].GetString() == "ANIMEGO_CATEGORY");
+        Assert.Contains(locks, value => value.GetProperty("field").GetString()
+            == "dynamic_tag_template"
+            && value.GetProperty("controlling_keys")[0].GetString() == "ANIMEGO_TAG");
+        Assert.Contains(locks, value => value.GetProperty("field").GetString()
+            == "mikan_identity_cookie"
+            && value.GetProperty("controlling_keys")[0].GetString()
+            == "ANIMEGO_MIKAN_COOKIE");
+        Assert.DoesNotContain("environment-private-cookie", getText, StringComparison.Ordinal);
+
+        using var rejected = await app.Client.PutAsync("/api/v1/sources/mikan", Json(new
+        {
+            display_name = "Mikan rejected",
+            downloader_id = "bt",
+            file_strategy = "move",
+            allowed_torrent_hosts = new List<string> { "mikanani.me" },
+            category = "user-category",
+            dynamic_tag_template = "{year}-user",
+            seeding_time_minutes = 0,
+            rss_filter_enabled = true,
+            rss_priority_enabled = true,
+            enabled = true,
+            clear_mikan_identity_cookie = true,
+            expected_revision = item.GetProperty("revision").GetInt64(),
+        }));
+        var error = await rejected.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Contains("source_profile_field_locked", error, StringComparison.Ordinal);
+        Assert.Contains("category", error, StringComparison.Ordinal);
+        Assert.Contains("dynamic_tag_template", error, StringComparison.Ordinal);
+        Assert.Contains("mikan_identity_cookie", error, StringComparison.Ordinal);
+
+        using var allowed = await app.Client.PutAsync("/api/v1/sources/mikan", Json(new
+        {
+            display_name = "Mikan deployment controlled",
+            downloader_id = "bt",
+            file_strategy = "move",
+            allowed_torrent_hosts = new List<string> { "mikanani.me" },
+            category = "environment-category",
+            dynamic_tag_template = "{year}-environment",
+            seeding_time_minutes = 0,
+            rss_filter_enabled = false,
+            rss_priority_enabled = false,
+            enabled = true,
+            expected_revision = item.GetProperty("revision").GetInt64(),
+        }));
+        using var saved = JsonDocument.Parse(await allowed.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+        Assert.Equal("Mikan deployment controlled", saved.RootElement
+            .GetProperty("display_name").GetString());
+        Assert.Equal(3, saved.RootElement.GetProperty("locked_fields").GetArrayLength());
+        Assert.True(saved.RootElement.GetProperty("mikan_identity_cookie_configured").GetBoolean());
+    }
+
     [Theory]
     [InlineData("Bad_Id", "u2", "pt", "link", "u2.invalid")]
     [InlineData("u2", "other", "pt", "link", "u2.invalid")]
@@ -383,6 +472,9 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);
         Assert.Contains("loadSources", script, StringComparison.Ordinal);
+        Assert.Contains("locked_fields", script, StringComparison.Ordinal);
+        Assert.Contains("部署锁只读", script, StringComparison.Ordinal);
+        Assert.Contains("mikan_identity_cookie", script, StringComparison.Ordinal);
         Assert.Contains("previewSourceRoute", script, StringComparison.Ordinal);
         Assert.Contains("expected_revision", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/sources/", script, StringComparison.Ordinal);

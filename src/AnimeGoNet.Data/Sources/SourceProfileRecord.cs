@@ -82,6 +82,23 @@ public sealed record SourceProfileDefinition(
         + $"CredentialsConfigured = {MikanIdentityCookie is not null} }}";
 }
 
+public sealed record SourceProfileDeploymentOverride(
+    string Id,
+    string Adapter,
+    bool OverrideCategory,
+    string Category,
+    bool OverrideDynamicTagTemplate,
+    string? DynamicTagTemplate,
+    bool OverrideMikanIdentityCookie,
+    string? MikanIdentityCookie)
+{
+    public override string ToString() =>
+        $"SourceProfileDeploymentOverride {{ Id = {Id}, "
+        + $"OverrideCategory = {OverrideCategory}, "
+        + $"OverrideDynamicTagTemplate = {OverrideDynamicTagTemplate}, "
+        + $"OverrideCredentials = {OverrideMikanIdentityCookie} }}";
+}
+
 public sealed class SourceProfileRevisionException : InvalidOperationException;
 
 public sealed class SourceProfileConflictException(string message) : InvalidOperationException(message);
