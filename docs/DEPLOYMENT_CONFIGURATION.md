@@ -70,9 +70,15 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `tmdb_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`bangumi_proxy_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
-`ANIMEGO_CATEGORY`、`ANIMEGO_WEB_HOST`、`ANIMEGO_WEB_PORT`。标准 ASP.NET Core
+`ANIMEGO_CATEGORY`、`ANIMEGO_PROXY_URL`、`ANIMEGO_WEB_HOST`、
+`ANIMEGO_WEB_PORT`。标准 ASP.NET Core
 `--urls` / `ASPNETCORE_URLS` 覆盖 `web.host` / `web.port`；推荐新部署优先使用
 规范嵌套键。
+
+旧 `ANIMEGO_PROXY_URL` 同时覆盖 TMDB 和 Bangumi 代理，以保留上游“一个全局
+代理”的语义；显式空值同时关闭两者。`tmdb_proxy_url` / `bangumi_proxy_url` 专用
+变量优先于旧全局变量。旧全局变量存在时，WebUI 将两个独立代理字段都标记为环境
+锁并拒绝私有覆盖。
 
 原生默认监听 `127.0.0.1:7991`，不会默认暴露到局域网。Docker 默认监听
 `0.0.0.0:7991`，并继续强制要求非空 Access Key。host 只接受 DNS 名或 IP 地址，

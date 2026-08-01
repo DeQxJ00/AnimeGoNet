@@ -29,6 +29,19 @@ public sealed class DeploymentConfigurationLocksTests
     }
 
     [Fact]
+    public void LegacyGlobalProxyLocksBothIndependentProxyFields()
+    {
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+            ["animego_proxy_url"]);
+
+        Assert.True(locks.IsLocked("tmdb_proxy_url"));
+        Assert.True(locks.IsLocked("bangumi_proxy_url"));
+        Assert.All(
+            locks.Items,
+            item => Assert.Equal(["animego_proxy_url"], item.EnvironmentVariables));
+    }
+
+    [Fact]
     public void ReapplyRestoresOnlyEnvironmentControlledDeploymentValues()
     {
         var defaults = AnimeGoDefaults.CreateNative(Path.GetTempPath());

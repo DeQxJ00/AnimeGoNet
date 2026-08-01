@@ -550,9 +550,10 @@ public static class AnimeGoApplication
                             "metadata:tmdb:base_url"),
                         "tmdb_base_url") ?? defaults.Metadata.Tmdb.BaseUrl,
                     ProxyUrl = ParseOptionalAbsoluteUri(
-                        FirstConfigurationValue(
+                        FirstPresentConfigurationValue(
                             configuration,
                             "tmdb_proxy_url",
+                            "ANIMEGO_PROXY_URL",
                             "metadata:tmdb:proxy_url"),
                         "tmdb_proxy_url"),
                     ApiKey = NormalizeOptional(FirstConfigurationValue(
@@ -600,9 +601,10 @@ public static class AnimeGoApplication
                             "metadata:bangumi:base_url"),
                         "bangumi_base_url") ?? defaults.Metadata.Bangumi.BaseUrl,
                     ProxyUrl = ParseOptionalAbsoluteUri(
-                        FirstConfigurationValue(
+                        FirstPresentConfigurationValue(
                             configuration,
                             "bangumi_proxy_url",
+                            "ANIMEGO_PROXY_URL",
                             "metadata:bangumi:proxy_url"),
                         "bangumi_proxy_url"),
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
@@ -1069,6 +1071,21 @@ public static class AnimeGoApplication
         {
             var value = configuration[key];
             if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FirstPresentConfigurationValue(
+        ConfigurationManager configuration,
+        params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (configuration[key] is { } value)
             {
                 return value.Trim();
             }

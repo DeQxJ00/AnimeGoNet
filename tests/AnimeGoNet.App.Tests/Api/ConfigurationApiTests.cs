@@ -805,6 +805,58 @@ public sealed class ConfigurationApiTests
             preserved.Settings?.InheritedFields ?? []);
     }
 
+    [Fact]
+    public async Task LegacyGlobalProxyProjectsAndRejectsBothIndependentProxyWrites()
+    {
+        var proxy = new Uri("http://127.0.0.1:7890/");
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Tmdb = options.Metadata.Tmdb with { ProxyUrl = proxy },
+                    Bangumi = options.Metadata.Bangumi with { ProxyUrl = proxy },
+                },
+            },
+            deploymentEnvironmentVariables: ["ANIMEGO_PROXY_URL"]);
+
+        using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
+        using (var current = JsonDocument.Parse(
+            await currentResponse.Content.ReadAsStreamAsync()))
+        {
+            var editable = current.RootElement.GetProperty("editable");
+            var locks = editable.GetProperty("locked_fields")
+                .EnumerateArray()
+                .ToDictionary(item => item.GetProperty("field").GetString()!);
+            Assert.Equal(proxy.AbsoluteUri, editable.GetProperty("tmdb_proxy_url").GetString());
+            Assert.Equal(proxy.AbsoluteUri, editable.GetProperty("bangumi_proxy_url").GetString());
+            Assert.Equal(
+                "ANIMEGO_PROXY_URL",
+                locks["tmdb_proxy_url"].GetProperty("environment_variables")[0].GetString());
+            Assert.Equal(
+                "ANIMEGO_PROXY_URL",
+                locks["bangumi_proxy_url"].GetProperty("environment_variables")[0].GetString());
+        }
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                tmdbProxy: "http://127.0.0.1:7891/",
+                bangumiProxy: "http://127.0.0.1:7892/"));
+        var error = await write.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, write.StatusCode);
+        Assert.Contains("configuration_field_locked", error, StringComparison.Ordinal);
+        Assert.Contains("tmdb_proxy_url", error, StringComparison.Ordinal);
+        Assert.Contains("bangumi_proxy_url", error, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(
+            app.RootPath,
+            "data",
+            "config",
+            "application.private.json")));
+    }
+
     private static StringContent Payload(
         long expectedRevision,
         string? apiKey = null,

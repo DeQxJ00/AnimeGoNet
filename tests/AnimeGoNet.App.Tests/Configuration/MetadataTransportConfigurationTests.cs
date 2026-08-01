@@ -1,12 +1,48 @@
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Configuration;
 
 public sealed class MetadataTransportConfigurationTests
 {
+    [Fact]
+    public void LegacyGlobalProxyMapsToBothClientsAndSpecificValueWins()
+    {
+        var configuration = new ConfigurationManager();
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ANIMEGO_PROXY_URL"] = "http://127.0.0.1:7890/",
+            ["tmdb_proxy_url"] = "socks5://127.0.0.1:1080/",
+            ["metadata:tmdb:proxy_url"] = "https://yaml-tmdb.invalid/",
+            ["metadata:bangumi:proxy_url"] = "https://yaml-bangumi.invalid/",
+        });
+
+        var options = AnimeGoApplication.LoadOptions(configuration, inContainer: false);
+
+        Assert.Equal(new Uri("socks5://127.0.0.1:1080/"), options.Metadata.Tmdb.ProxyUrl);
+        Assert.Equal(new Uri("http://127.0.0.1:7890/"), options.Metadata.Bangumi.ProxyUrl);
+    }
+
+    [Fact]
+    public void ExplicitEmptyLegacyGlobalProxyDisablesBothYamlProxies()
+    {
+        var configuration = new ConfigurationManager();
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ANIMEGO_PROXY_URL"] = string.Empty,
+            ["metadata:tmdb:proxy_url"] = "https://yaml-tmdb.invalid/",
+            ["metadata:bangumi:proxy_url"] = "https://yaml-bangumi.invalid/",
+        });
+
+        var options = AnimeGoApplication.LoadOptions(configuration, inContainer: false);
+
+        Assert.Null(options.Metadata.Tmdb.ProxyUrl);
+        Assert.Null(options.Metadata.Bangumi.ProxyUrl);
+    }
+
     [Fact]
     public async Task CommandLineConfigurationBindsIndependentApiAndProxyUrls()
     {
