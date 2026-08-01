@@ -103,7 +103,7 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 ```
 
 兼容的扁平变量包括 `data_path`、`download_path`、`save_path`、
-`tmdb_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、
+`tmdb_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、`tmdb_cache_hour`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`bangumi_proxy_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
@@ -174,6 +174,9 @@ metadata:
     read_access_token: ''
     language: zh-CN
     timeout_seconds: 30
+    retry_count: 3
+    retry_wait_seconds: 5
+    cache_hours: 336
   bangumi:
     base_url: https://api.bgm.tv/
     proxy_url: ''
@@ -224,6 +227,14 @@ data_update:
 `{week_name}`，逗号分隔多个 qB tag。模板在任务创建时随 SourceProfile revision
 冻结，只在 TMDB 元数据确认后的暂停下载准备阶段展开；不会把 passkey、凭据或
 未展开模板发送到 qB。
+
+`metadata.tmdb.cache_hours` 只缓存已经通过协议与父子身份校验的 TMDB
+Search/Series/Season/Episode 成功响应，默认 `336` 小时（14 天），范围为大于 0
+且不超过 8760 小时。权威 404、网络、认证、限流、服务、协议和取消失败不会写入
+缓存；到期条目惰性删除。旧配置
+`advanced.cache.themoviedb_cache_hour` 与扁平键 `tmdb_cache_hour` 会迁移到同一字段。
+缓存位于 SQLite `bolt/themoviedb` bucket，可在 WebUI 缓存页按 opaque 标识精确
+删除；缓存键和值都不包含 API key 或 Bearer token，原始搜索词只参与键摘要而不单独落库。
 
 季度失败链按 P4 → P3 → P2 → P1 逐级执行；四项均默认关闭。P3 需要 bgmid，并按
 Bangumi 前作名字和开播日期重新验证 TMDB Series+Season；P2 只从统一导入任务

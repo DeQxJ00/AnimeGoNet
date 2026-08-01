@@ -308,6 +308,10 @@ internal static class DeploymentYamlConfiguration
             "advanced:source:themoviedb:api_key",
             "metadata:tmdb:api_key");
         Alias(values, "setting:key:themoviedb", "metadata:tmdb:api_key");
+        Alias(
+            values,
+            "advanced:cache:themoviedb_cache_hour",
+            "metadata:tmdb:cache_hours");
 
         Add(values, "downloaders:bt:type", DownloaderTypes.Qbittorrent);
         AliasAny(
@@ -639,6 +643,7 @@ internal static class DeploymentYamlConfiguration
                 timeout_seconds: {{Number(values, "metadata:tmdb:timeout_seconds", defaults.Metadata.Tmdb.HttpTimeout.TotalSeconds)}}
                 retry_count: {{Integer(values, "metadata:tmdb:retry_count", defaults.Metadata.Tmdb.RetryCount)}}
                 retry_wait_seconds: {{Number(values, "metadata:tmdb:retry_wait_seconds", defaults.Metadata.Tmdb.RetryDelay.TotalSeconds)}}
+                cache_hours: {{Number(values, "metadata:tmdb:cache_hours", defaults.Metadata.Tmdb.CacheTtl.TotalHours)}}
               bangumi:
                 base_url: {{Scalar(Configured(values, "metadata:bangumi:base_url", defaults.Metadata.Bangumi.BaseUrl.AbsoluteUri))}}
                 proxy_url: {{Scalar(Configured(values, "metadata:bangumi:proxy_url", string.Empty))}}

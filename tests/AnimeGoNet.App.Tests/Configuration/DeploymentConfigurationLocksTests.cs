@@ -23,6 +23,9 @@ public sealed class DeploymentConfigurationLocksTests
         var legacyTmdbKey = DeploymentConfigurationLocks.FromVariableNames(
             ["ANIMEGO_THEMOVIEDB_KEY"]);
         Assert.True(legacyTmdbKey.IsLocked("tmdb_api_key"));
+        var legacyTmdbCache = DeploymentConfigurationLocks.FromVariableNames(
+            ["advanced__cache__themoviedb_cache_hour"]);
+        Assert.True(legacyTmdbCache.IsLocked("tmdb_cache_hours"));
         Assert.Equal(
             ["ai_use_episode_match"],
             Assert.Single(locks.Items, item => item.Field == "ai_use_metadata_match")
@@ -40,6 +43,31 @@ public sealed class DeploymentConfigurationLocksTests
         Assert.All(
             locks.Items,
             item => Assert.Equal(["animego_proxy_url"], item.EnvironmentVariables));
+    }
+
+    [Fact]
+    public void CanonicalTmdbCacheLockReappliesDeploymentTtl()
+    {
+        var deployment = AnimeGoDefaults.CreateDocker();
+        var candidate = deployment with
+        {
+            Metadata = deployment.Metadata with
+            {
+                Tmdb = deployment.Metadata.Tmdb with
+                {
+                    CacheTtl = TimeSpan.FromHours(12),
+                },
+            },
+        };
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+            ["metadata__tmdb__cache_hours"]);
+
+        var result = locks.Reapply(deployment, candidate);
+
+        Assert.Equal(TimeSpan.FromDays(14), result.Metadata.Tmdb.CacheTtl);
+        Assert.Equal(
+            ["tmdb_cache_hours"],
+            locks.FindChangedLockedFields(deployment, candidate));
     }
 
     [Fact]

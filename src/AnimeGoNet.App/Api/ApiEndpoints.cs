@@ -1409,6 +1409,7 @@ public static class ApiEndpoints
                     tmdb.HttpTimeout.TotalSeconds,
                     tmdb.RetryCount,
                     tmdb.RetryDelay.TotalSeconds,
+                    tmdb.CacheTtl.TotalHours,
                     !string.IsNullOrWhiteSpace(tmdb.ApiKey),
                     !string.IsNullOrWhiteSpace(tmdb.ReadAccessToken)),
                 new BangumiConfigurationResponse(
@@ -1472,6 +1473,7 @@ public static class ApiEndpoints
             tmdb.HttpTimeout.TotalSeconds,
             tmdb.RetryCount,
             tmdb.RetryDelay.TotalSeconds,
+            tmdb.CacheTtl.TotalHours,
             SecretState(settings?.TmdbApiKeyOverridden == true, settings?.TmdbApiKey),
             SecretState(
                 settings?.TmdbReadAccessTokenOverridden == true,
@@ -1535,6 +1537,7 @@ public static class ApiEndpoints
         var requestedSettings = CreateApplicationOverride(
             request,
             current.Settings,
+            deployment.Metadata.Tmdb.CacheTtl.TotalHours,
             DateTimeOffset.UtcNow);
         var requestedCandidate = ApplicationOverrideStore.Apply(
             deployment,
@@ -1618,6 +1621,10 @@ public static class ApiEndpoints
             "tmdb_retry_delay_seconds",
             beforeTmdb.RetryDelay,
             afterTmdb.RetryDelay);
+        Add(
+            "tmdb_cache_hours",
+            beforeTmdb.CacheTtl.TotalHours.ToString(invariant),
+            afterTmdb.CacheTtl.TotalHours.ToString(invariant));
         AddSecret(
             "tmdb_api_key",
             request.TmdbApiKey,
@@ -1802,6 +1809,7 @@ public static class ApiEndpoints
     private static ApplicationOverrideEntry CreateApplicationOverride(
         ConfigurationUpdateRequest request,
         ApplicationOverrideEntry? current,
+        double deploymentTmdbCacheHours,
         DateTimeOffset utcNow)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(request.ExpectedConfigurationRevision);
@@ -1849,6 +1857,10 @@ public static class ApiEndpoints
                 "tmdb_retry_delay_seconds",
                 300);
         }
+        var tmdbCacheHours = request.TmdbCacheHours
+            ?? current?.TmdbCacheHours
+            ?? deploymentTmdbCacheHours;
+        ValidateSeconds(tmdbCacheHours, "tmdb_cache_hours", 24 * 365);
         ValidateSeconds(
             request.BangumiHttpTimeoutSeconds,
             "bangumi_http_timeout_seconds",
@@ -1953,7 +1965,8 @@ public static class ApiEndpoints
             BangumiRetryCount: request.BangumiRetryCount
                 ?? current?.BangumiRetryCount,
             BangumiRetryDelaySeconds: request.BangumiRetryDelaySeconds
-                ?? current?.BangumiRetryDelaySeconds);
+                ?? current?.BangumiRetryDelaySeconds,
+            TmdbCacheHours: tmdbCacheHours);
     }
 
     private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate) =>

@@ -195,6 +195,12 @@ public static partial class AnimeGoOptionsValidator
             options.Metadata.Tmdb.RetryDelay,
             errors);
 
+        if (options.Metadata.Tmdb.CacheTtl <= TimeSpan.Zero
+            || options.Metadata.Tmdb.CacheTtl > TimeSpan.FromDays(365))
+        {
+            errors.Add("TMDB cache TTL must be greater than zero and at most 365 days.");
+        }
+
         if (string.IsNullOrWhiteSpace(options.Metadata.Tmdb.Language))
         {
             errors.Add("TMDB language must not be empty.");

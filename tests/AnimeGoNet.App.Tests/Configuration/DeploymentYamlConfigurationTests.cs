@@ -131,6 +131,7 @@ public sealed class DeploymentYamlConfigurationTests
                     timeout_seconds: 41
                     retry_count: 4
                     retry_wait_seconds: 6.5
+                    cache_hours: 72
                   bangumi:
                     base_url: https://bangumi.example.invalid/v0/
                     proxy_url: ''
@@ -208,6 +209,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(TimeSpan.FromSeconds(41), options.Metadata.Tmdb.HttpTimeout);
             Assert.Equal(4, options.Metadata.Tmdb.RetryCount);
             Assert.Equal(TimeSpan.FromSeconds(6.5), options.Metadata.Tmdb.RetryDelay);
+            Assert.Equal(TimeSpan.FromHours(72), options.Metadata.Tmdb.CacheTtl);
             Assert.Equal(
                 new Uri("https://bangumi.example.invalid/v0/"),
                 options.Metadata.Bangumi.BaseUrl);

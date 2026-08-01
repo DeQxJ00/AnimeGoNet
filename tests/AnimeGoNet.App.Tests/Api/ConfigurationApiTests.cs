@@ -27,6 +27,7 @@ public sealed class ConfigurationApiTests
                         Language = "ja-JP",
                         RetryCount = 4,
                         RetryDelay = TimeSpan.FromSeconds(6.5),
+                        CacheTtl = TimeSpan.FromHours(48),
                     },
                     Bangumi = options.Metadata.Bangumi with
                     {
@@ -89,6 +90,7 @@ public sealed class ConfigurationApiTests
         Assert.True(tmdb.GetProperty("read_access_token_configured").GetBoolean());
         Assert.Equal(4, tmdb.GetProperty("retry_count").GetInt32());
         Assert.Equal(6.5, tmdb.GetProperty("retry_delay_seconds").GetDouble());
+        Assert.Equal(48, tmdb.GetProperty("cache_hours").GetDouble());
         var bangumi = metadata.GetProperty("bangumi");
         Assert.Equal(
             "https://metadata.test.invalid/bangumi/",
@@ -382,6 +384,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             "https://updates.test.invalid/manifest.json",
             stored.Settings?.DataUpdateManifestUrl);
+        Assert.Equal(336, stored.Settings?.TmdbCacheHours);
     }
 
     [Fact]
@@ -515,6 +518,7 @@ public sealed class ConfigurationApiTests
                 .GetProperty("tmdb").GetProperty("api_key_configured").GetBoolean());
             var editable = current.RootElement.GetProperty("editable");
             Assert.Equal("configured", editable.GetProperty("tmdb_api_key_state").GetString());
+            Assert.Equal(336, editable.GetProperty("tmdb_cache_hours").GetDouble());
             Assert.Equal(
                 "configured",
                 editable.GetProperty("tmdb_read_access_token_state").GetString());
@@ -531,6 +535,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal("socks5://127.0.0.1:1080/", saved.Settings?.BangumiProxyUrl);
         Assert.Equal(3, saved.Settings?.TmdbRetryCount);
         Assert.Equal(5, saved.Settings?.TmdbRetryDelaySeconds);
+        Assert.Equal(336, saved.Settings?.TmdbCacheHours);
         Assert.Equal(3, saved.Settings?.BangumiRetryCount);
         Assert.Equal(5, saved.Settings?.BangumiRetryDelaySeconds);
 
@@ -944,6 +949,7 @@ public sealed class ConfigurationApiTests
             tmdb_http_timeout_seconds = 30,
             tmdb_retry_count = tmdbRetryCount,
             tmdb_retry_delay_seconds = tmdbRetryDelaySeconds,
+            tmdb_cache_hours = 336,
             tmdb_api_key = apiKey,
             clear_tmdb_api_key = clearApiKey,
             tmdb_read_access_token = readToken,

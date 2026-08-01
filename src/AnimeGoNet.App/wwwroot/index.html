@@ -842,6 +842,7 @@
         <label>TMDB 超时（秒）<input id="configuration-tmdb-timeout" type="number" min="1" max="86400" required></label>
         <label>TMDB 额外重试次数<input id="configuration-tmdb-retry-count" type="number" min="0" max="10" required></label>
         <label>TMDB 重试间隔（秒）<input id="configuration-tmdb-retry-delay" type="number" min="0" max="300" step="0.1" required></label>
+        <label>TMDB 成功响应缓存（小时）<input id="configuration-tmdb-cache-hours" type="number" min="0.1" max="8760" step="0.1" required></label>
         <label>新 TMDB API Key<input id="configuration-tmdb-key" type="password" autocomplete="new-password"></label>
         <label class="configuration-clear"><input id="configuration-tmdb-key-clear" type="checkbox">明确清除 API Key</label>
         <p id="configuration-tmdb-key-state" class="configuration-secret-state wide"></p>

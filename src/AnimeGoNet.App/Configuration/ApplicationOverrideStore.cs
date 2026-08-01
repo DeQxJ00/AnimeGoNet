@@ -45,7 +45,8 @@ public sealed record ApplicationOverrideEntry(
     int? TmdbRetryCount = null,
     double? TmdbRetryDelaySeconds = null,
     int? BangumiRetryCount = null,
-    double? BangumiRetryDelaySeconds = null);
+    double? BangumiRetryDelaySeconds = null,
+    double? TmdbCacheHours = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -250,6 +251,11 @@ public sealed class ApplicationOverrideStore : IDisposable
                         : settings.TmdbRetryDelaySeconds is { } tmdbRetryDelay
                         ? TimeSpan.FromSeconds(tmdbRetryDelay)
                         : options.Metadata.Tmdb.RetryDelay,
+                    CacheTtl = inheritedFields.Contains("tmdb_cache_hours")
+                        ? options.Metadata.Tmdb.CacheTtl
+                        : settings.TmdbCacheHours is { } tmdbCacheHours
+                        ? TimeSpan.FromHours(tmdbCacheHours)
+                        : options.Metadata.Tmdb.CacheTtl,
                     ApiKey = !inheritedFields.Contains("tmdb_api_key")
                         && settings.TmdbApiKeyOverridden
                         ? settings.TmdbApiKey

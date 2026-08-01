@@ -104,6 +104,7 @@ public sealed class AnimeGoOptionsValidatorTests
                     HttpTimeout = TimeSpan.Zero,
                     RetryCount = 11,
                     RetryDelay = TimeSpan.FromMinutes(6),
+                    CacheTtl = TimeSpan.FromDays(366),
                     Language = " ",
                 },
                 Bangumi = defaults.Metadata.Bangumi with
@@ -124,6 +125,7 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Contains(errors, error => error.Contains("TMDB HTTP timeout", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB retry count", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB retry delay", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TMDB cache TTL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB language", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi base URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi proxy URL", StringComparison.Ordinal));

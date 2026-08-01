@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Metadata;
 
@@ -35,4 +36,8 @@ internal sealed record TmdbEpisodeDto(
 [JsonSerializable(typeof(TmdbSeriesDto))]
 [JsonSerializable(typeof(TmdbSeasonDto))]
 [JsonSerializable(typeof(TmdbEpisodeDto))]
+[JsonSerializable(typeof(TmdbSeries[]))]
+[JsonSerializable(typeof(TmdbSeriesDetails))]
+[JsonSerializable(typeof(TmdbSeason))]
+[JsonSerializable(typeof(TmdbEpisode))]
 internal sealed partial class TmdbJsonContext : JsonSerializerContext;

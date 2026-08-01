@@ -32,6 +32,7 @@ public sealed class DeploymentConfigurationLocks
         new("tmdb_http_timeout_seconds", ["tmdb_timeout_second", "metadata:tmdb:timeout_seconds"]),
         new("tmdb_retry_count", ["tmdb_retry_count", "metadata:tmdb:retry_count"]),
         new("tmdb_retry_delay_seconds", ["tmdb_retry_wait_second", "metadata:tmdb:retry_wait_seconds"]),
+        new("tmdb_cache_hours", ["tmdb_cache_hour", "advanced:cache:themoviedb_cache_hour", "metadata:tmdb:cache_hours"]),
         new("tmdb_api_key", ["tmdb_api_key", "ANIMEGO_THEMOVIEDB_KEY", "metadata:tmdb:api_key"]),
         new("tmdb_read_access_token", ["tmdb_read_access_token", "metadata:tmdb:read_access_token"]),
         new("bangumi_base_url", ["bangumi_base_url", "metadata:bangumi:base_url"]),
@@ -215,6 +216,10 @@ public sealed class DeploymentConfigurationLocks
                     "tmdb_retry_delay_seconds",
                     current.TmdbRetryDelaySeconds,
                     candidate.TmdbRetryDelaySeconds),
+                TmdbCacheHours = Preserve(
+                    "tmdb_cache_hours",
+                    current.TmdbCacheHours,
+                    candidate.TmdbCacheHours),
                 TmdbApiKeyOverridden = Preserve(
                     "tmdb_api_key",
                     current.TmdbApiKeyOverridden,
@@ -391,6 +396,10 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("tmdb_retry_delay_seconds"))
         {
             tmdb = tmdb with { RetryDelay = deployment.Metadata.Tmdb.RetryDelay };
+        }
+        if (IsLocked("tmdb_cache_hours"))
+        {
+            tmdb = tmdb with { CacheTtl = deployment.Metadata.Tmdb.CacheTtl };
         }
         if (IsLocked("tmdb_api_key"))
         {
@@ -596,6 +605,10 @@ public sealed class DeploymentConfigurationLocks
             "tmdb_retry_delay_seconds",
             deployment.Metadata.Tmdb.RetryDelay,
             candidate.Metadata.Tmdb.RetryDelay);
+        AddIfChanged(
+            "tmdb_cache_hours",
+            deployment.Metadata.Tmdb.CacheTtl,
+            candidate.Metadata.Tmdb.CacheTtl);
         AddIfChanged(
             "bangumi_base_url",
             deployment.Metadata.Bangumi.BaseUrl,

@@ -66,6 +66,12 @@ AnimeGoNet.slnx
 - `AnimeSeries`：真实 TMDB Series，或仅在允许完全兜底时 `tmdbid=0 + bgmid` 的待补全记录。
 - `AnimeSeason`：普通正季度；Season 0 不进入普通季度候选。
 - `TmdbEpisode`：经 TMDB 验证的 Episode 全集，是 WebUI EP 网格和进度分母的唯一来源。
+- TMDB HTTP 成功响应经 source-generated JSON 写入 SQLite `bolt/themoviedb`，默认
+  TTL 为 14 天。缓存按规范 Base URL、语言、operation 与请求身份分区并使用
+  SHA-256 opaque key，不保存 API key 或 Bearer token，原始搜索词只参与键摘要而不
+  单独落库；读取时再次验证
+  Series/Season/Episode 父子身份，损坏或不一致条目删除后回源。404 与任何失败不做
+  negative cache，缓存不可用时不阻断权威 TMDB 请求。
 - `MetadataResolutionRun` / `MetadataResolutionAttempt`：分别保存 Series/Season/Episode 的来源、阶段、策略优先级、结果、失败分类、脱敏原因、可重试性、次数、耗时和时间。
 - 人工覆盖优先；确定性季度失败链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`。P3 需要 `bgmid`，按每个 Bangumi 前作的日文名、中文名和开播日期重新联合验证完整 `tmdbid + Season`，可恢复不同的 TMDB Series。P2 只解析统一导入任务 `title`，P1 固定本地 `S01`，两者都不验证 TMDB Season，并保存实际取得策略供 UI 区分。AI 元数据匹配是一个独立、默认关闭的任务级阶段：一个开关、一个 Prompt、每任务最多一次调用，同时返回 Series/Season/Episode；HTTP 默认超时 600 秒，Backtrace、AI 和后续 Episode 候选仍须由 TMDB 验证。
 - 特别篇、小数集号和无法可靠匹配的文件不转换为普通整数 EP；Series/普通 Season 已确认时保留原名进入该季度 `Other`。

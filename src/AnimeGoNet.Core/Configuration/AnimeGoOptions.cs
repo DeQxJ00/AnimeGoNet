@@ -115,6 +115,8 @@ public sealed record TmdbClientOptions
     public int RetryCount { get; init; } = 3;
 
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(5);
+
+    public TimeSpan CacheTtl { get; init; } = TimeSpan.FromDays(14);
 }
 
 public sealed record BangumiClientOptions

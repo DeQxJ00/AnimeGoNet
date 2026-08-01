@@ -214,6 +214,7 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_retry_count")] int TmdbRetryCount,
     [property: JsonPropertyName("tmdb_retry_delay_seconds")] double TmdbRetryDelaySeconds,
+    [property: JsonPropertyName("tmdb_cache_hours")] double TmdbCacheHours,
     [property: JsonPropertyName("tmdb_api_key_state")] string TmdbApiKeyState,
     [property: JsonPropertyName("tmdb_read_access_token_state")] string TmdbReadAccessTokenState,
     [property: JsonPropertyName("bangumi_base_url")] string BangumiBaseUrl,
@@ -258,6 +259,7 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_retry_count")] int? TmdbRetryCount,
     [property: JsonPropertyName("tmdb_retry_delay_seconds")] double? TmdbRetryDelaySeconds,
+    [property: JsonPropertyName("tmdb_cache_hours")] double? TmdbCacheHours,
     [property: JsonPropertyName("tmdb_api_key")] string? TmdbApiKey,
     [property: JsonPropertyName("clear_tmdb_api_key")] bool ClearTmdbApiKey,
     [property: JsonPropertyName("tmdb_read_access_token")] string? TmdbReadAccessToken,
@@ -341,6 +343,7 @@ public sealed record TmdbConfigurationResponse(
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
     [property: JsonPropertyName("retry_count")] int RetryCount,
     [property: JsonPropertyName("retry_delay_seconds")] double RetryDelaySeconds,
+    [property: JsonPropertyName("cache_hours")] double CacheHours,
     [property: JsonPropertyName("api_key_configured")] bool ApiKeyConfigured,
     [property: JsonPropertyName("read_access_token_configured")] bool ReadAccessTokenConfigured);
 

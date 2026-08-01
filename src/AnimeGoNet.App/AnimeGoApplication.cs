@@ -347,7 +347,8 @@ public static class AnimeGoApplication
         });
         builder.Services.AddSingleton<TitleParserManager>();
         builder.Services.AddSingleton<OrderedFeedFilterManager>();
-        builder.Services.AddSingleton<SqliteJsonCacheStore>();
+        var jsonCache = new SqliteJsonCacheStore(database);
+        builder.Services.AddSingleton(jsonCache);
         builder.Services.AddSingleton(directoryDatabaseScanner);
         builder.Services.AddSingleton(directoryDatabaseIndex);
         builder.Services.AddSingleton<DirectoryDatabaseWriter>();
@@ -408,11 +409,16 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MediaOrganizationProcessor>();
         builder.Services.AddSingleton<SafeFileDeleter>();
         builder.Services.AddSingleton<DeleteExecutionProcessor>();
-        tmdbClient ??= new TmdbClient(
-            MetadataHttpClientFactory.Create(options.Metadata.Tmdb.ProxyUrl),
+        tmdbClient ??= new TmdbCachingClient(
+            new TmdbClient(
+                MetadataHttpClientFactory.Create(options.Metadata.Tmdb.ProxyUrl),
+                options.Metadata.Tmdb,
+                ownsHttpClient: true),
+            jsonCache,
             options.Metadata.Tmdb,
-            ownsHttpClient: true);
-        builder.Services.AddSingleton(tmdbClient);
+            ownsInner: true);
+        var registeredTmdbClient = tmdbClient;
+        builder.Services.AddSingleton<ITmdbClient>(_ => registeredTmdbClient);
         builder.Services.AddSingleton<TmdbAuthority>();
         builder.Services.AddSingleton<TmdbSeriesResolver>();
         builder.Services.AddSingleton<TmdbSeriesSeasonResolver>();
@@ -611,6 +617,14 @@ public static class AnimeGoApplication
                             "metadata:tmdb:retry_wait_seconds"),
                         defaults.Metadata.Tmdb.RetryDelay.TotalSeconds,
                         "tmdb_retry_wait_second")),
+                    CacheTtl = TimeSpan.FromHours(ParseOptionalDouble(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_cache_hour",
+                            "advanced:cache:themoviedb_cache_hour",
+                            "metadata:tmdb:cache_hours"),
+                        defaults.Metadata.Tmdb.CacheTtl.TotalHours,
+                        "tmdb_cache_hour")),
                 },
                 Bangumi = defaults.Metadata.Bangumi with
                 {

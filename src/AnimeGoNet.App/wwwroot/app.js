@@ -2007,6 +2007,7 @@ function metadataConfigurationCard(config) {
             `${config.metadata.tmdb.retry_count} 次 · 间隔 `
                 + `${config.metadata.tmdb.retry_delay_seconds} 秒`,
         ],
+        ["TMDB 缓存", `${config.metadata.tmdb.cache_hours} 小时（仅缓存验证成功的响应）`],
         ["Bangumi API", config.metadata.bangumi.base_url],
         ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
         ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
@@ -2138,6 +2139,7 @@ const configurationLockSelectors = {
     tmdb_http_timeout_seconds: ["#configuration-tmdb-timeout"],
     tmdb_retry_count: ["#configuration-tmdb-retry-count"],
     tmdb_retry_delay_seconds: ["#configuration-tmdb-retry-delay"],
+    tmdb_cache_hours: ["#configuration-tmdb-cache-hours"],
     tmdb_api_key: ["#configuration-tmdb-key", "#configuration-tmdb-key-clear"],
     tmdb_read_access_token: ["#configuration-tmdb-token", "#configuration-tmdb-token-clear"],
     bangumi_base_url: ["#configuration-bangumi-url"],
@@ -2195,6 +2197,7 @@ function openConfigurationEditor() {
     setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
     setConfigurationValue("#configuration-tmdb-retry-count", editable.tmdb_retry_count);
     setConfigurationValue("#configuration-tmdb-retry-delay", editable.tmdb_retry_delay_seconds);
+    setConfigurationValue("#configuration-tmdb-cache-hours", editable.tmdb_cache_hours);
     setConfigurationValue("#configuration-tmdb-key", "");
     setConfigurationChecked("#configuration-tmdb-key-clear", false);
     element("#configuration-tmdb-key-state").textContent =
@@ -2240,6 +2243,7 @@ const configurationFieldLabels = {
     tmdb_http_timeout_seconds: "TMDB 超时（秒）",
     tmdb_retry_count: "TMDB 额外重试次数",
     tmdb_retry_delay_seconds: "TMDB 重试间隔（秒）",
+    tmdb_cache_hours: "TMDB 成功响应缓存（小时）",
     tmdb_api_key: "TMDB API Key",
     tmdb_read_access_token: "TMDB Read Token",
     bangumi_base_url: "Bangumi API 地址",
@@ -2278,6 +2282,7 @@ function configurationRequest() {
         tmdb_http_timeout_seconds: element("#configuration-tmdb-timeout").valueAsNumber,
         tmdb_retry_count: element("#configuration-tmdb-retry-count").valueAsNumber,
         tmdb_retry_delay_seconds: element("#configuration-tmdb-retry-delay").valueAsNumber,
+        tmdb_cache_hours: element("#configuration-tmdb-cache-hours").valueAsNumber,
         tmdb_api_key: element("#configuration-tmdb-key").value || null,
         clear_tmdb_api_key: element("#configuration-tmdb-key-clear").checked,
         tmdb_read_access_token: element("#configuration-tmdb-token").value || null,

@@ -76,6 +76,7 @@ public sealed class DeploymentYamlUpstreamParityTests
             Assert.Equal("5", snapshot.Values["metadata:tmdb:timeout_seconds"]);
             Assert.Equal("3", snapshot.Values["metadata:tmdb:retry_count"]);
             Assert.Equal("5", snapshot.Values["metadata:tmdb:retry_wait_seconds"]);
+            Assert.Equal("336", snapshot.Values["metadata:tmdb:cache_hours"]);
             Assert.Equal("5", snapshot.Values["metadata:bangumi:timeout_seconds"]);
             Assert.Equal("3", snapshot.Values["metadata:bangumi:retry_count"]);
             Assert.Equal("5", snapshot.Values["metadata:bangumi:retry_wait_seconds"]);
