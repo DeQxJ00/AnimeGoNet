@@ -226,6 +226,11 @@ public sealed class MediaOrganizationProcessorTests
         Assert.True(File.Exists(source));
         Assert.False(File.Exists(target));
 
+        await SetRawDownloadStateAsync(app, taskId, "complete");
+        Assert.Equal(MediaOrganizationResult.NoWork, await processor.RunOnceAsync());
+        Assert.True(File.Exists(source));
+        Assert.False(File.Exists(target));
+
         await SetDownloadStateAsync(app, taskId, "complete");
         Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
 
@@ -372,7 +377,19 @@ public sealed class MediaOrganizationProcessorTests
                 tmdb_season_number = 1, tmdb_episode_number = 1,
                 tmdb_episode_id = 1001, download_wanted = 1
             WHERE task_id = $task_id;
-            UPDATE download_jobs SET preparation_state = 'completed', state = $download_state, progress = 1
+            UPDATE download_jobs
+            SET preparation_state = 'completed', state = $download_state, progress = 1,
+                seeding_state = CASE
+                    WHEN seeding_target_minutes = 0 THEN 'not_required'
+                    WHEN $download_state = 'complete' THEN 'completed'
+                    WHEN $download_state = 'seeding' THEN 'seeding'
+                    ELSE 'waiting'
+                END,
+                seeding_completed_at_utc = CASE
+                    WHEN seeding_target_minutes <> 0 AND $download_state = 'complete'
+                        THEN $now
+                    ELSE NULL
+                END
             WHERE task_id = $task_id;
             UPDATE ingest_tasks SET status = 'downloaded' WHERE id = $task_id;
             """;
@@ -384,6 +401,34 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     private static async Task SetDownloadStateAsync(RunningApp app, string taskId, string state)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE download_jobs
+            SET state = $state,
+                seeding_state = CASE
+                    WHEN seeding_target_minutes = 0 THEN 'not_required'
+                    WHEN $state = 'complete' THEN 'completed'
+                    WHEN $state = 'seeding' THEN 'seeding'
+                    ELSE 'waiting'
+                END,
+                seeding_completed_at_utc = CASE
+                    WHEN seeding_target_minutes <> 0 AND $state = 'complete'
+                        THEN $now
+                    ELSE NULL
+                END,
+                updated_at_utc = $now
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$state", state);
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SetRawDownloadStateAsync(RunningApp app, string taskId, string state)
     {
         var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
         await using var connection = await database.OpenConnectionAsync();

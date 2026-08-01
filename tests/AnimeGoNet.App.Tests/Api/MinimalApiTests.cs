@@ -634,6 +634,9 @@ public sealed class MinimalApiTests
         Assert.Equal(0.4, item.GetProperty("progress").GetDouble());
         Assert.Equal(2, item.GetProperty("seeds").GetInt32());
         Assert.Equal(4, item.GetProperty("peers").GetInt32());
+        Assert.Equal("not_required", item.GetProperty("seeding_state").GetString());
+        Assert.Equal(0, item.GetProperty("seeding_target_minutes").GetInt32());
+        Assert.Equal(0, item.GetProperty("seeding_elapsed_seconds").GetInt64());
         Assert.False(item.GetProperty("is_stale").GetBoolean());
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
         Assert.DoesNotContain("token=secret", body, StringComparison.Ordinal);

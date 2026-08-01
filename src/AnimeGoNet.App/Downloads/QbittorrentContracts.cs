@@ -12,7 +12,8 @@ public sealed record QbittorrentTorrentInfo(
     [property: JsonPropertyName("dlspeed")] long DownloadSpeed,
     [property: JsonPropertyName("eta")] long Eta,
     [property: JsonPropertyName("num_seeds")] int Seeds,
-    [property: JsonPropertyName("num_leechs")] int Peers);
+    [property: JsonPropertyName("num_leechs")] int Peers,
+    [property: JsonPropertyName("seeding_time")] long SeedingTimeSeconds);
 
 public sealed record QbittorrentTorrentFile(
     [property: JsonPropertyName("index")] int Index,

@@ -59,7 +59,8 @@ public sealed record DownloadTaskSnapshot(
     long DownloadSpeedBytesPerSecond,
     long? EtaSeconds,
     int Seeds = 0,
-    int Peers = 0);
+    int Peers = 0,
+    long SeedingTimeSeconds = 0);
 
 public sealed record DownloadFileSnapshot(
     int Index,

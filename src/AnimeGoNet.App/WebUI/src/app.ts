@@ -300,6 +300,10 @@ interface DownloadItem {
   speed_bytes_per_second: number;
   seeds: number;
   peers: number;
+  seeding_state: "not_required" | "waiting" | "seeding" | "completed";
+  seeding_target_minutes: number;
+  seeding_elapsed_seconds: number;
+  seeding_completed_at_utc: string | null;
   is_stale: boolean;
   revision: number;
   downloader_failure_code: string | null;
@@ -3124,6 +3128,34 @@ function formatBytes(value: number): string {
   return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[unit]}`;
 }
 
+function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}天 ${hours}小时`;
+  if (hours > 0) return `${hours}小时 ${minutes}分钟`;
+  if (minutes > 0) return `${minutes}分钟`;
+  return `${seconds}秒`;
+}
+
+function seedingDescription(item: DownloadItem): string {
+  if (item.seeding_target_minutes === 0) return "做种：不要求";
+  const state = {
+    waiting: "等待开始",
+    seeding: "进行中",
+    completed: "已完成",
+    not_required: "不要求",
+  }[item.seeding_state];
+  const elapsed = formatDuration(item.seeding_elapsed_seconds);
+  if (item.seeding_target_minutes === -1) {
+    return `做种：${state} · 无限目标 · 已 ${elapsed}`;
+  }
+  const targetSeconds = item.seeding_target_minutes * 60;
+  const percentage = Math.min(100, 100 * item.seeding_elapsed_seconds / targetSeconds);
+  return `做种：${state} · ${elapsed} / ${formatDuration(targetSeconds)} · ${percentage.toFixed(1)}%`;
+}
+
 function downloadControlButton(
   item: DownloadItem,
   action: "pause" | "resume" | "retry",
@@ -3199,6 +3231,16 @@ async function loadDownloadDetail(
       group.append(term, value);
       stages.append(group);
     }
+    const seedingGroup = document.createElement("div");
+    const seedingTerm = document.createElement("dt");
+    seedingTerm.textContent = "做种目标";
+    const seedingValue = document.createElement("dd");
+    seedingValue.textContent = seedingDescription(detail.summary)
+      + (detail.summary.seeding_completed_at_utc
+        ? ` · 完成于 ${new Date(detail.summary.seeding_completed_at_utc).toLocaleString()}`
+        : "");
+    seedingGroup.append(seedingTerm, seedingValue);
+    stages.append(seedingGroup);
     if (detail.task_failure_kind || detail.task_failure_reason) {
       const failure = document.createElement("p");
       failure.className = "download-detail-failure";
@@ -3375,6 +3417,9 @@ function renderDownloadPage(body: DownloadListPage): void {
     const details = document.createElement("p");
     details.className = "download-details";
     details.textContent = `${item.source} → ${item.downloader_id} · ${(item.progress * 100).toFixed(1)}% · ${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)} · ${formatBytes(item.speed_bytes_per_second)}/s · Seeds ${item.seeds} · Peers ${item.peers}`;
+    const seeding = document.createElement("p");
+    seeding.className = `download-seeding ${item.seeding_state}`;
+    seeding.textContent = seedingDescription(item);
     const actions = document.createElement("div");
     actions.className = "download-actions";
     const expand = document.createElement("button");
@@ -3399,7 +3444,7 @@ function renderDownloadPage(body: DownloadListPage): void {
     remove.textContent = "删除…";
     remove.addEventListener("click", () => void openDeletePreview(item.task_id));
     actions.append(remove);
-    card.append(heading, progress, details, actions, detailTarget);
+    card.append(heading, progress, details, seeding, actions, detailTarget);
     if (expandedDownloadJobIds.has(item.job_id)) {
       void loadDownloadDetail(item, detailTarget, expand);
     }

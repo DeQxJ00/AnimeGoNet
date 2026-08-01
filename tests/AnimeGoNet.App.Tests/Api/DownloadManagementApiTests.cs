@@ -43,6 +43,10 @@ public sealed class DownloadManagementApiTests
                 .GetProperty("connected_download_speed_bytes_per_second")
                 .GetInt64());
         Assert.Equal(fixture.JobId, item.GetProperty("job_id").GetString());
+        Assert.Equal("not_required", item.GetProperty("seeding_state").GetString());
+        Assert.Equal(0, item.GetProperty("seeding_target_minutes").GetInt32());
+        Assert.Equal(0, item.GetProperty("seeding_elapsed_seconds").GetInt64());
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("seeding_completed_at_utc").ValueKind);
 
         using var detailResponse = await fixture.App.Client.GetAsync(
             $"/api/v1/downloads/{fixture.JobId}");
@@ -52,6 +56,9 @@ public sealed class DownloadManagementApiTests
 
         Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
         Assert.Equal("live", detail.RootElement.GetProperty("file_snapshot_state").GetString());
+        Assert.Equal(
+            "not_required",
+            detail.RootElement.GetProperty("summary").GetProperty("seeding_state").GetString());
         Assert.Equal("episode.mkv", file.GetProperty("relative_path").GetString());
         Assert.Equal(0.6, file.GetProperty("progress").GetDouble());
         Assert.True(file.GetProperty("wanted").GetBoolean());

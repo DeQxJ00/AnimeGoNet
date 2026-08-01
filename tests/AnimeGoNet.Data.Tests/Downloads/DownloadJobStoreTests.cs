@@ -100,6 +100,57 @@ public sealed class DownloadJobStoreTests
     }
 
     [Fact]
+    public async Task SeedingLifecycleIsDurableMonotonicAndAudited()
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+        await fixture.ConfigureSeedingAsync(30, "waiting");
+        var seedingAt = DateTimeOffset.UtcNow.AddMinutes(-20);
+        var completedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+
+        await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Seeding,
+                1, 100, 100, 0, null, 8, 2, 600)],
+            seedingAt);
+        var seeding = Assert.Single(await fixture.Jobs.ListAsync());
+
+        Assert.Equal("seeding", seeding.SeedingState);
+        Assert.Equal(30, seeding.SeedingTargetMinutes);
+        Assert.Equal(600, seeding.SeedingElapsedSeconds);
+        Assert.Null(seeding.SeedingCompletedAtUtc);
+
+        await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Seeding,
+                1, 100, 100, 0, null, 8, 2, 1_800)],
+            completedAt);
+        await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Downloading,
+                1, 100, 100, 0, null, 8, 2, 1_200)],
+            DateTimeOffset.UtcNow);
+        var detail = Assert.IsType<DownloadJobDetailRecord>(
+            await fixture.Jobs.GetDetailAsync(seeding.JobId));
+
+        Assert.Equal("completed", detail.Summary.SeedingState);
+        Assert.Equal(1_800, detail.Summary.SeedingElapsedSeconds);
+        Assert.Equal(completedAt, detail.Summary.SeedingCompletedAtUtc);
+        Assert.Contains(
+            detail.Events,
+            value => value.Kind == "seeding_state"
+                && value.FromState == "waiting"
+                && value.ToState == "seeding");
+        Assert.Contains(
+            detail.Events,
+            value => value.Kind == "seeding_state"
+                && value.FromState == "seeding"
+                && value.ToState == "completed");
+    }
+
+    [Fact]
     public async Task ListPageFiltersAndDetailExposeFilesAndAuditTimeline()
     {
         await using var fixture = await DownloadJobFixture.CreateAsync();
@@ -194,6 +245,22 @@ public sealed class DownloadJobStoreTests
         public DownloadJobStore Jobs { get; }
 
         public string InfoHash { get; }
+
+        public async Task ConfigureSeedingAsync(int targetMinutes, string state)
+        {
+            await using var connection = await _databaseFixture.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE download_jobs
+                SET seeding_target_minutes = $target,
+                    seeding_state = $state,
+                    seeding_elapsed_seconds = 0,
+                    seeding_completed_at_utc = NULL;
+                """;
+            command.Parameters.AddWithValue("$target", targetMinutes);
+            command.Parameters.AddWithValue("$state", state);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
 
         public static async Task<DownloadJobFixture> CreateAsync()
         {

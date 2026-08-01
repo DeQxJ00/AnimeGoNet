@@ -200,6 +200,9 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-heading strong { overflow-wrap: anywhere; }
 .download-card progress { width: 100%; height: 9px; margin: 16px 0 10px; accent-color: #59d3a5; }
 .download-details { margin: 0; color: #aebbd3; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
+.download-seeding { margin: 6px 0 0; color: #91a0bb; font-size: .82rem; line-height: 1.45; }
+.download-seeding.seeding { color: #73dbb4; }
+.download-seeding.completed { color: #9ee8c8; }
 .download-actions, .download-detail-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .download-detail { display: grid; gap: 11px; margin-top: 13px; }
 .download-detail:empty { display: none; }

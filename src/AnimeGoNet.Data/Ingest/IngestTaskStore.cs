@@ -444,6 +444,10 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             throw new ArgumentException("Confirmed download hash does not match the staged Torrent.", nameof(snapshot));
         }
 
+        var seeding = DownloadSeedingLifecycle.Project(
+            claim.SeedingTimeMinutes,
+            snapshot.State,
+            Math.Max(0, snapshot.SeedingTimeSeconds));
         var now = utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
@@ -481,14 +485,18 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     seeds, peers, snapshot_at_utc, is_stale, revision,
                     preparation_state, preparation_attempt_count,
                     download_root_path, save_root_path,
-                    organization_state, organization_attempt_count)
+                    organization_state, organization_attempt_count,
+                    seeding_target_minutes, seeding_state,
+                    seeding_elapsed_seconds, seeding_completed_at_utc)
                 VALUES (
                     $id, $task_id, $downloader_id, $info_hash, $state, $progress,
                     $downloaded_bytes, $total_bytes, $speed_bytes_per_second,
                     $eta_seconds, NULL, $created_at_utc, $updated_at_utc,
                     $seeds, $peers, $snapshot_at_utc, 0, 1,
                     'pending', 0, $download_root_path, $save_root_path,
-                    $organization_state, 0);
+                    $organization_state, 0,
+                    $seeding_target_minutes, $seeding_state,
+                    $seeding_elapsed_seconds, $seeding_completed_at_utc);
                 """;
             insert.Parameters.AddWithValue("$id", jobId);
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
@@ -508,6 +516,12 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue(
                 "$organization_state",
                 "pending");
+            insert.Parameters.AddWithValue("$seeding_target_minutes", claim.SeedingTimeMinutes);
+            insert.Parameters.AddWithValue("$seeding_state", ToDatabaseValue(seeding.State));
+            insert.Parameters.AddWithValue("$seeding_elapsed_seconds", seeding.ElapsedSeconds);
+            insert.Parameters.AddWithValue(
+                "$seeding_completed_at_utc",
+                seeding.State == DownloadSeedingState.Completed ? now : DBNull.Value);
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -688,5 +702,14 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
         DownloadTaskState.Complete => "complete",
         DownloadTaskState.Error => "error",
         _ => "unknown",
+    };
+
+    private static string ToDatabaseValue(DownloadSeedingState state) => state switch
+    {
+        DownloadSeedingState.NotRequired => "not_required",
+        DownloadSeedingState.Waiting => "waiting",
+        DownloadSeedingState.Seeding => "seeding",
+        DownloadSeedingState.Completed => "completed",
+        _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 }

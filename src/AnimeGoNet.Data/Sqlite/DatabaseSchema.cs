@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 32;
+    public const int CurrentVersion = 33;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -38,7 +38,57 @@ public static class DatabaseSchema
         new SchemaMigration(30, "library_metadata_audit_indexes", LibraryMetadataAuditIndexes),
         new SchemaMigration(31, "source_mikan_identity_cookie", SourceMikanIdentityCookie),
         new SchemaMigration(32, "tmdb_resolution_evidence", TmdbResolutionEvidence),
+        new SchemaMigration(33, "download_seeding_lifecycle", DownloadSeedingLifecycle),
     ];
+
+    private const string DownloadSeedingLifecycle = """
+        ALTER TABLE download_jobs
+        ADD COLUMN seeding_target_minutes INTEGER NOT NULL DEFAULT 0
+        CHECK (seeding_target_minutes BETWEEN -1 AND 5256000);
+
+        ALTER TABLE download_jobs
+        ADD COLUMN seeding_state TEXT NOT NULL DEFAULT 'not_required'
+        CHECK (seeding_state IN ('not_required', 'waiting', 'seeding', 'completed'));
+
+        ALTER TABLE download_jobs
+        ADD COLUMN seeding_elapsed_seconds INTEGER NOT NULL DEFAULT 0
+        CHECK (seeding_elapsed_seconds >= 0);
+
+        ALTER TABLE download_jobs
+        ADD COLUMN seeding_completed_at_utc TEXT;
+
+        UPDATE download_jobs
+        SET seeding_target_minutes = CASE
+                WHEN task_id IN (
+                    SELECT id FROM ingest_tasks
+                    WHERE json_extract(route_snapshot_json, '$.file_strategy') = 'move')
+                    THEN 0
+                WHEN CAST(COALESCE((
+                    SELECT json_extract(route_snapshot_json, '$.seeding_time_minutes')
+                    FROM ingest_tasks WHERE id = download_jobs.task_id), 0) AS INTEGER)
+                    BETWEEN -1 AND 5256000
+                    THEN CAST(COALESCE((
+                        SELECT json_extract(route_snapshot_json, '$.seeding_time_minutes')
+                        FROM ingest_tasks WHERE id = download_jobs.task_id), 0) AS INTEGER)
+                ELSE 0
+            END;
+
+        UPDATE download_jobs
+        SET seeding_state = CASE
+                WHEN seeding_target_minutes = 0 THEN 'not_required'
+                WHEN state = 'complete' THEN 'completed'
+                WHEN state = 'seeding' THEN 'seeding'
+                ELSE 'waiting'
+            END,
+            seeding_completed_at_utc = CASE
+                WHEN seeding_target_minutes <> 0 AND state = 'complete'
+                    THEN updated_at_utc
+                ELSE NULL
+            END;
+
+        CREATE INDEX ix_download_jobs_seeding_state
+        ON download_jobs(seeding_state, updated_at_utc);
+        """;
 
     private const string TmdbResolutionEvidence = """
         ALTER TABLE metadata_resolution_runs

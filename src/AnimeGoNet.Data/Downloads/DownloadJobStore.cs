@@ -40,13 +40,19 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             string TaskId,
             string InfoHash,
             string State,
-            bool IsStale)>();
+            bool IsStale,
+            string SeedingState,
+            int SeedingTargetMinutes,
+            long SeedingElapsedSeconds)>();
         await using (var query = connection.CreateCommand())
         {
             query.Transaction = transaction;
             query.CommandText = """
                 SELECT download_jobs.id, download_jobs.task_id, download_jobs.info_hash,
-                       download_jobs.state, download_jobs.is_stale
+                       download_jobs.state, download_jobs.is_stale,
+                       download_jobs.seeding_state,
+                       download_jobs.seeding_target_minutes,
+                       download_jobs.seeding_elapsed_seconds
                 FROM download_jobs
                 JOIN ingest_tasks ON ingest_tasks.id = download_jobs.task_id
                 WHERE download_jobs.downloader_id = $downloader_id
@@ -61,7 +67,10 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                     reader.GetString(1),
                     reader.GetString(2),
                     reader.GetString(3),
-                    reader.GetInt64(4) != 0));
+                    reader.GetInt64(4) != 0,
+                    reader.GetString(5),
+                    reader.GetInt32(6),
+                    reader.GetInt64(7)));
             }
         }
 
@@ -92,6 +101,13 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             }
 
             matched++;
+            var seeding = DownloadSeedingLifecycle.Project(
+                job.SeedingTargetMinutes,
+                snapshot.State,
+                Math.Max(0, snapshot.SeedingTimeSeconds),
+                ParseSeedingState(job.SeedingState),
+                job.SeedingElapsedSeconds);
+            var seedingState = ToDatabaseValue(seeding.State);
             await using (var update = connection.CreateCommand())
             {
                 update.Transaction = transaction;
@@ -101,6 +117,13 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                         downloaded_bytes = $downloaded_bytes, total_bytes = $total_bytes,
                         speed_bytes_per_second = $speed, eta_seconds = $eta_seconds,
                         seeds = $seeds, peers = $peers, snapshot_at_utc = $now,
+                        seeding_state = $seeding_state,
+                        seeding_elapsed_seconds = $seeding_elapsed_seconds,
+                        seeding_completed_at_utc = CASE
+                            WHEN $seeding_state = 'completed'
+                                THEN COALESCE(seeding_completed_at_utc, $now)
+                            ELSE NULL
+                        END,
                         is_stale = 0, revision = revision + 1, updated_at_utc = $now
                     WHERE id = $id;
                     """;
@@ -112,6 +135,8 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 update.Parameters.AddWithValue("$eta_seconds", (object?)snapshot.EtaSeconds ?? DBNull.Value);
                 update.Parameters.AddWithValue("$seeds", Math.Max(0, snapshot.Seeds));
                 update.Parameters.AddWithValue("$peers", Math.Max(0, snapshot.Peers));
+                update.Parameters.AddWithValue("$seeding_state", seedingState);
+                update.Parameters.AddWithValue("$seeding_elapsed_seconds", seeding.ElapsedSeconds);
                 update.Parameters.AddWithValue("$now", now);
                 update.Parameters.AddWithValue("$id", job.JobId);
                 await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -124,6 +149,15 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                     connection, transaction, job.JobId,
                     "snapshot_sync", "observed",
                     job.State, snapshotState, null,
+                    now, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!string.Equals(job.SeedingState, seedingState, StringComparison.Ordinal))
+            {
+                await InsertEventAsync(
+                    connection, transaction, job.JobId,
+                    "seeding_state", "observed",
+                    job.SeedingState, seedingState, null,
                     now, cancellationToken).ConfigureAwait(false);
             }
 
@@ -665,7 +699,11 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                    download_jobs.state, ingest_tasks.status, download_jobs.progress,
                    download_jobs.downloaded_bytes, download_jobs.total_bytes,
                    download_jobs.speed_bytes_per_second, download_jobs.eta_seconds,
-                   download_jobs.seeds, download_jobs.peers, download_jobs.is_stale,
+                   download_jobs.seeds, download_jobs.peers,
+                   download_jobs.seeding_state, download_jobs.seeding_target_minutes,
+                   download_jobs.seeding_elapsed_seconds,
+                   download_jobs.seeding_completed_at_utc,
+                   download_jobs.is_stale,
                    download_jobs.revision, download_jobs.snapshot_at_utc,
                    download_jobs.updated_at_utc,
                    COALESCE(downloader_runtime_state.connected, 0),
@@ -771,13 +809,17 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(12) ? null : reader.GetInt64(12),
             reader.GetInt32(13),
             reader.GetInt32(14),
-            reader.GetInt64(15) != 0,
-            reader.GetInt64(16),
-            ReadDateTimeOffset(reader, 17),
-            ReadDateTimeOffset(reader, 18)!.Value,
+            reader.GetString(15),
+            reader.GetInt32(16),
+            reader.GetInt64(17),
+            ReadDateTimeOffset(reader, 18),
             reader.GetInt64(19) != 0,
-            reader.IsDBNull(20) ? null : reader.GetString(20),
-            ReadDateTimeOffset(reader, 21));
+            reader.GetInt64(20),
+            ReadDateTimeOffset(reader, 21),
+            ReadDateTimeOffset(reader, 22)!.Value,
+            reader.GetInt64(23) != 0,
+            reader.IsDBNull(24) ? null : reader.GetString(24),
+            ReadDateTimeOffset(reader, 25));
 
     private static string? NormalizeSearch(string? value)
     {
@@ -943,6 +985,24 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         DownloadTaskState.Complete => "complete",
         DownloadTaskState.Error => "error",
         _ => "unknown",
+    };
+
+    private static string ToDatabaseValue(DownloadSeedingState state) => state switch
+    {
+        DownloadSeedingState.NotRequired => "not_required",
+        DownloadSeedingState.Waiting => "waiting",
+        DownloadSeedingState.Seeding => "seeding",
+        DownloadSeedingState.Completed => "completed",
+        _ => throw new ArgumentOutOfRangeException(nameof(state)),
+    };
+
+    private static DownloadSeedingState ParseSeedingState(string value) => value switch
+    {
+        "not_required" => DownloadSeedingState.NotRequired,
+        "waiting" => DownloadSeedingState.Waiting,
+        "seeding" => DownloadSeedingState.Seeding,
+        "completed" => DownloadSeedingState.Completed,
+        _ => throw new InvalidOperationException("Persisted seeding state is invalid."),
     };
 
     private static string ToBusinessStatus(DownloadTaskState state) => state switch

@@ -34,7 +34,7 @@
 | qBittorrent | connect/retry/add/list/state/delete/category/tag/seed | C/I/E | fake + 真实容器全部通过 |
 | 不支持的下载器类型 | 旧Transmission配置读取、诊断、禁用、零路由 | C/E | 明确永久Unsupported，不崩溃、不误转qB、不提供创建入口 |
 | 多下载器路由 | 命名实例、SourceProfile、ID schema、规则/路径/做种/去重、路由快照 | U/C/I/E | Mikan→bt、U2/TTG→pt；改配置不改变进行中任务，实例状态隔离 |
-| 下载状态机 | init/wait/download/seed/complete/pause/error/restart | U/C/I | 每条迁移与副作用被断言 |
+| 下载状态机 | init/wait/download/seed/complete/pause/error/restart、0/-1/正数做种目标 | U/C/I | schema v33 目标/累计秒数/完成时间持久化；状态和累计值不回退；整理只按持久化门禁推进 |
 | 去重 | RSS alias早停、全局TMDB Episode键、包内逐文件跳过、事务复查、删除记录后重下 | U/I/E | 跨来源只认第一个完整成功Episode；其他Episode不受影响，无并发双写 |
 | 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 进入 `Other`，未知季度或冲突文件不落盘 |
 | 字幕 | 同stem、多语言/轨道后缀、按EP唯一绑定、idx/sub、歧义、Other | U/P/I/E | 匹配字幕随视频继承TMDB EP且后缀不丢；未匹配字幕不猜测，其他附件不移动 |
@@ -45,7 +45,7 @@
 | WebSocket | 认证、日志流、pause/resume、断线、慢消费者 | C/E | 无泄漏/死锁，AOT 实机通过 |
 | 静态资源 | 首次释放、内嵌页、缓存头、404 | C/E | AOT 单文件环境可访问 |
 | Web UI | 仪表盘、下载、配置、插件、缓存、日志、路由、响应式 | U/C/E | Vitest/component/Playwright/可访问性通过 |
-| Web UI 下载进度 | qB状态/进度/速度/ETA/文件priority、业务整理阶段、多实例同步、stale恢复 | U/C/I/E | qB100%不提前完成；wanted进度正确；离线保留快照；暂停恢复/重试通过 |
+| Web UI 下载进度 | qB状态/进度/速度/ETA/文件priority、做种目标/累计/门禁、业务整理阶段、多实例同步、stale恢复 | U/C/I/E | qB100%不提前完成；0/-1/正数目标可解释；wanted进度正确；离线保留快照；暂停恢复/重试通过 |
 | Web UI 作品库 | TMDB 名称/Cover/Season、EP完成网格、四种稳定排序、待补全TMDB | U/C/I/E | EP全集与状态只来自TMDB和规范完成记录；排序/分页稳定；`tmdbid=0` 不伪造进度 |
 | Web UI 作品详情 | mikanid人工规则、TMDB三层获取阶段、偏移、验证状态、解析时间线 | U/C/E | 页面值与SQLite解析运行一致；人工规则修改有影响预览 |
 | 删除编排 | 业务记录、下载器任务、下载源文件、媒体库文件、组合删除、部分失败 | U/C/I/E | 四种可独立执行且不隐式级联；越界零删除，失败可重试且有审计 |

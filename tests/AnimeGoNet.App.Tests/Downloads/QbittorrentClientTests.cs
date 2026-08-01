@@ -62,7 +62,7 @@ public sealed class QbittorrentClientTests
     public async Task ListUsesSourceGeneratedJsonAndCanonicalState()
     {
         const string json = """
-            [{"hash":"abc","name":"Episode","state":"downloading","progress":0.25,"downloaded":25,"size":100,"dlspeed":10,"eta":8}]
+            [{"hash":"abc","name":"Episode","state":"downloading","progress":0.25,"downloaded":25,"size":100,"dlspeed":10,"eta":8,"seeding_time":123}]
             """;
         using var handler = new RecordingHandler(_ => Text(json, "application/json"));
         using var httpClient = new HttpClient(handler);
@@ -73,6 +73,7 @@ public sealed class QbittorrentClientTests
         Assert.Equal(DownloadTaskState.Downloading, item.State);
         Assert.Equal(25, item.DownloadedBytes);
         Assert.Equal(8, item.EtaSeconds);
+        Assert.Equal(123, item.SeedingTimeSeconds);
         Assert.Equal("/api/v2/torrents/info", Assert.Single(handler.Requests).Path);
     }
 

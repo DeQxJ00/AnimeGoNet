@@ -55,7 +55,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                              IN ('move', 'link', 'link_delete')
                          OR (
                              json_extract(task.route_snapshot_json, '$.file_strategy') = 'wait_move'
-                             AND job.state = 'complete'
+                             AND job.seeding_state IN ('not_required', 'completed')
                          )
                      ))
                     OR
@@ -68,7 +68,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                          (json_extract(task.route_snapshot_json, '$.file_strategy')
                               IN ('link', 'link_delete')
                           AND task.status = 'downloaded'
-                          AND job.state = 'complete')
+                          AND job.seeding_state IN ('not_required', 'completed'))
                      ))
                 )
                   AND (job.organization_next_attempt_at_utc IS NULL

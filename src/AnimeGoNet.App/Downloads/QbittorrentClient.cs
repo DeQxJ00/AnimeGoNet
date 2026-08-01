@@ -68,7 +68,8 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
             item.DownloadSpeed,
             item.Eta < 0 || item.Eta >= 8_640_000 ? null : item.Eta,
             item.Seeds,
-            item.Peers)).ToArray();
+            item.Peers,
+            Math.Max(0, item.SeedingTimeSeconds))).ToArray();
     }
 
     public async Task AddTorrentAsync(AddTorrentCommand command, CancellationToken cancellationToken = default)

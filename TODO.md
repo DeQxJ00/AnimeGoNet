@@ -165,12 +165,12 @@
 
 ## P8 — 下载、重命名、刮削
 
-- [>] 移植下载管理状态机和 notifier（staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded、持久化准备租约及安全重试已实现；做种/整理 notifier 待实现）。
+- [x] 移植下载管理状态机和 notifier：staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded 已接入；后台 qB 快照同步把不可变做种目标、单调累计秒数和 waiting/seeding/completed 写入 schema v33，整理 worker 只按该持久化门禁推进，准备、整理和 cleanup 均有独立租约与安全重试。
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
 - [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：worker 已在所有文件、原子 `tvshow.nfo`、上游兼容目录 JSON 及 schema v27 索引全部成功后才执行 completion/episode claim 事务，qB cleanup 独立在后；RSS 早期事务复查待实现。
 - [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。
 - [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、目录 JSON/SQLite 索引、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 待验收。
-- [>] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：move 文件操作与 qB cleanup 已分阶段；四类删除已按逐项目标独立持久化、租约执行和失败重试，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束；做种目标待实现。
+- [x] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：schema v33 固化 `seeding_target_minutes`、单调 `seeding_elapsed_seconds`、waiting/seeding/completed 与完成时间，`0/-1/正数` 语义独立于 qB 瞬时 state；媒体操作、qB cleanup 与四类删除均按独立持久化状态、租约和失败重试推进，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束。
 - [ ] 处理多文件、跨盘、目标冲突和部分失败。
 - [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [x] 实现字幕识别与唯一绑定：同目录同 stem 优先、语言/default/forced/SDH 后缀原样保留、不同 stem 按来源 EP 唯一匹配、`.idx/.sub` 分别绑定并保留扩展；匹配后只复用视频的已验证 TMDB EP/claim/priority，未匹配或歧义进入已确认季度 `Other`，整理不产生重复完成记录。
@@ -204,7 +204,7 @@
 - [ ] 通过 API/WS 契约差分测试。
 - [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。
 - [x] 实现仪表盘和下载器/任务状态：下载状态卡片、进度、连接且非 stale 的跨实例速度汇总、活动/暂停/失败/等待整理/完成/离线指标、qB 状态与 AnimeGoNet 业务阶段独立筛选，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、策略尝试时间线、文件归类计数、准备/整理失败详情和显式重试入口均已接入。
-- [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；解析/移动/重命名/字幕/NFO阶段待串联。
+- [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；下载 API/WebUI 另显示持久化做种目标、状态、累计时间、百分比和完成时间。解析/移动/重命名/字幕/NFO的更细粒度进度仍待串联。
 - [x] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、实例失败隔离、离线保留stale快照、重启按实例+hash恢复，以及首错2秒、连续半开失败指数增长并封顶120秒的熔断已完成；显式连接测试可安全绕过等待窗并在成功后复位。
 - [x] 实现下载列表/详情/文件级 priority 与 wanted 进度、筛选搜索分页和状态时间线；详情合并 SQLite 文件分配与 qB 实时文件快照，qB 离线时保留持久化信息并返回安全失败码，不暴露绝对路径或凭据。
 - [x] 实现暂停、恢复和 AnimeGoNet 业务重试；写操作校验 job revision，成功/失败均写入 schema v24 审计事件，任务卡片的删除操作仍只进入四类删除中心执行预览/确认。首版不复刻 Tracker/Peer 明细、piece 图、限速、强制校验/汇报和 qB 全局设置。

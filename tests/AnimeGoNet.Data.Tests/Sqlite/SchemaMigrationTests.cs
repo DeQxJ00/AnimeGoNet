@@ -158,6 +158,121 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task DownloadSeedingLifecycleMigrationBackfillsImmutableTargetsAndStates()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using (var foreignKeys = connection.CreateCommand())
+        {
+            foreignKeys.CommandText = "PRAGMA foreign_keys = ON;";
+            await foreignKeys.ExecuteNonQueryAsync();
+        }
+
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 32))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string created = "2026-07-31T09:00:00.0000000+00:00";
+        const string completed = "2026-07-31T10:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $created, $created);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES
+                    ('move-task', 'mikan', 1, 'mikan', 'Move', 'move-fingerprint', 'bt',
+                     '{"file_strategy":"move","seeding_time_minutes":30}',
+                     'downloaded', $created, $created),
+                    ('link-task', 'mikan', 1, 'mikan', 'Link', 'link-fingerprint', 'bt',
+                     '{"file_strategy":"link","seeding_time_minutes":30}',
+                     'downloaded', $created, $created),
+                    ('infinite-task', 'mikan', 1, 'mikan', 'Infinite', 'infinite-fingerprint', 'bt',
+                     '{"file_strategy":"wait_move","seeding_time_minutes":-1}',
+                     'downloaded', $created, $completed);
+
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, info_hash, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    eta_seconds, failure_reason, created_at_utc, updated_at_utc)
+                VALUES
+                    ('move-job', 'move-task', 'bt', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                     'seeding', 1, 1, 1, 0, NULL, NULL, $created, $created),
+                    ('link-job', 'link-task', 'bt', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                     'seeding', 1, 1, 1, 0, NULL, NULL, $created, $created),
+                    ('infinite-job', 'infinite-task', 'bt', 'cccccccccccccccccccccccccccccccccccccccc',
+                     'complete', 1, 1, 1, 0, NULL, NULL, $created, $completed);
+                """;
+            seed.Parameters.AddWithValue("$created", created);
+            seed.Parameters.AddWithValue("$completed", completed);
+            Assert.Equal(7, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration33 = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 33);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration33.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT id, seeding_target_minutes, seeding_state,
+                       seeding_elapsed_seconds, seeding_completed_at_utc
+                FROM download_jobs ORDER BY id;
+                """;
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("infinite-job", reader.GetString(0));
+            Assert.Equal(-1, reader.GetInt32(1));
+            Assert.Equal("completed", reader.GetString(2));
+            Assert.Equal(0, reader.GetInt64(3));
+            Assert.Equal(completed, reader.GetString(4));
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("link-job", reader.GetString(0));
+            Assert.Equal(30, reader.GetInt32(1));
+            Assert.Equal("seeding", reader.GetString(2));
+            Assert.True(reader.IsDBNull(4));
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("move-job", reader.GetString(0));
+            Assert.Equal(0, reader.GetInt32(1));
+            Assert.Equal("not_required", reader.GetString(2));
+            Assert.True(reader.IsDBNull(4));
+            Assert.False(await reader.ReadAsync());
+        }
+
+        await using (var index = connection.CreateCommand())
+        {
+            index.CommandText = """
+                SELECT COUNT(*) FROM sqlite_schema
+                WHERE type = 'index' AND name = 'ix_download_jobs_seeding_state';
+                """;
+            Assert.Equal(1L, await index.ExecuteScalarAsync());
+        }
+
+        await using var invalid = connection.CreateCommand();
+        invalid.CommandText = """
+            UPDATE download_jobs SET seeding_target_minutes = -2 WHERE id = 'link-job';
+            """;
+        await Assert.ThrowsAsync<SqliteException>(() => invalid.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
     public async Task TmdbResolutionEvidenceMigrationBackfillsRunsAndGuardsReferences()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
