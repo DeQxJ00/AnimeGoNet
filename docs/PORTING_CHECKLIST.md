@@ -62,7 +62,7 @@
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 已验证 | SQLite 唯一约束、并发完成写入、逐文件 claim、同任务字幕共享、跨任务完成/进行中精确跳过及失败释放已验证；正常整理与 completion 同事务写来源 alias，RSS winner 以 IMMEDIATE 事务复查同 `mikanid+来源EP` 并保存命中证据，业务记录删除级联清除 alias 后可重新导入；qB 文件 priority 已接入下载准备 |
 | TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 已验证 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid、固定本地 S01 且不依赖 P2/P1、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API/UI 已验证；Run 级 TMDB 访问确认/兜底资格/拒绝原因由列表和详情 API/WebUI 原样投影，六类非权威失败均经处理器门禁测试；唯一普通 Bangumi Episode ID 提供跨来源最高可信 scope，歧义/小数/特别篇保守降级；schema v20 恢复合并保存 alias 并标记 `DuplicateAfterResolution`；人工恢复逐项在线验证 TMDB；schema v21 在原兜底目录可恢复地重写真实 TMDB/Bangumi NFO |
 | 元数据解析尝试 | failure kind/reason/timeline + 三级最终证据 | 扩展 | 已验证 | schema v32 固化 Series/Season/Episode `resolution_source + run_id + attempt_id`，SQLite 触发器拒绝跨 Run/Stage/策略伪造引用；逐文件 Episode/字幕精确 Attempt、混合证据摘要、任务/作品库 API/WebUI、失败时间线和显式 retry tests |
-| 四类删除 | 业务/下载器任务/源文件/媒体文件 | 扩展 | 进行中 | 四类独立 flags/schema 已建；preview/executor 待实现 |
+| 四类删除 | 业务/下载器任务/源文件/媒体文件 | 扩展 | 已验证 | schema v12 指纹预览与逐项目标冻结、四类独立选择、API/WebUI 明确确认、租约恢复 executor 和逐项状态已接入；固定 qB `deleteFiles=false`，源/媒体只删捕获根内普通文件且不递归；执行顺序、部分失败重试、缺失幂等、越界/符号链接拒绝、完成记录与 alias/claim 精确清理均有 tests，删除同 TMDB EP 不影响其他 EP |
 
 ## 下载、整理与通知
 

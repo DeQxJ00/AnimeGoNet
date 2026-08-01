@@ -29,8 +29,8 @@ public sealed class DeleteExecutionProcessorTests
         var state = await ReadStateAsync(app, prepared.ExecutionId);
         Assert.Equal("completed", state.ExecutionState);
         Assert.Equal(4, state.CompletedItems);
-        Assert.Equal(0, state.CompletionRecords);
-        Assert.Equal(0, state.EpisodeClaims);
+        Assert.Equal(1, state.CompletionRecords);
+        Assert.Equal(1, state.EpisodeClaims);
     }
 
     [Fact]
@@ -48,8 +48,8 @@ public sealed class DeleteExecutionProcessorTests
         var state = await ReadStateAsync(app, prepared.ExecutionId);
         Assert.Equal("pending", state.ExecutionState);
         Assert.Equal("qbittorrent_http_error", state.FailureReason);
-        Assert.Equal(1, state.CompletionRecords);
-        Assert.Equal(1, state.EpisodeClaims);
+        Assert.Equal(2, state.CompletionRecords);
+        Assert.Equal(2, state.EpisodeClaims);
     }
 
     private static async Task<PreparedPlan> PreparePlanAsync(RunningApp app, DeleteSelection selection)
@@ -97,10 +97,19 @@ public sealed class DeleteExecutionProcessorTests
                     id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
                     source_id, source_item_id, media_path, completed_at_utc)
                 VALUES ('completion-delete', 100, 1, 1, 'mikan', 'delete-execution', $media, $now);
+                INSERT INTO completion_records (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    source_id, source_item_id, media_path, completed_at_utc)
+                VALUES ('completion-keep', 100, 1, 2, 'u2', 'keep-other-episode', NULL, $now);
                 INSERT INTO episode_claims (
                     id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
                     task_file_id, state, claimed_at_utc)
                 SELECT 'claim-delete', 100, 1, 1, id, 'completed', $now
+                FROM task_files WHERE task_id = $task_id;
+                INSERT INTO episode_claims (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    task_file_id, state, claimed_at_utc)
+                SELECT 'claim-keep', 100, 1, 2, id, 'completed', $now
                 FROM task_files WHERE task_id = $task_id;
                 INSERT INTO file_operations (
                     id, task_file_id, strategy, source_path, target_path, state,
@@ -112,7 +121,7 @@ public sealed class DeleteExecutionProcessorTests
             setup.Parameters.AddWithValue("$source", sourcePath);
             setup.Parameters.AddWithValue("$media", mediaPath);
             setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
-            Assert.Equal(4, await setup.ExecuteNonQueryAsync());
+            Assert.Equal(6, await setup.ExecuteNonQueryAsync());
         }
 
         var plans = app.App.Services.GetRequiredService<DeletePlanStore>();
