@@ -57,6 +57,32 @@ advanced:
         (Join-Path $env:data_path 'animego.yaml'),
         $legacyYamlBytes)
 }
+$pluginOs = if ($IsWindows) { 'win' } elseif ($IsLinux) { 'linux' } else { 'osx' }
+$pluginArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+$pluginRid = "$pluginOs-$pluginArchitecture"
+$pluginPackage = Join-Path $env:data_path 'plugins/native-smoke'
+New-Item -ItemType Directory -Path $pluginPackage -Force | Out-Null
+$pluginEntryName = if ($IsWindows) { 'NativeSmokePlugin.exe' } else { 'NativeSmokePlugin' }
+$pluginEntry = Join-Path $pluginPackage $pluginEntryName
+[IO.File]::WriteAllBytes($pluginEntry, [byte[]](0))
+if (-not $IsWindows) {
+    $pluginMode = [IO.UnixFileMode]::UserRead -bor `
+        [IO.UnixFileMode]::UserWrite -bor `
+        [IO.UnixFileMode]::UserExecute
+    [IO.File]::SetUnixFileMode($pluginEntry, $pluginMode)
+}
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
+$pluginManifest = @"
+{"id":"com.animegonet.native-smoke","name":"Native smoke","version":"1.0.0","apiVersion":1,"type":"filter","rid":"$pluginRid","entryPoint":"$pluginEntryName","configSchema":"config.schema.json","capabilities":[]}
+"@
+[IO.File]::WriteAllText(
+    (Join-Path $pluginPackage 'plugin.json'),
+    $pluginManifest,
+    $utf8NoBom)
+[IO.File]::WriteAllText(
+    (Join-Path $pluginPackage 'config.schema.json'),
+    '{"type":"object","additionalProperties":false}',
+    $utf8NoBom)
 $baseUrl = "http://127.0.0.1:$Port"
 $startParameters = @{
     FilePath = $resolvedExecutable
@@ -134,6 +160,15 @@ try {
 
     if (-not $status.native_aot) {
         throw 'Published process does not report NativeAOT.'
+    }
+
+    $externalPackages = @($status.external_plugins.packages)
+    $externalErrors = @($status.external_plugins.errors)
+    if ($externalPackages.Count -ne 1 `
+        -or $externalPackages[0].id -ne 'com.animegonet.native-smoke' `
+        -or $externalPackages[0].rid -ne $pluginRid `
+        -or $externalErrors.Count -ne 0) {
+        throw 'NativeAOT external plugin manifest discovery smoke failed.'
     }
 
     if (-not $status.capabilities.qbittorrent) {

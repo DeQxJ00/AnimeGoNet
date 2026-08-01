@@ -140,7 +140,7 @@
 - [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
 - [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
-- [ ] 实现外部 C# 插件进程的 manifest、JSON Lines 协议、超时、取消、健康检查和退出隔离。
+- [>] 实现外部 C# 插件进程：manifest 包发现与 NativeAOT-safe 严格解析已完成，逐包验证反向域名 ID、严格 SemVer、API v1、六类 type、五 RID/当前宿主匹配、能力 token、64 KiB manifest/256 KiB schema、入口/schema 存在、直接子目录/路径穿越/符号链接、Unix group/world write 和 executable bit；重复 ID 全部拒绝且坏包不阻塞独立好包。JSON Lines initialize/execute/health/shutdown、超时、取消、崩溃/退出隔离和退避待下一模块实现。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
 - [ ] 实现 `AnimeGo.PluginTool`。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
@@ -243,7 +243,7 @@
 - [>] 官方 Compose 将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`；配置和 smoke 断言已建立，真实容器验证待 CI。
 - [>] 验证外部下载器 `client.download_path` 路径转换与错误诊断：主程序已提供 qB 默认保存路径读取和显式路径/硬链接能力探测，临时目录成功/缺失 fixture 已通过；真实外部容器的跨容器映射验收待 Compose 集成环境。
 - [ ] 构建并实机验证 `linux/amd64`，按确认结果验证 `linux/arm64`。
-- [ ] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退。
+- [>] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退：`data/plugins` 已由目录模型创建并注册 manifest loader，平台/RID、入口执行位、Unix group/world write、链接逃逸和逐包错误隔离已有测试；Docker 只读挂载、真实非 root 子进程和自动禁用回退待协议进程完成后验收。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [ ] 生成 checksums、SBOM、第三方许可证。
 - [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；最新 win-x64 原生二进制也完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt/目录业务数据迁移演练仍待实现。

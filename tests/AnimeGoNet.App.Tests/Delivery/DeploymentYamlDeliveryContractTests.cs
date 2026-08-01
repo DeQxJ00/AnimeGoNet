@@ -35,6 +35,8 @@ public sealed class DeploymentYamlDeliveryContractTests
         Assert.Contains("$baseUrl/api/config?key=all", smoke, StringComparison.Ordinal);
         Assert.Contains("$baseUrl/api/config?key=raw", smoke, StringComparison.Ordinal);
         Assert.Contains("NativeAOT legacy configuration API smoke failed", smoke, StringComparison.Ordinal);
+        Assert.Contains("com.animegonet.native-smoke", smoke, StringComparison.Ordinal);
+        Assert.Contains("NativeAOT external plugin manifest discovery smoke failed", smoke, StringComparison.Ordinal);
         Assert.DoesNotContain("TestSpace", workflow + smoke, StringComparison.OrdinalIgnoreCase);
     }
 

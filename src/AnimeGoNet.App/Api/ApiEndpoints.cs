@@ -15,6 +15,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Plugins;
 using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.Core.Feeds;
@@ -816,7 +817,8 @@ public static class ApiEndpoints
 
     private static Ok<RuntimeStatus> Status(
         AnimeGoOptions options,
-        LegacyDownloaderMigrationState legacyMigration)
+        LegacyDownloaderMigrationState legacyMigration,
+        ExternalPluginDiscoveryResult externalPlugins)
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         return TypedResults.Ok(new RuntimeStatus(
@@ -839,7 +841,21 @@ public static class ApiEndpoints
                 Organizer: true,
                 Deletion: true),
             legacyMigration.BlocksDownloads,
-            ToResponse(legacyMigration)));
+            ToResponse(legacyMigration),
+            new ExternalPluginRuntimeStatusResponse(
+                externalPlugins.Packages.Select(package =>
+                    new ExternalPluginPackageResponse(
+                        package.Manifest.Id,
+                        package.Manifest.Name,
+                        package.Manifest.Version,
+                        package.Manifest.Type,
+                        package.Manifest.Rid,
+                        package.Manifest.Capabilities)).ToArray(),
+                externalPlugins.Errors.Select(error =>
+                    new ExternalPluginPackageErrorResponse(
+                        error.PackageDirectoryName,
+                        error.Code,
+                        error.Message)).ToArray())));
     }
 
     private static async Task<Ok<ConfigurationResponse>> Configuration(

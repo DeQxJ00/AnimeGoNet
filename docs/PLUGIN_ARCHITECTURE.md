@@ -115,6 +115,8 @@ data/plugins/com.example.animego.filter-resolution/
 稳定 ID 使用反向域名格式。宿主启动前验证 manifest、当前 RID、协议 major、入口路径必须位于插件目录内，并拒绝符号链接逃逸和可写权限异常。
 `type` 只允许 `source`、`feed`、`parser`、`filter`、`rename`、`schedule`；source 插件只能规范化输入和返回稳定 DTO，不能自行选择未授权下载器或直接获得客户端凭据。
 
+当前 manifest loader 已注册到宿主的 `data/plugins` 目录，启动时生成一次有效包/稳定错误快照并通过 `/api/v1/status.external_plugins` 安全投影，但尚不启动任何外部进程。它只枚举根目录的直接子目录，使用有界 UTF-8 `JsonDocument` 显式读取 `plugin.json`，拒绝未知/重复字段，并验证反向域名 ID、严格 SemVer、API v1、六类 type、五个发布 RID 与当前宿主一致、唯一稳定 capability、入口和 JSON Schema。manifest 上限 64 KiB，schema 上限 256 KiB；两者均限制 JSON 深度，schema 递归拒绝重复字段。入口/schema 必须是包内相对路径且每层都不是 link/reparse point；Unix 还拒绝 group/world write，并要求入口有执行位。Windows 固定 `.exe`，ACL 等价门禁随真实非 root/只读挂载 E2E 完成。发现时重复 ID 的所有包都拒绝，不按目录顺序偷偷选择；一个坏包只产生稳定诊断，不阻塞其他独立有效包。
+
 ## 4. 进程协议
 
 主程序以 stdio 启动插件。stdin/stdout 每行一个 UTF-8 JSON 对象，stdout 只用于协议，日志写 stderr。

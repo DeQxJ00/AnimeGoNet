@@ -41,7 +41,7 @@ AnimeGoNet.slnx
 ├─ cache/               TMDB/Bangumi/cover 缓存
 ├─ logs/
 ├─ backups/             私有配置的不可变 revision 备份
-└─ plugins/             未来外部进程插件 manifest；Docker 只读
+└─ plugins/             RID-specific 外部进程插件包；Docker 只读
 ```
 
 路径模型在启动时完成规范化并验证：所有实例下载目录必须位于全局 `download_path` 下；所有业务写入必须落在已声明根目录内；宿主/容器路径映射必须按最长前缀、目录边界匹配，禁止字符串前缀越界。

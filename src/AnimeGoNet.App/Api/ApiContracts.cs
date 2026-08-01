@@ -62,7 +62,28 @@ public sealed record RuntimeStatus(
     [property: JsonPropertyName("capabilities")] RuntimeCapabilities Capabilities,
     [property: JsonPropertyName("downloads_blocked")] bool DownloadsBlocked,
     [property: JsonPropertyName("migration_diagnostics")]
-    IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics);
+    IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics,
+    [property: JsonPropertyName("external_plugins")]
+    ExternalPluginRuntimeStatusResponse ExternalPlugins);
+
+public sealed record ExternalPluginRuntimeStatusResponse(
+    [property: JsonPropertyName("packages")]
+    IReadOnlyList<ExternalPluginPackageResponse> Packages,
+    [property: JsonPropertyName("errors")]
+    IReadOnlyList<ExternalPluginPackageErrorResponse> Errors);
+
+public sealed record ExternalPluginPackageResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("version")] string Version,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("rid")] string Rid,
+    [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities);
+
+public sealed record ExternalPluginPackageErrorResponse(
+    [property: JsonPropertyName("package_directory_name")] string PackageDirectoryName,
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("message")] string Message);
 
 public sealed record RuntimePaths(
     [property: JsonPropertyName("data_path")] string DataPath,

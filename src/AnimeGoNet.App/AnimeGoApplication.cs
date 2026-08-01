@@ -155,6 +155,9 @@ public static class AnimeGoApplication
                 : DownloaderDeploymentLocks.FromCurrentProcess(args);
         var layout = DirectoryLayout.From(options.Paths);
         layout.CreateDataDirectories();
+        var externalPluginLoader = new ExternalPluginManifestLoader(layout.PluginsPath);
+        var externalPluginDiscovery = await externalPluginLoader
+            .DiscoverAsync(cancellationToken).ConfigureAwait(false);
         builder.Services.AddSingleton(
             _ => new RollingFileLoggerProvider(
                 new RollingFileLogOptions
@@ -270,6 +273,8 @@ public static class AnimeGoApplication
             startBackgroundWorkers.Value,
             !string.IsNullOrWhiteSpace(accessKey)));
         builder.Services.AddSingleton(legacyDownloaderMigrationState);
+        builder.Services.AddSingleton(externalPluginLoader);
+        builder.Services.AddSingleton(externalPluginDiscovery);
         builder.Services.AddSingleton(applicationOverrides);
         builder.Services.AddSingleton(
             new ApplicationConfigurationRuntimeState(applicationOverrideSnapshot.Revision));
