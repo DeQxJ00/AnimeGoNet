@@ -202,7 +202,7 @@
 - [x] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、SourceProfile 独立开关、expected-revision 保存、真实服务端批次 preview（名单结果、winner、实际执行组），以及 schema v25 历史快照选择与 revision 安全回滚；首版使用可键盘操作的上下移动，不依赖拖拽。
 - [x] 移植静态页并生成 OpenAPI：静态 TypeScript/HTML/CSS 页面由 Kestrel/AOT smoke 覆盖；官方 .NET 10 AOT-safe 生成器在 `/openapi/v1.json` 输出完整当前 Minimal API 契约，具有确定性 operationId/标签、现代及旧 Access-Key 安全说明、无运行端口/路径/密钥泄露，并由原生进程 smoke 验证。
 - [>] 通过 API/WS 契约差分测试：生成文档与所有当前非排除 HTTP endpoint 的 method/path 精确相等，上游 OpenAPI 12 个 operation 也逐项自动对比；legacy config/rss/plugin/manager/Bolt、access-key 与 WebSocket 控制帧已有 Kestrel 契约，全响应字段 golden 与原油猴浏览器 E2E 仍待完成。
-- [ ] 创建 Web 前端工程、类型化 API client 和前端测试基线。
+- [x] 创建 Web 前端工程、类型化 API client 和前端测试基线：TypeScript 7 strict 工程输出原生 ES module；共享 JSON client 只接受同源绝对路径、集中携带 Access-Key、序列化类型化请求体，并以稳定错误类型处理结构化失败/非 JSON 响应；运行状态与目录数据库请求已接入，Node 内置 runner 的 5 项安全/协议测试及 CI 产物差分门禁已建立。
 - [x] 实现仪表盘和下载器/任务状态：下载状态卡片、进度、连接且非 stale 的跨实例速度汇总、活动/暂停/失败/等待整理/完成/离线指标、qB 状态与 AnimeGoNet 业务阶段独立筛选，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、策略尝试时间线、文件归类计数、准备/整理失败详情和显式重试入口均已接入。
 - [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；下载 API/WebUI 另显示持久化做种目标、状态、累计时间、百分比和完成时间。解析/移动/重命名/字幕/NFO的更细粒度进度仍待串联。
 - [x] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、实例失败隔离、离线保留stale快照、重启按实例+hash恢复，以及首错2秒、连续半开失败指数增长并封顶120秒的熔断已完成；显式连接测试可安全绕过等待窗并在成功后复位。
@@ -229,7 +229,7 @@
 - [ ] 实现缓存/数据库浏览和安全删除。
 - [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [ ] 完成响应式布局、空/错/加载状态和基本可访问性。
-- [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；DOM 单元测试和 Playwright UI E2E 待实现。
+- [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 的 Node 单元测试已接入，DOM 单元测试和 Playwright UI E2E 待实现。
 - [ ] 用 Tampermonkey + Mikan fixture 页验证“单集”“全集”“上传/获取过滤配置”。
 
 ## P10 — 组合与发布

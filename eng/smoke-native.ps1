@@ -166,6 +166,7 @@ try {
     $openApi = $openApiResponse.Content | ConvertFrom-Json
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
     $appScript = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/app.js" -TimeoutSec 5
+    $apiClientScript = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/api-client.js" -TimeoutSec 5
     if ($status.database_schema_version -ne $ExpectedSchemaVersion) {
         throw "Unexpected schema version: $($status.database_schema_version)"
     }
@@ -284,9 +285,12 @@ try {
 
     if ($index.StatusCode -ne 200 `
         -or $appScript.StatusCode -ne 200 `
+        -or $apiClientScript.StatusCode -ne 200 `
         -or -not $index.Content.Contains('<title>AnimeGoNet</title>') `
         -or -not $index.Content.Contains('external-plugin-list') `
-        -or -not $appScript.Content.Contains('/api/v1/plugins/')) {
+        -or -not $appScript.Content.Contains('/api/v1/plugins/') `
+        -or -not $appScript.Content.Contains('from "./api-client.js"') `
+        -or -not $apiClientScript.Content.Contains('invalid_api_path')) {
         throw 'Static WebUI smoke failed.'
     }
 

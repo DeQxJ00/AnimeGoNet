@@ -1,4 +1,4 @@
-"use strict";
+import { ApiClient } from "./api-client.js";
 function element(selector) {
     const found = document.querySelector(selector);
     if (!found)
@@ -13,6 +13,7 @@ async function responseError(response) {
     return body?.message ?? `HTTP ${response.status}`;
 }
 const accessKey = new URLSearchParams(window.location.search).get("access_key");
+const api = new ApiClient(accessKey);
 const headers = new Headers();
 if (accessKey)
     headers.set("Access-Key", accessKey);
@@ -478,17 +479,10 @@ async function resetExternalPlugin(pluginId, button) {
 async function loadStatus() {
     const health = element("#health");
     try {
-        const [response, pluginConfigurationResponse] = await Promise.all([
-            fetch("/api/v1/status", { headers }),
-            fetch("/api/v1/plugins", { headers }),
+        const [status, pluginConfigurations] = await Promise.all([
+            api.get("/api/v1/status"),
+            api.get("/api/v1/plugins"),
         ]);
-        if (!response.ok)
-            throw new Error(`HTTP ${response.status}`);
-        if (!pluginConfigurationResponse.ok) {
-            throw new Error(await responseError(pluginConfigurationResponse));
-        }
-        const status = await response.json();
-        const pluginConfigurations = await pluginConfigurationResponse.json();
         externalSourceAdapters = pluginConfigurations.items.filter((configuration) => configuration.type === "source");
         refreshSourceAdapterOptions();
         element("#schema").textContent = `v${status.database_schema_version}`;
@@ -523,12 +517,9 @@ async function loadDirectoryDatabase(refresh = false) {
     if (refresh)
         target.textContent = "正在刷新…";
     try {
-        const response = await fetch(refresh
+        const status = await api.request(refresh
             ? "/api/v1/library/directory-database/refresh"
-            : "/api/v1/library/directory-database", { method: refresh ? "POST" : "GET", headers });
-        if (!response.ok)
-            throw new Error(`HTTP ${response.status}`);
-        const status = await response.json();
+            : "/api/v1/library/directory-database", { method: refresh ? "POST" : "GET" });
         const rejected = status.last_rejected_count > 0
             ? `，拒绝 ${status.last_rejected_count}`
             : "";

@@ -26,8 +26,10 @@ jobs:
         run: npm ci
       - name: Type-check WebUI
         run: npm run web:check
+      - name: Test WebUI client
+        run: npm run web:test
       - name: Verify committed WebUI output
-        run: npm run web:build && git diff --exit-code -- src/AnimeGoNet.App/wwwroot/app.js
+        run: git diff --exit-code -- src/AnimeGoNet.App/wwwroot/app.js src/AnimeGoNet.App/wwwroot/api-client.js
 
   build-test:
     strategy:

@@ -20,6 +20,7 @@ public sealed class StaticWebUiTests
     [InlineData("/styles.css", "text/css", ".data-update-columns")]
     [InlineData("/styles.css", "text/css", ".data-update-offline")]
     [InlineData("/app.js", "text/javascript", "/api/v1/downloads")]
+    [InlineData("/api-client.js", "text/javascript", "invalid_api_path")]
     [InlineData("/app.js", "text/javascript", "查看文件与时间线")]
     [InlineData("/app.js", "text/javascript", "expected_revision")]
     [InlineData("/app.js", "text/javascript", "downloader_id")]

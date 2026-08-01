@@ -1,3 +1,5 @@
+import { ApiClient } from "./api-client.js";
+
 interface RuntimeStatus {
   database_schema_version: number;
   native_aot: boolean;
@@ -1121,6 +1123,7 @@ async function responseError(response: Response): Promise<string> {
 }
 
 const accessKey = new URLSearchParams(window.location.search).get("access_key");
+const api = new ApiClient(accessKey);
 const headers = new Headers();
 if (accessKey) headers.set("Access-Key", accessKey);
 const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
@@ -1632,16 +1635,10 @@ async function resetExternalPlugin(pluginId: string, button: HTMLButtonElement):
 async function loadStatus(): Promise<void> {
   const health = element<HTMLElement>("#health");
   try {
-    const [response, pluginConfigurationResponse] = await Promise.all([
-      fetch("/api/v1/status", { headers }),
-      fetch("/api/v1/plugins", { headers }),
+    const [status, pluginConfigurations] = await Promise.all([
+      api.get<RuntimeStatus>("/api/v1/status"),
+      api.get<ExternalPluginConfigurationList>("/api/v1/plugins"),
     ]);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    if (!pluginConfigurationResponse.ok) {
-      throw new Error(await responseError(pluginConfigurationResponse));
-    }
-    const status = await response.json() as RuntimeStatus;
-    const pluginConfigurations = await pluginConfigurationResponse.json() as ExternalPluginConfigurationList;
     externalSourceAdapters = pluginConfigurations.items.filter(
       (configuration) => configuration.type === "source",
     );
@@ -1677,14 +1674,12 @@ async function loadDirectoryDatabase(refresh = false): Promise<void> {
   button.disabled = true;
   if (refresh) target.textContent = "正在刷新…";
   try {
-    const response = await fetch(
+    const status = await api.request<DirectoryDatabaseStatus>(
       refresh
         ? "/api/v1/library/directory-database/refresh"
         : "/api/v1/library/directory-database",
-      { method: refresh ? "POST" : "GET", headers },
+      { method: refresh ? "POST" : "GET" },
     );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const status = await response.json() as DirectoryDatabaseStatus;
     const rejected = status.last_rejected_count > 0
       ? `，拒绝 ${status.last_rejected_count}`
       : "";

@@ -194,3 +194,21 @@ plugin-data。
 新建 profile；已存在 profile 对应包后来被禁用或移除时仍显示原 ID 和明确状态，不会
 静默改成 Mikan/U2/TTG。服务端创建时从实际 `PluginCatalog` 验证 adapter，路由预览走
 同一个强类型 adapter；默认禁用的外部包会安全返回不可用，不启动进程或产生任务。
+
+## 14. TypeScript 工程与 API client
+
+WebUI 使用 TypeScript 7 strict 编译为浏览器原生 ES module，不引入 React、Vue、
+Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共享边界：调用点声明
+响应与请求体类型，client 统一序列化 JSON、传播 `AbortSignal`、携带页面已有的旧
+`Access-Key`，并把结构化失败投影为稳定的 `ApiHttpError`。
+
+客户端只接受以单个 `/` 开头且不含反斜杠的同源路径，在进入 `fetch` 前拒绝绝对 URL、
+协议相对 URL和浏览器可重解释的反斜杠 host，防止 Access-Key 被发送到外部来源。失败
+响应只读取类型正确的 `code/message/errors` 字段；HTML、畸形 JSON 或错误字段类型只
+显示 HTTP 状态，不把代理页或任意响应正文放进 DOM。成功但不是 JSON 时返回稳定协议
+错误，`204` 可作为类型化 `void` 操作。
+
+运行状态、外部插件配置和目录数据库状态已经使用该 client。其余旧页面请求可按功能
+模块逐步迁移，不改变服务端契约。`npm run web:test` 先确定性编译，再使用 Node 内置
+runner 验证同源门禁、凭据/header、请求体、取消传播、结构化失败、不可信正文和 204；
+CI 同时检查 `app.js` 与 `api-client.js` 必须和 TypeScript 源码一致。
