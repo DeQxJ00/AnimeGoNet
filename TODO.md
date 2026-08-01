@@ -140,7 +140,7 @@
 - [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
 - [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
-- [>] 实现外部 C# 插件进程：manifest 包发现与 NativeAOT-safe 严格解析已完成；显式会话使用单一长期子进程和有界 UTF-8 JSON Lines 完成 initialize/execute/health/shutdown，严格校验 API/requestId/响应形状，支持调用串行化、输入输出上限、超时、取消、EOF/崩溃隔离、stderr 独立排空、进程树终止和启动前 manifest 二次校验。真实 .NET 子进程已验证只继承插件 ID、API 版本和独立数据目录，不继承宿主秘密。宿主级进程管理器、指数退避/自动禁用、stderr 结构化限流与六类强类型 adapter 待后续模块实现。
+- [>] 实现外部 C# 插件进程：manifest 包发现、严格 JSON Lines 会话与真实子进程环境隔离已完成；宿主按插件 ID 惰性启动并复用单一进程，插件间门禁/故障状态独立，协议/启动/健康故障按 2 秒起、2 分钟封顶指数退避，默认连续 5 次自动禁用，成功或正常业务错误清零，调用方取消只替换进程不惩罚插件；显式 reset 可重新启用。`/api/v1/status.external_plugins.runtimes` 安全显示 stopped/starting/ready/backoff/auto_disabled、计数、重试时间和稳定错误码，插件可写数据与只读包目录分离到 `data/plugin-data/<id>`。持久启停配置/API/WebUI、stderr 结构化限流与六类强类型 adapter 待后续模块实现。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
 - [ ] 实现 `AnimeGo.PluginTool`。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
@@ -243,7 +243,7 @@
 - [>] 官方 Compose 将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`；配置和 smoke 断言已建立，真实容器验证待 CI。
 - [>] 验证外部下载器 `client.download_path` 路径转换与错误诊断：主程序已提供 qB 默认保存路径读取和显式路径/硬链接能力探测，临时目录成功/缺失 fixture 已通过；真实外部容器的跨容器映射验收待 Compose 集成环境。
 - [ ] 构建并实机验证 `linux/amd64`，按确认结果验证 `linux/arm64`。
-- [>] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退：`data/plugins` 已由目录模型创建并注册 manifest loader；平台/RID、入口执行位、Unix group/world write、链接逃逸、逐包错误隔离和真实本机子进程/环境隔离已有测试。Docker 只读挂载、真实 Linux 非 root 子进程和自动禁用回退待验收。
+- [>] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退：`data/plugins` 包目录与 `data/plugin-data` 写目录已分离；平台/RID、入口执行位、Unix group/world write、链接逃逸、逐包错误隔离、真实本机子进程/环境隔离、自动禁用与显式 reset 已有测试。Docker 只读挂载和真实 Linux 非 root 子进程待验收。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [ ] 生成 checksums、SBOM、第三方许可证。
 - [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；最新 win-x64 原生二进制也完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt/目录业务数据迁移演练仍待实现。

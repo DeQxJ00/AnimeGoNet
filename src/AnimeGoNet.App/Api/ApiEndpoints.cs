@@ -818,7 +818,8 @@ public static class ApiEndpoints
     private static Ok<RuntimeStatus> Status(
         AnimeGoOptions options,
         LegacyDownloaderMigrationState legacyMigration,
-        ExternalPluginDiscoveryResult externalPlugins)
+        ExternalPluginDiscoveryResult externalPlugins,
+        ExternalPluginHostManager externalPluginHost)
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         return TypedResults.Ok(new RuntimeStatus(
@@ -855,7 +856,22 @@ public static class ApiEndpoints
                     new ExternalPluginPackageErrorResponse(
                         error.PackageDirectoryName,
                         error.Code,
-                        error.Message)).ToArray())));
+                        error.Message)).ToArray(),
+                externalPluginHost.GetSnapshots().Select(runtime =>
+                    new ExternalPluginRuntimeResponse(
+                        runtime.PluginId,
+                        runtime.State switch
+                        {
+                            ExternalPluginRuntimeState.Stopped => "stopped",
+                            ExternalPluginRuntimeState.Starting => "starting",
+                            ExternalPluginRuntimeState.Ready => "ready",
+                            ExternalPluginRuntimeState.Backoff => "backoff",
+                            ExternalPluginRuntimeState.AutoDisabled => "auto_disabled",
+                            _ => "unknown",
+                        },
+                        runtime.ConsecutiveFailures,
+                        runtime.RetryAtUtc,
+                        runtime.LastFailureCode)).ToArray())));
     }
 
     private static async Task<Ok<ConfigurationResponse>> Configuration(

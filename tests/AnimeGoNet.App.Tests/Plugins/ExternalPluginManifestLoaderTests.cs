@@ -57,7 +57,9 @@ public sealed class ExternalPluginManifestLoaderTests
         Assert.Empty(refreshed.Packages);
         Assert.Empty(status!["external_plugins"]!["packages"]!.AsArray());
         Assert.Empty(status["external_plugins"]!["errors"]!.AsArray());
+        Assert.Empty(status["external_plugins"]!["runtimes"]!.AsArray());
         Assert.True(Directory.Exists(Path.Combine(app.RootPath, "data", "plugins")));
+        Assert.True(Directory.Exists(Path.Combine(app.RootPath, "data", "plugin-data")));
     }
 
     [Theory]

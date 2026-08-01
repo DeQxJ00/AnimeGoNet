@@ -5,7 +5,27 @@ using AnimeGoNet.App.Serialization;
 
 namespace AnimeGoNet.App.Plugins;
 
-public sealed class ExternalPluginProcessSession : IAsyncDisposable
+internal interface IExternalPluginSession : IAsyncDisposable
+{
+    ExternalPluginSessionState State { get; }
+
+    Task StartAsync(string hostVersion, CancellationToken cancellationToken = default);
+
+    Task<JsonElement> ExecuteAsync(
+        string operation,
+        JsonElement payload,
+        JsonElement config,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> HealthAsync(CancellationToken cancellationToken = default);
+
+    Task ShutdownAsync(
+        string reason = "host_shutdown",
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class ExternalPluginProcessSession : IExternalPluginSession
 {
     private static readonly byte[] Newline = [(byte)'\n'];
     private static readonly FrozenSet<string> InitializeResultFields =

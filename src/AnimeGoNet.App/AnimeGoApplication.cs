@@ -275,6 +275,11 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(legacyDownloaderMigrationState);
         builder.Services.AddSingleton(externalPluginLoader);
         builder.Services.AddSingleton(externalPluginDiscovery);
+        builder.Services.AddSingleton<ExternalPluginHostManager>(_ =>
+            new ExternalPluginHostManager(
+                externalPluginLoader,
+                externalPluginDiscovery,
+                layout.PluginDataPath));
         builder.Services.AddSingleton(applicationOverrides);
         builder.Services.AddSingleton(
             new ApplicationConfigurationRuntimeState(applicationOverrideSnapshot.Revision));

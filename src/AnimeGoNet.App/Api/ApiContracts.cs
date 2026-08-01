@@ -70,7 +70,16 @@ public sealed record ExternalPluginRuntimeStatusResponse(
     [property: JsonPropertyName("packages")]
     IReadOnlyList<ExternalPluginPackageResponse> Packages,
     [property: JsonPropertyName("errors")]
-    IReadOnlyList<ExternalPluginPackageErrorResponse> Errors);
+    IReadOnlyList<ExternalPluginPackageErrorResponse> Errors,
+    [property: JsonPropertyName("runtimes")]
+    IReadOnlyList<ExternalPluginRuntimeResponse> Runtimes);
+
+public sealed record ExternalPluginRuntimeResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("consecutive_failures")] int ConsecutiveFailures,
+    [property: JsonPropertyName("retry_at_utc")] DateTimeOffset? RetryAtUtc,
+    [property: JsonPropertyName("last_failure_code")] string? LastFailureCode);
 
 public sealed record ExternalPluginPackageResponse(
     [property: JsonPropertyName("id")] string Id,

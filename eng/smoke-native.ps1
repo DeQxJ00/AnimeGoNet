@@ -164,10 +164,16 @@ try {
 
     $externalPackages = @($status.external_plugins.packages)
     $externalErrors = @($status.external_plugins.errors)
+    $externalRuntimes = @($status.external_plugins.runtimes)
     if ($externalPackages.Count -ne 1 `
         -or $externalPackages[0].id -ne 'com.animegonet.native-smoke' `
         -or $externalPackages[0].rid -ne $pluginRid `
-        -or $externalErrors.Count -ne 0) {
+        -or $externalErrors.Count -ne 0 `
+        -or $externalRuntimes.Count -ne 1 `
+        -or $externalRuntimes[0].id -ne 'com.animegonet.native-smoke' `
+        -or $externalRuntimes[0].state -ne 'stopped' `
+        -or $externalRuntimes[0].consecutive_failures -ne 0 `
+        -or -not (Test-Path -LiteralPath (Join-Path $env:data_path 'plugin-data') -PathType Container)) {
         throw 'NativeAOT external plugin manifest discovery smoke failed.'
     }
 

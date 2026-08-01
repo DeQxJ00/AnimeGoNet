@@ -21,6 +21,7 @@ public sealed class DirectoryLayoutTests
             Assert.True(Directory.Exists(layout.LogsPath));
             Assert.True(Directory.Exists(layout.BackupsPath));
             Assert.True(Directory.Exists(layout.PluginsPath));
+            Assert.True(Directory.Exists(layout.PluginDataPath));
             Assert.True(Directory.Exists(layout.DataUpdatePath));
             Assert.False(Directory.Exists(options.Paths.DownloadPath));
             Assert.False(Directory.Exists(options.Paths.SavePath));
