@@ -251,4 +251,83 @@ public sealed class MetadataTaskDetailApiTests
             json.RootElement.GetProperty("ai").GetProperty("confidence_basis").GetString());
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
+
+    [Theory]
+    [InlineData("SemanticNoMatch", true, "bangumi_fallback_disabled")]
+    [InlineData("Network", false, "tmdb_access_not_confirmed")]
+    public async Task ListAndDetailExposeLatestAuthoritativeFallbackDecision(
+        string failureKind,
+        bool accessConfirmed,
+        string denialReason)
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/fallback-decision.torrent",
+                "info": { "title": "Fallback decision", "mikanid": 3951, "bgmid": 547888 }
+              }]
+            }
+            """;
+        using var ingest = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var ingestJson = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        var taskId = ingestJson.RootElement
+            .GetProperty("items")[0]
+            .GetProperty("ingest_id")
+            .GetString()!;
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var now = DateTimeOffset.UtcNow.ToString("O");
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET status = 'metadata_failed', failure_kind = $failure_kind,
+                    failure_reason = 'safe_failure', updated_at_utc = $now
+                WHERE id = $task_id;
+
+                INSERT INTO metadata_resolution_runs (
+                    id, task_id, status, tmdb_access_confirmed, failure_kind,
+                    fallback_eligible, fallback_denial_reason,
+                    started_at_utc, completed_at_utc, attempt_number)
+                VALUES (
+                    'run-fallback-decision', $task_id, 'failed', $access_confirmed,
+                    $failure_kind, 0, $denial_reason, $now, $now, 1);
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            command.Parameters.AddWithValue("$failure_kind", failureKind);
+            command.Parameters.AddWithValue("$access_confirmed", accessConfirmed ? 1 : 0);
+            command.Parameters.AddWithValue("$denial_reason", denialReason);
+            command.Parameters.AddWithValue("$now", now);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var listResponse = await app.Client.GetAsync("/api/v1/metadata/tasks");
+        using var list = JsonDocument.Parse(await listResponse.Content.ReadAsStreamAsync());
+        var listItem = Assert.Single(
+            list.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("task_id").GetString() == taskId);
+        AssertFallbackDecision(listItem);
+
+        using var detailResponse = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks/{taskId}");
+        using var detail = JsonDocument.Parse(await detailResponse.Content.ReadAsStreamAsync());
+        AssertFallbackDecision(detail.RootElement.GetProperty("summary"));
+
+        void AssertFallbackDecision(JsonElement item)
+        {
+            Assert.Equal("failed", item.GetProperty("latest_run_status").GetString());
+            Assert.Equal(
+                accessConfirmed,
+                item.GetProperty("tmdb_access_confirmed").GetBoolean());
+            Assert.False(item.GetProperty("bangumi_fallback_eligible").GetBoolean());
+            Assert.Equal(
+                denialReason,
+                item.GetProperty("bangumi_fallback_denial_reason").GetString());
+        }
+    }
 }

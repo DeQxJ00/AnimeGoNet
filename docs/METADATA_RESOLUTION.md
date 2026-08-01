@@ -270,6 +270,15 @@ SQLite 必须同时保存一次解析运行的最终状态和每个策略的尝�
 
 Bangumi 完全兜底资格只允许 `failure_kind=SemanticNoMatch && tmdb_access_confirmed=true`。Web 必须显示“允许/拒绝兜底”及拒绝原因；网络恢复后的手动/自动重试重新运行 TMDB，不把旧网络错误转换成 `tmdbid=0`。
 
+当前 SQLite `metadata_resolution_runs` 已把上述最终决定固化为
+`tmdb_access_confirmed`、`fallback_eligible` 和 `fallback_denial_reason`。任务查询只读取
+该任务最高 `attempt_number` 的 Run，不从最近一条策略 Attempt 猜测资格。列表和详情
+API 使用 `latest_run_status`、`tmdb_access_confirmed`、
+`bangumi_fallback_eligible`、`bangumi_fallback_denial_reason` 返回同一决定。WebUI 只在
+Run 为 `failed` 或 `fallback_resolved` 时显示它：前者明确显示允许/拒绝、权威访问
+是否确认及稳定拒绝原因；后者明确显示已经使用固定本地 S01 且不提供有效 tmdbid。
+没有 Run、仍在运行或已取得正常 TMDB 身份时，不虚构兜底决定。
+
 ### 6.4 最终取得证据
 
 策略尝试时间线用于解释过程，最终字段不能在查询时从“最近一次尝试”重新推断。

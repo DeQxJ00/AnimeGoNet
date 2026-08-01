@@ -59,7 +59,7 @@
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 待实现 | scan/upsert/recovery tests |
 | 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 进行中 | ingest command/response 和 JSON context 已验证；其余模型待实现 |
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 进行中 | SQLite 唯一约束、并发完成写入、逐文件 claim、同任务字幕共享、跨任务完成/进行中精确跳过及失败释放已验证；alias/delete 和 qB 文件 priority 待实现 |
-| TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 已实现 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid、固定本地 S01 且不依赖 P2/P1、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API/UI 已验证；唯一普通 Bangumi Episode ID 提供跨来源最高可信 scope，歧义/小数/特别篇保守降级；schema v20 恢复合并保存 alias 并标记 `DuplicateAfterResolution`；人工恢复逐项在线验证 TMDB；schema v21 在原兜底目录可恢复地重写真实 TMDB/Bangumi NFO |
+| TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 已验证 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid、固定本地 S01 且不依赖 P2/P1、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API/UI 已验证；Run 级 TMDB 访问确认/兜底资格/拒绝原因由列表和详情 API/WebUI 原样投影，六类非权威失败均经处理器门禁测试；唯一普通 Bangumi Episode ID 提供跨来源最高可信 scope，歧义/小数/特别篇保守降级；schema v20 恢复合并保存 alias 并标记 `DuplicateAfterResolution`；人工恢复逐项在线验证 TMDB；schema v21 在原兜底目录可恢复地重写真实 TMDB/Bangumi NFO |
 | 元数据解析尝试 | failure kind/reason/timeline + 三级最终证据 | 扩展 | 已验证 | schema v32 固化 Series/Season/Episode `resolution_source + run_id + attempt_id`，SQLite 触发器拒绝跨 Run/Stage/策略伪造引用；逐文件 Episode/字幕精确 Attempt、混合证据摘要、任务/作品库 API/WebUI、失败时间线和显式 retry tests |
 | 四类删除 | 业务/下载器任务/源文件/媒体文件 | 扩展 | 进行中 | 四类独立 flags/schema 已建；preview/executor 待实现 |
 

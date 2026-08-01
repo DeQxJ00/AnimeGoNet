@@ -123,7 +123,7 @@
 - [>] 自动编排之前应用 Mikan 作品级人工规则；完整 TMDB Series/Season 覆盖由专用 worker 优先领取并权威验证，EP Offset 已在逐文件 TMDB Episode 验证前应用且无效时阻断静默回退；可信自动 offset 与字幕绑定仍待串联。
 - [x] 人工规则无效时记录人工覆盖策略失败并阻止静默自动覆盖；清除/禁用后可通过 `POST /api/v1/metadata/tasks/{taskId}/retry` 显式重新匹配，事务性恢复自动策略队列且保留历史运行记录，并拒绝活动租约/非失败状态。
 - [x] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误：客户端稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；连接/逐次超时/429/5xx 可配置重试，404/认证/协议失败不重试，取消立即传播。
-- [>] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`（权威 404 仅产生 `SemanticNoMatch + access_confirmed`，其他客户端失败均禁止资格；SQLite 持久化与最终门禁待串联）。
+- [x] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`：SQLite Run 持久化、最终门禁、列表/详情 API 与 WebUI 决策说明均已串联；只有权威 `SemanticNoMatch + access_confirmed` 可进入兜底，Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput/Ambiguous 全部经过处理器测试证明拒绝且不创建 `tmdbid=0`。
 - [x] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；SQLite 重启后可按任务查询，版本化 API 与任务卡片策略时间线均已接入。
 - [ ] 通过 fixture parity 和受控 live smoke。
 

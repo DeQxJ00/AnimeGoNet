@@ -501,6 +501,11 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("failure_stage")] string? FailureStage,
     [property: JsonPropertyName("failure_code")] string? FailureCode,
     [property: JsonPropertyName("failure_retryable")] bool? FailureRetryable,
+    [property: JsonPropertyName("latest_run_status")] string? LatestRunStatus,
+    [property: JsonPropertyName("tmdb_access_confirmed")] bool? TmdbAccessConfirmed,
+    [property: JsonPropertyName("bangumi_fallback_eligible")] bool? BangumiFallbackEligible,
+    [property: JsonPropertyName("bangumi_fallback_denial_reason")]
+    string? BangumiFallbackDenialReason,
     [property: JsonPropertyName("handling_category")] string HandlingCategory,
     [property: JsonPropertyName("episode_file_count")] int EpisodeFileCount,
     [property: JsonPropertyName("other_file_count")] int OtherFileCount,

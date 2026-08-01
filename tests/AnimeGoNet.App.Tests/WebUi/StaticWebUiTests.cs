@@ -42,6 +42,9 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "/attempts")]
     [InlineData("/app.js", "text/javascript", "查看策略时间线")]
     [InlineData("/app.js", "text/javascript", "可自动重试")]
+    [InlineData("/app.js", "text/javascript", "Bangumi 完全兜底：")]
+    [InlineData("/app.js", "text/javascript", "TMDB 权威访问未确认")]
+    [InlineData("/app.js", "text/javascript", "bangumi_fallback_denial_reason")]
     [InlineData("/app.js", "text/javascript", "/api/v1/metadata/pending-tmdb")]
     [InlineData("/app.js", "text/javascript", "验证并恢复")]
     [InlineData("/app.js", "text/javascript", "DuplicateAfterResolution")]
@@ -80,6 +83,7 @@ public sealed class StaticWebUiTests
     [InlineData("/styles.css", "text/css", ".pending-recovery-form")]
     [InlineData("/styles.css", "text/css", ".manual-submit-card")]
     [InlineData("/styles.css", "text/css", ".mikan-work-impact-task")]
+    [InlineData("/styles.css", "text/css", ".metadata-fallback-decision")]
     public async Task ServesStaticAssets(string path, string mediaType, string marker)
     {
         await using var app = await RunningApp.StartAsync();

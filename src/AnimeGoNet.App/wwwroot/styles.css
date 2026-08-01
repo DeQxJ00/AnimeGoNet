@@ -273,6 +273,9 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-identity { margin: 15px 0; }
 .metadata-files { margin: 15px 0 0; }
 .metadata-failure { color: #ffb0b0; margin: 12px 0 0; }
+.metadata-fallback-decision { margin: 10px 0 0; padding: 9px 11px; border: 1px solid #5b4b57; border-radius: 10px; color: #f0d7df; background: rgba(63,31,42,.38); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
+.metadata-fallback-decision.allowed { border-color: #7c6835; color: #ffe09a; background: rgba(65,53,21,.38); }
+.metadata-fallback-decision.denied { border-color: #813f49; color: #ffb4b4; }
 .metadata-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
 .metadata-stages div { min-width: 0; padding: 10px; border-radius: 12px; background: rgba(5,8,16,.55); }
 .metadata-stages dt { color: #8da2c9; font-size: .72rem; }

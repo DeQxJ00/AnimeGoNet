@@ -461,6 +461,60 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(MetadataFailureKind.Network, run.FailureKind);
         Assert.False(run.FallbackEligible);
         Assert.False(run.TmdbAccessConfirmed);
+
+        var detail = Assert.IsType<MetadataTaskDetailProjection>(
+            await fixture.Store.GetTaskDetailAsync(fixture.TaskId));
+        Assert.Equal("failed", detail.Summary.LatestRunStatus);
+        Assert.False(detail.Summary.TmdbAccessConfirmed);
+        Assert.False(detail.Summary.BangumiFallbackEligible);
+        Assert.Equal(
+            "tmdb_access_not_confirmed",
+            detail.Summary.BangumiFallbackDenialReason);
+    }
+
+    [Fact]
+    public async Task AuthoritativeNoMatchAndCompletedFallbackProjectLatestDecision()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var failedClaim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.FailAsync(
+            failedClaim,
+            new MetadataFailure(
+                MetadataFailureKind.SemanticNoMatch,
+                "tmdb_series_not_found",
+                true),
+            fallbackEligible: false,
+            "bangumi_fallback_disabled",
+            now);
+
+        var failed = Assert.IsType<MetadataTaskDetailProjection>(
+            await fixture.Store.GetTaskDetailAsync(fixture.TaskId));
+        Assert.Equal("failed", failed.Summary.LatestRunStatus);
+        Assert.True(failed.Summary.TmdbAccessConfirmed);
+        Assert.False(failed.Summary.BangumiFallbackEligible);
+        Assert.Equal(
+            "bangumi_fallback_disabled",
+            failed.Summary.BangumiFallbackDenialReason);
+
+        Assert.Equal(
+            MetadataRetryResult.Retried,
+            await fixture.Store.RetryFailedAsync(fixture.TaskId, now.AddSeconds(1)));
+        var fallbackClaim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now.AddSeconds(2),
+                TimeSpan.FromMinutes(1)));
+        await CompleteFallbackAsync(fixture, fallbackClaim, now.AddSeconds(2));
+
+        var completed = Assert.IsType<MetadataTaskDetailProjection>(
+            await fixture.Store.GetTaskDetailAsync(fixture.TaskId));
+        Assert.Equal("fallback_resolved", completed.Summary.LatestRunStatus);
+        Assert.True(completed.Summary.TmdbAccessConfirmed);
+        Assert.True(completed.Summary.BangumiFallbackEligible);
+        Assert.Null(completed.Summary.BangumiFallbackDenialReason);
     }
 
     [Fact]

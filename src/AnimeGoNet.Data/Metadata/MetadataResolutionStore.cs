@@ -1979,6 +1979,22 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
                     WHERE run.task_id = task.id AND attempt.result = 'failed'
                     ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT run.status
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                    ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                   (SELECT run.tmdb_access_confirmed
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                    ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                   (SELECT run.fallback_eligible
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                    ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                   (SELECT run.fallback_denial_reason
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                    ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
                    SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
@@ -2115,6 +2131,22 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                         JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
                         WHERE run.task_id = task.id AND attempt.result = 'failed'
                         ORDER BY attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT run.status
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                        ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                       (SELECT run.tmdb_access_confirmed
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                        ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                       (SELECT run.fallback_eligible
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                        ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                       (SELECT run.fallback_denial_reason
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                        ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
                        SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
@@ -2245,13 +2277,17 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             failureStage,
             failureCode,
             failureRetryable,
+            reader.IsDBNull(23) ? null : reader.GetString(23),
+            reader.IsDBNull(24) ? null : reader.GetInt64(24) != 0,
+            reader.IsDBNull(25) ? null : reader.GetInt64(25) != 0,
+            reader.IsDBNull(26) ? null : reader.GetString(26),
             ClassifyHandling(status, failureKind, failureRetryable),
-            reader.GetInt32(23),
-            reader.GetInt32(24),
-            reader.GetInt32(25),
-            reader.GetInt32(26),
+            reader.GetInt32(27),
+            reader.GetInt32(28),
+            reader.GetInt32(29),
+            reader.GetInt32(30),
             DateTimeOffset.Parse(
-                reader.GetString(27),
+                reader.GetString(31),
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind),
             seriesResolution,

@@ -413,6 +413,10 @@ interface MetadataItem {
   failure_stage: string | null;
   failure_code: string | null;
   failure_retryable: boolean | null;
+  latest_run_status: string | null;
+  tmdb_access_confirmed: boolean | null;
+  bangumi_fallback_eligible: boolean | null;
+  bangumi_fallback_denial_reason: string | null;
   handling_category: string;
   episode_file_count: number;
   other_file_count: number;
@@ -3610,6 +3614,45 @@ function textOrDash(value: unknown): string {
   return value === null || value === undefined || value === "" ? "—" : String(value);
 }
 
+const bangumiFallbackDenialLabels: Record<string, string> = {
+  tmdb_access_not_attempted: "尚未访问 TMDB",
+  tmdb_access_not_confirmed: "TMDB 权威访问未确认（网络、服务、认证、配置或协议失败）",
+  bangumi_subject_missing: "缺少有效 bgmid",
+  bangumi_fallback_disabled: "Bangumi 完全兜底开关未启用",
+  tmdb_series_resolved: "已经取得有效 TMDB Series；完全兜底不适用",
+  metadata_lease_expired: "解析租约过期，必须重新匹配",
+  tmdb_episode_validation_failed: "TMDB Episode 验证失败；不能降级为完全兜底",
+  bangumi_fallback_pending: "满足前置条件，等待 Bangumi 完全兜底",
+};
+
+function metadataFallbackDecision(item: MetadataItem): HTMLParagraphElement | null {
+  if (item.latest_run_status !== "failed"
+    && item.latest_run_status !== "fallback_resolved") {
+    return null;
+  }
+
+  const decision = document.createElement("p");
+  const used = item.latest_run_status === "fallback_resolved";
+  const eligible = item.bangumi_fallback_eligible === true;
+  decision.className = `metadata-fallback-decision ${used || eligible ? "allowed" : "denied"}`;
+  if (used) {
+    decision.textContent =
+      "Bangumi 完全兜底：已允许并使用 · TMDB 权威访问已确认 · 固定本地 S01 · 不提供有效 tmdbid";
+    return decision;
+  }
+
+  const access = item.tmdb_access_confirmed === true
+    ? "TMDB 权威访问已确认"
+    : "TMDB 权威访问未确认";
+  const eligibility = eligible ? "允许" : "拒绝";
+  const reason = item.bangumi_fallback_denial_reason === null
+    ? "未记录原因"
+    : bangumiFallbackDenialLabels[item.bangumi_fallback_denial_reason]
+      ?? item.bangumi_fallback_denial_reason;
+  decision.textContent = `Bangumi 完全兜底：${eligibility} · ${access} · ${reason}`;
+  return decision;
+}
+
 async function retryMetadataTask(taskId: string, button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   button.textContent = "重新入队中…";
@@ -3911,6 +3954,8 @@ async function loadMetadataTasks(): Promise<void> {
           + ` · ${textOrDash(item.failure_reason)}`;
         card.append(failure);
       }
+      const fallbackDecision = metadataFallbackDecision(item);
+      if (fallbackDecision) card.append(fallbackDecision);
       const actions = document.createElement("div");
       actions.className = "metadata-actions";
       const detailButton = document.createElement("button");

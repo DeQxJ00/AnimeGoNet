@@ -186,6 +186,57 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal(0L, await command.ExecuteScalarAsync());
     }
 
+    [Theory]
+    [InlineData(MetadataFailureKind.RemoteService)]
+    [InlineData(MetadataFailureKind.Authentication)]
+    [InlineData(MetadataFailureKind.Configuration)]
+    [InlineData(MetadataFailureKind.Protocol)]
+    [InlineData(MetadataFailureKind.InvalidInput)]
+    [InlineData(MetadataFailureKind.Ambiguous)]
+    public async Task EveryNonAuthoritativeTmdbFailureKindIsDeniedBangumiFallback(
+        MetadataFailureKind failureKind)
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            searchFailure: new TmdbClientException(
+                failureKind,
+                "tmdb_non_authoritative_failure",
+                tmdbAccessConfirmed: false));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    TmdbFailureUseBangumi = true,
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient(new BangumiSubject(
+                547888, "Made in Abyss", "来自深渊", null, 12)));
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊");
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>()
+            .RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>()
+            .GetLatestAsync(taskId));
+        Assert.Equal("failed", run.Status);
+        Assert.Equal(failureKind, run.FailureKind);
+        Assert.False(run.TmdbAccessConfirmed);
+        Assert.False(run.FallbackEligible);
+        Assert.Equal("tmdb_access_not_confirmed", run.FallbackDenialReason);
+
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM anime_series WHERE tmdb_series_id = 0;";
+        Assert.Equal(0L, await command.ExecuteScalarAsync());
+    }
+
     [Fact]
     public async Task ResolvedSeriesWithSeasonMismatchNeverCreatesBangumiFallback()
     {
