@@ -4,6 +4,36 @@ interface RuntimeStatus {
   runtime_identifier: string;
   paths: { data_path: string };
   capabilities: Record<string, boolean>;
+  external_plugins: ExternalPluginStatus;
+}
+
+interface ExternalPluginStatus {
+  packages: ExternalPluginPackage[];
+  errors: ExternalPluginPackageError[];
+  runtimes: ExternalPluginRuntime[];
+}
+
+interface ExternalPluginPackage {
+  id: string;
+  name: string;
+  version: string;
+  type: "source" | "feed" | "parser" | "filter" | "rename" | "schedule";
+  rid: string;
+  capabilities: string[];
+}
+
+interface ExternalPluginPackageError {
+  package_directory_name: string;
+  code: string;
+  message: string;
+}
+
+interface ExternalPluginRuntime {
+  id: string;
+  state: "stopped" | "starting" | "ready" | "backoff" | "auto_disabled" | "unknown";
+  consecutive_failures: number;
+  retry_at_utc: string | null;
+  last_failure_code: string | null;
 }
 
 interface DirectoryDatabaseStatus {
@@ -1140,6 +1170,100 @@ const deleteGroups: DeleteGroup[] = [
   { flag: "delete_media_files", label: "媒体库文件", collection: "media_files", help: "精确删除捕获媒体库根目录内的文件" },
 ];
 
+const externalPluginStateLabels: Record<ExternalPluginRuntime["state"], string> = {
+  stopped: "未启动",
+  starting: "正在启动",
+  ready: "运行中",
+  backoff: "故障退避",
+  auto_disabled: "已自动禁用",
+  unknown: "未知状态",
+};
+
+function renderExternalPlugins(status: ExternalPluginStatus): void {
+  const target = element<HTMLElement>("#external-plugin-list");
+  const runtimes = new Map(status.runtimes.map(runtime => [runtime.id, runtime]));
+  const cards: HTMLElement[] = [];
+  for (const plugin of status.packages) {
+    const runtime = runtimes.get(plugin.id);
+    const card = document.createElement("article");
+    card.className = `external-plugin-card ${runtime?.state ?? "unknown"}`;
+    const heading = document.createElement("div");
+    heading.className = "external-plugin-card-heading";
+    const name = document.createElement("strong");
+    name.textContent = plugin.name;
+    const badge = document.createElement("span");
+    badge.className = `badge ${runtime?.state === "ready" ? "ready" : runtime?.state === "auto_disabled" ? "error" : "pending"}`;
+    badge.textContent = externalPluginStateLabels[runtime?.state ?? "unknown"];
+    heading.append(name, badge);
+    const identity = document.createElement("code");
+    identity.textContent = plugin.id;
+    const metadata = document.createElement("p");
+    metadata.className = "muted";
+    metadata.textContent = `${plugin.type} · ${plugin.version} · ${plugin.rid}`;
+    card.append(heading, identity, metadata);
+    if (plugin.capabilities.length > 0) {
+      const capabilities = document.createElement("small");
+      capabilities.textContent = `能力：${plugin.capabilities.join("、")}`;
+      card.append(capabilities);
+    }
+    if (runtime && (runtime.consecutive_failures > 0 || runtime.last_failure_code)) {
+      const failure = document.createElement("small");
+      const retry = runtime.retry_at_utc
+        ? `；可重试 ${new Date(runtime.retry_at_utc).toLocaleString()}`
+        : "";
+      failure.className = "external-plugin-failure";
+      failure.textContent = `连续失败 ${runtime.consecutive_failures} 次；${runtime.last_failure_code ?? "未分类"}${retry}`;
+      card.append(failure);
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "secondary-button";
+      reset.textContent = "清除故障状态";
+      reset.addEventListener("click", () => void resetExternalPlugin(plugin.id, reset));
+      card.append(reset);
+    }
+    cards.push(card);
+  }
+  for (const error of status.errors) {
+    const card = document.createElement("article");
+    card.className = "external-plugin-card invalid";
+    const heading = document.createElement("strong");
+    heading.textContent = error.package_directory_name;
+    const code = document.createElement("code");
+    code.textContent = error.code;
+    const message = document.createElement("small");
+    message.textContent = error.message;
+    card.append(heading, code, message);
+    cards.push(card);
+  }
+  if (cards.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = "没有发现外部插件包。内置 C# 插件不在此处重复显示。";
+    cards.push(empty);
+  }
+  target.replaceChildren(...cards);
+  target.setAttribute("aria-busy", "false");
+}
+
+async function resetExternalPlugin(pluginId: string, button: HTMLButtonElement): Promise<void> {
+  const original = button.textContent ?? "清除故障状态";
+  button.disabled = true;
+  button.textContent = "正在清除…";
+  try {
+    const response = await fetch(`/api/v1/plugins/${encodeURIComponent(pluginId)}/reset`, {
+      method: "POST",
+      headers,
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadStatus();
+  } catch (error) {
+    button.textContent = errorMessage(error, "清除失败");
+    button.disabled = false;
+    return;
+  }
+  button.textContent = original;
+}
+
 async function loadStatus(): Promise<void> {
   const health = element<HTMLElement>("#health");
   try {
@@ -1162,6 +1286,7 @@ async function loadStatus(): Promise<void> {
       return item;
     });
     element<HTMLElement>("#modules").replaceChildren(...modules);
+    renderExternalPlugins(status.external_plugins);
     health.textContent = "运行中";
     health.className = "badge ready";
   } catch (error) {
@@ -6357,6 +6482,10 @@ element<HTMLButtonElement>("#downloader-config-delete").addEventListener("click"
 element<HTMLButtonElement>("#directory-database-refresh").addEventListener(
   "click",
   () => void loadDirectoryDatabase(true),
+);
+element<HTMLButtonElement>("#external-plugin-reload").addEventListener(
+  "click",
+  () => void loadStatus(),
 );
 element<HTMLButtonElement>("#data-update-reload").addEventListener(
   "click",

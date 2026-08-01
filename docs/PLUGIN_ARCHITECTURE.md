@@ -158,6 +158,7 @@ data/plugins/com.example.animego.filter-resolution/
 - stdout 出现非 JSON、request ID 不匹配或协议版本不兼容时终止进程。
 - 当前 stderr 使用独立异步管道持续排空，绝不当作协议；按插件 ID 写结构化日志和速率限制尚未接入。
 - 宿主管理器在 `data/plugin-data/<id>` 提供独立可写目录，和可只读挂载的 `data/plugins/<package>` 分离。运行状态只投影稳定错误码，不返回包路径、数据路径、stderr 或配置。
+- `GET /api/v1/status` 同时投影安全 manifest、逐包校验错误和运行状态；`POST /api/v1/plugins/{id}/reset` 受统一 Access-Key 保护，只清除退避/自动禁用并关闭旧会话，不上传、修改或执行新的插件包。静态 WebUI 对应显示分类、版本、RID、能力和可恢复故障。
 - 六类强类型 adapter、持久启停配置及管理 API/WebUI 仍是后续边界；当前不会把外部包自动加入内置 `PluginCatalog`。
 - 外部插件不直接获得 AnimeGoNet 的数据库连接、DI 容器或下载器对象；只接收完成任务所需 DTO。
 - 外部可执行程序不是安全沙箱。只运行用户信任的插件；首版 Web UI 不提供上传可执行文件，只负责发现、启停、配置和显示校验结果。

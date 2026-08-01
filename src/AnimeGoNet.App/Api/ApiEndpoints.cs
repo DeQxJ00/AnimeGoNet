@@ -43,6 +43,7 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapPost("/api/v1/plugins/{pluginId}/reset", ResetExternalPlugin);
         app.MapGet("/api/v1/config", Configuration);
         app.MapPost("/api/v1/config/preview", PreviewConfiguration);
         app.MapPut("/api/v1/config", PutConfiguration);
@@ -858,20 +859,32 @@ public static class ApiEndpoints
                         error.Code,
                         error.Message)).ToArray(),
                 externalPluginHost.GetSnapshots().Select(runtime =>
-                    new ExternalPluginRuntimeResponse(
-                        runtime.PluginId,
-                        runtime.State switch
-                        {
-                            ExternalPluginRuntimeState.Stopped => "stopped",
-                            ExternalPluginRuntimeState.Starting => "starting",
-                            ExternalPluginRuntimeState.Ready => "ready",
-                            ExternalPluginRuntimeState.Backoff => "backoff",
-                            ExternalPluginRuntimeState.AutoDisabled => "auto_disabled",
-                            _ => "unknown",
-                        },
-                        runtime.ConsecutiveFailures,
-                        runtime.RetryAtUtc,
-                        runtime.LastFailureCode)).ToArray())));
+                    ToResponse(runtime)).ToArray())));
+    }
+
+    private static async Task<IResult> ResetExternalPlugin(
+        string pluginId,
+        ExternalPluginHostManager manager,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(pluginId, "plugin id");
+            if (manager.GetSnapshot(id) is null)
+            {
+                return TypedResults.NotFound(Error(
+                    "external_plugin_not_found",
+                    "External plugin was not found."));
+            }
+            await manager.ResetAsync(id, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(manager.GetSnapshot(id)!));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "external_plugin_id_invalid",
+                exception.Message));
+        }
     }
 
     private static async Task<Ok<ConfigurationResponse>> Configuration(
@@ -5257,6 +5270,23 @@ public static class ApiEndpoints
     }
 
     private static ApiErrorResponse Error(string code, string message) => new(code, message);
+
+    private static ExternalPluginRuntimeResponse ToResponse(
+        ExternalPluginRuntimeSnapshot runtime) =>
+        new(
+            runtime.PluginId,
+            runtime.State switch
+            {
+                ExternalPluginRuntimeState.Stopped => "stopped",
+                ExternalPluginRuntimeState.Starting => "starting",
+                ExternalPluginRuntimeState.Ready => "ready",
+                ExternalPluginRuntimeState.Backoff => "backoff",
+                ExternalPluginRuntimeState.AutoDisabled => "auto_disabled",
+                _ => "unknown",
+            },
+            runtime.ConsecutiveFailures,
+            runtime.RetryAtUtc,
+            runtime.LastFailureCode);
 
     private static ConfigurationMigrationDiagnosticResponse[] ToResponse(
         LegacyDownloaderMigrationState state) =>

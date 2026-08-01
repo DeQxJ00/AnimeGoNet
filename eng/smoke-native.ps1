@@ -144,6 +144,7 @@ try {
     }
     $ingest = Invoke-RestMethod @ingestParameters
     $index = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 5
+    $appScript = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/app.js" -TimeoutSec 5
     if ($status.database_schema_version -ne $ExpectedSchemaVersion) {
         throw "Unexpected schema version: $($status.database_schema_version)"
     }
@@ -177,6 +178,16 @@ try {
         throw 'NativeAOT external plugin manifest discovery smoke failed.'
     }
 
+    $externalPluginReset = Invoke-RestMethod `
+        -Uri "$baseUrl/api/v1/plugins/com.animegonet.native-smoke/reset" `
+        -Method Post `
+        -TimeoutSec 5
+    if ($externalPluginReset.id -ne 'com.animegonet.native-smoke' `
+        -or $externalPluginReset.state -ne 'stopped' `
+        -or $externalPluginReset.consecutive_failures -ne 0) {
+        throw 'NativeAOT external plugin reset API smoke failed.'
+    }
+
     if (-not $status.capabilities.qbittorrent) {
         throw 'Published process does not report the qBittorrent capability.'
     }
@@ -195,7 +206,11 @@ try {
         throw 'NativeAOT secure ingest rejection smoke failed.'
     }
 
-    if ($index.StatusCode -ne 200 -or -not $index.Content.Contains('<title>AnimeGoNet</title>')) {
+    if ($index.StatusCode -ne 200 `
+        -or $appScript.StatusCode -ne 200 `
+        -or -not $index.Content.Contains('<title>AnimeGoNet</title>') `
+        -or -not $index.Content.Contains('external-plugin-list') `
+        -or -not $appScript.Content.Contains('/api/v1/plugins/')) {
         throw 'Static WebUI smoke failed.'
     }
 
