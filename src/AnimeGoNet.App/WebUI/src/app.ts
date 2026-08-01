@@ -935,6 +935,16 @@ interface SourceProfile {
   rss_priority_enabled: boolean;
   enabled: boolean;
   mikan_identity_cookie_configured: boolean;
+  rss_feed_url_configured: boolean;
+  rss_schedule_enabled: boolean;
+  rss_schedule_cron: string;
+  rss_schedule_registered: boolean;
+  rss_schedule_next_at_utc: string | null;
+  rss_last_run_state: "never" | "running" | "succeeded" | "failed";
+  rss_last_started_at_utc: string | null;
+  rss_last_completed_at_utc: string | null;
+  rss_last_failure_code: string | null;
+  rss_last_batch_id: string | null;
   revision: number;
   ingest_task_count: number;
   rss_batch_count: number;
@@ -4630,6 +4640,42 @@ function updateSourceCredentialInputs(): void {
     : current?.mikan_identity_cookie_configured
     ? "已配置（值永不回显）；留空保持不变。"
     : "未配置；可粘贴 Cookie 值或完整 Cookie。";
+
+  const rssUrl = element<HTMLInputElement>("#source-rss-url");
+  const clearRssUrl = element<HTMLInputElement>("#source-rss-url-clear");
+  const rssCron = element<HTMLInputElement>("#source-rss-cron");
+  const scheduleEnabled = element<HTMLInputElement>("#source-rss-schedule-enabled");
+  const sourceEnabled = element<HTMLInputElement>("#source-enabled").checked;
+  rssUrl.disabled = !isMikan || clearRssUrl.checked;
+  clearRssUrl.disabled = !isMikan || current === null;
+  rssCron.disabled = !isMikan;
+  scheduleEnabled.disabled = !isMikan || !sourceEnabled;
+  if (!isMikan || clearRssUrl.checked) rssUrl.value = "";
+  if (!isMikan || !sourceEnabled || clearRssUrl.checked) scheduleEnabled.checked = false;
+  element<HTMLElement>("#source-rss-url-state").textContent = !isMikan
+    ? "仅 Mikan 适配器可配置 RSS URL。"
+    : clearRssUrl.checked
+    ? "保存后明确清除 RSS URL，并关闭自动调度。"
+    : current?.rss_feed_url_configured
+    ? "已保存于服务端数据目录（值永不回显）；留空保持不变。"
+    : "未配置；启用自动调度前必须填写。";
+
+  const scheduleState = element<HTMLElement>("#source-rss-schedule-state");
+  if (!scheduleEnabled.checked) {
+    scheduleState.textContent = current?.rss_schedule_enabled
+      ? "保存后关闭并移除自动调度。"
+      : "RSS 自动调度未启用。";
+  } else if (!current || !current.rss_schedule_enabled) {
+    scheduleState.textContent = "保存后注册自动调度。";
+  } else {
+    const registered = current.rss_schedule_registered
+      ? `已注册 · 下次 ${dataUpdateTime(current.rss_schedule_next_at_utc)}`
+      : "已配置但当前未注册（后台工作器未运行）";
+    const last = current.rss_last_run_state === "never"
+      ? "尚未执行"
+      : `${current.rss_last_run_state} · 完成 ${dataUpdateTime(current.rss_last_completed_at_utc)}`;
+    scheduleState.textContent = `${registered} · ${last}${current.rss_last_failure_code ? ` · ${current.rss_last_failure_code}` : ""}${current.rss_last_batch_id ? ` · batch ${current.rss_last_batch_id}` : ""}`;
+  }
 }
 
 function populateSourceForm(profile: SourceProfile | null): void {
@@ -4654,6 +4700,12 @@ function populateSourceForm(profile: SourceProfile | null): void {
   element<HTMLInputElement>("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
   element<HTMLInputElement>("#source-mikan-cookie").value = "";
   element<HTMLInputElement>("#source-mikan-cookie-clear").checked = false;
+  element<HTMLInputElement>("#source-rss-url").value = "";
+  element<HTMLInputElement>("#source-rss-url-clear").checked = false;
+  element<HTMLInputElement>("#source-rss-cron").value =
+    profile?.rss_schedule_cron ?? "0 0/15 * * * ?";
+  element<HTMLInputElement>("#source-rss-schedule-enabled").checked =
+    profile?.rss_schedule_enabled ?? false;
   const remove = element<HTMLButtonElement>("#source-delete");
   remove.disabled = profile === null || profile.is_default;
   remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
@@ -4687,7 +4739,7 @@ function renderSourceList(): void {
     revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
     heading.append(name, revision);
     const route = document.createElement("p");
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
@@ -5282,12 +5334,18 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     enabled: element<HTMLInputElement>("#source-enabled").checked,
     mikan_identity_cookie:
       element<HTMLInputElement>("#source-mikan-cookie").value || null,
+    rss_feed_url: element<HTMLInputElement>("#source-rss-url").value || null,
+    rss_schedule_enabled:
+      element<HTMLInputElement>("#source-rss-schedule-enabled").checked,
+    rss_schedule_cron: element<HTMLInputElement>("#source-rss-cron").value.trim(),
   };
   const payload = current
     ? {
         ...common,
         clear_mikan_identity_cookie:
           element<HTMLInputElement>("#source-mikan-cookie-clear").checked,
+        clear_rss_feed_url:
+          element<HTMLInputElement>("#source-rss-url-clear").checked,
         expected_revision: current.revision,
       }
     : {
@@ -6241,6 +6299,18 @@ element<HTMLSelectElement>("#source-adapter").addEventListener(
   updateSourceCredentialInputs,
 );
 element<HTMLInputElement>("#source-mikan-cookie-clear").addEventListener(
+  "change",
+  updateSourceCredentialInputs,
+);
+element<HTMLInputElement>("#source-rss-url-clear").addEventListener(
+  "change",
+  updateSourceCredentialInputs,
+);
+element<HTMLInputElement>("#source-enabled").addEventListener(
+  "change",
+  updateSourceCredentialInputs,
+);
+element<HTMLInputElement>("#source-rss-schedule-enabled").addEventListener(
   "change",
   updateSourceCredentialInputs,
 );

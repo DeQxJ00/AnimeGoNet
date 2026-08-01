@@ -452,11 +452,22 @@
               <small id="source-mikan-cookie-state">仅 Mikan 适配器可配置。</small>
             </label>
             <label class="configuration-clear"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
+            <label class="source-hosts">Mikan RSS URL（只写，可能包含 passkey）
+              <input id="source-rss-url" type="password" inputmode="url" autocomplete="new-password" spellcheck="false" placeholder="https://mikanani.me/RSS/MyBangumi?token=...">
+              <small id="source-rss-url-state">仅 Mikan 适配器可配置；值永不回显。</small>
+            </label>
+            <label class="configuration-clear"><input id="source-rss-url-clear" type="checkbox">明确清除 RSS URL</label>
+            <label class="source-hosts">RSS 调度 Cron（秒 分 时 日 月 周）
+              <input id="source-rss-cron" maxlength="256" autocomplete="off" spellcheck="false" value="0 0/15 * * * ?">
+              <small>默认每 15 分钟；调度只传来源 ID/revision，不传 URL 或 passkey。</small>
+            </label>
+            <p id="source-rss-schedule-state" class="muted source-hosts">RSS 自动调度未启用。</p>
           </div>
           <div class="source-switches">
             <label><input id="source-enabled" type="checkbox">启用来源</label>
             <label><input id="source-filter-enabled" type="checkbox">执行旧 Mikan 过滤</label>
             <label><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
+            <label><input id="source-rss-schedule-enabled" type="checkbox">自动读取 Mikan RSS</label>
           </div>
           <details class="route-preview">
             <summary>路由预览</summary>

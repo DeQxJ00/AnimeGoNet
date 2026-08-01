@@ -221,6 +221,9 @@ public static class AnimeGoApplication
             cancellationToken).ConfigureAwait(false);
         var sourceProfiles = new SourceProfileStore(database);
         await sourceProfiles.EnsureSeedsAsync(options.InitialSourceProfiles, cancellationToken).ConfigureAwait(false);
+        await sourceProfiles.RecoverInterruptedScheduledRunsAsync(
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
         var rssRules = new MikanRssRuleStore(database);
         await rssRules.EnsureDefaultAsync(
             "mikan", MikanRssRuleDefaults.Create(), DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
@@ -274,6 +277,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<StagedTorrentDispatchSchedulePlugin>();
         builder.Services.AddSingleton<DirectoryDatabaseRefreshSchedulePlugin>();
         builder.Services.AddSingleton<DataUpdateSchedulePlugin>();
+        builder.Services.AddSingleton<MikanRssIngestSchedulePlugin>();
         builder.Services.AddSingleton<PluginCatalog>(services =>
             BuiltInPluginCatalog.Create(
             [
@@ -282,6 +286,7 @@ public static class AnimeGoApplication
                 services.GetRequiredService<StagedTorrentDispatchSchedulePlugin>(),
                 services.GetRequiredService<DirectoryDatabaseRefreshSchedulePlugin>(),
                 services.GetRequiredService<DataUpdateSchedulePlugin>(),
+                services.GetRequiredService<MikanRssIngestSchedulePlugin>(),
             ]));
         builder.Services.AddSingleton<TitleParserManager>();
         builder.Services.AddSingleton<OrderedFeedFilterManager>();
@@ -305,6 +310,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
         builder.Services.AddSingleton<PluginScheduleCoordinator>();
         builder.Services.AddSingleton<DataUpdateScheduleManager>();
+        builder.Services.AddSingleton<SourceRssScheduleManager>();
         builder.Services.AddSingleton(downloadJobs);
         builder.Services.AddSingleton<DownloaderAdminStore>();
         builder.Services.AddSingleton<DownloadPreparationStore>();

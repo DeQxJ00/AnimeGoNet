@@ -2345,21 +2345,24 @@ public static class ApiEndpoints
 
     private static async Task<Ok<SourceProfileListResponse>> ListSourceProfiles(
         SourceProfileStore profiles,
+        SourceRssScheduleManager schedules,
         CancellationToken cancellationToken)
     {
         var records = await profiles.ListAsync(cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(new SourceProfileListResponse(records.Select(ToResponse).ToArray()));
+        return TypedResults.Ok(new SourceProfileListResponse(
+            records.Select(profile => ToResponse(profile, schedules)).ToArray()));
     }
 
     private static async Task<IResult> GetSourceProfile(
         string sourceProfileId,
         SourceProfileStore profiles,
+        SourceRssScheduleManager schedules,
         CancellationToken cancellationToken)
     {
         var record = await profiles.GetAsync(sourceProfileId, cancellationToken).ConfigureAwait(false);
         return record is null
             ? TypedResults.NotFound(Error("source_profile_not_found", "Source profile was not found."))
-            : TypedResults.Ok(ToResponse(record));
+            : TypedResults.Ok(ToResponse(record, schedules));
     }
 
     private static async Task<IResult> CreateSourceProfile(
@@ -2368,6 +2371,8 @@ public static class ApiEndpoints
         SourceProfileStore profiles,
         MikanRssRuleStore rules,
         LegacyMikanFilterStore legacyFilters,
+        SourceRssScheduleManager schedules,
+        IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
         try
@@ -2388,6 +2393,10 @@ public static class ApiEndpoints
                 request.Enabled,
                 request.MikanIdentityCookie,
                 clearMikanIdentityCookie: false,
+                request.RssFeedUrl,
+                clearRssFeedUrl: false,
+                request.RssScheduleEnabled ?? false,
+                request.RssScheduleCron,
                 current: null,
                 options);
             var now = DateTimeOffset.UtcNow;
@@ -2398,7 +2407,12 @@ public static class ApiEndpoints
             {
                 await legacyFilters.EnsureDefaultAsync(id, now, cancellationToken).ConfigureAwait(false);
             }
-            return TypedResults.Created($"/api/v1/sources/{id}", ToResponse(created));
+            await schedules.ApplyAsync(
+                created,
+                applicationLifetime.ApplicationStopping).ConfigureAwait(false);
+            return TypedResults.Created(
+                $"/api/v1/sources/{id}",
+                ToResponse(created, schedules));
         }
         catch (SourceProfileDuplicateException)
         {
@@ -2416,6 +2430,8 @@ public static class ApiEndpoints
         SourceProfileUpdateRequest request,
         AnimeGoOptions options,
         SourceProfileStore profiles,
+        SourceRssScheduleManager schedules,
+        IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
         try
@@ -2437,6 +2453,12 @@ public static class ApiEndpoints
                 throw new ArgumentException(
                     "mikan_identity_cookie and clear_mikan_identity_cookie cannot both be set.");
             }
+            if (request.ClearRssFeedUrl
+                && !string.IsNullOrWhiteSpace(request.RssFeedUrl))
+            {
+                throw new ArgumentException(
+                    "rss_feed_url and clear_rss_feed_url cannot both be set.");
+            }
             var definition = ToDefinition(
                 request.DisplayName,
                 current.Adapter,
@@ -2452,12 +2474,22 @@ public static class ApiEndpoints
                 request.Enabled,
                 request.MikanIdentityCookie,
                 request.ClearMikanIdentityCookie,
+                request.RssFeedUrl,
+                request.ClearRssFeedUrl,
+                request.RssScheduleEnabled
+                    ?? (request.Enabled
+                        && !request.ClearRssFeedUrl
+                        && current.RssScheduleEnabled),
+                request.RssScheduleCron,
                 current,
                 options);
             var saved = await profiles.UpdateAsync(
                 id, definition, request.ExpectedRevision, DateTimeOffset.UtcNow, cancellationToken)
                 .ConfigureAwait(false);
-            return TypedResults.Ok(ToResponse(saved));
+            await schedules.ApplyAsync(
+                saved,
+                applicationLifetime.ApplicationStopping).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(saved, schedules));
         }
         catch (SourceProfileRevisionException)
         {
@@ -2478,6 +2510,8 @@ public static class ApiEndpoints
         string sourceProfileId,
         [FromQuery(Name = "expected_revision")] long expectedRevision,
         SourceProfileStore profiles,
+        SourceRssScheduleManager schedules,
+        IHostApplicationLifetime applicationLifetime,
         CancellationToken cancellationToken)
     {
         try
@@ -2488,6 +2522,9 @@ public static class ApiEndpoints
                 throw new ArgumentException("expected_revision must be at least 1.");
             }
             await profiles.DeleteAsync(id, expectedRevision, cancellationToken).ConfigureAwait(false);
+            await schedules.RemoveAsync(
+                id,
+                applicationLifetime.ApplicationStopping).ConfigureAwait(false);
             return TypedResults.Ok(new SourceProfileDeleteResponse(id, true));
         }
         catch (SourceProfileRevisionException)
@@ -4769,8 +4806,12 @@ public static class ApiEndpoints
             rule.CreatedAtUtc,
             rule.UpdatedAtUtc);
 
-    private static SourceProfileResponse ToResponse(SourceProfileAdminRecord profile) =>
-        new(
+    private static SourceProfileResponse ToResponse(
+        SourceProfileAdminRecord profile,
+        SourceRssScheduleManager schedules)
+    {
+        var schedule = schedules.Get(profile.Id);
+        return new(
             profile.Id,
             profile.DisplayName,
             profile.Adapter,
@@ -4793,7 +4834,18 @@ public static class ApiEndpoints
                 ? "move transfers completed files and does not preserve seeding."
                 : null,
             profile.CreatedAtUtc,
-            profile.UpdatedAtUtc);
+            profile.UpdatedAtUtc,
+            profile.RssFeedUrl is not null,
+            profile.RssScheduleEnabled,
+            profile.RssScheduleCron,
+            schedule is not null,
+            schedule?.NextTime,
+            profile.RssLastRunState,
+            profile.RssLastStartedAtUtc,
+            profile.RssLastCompletedAtUtc,
+            profile.RssLastFailureCode,
+            profile.RssLastBatchId);
+    }
 
     private static DownloaderInstanceResponse ToResponse(
         string id,
@@ -4886,6 +4938,10 @@ public static class ApiEndpoints
         bool enabled,
         string? mikanIdentityCookie,
         bool clearMikanIdentityCookie,
+        string? rssFeedUrl,
+        bool clearRssFeedUrl,
+        bool rssScheduleEnabled,
+        string? rssScheduleCron,
         SourceProfileAdminRecord? current,
         AnimeGoOptions options)
     {
@@ -4949,6 +5005,26 @@ public static class ApiEndpoints
             throw new ArgumentException(
                 "mikan_identity_cookie can only be configured for a Mikan adapter.");
         }
+        var normalizedRssFeedUrl = clearRssFeedUrl
+            ? null
+            : !string.IsNullOrWhiteSpace(rssFeedUrl)
+                ? SourceRssSchedulePolicy.NormalizeFeedUrl(normalizedAdapter, rssFeedUrl)
+                : current?.RssFeedUrl;
+        if (normalizedRssFeedUrl is not null
+            && !TorrentNetworkPolicy.IsHostAllowed(
+                new Uri(normalizedRssFeedUrl, UriKind.Absolute).IdnHost,
+                hosts))
+        {
+            throw new ArgumentException(
+                "rss_feed_url host must be included in allowed_torrent_hosts.");
+        }
+        var normalizedRssScheduleCron = SourceRssSchedulePolicy.NormalizeCron(
+            rssScheduleCron ?? current?.RssScheduleCron);
+        SourceRssSchedulePolicy.ValidateEnabled(
+            normalizedAdapter,
+            enabled,
+            rssScheduleEnabled,
+            normalizedRssFeedUrl);
         return new SourceProfileDefinition(
             name,
             normalizedAdapter,
@@ -4962,7 +5038,10 @@ public static class ApiEndpoints
             rssPriorityEnabled,
             enabled,
             normalizedMikanIdentityCookie,
-            normalizedDynamicTagTemplate);
+            normalizedDynamicTagTemplate,
+            normalizedRssFeedUrl,
+            rssScheduleEnabled,
+            normalizedRssScheduleCron);
     }
 
     private static string RequireCanonicalStableId(string? value, string name)

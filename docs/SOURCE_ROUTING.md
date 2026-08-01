@@ -66,6 +66,7 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - filter/rule profile、TMDB/AI策略 profile。
 - 对 Mikan RSS profile 保存 `mikan_rss_filter_enabled`，默认 `true`；AnimeGoHelper legacy `/api/rss` 使用默认 Mikan profile 的当前 revision，开关和规则随任务路由快照固化。
 - 对 Mikan RSS profile 另存独立的 `mikan_rss_priority_enabled` 和版本化优选规则；新安装默认启用，在同批次按可靠 `mikanid+来源EP` 聚合重复RSS选项并逐组淘汰，规则结构见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
+- Mikan profile 可选保存一个自动读取 RSS 的只写 URL 和六字段 Cron（默认 `0 0/15 * * * ?`）。URL 可包含 passkey，只存于服务端 `data_path` 下 SQLite，API/WebUI/调度快照/插件错误/日志均不得回显；更新留空保持旧值，必须用明确清除开关删除。只有来源与调度都启用且 adapter 为 Mikan、URL 合法时才允许保存启用状态。程序启动和来源 CRUD 会立即增删 `source-rss-*`，但关闭后台 worker 的测试/维护模式只保留配置而不创建假任务。完整状态和验收见 [`SOURCE_RSS_SCHEDULING.md`](SOURCE_RSS_SCHEDULING.md)。
 - RSS 产生 winner 后，主程序从其 Mikan Episode URL 取得同源站点 origin，使用受 SourceProfile host 白名单、DNS 公网地址校验、重定向和 2 MiB 上限保护的 HTTP 管道抓取 `/Home/Bangumi/{mikanid}`。只接受 `p.bangumi-info` 内指向 `bgm.tv`/`bangumi.tv` `/subject/{正整数}` 的唯一 Subject；结果以 `bgmid` 写入 RSS 批次和统一导入任务。成功批次不重复抓取；网络/页面/歧义失败保留 winner 为可重试状态，不创建缺 `bgmid` 的 Mikan 下载任务。
 - qB category、静态附加 tags；AnimeGoNet 总会额外加入 `animegonet`、来源 ID 和文件策略三个可识别系统 tag。
 - 可空 `dynamic_tag_template`；默认 Mikan 为 `{year}年{quarter}月新番`，支持 `{year}`、`{quarter}`（季度首月 1/4/7/10）、`{quarter_index}`、`{quarter_name}`、`{ep}`、`{week}` 和 `{week_name}`，逗号分隔最多 16 个 tag。

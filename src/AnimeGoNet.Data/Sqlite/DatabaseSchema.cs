@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 35;
+    public const int CurrentVersion = 36;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -41,7 +41,44 @@ public static class DatabaseSchema
         new SchemaMigration(33, "download_seeding_lifecycle", DownloadSeedingLifecycle),
         new SchemaMigration(34, "dynamic_download_tags", DynamicDownloadTags),
         new SchemaMigration(35, "completion_source_alias_audit", CompletionSourceAliasAudit),
+        new SchemaMigration(36, "source_rss_scheduling", SourceRssScheduling),
     ];
+
+    private const string SourceRssScheduling = """
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_feed_url TEXT
+        CHECK (rss_feed_url IS NULL OR length(rss_feed_url) BETWEEN 1 AND 4096);
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_schedule_enabled INTEGER NOT NULL DEFAULT 0
+        CHECK (rss_schedule_enabled IN (0, 1));
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_schedule_cron TEXT NOT NULL DEFAULT '0 0/15 * * * ?'
+        CHECK (length(rss_schedule_cron) BETWEEN 1 AND 256);
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_last_run_state TEXT NOT NULL DEFAULT 'never'
+        CHECK (rss_last_run_state IN ('never', 'running', 'succeeded', 'failed'));
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_last_started_at_utc TEXT;
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_last_completed_at_utc TEXT;
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_last_failure_code TEXT
+        CHECK (rss_last_failure_code IS NULL
+            OR length(rss_last_failure_code) BETWEEN 1 AND 128);
+
+        ALTER TABLE source_profiles
+        ADD COLUMN rss_last_batch_id TEXT
+        REFERENCES mikan_rss_batches(id) ON DELETE SET NULL;
+
+        CREATE INDEX ix_source_profiles_rss_schedule
+        ON source_profiles(rss_schedule_enabled, enabled, id);
+        """;
 
     private const string CompletionSourceAliasAudit = """
         ALTER TABLE mikan_rss_batch_entries

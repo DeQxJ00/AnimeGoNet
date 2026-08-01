@@ -335,6 +335,13 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-seeding-time\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-rss-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-rss-url-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-rss-cron\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-rss-schedule-enabled\"", html, StringComparison.Ordinal);
+        Assert.Contains("秒 分 时 日 月 周", html, StringComparison.Ordinal);
+        Assert.Contains("rss_feed_url_configured", script, StringComparison.Ordinal);
+        Assert.Contains("rss_schedule_registered", script, StringComparison.Ordinal);
         Assert.Contains("值永不回显", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
@@ -421,6 +428,151 @@ public sealed class SourceProfileApiTests
             .GetBoolean());
         Assert.Null(
             (await store.GetAsync("mikan-private"))?.MikanIdentityCookie);
+    }
+
+    [Fact]
+    public async Task MikanRssUrlIsWriteOnlyPreservedAndExplicitlyClearable()
+    {
+        const string secretUrl =
+            "https://mikanani.me/RSS/MyBangumi?token=api-private-passkey";
+        await using var app = await RunningApp.StartAsync();
+        using var create = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "mikan-scheduled",
+                display_name = "Mikan Scheduled",
+                adapter = "mikan",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                rss_feed_url = secretUrl,
+                rss_schedule_enabled = true,
+                rss_schedule_cron = "0 5/15 * * * ?",
+            }));
+        var createText = await create.Content.ReadAsStringAsync();
+        using var created = JsonDocument.Parse(createText);
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.True(created.RootElement.GetProperty("rss_feed_url_configured").GetBoolean());
+        Assert.True(created.RootElement.GetProperty("rss_schedule_enabled").GetBoolean());
+        Assert.False(created.RootElement.GetProperty("rss_schedule_registered").GetBoolean());
+        Assert.Equal("never", created.RootElement.GetProperty("rss_last_run_state").GetString());
+        Assert.DoesNotContain("api-private-passkey", createText, StringComparison.Ordinal);
+        Assert.False(created.RootElement.TryGetProperty("rss_feed_url", out _));
+
+        var listText = await app.Client.GetStringAsync("/api/v1/sources");
+        var getText = await app.Client.GetStringAsync("/api/v1/sources/mikan-scheduled");
+        Assert.DoesNotContain("api-private-passkey", listText, StringComparison.Ordinal);
+        Assert.DoesNotContain("api-private-passkey", getText, StringComparison.Ordinal);
+        var store = app.App.Services.GetRequiredService<SourceProfileStore>();
+        Assert.Equal(secretUrl, (await store.GetAsync("mikan-scheduled"))?.RssFeedUrl);
+
+        using var preserve = await app.Client.PutAsync(
+            "/api/v1/sources/mikan-scheduled",
+            Json(new
+            {
+                display_name = "Mikan Scheduled",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                expected_revision = 1,
+            }));
+        using var preserved = JsonDocument.Parse(await preserve.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
+        Assert.True(preserved.RootElement.GetProperty("rss_schedule_enabled").GetBoolean());
+        Assert.Equal("0 5/15 * * * ?", preserved.RootElement.GetProperty("rss_schedule_cron").GetString());
+        Assert.Equal(secretUrl, (await store.GetAsync("mikan-scheduled"))?.RssFeedUrl);
+
+        using var invalidClear = await app.Client.PutAsync(
+            "/api/v1/sources/mikan-scheduled",
+            Json(new
+            {
+                display_name = "Mikan Scheduled",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                clear_rss_feed_url = true,
+                rss_schedule_enabled = true,
+                expected_revision = 2,
+            }));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidClear.StatusCode);
+
+        using var clear = await app.Client.PutAsync(
+            "/api/v1/sources/mikan-scheduled",
+            Json(new
+            {
+                display_name = "Mikan Scheduled",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                clear_rss_feed_url = true,
+                expected_revision = 2,
+            }));
+        using var cleared = JsonDocument.Parse(await clear.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        Assert.False(cleared.RootElement.GetProperty("rss_feed_url_configured").GetBoolean());
+        Assert.False(cleared.RootElement.GetProperty("rss_schedule_enabled").GetBoolean());
+        Assert.Null((await store.GetAsync("mikan-scheduled"))?.RssFeedUrl);
+    }
+
+    [Fact]
+    public async Task InvalidRssScheduleConfigurationIsRejectedBeforePersistence()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var nonMikan = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "u2-rss",
+                display_name = "U2 RSS",
+                adapter = "u2",
+                downloader_id = "pt",
+                file_strategy = "link",
+                allowed_torrent_hosts = new List<string> { "u2.invalid" },
+                enabled = true,
+                rss_feed_url = "https://u2.invalid/rss?passkey=private",
+            }));
+        using var invalidCron = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "mikan-invalid-cron",
+                display_name = "Mikan invalid cron",
+                adapter = "mikan",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                rss_feed_url = "https://mikanani.me/rss?passkey=private",
+                rss_schedule_enabled = true,
+                rss_schedule_cron = "not a cron",
+            }));
+        using var hostMismatch = await app.Client.PostAsync(
+            "/api/v1/sources",
+            Json(new
+            {
+                id = "mikan-host-mismatch",
+                display_name = "Mikan host mismatch",
+                adapter = "mikan",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = new List<string> { "mikanani.me" },
+                enabled = true,
+                rss_feed_url = "https://other.invalid/rss?passkey=private",
+                rss_schedule_enabled = true,
+            }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, nonMikan.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidCron.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, hostMismatch.StatusCode);
+        Assert.Null(await app.App.Services
+            .GetRequiredService<SourceProfileStore>()
+            .GetAsync("mikan-invalid-cron"));
     }
 
     [Fact]

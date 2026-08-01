@@ -151,7 +151,7 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [x] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作、失败隔离、可选客户端版本/默认保存路径诊断，以及按实例 2～120 秒指数退避/熔断均已实现。
-- [x] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、动态 tag 模板、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成。Cookie 按来源隔离且跨 Host redirect 剥离；RSS 并发修改不混用新旧 revision。动态模板随任务冻结，元数据确认后在恢复下载前按规范季度日期和首个普通 EP 渲染并写 qB，跳过/失败均有持久状态和事件。
+- [x] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、动态 tag 模板、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成。Cookie 按来源隔离且跨 Host redirect 剥离；RSS 并发修改不混用新旧 revision。动态模板随任务冻结，元数据确认后在恢复下载前按规范季度日期和首个普通 EP 渲染并写 qB，跳过/失败均有持久状态和事件。schema v36 另为每个 Mikan 来源保存只写 RSS URL、六字段 Cron、启用状态和最近执行审计；后台启动、CRUD 热更新、旧 revision 失效、中断恢复与 passkey 不回显均已验证。
 - [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
 - [x] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口在请求期执行安全 Torrent staging 并原子保存文件清单，后台 worker 按不可变下载器路由暂停投递 qB、确认 hash 后进入元数据和逐文件准备。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add（category/tags/seedingTimeLimit）、file priority、stop/start/delete、状态映射、严格 hash/index/priority/做种分钟校验与失败响应。
@@ -187,7 +187,7 @@
 ## P9 — 调度、Web API 与 Web 页面
 
 - [x] 实现六字段 Cron 调度、StartRun 和 NextTime：支持秒级六字段、`?`、list/range/step、英文月份/星期与标准 descriptor，DOM/DOW 沿用 Cron OR 语义；时区/DST、启动立即执行、三次重试、并发任务、热增删唤醒、稳定快照和取消退出均由可控时钟测试覆盖，宿主仅在后台 worker 开启时运行 coordinator。
-- [ ] 实现 Bangumi/数据库/feed/plugin tasks。
+- [x] 实现 Bangumi/数据库/feed/plugin tasks：旧 Bangumi cache 下载由版本化 AnimeGoNetData 检查/下载/导入调度替代；目录数据库刷新、数据更新和逐 SourceProfile Mikan RSS feed 均由编译期内置 schedule plugin 执行。RSS 调度只携带来源 ID/revision，运行时从 SQLite 取得只写 URL；失败重试、审计、热增删、重启中断恢复和后台禁用门禁已覆盖，无 Python task 或反射发现。
 - [>] 实现优雅退出和取消传播：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT 宿主停止与 win-x64 NativeAOT 停止后句柄清理已验证；Linux/macOS NativeAOT `SIGTERM` 已加入五 RID smoke，待 CI 实机结果后完成。
 - [ ] 移植 10 个 HTTP API。
 - [x] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与现代 `/api/v1/rss/ingest` 均已接入来源规则、统一 staging 与后台 qB dispatch。

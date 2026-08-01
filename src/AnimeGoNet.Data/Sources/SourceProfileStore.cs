@@ -131,7 +131,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             SELECT id, adapter, downloader_id, file_strategy,
                    allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
                    rss_filter_enabled, rss_priority_enabled, revision,
-                   mikan_identity_cookie, dynamic_tag_template
+                   mikan_identity_cookie, dynamic_tag_template,
+                   rss_feed_url, rss_schedule_enabled, rss_schedule_cron
             FROM source_profiles
             WHERE id = $id AND enabled = 1;
             """;
@@ -155,7 +156,10 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetInt64(9) != 0,
             reader.GetInt64(10),
             reader.IsDBNull(11) ? null : reader.GetString(11),
-            reader.IsDBNull(12) ? null : reader.GetString(12));
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            reader.GetBoolean(14),
+            reader.GetString(15));
     }
 
     public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
@@ -200,11 +204,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 rss_filter_enabled, rss_priority_enabled,
                 revision, enabled, created_at_utc, updated_at_utc,
                 mikan_identity_cookie, dynamic_tag_template,
-                dynamic_tag_template_initialized)
+                dynamic_tag_template_initialized, rss_feed_url,
+                rss_schedule_enabled, rss_schedule_cron)
             VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts,
                     $category, $tags, $seeding_time, $filter, $priority,
                     1, $enabled, $now, $now, $mikan_identity_cookie,
-                    $dynamic_tag_template, 1);
+                    $dynamic_tag_template, 1, $rss_feed_url,
+                    $rss_schedule_enabled, $rss_schedule_cron);
             """;
         BindDefinition(command, normalized, definition, utcNow);
         try
@@ -238,6 +244,14 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 rss_priority_enabled = $priority, enabled = $enabled,
                 mikan_identity_cookie = $mikan_identity_cookie,
                 dynamic_tag_template = $dynamic_tag_template,
+                rss_feed_url = $rss_feed_url,
+                rss_schedule_enabled = $rss_schedule_enabled,
+                rss_schedule_cron = $rss_schedule_cron,
+                rss_last_run_state = 'never',
+                rss_last_started_at_utc = NULL,
+                rss_last_completed_at_utc = NULL,
+                rss_last_failure_code = NULL,
+                rss_last_batch_id = NULL,
                 revision = revision + 1, updated_at_utc = $now
             WHERE id = $id AND adapter = $adapter AND revision = $expected;
             """;
@@ -297,6 +311,137 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListScheduledAsync(
+        CancellationToken cancellationToken = default) =>
+        (await ListAsync(cancellationToken).ConfigureAwait(false))
+        .Where(profile => profile.Enabled && profile.RssScheduleEnabled)
+        .ToArray();
+
+    public async Task<SourceProfileRecord?> GetScheduledExecutionAsync(
+        string id,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(expectedRevision, 1);
+        var profile = await GetEnabledAsync(NormalizeId(id), cancellationToken).ConfigureAwait(false);
+        return profile is not null
+            && profile.Revision == expectedRevision
+            && profile.RssScheduleEnabled
+            && profile.RssFeedUrl is not null
+                ? profile
+                : null;
+    }
+
+    public async Task<bool> TryStartScheduledRunAsync(
+        string id,
+        long expectedRevision,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET rss_last_run_state = 'running',
+                rss_last_started_at_utc = $now,
+                rss_last_completed_at_utc = NULL,
+                rss_last_failure_code = NULL,
+                rss_last_batch_id = NULL
+            WHERE id = $id AND revision = $revision
+              AND enabled = 1 AND rss_schedule_enabled = 1
+              AND rss_feed_url IS NOT NULL
+              AND rss_last_run_state <> 'running';
+            """;
+        command.Parameters.AddWithValue("$id", NormalizeId(id));
+        command.Parameters.AddWithValue("$revision", expectedRevision);
+        command.Parameters.AddWithValue("$now", Format(utcNow));
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
+
+    public async Task<int> RecoverInterruptedScheduledRunsAsync(
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET rss_last_run_state = 'failed',
+                rss_last_completed_at_utc = $now,
+                rss_last_failure_code = 'rss_schedule_interrupted',
+                rss_last_batch_id = NULL
+            WHERE rss_last_run_state = 'running';
+            """;
+        command.Parameters.AddWithValue("$now", Format(utcNow));
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<bool> CompleteScheduledRunAsync(
+        string id,
+        long expectedRevision,
+        string batchId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        FinishScheduledRunAsync(
+            id,
+            expectedRevision,
+            "succeeded",
+            batchId,
+            null,
+            utcNow,
+            cancellationToken);
+
+    public Task<bool> FailScheduledRunAsync(
+        string id,
+        long expectedRevision,
+        string failureCode,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(failureCode);
+        if (failureCode.Length > 128)
+        {
+            throw new ArgumentException("RSS schedule failure code must not exceed 128 characters.");
+        }
+        return FinishScheduledRunAsync(
+            id,
+            expectedRevision,
+            "failed",
+            null,
+            failureCode,
+            utcNow,
+            cancellationToken);
+    }
+
+    private async Task<bool> FinishScheduledRunAsync(
+        string id,
+        long expectedRevision,
+        string state,
+        string? batchId,
+        string? failureCode,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET rss_last_run_state = $state,
+                rss_last_completed_at_utc = $now,
+                rss_last_failure_code = $failure,
+                rss_last_batch_id = $batch
+            WHERE id = $id AND revision = $revision
+              AND rss_last_run_state = 'running';
+            """;
+        command.Parameters.AddWithValue("$state", state);
+        command.Parameters.AddWithValue("$now", Format(utcNow));
+        command.Parameters.AddWithValue("$failure", (object?)failureCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("$batch", (object?)batchId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", NormalizeId(id));
+        command.Parameters.AddWithValue("$revision", expectedRevision);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
+
     private const string AdminSelect = """
         SELECT p.id, p.display_name, p.adapter, p.downloader_id, p.file_strategy,
                p.allowed_torrent_hosts_json, p.category, p.tags_json, p.seeding_time_minutes,
@@ -304,7 +449,10 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                (SELECT COUNT(*) FROM ingest_tasks i WHERE i.source_profile_id = p.id),
                (SELECT COUNT(*) FROM mikan_rss_batches b WHERE b.source_profile_id = p.id),
                p.created_at_utc, p.updated_at_utc, p.mikan_identity_cookie,
-               p.dynamic_tag_template
+               p.dynamic_tag_template, p.rss_feed_url, p.rss_schedule_enabled,
+               p.rss_schedule_cron, p.rss_last_run_state,
+               p.rss_last_started_at_utc, p.rss_last_completed_at_utc,
+               p.rss_last_failure_code, p.rss_last_batch_id
         FROM source_profiles p
         """;
 
@@ -327,7 +475,19 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         DateTimeOffset.Parse(reader.GetString(15), CultureInfo.InvariantCulture),
         DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture),
         reader.IsDBNull(17) ? null : reader.GetString(17),
-        reader.IsDBNull(18) ? null : reader.GetString(18));
+        reader.IsDBNull(18) ? null : reader.GetString(18),
+        reader.IsDBNull(19) ? null : reader.GetString(19),
+        reader.GetBoolean(20),
+        reader.GetString(21),
+        reader.GetString(22),
+        reader.IsDBNull(23)
+            ? null
+            : DateTimeOffset.Parse(reader.GetString(23), CultureInfo.InvariantCulture),
+        reader.IsDBNull(24)
+            ? null
+            : DateTimeOffset.Parse(reader.GetString(24), CultureInfo.InvariantCulture),
+        reader.IsDBNull(25) ? null : reader.GetString(25),
+        reader.IsDBNull(26) ? null : reader.GetString(26));
 
     private static void BindDefinition(
         SqliteCommand command,
@@ -344,6 +504,16 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         var mikanIdentityCookie = NormalizeMikanIdentityCookie(
             definition.Adapter,
             definition.MikanIdentityCookie);
+        var rssFeedUrl = SourceRssSchedulePolicy.NormalizeFeedUrl(
+            definition.Adapter,
+            definition.RssFeedUrl);
+        var rssScheduleCron = SourceRssSchedulePolicy.NormalizeCron(
+            definition.RssScheduleCron);
+        SourceRssSchedulePolicy.ValidateEnabled(
+            definition.Adapter,
+            definition.Enabled,
+            definition.RssScheduleEnabled,
+            rssFeedUrl);
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$name", definition.DisplayName);
         command.Parameters.AddWithValue("$adapter", definition.Adapter);
@@ -368,6 +538,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue(
             "$mikan_identity_cookie",
             (object?)mikanIdentityCookie ?? DBNull.Value);
+        command.Parameters.AddWithValue("$rss_feed_url", (object?)rssFeedUrl ?? DBNull.Value);
+        command.Parameters.AddWithValue("$rss_schedule_enabled", definition.RssScheduleEnabled);
+        command.Parameters.AddWithValue("$rss_schedule_cron", rssScheduleCron);
         command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
     }
 
@@ -387,6 +560,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         return value.Trim().ToLowerInvariant();
     }
+
+    private static string Format(DateTimeOffset value) =>
+        value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static string ToDatabaseValue(FileStrategy strategy) => strategy switch
     {

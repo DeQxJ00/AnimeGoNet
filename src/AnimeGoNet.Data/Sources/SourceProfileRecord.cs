@@ -13,7 +13,10 @@ public sealed record SourceProfileRecord(
     bool RssPriorityEnabled,
     long Revision,
     string? MikanIdentityCookie = null,
-    string? DynamicTagTemplate = null)
+    string? DynamicTagTemplate = null,
+    string? RssFeedUrl = null,
+    bool RssScheduleEnabled = false,
+    string RssScheduleCron = AnimeGoNet.Core.Sources.SourceRssSchedulePolicy.DefaultCron)
 {
     public override string ToString() =>
         $"SourceProfileRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -40,7 +43,15 @@ public sealed record SourceProfileAdminRecord(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
     string? MikanIdentityCookie = null,
-    string? DynamicTagTemplate = null)
+    string? DynamicTagTemplate = null,
+    string? RssFeedUrl = null,
+    bool RssScheduleEnabled = false,
+    string RssScheduleCron = AnimeGoNet.Core.Sources.SourceRssSchedulePolicy.DefaultCron,
+    string RssLastRunState = "never",
+    DateTimeOffset? RssLastStartedAtUtc = null,
+    DateTimeOffset? RssLastCompletedAtUtc = null,
+    string? RssLastFailureCode = null,
+    string? RssLastBatchId = null)
 {
     public override string ToString() =>
         $"SourceProfileAdminRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -61,7 +72,10 @@ public sealed record SourceProfileDefinition(
     bool RssPriorityEnabled,
     bool Enabled,
     string? MikanIdentityCookie = null,
-    string? DynamicTagTemplate = null)
+    string? DynamicTagTemplate = null,
+    string? RssFeedUrl = null,
+    bool RssScheduleEnabled = false,
+    string RssScheduleCron = AnimeGoNet.Core.Sources.SourceRssSchedulePolicy.DefaultCron)
 {
     public override string ToString() =>
         $"SourceProfileDefinition {{ Adapter = {Adapter}, "

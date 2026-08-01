@@ -310,3 +310,136 @@ internal sealed class DataUpdateSchedulePlugin(
         }
     }
 }
+
+internal sealed class MikanRssIngestSchedulePlugin(
+    SourceProfileStore profiles,
+    RssFeedReader reader,
+    IServiceProvider services) : IScheduledPlugin
+{
+    public PluginDescriptor Descriptor { get; } =
+        new(
+            AnimeGoNet.App.Scheduling.SourceRssScheduleManager.PluginId,
+            "Mikan RSS ingestion",
+            "1.0.0",
+            PluginCategory.Schedule,
+            130);
+
+    public async ValueTask<ScheduledResult> ExecuteAsync(
+        ScheduledContext context,
+        CancellationToken cancellationToken)
+    {
+        if (!context.Arguments.TryGetValue("source_profile_id", out var sourceProfileId)
+            || string.IsNullOrWhiteSpace(sourceProfileId)
+            || !context.Arguments.TryGetValue("source_profile_revision", out var revisionText)
+            || !long.TryParse(
+                revisionText,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var expectedRevision)
+            || expectedRevision < 1)
+        {
+            return Failure(
+                "rss_schedule_context_invalid",
+                "The RSS schedule context is invalid.");
+        }
+
+        sourceProfileId = sourceProfileId.Trim().ToLowerInvariant();
+        var profile = await profiles.GetScheduledExecutionAsync(
+            sourceProfileId,
+            expectedRevision,
+            cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            return Success("stale");
+        }
+        if (!await profiles.TryStartScheduledRunAsync(
+                sourceProfileId,
+                expectedRevision,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false))
+        {
+            return Success("already-running-or-stale");
+        }
+
+        try
+        {
+            var feed = await reader.ParseUrlAsync(
+                profile.RssFeedUrl!,
+                sourceProfileId,
+                cancellationToken).ConfigureAwait(false);
+            var result = await services
+                .GetRequiredService<MikanRssIngestProcessor>()
+                .ProcessScheduledAsync(
+                feed,
+                sourceProfileId,
+                expectedRevision,
+                cancellationToken).ConfigureAwait(false);
+            await profiles.CompleteScheduledRunAsync(
+                sourceProfileId,
+                expectedRevision,
+                result.BatchId,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return Success($"batch={result.BatchId};items={result.Items.Count}");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await TryRecordFailureAsync(
+                sourceProfileId,
+                expectedRevision,
+                "rss_schedule_cancelled",
+                CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        catch (RssFeedException exception)
+        {
+            await TryRecordFailureAsync(
+                sourceProfileId,
+                expectedRevision,
+                exception.Code,
+                cancellationToken).ConfigureAwait(false);
+            return Failure(exception.Code, "The scheduled RSS ingestion failed.");
+        }
+        catch
+        {
+            const string code = "rss_schedule_failed";
+            await TryRecordFailureAsync(
+                sourceProfileId,
+                expectedRevision,
+                code,
+                cancellationToken).ConfigureAwait(false);
+            return Failure(code, "The scheduled RSS ingestion failed.");
+        }
+    }
+
+    private async Task TryRecordFailureAsync(
+        string sourceProfileId,
+        long expectedRevision,
+        string code,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await profiles.FailScheduledRunAsync(
+                sourceProfileId,
+                expectedRevision,
+                code,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // The stable plugin failure remains reportable even when its audit write is unavailable.
+        }
+    }
+
+    private static ScheduledResult Success(string message) =>
+        new(true, message, [], null);
+
+    private static ScheduledResult Failure(string code, string message) =>
+        new(false, null, [new PluginOperationError(code, message)], null);
+}

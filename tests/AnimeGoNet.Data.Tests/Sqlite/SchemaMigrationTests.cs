@@ -508,6 +508,77 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task SourceRssSchedulingMigrationPreservesProfilesAndAddsSafeDefaults()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 35))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-08-01T12:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 7, 1, $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(1, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration36 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 36);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration36.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var profile = connection.CreateCommand())
+        {
+            profile.CommandText = """
+                SELECT revision, rss_feed_url, rss_schedule_enabled, rss_schedule_cron,
+                       rss_last_run_state, rss_last_started_at_utc,
+                       rss_last_completed_at_utc, rss_last_failure_code, rss_last_batch_id
+                FROM source_profiles WHERE id = 'mikan';
+                """;
+            await using var reader = await profile.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(7, reader.GetInt64(0));
+            Assert.True(reader.IsDBNull(1));
+            Assert.False(reader.GetBoolean(2));
+            Assert.Equal("0 0/15 * * * ?", reader.GetString(3));
+            Assert.Equal("never", reader.GetString(4));
+            Assert.True(reader.IsDBNull(5));
+            Assert.True(reader.IsDBNull(6));
+            Assert.True(reader.IsDBNull(7));
+            Assert.True(reader.IsDBNull(8));
+        }
+
+        await using (var index = connection.CreateCommand())
+        {
+            index.CommandText = """
+                SELECT COUNT(*) FROM sqlite_schema
+                WHERE type = 'index' AND name = 'ix_source_profiles_rss_schedule';
+                """;
+            Assert.Equal(1L, await index.ExecuteScalarAsync());
+        }
+
+        await using var invalid = connection.CreateCommand();
+        invalid.CommandText =
+            "UPDATE source_profiles SET rss_last_run_state = 'unknown' WHERE id = 'mikan';";
+        await Assert.ThrowsAsync<SqliteException>(() => invalid.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
     public async Task TmdbResolutionEvidenceMigrationBackfillsRunsAndGuardsReferences()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

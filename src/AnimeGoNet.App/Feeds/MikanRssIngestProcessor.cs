@@ -50,10 +50,28 @@ public sealed class MikanRssIngestProcessor(
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
 
-    public async Task<MikanRssIngestResult> ProcessAsync(
+    public Task<MikanRssIngestResult> ProcessAsync(
         RssFeedDocument feed,
         string sourceProfileId = "mikan",
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ProcessCoreAsync(feed, sourceProfileId, null, cancellationToken);
+
+    public Task<MikanRssIngestResult> ProcessScheduledAsync(
+        RssFeedDocument feed,
+        string sourceProfileId,
+        long expectedSourceProfileRevision,
+        CancellationToken cancellationToken = default) =>
+        ProcessCoreAsync(
+            feed,
+            sourceProfileId,
+            expectedSourceProfileRevision,
+            cancellationToken);
+
+    private async Task<MikanRssIngestResult> ProcessCoreAsync(
+        RssFeedDocument feed,
+        string sourceProfileId,
+        long? expectedSourceProfileRevision,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(feed);
         var profile = await profiles.GetEnabledAsync(
@@ -62,6 +80,13 @@ public sealed class MikanRssIngestProcessor(
         if (!string.Equals(profile.Adapter, "mikan", StringComparison.OrdinalIgnoreCase))
         {
             throw new RssFeedException("rss_source_profile_invalid", "RSS source profile is not a Mikan adapter.");
+        }
+        if (expectedSourceProfileRevision is { } expectedRevision
+            && profile.Revision != expectedRevision)
+        {
+            throw new RssFeedException(
+                "rss_source_profile_stale",
+                "The RSS source profile changed before the scheduled feed could be processed.");
         }
 
         var ruleSnapshot = await rules.GetAsync(profile.Id, cancellationToken).ConfigureAwait(false)

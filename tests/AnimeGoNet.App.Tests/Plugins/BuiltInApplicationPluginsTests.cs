@@ -17,10 +17,13 @@ public sealed class BuiltInApplicationPluginsTests
         Assert.Single(catalog.GetAll<ITitleParserPlugin>());
         Assert.Single(catalog.GetAll<IFeedFilterPlugin>());
         Assert.Single(catalog.GetAll<IRenamePlugin>());
-        Assert.Equal(3, catalog.GetAll<IScheduledPlugin>().Count);
+        Assert.Equal(4, catalog.GetAll<IScheduledPlugin>().Count);
         Assert.Contains(
             catalog.GetAll<IScheduledPlugin>(),
             plugin => plugin.Descriptor.Id == "animegonet-data-update");
+        Assert.Contains(
+            catalog.GetAll<IScheduledPlugin>(),
+            plugin => plugin.Descriptor.Id == "mikan-rss-ingest-schedule");
         Assert.DoesNotContain(catalog.All, plugin =>
             plugin.Descriptor.Id.EndsWith(".py", StringComparison.Ordinal)
             || plugin.Descriptor.Id.Contains("python", StringComparison.Ordinal));

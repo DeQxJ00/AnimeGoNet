@@ -81,7 +81,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 已验证 | 纯 C# 秒级六字段 parser 支持 `?`、list/range/step、月份/星期名及标准 descriptor；Cron DOM/DOW OR、NextTime、时区/DST、StartRun、固定3次/3秒重试、热增删、并发执行、取消与 HostedService tests，win-x64 NativeAOT smoke |
+| `internal/schedule` 六字段 Cron | HostedService scheduler | 保留 | 已验证 | 纯 C# 秒级六字段 parser 支持 `?`、list/range/step、月份/星期名及标准 descriptor；Cron DOM/DOW OR、NextTime、时区/DST、StartRun、固定3次/3秒重试、热增删、并发执行、取消与 HostedService tests。目录数据库、AnimeGoNetData 与逐来源 Mikan RSS 均使用编译期内置插件；schema v36 RSS 调度已验证启动注册、CRUD 热替换、旧 revision 零网络、重叠旁路、中断恢复、失败审计和 passkey 脱敏；win-x64 NativeAOT smoke |
 | `/ping`、`/sha256` | Minimal API compatibility endpoints | 保留 | 已验证 | 实际 Kestrel contract tests + win-x64 NativeAOT smoke |
 | `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 已验证 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 feed/Episode 获取、Filiter0..4、批内 identity cache、失败隔离、新优选和 winner 原子 staging Kestrel tests |
 | `/api/v1/rss/ingest` | 现代 Mikan RSS 手动导入 | 扩展 | 已验证 | 明确 SourceProfile、adapter 预检后再抓取、规则 revision、winner 原子 staging、错误脱敏和带 passkey URL 不回显 Kestrel tests |

@@ -167,6 +167,96 @@ public sealed class SourceProfileStoreAdminTests
     }
 
     [Fact]
+    public async Task RssScheduleIsVersionedAuditedAndRecoversInterruptedRuns()
+    {
+        const string secretUrl =
+            "https://mikanani.me/RSS/MyBangumi?token=store-private-value";
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var created = await store.CreateAsync(
+            "mikan-scheduled",
+            Definition(
+                "Mikan scheduled",
+                "mikan",
+                "bt",
+                "move",
+                ["mikanani.me"]) with
+            {
+                RssFeedUrl = secretUrl,
+                RssScheduleEnabled = true,
+                RssScheduleCron = "0 5/15 * * * ?",
+            },
+            At(10));
+
+        Assert.Equal(secretUrl, created.RssFeedUrl);
+        Assert.DoesNotContain("store-private-value", created.ToString(), StringComparison.Ordinal);
+        Assert.Equal(
+            "mikan-scheduled",
+            Assert.Single(await store.ListScheduledAsync()).Id);
+        Assert.NotNull(await store.GetScheduledExecutionAsync("mikan-scheduled", 1));
+        Assert.True(await store.TryStartScheduledRunAsync("mikan-scheduled", 1, At(11)));
+        Assert.False(await store.TryStartScheduledRunAsync("mikan-scheduled", 1, At(11)));
+        Assert.True(await store.FailScheduledRunAsync(
+            "mikan-scheduled", 1, "rss_request_failed", At(12)));
+
+        var failed = Assert.IsType<SourceProfileAdminRecord>(
+            await store.GetAsync("mikan-scheduled"));
+        Assert.Equal("failed", failed.RssLastRunState);
+        Assert.Equal("rss_request_failed", failed.RssLastFailureCode);
+        Assert.Equal(At(12), failed.RssLastCompletedAtUtc);
+
+        var updated = await store.UpdateAsync(
+            "mikan-scheduled",
+            Definition(
+                "Mikan scheduled",
+                "mikan",
+                "bt",
+                "move",
+                ["mikanani.me"]) with
+            {
+                RssFeedUrl = secretUrl,
+                RssScheduleEnabled = true,
+                RssScheduleCron = "0 10/15 * * * ?",
+            },
+            1,
+            At(13));
+        Assert.Equal("never", updated.RssLastRunState);
+        Assert.Null(updated.RssLastFailureCode);
+        Assert.Null(await store.GetScheduledExecutionAsync("mikan-scheduled", 1));
+        Assert.NotNull(await store.GetScheduledExecutionAsync("mikan-scheduled", 2));
+
+        Assert.True(await store.TryStartScheduledRunAsync("mikan-scheduled", 2, At(14)));
+        Assert.Equal(1, await store.RecoverInterruptedScheduledRunsAsync(At(15)));
+        var recovered = Assert.IsType<SourceProfileAdminRecord>(
+            await store.GetAsync("mikan-scheduled"));
+        Assert.Equal("failed", recovered.RssLastRunState);
+        Assert.Equal("rss_schedule_interrupted", recovered.RssLastFailureCode);
+        Assert.Equal(At(15), recovered.RssLastCompletedAtUtc);
+    }
+
+    [Fact]
+    public async Task RssScheduleRejectsNonMikanUrlAndMissingUrl()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(
+            "u2-rss",
+            Definition("U2 RSS", "u2", "pt", "link", ["u2.invalid"]) with
+            {
+                RssFeedUrl = "https://u2.invalid/rss",
+            },
+            At(10)));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(
+            "mikan-rss",
+            Definition("Mikan RSS", "mikan", "bt", "move", ["mikanani.me"]) with
+            {
+                RssScheduleEnabled = true,
+            },
+            At(10)));
+    }
+
+    [Fact]
     public async Task V33UpgradeAppliesConfiguredTemplateOnceAndExplicitClearSurvivesRestartSeed()
     {
         var root = Path.Combine(

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AnimeGoNet.Core.Sources;
 
 namespace AnimeGoNet.App.Api;
 
@@ -914,7 +915,10 @@ public sealed record SourceProfileCreateRequest(
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
-    [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie);
+    [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
+    [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
+    [property: JsonPropertyName("rss_schedule_enabled")] bool? RssScheduleEnabled = null,
+    [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null);
 
 public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("display_name")] string? DisplayName,
@@ -930,7 +934,11 @@ public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
     [property: JsonPropertyName("clear_mikan_identity_cookie")] bool ClearMikanIdentityCookie,
-    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
+    [property: JsonPropertyName("clear_rss_feed_url")] bool ClearRssFeedUrl = false,
+    [property: JsonPropertyName("rss_schedule_enabled")] bool? RssScheduleEnabled = null,
+    [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null);
 
 public sealed record SourceProfileResponse(
     [property: JsonPropertyName("id")] string Id,
@@ -954,7 +962,18 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("is_default")] bool IsDefault,
     [property: JsonPropertyName("file_strategy_warning")] string? FileStrategyWarning,
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
-    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
+    [property: JsonPropertyName("rss_feed_url_configured")] bool RssFeedUrlConfigured = false,
+    [property: JsonPropertyName("rss_schedule_enabled")] bool RssScheduleEnabled = false,
+    [property: JsonPropertyName("rss_schedule_cron")] string RssScheduleCron =
+        SourceRssSchedulePolicy.DefaultCron,
+    [property: JsonPropertyName("rss_schedule_registered")] bool RssScheduleRegistered = false,
+    [property: JsonPropertyName("rss_schedule_next_at_utc")] DateTimeOffset? RssScheduleNextAtUtc = null,
+    [property: JsonPropertyName("rss_last_run_state")] string RssLastRunState = "never",
+    [property: JsonPropertyName("rss_last_started_at_utc")] DateTimeOffset? RssLastStartedAtUtc = null,
+    [property: JsonPropertyName("rss_last_completed_at_utc")] DateTimeOffset? RssLastCompletedAtUtc = null,
+    [property: JsonPropertyName("rss_last_failure_code")] string? RssLastFailureCode = null,
+    [property: JsonPropertyName("rss_last_batch_id")] string? RssLastBatchId = null);
 
 public sealed record SourceProfileListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<SourceProfileResponse> Items);
