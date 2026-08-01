@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeGoNet.App.Plugins;
 
@@ -79,13 +80,23 @@ internal interface IExternalPluginSessionFactory
 }
 
 internal sealed class ExternalPluginSessionFactory(
-    ExternalPluginManifestLoader loader) : IExternalPluginSessionFactory
+    ExternalPluginManifestLoader loader,
+    ILogger logger,
+    TimeProvider timeProvider) : IExternalPluginSessionFactory
 {
     public IExternalPluginSession Create(
         ExternalPluginPackage package,
         string pluginDataPath,
         ExternalPluginSessionOptions options) =>
-        new ExternalPluginProcessSession(loader, package, pluginDataPath, options);
+        new ExternalPluginProcessSession(
+            loader,
+            package,
+            pluginDataPath,
+            options,
+            new SystemExternalPluginProcessFactory(),
+            static () => Guid.NewGuid().ToString("N"),
+            logger,
+            timeProvider);
 }
 
 public sealed class ExternalPluginHostManager : IAsyncDisposable
@@ -104,13 +115,18 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
         ExternalPluginDiscoveryResult discovery,
         string pluginDataRoot,
         ExternalPluginHostOptions? options = null,
-        ExternalPluginConfigurationStore? configurations = null)
+        ExternalPluginConfigurationStore? configurations = null,
+        ILoggerFactory? loggerFactory = null)
         : this(
             discovery,
             pluginDataRoot,
             Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
             options,
-            new ExternalPluginSessionFactory(loader),
+            new ExternalPluginSessionFactory(
+                loader,
+                (loggerFactory ?? NullLoggerFactory.Instance)
+                    .CreateLogger<ExternalPluginProcessSession>(),
+                TimeProvider.System),
             TimeProvider.System,
             configurations)
     {

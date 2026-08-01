@@ -73,6 +73,10 @@ public sealed record ExternalPluginSessionOptions
 
     public int StderrBufferBytes { get; init; } = 4096;
 
+    public int StderrLogLinesPerWindow { get; init; } = 20;
+
+    public TimeSpan StderrLogWindow { get; init; } = TimeSpan.FromSeconds(10);
+
     public void Validate()
     {
         ValidateTimeout(InitializeTimeout, nameof(InitializeTimeout));
@@ -96,6 +100,19 @@ public sealed record ExternalPluginSessionOptions
             throw new ArgumentOutOfRangeException(
                 nameof(StderrBufferBytes),
                 "External plugin stderr buffer must be between 256 bytes and 64 KiB.");
+        }
+        if (StderrLogLinesPerWindow is < 1 or > 1000)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(StderrLogLinesPerWindow),
+                "External plugin stderr logging must allow 1 to 1000 lines per window.");
+        }
+        if (StderrLogWindow < TimeSpan.FromSeconds(1)
+            || StderrLogWindow > TimeSpan.FromHours(1))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(StderrLogWindow),
+                "External plugin stderr logging windows must be between one second and one hour.");
         }
     }
 

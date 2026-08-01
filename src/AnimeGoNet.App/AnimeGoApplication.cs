@@ -281,12 +281,13 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(externalPluginDiscovery);
         builder.Services.AddSingleton(externalPluginConfigurations);
         builder.Services.AddSingleton<ExternalPluginConfigurationValidator>();
-        builder.Services.AddSingleton<ExternalPluginHostManager>(_ =>
+        builder.Services.AddSingleton<ExternalPluginHostManager>(services =>
             new ExternalPluginHostManager(
                 externalPluginLoader,
                 externalPluginDiscovery,
                 layout.PluginDataPath,
-                configurations: externalPluginConfigurations));
+                configurations: externalPluginConfigurations,
+                loggerFactory: services.GetRequiredService<ILoggerFactory>()));
         builder.Services.AddSingleton<ExternalPluginConfigurationService>();
         builder.Services.AddSingleton(applicationOverrides);
         builder.Services.AddSingleton(

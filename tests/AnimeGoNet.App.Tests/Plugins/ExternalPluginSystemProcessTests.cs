@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AnimeGoNet.App.Plugins;
+using Microsoft.Extensions.Logging;
 
 namespace AnimeGoNet.App.Tests.Plugins;
 
@@ -25,6 +26,7 @@ public sealed class ExternalPluginSystemProcessTests
                 rid);
             var package = await loader.LoadPackageAsync(packagePath);
             var dataPath = Path.Combine(root, "data", "plugin-state");
+            var logger = new CollectingLogger();
             var previousSecret = Environment.GetEnvironmentVariable(SecretVariable);
             Environment.SetEnvironmentVariable(SecretVariable, "must-not-leak");
             try
@@ -39,7 +41,11 @@ public sealed class ExternalPluginSystemProcessTests
                         ExecuteTimeout = TimeSpan.FromSeconds(10),
                         HealthTimeout = TimeSpan.FromSeconds(10),
                         ShutdownTimeout = TimeSpan.FromSeconds(10),
-                    });
+                    },
+                    new SystemExternalPluginProcessFactory(),
+                    static () => Guid.NewGuid().ToString("N"),
+                    logger,
+                    TimeProvider.System);
 
                 await session.StartAsync("1.0.0-test");
                 var result = await session.ExecuteAsync(
@@ -64,9 +70,21 @@ public sealed class ExternalPluginSystemProcessTests
                 Assert.True(await session.HealthAsync());
 
                 await session.ShutdownAsync("integration_test_complete");
+                await session.DisposeAsync();
 
                 Assert.Equal(ExternalPluginSessionState.Stopped, session.State);
                 Assert.True(Directory.Exists(dataPath));
+                var stderr = Assert.Single(
+                    logger.Entries,
+                    entry => entry.EventId.Id == 1901);
+                Assert.Contains(
+                    "fixture diagnostic password=<redacted>",
+                    stderr.Message,
+                    StringComparison.Ordinal);
+                Assert.DoesNotContain(
+                    "fixture-stderr-secret",
+                    stderr.Message,
+                    StringComparison.Ordinal);
             }
             finally
             {
@@ -77,6 +95,25 @@ public sealed class ExternalPluginSystemProcessTests
         {
             await DeleteDirectoryEventuallyAsync(root);
         }
+    }
+
+    private sealed record LogEntry(EventId EventId, string Message);
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add(new LogEntry(eventId, formatter(state, exception)));
     }
 
     private static async Task DeleteDirectoryEventuallyAsync(string path)

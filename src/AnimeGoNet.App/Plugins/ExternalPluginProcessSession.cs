@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Serialization;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeGoNet.App.Plugins;
 
@@ -39,6 +40,7 @@ public sealed class ExternalPluginProcessSession : IExternalPluginSession
     private readonly ExternalPluginSessionOptions _options;
     private readonly IExternalPluginProcessFactory _processFactory;
     private readonly Func<string> _requestIdFactory;
+    private readonly ExternalPluginStderrForwarder _stderrForwarder;
     private readonly SemaphoreSlim _callGate = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Lock _stateLock = new();
@@ -60,7 +62,9 @@ public sealed class ExternalPluginProcessSession : IExternalPluginSession
             pluginDataPath,
             options,
             new SystemExternalPluginProcessFactory(),
-            static () => Guid.NewGuid().ToString("N"))
+            static () => Guid.NewGuid().ToString("N"),
+            NullLogger.Instance,
+            TimeProvider.System)
     {
     }
 
@@ -70,7 +74,9 @@ public sealed class ExternalPluginProcessSession : IExternalPluginSession
         string pluginDataPath,
         ExternalPluginSessionOptions? options,
         IExternalPluginProcessFactory processFactory,
-        Func<string> requestIdFactory)
+        Func<string> requestIdFactory,
+        ILogger? logger = null,
+        TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(manifestLoader);
         ArgumentNullException.ThrowIfNull(package);
@@ -84,6 +90,9 @@ public sealed class ExternalPluginProcessSession : IExternalPluginSession
         _options.Validate();
         _processFactory = processFactory;
         _requestIdFactory = requestIdFactory;
+        _stderrForwarder = new ExternalPluginStderrForwarder(
+            logger ?? NullLogger.Instance,
+            timeProvider ?? TimeProvider.System);
     }
 
     public ExternalPluginSessionState State
@@ -130,9 +139,10 @@ public sealed class ExternalPluginProcessSession : IExternalPluginSession
             _process = _processFactory.Start(package, _pluginDataPath);
             _activePackage = package;
             _stdout = new BoundedUtf8LineReader(_process.StandardOutput);
-            _stderrDrain = DrainStderrAsync(
+            _stderrDrain = _stderrForwarder.DrainAsync(
+                package.Manifest.Id,
                 _process.StandardError,
-                _options.StderrBufferBytes,
+                _options,
                 _lifetime.Token);
 
             var payload = JsonSerializer.SerializeToElement(
@@ -728,18 +738,6 @@ public sealed class ExternalPluginProcessSession : IExternalPluginSession
         {
             await _process.DisposeAsync().ConfigureAwait(false);
             _process = null;
-        }
-    }
-
-    private static async Task DrainStderrAsync(
-        Stream stderr,
-        int bufferSize,
-        CancellationToken cancellationToken)
-    {
-        var buffer = new byte[bufferSize];
-        while (await stderr.ReadAsync(buffer, cancellationToken).ConfigureAwait(false) > 0)
-        {
-            // stderr is deliberately drained without treating it as protocol output.
         }
     }
 

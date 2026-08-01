@@ -47,6 +47,9 @@ while (await Console.In.ReadLineAsync() is { } line)
             break;
         }
         case "execute":
+            await Console.Error.WriteLineAsync(
+                "fixture diagnostic password=fixture-stderr-secret");
+            await Console.Error.FlushAsync();
             result = new JsonObject
             {
                 ["operation"] = request["operation"]?.DeepClone(),

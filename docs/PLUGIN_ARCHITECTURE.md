@@ -156,7 +156,7 @@ data/plugins/com.example.animego.filter-resolution/
 - 每次调用支持取消、执行超时、最大输入/输出大小和最大并发数。
 - 当前默认 initialize 10 秒、execute 120 秒、health/shutdown 5 秒，请求和响应各 1 MiB；可配置上限被限制为 16 MiB。
 - stdout 出现非 JSON、request ID 不匹配或协议版本不兼容时终止进程。
-- 当前 stderr 使用独立异步管道持续排空，绝不当作协议；按插件 ID 写结构化日志和速率限制尚未接入。
+- stderr 使用独立异步管道持续排空，绝不当作协议。每个非空行按插件 ID 以 Warning 结构化转发到宿主统一日志，默认单行最多缓冲 4 KiB，超过后丢弃余下字节并标记截断；无效 UTF-8 使用替换字符，控制字符先归一化，随后复用 URL、Cookie、password/token/key 等统一脱敏。默认每个会话每 10 秒最多输出 20 行，超额行只在窗口切换或管道结束时输出一次抑制计数；日志 provider 抛错不会影响协议读写或插件生命周期。stderr 内容和抑制计数不进入状态 API。
 - 宿主管理器在 `data/plugin-data/<id>` 提供独立可写目录，和可只读挂载的 `data/plugins/<package>` 分离。运行状态只投影稳定错误码，不返回包路径、数据路径、stderr 或配置。
 - 外部包即使发现成功也默认禁用。显式配置保存在 `data/config/external-plugins.private.json`，使用全局/逐插件单调 revision、同目录临时文件原子替换和 Unix `0600`；失败的 ID、对象边界、schema、manifest 身份或 revision 校验不会修改原文件。此文件可能包含第三方凭据，必须与其他 private 配置同等保护。
 - `args` 保持上游默认入口参数语义：先写入配置默认值，再由本次任务 payload 的同名字段覆盖；`vars` 通过 JSON Lines 请求的 `config` 字段传递。`config.schema.json` 校验 vars，当前支持 object/array/string/integer/number/boolean/null、properties/required/additionalProperties/items、enum、长度/数量/数值范围和无回溯 pattern。低层显式 config 调用只对宿主内部测试开放，后续 adapter 统一走启用检查与持久配置合并。

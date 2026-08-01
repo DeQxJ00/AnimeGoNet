@@ -140,7 +140,7 @@
 - [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
 - [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
-- [>] 实现外部 C# 插件进程：manifest、JSON Lines、环境隔离、惰性复用、插件级指数退避/自动禁用和独立数据目录已完成。启停/args/vars 使用 revision 原子私有文件，未配置默认禁用，任务参数覆盖 args 默认值，vars 作为协议 config；管理 API 与 schema 表单支持冲突、校验、恢复默认和 writeOnly 凭据留空保留/显式清除，响应不回显原值。stderr 结构化限流与六类强类型 adapter 待后续模块实现。
+- [>] 实现外部 C# 插件进程：manifest、JSON Lines、环境隔离、惰性复用、插件级指数退避/自动禁用和独立数据目录已完成。启停/args/vars 使用 revision 原子私有文件，未配置默认禁用，任务参数覆盖 args 默认值，vars 作为协议 config；管理 API 与 schema 表单支持冲突、校验、恢复默认和 writeOnly 凭据留空保留/显式清除，响应不回显原值。stderr 已按插件 ID 结构化转发，具有逐行字节上限、统一脱敏、固定窗口限流和抑制汇总；六类强类型 adapter 待后续模块实现。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
 - [ ] 实现 `AnimeGo.PluginTool`。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
