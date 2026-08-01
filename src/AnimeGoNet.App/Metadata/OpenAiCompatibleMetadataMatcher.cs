@@ -373,12 +373,14 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         using var document = JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("choices", out var choices)
             || choices.ValueKind != JsonValueKind.Array
-            || choices.GetArrayLength() == 0
+            || choices.GetArrayLength() != 1
             || !choices[0].TryGetProperty("message", out var message))
         {
             throw new AiMetadataMatcherException(
                 MetadataFailureKind.Protocol,
-                "ai_chat_response_invalid");
+                choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 1
+                    ? "ai_chat_response_ambiguous"
+                    : "ai_chat_response_invalid");
         }
 
         string? content = null;

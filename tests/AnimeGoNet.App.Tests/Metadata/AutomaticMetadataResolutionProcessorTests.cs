@@ -1165,6 +1165,41 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.DoesNotContain("ai_metadata", await ReadStrategiesAsync(app, taskId));
     }
 
+    [Fact]
+    public async Task DisabledUnifiedAiPerformsNoRequestOrAiAudit()
+    {
+        var ai = new FakeAiMetadataMatcher();
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            searchReturnsEmpty: true);
+        var bangumi = new FakeBangumiClient(new BangumiSubject(
+            547888,
+            "Made in Abyss Season 2",
+            "来自深渊 第二季",
+            new DateOnly(2022, 7, 6),
+            12));
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = false },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: bangumi,
+            aiMetadataMatcher: ai);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第二季");
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Empty(ai.Requests);
+        Assert.DoesNotContain("ai_metadata", await ReadStrategiesAsync(app, taskId));
+        Assert.Equal("metadata_failed", await ReadTaskStatusAsync(app, taskId));
+    }
+
     private static async Task<string> AddDownloadedTaskAsync(RunningApp app, string title)
     {
         var payload = $$"""

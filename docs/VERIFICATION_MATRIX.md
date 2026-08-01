@@ -161,7 +161,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 2. AI 关闭时请求数为 0；开启但配置缺失时返回明确配置错误并继续较低优先级策略。
 3. 每个 AI 请求只发送任务总标题、候选视频的任务内相对文件名/字节容量、可空 `bgmid`/`anidbid`/`imdbid`，以及Mikan单文件门禁所需的 `torrent_file_count/published_at/bgm_episode_candidate/use_bangumi_pubdate_first`；断言不包含重复的文件名EP字段、输入源/下载器配置、宿主机绝对路径、Bangumi详情、API Key、Cookie 或其他配置。
 4. 模型一次返回单文件或多文件的有效 Series/Season/Episode，经 TMDB API 逐项二次验证后生成规范字段。
-5. 模型返回不存在的 ID、Season 0、日期冲突、畸形 JSON或歧义：拒绝对应候选；Series/普通季度已确认但 Episode 缺失时保留原名进入季度 `Other`。
+5. 模型返回不存在的 ID、Season 0、日期冲突、外层/业务畸形 JSON、零个或多个 `choices`：拒绝对应候选；不得静默采用多个候选的第一项。Series/普通季度已确认但 Episode 缺失时保留原名进入季度 `Other`。
 6. TMDB `zh-CN` 名称存在时用中文目录名；缺失时用 TMDB `original_name`，不得使用 Bangumi 名称替代。
 7. 来源 EP=1、TMDB EP=67：保留 `SourceEpisodeNumber=1`，最终文件为 `E067`，去重键和目录 DB 使用规范集号。
 8. 多文件映射存在 Episode 缺口：已确认季度的缺口文件进入 `Other`，其余已验证文件正常落盘；Series/Season 缺失、重复目标或目标冲突的对应文件不落盘并可幂等重试。

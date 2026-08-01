@@ -29,7 +29,7 @@ ai:
   use_bangumi_pubdate_first: true
 ```
 
-首版直接用 `HttpClient` 调用 OpenAI-compatible API，不依赖厂商 SDK。配置缺失时记录明确错误并继续较低优先级；密钥允许环境变量覆盖，Web UI 只显示是否已配置。
+首版直接用 `HttpClient` 调用 OpenAI-compatible API，不依赖厂商 SDK。配置缺失时记录明确错误并继续较低优先级；密钥允许环境变量覆盖，Web UI 只显示是否已配置。一次 Chat Completions 响应必须恰好包含一个 `choice`；零个候选属于无效协议响应，多个候选属于协议歧义，不能静默取第一项。外层响应和 `message.content` 中的业务 JSON 分别解析并使用稳定错误码分类。
 
 当前主程序部署层使用扁平键
 `ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model`、

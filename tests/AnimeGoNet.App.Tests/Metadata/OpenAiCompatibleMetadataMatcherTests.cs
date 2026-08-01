@@ -83,6 +83,164 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     }
 
     [Fact]
+    public async Task ExhaustedRateLimitUsesStableSafeClassification()
+    {
+        var handler = new FakeAiAndMcpHandler { AlwaysRateLimitAiRequests = true };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { RetryCount = 1 });
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.RemoteService, exception.Kind);
+        Assert.Equal("ai_rate_limited", exception.SafeCode);
+        Assert.Equal(2, handler.AiCalls);
+        Assert.DoesNotContain("retry", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ProviderTimeoutUsesStableNetworkClassification()
+    {
+        var handler = new FakeAiAndMcpHandler { DelayAiResponse = true };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with
+            {
+                HttpTimeout = TimeSpan.FromMilliseconds(30),
+                RetryCount = 0,
+            });
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Network, exception.Kind);
+        Assert.Equal("ai_http_timeout", exception.SafeCode);
+        Assert.Equal(1, handler.AiCalls);
+    }
+
+    [Fact]
+    public async Task MalformedChatJsonUsesStableProtocolClassification()
+    {
+        var handler = new FakeAiAndMcpHandler { RawAiResponse = "{" };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("ai_response_json_invalid", exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task MalformedModelJsonUsesStableProtocolClassification()
+    {
+        var handler = new FakeAiAndMcpHandler { FinalModelResult = "{" };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("ai_result_json_invalid", exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task MultipleProviderChoicesAreRejectedAsAmbiguous()
+    {
+        var handler = new FakeAiAndMcpHandler
+        {
+            RawAiResponse =
+                """
+                {
+                  "choices": [
+                    {"message":{"content":"{\"matched\":false}"}},
+                    {"message":{"content":"{\"matched\":true}"}}
+                  ]
+                }
+                """,
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("ai_chat_response_ambiguous", exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task McpToolSchemaCacheAvoidsRepeatedDiscoveryForSameEndpoint()
+    {
+        var handler = new FakeAiAndMcpHandler();
+        using var client = new HttpClient(handler);
+        var options = Options() with
+        {
+            TmdbMcpUrl = new Uri("http://tmdb.test.invalid/mcp/cache-boundary-v1"),
+        };
+
+        using (var first = new OpenAiCompatibleMetadataMatcher(client, options))
+        {
+            Assert.True((await first.MatchAsync(Input())).Matched);
+        }
+
+        using (var second = new OpenAiCompatibleMetadataMatcher(client, options))
+        {
+            Assert.True((await second.MatchAsync(Input())).Matched);
+        }
+
+        Assert.Equal(2, handler.McpInitializeCalls);
+        Assert.Equal(1, handler.McpToolsListCalls);
+    }
+
+    [Fact]
+    public async Task FakeProviderCannotForgeNonexistentTmdbSeries()
+    {
+        var handler = new FakeAiAndMcpHandler
+        {
+            FinalModelResult =
+                """{"matched":true,"tmdb_id":999999,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""",
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+        var input = Input();
+
+        var candidate = await matcher.MatchAsync(input);
+        var tmdb = new RejectingTmdbClient();
+        var validation = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
+
+        Assert.Equal(MetadataFailureKind.SemanticNoMatch, validation.Failure!.Kind);
+        Assert.Equal("ai_tmdb_series_not_found", validation.Failure.Code);
+        Assert.Equal(1, tmdb.SeriesDetailsCalls);
+    }
+
+    [Fact]
+    public async Task FakeProviderFileListConflictIsRejectedBeforeTmdbAccess()
+    {
+        var handler = new FakeAiAndMcpHandler
+        {
+            FinalModelResult =
+                """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/02.mkv","matched":true,"season":1,"episode":2,"reason":null}],"reason":null}""",
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+        var input = Input();
+
+        var candidate = await matcher.MatchAsync(input);
+        var tmdb = new RejectingTmdbClient();
+        var validation = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
+
+        Assert.Equal(MetadataFailureKind.Protocol, validation.Failure!.Kind);
+        Assert.Equal("ai_file_identity_mismatch", validation.Failure.Code);
+        Assert.Equal(0, tmdb.SeriesDetailsCalls);
+    }
+
+    [Fact]
     public async Task AuthenticationFailureUsesSafeClassification()
     {
         var handler = new FakeAiAndMcpHandler { RejectAiAuthentication = true };
@@ -155,7 +313,15 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
 
         public bool RateLimitFirstAiRequest { get; init; }
 
+        public bool AlwaysRateLimitAiRequests { get; init; }
+
+        public bool DelayAiResponse { get; init; }
+
         public bool RejectAiAuthentication { get; init; }
+
+        public string? RawAiResponse { get; init; }
+
+        public string? FinalModelResult { get; init; }
 
         public List<string> RequestHosts { get; } = [];
 
@@ -188,14 +354,24 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             AiCalls++;
             AuthorizationValues.Add(request.Headers.Authorization?.ToString());
             AiBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            if (DelayAiResponse)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
             if (RejectAiAuthentication)
             {
                 return Json(HttpStatusCode.Unauthorized, """{"error":{"message":"private detail"}}""");
             }
 
-            if (RateLimitFirstAiRequest && AiCalls == 1)
+            if (AlwaysRateLimitAiRequests || (RateLimitFirstAiRequest && AiCalls == 1))
             {
                 return Json(HttpStatusCode.TooManyRequests, """{"error":{"message":"retry"}}""");
+            }
+
+            if (RawAiResponse is not null)
+            {
+                return Json(HttpStatusCode.OK, RawAiResponse);
             }
 
             _aiSequence++;
@@ -225,8 +401,8 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                     """);
             }
 
-            const string modelResult =
-                """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
+            var modelResult = FinalModelResult
+                ?? """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
             return Json(
                 HttpStatusCode.OK,
                 "{\"choices\":[{\"message\":{\"content\":"
@@ -277,5 +453,41 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
+    }
+
+    private sealed class RejectingTmdbClient : ITmdbClient
+    {
+        public int SeriesDetailsCalls { get; private set; }
+
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+            string title,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbSeries?> GetSeriesAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default)
+        {
+            SeriesDetailsCalls++;
+            return Task.FromResult<TmdbSeriesDetails?>(null);
+        }
+
+        public Task<TmdbSeason?> GetSeasonAsync(
+            int seriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(
+            int seriesId,
+            int seasonNumber,
+            int episodeNumber,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }
