@@ -79,6 +79,36 @@ public sealed class MediaOrganizationStoreTests
         Assert.Equal(0, (await fixture.ReadStateAsync()).CompletionCount);
     }
 
+    [Fact]
+    public async Task OperationsAreReturnedInStableTorrentPathOrder()
+    {
+        await using var fixture = await OrganizationFixture.CreateAsync();
+        await fixture.AddEpisodeFileAsync(
+            "first-by-path",
+            "alpha.mkv",
+            4,
+            2,
+            1002);
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        Assert.Equal(["alpha.mkv", "episode.mkv"], claim.Files.Select(file => file.RelativePath));
+        var reversedPlans = claim.Files
+            .Reverse()
+            .Select(file => new MediaOperationPlan(
+                file.TaskFileId,
+                "/download/incomplete/bt/" + file.RelativePath,
+                "/download/anime/Series/S01/" + file.RelativePath))
+            .ToArray();
+
+        var operations = await fixture.Store.EnsureOperationsAsync(claim, reversedPlans, now);
+
+        Assert.Equal(
+            claim.Files.Select(file => file.TaskFileId),
+            operations.Select(operation => operation.TaskFileId));
+    }
+
     private sealed class OrganizationFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _database;
@@ -161,6 +191,36 @@ public sealed class MediaOrganizationStoreTests
             return new State(
                 reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3));
+        }
+
+        public async Task AddEpisodeFileAsync(
+            string fileId,
+            string relativePath,
+            long sizeBytes,
+            int episodeNumber,
+            int episodeId)
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    file_episode_candidate, tmdb_series_id, tmdb_season_number,
+                    tmdb_episode_number, tmdb_episode_id, disposition, download_wanted)
+                VALUES (
+                    $id, $task_id, $relative_path, $size_bytes, $source_episode,
+                    $source_episode, 100, 1, $episode_number, $episode_id,
+                    'episode', 1);
+                """;
+            command.Parameters.AddWithValue("$id", fileId);
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            command.Parameters.AddWithValue("$relative_path", relativePath);
+            command.Parameters.AddWithValue("$size_bytes", sizeBytes);
+            command.Parameters.AddWithValue("$source_episode", episodeNumber.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$episode_number", episodeNumber);
+            command.Parameters.AddWithValue("$episode_id", episodeId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public ValueTask DisposeAsync() => _database.DisposeAsync();

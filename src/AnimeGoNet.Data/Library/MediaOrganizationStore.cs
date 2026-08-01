@@ -588,7 +588,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                    operation.state, operation.bytes_verified
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
-            WHERE file.task_id = $task_id ORDER BY operation.id;
+            WHERE file.task_id = $task_id
+            ORDER BY file.relative_path, file.id;
             """;
         query.Parameters.AddWithValue("$task_id", taskId);
         await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);

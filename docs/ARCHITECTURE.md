@@ -85,7 +85,7 @@ AnimeGoNet.slnx
 
 字幕只允许通过同目录同 stem（可附加多语言/default/forced/SDH/轨道 token）或唯一来源 EP 关联视频；它复用视频已经由 TMDB 验证的 Episode，不单独请求 TMDB、不单独占 claim 或写完成记录。`.idx/.sub` 分别保存关联并保留扩展。无法唯一关联但季度已确认时进入 `Other`；关联成功时目标为 `Eyyy.<原后缀>.<字幕扩展>`。
 
-媒体目标路径只由已持久化的 TMDB 规范名称、Season、Episode 和捕获的 save root 生成；所有跨平台非法字符、控制字符、Windows 保留名及尾随点/空格都做确定性清洗。实际 `move` 必须先验证源路径和目标路径仍位于捕获根目录内并拒绝符号链接穿越；同卷优先原子 rename，跨卷使用同目录 task-owned partial、SHA-256 双向校验、原子提交目标后才删除源。重试时目标已存在仅在容量与内容一致时清理源，否则保留双方并报告冲突。
+媒体目标路径只由已持久化的 TMDB 规范名称、Season、Episode 和捕获的 save root 生成；所有跨平台非法字符、控制字符、Windows 保留名及尾随点/空格都做确定性清洗。实际 `move` 必须先验证源路径和目标路径仍位于捕获根目录内并拒绝符号链接穿越；同卷优先原子 rename，跨卷使用同目录 task-owned partial、SHA-256 双向校验、原子提交目标后才删除源。多文件 operation 按 Torrent 相对路径、文件 ID 稳定执行；部分文件已完成后发生冲突只释放 job 租约，不提前写业务 completion，重试跳过 completed operation 并继续 pending operation。目标已存在仅在容量与内容一致时清理源，否则保留双方并报告冲突。
 
 Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可变逐文件计划，逐项完成安全 move，再以原子临时文件写入系列根 `tvshow.nfo` 以及与上游兼容的系列、季度、Episode 目录 JSON；侧车同步写入 schema v27 的 SQLite 目录索引。只有这些步骤全部成功，才在 SQLite 同事务写 completion record 并完成 episode claim。随后任务进入独立 `organizing_cleanup`，另一次租约只调用 qB `deleteFiles=false`，成功后才成为 `organized`。下载器离线或进程崩溃不会重做已完成文件，也不会删除媒体库目标。
 

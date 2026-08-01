@@ -149,6 +149,89 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     [Fact]
+    public async Task MultiFileConflictResumesOnlyPendingOperationInStablePathOrder()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(
+            downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var downloadRoot = Path.Combine(paths.DownloadPath, "bt");
+        var secondSource = Path.Combine(downloadRoot, "episode2.mkv");
+        await File.WriteAllBytesAsync(secondSource, [6, 7, 8, 9]);
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    file_episode_candidate, tmdb_series_id, tmdb_season_number,
+                    tmdb_episode_number, tmdb_episode_id, disposition, download_wanted)
+                VALUES (
+                    'second-episode', $task_id, 'episode2.mkv', 4, '2', '2',
+                    100, 1, 2, 1002, 'episode', 1);
+                """;
+            insert.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(1, await insert.ExecuteNonQueryAsync());
+        }
+
+        var firstTarget = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
+        var secondTarget = Path.Combine(paths.SavePath, "Series", "S01", "E002.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(secondTarget)!);
+        await File.WriteAllBytesAsync(secondTarget, [9, 8, 7, 6]);
+        var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
+
+        Assert.Equal(MediaOrganizationResult.RetryScheduled, await processor.RunOnceAsync());
+
+        Assert.True(File.Exists(firstTarget));
+        Assert.False(File.Exists(Path.Combine(downloadRoot, "episode.mkv")));
+        Assert.True(File.Exists(secondSource));
+        Assert.Equal(new byte[] { 9, 8, 7, 6 }, await File.ReadAllBytesAsync(secondTarget));
+        await using (var failedConnection = await database.OpenConnectionAsync())
+        await using (var failed = failedConnection.CreateCommand())
+        {
+            failed.CommandText = """
+                SELECT
+                    SUM(CASE WHEN operation.state = 'completed' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN operation.state = 'pending' THEN 1 ELSE 0 END),
+                    (SELECT COUNT(*) FROM completion_records),
+                    job.organization_state,
+                    job.organization_failure_code,
+                    task.status
+                FROM file_operations AS operation
+                JOIN task_files AS file ON file.id = operation.task_file_id
+                JOIN download_jobs AS job ON job.task_id = file.task_id
+                JOIN ingest_tasks AS task ON task.id = file.task_id
+                WHERE file.task_id = $task_id
+                GROUP BY job.organization_state, job.organization_failure_code, task.status;
+                """;
+            failed.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await failed.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1, reader.GetInt32(0));
+            Assert.Equal(1, reader.GetInt32(1));
+            Assert.Equal(0, reader.GetInt32(2));
+            Assert.Equal("pending", reader.GetString(3));
+            Assert.Equal("target_conflict", reader.GetString(4));
+            Assert.Equal("downloaded", reader.GetString(5));
+        }
+
+        File.Delete(secondTarget);
+        await MakeOrganizationRetryReadyAsync(app, taskId);
+
+        Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
+
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, await File.ReadAllBytesAsync(firstTarget));
+        Assert.Equal(new byte[] { 6, 7, 8, 9 }, await File.ReadAllBytesAsync(secondTarget));
+        Assert.False(File.Exists(secondSource));
+        Assert.Equal(("organizing_cleanup", "cleanup", 2), await ReadStateAsync(app, taskId));
+
+        Assert.Equal(MediaOrganizationResult.CleanupCompleted, await processor.RunOnceAsync());
+        Assert.Equal(("organized", "completed", 2), await ReadStateAsync(app, taskId));
+    }
+
+    [Fact]
     public async Task BangumiFallbackMovesToOtherAndWritesTmdbZeroNfoWithoutCanonicalCompletion()
     {
         var client = new FakeDownloadClient();
@@ -365,6 +448,23 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
         await File.WriteAllBytesAsync(
             Path.Combine(paths.DownloadPath, "bt", "episode.zh-Hans.forced.ass"), [6, 7, 8]);
+    }
+
+    private static async Task MakeOrganizationRetryReadyAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE download_jobs
+            SET organization_next_attempt_at_utc = $now
+            WHERE task_id = $task_id AND organization_state = 'pending';
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue(
+            "$now",
+            DateTimeOffset.UtcNow.AddSeconds(-1).ToString("O"));
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task SeedFallbackClaimAsync(RunningApp app, string taskId)

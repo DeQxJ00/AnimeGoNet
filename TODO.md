@@ -171,7 +171,7 @@
 - [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。
 - [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、目录 JSON/SQLite 索引、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 待验收。
 - [x] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：schema v33 固化 `seeding_target_minutes`、单调 `seeding_elapsed_seconds`、waiting/seeding/completed 与完成时间，`0/-1/正数` 语义独立于 qB 瞬时 state；媒体操作、qB cleanup 与四类删除均按独立持久化状态、租约和失败重试推进，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束。
-- [ ] 处理多文件、跨盘、目标冲突和部分失败。
+- [x] 处理多文件、跨盘、目标冲突和部分失败：逐文件 operation 按 Torrent 相对路径/文件 ID 稳定执行；同卷优先原子 move，跨盘进入 task-owned partial + 容量/SHA-256 校验 + 原子提交；不同内容的既有目标保留源/目标并返回 `target_conflict`；前序文件已完成而后序文件失败时不写业务 completion，解除冲突后仅续做 pending operation，最终一次性完成全部 Episode 记录和独立下载器 cleanup。
 - [>] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。fake/SQLite并发、恢复和失败测试已通过；绑定字幕与真实 qB/container E2E 待实现。
 - [x] 实现字幕识别与唯一绑定：同目录同 stem 优先、语言/default/forced/SDH 后缀原样保留、不同 stem 按来源 EP 唯一匹配、`.idx/.sub` 分别绑定并保留扩展；匹配后只复用视频的已验证 TMDB EP/claim/priority，未匹配或歧义进入已确认季度 `Other`，整理不产生重复完成记录。
 - [x] 串联媒体目录 DB 与 NFO：NFO 与三层目录侧车都位于业务完成记录之前；侧车损坏、越界或索引失败会保持可重试且不写完成记录。
