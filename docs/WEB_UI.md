@@ -189,3 +189,8 @@ integer/number 与 JSON 容器控件。args 是非凭据 JSON 对象且只作为
 密码框留空时保留旧值，勾选“清除已保存值”才删除。保存使用全局 revision 防止多页面
 覆盖，并停止旧会话；“恢复默认禁用”明确确认后删除该插件私有配置，不删除插件包或
 plugin-data。
+
+类型为 `source` 的有效外部包也进入“来源”页面的 adapter 下拉。只有已启用包可用于
+新建 profile；已存在 profile 对应包后来被禁用或移除时仍显示原 ID 和明确状态，不会
+静默改成 Mikan/U2/TTG。服务端创建时从实际 `PluginCatalog` 验证 adapter，路由预览走
+同一个强类型 adapter；默认禁用的外部包会安全返回不可用，不启动进程或产生任务。

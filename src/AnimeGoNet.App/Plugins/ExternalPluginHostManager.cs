@@ -177,13 +177,29 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
             : null;
     }
 
-    public async Task<JsonElement> ExecuteConfiguredAsync(
+    public Task<JsonElement> ExecuteConfiguredAsync(
         string pluginId,
         string operation,
         JsonElement payload,
         TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteConfiguredAsync(
+            pluginId,
+            operation,
+            payload,
+            static result => result.Clone(),
+            timeout,
+            cancellationToken);
+
+    internal async Task<TResult> ExecuteConfiguredAsync<TResult>(
+        string pluginId,
+        string operation,
+        JsonElement payload,
+        Func<JsonElement, TResult> resultFactory,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(resultFactory);
         _ = GetRequired(pluginId);
         var configuration = _configurations?.GetOrDefault(pluginId);
         if (configuration is { Enabled: false })
@@ -199,6 +215,7 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
             operation,
             configuredPayload,
             configuredVars,
+            resultFactory,
             timeout,
             cancellationToken).ConfigureAwait(false);
     }
@@ -215,13 +232,30 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
         return HealthAsync(pluginId, cancellationToken);
     }
 
-    internal async Task<JsonElement> ExecuteAsync(
+    internal Task<JsonElement> ExecuteAsync(
         string pluginId,
         string operation,
         JsonElement payload,
         JsonElement config,
         TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            pluginId,
+            operation,
+            payload,
+            config,
+            static result => result.Clone(),
+            timeout,
+            cancellationToken);
+
+    private async Task<TResult> ExecuteAsync<TResult>(
+        string pluginId,
+        string operation,
+        JsonElement payload,
+        JsonElement config,
+        Func<JsonElement, TResult> resultFactory,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken)
     {
         var runtime = GetRequired(pluginId);
         await runtime.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -233,14 +267,21 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
                 .ConfigureAwait(false);
             try
             {
-                var result = await session.ExecuteAsync(
+                var wireResult = await session.ExecuteAsync(
                     operation,
                     payload,
                     config,
                     timeout,
                     cancellationToken).ConfigureAwait(false);
+                var result = resultFactory(wireResult);
                 RecordSuccess(runtime);
                 return result;
+            }
+            catch (ExternalPluginResultException exception)
+            {
+                await RecordFailureAndDisposeAsync(runtime, exception.Code)
+                    .ConfigureAwait(false);
+                throw;
             }
             catch (ExternalPluginRemoteException)
             {

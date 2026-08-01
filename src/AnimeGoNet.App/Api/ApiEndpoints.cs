@@ -2736,6 +2736,7 @@ public static class ApiEndpoints
     private static async Task<IResult> CreateSourceProfile(
         SourceProfileCreateRequest request,
         AnimeGoOptions options,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         SourceProfileStore profiles,
         MikanRssRuleStore rules,
         LegacyMikanFilterStore legacyFilters,
@@ -2766,7 +2767,8 @@ public static class ApiEndpoints
                 request.RssScheduleEnabled ?? false,
                 request.RssScheduleCron,
                 current: null,
-                options);
+                options,
+                plugins);
             var now = DateTimeOffset.UtcNow;
             var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
             await rules.EnsureDefaultAsync(
@@ -2797,6 +2799,7 @@ public static class ApiEndpoints
         string sourceProfileId,
         SourceProfileUpdateRequest request,
         AnimeGoOptions options,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         SourceProfileStore profiles,
         SourceRssScheduleManager schedules,
         IHostApplicationLifetime applicationLifetime,
@@ -2850,7 +2853,8 @@ public static class ApiEndpoints
                         && current.RssScheduleEnabled),
                 request.RssScheduleCron,
                 current,
-                options);
+                options,
+                plugins);
             var saved = await profiles.UpdateAsync(
                 id, definition, request.ExpectedRevision, DateTimeOffset.UtcNow, cancellationToken)
                 .ConfigureAwait(false);
@@ -5311,7 +5315,8 @@ public static class ApiEndpoints
         bool rssScheduleEnabled,
         string? rssScheduleCron,
         SourceProfileAdminRecord? current,
-        AnimeGoOptions options)
+        AnimeGoOptions options,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins)
     {
         var name = displayName?.Trim() ?? string.Empty;
         if (name.Length is < 1 or > 128)
@@ -5319,9 +5324,12 @@ public static class ApiEndpoints
             throw new ArgumentException("display_name must contain 1 to 128 characters.");
         }
         var normalizedAdapter = adapter?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (normalizedAdapter is not ("mikan" or "u2" or "ttg"))
+        if (plugins.Find<AnimeGo.Plugin.Abstractions.IInputSourceAdapter>(normalizedAdapter) is null
+            && (current is null
+                || !string.Equals(current.Adapter, normalizedAdapter, StringComparison.Ordinal)))
         {
-            throw new ArgumentException("adapter must be mikan, u2 or ttg.");
+            throw new ArgumentException(
+                "adapter must reference a registered built-in or external source adapter.");
         }
         var normalizedDownloader = RequireCanonicalStableId(downloaderId, "downloader_id");
         if (!options.Downloaders.TryGetValue(normalizedDownloader, out var downloader)

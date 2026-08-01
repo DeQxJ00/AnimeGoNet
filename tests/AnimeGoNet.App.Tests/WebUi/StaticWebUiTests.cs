@@ -72,6 +72,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "configured_write_only_paths")]
     [InlineData("/app.js", "text/javascript", "已配置；留空保留")]
     [InlineData("/app.js", "text/javascript", "/configuration")]
+    [InlineData("/app.js", "text/javascript", "externalSourceAdapters")]
+    [InlineData("/app.js", "text/javascript", "插件包不可用")]
     [InlineData("/", "text/html", "external-plugin-list")]
     [InlineData("/", "text/html", "writeOnly")]
     [InlineData("/styles.css", "text/css", ".external-plugin-card")]

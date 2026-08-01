@@ -159,10 +159,12 @@ data/plugins/com.example.animego.filter-resolution/
 - stderr 使用独立异步管道持续排空，绝不当作协议。每个非空行按插件 ID 以 Warning 结构化转发到宿主统一日志，默认单行最多缓冲 4 KiB，超过后丢弃余下字节并标记截断；无效 UTF-8 使用替换字符，控制字符先归一化，随后复用 URL、Cookie、password/token/key 等统一脱敏。默认每个会话每 10 秒最多输出 20 行，超额行只在窗口切换或管道结束时输出一次抑制计数；日志 provider 抛错不会影响协议读写或插件生命周期。stderr 内容和抑制计数不进入状态 API。
 - 宿主管理器在 `data/plugin-data/<id>` 提供独立可写目录，和可只读挂载的 `data/plugins/<package>` 分离。运行状态只投影稳定错误码，不返回包路径、数据路径、stderr 或配置。
 - 外部包即使发现成功也默认禁用。显式配置保存在 `data/config/external-plugins.private.json`，使用全局/逐插件单调 revision、同目录临时文件原子替换和 Unix `0600`；失败的 ID、对象边界、schema、manifest 身份或 revision 校验不会修改原文件。此文件可能包含第三方凭据，必须与其他 private 配置同等保护。
-- `args` 保持上游默认入口参数语义：先写入配置默认值，再由本次任务 payload 的同名字段覆盖；`vars` 通过 JSON Lines 请求的 `config` 字段传递。`config.schema.json` 校验 vars，当前支持 object/array/string/integer/number/boolean/null、properties/required/additionalProperties/items、enum、长度/数量/数值范围和无回溯 pattern。低层显式 config 调用只对宿主内部测试开放，后续 adapter 统一走启用检查与持久配置合并。
+- `args` 保持上游默认入口参数语义：先写入配置默认值，再由本次任务 payload 的同名字段覆盖；`vars` 通过 JSON Lines 请求的 `config` 字段传递。`config.schema.json` 校验 vars，当前支持 object/array/string/integer/number/boolean/null、properties/required/additionalProperties/items、enum、长度/数量/数值范围和无回溯 pattern。低层显式 config 调用只对宿主内部测试开放；六类强类型 adapter 全部走启用检查与持久配置合并。
 - `GET /api/v1/status` 同时投影安全 manifest、逐包校验错误、启用状态和运行状态；`POST /api/v1/plugins/{id}/reset` 受统一 Access-Key 保护，只清除退避/自动禁用并关闭旧会话，不上传、修改或执行新的插件包。
 - `GET /api/v1/plugins` 返回全局/逐项 revision、args、脱敏 vars 与 schema；`PUT/DELETE /api/v1/plugins/{id}/configuration` 原子保存或恢复未配置默认。schema 的 `writeOnly: true` 值不进入响应，只返回已配置 JSON Pointer，且其 default/example/const 注解也会剥离；PUT 中省略表示保留，`clear_write_only_paths` 才清除。未声明的 vars 属性也不进入响应，避免 schema 变更意外暴露旧值。args 明确是非凭据任务默认值，凭据必须放入 writeOnly vars。
-- 静态 WebUI 提供启停、args JSON、按 schema 类型生成的 vars 控件、嵌套 JSON、writeOnly 替换/清除、revision 冲突提示和恢复默认禁用。六类强类型 adapter 仍是后续边界；当前不会把外部包自动加入内置 `PluginCatalog`。
+- 静态 WebUI 提供启停、args JSON、按 schema 类型生成的 vars 控件、嵌套 JSON、writeOnly 替换/清除、revision 冲突提示和恢复默认禁用。发现成功的包在启动时按 manifest type 显式构造为 `IInputSourceAdapter`、`IFeedPlugin`、`ITitleParserPlugin`、`IFeedFilterPlugin`、`IRenamePlugin` 或 `IScheduledPlugin`，并以 `IsBuiltIn=false` 加入统一 `PluginCatalog`；没有程序集扫描或运行时反射。
+- 固定 operation 分别是 `source.normalize`、`feed.fetch`、`parser.parse`、`filter.all`、`rename.plan`、`schedule.execute`。payload/result 使用 camelCase source-generated JSON。宿主递归拒绝重复/未知字段，再校验错误码、集合/文本边界、HTTP(S) URL、精确 URL SHA-256、filter index 全覆盖、相对媒体路径和 schedule delay；非法结果在同一插件锁内作为协议故障关闭会话并进入退避，远端声明的业务错误则不惩罚健康会话。
+- 外部 filter 只在有序规则组显式列出其 ID 时执行；`configuredPluginIds=null` 的历史默认链只运行内置 filter，避免新安装但默认禁用的包悄悄改变 RSS 行为。显式空数组仍表示不运行任何 filter。
 - 外部插件不直接获得 AnimeGoNet 的数据库连接、DI 容器或下载器对象；只接收完成任务所需 DTO。
 - 外部可执行程序不是安全沙箱。只运行用户信任的插件；首版 Web UI 不提供上传可执行文件，只负责发现、启停、配置和显示校验结果。
 - Docker 中插件目录只读挂载；需要写入的数据使用单独、受限的插件数据目录。

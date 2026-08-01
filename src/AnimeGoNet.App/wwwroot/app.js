@@ -26,6 +26,7 @@ let activeRssRules = null;
 let activeLegacyMikanFilter = null;
 let sourceProfiles = [];
 let activeSourceId = null;
+let externalSourceAdapters = [];
 let downloaderInstances = [];
 let downloaderConfigurationRevision = 0;
 let activeDownloaderId = null;
@@ -488,6 +489,8 @@ async function loadStatus() {
         }
         const status = await response.json();
         const pluginConfigurations = await pluginConfigurationResponse.json();
+        externalSourceAdapters = pluginConfigurations.items.filter((configuration) => configuration.type === "source");
+        refreshSourceAdapterOptions();
         element("#schema").textContent = `v${status.database_schema_version}`;
         element("#runtime").textContent = status.native_aot
             ? `NativeAOT · ${status.runtime_identifier}`
@@ -3873,6 +3876,7 @@ async function loadSources(selectedId) {
             throw new Error(await responseError(response));
         const body = await response.json();
         sourceProfiles = body.items;
+        refreshSourceAdapterOptions();
         refreshSourceDownloaderOptions();
         refreshManualSourceOptions();
         const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
@@ -3886,10 +3890,43 @@ async function loadSources(selectedId) {
     catch (error) {
         sourceProfiles = [];
         activeSourceId = null;
+        refreshSourceAdapterOptions();
         refreshManualSourceOptions();
         renderSourceList();
         status.textContent = `来源读取失败：${errorMessage(error, "未知错误")}`;
     }
+}
+function refreshSourceAdapterOptions() {
+    const select = element("#source-adapter");
+    const previous = select.value;
+    const entries = new Map([
+        ["mikan", { label: "Mikan", enabled: true }],
+        ["u2", { label: "U2", enabled: true }],
+        ["ttg", { label: "TTG", enabled: true }],
+    ]);
+    for (const adapter of externalSourceAdapters) {
+        entries.set(adapter.id, {
+            label: `${adapter.name} (${adapter.id})${adapter.enabled ? "" : " · 插件未启用"}`,
+            enabled: adapter.enabled,
+        });
+    }
+    for (const profile of sourceProfiles) {
+        if (!entries.has(profile.adapter)) {
+            entries.set(profile.adapter, {
+                label: `${profile.adapter} · 插件包不可用`,
+                enabled: false,
+            });
+        }
+    }
+    const options = [...entries.entries()].map(([id, entry]) => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = entry.label;
+        option.disabled = !entry.enabled;
+        return option;
+    });
+    select.replaceChildren(...options);
+    select.value = entries.has(previous) ? previous : "u2";
 }
 function setManualSourceOptions(selector, profiles, emptyLabel) {
     const select = element(selector);

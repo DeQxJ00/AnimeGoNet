@@ -146,3 +146,11 @@ public class ExternalPluginProtocolException(
 public sealed class ExternalPluginRemoteException(
     string code,
     string message) : ExternalPluginProtocolException(code, message);
+
+internal sealed class ExternalPluginResultException(
+    string code,
+    string message,
+    Exception? innerException = null) : ExternalPluginProtocolException(
+        code,
+        message,
+        innerException);

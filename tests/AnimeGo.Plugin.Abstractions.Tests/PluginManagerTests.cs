@@ -118,6 +118,23 @@ public sealed class PluginManagerTests
         Assert.Equal(0, plugin.CallCount);
     }
 
+    [Fact]
+    public async Task ExternalFilterRequiresExplicitOrderedConfiguration()
+    {
+        var builtIn = new FilterPlugin("builtin", 10);
+        var external = new FilterPlugin("external", 20, isBuiltIn: false);
+        var manager = new OrderedFeedFilterManager(
+            new PluginCatalog([external, builtIn]));
+
+        var defaults = await manager.ExecuteAsync(FilterContext());
+        var configured = await manager.ExecuteAsync(FilterContext(), ["external"]);
+
+        Assert.Equal(["builtin"], defaults.Runs.Select(run => run.PluginId));
+        Assert.Equal(["external"], configured.Runs.Select(run => run.PluginId));
+        Assert.Equal(1, builtIn.CallCount);
+        Assert.Equal(1, external.CallCount);
+    }
+
     private static TitleParseContext ParseContext() =>
         new(
             "Show [01]",
@@ -180,12 +197,13 @@ public sealed class PluginManagerTests
         int order,
         IReadOnlyList<int>? rejectedIndexes = null,
         string? errorCode = null,
-        bool returnDuplicateIndex = false) : IFeedFilterPlugin
+        bool returnDuplicateIndex = false,
+        bool isBuiltIn = true) : IFeedFilterPlugin
     {
         private readonly HashSet<int> rejected = (rejectedIndexes ?? []).ToHashSet();
 
         public PluginDescriptor Descriptor { get; } =
-            new(id, id, "1.0.0", PluginCategory.Filter, order);
+            new(id, id, "1.0.0", PluginCategory.Filter, order, isBuiltIn);
 
         public int CallCount { get; private set; }
 

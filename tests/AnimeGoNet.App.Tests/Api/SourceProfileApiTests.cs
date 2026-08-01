@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.App.Tests.Plugins;
 using AnimeGoNet.Data.Sqlite;
 using AnimeGoNet.Data.Sources;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,6 +10,41 @@ namespace AnimeGoNet.App.Tests.Api;
 
 public sealed class SourceProfileApiTests
 {
+    [Fact]
+    public async Task CreateAcceptsDiscoveredExternalSourceAdapterAndPreviewFailsClosedWhileDisabled()
+    {
+        await using var app = await RunningApp.StartAsync(
+            prepareData: layout => ExternalPluginPackageFixture.Write(
+                layout.PluginsPath,
+                "source"));
+
+        using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "external-source-profile",
+            display_name = "External source profile",
+            adapter = "com.example.source",
+            downloader_id = "pt",
+            file_strategy = "link",
+            allowed_torrent_hosts = new List<string> { "tracker.example" },
+            enabled = true,
+        }));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        using var created = JsonDocument.Parse(await create.Content.ReadAsStreamAsync());
+        Assert.Equal(
+            "com.example.source",
+            created.RootElement.GetProperty("adapter").GetString());
+
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/sources/external-source-profile/route-preview",
+            Json(new { title = "External fixture" }));
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        using var result = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.False(result.RootElement.GetProperty("valid").GetBoolean());
+        Assert.Contains(
+            result.RootElement.GetProperty("errors").EnumerateArray(),
+            error => error.GetString()!.Contains("unavailable", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task CreateUpdateAndIngestUseVersionedDownloaderRoute()
     {

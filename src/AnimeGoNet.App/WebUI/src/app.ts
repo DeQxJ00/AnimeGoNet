@@ -989,7 +989,7 @@ interface MikanWorkRematchResponse {
 interface SourceProfile {
   id: string;
   display_name: string;
-  adapter: "mikan" | "u2" | "ttg";
+  adapter: string;
   downloader_id: string;
   file_strategy: "link" | "link_delete" | "move" | "wait_move";
   allowed_torrent_hosts: string[];
@@ -1133,6 +1133,7 @@ let activeRssRules: RssRuleSnapshot | null = null;
 let activeLegacyMikanFilter: LegacyMikanFilterResponse | null = null;
 let sourceProfiles: SourceProfile[] = [];
 let activeSourceId: string | null = null;
+let externalSourceAdapters: ExternalPluginConfiguration[] = [];
 let downloaderInstances: DownloaderInstance[] = [];
 let downloaderConfigurationRevision = 0;
 let activeDownloaderId: string | null = null;
@@ -1641,6 +1642,10 @@ async function loadStatus(): Promise<void> {
     }
     const status = await response.json() as RuntimeStatus;
     const pluginConfigurations = await pluginConfigurationResponse.json() as ExternalPluginConfigurationList;
+    externalSourceAdapters = pluginConfigurations.items.filter(
+      (configuration) => configuration.type === "source",
+    );
+    refreshSourceAdapterOptions();
     element<HTMLElement>("#schema").textContent = `v${status.database_schema_version}`;
     element<HTMLElement>("#runtime").textContent = status.native_aot
       ? `NativeAOT · ${status.runtime_identifier}`
@@ -5299,6 +5304,7 @@ async function loadSources(selectedId?: string): Promise<void> {
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as SourceProfileList;
     sourceProfiles = body.items;
+    refreshSourceAdapterOptions();
     refreshSourceDownloaderOptions();
     refreshManualSourceOptions();
     const selected = sourceProfiles.find((profile) => profile.id === (selectedId ?? activeSourceId))
@@ -5310,10 +5316,45 @@ async function loadSources(selectedId?: string): Promise<void> {
   } catch (error) {
     sourceProfiles = [];
     activeSourceId = null;
+    refreshSourceAdapterOptions();
     refreshManualSourceOptions();
     renderSourceList();
     status.textContent = `来源读取失败：${errorMessage(error, "未知错误")}`;
   }
+}
+
+function refreshSourceAdapterOptions(): void {
+  const select = element<HTMLSelectElement>("#source-adapter");
+  const previous = select.value;
+  const entries = new Map<string, { label: string; enabled: boolean }>([
+    ["mikan", { label: "Mikan", enabled: true }],
+    ["u2", { label: "U2", enabled: true }],
+    ["ttg", { label: "TTG", enabled: true }],
+  ]);
+  for (const adapter of externalSourceAdapters) {
+    entries.set(adapter.id, {
+      label: `${adapter.name} (${adapter.id})${adapter.enabled ? "" : " · 插件未启用"}`,
+      enabled: adapter.enabled,
+    });
+  }
+  for (const profile of sourceProfiles) {
+    if (!entries.has(profile.adapter)) {
+      entries.set(profile.adapter, {
+        label: `${profile.adapter} · 插件包不可用`,
+        enabled: false,
+      });
+    }
+  }
+
+  const options = [...entries.entries()].map(([id, entry]) => {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = entry.label;
+    option.disabled = !entry.enabled;
+    return option;
+  });
+  select.replaceChildren(...options);
+  select.value = entries.has(previous) ? previous : "u2";
 }
 
 function setManualSourceOptions(

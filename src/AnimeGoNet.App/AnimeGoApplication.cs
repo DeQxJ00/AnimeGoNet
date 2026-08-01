@@ -306,7 +306,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<DataUpdateSchedulePlugin>();
         builder.Services.AddSingleton<MikanRssIngestSchedulePlugin>();
         builder.Services.AddSingleton<PluginCatalog>(services =>
-            BuiltInPluginCatalog.Create(
+        {
+            IAnimeGoPlugin[] applicationPlugins =
             [
                 services.GetRequiredService<MikanRssFeedPlugin>(),
                 services.GetRequiredService<MikanToolFilterPlugin>(),
@@ -314,7 +315,12 @@ public static class AnimeGoApplication
                 services.GetRequiredService<DirectoryDatabaseRefreshSchedulePlugin>(),
                 services.GetRequiredService<DataUpdateSchedulePlugin>(),
                 services.GetRequiredService<MikanRssIngestSchedulePlugin>(),
-            ]));
+            ];
+            var externalPlugins = ExternalPluginAdapterFactory.Create(
+                externalPluginDiscovery,
+                services.GetRequiredService<ExternalPluginHostManager>());
+            return BuiltInPluginCatalog.Create(applicationPlugins.Concat(externalPlugins));
+        });
         builder.Services.AddSingleton<TitleParserManager>();
         builder.Services.AddSingleton<OrderedFeedFilterManager>();
         builder.Services.AddSingleton<SqliteJsonCacheStore>();

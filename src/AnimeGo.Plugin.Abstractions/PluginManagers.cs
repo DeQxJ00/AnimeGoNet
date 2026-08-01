@@ -95,7 +95,9 @@ public sealed class OrderedFeedFilterManager(PluginCatalog catalog)
     {
         if (configuredPluginIds is null)
         {
-            return catalog.GetAll<IFeedFilterPlugin>();
+            return catalog.GetAll<IFeedFilterPlugin>()
+                .Where(plugin => plugin.Descriptor.IsBuiltIn)
+                .ToArray();
         }
 
         var filters = new List<IFeedFilterPlugin>(configuredPluginIds.Count);

@@ -30,6 +30,33 @@ public sealed class BuiltInApplicationPluginsTests
     }
 
     [Fact]
+    public async Task HostCatalogRegistersEveryDiscoveredExternalPackageAsItsTypedContract()
+    {
+        var types = new[] { "source", "feed", "parser", "filter", "rename", "schedule" };
+        await using var app = await RunningApp.StartAsync(
+            prepareData: layout =>
+            {
+                foreach (var type in types)
+                {
+                    ExternalPluginPackageFixture.Write(layout.PluginsPath, type);
+                }
+            });
+        var catalog = app.App.Services.GetRequiredService<PluginCatalog>();
+
+        Assert.NotNull(catalog.Find<IInputSourceAdapter>("com.example.source"));
+        Assert.NotNull(catalog.Find<IFeedPlugin>("com.example.feed"));
+        Assert.NotNull(catalog.Find<ITitleParserPlugin>("com.example.parser"));
+        Assert.NotNull(catalog.Find<IFeedFilterPlugin>("com.example.filter"));
+        Assert.NotNull(catalog.Find<IRenamePlugin>("com.example.rename"));
+        Assert.NotNull(catalog.Find<IScheduledPlugin>("com.example.schedule"));
+        Assert.All(
+            catalog.All.Where(plugin => plugin.Descriptor.Id.StartsWith(
+                "com.example.",
+                StringComparison.Ordinal)),
+            plugin => Assert.False(plugin.Descriptor.IsBuiltIn));
+    }
+
+    [Fact]
     public async Task FeedPluginMapsReaderFailureToStablePluginError()
     {
         await using var app = await RunningApp.StartAsync();
