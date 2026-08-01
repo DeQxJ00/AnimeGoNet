@@ -159,6 +159,12 @@ public sealed class StagedTorrentDispatcherTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes,
+            IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
         {
             PausedHashes.AddRange(hashes);

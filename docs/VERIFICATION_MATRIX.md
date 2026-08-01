@@ -31,7 +31,7 @@
 | Filter | 顺序、多插件、skip、异常、MikanTool五档/优先级/黑白名单/legacy顺序 | U/P | 上游 Python差分与filter fixture全过 |
 | Mikan RSS 同集优选 | mikanid+来源EP分组、动态优先级组/具名数组、逐组短路、黑白名单、双开关 | U/C/P/I/E | 单候选旁路优先级；重复组选出一个winner；默认720p拒绝；loser无昂贵副作用 |
 | AnimeGoHelper | 单集、全集、过滤配置上传/获取/往返、认证、CORS | C/P/E | 原油猴脚本无需修改即可完成四个主流程，配置无损往返且真实参与RSS过滤 |
-| qBittorrent | connect/retry/add/list/state/delete/category/tag/seed | C/I/E | fake + 真实容器全部通过 |
+| qBittorrent | connect/retry/add/list/state/delete/category/static tag/metadata dynamic tag/seed | C/I/E | fake + `addTags` HTTP 合同与后置准备流程通过；真实容器主合同进入 CI |
 | 不支持的下载器类型 | 旧Transmission配置读取、诊断、禁用、零路由 | C/E | 明确永久Unsupported，不崩溃、不误转qB、不提供创建入口 |
 | 多下载器路由 | 命名实例、SourceProfile、ID schema、规则/路径/做种/去重、路由快照 | U/C/I/E | Mikan→bt、U2/TTG→pt；改配置不改变进行中任务，实例状态隔离 |
 | 下载状态机 | init/wait/download/seed/complete/pause/error/restart、0/-1/正数做种目标 | U/C/I | schema v33 目标/累计秒数/完成时间持久化；状态和累计值不回退；整理只按持久化门禁推进 |

@@ -273,6 +273,105 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task DynamicDownloadTagsMigrationBackfillsOnlyMikanAndKeepsJobsAuditable()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 33))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-08-01T10:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES
+                    ('mikan', 'Mikan', 'mikan', 'bt', 'move', 1, 1, 7, 1, $now, $now),
+                    ('u2', 'U2', 'u2', 'pt', 'link', 1, 1, 3, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES (
+                    'task', 'mikan', 7, 'mikan', 'Episode', 'fingerprint', 'bt',
+                    '{}', 'metadata_resolved', $now, $now);
+
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, info_hash, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'job', 'task', 'bt', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                    'paused', 0, 0, 1, 0, $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(4, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration34 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 34);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration34.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var profiles = connection.CreateCommand())
+        {
+            profiles.CommandText = """
+                SELECT id, dynamic_tag_template,
+                       dynamic_tag_template_initialized, revision
+                FROM source_profiles ORDER BY id;
+                """;
+            await using var reader = await profiles.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("mikan", reader.GetString(0));
+            Assert.Equal("{year}年{quarter}月新番", reader.GetString(1));
+            Assert.Equal(0, reader.GetInt32(2));
+            Assert.Equal(7, reader.GetInt64(3));
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("u2", reader.GetString(0));
+            Assert.True(reader.IsDBNull(1));
+            Assert.Equal(0, reader.GetInt32(2));
+            Assert.Equal(3, reader.GetInt64(3));
+            Assert.False(await reader.ReadAsync());
+        }
+
+        await using (var job = connection.CreateCommand())
+        {
+            job.CommandText = """
+                SELECT dynamic_tags_json, dynamic_tag_state, dynamic_tag_failure_code
+                FROM download_jobs WHERE id = 'job';
+                """;
+            await using var reader = await job.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("[]", reader.GetString(0));
+            Assert.Equal("not_configured", reader.GetString(1));
+            Assert.True(reader.IsDBNull(2));
+        }
+
+        await using (var index = connection.CreateCommand())
+        {
+            index.CommandText = """
+                SELECT COUNT(*) FROM sqlite_schema
+                WHERE type = 'index' AND name = 'ix_download_jobs_dynamic_tag_state';
+                """;
+            Assert.Equal(1L, await index.ExecuteScalarAsync());
+        }
+
+        await using var invalid = connection.CreateCommand();
+        invalid.CommandText = "UPDATE download_jobs SET dynamic_tag_state = 'unknown' WHERE id = 'job';";
+        await Assert.ThrowsAsync<SqliteException>(() => invalid.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
     public async Task TmdbResolutionEvidenceMigrationBackfillsRunsAndGuardsReferences()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

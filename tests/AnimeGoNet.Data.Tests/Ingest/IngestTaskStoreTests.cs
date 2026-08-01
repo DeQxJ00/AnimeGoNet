@@ -38,6 +38,12 @@ public sealed class IngestTaskStoreTests
         Assert.Contains("\"file_strategy\":\"move\"", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"category\":\"animegonet\"", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"tags\":[]", reader.GetString(1), StringComparison.Ordinal);
+        using (var route = System.Text.Json.JsonDocument.Parse(reader.GetString(1)))
+        {
+            Assert.Equal(
+                "{year}年{quarter}月新番",
+                route.RootElement.GetProperty("dynamic_tag_template").GetString());
+        }
         Assert.Contains("\"seeding_time_minutes\":0", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);
     }
@@ -294,6 +300,7 @@ public sealed class IngestTaskStoreTests
         Assert.Equal("animegonet", claim.Category);
         Assert.Empty(claim.Tags);
         Assert.Equal(0, claim.SeedingTimeMinutes);
+        Assert.Equal("{year}年{quarter}月新番", claim.DynamicTagTemplate);
     }
 
     private static NormalizedIngestItem CreateNormalized(string source = "mikan") =>

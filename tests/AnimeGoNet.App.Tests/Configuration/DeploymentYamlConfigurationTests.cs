@@ -388,6 +388,9 @@ public sealed class DeploymentYamlConfigurationTests
                 key => key.StartsWith(
                     "sources:mikan:tags:",
                     StringComparison.Ordinal));
+            Assert.Equal(
+                "legacy-tag",
+                snapshot.Values["sources:mikan:dynamic_tag_template"]);
             Assert.Equal("wait_move", snapshot.Values["sources:mikan:file_strategy"]);
             Assert.Equal("15", snapshot.Values["sources:mikan:seeding_time_minutes"]);
             Assert.Equal(
@@ -411,6 +414,10 @@ public sealed class DeploymentYamlConfigurationTests
             var upgradedText = await File.ReadAllTextAsync(path);
             Assert.Contains(
                 "mikan_identity_cookie: '.AspNetCore.Identity.Application=legacy-private-cookie'",
+                upgradedText,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "dynamic_tag_template: 'legacy-tag'",
                 upgradedText,
                 StringComparison.Ordinal);
 

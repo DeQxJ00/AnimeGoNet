@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -81,15 +83,54 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
 
         string downloaderId;
         string infoHash;
+        string? dynamicTagTemplate;
+        DateOnly? dynamicTagAirDate;
+        int? dynamicTagEpisodeNumber;
         await using (var job = connection.CreateCommand())
         {
             job.Transaction = transaction;
             job.CommandText = """
-                SELECT downloader_id, info_hash
-                FROM download_jobs
-                WHERE id = $job_id AND task_id = $task_id
-                  AND preparation_state = 'preparing'
-                  AND preparation_lease_token = $lease_token;
+                SELECT job.downloader_id, job.info_hash,
+                       json_extract(task.route_snapshot_json, '$.dynamic_tag_template'),
+                       (
+                           SELECT season.air_date
+                           FROM task_files AS file
+                           JOIN anime_series AS series
+                             ON series.tmdb_series_id = file.tmdb_series_id
+                           JOIN anime_seasons AS season
+                             ON season.series_id = series.id
+                            AND season.season_number = file.tmdb_season_number
+                           WHERE file.task_id = task.id
+                             AND file.disposition = 'episode'
+                             AND file.tmdb_episode_number IS NOT NULL
+                           ORDER BY file.tmdb_season_number,
+                                    file.tmdb_episode_number,
+                                    file.relative_path,
+                                    file.id
+                           LIMIT 1
+                       ),
+                       (
+                           SELECT file.tmdb_episode_number
+                           FROM task_files AS file
+                           JOIN anime_series AS series
+                             ON series.tmdb_series_id = file.tmdb_series_id
+                           JOIN anime_seasons AS season
+                             ON season.series_id = series.id
+                            AND season.season_number = file.tmdb_season_number
+                           WHERE file.task_id = task.id
+                             AND file.disposition = 'episode'
+                             AND file.tmdb_episode_number IS NOT NULL
+                           ORDER BY file.tmdb_season_number,
+                                    file.tmdb_episode_number,
+                                    file.relative_path,
+                                    file.id
+                           LIMIT 1
+                       )
+                FROM download_jobs AS job
+                JOIN ingest_tasks AS task ON task.id = job.task_id
+                WHERE job.id = $job_id AND job.task_id = $task_id
+                  AND job.preparation_state = 'preparing'
+                  AND job.preparation_lease_token = $lease_token;
                 """;
             job.Parameters.AddWithValue("$job_id", jobId);
             job.Parameters.AddWithValue("$task_id", taskId);
@@ -102,6 +143,14 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
 
             downloaderId = reader.GetString(0);
             infoHash = reader.GetString(1);
+            dynamicTagTemplate = reader.IsDBNull(2) ? null : reader.GetString(2);
+            dynamicTagAirDate = reader.IsDBNull(3)
+                ? null
+                : DateOnly.ParseExact(
+                    reader.GetString(3),
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture);
+            dynamicTagEpisodeNumber = reader.IsDBNull(4) ? null : reader.GetInt32(4);
         }
 
         var files = new List<DownloadPreparationFile>();
@@ -139,17 +188,22 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
             infoHash,
             leaseToken,
             attemptCount,
+            dynamicTagTemplate,
+            dynamicTagAirDate,
+            dynamicTagEpisodeNumber,
             files);
     }
 
     public async Task CompleteAsync(
         DownloadPreparationClaim claim,
         IReadOnlyList<DownloadFileAssignment> assignments,
+        DownloadDynamicTagAssignment dynamicTags,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(assignments);
+        ArgumentNullException.ThrowIfNull(dynamicTags);
         if (assignments.Count != claim.Files.Count
             || !assignments.Select(item => item.FileId).ToHashSet(StringComparer.Ordinal)
                 .SetEquals(claim.Files.Select(item => item.FileId))
@@ -168,6 +222,8 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
                 throw new ArgumentException("Wanted state must match non-zero downloader priority.", nameof(assignments));
             }
         }
+
+        ValidateDynamicTags(dynamicTags);
 
         var allSkipped = assignments.All(item => !item.Wanted);
         var now = Format(utcNow);
@@ -220,6 +276,9 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
                     preparation_lease_expires_at_utc = NULL,
                     preparation_next_attempt_at_utc = NULL,
                     preparation_failure_code = NULL,
+                    dynamic_tags_json = $dynamic_tags_json,
+                    dynamic_tag_state = $dynamic_tag_state,
+                    dynamic_tag_failure_code = $dynamic_tag_failure_code,
                     state = $job_state, updated_at_utc = $now,
                     revision = revision + 1
                 WHERE id = $job_id AND task_id = $task_id
@@ -234,11 +293,43 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
             AddIdentity(finish, claim);
             finish.Parameters.AddWithValue("$job_state", allSkipped ? "skipped_duplicate" : "waiting");
             finish.Parameters.AddWithValue("$task_status", allSkipped ? "download_skipped_duplicate" : "download_queued");
+            finish.Parameters.AddWithValue(
+                "$dynamic_tags_json",
+                JsonSerializer.Serialize(dynamicTags.Tags.ToArray(), DataJsonContext.Default.StringArray));
+            finish.Parameters.AddWithValue("$dynamic_tag_state", dynamicTags.State);
+            finish.Parameters.AddWithValue(
+                "$dynamic_tag_failure_code",
+                (object?)dynamicTags.FailureCode ?? DBNull.Value);
             finish.Parameters.AddWithValue("$now", now);
             if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
             {
                 throw new InvalidOperationException("Download preparation completion changed concurrently.");
             }
+        }
+
+        if (dynamicTags.State != "not_configured")
+        {
+            await using var audit = connection.CreateCommand();
+            audit.Transaction = transaction;
+            audit.CommandText = """
+                INSERT INTO download_job_events (
+                    id, job_id, kind, result, from_state, to_state,
+                    failure_code, created_at_utc)
+                VALUES (
+                    $id, $job_id, 'dynamic_tag', $result, NULL,
+                    $dynamic_tag_state, $failure_code, $now);
+                """;
+            audit.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            audit.Parameters.AddWithValue("$job_id", claim.JobId);
+            audit.Parameters.AddWithValue(
+                "$result",
+                dynamicTags.State == "applied" ? "succeeded" : "skipped");
+            audit.Parameters.AddWithValue("$dynamic_tag_state", dynamicTags.State);
+            audit.Parameters.AddWithValue(
+                "$failure_code",
+                (object?)dynamicTags.FailureCode ?? DBNull.Value);
+            audit.Parameters.AddWithValue("$now", now);
+            await audit.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -284,9 +375,33 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
     private static void ValidateFailureCode(string value)
     {
         if (string.IsNullOrWhiteSpace(value)
+            || value.Length > 128
             || value.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
         {
             throw new ArgumentException("Failure code must be a stable ASCII identifier.", nameof(value));
+        }
+    }
+
+    private static void ValidateDynamicTags(DownloadDynamicTagAssignment assignment)
+    {
+        ArgumentNullException.ThrowIfNull(assignment.Tags);
+        if (assignment.State is not ("not_configured" or "applied" or "skipped"))
+        {
+            throw new ArgumentException("Dynamic tag state is invalid.", nameof(assignment));
+        }
+
+        if ((assignment.State == "applied") != (assignment.Tags.Count > 0)
+            || (assignment.State == "applied" && assignment.FailureCode is not null)
+            || (assignment.State == "not_configured"
+                && (assignment.Tags.Count > 0 || assignment.FailureCode is not null))
+            || (assignment.State == "skipped" && assignment.FailureCode is null))
+        {
+            throw new ArgumentException("Dynamic tag state, values and failure code are inconsistent.", nameof(assignment));
+        }
+
+        if (assignment.FailureCode is not null)
+        {
+            ValidateFailureCode(assignment.FailureCode);
         }
     }
 

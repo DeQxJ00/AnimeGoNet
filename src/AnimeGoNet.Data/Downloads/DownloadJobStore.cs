@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Text.Json;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Downloads;
@@ -703,6 +705,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                    download_jobs.seeding_state, download_jobs.seeding_target_minutes,
                    download_jobs.seeding_elapsed_seconds,
                    download_jobs.seeding_completed_at_utc,
+                   download_jobs.dynamic_tags_json,
+                   download_jobs.dynamic_tag_state,
+                   download_jobs.dynamic_tag_failure_code,
                    download_jobs.is_stale,
                    download_jobs.revision, download_jobs.snapshot_at_utc,
                    download_jobs.updated_at_utc,
@@ -813,13 +818,16 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(16),
             reader.GetInt64(17),
             ReadDateTimeOffset(reader, 18),
-            reader.GetInt64(19) != 0,
-            reader.GetInt64(20),
-            ReadDateTimeOffset(reader, 21),
-            ReadDateTimeOffset(reader, 22)!.Value,
-            reader.GetInt64(23) != 0,
-            reader.IsDBNull(24) ? null : reader.GetString(24),
-            ReadDateTimeOffset(reader, 25));
+            JsonSerializer.Deserialize(reader.GetString(19), DataJsonContext.Default.StringArray) ?? [],
+            reader.GetString(20),
+            reader.IsDBNull(21) ? null : reader.GetString(21),
+            reader.GetInt64(22) != 0,
+            reader.GetInt64(23),
+            ReadDateTimeOffset(reader, 24),
+            ReadDateTimeOffset(reader, 25)!.Value,
+            reader.GetInt64(26) != 0,
+            reader.IsDBNull(27) ? null : reader.GetString(27),
+            ReadDateTimeOffset(reader, 28));
 
     private static string? NormalizeSearch(string? value)
     {

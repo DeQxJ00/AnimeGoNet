@@ -24,6 +24,7 @@ public sealed class SourceProfileApiTests
             allowed_torrent_hosts = new List<string> { "U2.INVALID", "*.u2.invalid" },
             category = "Anime/U2",
             tags = new List<string> { "PT", "Web" },
+            dynamic_tag_template = "{year}年{quarter}月新番,EP{ep}",
             seeding_time_minutes = 1440,
             rss_filter_enabled = true,
             rss_priority_enabled = true,
@@ -35,6 +36,9 @@ public sealed class SourceProfileApiTests
         Assert.Equal("u2.invalid", created.RootElement.GetProperty("allowed_torrent_hosts")[0].GetString());
         Assert.Equal("Anime/U2", created.RootElement.GetProperty("category").GetString());
         Assert.Equal(2, created.RootElement.GetProperty("tags").GetArrayLength());
+        Assert.Equal(
+            "{year}年{quarter}月新番,EP{ep}",
+            created.RootElement.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(1440, created.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.Equal("/api/v1/sources/u2", create.Headers.Location?.OriginalString);
 
@@ -83,6 +87,9 @@ public sealed class SourceProfileApiTests
         Assert.Equal(2, updated.RootElement.GetProperty("revision").GetInt64());
         Assert.Equal("bt", updated.RootElement.GetProperty("downloader_id").GetString());
         Assert.Equal("Anime/Move", updated.RootElement.GetProperty("category").GetString());
+        Assert.Equal(
+            "{year}年{quarter}月新番,EP{ep}",
+            updated.RootElement.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(0, updated.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.Contains(
             "does not preserve seeding",
@@ -107,6 +114,9 @@ public sealed class SourceProfileApiTests
             using var route = JsonDocument.Parse(reader.GetString(2));
             Assert.Equal("Anime/U2", route.RootElement.GetProperty("category").GetString());
             Assert.Equal("PT", route.RootElement.GetProperty("tags")[0].GetString());
+            Assert.Equal(
+                "{year}年{quarter}月新番,EP{ep}",
+                route.RootElement.GetProperty("dynamic_tag_template").GetString());
             Assert.Equal(1440, route.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         }
 
@@ -136,6 +146,9 @@ public sealed class SourceProfileApiTests
         Assert.True(mikan.GetProperty("is_default").GetBoolean());
         Assert.Equal("move", mikan.GetProperty("file_strategy").GetString());
         Assert.Equal("animegonet", mikan.GetProperty("category").GetString());
+        Assert.Equal(
+            "{year}年{quarter}月新番",
+            mikan.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(0, mikan.GetProperty("seeding_time_minutes").GetInt32());
 
         using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
@@ -226,6 +239,27 @@ public sealed class SourceProfileApiTests
     }
 
     [Fact]
+    public async Task InvalidDynamicTagTemplateIsRejectedBeforePersistence()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var response = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-tags",
+            display_name = "U2 Tags",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = "link",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            dynamic_tag_template = "{unknown}",
+            enabled = true,
+        }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("source_profile_invalid", body.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task LegacyUpdateOmissionPreservesPolicyAndStrategyChangeGetsSafeSeedDefault()
     {
         await using var app = await RunningApp.StartAsync();
@@ -239,6 +273,7 @@ public sealed class SourceProfileApiTests
             allowed_torrent_hosts = new List<string> { "u2.invalid" },
             category = "Anime/Legacy",
             tags = new List<string> { "PT" },
+            dynamic_tag_template = "{year}-legacy",
             seeding_time_minutes = 60,
             enabled = true,
         }));
@@ -257,6 +292,9 @@ public sealed class SourceProfileApiTests
         Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
         Assert.Equal("Anime/Legacy", preserved.RootElement.GetProperty("category").GetString());
         Assert.Equal("PT", preserved.RootElement.GetProperty("tags")[0].GetString());
+        Assert.Equal(
+            "{year}-legacy",
+            preserved.RootElement.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(60, preserved.RootElement.GetProperty("seeding_time_minutes").GetInt32());
 
         using var move = await app.Client.PutAsync("/api/v1/sources/u2-legacy", Json(new
@@ -265,6 +303,7 @@ public sealed class SourceProfileApiTests
             downloader_id = "pt",
             file_strategy = "move",
             allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            dynamic_tag_template = "",
             enabled = true,
             expected_revision = 2,
         }));
@@ -272,6 +311,9 @@ public sealed class SourceProfileApiTests
         Assert.Equal(HttpStatusCode.OK, move.StatusCode);
         Assert.Equal("Anime/Legacy", moved.RootElement.GetProperty("category").GetString());
         Assert.Equal("PT", moved.RootElement.GetProperty("tags")[0].GetString());
+        Assert.Equal(
+            JsonValueKind.Null,
+            moved.RootElement.GetProperty("dynamic_tag_template").ValueKind);
         Assert.Equal(0, moved.RootElement.GetProperty("seeding_time_minutes").GetInt32());
     }
 
@@ -288,6 +330,8 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-hosts\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-category\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-tags\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-dynamic-tag\"", html, StringComparison.Ordinal);
+        Assert.Contains("{quarter_name}", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-seeding-time\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie-clear\"", html, StringComparison.Ordinal);
@@ -443,6 +487,7 @@ public sealed class SourceProfileApiTests
         Assert.Equal("u2", route.RootElement.GetProperty("adapter").GetString());
         Assert.Equal("pt", route.RootElement.GetProperty("downloader_id").GetString());
         Assert.Equal("animegonet", route.RootElement.GetProperty("category").GetString());
+        Assert.Equal(JsonValueKind.Null, route.RootElement.GetProperty("dynamic_tag_template").ValueKind);
         Assert.Equal(0, route.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.Equal(1, route.RootElement.GetProperty("rss_rule_revision").GetInt64());
 

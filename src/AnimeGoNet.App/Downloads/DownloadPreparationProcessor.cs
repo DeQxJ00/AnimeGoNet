@@ -40,6 +40,7 @@ public sealed class DownloadPreparationProcessor(
             await preparations.CompleteAsync(
                 claim,
                 prepared.Assignments,
+                prepared.DynamicTags,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
             if (prepared.AllSkipped)
@@ -166,19 +167,60 @@ public sealed class DownloadPreparationProcessor(
         }
 
         var unwantedIndexes = assignments.Where(item => !item.Wanted).Select(item => item.DownloadFileIndex).ToArray();
+        var wantedIndexes = assignments.Where(item => item.Wanted).Select(item => item.DownloadFileIndex).ToArray();
+        var dynamicTags = await ApplyDynamicTagsAsync(
+            client,
+            claim,
+            wantedIndexes.Length == 0,
+            cancellationToken).ConfigureAwait(false);
+
         if (unwantedIndexes.Length > 0)
         {
             await client.SetFilePriorityAsync(claim.InfoHash, unwantedIndexes, 0, cancellationToken).ConfigureAwait(false);
         }
 
-        var wantedIndexes = assignments.Where(item => item.Wanted).Select(item => item.DownloadFileIndex).ToArray();
         if (wantedIndexes.Length > 0)
         {
             await client.SetFilePriorityAsync(claim.InfoHash, wantedIndexes, 1, cancellationToken).ConfigureAwait(false);
             await client.ResumeAsync([claim.InfoHash], cancellationToken).ConfigureAwait(false);
         }
 
-        return new PreparedDownload(assignments, wantedIndexes.Length == 0);
+        return new PreparedDownload(assignments, wantedIndexes.Length == 0, dynamicTags);
+    }
+
+    private static async Task<DownloadDynamicTagAssignment> ApplyDynamicTagsAsync(
+        IDownloadClient client,
+        DownloadPreparationClaim claim,
+        bool allSkipped,
+        CancellationToken cancellationToken)
+    {
+        if (claim.DynamicTagTemplate is null)
+        {
+            return new DownloadDynamicTagAssignment([], "not_configured", null);
+        }
+
+        if (allSkipped)
+        {
+            return new DownloadDynamicTagAssignment(
+                [],
+                "skipped",
+                "dynamic_tag_all_files_skipped");
+        }
+
+        var rendered = DownloadDynamicTagTemplate.Render(
+            claim.DynamicTagTemplate,
+            claim.DynamicTagAirDate,
+            claim.DynamicTagEpisodeNumber);
+        if (!rendered.IsSuccess)
+        {
+            return new DownloadDynamicTagAssignment([], "skipped", rendered.FailureCode);
+        }
+
+        await client.AddTagsAsync(
+            [claim.InfoHash],
+            rendered.Tags,
+            cancellationToken).ConfigureAwait(false);
+        return new DownloadDynamicTagAssignment(rendered.Tags, "applied", null);
     }
 
     private static string NormalizePath(string value) => value.Replace('\\', '/');
@@ -194,7 +236,8 @@ public sealed class DownloadPreparationProcessor(
 
     private sealed record PreparedDownload(
         IReadOnlyList<DownloadFileAssignment> Assignments,
-        bool AllSkipped);
+        bool AllSkipped,
+        DownloadDynamicTagAssignment DynamicTags);
 
     private sealed class PreparationFailureException(string code) : Exception
     {

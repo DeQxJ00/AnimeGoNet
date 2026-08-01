@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 33,
+    [int]$ExpectedSchemaVersion = 34,
 
     [switch]$LegacyYamlUpgrade
 )
@@ -212,7 +212,10 @@ try {
         if ($deploymentYamlText.Contains("`nsetting:")) {
             throw 'NativeAOT legacy deployment YAML was not rewritten to the canonical layout.'
         }
-        if ($deploymentYamlText.Contains('{year}-legacy-template')) {
+        if (-not $deploymentYamlText.Contains("dynamic_tag_template: '{year}-legacy-template'")) {
+            throw 'NativeAOT legacy dynamic tag template was not migrated to the dedicated source field.'
+        }
+        if (-not $deploymentYamlText.Contains('tags: []')) {
             throw 'NativeAOT legacy dynamic tag template was incorrectly migrated as a static tag.'
         }
         $backups = @(

@@ -177,6 +177,8 @@ public sealed record SourceProfileSeed
 
     public IReadOnlyList<string> Tags { get; init; } = [];
 
+    public string? DynamicTagTemplate { get; init; }
+
     public int SeedingTimeMinutes { get; init; }
 
     public bool RssFilterEnabled { get; init; }

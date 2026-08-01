@@ -80,6 +80,7 @@ public static class AnimeGoDefaults
                     AllowedTorrentHosts = ["mikanani.me"],
                     Category = "animegonet",
                     Tags = [],
+                    DynamicTagTemplate = "{year}年{quarter}月新番",
                     SeedingTimeMinutes = 0,
                     RssFilterEnabled = true,
                     RssPriorityEnabled = true,

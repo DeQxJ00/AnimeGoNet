@@ -369,7 +369,8 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                        json_extract(ingest_tasks.route_snapshot_json, '$.file_strategy'),
                        json_extract(ingest_tasks.route_snapshot_json, '$.category'),
                        json_extract(ingest_tasks.route_snapshot_json, '$.tags'),
-                       json_extract(ingest_tasks.route_snapshot_json, '$.seeding_time_minutes')
+                       json_extract(ingest_tasks.route_snapshot_json, '$.seeding_time_minutes'),
+                       json_extract(ingest_tasks.route_snapshot_json, '$.dynamic_tag_template')
                 FROM staged_torrents
                 JOIN ingest_tasks ON ingest_tasks.id = staged_torrents.task_id
                 WHERE staged_torrents.task_id = $task_id
@@ -396,7 +397,8 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 JsonSerializer.Deserialize(reader.GetString(9), DataJsonContext.Default.StringArray) ?? [],
                 reader.GetInt32(10),
                 leaseToken,
-                attemptCount);
+                attemptCount,
+                reader.IsDBNull(11) ? null : reader.GetString(11));
         }
 
         await using (var updateTask = connection.CreateCommand())
@@ -487,7 +489,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     download_root_path, save_root_path,
                     organization_state, organization_attempt_count,
                     seeding_target_minutes, seeding_state,
-                    seeding_elapsed_seconds, seeding_completed_at_utc)
+                    seeding_elapsed_seconds, seeding_completed_at_utc,
+                    dynamic_tags_json, dynamic_tag_state,
+                    dynamic_tag_failure_code)
                 VALUES (
                     $id, $task_id, $downloader_id, $info_hash, $state, $progress,
                     $downloaded_bytes, $total_bytes, $speed_bytes_per_second,
@@ -496,7 +500,8 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     'pending', 0, $download_root_path, $save_root_path,
                     $organization_state, 0,
                     $seeding_target_minutes, $seeding_state,
-                    $seeding_elapsed_seconds, $seeding_completed_at_utc);
+                    $seeding_elapsed_seconds, $seeding_completed_at_utc,
+                    '[]', $dynamic_tag_state, NULL);
                 """;
             insert.Parameters.AddWithValue("$id", jobId);
             insert.Parameters.AddWithValue("$task_id", claim.TaskId);
@@ -522,6 +527,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue(
                 "$seeding_completed_at_utc",
                 seeding.State == DownloadSeedingState.Completed ? now : DBNull.Value);
+            insert.Parameters.AddWithValue(
+                "$dynamic_tag_state",
+                claim.DynamicTagTemplate is null ? "not_configured" : "pending");
             insert.Parameters.AddWithValue("$created_at_utc", now);
             insert.Parameters.AddWithValue("$updated_at_utc", now);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -633,6 +641,14 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             }
 
             writer.WriteEndArray();
+            if (profile.DynamicTagTemplate is null)
+            {
+                writer.WriteNull("dynamic_tag_template");
+            }
+            else
+            {
+                writer.WriteString("dynamic_tag_template", profile.DynamicTagTemplate);
+            }
             writer.WriteNumber("seeding_time_minutes", profile.SeedingTimeMinutes);
             writer.WriteStartArray("allowed_torrent_hosts");
             foreach (var host in profile.AllowedTorrentHosts)

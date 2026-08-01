@@ -161,6 +161,7 @@ public sealed class DeleteExecutionProcessorTests
         public Task<IReadOnlyList<DownloadFileSnapshot>> ListFilesAsync(string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<DownloadFileSnapshot>>([]);
         public Task SetFilePriorityAsync(string hash, IReadOnlyList<int> fileIndexes, int priority, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AddTagsAsync(IReadOnlyList<string> hashes, IReadOnlyList<string> tags, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DeleteAsync(IReadOnlyList<string> hashes, bool deleteFiles, CancellationToken cancellationToken = default)

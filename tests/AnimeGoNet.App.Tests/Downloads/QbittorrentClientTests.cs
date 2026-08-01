@@ -191,6 +191,41 @@ public sealed class QbittorrentClientTests
     }
 
     [Fact]
+    public async Task AddsNormalizedTagsWithOfficialTorrentEndpoint()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+        var firstHash = new string('a', 40);
+        var secondHash = new string('b', 64);
+
+        await client.AddTagsAsync(
+            [firstHash, secondHash],
+            [" 2026年4月新番 ", "星期一"]);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("/api/v2/torrents/addTags", request.Path);
+        Assert.Equal(
+            $"hashes={firstHash}%7C{secondHash}&tags=2026%E5%B9%B44%E6%9C%88%E6%96%B0%E7%95%AA%2C%E6%98%9F%E6%9C%9F%E4%B8%80",
+            request.Body);
+    }
+
+    [Fact]
+    public async Task AddTagsRejectsUnsafeIdentityAndEmptyTagsBeforeHttp()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var httpClient = new HttpClient(handler);
+        var client = CreateClient(httpClient);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.AddTagsAsync(["not-a-hash"], ["tag"]));
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.AddTagsAsync([new string('a', 40)], []));
+
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task FileOperationsRejectUnsafeIdentityBeforeHttp()
     {
         using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));

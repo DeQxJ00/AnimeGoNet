@@ -484,6 +484,8 @@ public sealed class MediaOrganizationProcessorTests
             Task.FromResult<IReadOnlyList<DownloadFileSnapshot>>([]);
         public Task SetFilePriorityAsync(string hash, IReadOnlyList<int> fileIndexes, int priority, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+        public Task AddTagsAsync(IReadOnlyList<string> hashes, IReadOnlyList<string> tags, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
         public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
         {
             Paused.AddRange(hashes);

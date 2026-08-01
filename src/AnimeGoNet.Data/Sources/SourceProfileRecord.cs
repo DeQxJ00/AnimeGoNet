@@ -12,7 +12,8 @@ public sealed record SourceProfileRecord(
     bool RssFilterEnabled,
     bool RssPriorityEnabled,
     long Revision,
-    string? MikanIdentityCookie = null)
+    string? MikanIdentityCookie = null,
+    string? DynamicTagTemplate = null)
 {
     public override string ToString() =>
         $"SourceProfileRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -38,7 +39,8 @@ public sealed record SourceProfileAdminRecord(
     long RssBatchCount,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    string? MikanIdentityCookie = null)
+    string? MikanIdentityCookie = null,
+    string? DynamicTagTemplate = null)
 {
     public override string ToString() =>
         $"SourceProfileAdminRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -58,7 +60,8 @@ public sealed record SourceProfileDefinition(
     bool RssFilterEnabled,
     bool RssPriorityEnabled,
     bool Enabled,
-    string? MikanIdentityCookie = null)
+    string? MikanIdentityCookie = null,
+    string? DynamicTagTemplate = null)
 {
     public override string ToString() =>
         $"SourceProfileDefinition {{ Adapter = {Adapter}, "

@@ -88,9 +88,9 @@ API、日志、DOM和导出数据不得包含qB密码、Cookie、完整Torrent U
 - `GET /api/v1/downloads/{jobId}`：返回下载/业务两层状态、准备与整理阶段、文件列表和审计时间线。文件列表按 qB 文件 index 优先、规范化相对路径其次，将实时快照与持久化分配合并；尚未写入分配表的 qB 文件仍以 `unassigned` 显示。
 - `POST /api/v1/downloads/{jobId}/pause`、`/resume`、`/retry`：请求体携带 `expected_revision`。暂停/恢复调用任务不可变路由绑定的 qB 实例；业务重试只清理允许重试阶段的安全失败码和下次执行时间，不改写路由快照。
 
-schema v24 的 `download_job_events` 保存调度确认、qB 状态变化、快照缺失、暂停/恢复、业务重试和安全失败码；schema v33 另在做种状态变化时记录 `seeding_state` 事件，并保存不可变目标、单调累计秒数和首次完成时间。异常正文、URL和凭据不进入该表。详情读取 qB 失败时仍返回 `200` 和 SQLite 快照，并把 `file_snapshot_state` 标记为 `unavailable`；控制命令则返回稳定的安全错误和 `503`，不回显上游异常正文。
+schema v24 的 `download_job_events` 保存调度确认、qB 状态变化、快照缺失、暂停/恢复、业务重试和安全失败码；schema v33 另在做种状态变化时记录 `seeding_state` 事件，并保存不可变目标、单调累计秒数和首次完成时间。schema v34 保存元数据动态 tag 的实际值、`pending/applied/skipped/not_configured`、稳定失败码和 `dynamic_tag` 事件。异常正文、URL和凭据不进入该表。详情读取 qB 失败时仍返回 `200` 和 SQLite 快照，并把 `file_snapshot_state` 标记为 `unavailable`；控制命令则返回稳定的安全错误和 `503`，不回显上游异常正文。
 
-静态 TypeScript 页面提供服务端筛选/翻页、做种目标/累计时间/完成门禁、文件级百分比与 priority/wanted、准备/整理失败、时间线、暂停/恢复、业务重试和四类删除预览入口。生成的 `wwwroot/app.js` 必须由 `npm run web:build` 产生，并由 `npm run web:check` 校验类型。
+静态 TypeScript 页面提供服务端筛选/翻页、做种目标/累计时间/完成门禁、动态 tag 状态/实际值/跳过原因、文件级百分比与 priority/wanted、准备/整理失败、时间线、暂停/恢复、业务重试和四类删除预览入口。生成的 `wwwroot/app.js` 必须由 `npm run web:build` 产生，并由 `npm run web:check` 校验类型。
 
 列表响应的 `summary` 始终是未套用当前筛选的全局下载仪表盘，返回任务总数、活动/暂停/失败/stale、等待整理/已完成、准备/整理失败、离线实例、最近安全失败码和最后一次下载器成功时间。汇总下载速度只计算运行快照标为已连接且任务非 stale 的实例；离线实例的历史速度不得加入。
 

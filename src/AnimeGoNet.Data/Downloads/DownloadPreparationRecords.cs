@@ -13,6 +13,9 @@ public sealed record DownloadPreparationClaim(
     string InfoHash,
     string LeaseToken,
     int AttemptCount,
+    string? DynamicTagTemplate,
+    DateOnly? DynamicTagAirDate,
+    int? DynamicTagEpisodeNumber,
     IReadOnlyList<DownloadPreparationFile> Files);
 
 public sealed record DownloadFileAssignment(
@@ -20,3 +23,8 @@ public sealed record DownloadFileAssignment(
     int DownloadFileIndex,
     int Priority,
     bool Wanted);
+
+public sealed record DownloadDynamicTagAssignment(
+    IReadOnlyList<string> Tags,
+    string State,
+    string? FailureCode);

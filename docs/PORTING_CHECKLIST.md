@@ -67,7 +67,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过；隔离双容器 login/version/path/reconnect/add/list/files/filePrio/start/stop/delete 已进入 Docker CI，首次 runner 结果和动态元数据 tag 待验收 |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio/addTags、元数据后置动态 tag、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过；隔离双容器 login/version/path/reconnect/add/list/files/filePrio/start/stop/delete 已进入 Docker CI，首次 runner 结果待验收 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 已验证 | `ANIMEGO_CLIENT`、显式旧配置路径和 `data_path/animego.yaml` 只读检测；`UnsupportedDownloaderType`/不可读旧配置 fail-closed，workers/registry/ingest/控制/连接探测均阻断，Web 可进入修复；AOT/API tests |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v10 的 media organization 租约、逐文件 operation、独立 cleanup 重试与完成记录事务门禁已由后台 worker 串联；schema v33 另持久化不可变做种目标、单调累计秒数、完成门禁与审计。qB 状态/paused preparation/不可变路径/实例故障恢复 tests 已通过；真实容器全链待验收 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB 快照同步驱动持久化 waiting/seeding/completed，link/link_delete 先发布媒体后等待做种门禁，wait_move 等门禁完成，独立 deleteFiles=false cleanup 与崩溃恢复 tests 已通过；真实容器状态转换待验收 |

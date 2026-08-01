@@ -2,6 +2,8 @@ using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
+using AnimeGoNet.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Tests.Sources;
 
@@ -15,7 +17,10 @@ public sealed class SourceProfileStoreAdminTests
         await store.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
         var created = await store.CreateAsync(
             "u2",
-            Definition("U2", "u2", "pt", "link", ["u2.invalid"]),
+            Definition("U2", "u2", "pt", "link", ["u2.invalid"]) with
+            {
+                DynamicTagTemplate = "{year}年{quarter}月新番,EP{ep}",
+            },
             At(10));
         var enabled = Assert.IsType<SourceProfileRecord>(await store.GetEnabledAsync("u2"));
         var task = await new IngestTaskStore(fixture.Database).AddAsync(
@@ -32,12 +37,14 @@ public sealed class SourceProfileStoreAdminTests
         var listed = Assert.Single(await store.ListAsync(), item => item.Id == "u2");
 
         Assert.Equal(1, created.Revision);
+        Assert.Equal("{year}年{quarter}月新番,EP{ep}", created.DynamicTagTemplate);
         Assert.Equal(2, updated.Revision);
         Assert.Equal("bt", updated.DownloaderId);
         Assert.Equal("move", updated.FileStrategy);
         Assert.Equal("animegonet", updated.Category);
         Assert.Equal(["source-test"], updated.Tags);
         Assert.Equal(0, updated.SeedingTimeMinutes);
+        Assert.Null(updated.DynamicTagTemplate);
         Assert.Equal(1, listed.IngestTaskCount);
         Assert.Equal("pt", task.DownloaderId);
         Assert.Equal(1, task.SourceProfileRevision);
@@ -88,6 +95,15 @@ public sealed class SourceProfileStoreAdminTests
 
         await Assert.ThrowsAsync<ArgumentException>(
             () => store.CreateAsync("u2", invalid, At(10)));
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CreateAsync(
+                "u2-tag",
+                Definition("U2", "u2", "pt", "link", ["u2.invalid"]) with
+                {
+                    DynamicTagTemplate = "{unsupported}",
+                },
+                At(10)));
     }
 
     [Fact]
@@ -148,6 +164,105 @@ public sealed class SourceProfileStoreAdminTests
             () => store.CreateAsync("u2", definition, At(10)));
 
         Assert.Null(await store.GetAsync("u2"));
+    }
+
+    [Fact]
+    public async Task V33UpgradeAppliesConfiguredTemplateOnceAndExplicitClearSurvivesRestartSeed()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-dynamic-tag-upgrade",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var databasePath = Path.Combine(root, "animegonet.db");
+            await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+            {
+                await connection.OpenAsync();
+                await using (var migrationTable = connection.CreateCommand())
+                {
+                    migrationTable.CommandText = """
+                        CREATE TABLE schema_migrations (
+                            version INTEGER NOT NULL PRIMARY KEY,
+                            name TEXT NOT NULL UNIQUE,
+                            applied_at_utc TEXT NOT NULL
+                        ) STRICT;
+                        """;
+                    await migrationTable.ExecuteNonQueryAsync();
+                }
+
+                foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 33))
+                {
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = migration.Sql + """
+
+                        INSERT INTO schema_migrations(version, name, applied_at_utc)
+                        VALUES ($version, $name, $now);
+                        """;
+                    command.Parameters.AddWithValue("$version", migration.Version);
+                    command.Parameters.AddWithValue("$name", migration.Name);
+                    command.Parameters.AddWithValue("$now", At(9).ToString("O"));
+                    await command.ExecuteNonQueryAsync();
+                }
+
+                await using var seed = connection.CreateCommand();
+                seed.CommandText = """
+                    INSERT INTO source_profiles (
+                        id, display_name, adapter, downloader_id, file_strategy,
+                        rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                        created_at_utc, updated_at_utc)
+                    VALUES (
+                        'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                        1, 1, 7, 1, $now, $now);
+                    """;
+                seed.Parameters.AddWithValue("$now", At(10).ToString("O"));
+                Assert.Equal(1, await seed.ExecuteNonQueryAsync());
+            }
+
+            var database = new AnimeGoSqliteDatabase(databasePath);
+            await database.InitializeAsync();
+            var store = new SourceProfileStore(database);
+            var configuredSeed = AnimeGoDefaults.CreateDocker().InitialSourceProfiles[0] with
+            {
+                DynamicTagTemplate = "{year}-configured",
+            };
+
+            await store.EnsureSeedsAsync([configuredSeed]);
+            var upgraded = Assert.IsType<SourceProfileAdminRecord>(await store.GetAsync("mikan"));
+            Assert.Equal("{year}-configured", upgraded.DynamicTagTemplate);
+            Assert.Equal(8, upgraded.Revision);
+
+            var cleared = await store.UpdateAsync(
+                "mikan",
+                new SourceProfileDefinition(
+                    upgraded.DisplayName,
+                    upgraded.Adapter,
+                    upgraded.DownloaderId,
+                    upgraded.FileStrategy,
+                    upgraded.AllowedTorrentHosts,
+                    upgraded.Category,
+                    upgraded.Tags,
+                    upgraded.SeedingTimeMinutes,
+                    upgraded.RssFilterEnabled,
+                    upgraded.RssPriorityEnabled,
+                    upgraded.Enabled,
+                    upgraded.MikanIdentityCookie,
+                    DynamicTagTemplate: null),
+                upgraded.Revision,
+                At(12));
+            Assert.Null(cleared.DynamicTagTemplate);
+
+            await store.EnsureSeedsAsync([configuredSeed]);
+            var restarted = Assert.IsType<SourceProfileAdminRecord>(await store.GetAsync("mikan"));
+            Assert.Null(restarted.DynamicTagTemplate);
+            Assert.Equal(cleared.Revision, restarted.Revision);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static SourceProfileDefinition Definition(

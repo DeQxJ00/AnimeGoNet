@@ -68,14 +68,14 @@
 - [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
 - [>] 移植环境变量覆盖：规范嵌套键、现有扁平键、旧 qB 兼容键及命令行优先级已接入；应用字段和下载器实例字段的部署锁均在 API/WebUI 逐字段显示来源，拒绝改写且保存其他字段时不把环境凭据复制进私有覆盖。路径及完整旧配置 precedence parity 仍待补齐。
 - [>] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均已有测试；全部旧 Go 配置异常 parity 仍待补齐。
-- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 qB `setting:`/`advanced:` 现默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/TMDB/代理/失败链/Cron 与 `advanced.source|anidata.mikan.cookie` 已迁移，错误值在落盘前拒绝，Transmission 保持原文件并 fail closed。上游动态 tag 尚无等价新模型，因此 parity 仍为进行中。
+- [>] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：1.1.0～1.7.1 旧 qB `setting:`/`advanced:` 现默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/动态 tag 模板/TMDB/代理/失败链/Cron 与 `advanced.source|anidata.mikan.cookie` 已迁移，错误值在落盘前拒绝，Transmission 保持原文件并 fail closed；其余历史字段 parity 仍为进行中。
 - [x] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取、新安装默认注释及旧 YAML 自动重写新默认值均已完成。
 - [x] 增加 OpenAI-compatible AI 配置 DTO、扁平环境变量、敏感值脱敏和 source-generated JSON 上下文；API 只返回 provider/base/model/工具端点与 `api_key_configured`，不返回密钥。
 - [>] 领域模型拆分来源字段与 TMDB 规范字段：权威 `TmdbSeries`/`TmdbSeason`/`TmdbEpisode` 与三级验证结果已建立；来源字段和持久化编排仍待串联。
 - [x] 增加 `MikanWorkMetadataRule`：`mikanid` 唯一键、`BangumiSubjectId`、`TmdbSeriesId`、`TmdbSeasonNumber`、有符号 `EpisodeOffset`、启用/版本/审计字段；数据层已实现 revision 冲突保护、禁用和清除，API/编排接入在对应阶段继续。
 - [x] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器：19 组由 develop 分支 Python 产出的 golden fixture 已逐字段覆盖标题、季度、集号、字幕、发布组、分辨率和来源，并明确保留不识别 E04/EP04 等原始语义。独立 `FileEpisodeCandidateResolver` 才拒绝年份/分辨率占位、歧义和非正片，只对 Mikan SourceProfile 落逐文件候选；AI/TMDB 验证后的本地统一偏移计算及“不一致只禁止学习”已在 Episode worker 完成。
 - [>] 已建立 NativeAOT-safe Torrent 文件和 Mikan RSS title EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，RSS title 另支持不受扩展名截断的最后可靠标记；小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 均不形成普通整数。入库的 Mikan `file_episode_candidate` 现改由 raw_parser.py 兼容层与独立安全层决定，其他 adapter 固定不写；确认 Season 后仍逐文件经 TMDB Episode API 验证，RSS 批次与逐文件候选的跨请求审计仍待补全。
-- [>] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；数据层已按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中可安全计算目标 EP，主程序 AI 前置接入仍待串联。
+- [x] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中后在 AI/TMDB Episode 调用前本地计算并验证目标 EP，API/WebUI 显示 Learning/Trusted/ConflictReset。
 - [x] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用：schema v32 在解析完成事务中固化 Series/Season 的 Run+Attempt，并为每个 Episode/字幕文件保存精确 Attempt；API、任务面板和作品库均显示权威来源及证据引用，混合文件明确下钻到逐文件详情。
 - [ ] 通过全部配置/模型 parity tests。
 
@@ -151,9 +151,9 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [x] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作、失败隔离、可选客户端版本/默认保存路径诊断，以及按实例 2～120 秒指数退避/熔断均已实现。
-- [>] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成；Cookie 按来源隔离、写入时规范化、API/WebUI 只返回 configured 状态，RSS/Torrent 只向原始 Host 注入且跨 Host redirect 剥离。RSS 请求处理中并发修改不会混用新旧过滤开关、凭据或下载器路由，历史任务保留原 revision/下载器/下载策略快照。依赖 TMDB/Bangumi 日期与 EP 的上游动态 tag 模板待元数据后置赋值模块实现。
+- [x] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、动态 tag 模板、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成。Cookie 按来源隔离且跨 Host redirect 剥离；RSS 并发修改不混用新旧 revision。动态模板随任务冻结，元数据确认后在恢复下载前按规范季度日期和首个普通 EP 渲染并写 qB，跳过/失败均有持久状态和事件。
 - [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
-- [>] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口已在请求期执行安全 Torrent staging 并原子保存文件清单，qB worker 待接入。
+- [x] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口在请求期执行安全 Torrent staging 并原子保存文件清单，后台 worker 按不可变下载器路由暂停投递 qB、确认 hash 后进入元数据和逐文件准备。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add（category/tags/seedingTimeLimit）、file priority、stop/start/delete、状态映射、严格 hash/index/priority/做种分钟校验与失败响应。
 - [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、已有/新增任务显式再暂停、qB确认、download job事务与确认后staging清理。
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；qB 专用脚本用 FQN 过滤只启动 `QbittorrentSandboxTests`，不会串跑同项目的 TMDB live 测试；默认 CI 不启动该实例，也未创建 Torrent。
@@ -209,7 +209,7 @@
 - [x] 实现下载列表/详情/文件级 priority 与 wanted 进度、筛选搜索分页和状态时间线；详情合并 SQLite 文件分配与 qB 实时文件快照，qB 离线时保留持久化信息并返回安全失败码，不暴露绝对路径或凭据。
 - [x] 实现暂停、恢复和 AnimeGoNet 业务重试；写操作校验 job revision，成功/失败均写入 schema v24 审计事件，任务卡片的删除操作仍只进入四类删除中心执行预览/确认。首版不复刻 Tracker/Peer 明细、piece 图、限速、强制校验/汇报和 qB 全局设置。
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
-- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、做种分钟、Mikan 身份 Cookie 的只写设置/显式清除/已配置状态、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；动态 tag 模板和重复命中通知待实现。
+- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态 tags、元数据动态 tag 模板、做种分钟、Mikan 身份 Cookie 的只写设置/显式清除/已配置状态、revision 冲突、move 强制零做种提示，以及复用真实 adapter 校验且不产生副作用的路由预览；重复命中通知待实现。
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥只写不回显，保存前 diff 只显示 `继承/已配置/已清除` 状态，环境锁、即时生效和需重启字段均可见。

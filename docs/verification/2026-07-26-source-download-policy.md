@@ -9,7 +9,7 @@
 - `advanced.client.seeding_time_minute` → SourceProfile `seeding_time_minutes`
 - qB 语义保持为 `0=不做种`、`-1=无限`、正数为分钟限制
 
-上游动态 tag 支持 `{year}`、`{quarter}`、`{ep}` 等元数据变量。AnimeGoNet 在 Torrent dispatch 时尚未完成 TMDB/Bangumi 验证，因此本模块只发送静态 tags；动态模板留给元数据完成后的显式 qB tag 赋值模块，不把未展开模板误写到任务。
+上游动态 tag 支持 `{year}`、`{quarter}`、`{ep}` 等元数据变量。本次历史增量在 Torrent dispatch 时只发送静态 tags，不把未展开模板误写到任务；该边界后来由 schema v34 的元数据后置 qB tag 模块完成，见 `2026-08-01-dynamic-download-tags.md`。
 
 ## 数据与不可变边界
 

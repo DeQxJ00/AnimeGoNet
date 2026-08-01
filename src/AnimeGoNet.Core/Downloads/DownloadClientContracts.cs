@@ -18,6 +18,11 @@ public interface IDownloadClient
         int priority,
         CancellationToken cancellationToken = default);
 
+    Task AddTagsAsync(
+        IReadOnlyList<string> hashes,
+        IReadOnlyList<string> tags,
+        CancellationToken cancellationToken = default);
+
     Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default);
 
     Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default);

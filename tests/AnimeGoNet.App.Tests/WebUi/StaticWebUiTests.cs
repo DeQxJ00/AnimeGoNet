@@ -27,6 +27,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "seeding_target_minutes")]
     [InlineData("/app.js", "text/javascript", "做种：")]
     [InlineData("/styles.css", "text/css", ".download-seeding")]
+    [InlineData("/styles.css", "text/css", ".download-dynamic-tags")]
+    [InlineData("/app.js", "text/javascript", "动态 Tags：")]
     [InlineData("/app.js", "text/javascript", "/api/v1/library/seasons")]
     [InlineData("/app.js", "text/javascript", "animegonet.library.v1")]
     [InlineData("/app.js", "text/javascript", "TMDB EP snapshot")]

@@ -21,8 +21,11 @@ season-failure switches and database refresh Cron.
 
 The upstream dynamic `setting.tag` expression is not copied to
 `SourceProfile.tags`, because the former is a template and the latter is
-currently a static list. Mikan Cookie likewise remains in the exact backup
-until its dedicated source-secret model exists.
+currently a static list. At the time of this historical verification, the
+template and Mikan Cookie remained in the exact backup. Schema v31 later added
+the Cookie model; schema v34 added `dynamic_tag_template` and now migrates the
+template there while keeping static tags empty. See
+`2026-08-01-dynamic-download-tags.md`.
 
 ## Persistence guarantees
 
@@ -72,8 +75,10 @@ The exact native executable then passed two isolated executions of
    checks.
 2. `legacy-yaml-upgrade`: started from a safe 1.6.1 fixture, proved the backup
    SHA-256 matched the original bytes, proved the active file was canonical
-   1.7.1, proved the dynamic tag template was absent, and completed the same
-   runtime checks.
+   1.7.1, proved the dynamic tag template was absent at that historical
+   increment, and completed the same runtime checks. The current schema v34
+   smoke instead proves it is present only in `dynamic_tag_template` and not
+   in static tags.
 
 `.github/workflows/animegonet-native-aot.yml` now invokes both modes for
 `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64` and `osx-arm64`. Non-Windows

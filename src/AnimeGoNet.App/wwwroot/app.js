@@ -2171,6 +2171,15 @@ function renderDownloadPage(body) {
         const seeding = document.createElement("p");
         seeding.className = `download-seeding ${item.seeding_state}`;
         seeding.textContent = seedingDescription(item);
+        const dynamicTags = document.createElement("p");
+        dynamicTags.className = `download-dynamic-tags ${item.dynamic_tag_state}`;
+        dynamicTags.textContent = item.dynamic_tag_state === "applied"
+            ? `动态 Tags：${item.dynamic_tags.join(", ")}`
+            : item.dynamic_tag_state === "skipped"
+                ? `动态 Tags：已跳过（${item.dynamic_tag_failure_code ?? "未知原因"}）`
+                : item.dynamic_tag_state === "pending"
+                    ? "动态 Tags：等待元数据确认"
+                    : "动态 Tags：未配置";
         const actions = document.createElement("div");
         actions.className = "download-actions";
         const expand = document.createElement("button");
@@ -2197,7 +2206,7 @@ function renderDownloadPage(body) {
         remove.textContent = "删除…";
         remove.addEventListener("click", () => void openDeletePreview(item.task_id));
         actions.append(remove);
-        card.append(heading, progress, details, seeding, actions, detailTarget);
+        card.append(heading, progress, details, seeding, dynamicTags, actions, detailTarget);
         if (expandedDownloadJobIds.has(item.job_id)) {
             void loadDownloadDetail(item, detailTarget, expand);
         }
@@ -3319,6 +3328,7 @@ function populateSourceForm(profile) {
     element("#source-strategy").value = profile?.file_strategy ?? "link";
     element("#source-category").value = profile?.category ?? "animegonet";
     element("#source-tags").value = profile?.tags.join(", ") ?? "";
+    element("#source-dynamic-tag").value = profile?.dynamic_tag_template ?? "";
     element("#source-seeding-time").value =
         String(profile?.seeding_time_minutes ?? 0);
     element("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
@@ -3359,7 +3369,7 @@ function renderSourceList() {
         revision.textContent = `rev ${profile.revision}${profile.enabled ? "" : " · 已停用"}`;
         heading.append(name, revision);
         const route = document.createElement("p");
-        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
         card.append(heading, route);
         card.addEventListener("click", () => populateSourceForm(profile));
         return card;
@@ -3401,6 +3411,7 @@ async function previewSourceRoute() {
                 `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
                 `媒体库 ${route.save_path}`,
                 `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
+                `动态 Tag 模板 ${route.dynamic_tag_template ?? "关闭"}`,
                 `做种 ${route.seeding_time_minutes} 分钟 · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
             ].join("\n")
             : `无效\n${route.errors.map((error) => `• ${error}`).join("\n")}`;
@@ -3884,6 +3895,7 @@ async function saveSource(event) {
         file_strategy: element("#source-strategy").value,
         category: element("#source-category").value.trim(),
         tags: sourceTags(),
+        dynamic_tag_template: element("#source-dynamic-tag").value,
         seeding_time_minutes: element("#source-seeding-time").valueAsNumber,
         allowed_torrent_hosts: sourceHosts(),
         rss_filter_enabled: element("#source-filter-enabled").checked,

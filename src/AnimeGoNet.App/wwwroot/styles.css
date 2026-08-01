@@ -203,6 +203,9 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-seeding { margin: 6px 0 0; color: #91a0bb; font-size: .82rem; line-height: 1.45; }
 .download-seeding.seeding { color: #73dbb4; }
 .download-seeding.completed { color: #9ee8c8; }
+.download-dynamic-tags { margin: 4px 0 0; color: #91a0bb; font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
+.download-dynamic-tags.applied { color: #9ee8c8; }
+.download-dynamic-tags.skipped { color: #e5bc7c; }
 .download-actions, .download-detail-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .download-detail { display: grid; gap: 11px; margin-top: 13px; }
 .download-detail:empty { display: none; }

@@ -68,10 +68,11 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - 对 Mikan RSS profile 另存独立的 `mikan_rss_priority_enabled` 和版本化优选规则；新安装默认启用，在同批次按可靠 `mikanid+来源EP` 聚合重复RSS选项并逐组淘汰，规则结构见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
 - RSS 产生 winner 后，主程序从其 Mikan Episode URL 取得同源站点 origin，使用受 SourceProfile host 白名单、DNS 公网地址校验、重定向和 2 MiB 上限保护的 HTTP 管道抓取 `/Home/Bangumi/{mikanid}`。只接受 `p.bangumi-info` 内指向 `bgm.tv`/`bangumi.tv` `/subject/{正整数}` 的唯一 Subject；结果以 `bgmid` 写入 RSS 批次和统一导入任务。成功批次不重复抓取；网络/页面/歧义失败保留 winner 为可重试状态，不创建缺 `bgmid` 的 Mikan 下载任务。
 - qB category、静态附加 tags；AnimeGoNet 总会额外加入 `animegonet`、来源 ID 和文件策略三个可识别系统 tag。
+- 可空 `dynamic_tag_template`；默认 Mikan 为 `{year}年{quarter}月新番`，支持 `{year}`、`{quarter}`（季度首月 1/4/7/10）、`{quarter_index}`、`{quarter_name}`、`{ep}`、`{week}` 和 `{week_name}`，逗号分隔最多 16 个 tag。
 - `file_strategy`：`link`、`link_delete`、`move`、`wait_move`。
 - `seeding_time_minutes` 沿用上游 qB 语义：`0` 不做种、`-1` 无限做种、正数为分钟上限；`move` 必须为 `0`，因为下载完成后移动源文件。
 - 四种策略严格使用任务创建时的 route snapshot。schema v33 把做种分钟复制为 job 的不可变目标，并由 qB `seeding_time` 投影为单调累计秒数及 `not_required/waiting/seeding/completed`；重启、离线旧快照和后续 SourceProfile 修改都不能改变目标或倒退完成状态。`0` 直接为 `not_required`，正数达到分钟上限或 qB 报告完成后为 `completed`，`-1` 不按时长自动完成。`link` 与 `link_delete` 在 qB 首次进入已下载/做种状态后建立媒体库硬链接且不暂停做种；`link_delete` 仅在持久化做种状态完成后校验目标与源内容一致再删除源文件。`move` 在下载完成后暂停并立即安全移动；`wait_move` 等同一持久化门禁完成后才暂停并移动。文件/NFO/完成记录成功后才进入独立 qB 清理阶段，清理固定使用 `deleteFiles=false`。
-- 依赖 TMDB/Bangumi 日期或 EP 的上游 `{year}/{quarter}/{ep}` 动态 tag 模板不能在暂停 dispatch 阶段求值；它将由后置元数据模块验证后再赋值，本阶段不会把未展开模板原样发送给 qB。
+- 动态 tag 模板与 profile revision 一起写入不可变 `route_snapshot_json`，绝不在暂停 dispatch 阶段把未展开模板发送给 qB。任务达到 `metadata_resolved` 后，下载准备 worker 取按 Season/EP/路径稳定排序的首个普通规范 Episode，用其已确认 TMDB Season 的开播日期和 EP 渲染模板，并在设置文件 priority、恢复任务前调用 qB `addTags`。缺少所需日期/EP、全文件重复或渲染结果无效时，下载继续但 job 记录稳定 `skipped` 原因；qB 写入失败则保持暂停并按准备租约重试。API/WebUI 显示 `pending/applied/skipped/not_configured`、实际 tag 和失败码。
 - 去重范围固定为全局媒体库，不允许 source profile 改成来源内去重；规范键为 TMDB Series/Season/Episode。profile 只可配置发现重复后的日志/通知，不可绕过完成记录。
 
 配置优先级固定为：作品级人工规则 > 输入源 profile > 全局默认。人工规则命中失败时显式报错，不能静默落到较低层覆盖。
@@ -193,7 +194,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - “路由预览”：输入模拟 title/IDs 后显示会命中哪个下载器、哪些规则以及路径。
 - 修改只影响新任务；进行中任务保持原快照，可由用户显式重新路由。
 
-当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、category、tags、做种分钟和规则开关。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
+当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、category、静态 tags、动态 tag 模板、做种分钟和规则开关。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
 
 ### 任务/作品详情
 

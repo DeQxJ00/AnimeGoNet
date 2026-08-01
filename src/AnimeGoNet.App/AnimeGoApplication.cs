@@ -927,6 +927,8 @@ public static class AnimeGoApplication
                     : FirstConfigurationValue(child, "category"))
                     ?? "animegonet",
                 Tags = ReadScalarList(child.GetSection("tags")),
+                DynamicTagTemplate = DownloadDynamicTagTemplate.Normalize(
+                    FirstConfigurationValue(child, "dynamic_tag_template")),
                 SeedingTimeMinutes = ParseOptionalInt(
                     FirstConfigurationValue(child, "seeding_time_minutes"),
                     0,

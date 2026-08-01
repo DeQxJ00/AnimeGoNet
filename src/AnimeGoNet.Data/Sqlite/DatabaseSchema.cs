@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 33;
+    public const int CurrentVersion = 34;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -39,7 +39,40 @@ public static class DatabaseSchema
         new SchemaMigration(31, "source_mikan_identity_cookie", SourceMikanIdentityCookie),
         new SchemaMigration(32, "tmdb_resolution_evidence", TmdbResolutionEvidence),
         new SchemaMigration(33, "download_seeding_lifecycle", DownloadSeedingLifecycle),
+        new SchemaMigration(34, "dynamic_download_tags", DynamicDownloadTags),
     ];
+
+    private const string DynamicDownloadTags = """
+        ALTER TABLE source_profiles
+        ADD COLUMN dynamic_tag_template TEXT
+        CHECK (dynamic_tag_template IS NULL
+            OR length(dynamic_tag_template) BETWEEN 1 AND 512);
+
+        ALTER TABLE source_profiles
+        ADD COLUMN dynamic_tag_template_initialized INTEGER NOT NULL DEFAULT 0
+        CHECK (dynamic_tag_template_initialized IN (0, 1));
+
+        ALTER TABLE download_jobs
+        ADD COLUMN dynamic_tags_json TEXT NOT NULL DEFAULT '[]'
+        CHECK (json_valid(dynamic_tags_json)
+            AND json_type(dynamic_tags_json) = 'array');
+
+        ALTER TABLE download_jobs
+        ADD COLUMN dynamic_tag_state TEXT NOT NULL DEFAULT 'not_configured'
+        CHECK (dynamic_tag_state IN ('not_configured', 'pending', 'applied', 'skipped'));
+
+        ALTER TABLE download_jobs
+        ADD COLUMN dynamic_tag_failure_code TEXT
+        CHECK (dynamic_tag_failure_code IS NULL
+            OR length(dynamic_tag_failure_code) BETWEEN 1 AND 128);
+
+        UPDATE source_profiles
+        SET dynamic_tag_template = '{year}年{quarter}月新番'
+        WHERE id = 'mikan' AND dynamic_tag_template IS NULL;
+
+        CREATE INDEX ix_download_jobs_dynamic_tag_state
+        ON download_jobs(dynamic_tag_state, updated_at_utc);
+        """;
 
     private const string DownloadSeedingLifecycle = """
         ALTER TABLE download_jobs

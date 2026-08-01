@@ -107,6 +107,7 @@ sources:
       - mikanani.me
     category: animegonet
     tags: []
+    dynamic_tag_template: '{year}年{quarter}月新番'
     seeding_time_minutes: 0
     rss_filter_enabled: true
     rss_priority_enabled: true
@@ -163,6 +164,12 @@ data_update:
 `downloader_id` 绑定不同 qBittorrent 实例。所有下载器 `download_path` 必须位于
 全局 `paths.download_path` 内。Mikan 默认整理语义固定为 `move`，因此做种分钟
 必须为 0。
+
+`dynamic_tag_template` 留空即关闭；默认 Mikan 值与上游一致。支持 `{year}`、
+`{quarter}`、`{quarter_index}`、`{quarter_name}`、`{ep}`、`{week}`、
+`{week_name}`，逗号分隔多个 qB tag。模板在任务创建时随 SourceProfile revision
+冻结，只在 TMDB 元数据确认后的暂停下载准备阶段展开；不会把 passkey、凭据或
+未展开模板发送到 qB。
 
 季度失败链按 P4 → P3 → P2 → P1 逐级执行；四项均默认关闭。P3 需要 bgmid，并按
 Bangumi 前作名字和开播日期重新验证 TMDB Series+Season；P2 只从统一导入任务
@@ -230,6 +237,7 @@ TMDB/Bangumi redirect、全局代理、请求超时、季度失败开关和刷�
 qBittorrent，不能自动猜测。
 
 Python/JavaScript 插件、旧缓存/日志路径和旧 Bolt 数据副作用不会进入新主程序；
-它们只保留在原字节备份中。旧 `setting.tag` 是动态模板，而当前
-`SourceProfile.tags` 是静态 tag，因此也不会被错误转换成字面量静态 tag。Mikan
-Cookie 和动态 tag 的专用新模型尚未完成时，同样以备份作为恢复真相源。
+它们只保留在原字节备份中。旧 `setting.tag` 是动态模板，会迁移到
+`sources.mikan.dynamic_tag_template`；它不会进入静态 `SourceProfile.tags`，也不会
+在 Torrent 初次投递时以未展开字面量发送。模板会随任务路由快照冻结，在元数据
+确认后的下载准备阶段才渲染并写入 qB。

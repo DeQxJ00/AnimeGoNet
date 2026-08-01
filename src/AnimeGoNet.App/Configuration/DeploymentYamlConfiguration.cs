@@ -331,6 +331,8 @@ internal static class DeploymentYamlConfiguration
         Add(values, "sources:mikan:allowed_torrent_hosts:0", "mikanani.me");
         Alias(values, "setting:category", "sources:mikan:category");
         Add(values, "sources:mikan:category", "animegonet");
+        Alias(values, "setting:tag", "sources:mikan:dynamic_tag_template");
+        Add(values, "sources:mikan:dynamic_tag_template", "{year}年{quarter}月新番");
         AliasAny(
             values,
             [
@@ -570,8 +572,8 @@ internal static class DeploymentYamlConfiguration
         var bt = defaults.Downloaders["bt"];
         return $$"""
             # AnimeGoNet 部署配置。此文件由旧版 {{Required(values, "version")}} 配置迁移；
-            # 如启用 backup，原文件已按版本和 UTC 时间备份。Python 插件及动态 tag
-            # 模板不会被误写为当前静态配置。
+            # 如启用 backup，原文件已按版本和 UTC 时间备份。Python 插件不会迁移；
+            # 旧动态 tag 模板迁移到来源级后置赋值，不会作为静态 tag 提前发送。
             version: {{CurrentVersion}}
 
             paths:
@@ -601,6 +603,7 @@ internal static class DeploymentYamlConfiguration
                   - mikanani.me
                 category: {{Scalar(Configured(values, "sources:mikan:category", "animegonet"))}}
                 tags: []
+                dynamic_tag_template: {{Scalar(Configured(values, "sources:mikan:dynamic_tag_template", "{year}年{quarter}月新番"))}}
                 seeding_time_minutes: {{Integer(values, "sources:mikan:seeding_time_minutes", 0)}}
                 rss_filter_enabled: true
                 rss_priority_enabled: true
@@ -796,6 +799,7 @@ internal static class DeploymentYamlConfiguration
                   - mikanani.me
                 category: animegonet
                 tags: []
+                dynamic_tag_template: '{year}年{quarter}月新番'
                 seeding_time_minutes: 0
                 rss_filter_enabled: true
                 rss_priority_enabled: true

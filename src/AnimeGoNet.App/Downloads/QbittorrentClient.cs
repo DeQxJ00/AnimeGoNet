@@ -153,6 +153,41 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
     public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
         PostHashesAsync("api/v2/torrents/stop", hashes, null, cancellationToken);
 
+    public async Task AddTagsAsync(
+        IReadOnlyList<string> hashes,
+        IReadOnlyList<string> tags,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(hashes);
+        ArgumentNullException.ThrowIfNull(tags);
+        if (hashes.Count == 0)
+        {
+            throw new ArgumentException("At least one torrent hash is required.", nameof(hashes));
+        }
+
+        foreach (var hash in hashes)
+        {
+            ValidateHash(hash);
+        }
+
+        var normalizedTags = SourceDownloadPolicy.NormalizeTags(
+            tags.Select(tag => (string?)tag));
+        if (normalizedTags.Count == 0)
+        {
+            throw new ArgumentException("At least one tag is required.", nameof(tags));
+        }
+
+        using var response = await _httpClient.PostAsync(
+            "api/v2/torrents/addTags",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["hashes"] = string.Join('|', hashes),
+                ["tags"] = string.Join(',', normalizedTags),
+            }),
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
     public Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
         PostHashesAsync("api/v2/torrents/start", hashes, null, cancellationToken);
 

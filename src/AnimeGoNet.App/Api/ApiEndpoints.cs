@@ -2381,6 +2381,7 @@ public static class ApiEndpoints
                 request.AllowedTorrentHosts,
                 request.Category,
                 request.Tags,
+                request.DynamicTagTemplate,
                 request.SeedingTimeMinutes,
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
@@ -2444,6 +2445,7 @@ public static class ApiEndpoints
                 request.AllowedTorrentHosts,
                 request.Category,
                 request.Tags,
+                request.DynamicTagTemplate,
                 request.SeedingTimeMinutes,
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
@@ -2565,6 +2567,7 @@ public static class ApiEndpoints
             profile.FileStrategy,
             profile.Category,
             profile.Tags,
+            profile.DynamicTagTemplate,
             profile.SeedingTimeMinutes,
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
@@ -4776,6 +4779,7 @@ public static class ApiEndpoints
             profile.AllowedTorrentHosts,
             profile.Category,
             profile.Tags,
+            profile.DynamicTagTemplate,
             profile.SeedingTimeMinutes,
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
@@ -4875,6 +4879,7 @@ public static class ApiEndpoints
         IReadOnlyList<string?>? allowedTorrentHosts,
         string? category,
         IReadOnlyList<string?>? tags,
+        string? dynamicTagTemplate,
         int? seedingTimeMinutes,
         bool rssFilterEnabled,
         bool rssPriorityEnabled,
@@ -4924,6 +4929,9 @@ public static class ApiEndpoints
             category ?? current?.Category ?? "animegonet");
         var normalizedTags = SourceDownloadPolicy.NormalizeTags(
             tags ?? current?.Tags.Select(value => (string?)value) ?? []);
+        var normalizedDynamicTagTemplate = dynamicTagTemplate is null && current is not null
+            ? current.DynamicTagTemplate
+            : DownloadDynamicTagTemplate.Normalize(dynamicTagTemplate);
         var normalizedSeedingTime = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
             normalizedStrategy,
             seedingTimeMinutes
@@ -4953,7 +4961,8 @@ public static class ApiEndpoints
             rssFilterEnabled,
             rssPriorityEnabled,
             enabled,
-            normalizedMikanIdentityCookie);
+            normalizedMikanIdentityCookie,
+            normalizedDynamicTagTemplate);
     }
 
     private static string RequireCanonicalStableId(string? value, string name)
@@ -5076,6 +5085,9 @@ public static class ApiEndpoints
             record.SeedingTargetMinutes,
             record.SeedingElapsedSeconds,
             record.SeedingCompletedAtUtc,
+            record.DynamicTags,
+            record.DynamicTagState,
+            record.DynamicTagFailureCode,
             record.IsStale,
             record.Revision,
             record.SnapshotAtUtc,

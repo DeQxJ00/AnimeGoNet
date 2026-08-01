@@ -4,6 +4,7 @@ using AnimeGoNet.Core.Scheduling;
 namespace AnimeGoNet.Core.Configuration;
 
 using AnimeGoNet.Core.Sources;
+using AnimeGoNet.Core.Downloads;
 
 public static partial class AnimeGoOptionsValidator
 {
@@ -94,6 +95,7 @@ public static partial class AnimeGoOptionsValidator
             {
                 _ = SourceDownloadPolicy.NormalizeCategory(profile.Category);
                 _ = SourceDownloadPolicy.NormalizeTags(profile.Tags);
+                _ = DownloadDynamicTagTemplate.Normalize(profile.DynamicTagTemplate);
                 _ = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
                     profile.FileStrategy switch
                     {

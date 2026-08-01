@@ -47,6 +47,9 @@ public sealed class DownloadManagementApiTests
         Assert.Equal(0, item.GetProperty("seeding_target_minutes").GetInt32());
         Assert.Equal(0, item.GetProperty("seeding_elapsed_seconds").GetInt64());
         Assert.Equal(JsonValueKind.Null, item.GetProperty("seeding_completed_at_utc").ValueKind);
+        Assert.Equal("pending", item.GetProperty("dynamic_tag_state").GetString());
+        Assert.Empty(item.GetProperty("dynamic_tags").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("dynamic_tag_failure_code").ValueKind);
 
         using var detailResponse = await fixture.App.Client.GetAsync(
             $"/api/v1/downloads/{fixture.JobId}");
@@ -59,6 +62,9 @@ public sealed class DownloadManagementApiTests
         Assert.Equal(
             "not_required",
             detail.RootElement.GetProperty("summary").GetProperty("seeding_state").GetString());
+        Assert.Equal(
+            "pending",
+            detail.RootElement.GetProperty("summary").GetProperty("dynamic_tag_state").GetString());
         Assert.Equal("episode.mkv", file.GetProperty("relative_path").GetString());
         Assert.Equal(0.6, file.GetProperty("progress").GetDouble());
         Assert.True(file.GetProperty("wanted").GetBoolean());
@@ -370,6 +376,12 @@ public sealed class DownloadManagementApiTests
             int priority,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes,
+            IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
         public Task PauseAsync(
             IReadOnlyList<string> hashes,

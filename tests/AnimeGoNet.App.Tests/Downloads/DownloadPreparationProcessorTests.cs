@@ -97,6 +97,86 @@ public sealed class DownloadPreparationProcessorTests
         Assert.All(state.Files, file => Assert.Null(file.Index));
     }
 
+    [Fact]
+    public async Task AppliesRenderedCanonicalMetadataTagsBeforeResumeAndAuditsResult()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files = [new DownloadFileSnapshot(0, "episode.mkv", 5, 0, 1)],
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(app, [("episode.mkv", 5L, "episode")]);
+        await ConfigureDynamicTagFixtureAsync(
+            app,
+            taskId,
+            "{year}年{quarter}月新番,EP{ep},{week_name}",
+            new DateOnly(2026, 4, 6),
+            3);
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.Completed, result);
+        var tags = Assert.Single(client.TagCalls);
+        Assert.Equal(["2026年4月新番", "EP3", "星期一"], tags.Tags);
+        Assert.True(client.Events.IndexOf("tags") < client.Events.IndexOf("resume"));
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("applied", state.DynamicTagState);
+        Assert.Equal(["2026年4月新番", "EP3", "星期一"], state.DynamicTags);
+        Assert.Null(state.DynamicTagFailureCode);
+        Assert.Equal(1, state.DynamicTagEventCount);
+    }
+
+    [Fact]
+    public async Task MissingCanonicalAirDateSkipsDynamicTagWithoutBlockingDownload()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files = [new DownloadFileSnapshot(0, "episode.mkv", 5, 0, 1)],
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(app, [("episode.mkv", 5L, "episode")]);
+        await ConfigureDynamicTagFixtureAsync(app, taskId, "{year}年新番", null, 3);
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.Completed, result);
+        Assert.Empty(client.TagCalls);
+        Assert.Single(client.Resumed);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("skipped", state.DynamicTagState);
+        Assert.Equal("dynamic_tag_air_date_unavailable", state.DynamicTagFailureCode);
+        Assert.Equal(1, state.DynamicTagEventCount);
+    }
+
+    [Fact]
+    public async Task QbittorrentTagFailureLeavesPreparationRetryableAndStopped()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files = [new DownloadFileSnapshot(0, "episode.mkv", 5, 0, 1)],
+            AddTagsFailure = new HttpRequestException("fixture"),
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(app, [("episode.mkv", 5L, "episode")]);
+        await ConfigureDynamicTagFixtureAsync(
+            app,
+            taskId,
+            "{year}年新番",
+            new DateOnly(2026, 4, 6),
+            3);
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.RetryScheduled, result);
+        Assert.Empty(client.Resumed);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("pending", state.PreparationPhase);
+        Assert.Equal("qbittorrent_http_error", state.PreparationFailureCode);
+        Assert.Equal("pending", state.DynamicTagState);
+        Assert.Empty(state.DynamicTags);
+        Assert.Equal(0, state.DynamicTagEventCount);
+    }
+
     private static async Task<string> PrepareTaskAsync(
         RunningApp app,
         params (string Path, long Size, string Disposition)[] files)
@@ -162,6 +242,59 @@ public sealed class DownloadPreparationProcessorTests
         return taskId;
     }
 
+    private static async Task ConfigureDynamicTagFixtureAsync(
+        RunningApp app,
+        string taskId,
+        string template,
+        DateOnly? seasonAirDate,
+        int episodeNumber)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        var now = DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+        await using (var series = connection.CreateCommand())
+        {
+            series.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, canonical_name, needs_tmdb_completion,
+                    created_at_utc, updated_at_utc)
+                VALUES ('dynamic-tag-series', 900001, 'Dynamic Tag Fixture', 0, $now, $now);
+
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name, air_date,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'dynamic-tag-season', 'dynamic-tag-series', 4, 'Season 4',
+                    $air_date, $now, $now);
+                """;
+            series.Parameters.AddWithValue("$now", now);
+            series.Parameters.AddWithValue(
+                "$air_date",
+                seasonAirDate is null
+                    ? DBNull.Value
+                    : seasonAirDate.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+            await series.ExecuteNonQueryAsync();
+        }
+
+        await using var task = connection.CreateCommand();
+        task.CommandText = """
+            UPDATE ingest_tasks
+            SET route_snapshot_json = json_set(
+                route_snapshot_json, '$.dynamic_tag_template', $template)
+            WHERE id = $task_id;
+
+            UPDATE task_files
+            SET tmdb_series_id = 900001,
+                tmdb_season_number = 4,
+                tmdb_episode_number = $episode
+            WHERE task_id = $task_id AND disposition = 'episode';
+            """;
+        task.Parameters.AddWithValue("$template", template);
+        task.Parameters.AddWithValue("$task_id", taskId);
+        task.Parameters.AddWithValue("$episode", episodeNumber);
+        Assert.Equal(2, await task.ExecuteNonQueryAsync());
+    }
+
     private static async Task<PreparationState> ReadStateAsync(RunningApp app, string taskId)
     {
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
@@ -170,11 +303,17 @@ public sealed class DownloadPreparationProcessorTests
         string jobState;
         string preparationState;
         string? preparationFailureCode;
+        string dynamicTagState;
+        string[] dynamicTags;
+        string? dynamicTagFailureCode;
         await using (var job = connection.CreateCommand())
         {
             job.CommandText = """
                 SELECT task.status, download_jobs.state, download_jobs.preparation_state,
-                       download_jobs.preparation_failure_code
+                       download_jobs.preparation_failure_code,
+                       download_jobs.dynamic_tag_state,
+                       download_jobs.dynamic_tags_json,
+                       download_jobs.dynamic_tag_failure_code
                 FROM ingest_tasks AS task
                 JOIN download_jobs ON download_jobs.task_id = task.id
                 WHERE task.id = $task_id;
@@ -186,6 +325,9 @@ public sealed class DownloadPreparationProcessorTests
             jobState = reader.GetString(1);
             preparationState = reader.GetString(2);
             preparationFailureCode = reader.IsDBNull(3) ? null : reader.GetString(3);
+            dynamicTagState = reader.GetString(4);
+            dynamicTags = JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [];
+            dynamicTagFailureCode = reader.IsDBNull(6) ? null : reader.GetString(6);
         }
 
         var files = new List<FileState>();
@@ -206,11 +348,27 @@ public sealed class DownloadPreparationProcessorTests
             }
         }
 
+        await using var eventCount = connection.CreateCommand();
+        eventCount.CommandText = """
+            SELECT COUNT(*)
+            FROM download_job_events AS event
+            JOIN download_jobs AS job ON job.id = event.job_id
+            WHERE job.task_id = $task_id AND event.kind = 'dynamic_tag';
+            """;
+        eventCount.Parameters.AddWithValue("$task_id", taskId);
+        var dynamicTagEventCount = Convert.ToInt32(
+            await eventCount.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture);
+
         return new PreparationState(
             taskStatus,
             jobState,
             preparationState,
             preparationFailureCode,
+            dynamicTagState,
+            dynamicTags,
+            dynamicTagFailureCode,
+            dynamicTagEventCount,
             files);
     }
 
@@ -227,6 +385,12 @@ public sealed class DownloadPreparationProcessorTests
         public IReadOnlyList<DownloadFileSnapshot> Files { get; init; } = [];
 
         public List<(int[] Indexes, int Priority)> PriorityCalls { get; } = [];
+
+        public List<(string[] Hashes, string[] Tags)> TagCalls { get; } = [];
+
+        public List<string> Events { get; } = [];
+
+        public Exception? AddTagsFailure { get; init; }
 
         public List<string> Resumed { get; } = [];
 
@@ -256,6 +420,20 @@ public sealed class DownloadPreparationProcessorTests
             return Task.CompletedTask;
         }
 
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes,
+            IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default)
+        {
+            TagCalls.Add((hashes.ToArray(), tags.ToArray()));
+            Events.Add("tags");
+            if (AddTagsFailure is not null)
+            {
+                throw AddTagsFailure;
+            }
+            return Task.CompletedTask;
+        }
+
         public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
         {
             Paused.AddRange(hashes);
@@ -265,6 +443,7 @@ public sealed class DownloadPreparationProcessorTests
         public Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
         {
             Resumed.AddRange(hashes);
+            Events.Add("resume");
             return Task.CompletedTask;
         }
 
@@ -285,5 +464,9 @@ public sealed class DownloadPreparationProcessorTests
         string JobState,
         string PreparationPhase,
         string? PreparationFailureCode,
+        string DynamicTagState,
+        IReadOnlyList<string> DynamicTags,
+        string? DynamicTagFailureCode,
+        int DynamicTagEventCount,
         IReadOnlyList<FileState> Files);
 }

@@ -121,6 +121,12 @@ public sealed class GracefulShutdownTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes,
+            IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task PauseAsync(
             IReadOnlyList<string> hashes,
             CancellationToken cancellationToken = default) =>

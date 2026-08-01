@@ -31,4 +31,5 @@ public sealed record ClaimedStagedTorrentRecord(
     IReadOnlyList<string> Tags,
     int SeedingTimeMinutes,
     string LeaseToken,
-    int AttemptCount);
+    int AttemptCount,
+    string? DynamicTagTemplate = null);

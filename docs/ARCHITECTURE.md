@@ -27,7 +27,7 @@ AnimeGoNet.slnx
 ## 2. 配置、数据与目录真相源
 
 - 部署配置文件保存监听地址、Access Key、`data_path`、`download_path`、`save_path`、命名 qBittorrent 实例、路径映射、TMDB/AI 连接与更新策略。
-- 旧 `1.1.0`～`1.7.1` `setting:`/`advanced:` qBittorrent 配置在完整解析和已知字段校验后，默认以 `CreateNew` 在原目录保存原字节版本化备份，再从同目录临时文件原子替换为规范 1.7.1；同秒冲突只增序号，不覆盖证据。Transmission/其他客户端保持原文件并继续 fail closed。Python/JavaScript 插件和旧动态 tag 模板不伪装成当前 C# 插件或静态 tag，只保留在备份中。
+- 旧 `1.1.0`～`1.7.1` `setting:`/`advanced:` qBittorrent 配置在完整解析和已知字段校验后，默认以 `CreateNew` 在原目录保存原字节版本化备份，再从同目录临时文件原子替换为规范 1.7.1；同秒冲突只增序号，不覆盖证据。Transmission/其他客户端保持原文件并继续 fail closed。Python/JavaScript 插件不进入当前 C# 运行时；旧动态 tag 模板迁移到来源专用字段，不伪装成静态 tag。
 - 环境变量可以覆盖部署配置；WebUI 显示最终值与来源，被环境变量覆盖的字段只读。Web/API 写入的 qB 覆盖位于 `data_path/config/downloaders.private.json`，TMDB/季度失败链/AI/offset/Torrent/AnimeGoNetData 更新覆盖位于 `data_path/config/application.private.json`；两者都采用 source-generated JSON、revision、同目录临时文件原子替换，Unix 权限为 `0600`。这些文件属于部署 secret，必须随 data_path 一起保护且不得提交。应用配置必须先调用无副作用的预览端点，服务端以相同候选构造和校验逻辑返回字段级脱敏 diff；密钥只返回 `继承/已配置/已清除` 状态。覆盖或恢复前，当前文件按 revision 原子备份为 `data_path/backups/application.private.revision-{revision:D20}.json`，备份同样为 `0600`；同 revision 已存在不同内容时拒绝写入，不能覆盖证据。Web 不展示或改写运维人员维护的原始部署 YAML，避免注释/格式丢失、secret 混入和环境覆盖被伪装成写入成功；data update 七个字段保存后例外地热应用，其他应用覆盖继续在重启后整体生效。
 - SQLite 保存来源 profile、规则、动画、任务、匹配尝试、下载/整理状态、完成记录和审计，不复制密码等部署配置。
 - Docker 默认路径固定为 `data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。Compose 必须把 AnimeGoNet 与 qBittorrent 的共同宿主父目录映射为同一容器内 `/download`。
@@ -50,7 +50,7 @@ AnimeGoNet.slnx
 
 ### 来源与路由
 
-- `SourceProfile`：稳定小写 ID、adapter、下载器实例 ID、元数据字段 schema、规则 revision、文件策略、category/tag、路径与做种策略。
+- `SourceProfile`：稳定小写 ID、adapter、下载器实例 ID、元数据字段 schema、规则 revision、文件策略、category、静态 tag、元数据动态 tag 模板、路径与做种策略。
 - RSS 编排在请求起点取得一次 SourceProfile record，并通过强类型 `FilterSourceProfileSnapshot` 把相同 revision 的过滤开关传给编译期 filter；winner staging 直接接收原 record，不重新查询当前 profile。这样并发配置更新只能影响后续请求，不能产生规则与下载路由混合快照。
 - `DownloaderInstance`：部署配置或 data_path 私有覆盖中的命名 qBittorrent 连接；API 只回显安全 URL/路径和“凭据是否配置”，密码只写。任务只保存实例 ID 和不可变路由快照，不保存明文密码。
 - `IngestBatch` / `IngestItem`：统一导入命令；保存 title、脱敏 Torrent URL 指纹、source item/work ID、`mikanid`、`groupid`、可选 bgmid/anidbid/imdbid。
@@ -95,6 +95,7 @@ Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可
 
 - 只使用 `Microsoft.Data.Sqlite`、参数化命令和显式 SQL，不使用 EF Core、运行时实体映射或反射 migration。
 - schema migration 是按版本排序的编译期常量；启动时在单事务执行并记录 `schema_migrations(version, name, applied_at_utc)`。schema v10 起 media organization 使用 job 级租约，逐文件 `file_operations` 每个 task file 唯一，并把文件完成与下载器 cleanup 作为两个可独立恢复阶段。schema v12 起删除确认不依赖不透明 JSON：预览把完成记录 ID、下载器实例+hash、源/媒体绝对路径及其捕获根目录规范排序后计算 SHA-256 指纹；确认必须提交该指纹，事务内重新计算一致后才冻结为逐项 `delete_execution_items`，同一任务只能存在一个活动计划。执行器按 qB 任务、源文件、媒体文件、业务记录的顺序消费不可变目标并持久化逐项结果；qB 永远使用 `deleteFiles=false`，精确文件删除拒绝根目录本身、目录、越界路径和符号链接穿越且不清理父目录，缺失文件作为幂等 skipped。只有前置外部动作成功后才事务删除 completion（alias 级联）及同 TMDB Episode 的 completed claim。schema v13 将 Mikan RSS whitelist、blacklist、priority groups、具名数组和值拆为带显式 position/FK/唯一约束的规范化表；所有匹配值保存前按 invariant lowercase 归一，整套规则用 revision 乐观并发替换，启动只在不存在时写默认规则。schema v20 为 fallback completion 增加 `pending/resolved/duplicate_after_resolution` 恢复状态、规范 completion 外键与显式 fallback alias；规范 completion 删除时通过级联同时失效恢复记录和 alias。schema v21 把恢复后的 `tvshow.nfo` 更新建模为带租约、失败码和重试时间的持久作业；目标只来自原下载任务捕获的 `save_root_path`，不从媒体路径字符串猜测根目录。schema v27 保存目录数据库索引、每次扫描和逐文件稳定拒绝码；扫描不跟随 reparse point/symlink，单侧车上限 64 KiB，刷新与整理侧写通过进程内门禁串行，避免全量刷新覆盖刚完成的增量索引。schema v28 保存 AnimeGoNetData 版本、active/previous 指针、导入/回滚运行审计、独立 staging subjects/episodes 与版本化归档表；压缩包完整验证后才在单事务内复制 staging、切换 active 并裁剪旧版本，失败不修改旧 active。schema v29 增加带自增顺序的远程检查/下载/导入审计及已验证下载包目录；下载只写应用创建的 `.partial-*`，长度与哈希全部通过后才同卷移动到 `data-update/packages/<version>`，数据库不保存 manifest/asset URL。schema v30 为季度详情审计增加 task file 规范身份、解析 Run 规范身份、Run 尝试时间和 Mikan 人工规则作用域索引；不复制或反规范化审计数据。schema v33 将任务创建时的做种目标复制到 download job，以 qB 累计秒数产生单调状态并保存首次完成时间；`wait_move` 和 `link_delete` 的整理/删除门禁只读取该持久化状态，不依赖可能丢失或回退的瞬时 qB state。
+- schema v34 保存来源动态 tag 模板及 job 的 `pending/applied/skipped/not_configured` 状态、实际 tag 和稳定失败码；后置 qB 赋值可重试且历史任务不受 profile 修改影响。
 - 启用 `PRAGMA foreign_keys=ON`、WAL、busy timeout；每个写入工作流使用短事务。
 - 枚举按稳定小写字符串或显式整数存储，禁止依赖 .NET 类型名。
 - 所有时间使用 UTC ISO-8601；所有比较 ID（source/profile/downloader）在入口转小写 invariant。

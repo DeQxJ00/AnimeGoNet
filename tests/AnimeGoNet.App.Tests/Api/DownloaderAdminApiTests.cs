@@ -400,6 +400,9 @@ public sealed class DownloaderAdminApiTests
         public Task SetFilePriorityAsync(
             string hash, IReadOnlyList<int> fileIndexes, int priority,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes, IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task PauseAsync(
             IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task ResumeAsync(
