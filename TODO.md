@@ -142,7 +142,7 @@
 - [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
 - [x] 实现外部 C# 插件进程：manifest、JSON Lines、环境隔离、惰性复用、插件级指数退避/自动禁用和独立数据目录；启停/args/vars 使用 revision 原子私有文件，管理 API/schema 表单支持 writeOnly 留空保留/显式清除；stderr 按插件 ID 结构化脱敏限流；source/feed/parser/filter/rename/schedule 六类外部包均以固定 operation、source-generated DTO 和严格结果校验注册进 `PluginCatalog`，非法结果关闭会话并进入退避。
 - [x] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板：SDK 以 source-generated `JsonTypeInfo` 驱动六类强类型处理器，严格执行 initialize/execute/health/shutdown JSON Lines、环境身份、输入输出上限和稳定业务错误；模板包可生成六类最小实现，五 RID workflow 使用原生 Windows/Linux ARM64 与 macOS ARM64 runner 实际发布，并由 `eng/verify-plugin-template.ps1` 生成六类项目、Release 编译、NativeAOT 发布及四阶段真实进程 smoke。
-- [ ] 实现 `AnimeGo.PluginTool`。
+- [x] 实现 `AnimeGo.PluginTool`：AOT-safe `validate/run/pack` CLI 复用主程序 manifest、配置 schema、进程协议和六类结果校验；严格 fixture UTF-8/JSON/operation/config 边界、包树权限/链接/容量审计、内容摘要、确定性 ZIP 与原子覆盖已完成。专用 fake 测试覆盖退出码、脱敏、生命周期、健康失败、临时/显式 data path、变更竞态和可重复打包；五 RID template workflow 使用原生工具对生成的 NativeAOT filter 执行真实 validate→run→pack。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
 - [x] 移植 ordered filter manager：按显式配置或目录顺序逐级传递 accepted items，插件错误/无效索引立即终止，拒绝项不会进入后续 filter；空显式链等价于跳过过滤。
 - [>] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约和 winner→统一 staging 已串联；download worker 到最终整理的真实 qB/container 全链验收仍待实现。

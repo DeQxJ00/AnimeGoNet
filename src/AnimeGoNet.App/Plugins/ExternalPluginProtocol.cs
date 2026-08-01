@@ -11,6 +11,29 @@ public static class ExternalPluginMethods
     public const string Shutdown = "shutdown";
 }
 
+public static class ExternalPluginOperations
+{
+    public const string SourceNormalize = "source.normalize";
+    public const string FeedFetch = "feed.fetch";
+    public const string ParserParse = "parser.parse";
+    public const string FilterAll = "filter.all";
+    public const string RenamePlan = "rename.plan";
+    public const string ScheduleExecute = "schedule.execute";
+
+    public static string ForType(string pluginType) => pluginType switch
+    {
+        "source" => SourceNormalize,
+        "feed" => FeedFetch,
+        "parser" => ParserParse,
+        "filter" => FilterAll,
+        "rename" => RenamePlan,
+        "schedule" => ScheduleExecute,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(pluginType),
+            "External plugin operations require a supported plugin type."),
+    };
+}
+
 public sealed record ExternalPluginWireRequest(
     [property: JsonPropertyName("apiVersion")] int ApiVersion,
     [property: JsonPropertyName("requestId")] string RequestId,

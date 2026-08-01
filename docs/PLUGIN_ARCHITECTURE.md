@@ -209,6 +209,50 @@ manifest identity 已替换并 Release 零警告编译；随后发布 filter Nat
 真实 stdin/stdout 跑通 initialize → execute → health → shutdown。主项目五 RID NativeAOT
 workflow 在对应原生 runner 上运行同一脚本，Linux/Windows ARM64 不做 x64 伪交叉验证。
 
+### 7.1 PluginTool 发布前检查
+
+源码仓库内可直接运行：
+
+```powershell
+dotnet run --project src/AnimeGo.PluginTool -c Release -- validate <package-directory> --rid win-x64
+dotnet run --project src/AnimeGo.PluginTool -c Release -- run <package-directory> --fixture filter.fixture.json --rid win-x64
+dotnet run --project src/AnimeGo.PluginTool -c Release -- pack <package-directory> --output com.example.filter-win-x64.zip --rid win-x64
+```
+
+打包为 .NET tool 后命令名为 `animego-plugin`。三个命令均只向 stdout 写一行稳定 JSON；
+错误只向 stderr 写一行稳定 JSON，不输出堆栈、插件异常消息或 fixture/config 内容。
+
+- `validate` 复用主程序的严格 manifest、RID、entry point、配置 schema 校验，并递归审计
+  包内链接/reparse point、Unix 组/其他用户可写权限、路径、文件数和容量；输出整个包的
+  canonical SHA-256，不执行插件。
+- `run` 先完成 `validate`，再要求当前主机 RID 与包一致。fixture 必须是 1 byte～1 MiB、
+  无 BOM 的有效 UTF-8、无重复/未知字段的严格 JSON；`operation` 必须精确对应插件类型，
+  `config` 必须通过包内 schema。工具随后通过与主程序相同的协议启动真实进程，依次执行
+  initialize、fixture execute、六类强类型结果校验、health 和 shutdown。未传 `--data-path`
+  时只创建并清理一个 GUID 命名的系统临时目录；显式目录不会由工具删除。
+- `pack` 在完整审计后按 ordinal 路径排序、固定 ZIP 时间戳和属性，逐文件重新核对长度和
+  SHA-256，先在目标目录写 GUID 临时文件并完成 archive hash，最后原子移动。输出必须为
+  包目录外的 `.zip`；已有文件只有显式 `--force` 才替换。
+
+filter fixture 示例：
+
+```json
+{
+  "operation": "filter.all",
+  "payload": {
+    "sourceProfileId": "fixture",
+    "items": [],
+    "arguments": {},
+    "sourceProfileSnapshot": null
+  },
+  "config": {}
+}
+```
+
+fixture 应只使用合成输入，不应保存 Cookie、passkey 或 WebUI 凭据。退出码为：`0` 成功、
+`2` 命令行错误、`3` manifest/包审计错误、`4` fixture/config 错误、`5` 进程协议或强类型
+结果错误、`6` 文件/打包错误、`130` 取消。
+
 ## 8. 验证与提交拆分
 
 1. `feat(plugins): add csharp plugin abstractions and catalog`

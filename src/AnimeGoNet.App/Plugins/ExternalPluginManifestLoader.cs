@@ -174,7 +174,7 @@ public sealed class ExternalPluginManifestLoader
         }
         EnsureLinkFreePath(packagePath, entryPointPath);
         EnsureSafePermissions(entryPointPath, isExecutable: true);
-        if (OperatingSystem.IsWindows()
+        if (manifest.Rid.StartsWith("win-", StringComparison.Ordinal)
             && !string.Equals(
                 Path.GetExtension(entryPointPath),
                 ".exe",

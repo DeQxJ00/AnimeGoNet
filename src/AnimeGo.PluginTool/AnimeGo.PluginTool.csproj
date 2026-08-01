@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AnimeGo.PluginTool</AssemblyName>
+    <RootNamespace>AnimeGo.PluginTool</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>animego-plugin</ToolCommandName>
+    <PackageId>AnimeGo.PluginTool</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Validate, execute fixtures against, and package AnimeGoNet external plugins.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AnimeGoNet.App/AnimeGoNet.App.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AnimeGo.PluginTool.Tests" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

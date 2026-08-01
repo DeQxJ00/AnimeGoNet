@@ -9,7 +9,7 @@
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 待验证 |
-| `cmd/plugin` | C# 内置插件测试与未来 `PluginTool` | 替换 | 待实现 | 协议/fixture tests |
+| `cmd/plugin` | `AnimeGo.PluginTool` validate/run/pack | 替换 | 已验证 | 严格 fixture/config/typed-result tests、确定性 ZIP、真实 NativeAOT 插件进程 smoke |
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认配置 tests 已通过；旧 YAML parity 待实现 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 待实现 | 12 份历史 YAML golden |
@@ -17,7 +17,7 @@
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |
-| 外部可执行插件包 | RID-specific C# process package | 新增 | 进行中 | manifest、JSON Lines、真实进程环境隔离、每插件惰性复用、指数退避/阈值自动禁用/reset 和安全运行状态已验证；持久启停配置、强类型 adapter、stderr 日志、SDK/Tool/WebUI 待实现 |
+| 外部可执行插件包 | RID-specific C# process package | 新增 | 已验证 | manifest、JSON Lines、真实进程环境隔离、惰性复用/退避/reset、配置 API/UI、六类 typed adapter、stderr、SDK/模板及 AOT-safe PluginTool 均有 fake/真实进程/五 RID 验收 |
 | parser 首个启用实现、filter 顺序串联 | `TitleParserManager` / `OrderedFeedFilterManager` | 保留 | 已验证 | 首个/显式 parser 不 fallback；filter accepted 逐级传递、错误短路、无效/重复 index、空链 tests；Mikan RSS 生产链回归 |
 | `internal/constant`、`exceptions` | 强类型常量、稳定错误码 | 保留 | 待实现 | domain tests |
 | `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 已验证 | 编译期 provider fan-out、统一 URL/凭据脱敏、有界 WebSocket stream，以及 `data_path/logs/animego.log` 的 Info+、2 MiB/14份/14天滚动文件均通过并发、轮转、生命周期和 NativeAOT smoke |

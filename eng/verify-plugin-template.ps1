@@ -118,6 +118,16 @@ try {
             throw "NativeAOT entry point '$entryPoint' was not produced."
         }
 
+        $publishedManifestPath = Join-Path $publishDirectory 'plugin.json'
+        $publishedManifest = Get-Content $publishedManifestPath -Raw | ConvertFrom-Json
+        $publishedManifest.rid = $rid
+        $publishedManifest.entryPoint = [System.IO.Path]::GetFileName($entryPoint)
+        $publishedManifestJson = $publishedManifest | ConvertTo-Json -Depth 8
+        [System.IO.File]::WriteAllText(
+            $publishedManifestPath,
+            $publishedManifestJson,
+            [System.Text.UTF8Encoding]::new($false))
+
         $dataPath = Join-Path $workingDirectory 'plugin-data'
         New-Item -ItemType Directory -Path $dataPath | Out-Null
         $previousId = $env:ANIMEGO_PLUGIN_ID
@@ -151,6 +161,77 @@ try {
             $env:ANIMEGO_PLUGIN_ID = $previousId
             $env:ANIMEGO_PLUGIN_API_VERSION = $previousApi
             $env:ANIMEGO_PLUGIN_DATA_PATH = $previousData
+        }
+
+        $toolPublishDirectory = Join-Path $workingDirectory "plugin-tool/$rid"
+        $toolProject = Join-Path $repositoryRoot 'src/AnimeGo.PluginTool/AnimeGo.PluginTool.csproj'
+        Invoke-DotNet publish $toolProject `
+            '--configuration' 'Release' `
+            '--runtime' $rid `
+            '--self-contained' 'true' `
+            '--output' $toolPublishDirectory `
+            '-p:PublishAot=true'
+
+        $toolEntryPoint = if ($rid.StartsWith('win-', [StringComparison]::Ordinal)) {
+            Join-Path $toolPublishDirectory 'AnimeGo.PluginTool.exe'
+        } else {
+            Join-Path $toolPublishDirectory 'AnimeGo.PluginTool'
+        }
+        if (-not (Test-Path $toolEntryPoint -PathType Leaf)) {
+            throw "NativeAOT plugin tool entry point '$toolEntryPoint' was not produced."
+        }
+
+        $fixturePath = Join-Path $workingDirectory 'filter.fixture.json'
+        $fixtureJson = @'
+{
+  "operation": "filter.all",
+  "payload": {
+    "sourceProfileId": "fixture",
+    "items": [],
+    "arguments": {},
+    "sourceProfileSnapshot": null
+  },
+  "config": {}
+}
+'@
+        [System.IO.File]::WriteAllText(
+            $fixturePath,
+            $fixtureJson,
+            [System.Text.UTF8Encoding]::new($false))
+
+        $validateOutput = & $toolEntryPoint validate $publishDirectory --rid $rid
+        if ($LASTEXITCODE -ne 0) {
+            throw "Native plugin tool validate failed with exit code $LASTEXITCODE."
+        }
+        $validateResult = $validateOutput | ConvertFrom-Json
+        if (-not $validateResult.ok -or $validateResult.package.id -ne 'com.example.filter') {
+            throw 'Native plugin tool validate returned an invalid result.'
+        }
+
+        $runOutput = & $toolEntryPoint run $publishDirectory `
+            --fixture $fixturePath `
+            --rid $rid `
+            --data-path $dataPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Native plugin tool run failed with exit code $LASTEXITCODE."
+        }
+        $runResult = $runOutput | ConvertFrom-Json
+        if (-not $runResult.ok -or -not $runResult.healthy) {
+            throw 'Native plugin tool did not complete a healthy real-process fixture run.'
+        }
+
+        $archivePath = Join-Path $workingDirectory "com.example.filter-$rid.zip"
+        $packOutput = & $toolEntryPoint pack $publishDirectory `
+            --output $archivePath `
+            --rid $rid
+        if ($LASTEXITCODE -ne 0) {
+            throw "Native plugin tool pack failed with exit code $LASTEXITCODE."
+        }
+        $packResult = $packOutput | ConvertFrom-Json
+        if (-not $packResult.ok `
+            -or -not (Test-Path $archivePath -PathType Leaf) `
+            -or $packResult.archiveSha256.Length -ne 64) {
+            throw 'Native plugin tool pack returned an invalid archive result.'
         }
     }
 

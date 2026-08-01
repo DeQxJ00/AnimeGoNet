@@ -124,7 +124,7 @@ internal sealed class ExternalSourceAdapter(
         SourceIngestContext context,
         CancellationToken cancellationToken) =>
         await InvokeAsync(
-            "source.normalize",
+            ExternalPluginOperations.SourceNormalize,
             Serialize(context, ExternalPluginAdapterJsonContext.Default.SourceIngestContext),
             ExternalPluginResultParser.ParseSource,
             static error => new SourceIngestResult(null, [error]),
@@ -143,7 +143,7 @@ internal sealed class ExternalFeedAdapter(
         FeedContext context,
         CancellationToken cancellationToken) =>
         await InvokeAsync(
-            "feed.fetch",
+            ExternalPluginOperations.FeedFetch,
             Serialize(context, ExternalPluginAdapterJsonContext.Default.FeedContext),
             ExternalPluginResultParser.ParseFeed,
             static error => new FeedResult(
@@ -165,7 +165,7 @@ internal sealed class ExternalParserAdapter(
         TitleParseContext context,
         CancellationToken cancellationToken) =>
         await InvokeAsync(
-            "parser.parse",
+            ExternalPluginOperations.ParserParse,
             Serialize(context, ExternalPluginAdapterJsonContext.Default.TitleParseContext),
             ExternalPluginResultParser.ParseTitle,
             static error => new TitleParseResult(
@@ -193,7 +193,7 @@ internal sealed class ExternalFilterAdapter(
         FilterContext context,
         CancellationToken cancellationToken) =>
         await InvokeAsync(
-            "filter.all",
+            ExternalPluginOperations.FilterAll,
             Serialize(context, ExternalPluginAdapterJsonContext.Default.FilterContext),
             result => ExternalPluginResultParser.ParseFilter(result, context.Items),
             static error => new FilterResult(
@@ -215,7 +215,7 @@ internal sealed class ExternalRenameAdapter(
         RenameContext context,
         CancellationToken cancellationToken) =>
         await InvokeAsync(
-            "rename.plan",
+            ExternalPluginOperations.RenamePlan,
             Serialize(context, ExternalPluginAdapterJsonContext.Default.RenameContext),
             ExternalPluginResultParser.ParseRename,
             static error => new RenameResult(false, null, [error]),
@@ -234,7 +234,7 @@ internal sealed class ExternalScheduleAdapter(
         ScheduledContext context,
         CancellationToken cancellationToken) =>
         await InvokeAsync(
-            "schedule.execute",
+            ExternalPluginOperations.ScheduleExecute,
             Serialize(context, ExternalPluginAdapterJsonContext.Default.ScheduledContext),
             ExternalPluginResultParser.ParseSchedule,
             static error => new ScheduledResult(false, null, [error], null),
@@ -663,6 +663,142 @@ internal static class ExternalPluginResultParser
         new(code, "The external plugin returned a result outside its typed contract.", innerException);
 }
 
+public static class ExternalPluginResultValidator
+{
+    public static void Validate(
+        string pluginType,
+        JsonElement result,
+        JsonElement? requestPayload = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginType);
+        _ = pluginType switch
+        {
+            "source" => (object)ExternalPluginResultParser.ParseSource(result),
+            "feed" => ExternalPluginResultParser.ParseFeed(result),
+            "parser" => ExternalPluginResultParser.ParseTitle(result),
+            "filter" => ExternalPluginResultParser.ParseFilter(
+                result,
+                ReadFilterItems(requestPayload)),
+            "rename" => ExternalPluginResultParser.ParseRename(result),
+            "schedule" => ExternalPluginResultParser.ParseSchedule(result),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(pluginType),
+                "External plugin result validation requires a supported plugin type."),
+        };
+    }
+
+    private static FilterItem[] ReadFilterItems(JsonElement? requestPayload)
+    {
+        if (requestPayload is not { ValueKind: JsonValueKind.Object } payload
+            || !payload.TryGetProperty("items", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+        {
+            throw new ExternalPluginProtocolException(
+                "filter_fixture_payload_invalid",
+                "Filter result validation requires the original fixture items.");
+        }
+        try
+        {
+            var parsed = JsonSerializer.Deserialize(
+                items,
+                ExternalPluginAdapterJsonContext.Default.FilterItemArray) ?? [];
+            if (parsed.Any(item => item is null))
+            {
+                throw new ExternalPluginProtocolException(
+                    "filter_fixture_payload_invalid",
+                    "Filter fixture items do not match the typed contract.");
+            }
+            return parsed;
+        }
+        catch (JsonException exception)
+        {
+            throw new ExternalPluginProtocolException(
+                "filter_fixture_payload_invalid",
+                "Filter fixture items do not match the typed contract.",
+                exception);
+        }
+    }
+}
+
+public static class ExternalPluginRequestValidator
+{
+    public static void Validate(string pluginType, JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid();
+        }
+        object? request;
+        try
+        {
+            request = pluginType switch
+            {
+                "source" => JsonSerializer.Deserialize(
+                    payload,
+                    ExternalPluginAdapterJsonContext.Default.SourceIngestContext),
+                "feed" => JsonSerializer.Deserialize(
+                    payload,
+                    ExternalPluginAdapterJsonContext.Default.FeedContext),
+                "parser" => JsonSerializer.Deserialize(
+                    payload,
+                    ExternalPluginAdapterJsonContext.Default.TitleParseContext),
+                "filter" => JsonSerializer.Deserialize(
+                    payload,
+                    ExternalPluginAdapterJsonContext.Default.FilterContext),
+                "rename" => JsonSerializer.Deserialize(
+                    payload,
+                    ExternalPluginAdapterJsonContext.Default.RenameContext),
+                "schedule" => JsonSerializer.Deserialize(
+                    payload,
+                    ExternalPluginAdapterJsonContext.Default.ScheduledContext),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(pluginType),
+                    "External plugin request validation requires a supported plugin type."),
+            };
+        }
+        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        {
+            throw Invalid(exception);
+        }
+        if (request is null || !HasRequiredMembers(request))
+        {
+            throw Invalid();
+        }
+    }
+
+    private static bool HasRequiredMembers(object request) => request switch
+    {
+        SourceIngestContext source => source.Source is not null,
+        FeedContext feed =>
+            feed.SourceProfileId is not null
+            && feed.FeedUrl is not null
+            && ValidMap(feed.Arguments),
+        TitleParseContext parser => parser.Title is not null && ValidMap(parser.Arguments),
+        FilterContext filter =>
+            filter.SourceProfileId is not null
+            && ValidMap(filter.Arguments)
+            && filter.Items is not null
+            && filter.Items.All(item =>
+                item is not null && item.Title is not null && item.TorrentUrl is not null),
+        RenameContext rename =>
+            rename.SourcePath is not null
+            && rename.SeriesName is not null
+            && rename.Disposition is not null
+            && ValidMap(rename.Arguments),
+        ScheduledContext schedule => schedule.TaskId is not null && ValidMap(schedule.Arguments),
+        _ => false,
+    };
+
+    private static bool ValidMap(IReadOnlyDictionary<string, string>? values) =>
+        values is not null && values.All(item => item.Key is not null && item.Value is not null);
+
+    private static ExternalPluginProtocolException Invalid(Exception? innerException = null) =>
+        new(
+            "plugin_fixture_payload_invalid",
+            "The fixture payload does not match the typed plugin request contract.",
+            innerException);
+}
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = false,
@@ -675,6 +811,7 @@ internal static class ExternalPluginResultParser
 [JsonSerializable(typeof(TitleParseContext))]
 [JsonSerializable(typeof(TitleParseResult))]
 [JsonSerializable(typeof(FilterContext))]
+[JsonSerializable(typeof(FilterItem[]))]
 [JsonSerializable(typeof(FilterResult))]
 [JsonSerializable(typeof(RenameContext))]
 [JsonSerializable(typeof(RenameResult))]
