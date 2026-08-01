@@ -200,6 +200,44 @@
       </div>
     </section>
 
+    <section id="cache-browser" aria-labelledby="cache-browser-title">
+      <div class="section-heading cache-browser-heading">
+        <div>
+          <p class="eyebrow">Safe SQLite cache view</p>
+          <h2 id="cache-browser-title">缓存浏览</h2>
+        </div>
+        <div class="cache-browser-actions">
+          <label>命名空间
+            <select id="cache-database">
+              <option value="bolt">bolt（可精确删除）</option>
+              <option value="bolt_sub">bolt_sub（只读）</option>
+            </select>
+          </label>
+          <button id="cache-reload" type="button" class="secondary-button">刷新缓存</button>
+        </div>
+      </div>
+      <p class="muted">页面只显示 bucket/key 的不可逆 SHA-256 标识、大小和时间；不会返回原始 key、JSON value、数据库路径或凭据。删除必须二次确认且条目变化后旧令牌立即失效。</p>
+      <p id="cache-status" class="muted" role="status">正在读取缓存…</p>
+      <div class="cache-browser-layout">
+        <aside aria-labelledby="cache-buckets-title">
+          <h3 id="cache-buckets-title">Buckets</h3>
+          <div id="cache-buckets" class="cache-bucket-list" aria-live="polite" aria-busy="true">
+            <p class="muted empty">正在读取 bucket…</p>
+          </div>
+        </aside>
+        <div>
+          <div id="cache-entries" class="cache-entry-list" aria-live="polite" aria-busy="true">
+            <p class="muted empty">请选择一个 bucket。</p>
+          </div>
+          <nav class="cache-pagination" aria-label="缓存条目分页">
+            <button id="cache-previous" type="button" class="secondary-button" disabled>上一页</button>
+            <span id="cache-page-label">第 1 页</span>
+            <button id="cache-next" type="button" class="secondary-button" disabled>下一页</button>
+          </nav>
+        </div>
+      </div>
+    </section>
+
     <section id="live-logs" aria-labelledby="live-logs-title">
       <div class="section-heading live-log-heading">
         <div>

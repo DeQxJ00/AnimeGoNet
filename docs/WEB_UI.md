@@ -212,3 +212,16 @@ Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共�
 模块逐步迁移，不改变服务端契约。`npm run web:test` 先确定性编译，再使用 Node 内置
 runner 验证同源门禁、凭据/header、请求体、取消传播、结构化失败、不可信正文和 204；
 CI 同时检查 `app.js` 与 `api-client.js` 必须和 TypeScript 源码一致。
+
+## 15. 缓存浏览与精确删除
+
+“缓存浏览”只展示 SQLite `cache_buckets/cache_entries` 的安全管理投影。用户可在
+`bolt` 与只读 `bolt_sub` 之间切换、选择 opaque bucket、分页查看 opaque key、JSON
+字节数、更新时间和过期时间。原始 bucket/key/value、数据库文件路径、业务表字段和
+凭据都不进入 API 响应，因此页面也无法显示或复制这些值。
+
+`bolt` 条目提供“删除此缓存项”，点击后还需浏览器明确二次确认。请求只携带 opaque
+bucket/key ID 和当前删除 token；服务端事务内确认 token 仍对应同一个 key/value/TTL/
+更新时间后才删除一条 cache entry。期间发生刷新或覆盖会返回稳定冲突并强制页面重新
+读取；`bolt_sub` 只显示“只读”，从 API 和页面两层都不提供删除。此功能不开放 SQL、
+整 bucket 删除、任意业务表修改或文件操作；业务记录和媒体删除继续只走四类删除中心。

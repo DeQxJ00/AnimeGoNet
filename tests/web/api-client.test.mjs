@@ -107,6 +107,11 @@ test("untrusted failure bodies and invalid success JSON are not displayed", asyn
 });
 
 test("204 responses support typed void operations", async () => {
-  const client = new ApiClient(null, async () => new Response(null, { status: 204 }));
-  assert.equal(await client.delete("/api/v1/items/1"), undefined);
+  let body;
+  const client = new ApiClient(null, async (_input, init) => {
+    body = init.body;
+    return new Response(null, { status: 204 });
+  });
+  assert.equal(await client.delete("/api/v1/items/1", { revision: 3 }), undefined);
+  assert.equal(body, '{"revision":3}');
 });

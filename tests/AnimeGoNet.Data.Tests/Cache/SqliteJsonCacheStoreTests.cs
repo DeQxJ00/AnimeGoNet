@@ -144,4 +144,96 @@ public sealed class SqliteJsonCacheStoreTests
         Assert.Equal("key-00", keys[0]);
         Assert.Equal("key-11", keys[^1]);
     }
+
+    [Fact]
+    public async Task BrowserProjectionUsesOpaqueIdsAndNeverReturnsKeysOrValues()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SqliteJsonCacheStore(fixture.Database);
+        const string secretKey = "https://tracker.invalid/private-passkey/file.torrent";
+        const string secretValue = "{\"password\":\"never-return-this\"}";
+        await store.PutJsonAsync("bolt", "private-cache", secretKey, secretValue, null, Now);
+
+        var bucket = Assert.Single(await store.ListBrowserBucketsAsync("bolt", Now));
+        Assert.Equal(64, bucket.BucketId.Length);
+        Assert.Equal(1, bucket.EntryCount);
+        Assert.DoesNotContain("private-cache", bucket.ToString(), StringComparison.Ordinal);
+
+        var page = await store.ListBrowserEntriesAsync("bolt", bucket.BucketId, 1, 25, Now);
+        Assert.NotNull(page);
+        var entry = Assert.Single(page.Items);
+        Assert.Equal(64, entry.EntryId.Length);
+        Assert.Equal(64, entry.DeleteToken.Length);
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(secretValue), entry.ValueBytes);
+        Assert.DoesNotContain(secretKey, page.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("never-return-this", page.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BrowserPagingPurgesExpiredAndKeepsStableBinaryOrder()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SqliteJsonCacheStore(fixture.Database);
+        await store.PutBatchJsonAsync(
+            "bolt",
+            "page",
+            [
+                new CacheEntryWrite("c", "3"),
+                new CacheEntryWrite("a", "1"),
+                new CacheEntryWrite("b", "2"),
+            ],
+            null,
+            Now);
+        await store.PutJsonAsync("bolt", "expired", "gone", "0", TimeSpan.FromSeconds(1), Now);
+
+        var buckets = await store.ListBrowserBucketsAsync("bolt", Now.AddSeconds(1));
+        Assert.Equal(2, buckets.Count);
+        Assert.Contains(buckets, bucket => bucket.EntryCount == 0);
+        var pageBucket = Assert.Single(buckets, bucket => bucket.EntryCount == 3);
+        var first = await store.ListBrowserEntriesAsync("bolt", pageBucket.BucketId, 1, 2, Now.AddSeconds(1));
+        var second = await store.ListBrowserEntriesAsync("bolt", pageBucket.BucketId, 2, 2, Now.AddSeconds(1));
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.Equal(3, first.TotalCount);
+        Assert.Equal(2, first.Items.Count);
+        Assert.Single(second.Items);
+        Assert.DoesNotContain(first.Items[0].EntryId, second.Items.Select(item => item.EntryId));
+    }
+
+    [Fact]
+    public async Task BrowserDeleteRequiresFreshTokenAndMutableNamespace()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SqliteJsonCacheStore(fixture.Database);
+        await store.PutJsonAsync("bolt", "mutable", "key", "1", null, Now);
+        await store.PutJsonAsync("bolt_sub", "archive", "key", "1", null, Now);
+        var mutableBucket = Assert.Single(await store.ListBrowserBucketsAsync("bolt", Now));
+        var archiveBucket = Assert.Single(await store.ListBrowserBucketsAsync("bolt_sub", Now));
+        var mutable = Assert.Single((await store.ListBrowserEntriesAsync(
+            "bolt", mutableBucket.BucketId, 1, 10, Now))!.Items);
+        var archive = Assert.Single((await store.ListBrowserEntriesAsync(
+            "bolt_sub", archiveBucket.BucketId, 1, 10, Now))!.Items);
+
+        await store.PutJsonAsync("bolt", "mutable", "key", "2", null, Now.AddSeconds(1));
+        Assert.Equal(
+            CacheBrowserDeleteResult.Changed,
+            await store.DeleteBrowserEntryAsync(
+                "bolt", mutableBucket.BucketId, mutable.EntryId, mutable.DeleteToken));
+        Assert.Equal(
+            CacheBrowserDeleteResult.ReadOnly,
+            await store.DeleteBrowserEntryAsync(
+                "bolt_sub", archiveBucket.BucketId, archive.EntryId, archive.DeleteToken));
+
+        var refreshed = Assert.Single((await store.ListBrowserEntriesAsync(
+            "bolt", mutableBucket.BucketId, 1, 10, Now.AddSeconds(1)))!.Items);
+        Assert.Equal(
+            CacheBrowserDeleteResult.Deleted,
+            await store.DeleteBrowserEntryAsync(
+                "bolt", mutableBucket.BucketId, refreshed.EntryId, refreshed.DeleteToken));
+        Assert.Equal(
+            CacheBrowserDeleteResult.NotFound,
+            await store.DeleteBrowserEntryAsync(
+                "bolt", mutableBucket.BucketId, refreshed.EntryId, refreshed.DeleteToken));
+    }
 }

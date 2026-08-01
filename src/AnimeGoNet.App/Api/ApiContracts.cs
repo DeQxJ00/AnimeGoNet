@@ -51,6 +51,42 @@ public sealed record LegacyBoltGetResponse(
 
 public sealed record LegacyBoltDeleteResponse;
 
+public sealed record CacheBrowserBucketResponse(
+    [property: JsonPropertyName("bucket_id")] string BucketId,
+    [property: JsonPropertyName("entry_count")] int EntryCount);
+
+public sealed record CacheBrowserBucketListResponse(
+    [property: JsonPropertyName("database")] string Database,
+    [property: JsonPropertyName("read_only")] bool ReadOnly,
+    [property: JsonPropertyName("items")] IReadOnlyList<CacheBrowserBucketResponse> Items);
+
+public sealed record CacheBrowserEntryResponse(
+    [property: JsonPropertyName("entry_id")] string EntryId,
+    [property: JsonPropertyName("delete_token")] string DeleteToken,
+    [property: JsonPropertyName("value_bytes")] int ValueBytes,
+    [property: JsonPropertyName("expires_at_utc")] DateTimeOffset? ExpiresAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record CacheBrowserEntryListResponse(
+    [property: JsonPropertyName("database")] string Database,
+    [property: JsonPropertyName("read_only")] bool ReadOnly,
+    [property: JsonPropertyName("bucket_id")] string BucketId,
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_count")] int TotalCount,
+    [property: JsonPropertyName("items")] IReadOnlyList<CacheBrowserEntryResponse> Items);
+
+public sealed record CacheBrowserDeleteRequest(
+    [property: JsonPropertyName("database")] string? Database,
+    [property: JsonPropertyName("bucket_id")] string? BucketId,
+    [property: JsonPropertyName("delete_token")] string? DeleteToken);
+
+public sealed record CacheBrowserDeleteResponse(
+    [property: JsonPropertyName("database")] string Database,
+    [property: JsonPropertyName("bucket_id")] string BucketId,
+    [property: JsonPropertyName("entry_id")] string EntryId,
+    [property: JsonPropertyName("deleted")] bool Deleted);
+
 public sealed record PingData(string Version, long Time);
 
 public sealed record RuntimeStatus(

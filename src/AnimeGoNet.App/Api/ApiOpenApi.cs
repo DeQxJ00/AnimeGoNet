@@ -13,6 +13,7 @@ internal static class ApiOpenApi
     [
         "compatibility",
         "config",
+        "cache",
         "data-update",
         "delete",
         "downloaders",

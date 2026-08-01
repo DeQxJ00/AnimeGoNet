@@ -55,6 +55,9 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/config/preview", PreviewConfiguration);
         app.MapPut("/api/v1/config", PutConfiguration);
         app.MapDelete("/api/v1/config", DeleteConfigurationOverride);
+        app.MapGet("/api/v1/cache/buckets", CacheBrowserBuckets);
+        app.MapGet("/api/v1/cache/entries", CacheBrowserEntries);
+        app.MapDelete("/api/v1/cache/entries/{entryId}", DeleteCacheBrowserEntry);
         app.MapGet("/api/v1/downloads", Downloads);
         app.MapGet("/api/v1/downloads/{jobId}", DownloadDetail);
         app.MapPost("/api/v1/downloads/{jobId}/pause", PauseDownload);
@@ -820,6 +823,133 @@ public static class ApiEndpoints
         {
             return TypedResults.Ok(new LegacyApiResponse<LegacyBoltDeleteResponse?>(
                 300, "参数错误，缓存标识无效", null));
+        }
+    }
+
+    private static async Task<Results<
+        Ok<CacheBrowserBucketListResponse>,
+        BadRequest<ApiErrorResponse>>> CacheBrowserBuckets(
+        [FromQuery] string? database,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var normalizedDatabase = string.IsNullOrWhiteSpace(database)
+            ? "bolt"
+            : database.Trim().ToLowerInvariant();
+        try
+        {
+            var buckets = await store.ListBrowserBucketsAsync(
+                normalizedDatabase,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new CacheBrowserBucketListResponse(
+                normalizedDatabase,
+                string.Equals(normalizedDatabase, "bolt_sub", StringComparison.Ordinal),
+                buckets.Select(static bucket => new CacheBrowserBucketResponse(
+                    bucket.BucketId,
+                    bucket.EntryCount)).ToArray()));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("cache_database_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<Results<
+        Ok<CacheBrowserEntryListResponse>,
+        BadRequest<ApiErrorResponse>,
+        NotFound<ApiErrorResponse>>> CacheBrowserEntries(
+        [FromQuery] string? database,
+        [FromQuery(Name = "bucket_id")] string? bucketId,
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var normalizedDatabase = string.IsNullOrWhiteSpace(database)
+            ? "bolt"
+            : database.Trim().ToLowerInvariant();
+        try
+        {
+            var result = await store.ListBrowserEntriesAsync(
+                normalizedDatabase,
+                bucketId ?? string.Empty,
+                page ?? 1,
+                pageSize ?? 50,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            if (result is null)
+            {
+                return TypedResults.NotFound(Error(
+                    "cache_bucket_not_found",
+                    "Cache bucket does not exist."));
+            }
+            return TypedResults.Ok(new CacheBrowserEntryListResponse(
+                normalizedDatabase,
+                string.Equals(normalizedDatabase, "bolt_sub", StringComparison.Ordinal),
+                result.BucketId,
+                result.Page,
+                result.PageSize,
+                result.TotalCount,
+                result.Items.Select(static item => new CacheBrowserEntryResponse(
+                    item.EntryId,
+                    item.DeleteToken,
+                    item.ValueBytes,
+                    item.ExpiresAtUtc,
+                    item.UpdatedAtUtc)).ToArray()));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("cache_query_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<Results<
+        Ok<CacheBrowserDeleteResponse>,
+        BadRequest<ApiErrorResponse>,
+        NotFound<ApiErrorResponse>,
+        Conflict<ApiErrorResponse>>> DeleteCacheBrowserEntry(
+        string entryId,
+        CacheBrowserDeleteRequest request,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var normalizedDatabase = string.IsNullOrWhiteSpace(request.Database)
+            ? "bolt"
+            : request.Database.Trim().ToLowerInvariant();
+        try
+        {
+            var result = await store.DeleteBrowserEntryAsync(
+                normalizedDatabase,
+                request.BucketId ?? string.Empty,
+                entryId,
+                request.DeleteToken ?? string.Empty,
+                cancellationToken).ConfigureAwait(false);
+            return result switch
+            {
+                CacheBrowserDeleteResult.Deleted => TypedResults.Ok(
+                    new CacheBrowserDeleteResponse(
+                        normalizedDatabase,
+                        request.BucketId!.Trim().ToLowerInvariant(),
+                        entryId.Trim().ToLowerInvariant(),
+                        true)),
+                CacheBrowserDeleteResult.NotFound => TypedResults.NotFound(Error(
+                    "cache_entry_not_found",
+                    "Cache entry does not exist.")),
+                CacheBrowserDeleteResult.Changed => TypedResults.Conflict(Error(
+                    "cache_entry_changed",
+                    "Cache entry changed after it was listed. Refresh before deleting.")),
+                CacheBrowserDeleteResult.ReadOnly => TypedResults.Conflict(Error(
+                    "cache_namespace_read_only",
+                    "The bolt_sub namespace is read-only.")),
+                _ => TypedResults.Conflict(Error(
+                    "cache_delete_failed",
+                    "Cache entry could not be deleted.")),
+            };
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("cache_delete_invalid", exception.Message));
         }
     }
 

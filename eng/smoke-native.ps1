@@ -137,6 +137,7 @@ try {
         Invoke-RestMethod -Uri "$baseUrl/api/v1/sources" -TimeoutSec 5
     $sources = @($sourceResponse.items)
     $cacheBuckets = Invoke-RestMethod -Uri "$baseUrl/api/bolt?type=bucket" -TimeoutSec 5
+    $cacheBrowser = Invoke-RestMethod -Uri "$baseUrl/api/v1/cache/buckets?database=bolt" -TimeoutSec 5
     $legacyConfig = Invoke-RestMethod -Uri "$baseUrl/api/config?key=all" -TimeoutSec 5
     $legacyRaw = Invoke-RestMethod -Uri "$baseUrl/api/config?key=raw" -TimeoutSec 5
     $legacyPutPayload = @{
@@ -173,6 +174,12 @@ try {
 
     if ($cacheBuckets.code -ne 200 -or $cacheBuckets.data.type -ne 'bucket') {
         throw 'NativeAOT SQLite cache compatibility API smoke failed.'
+    }
+
+    if ($cacheBrowser.database -ne 'bolt' `
+        -or $cacheBrowser.read_only `
+        -or $null -eq $cacheBrowser.items) {
+        throw 'NativeAOT safe cache browser API smoke failed.'
     }
 
     if ($legacyConfig.code -ne 200 -or $legacyConfig.data.version -ne '1.7.1' `
@@ -288,7 +295,9 @@ try {
         -or $apiClientScript.StatusCode -ne 200 `
         -or -not $index.Content.Contains('<title>AnimeGoNet</title>') `
         -or -not $index.Content.Contains('external-plugin-list') `
+        -or -not $index.Content.Contains('cache-browser') `
         -or -not $appScript.Content.Contains('/api/v1/plugins/') `
+        -or -not $appScript.Content.Contains('/api/v1/cache/buckets') `
         -or -not $appScript.Content.Contains('from "./api-client.js"') `
         -or -not $apiClientScript.Content.Contains('invalid_api_path')) {
         throw 'Static WebUI smoke failed.'

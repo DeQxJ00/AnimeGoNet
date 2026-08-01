@@ -47,6 +47,14 @@ let loadedMikanWorkId = null;
 let activeMikanWorkImpact = null;
 let activeConfigurationLockedFields = new Set();
 let pendingConfigurationRequest = null;
+let cacheDatabase = "bolt";
+let cacheBuckets = [];
+let activeCacheBucketId = null;
+let cachePage = 1;
+let cacheTotalCount = 0;
+let cacheReadOnly = false;
+let cacheRequestSequence = 0;
+const cachePageSize = 25;
 const maximumRenderedLogs = 500;
 const liveLogLevelOrder = {
     trace: 0,
@@ -768,6 +776,201 @@ async function importOfflineDataPackage(event) {
     finally {
         setDataUpdateBusy(false);
         await loadDataUpdate(true);
+    }
+}
+function cacheDigestLabel(kind, digest) {
+    return `${kind} sha256:${digest.slice(0, 12)}…`;
+}
+function setCacheBusy(busy) {
+    element("#cache-database").disabled = busy;
+    element("#cache-reload").disabled = busy;
+    element("#cache-buckets").setAttribute("aria-busy", String(busy));
+    element("#cache-entries").setAttribute("aria-busy", String(busy));
+}
+function renderCacheBuckets() {
+    const target = element("#cache-buckets");
+    if (cacheBuckets.length === 0) {
+        target.replaceChildren(Object.assign(document.createElement("p"), {
+            className: "muted empty",
+            textContent: "当前命名空间没有 bucket。",
+        }));
+        return;
+    }
+    target.replaceChildren(...cacheBuckets.map(bucket => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary-button cache-bucket-button";
+        button.setAttribute("aria-current", String(bucket.bucket_id === activeCacheBucketId));
+        const label = document.createElement("code");
+        label.textContent = cacheDigestLabel("bucket", bucket.bucket_id);
+        const count = document.createElement("span");
+        count.textContent = `${bucket.entry_count} 项`;
+        button.append(label, count);
+        button.addEventListener("click", () => {
+            if (activeCacheBucketId === bucket.bucket_id)
+                return;
+            activeCacheBucketId = bucket.bucket_id;
+            cachePage = 1;
+            renderCacheBuckets();
+            void loadCacheEntries();
+        });
+        return button;
+    }));
+}
+function renderCacheEntries(page) {
+    const target = element("#cache-entries");
+    if (page.items.length === 0) {
+        target.replaceChildren(Object.assign(document.createElement("p"), {
+            className: "muted empty",
+            textContent: page.bucket_id === ""
+                ? "当前命名空间没有 bucket。"
+                : page.total_count === 0 ? "此 bucket 没有有效条目。" : "当前页没有条目。",
+        }));
+    }
+    else {
+        target.replaceChildren(...page.items.map(item => {
+            const card = document.createElement("article");
+            card.className = "cache-entry";
+            const details = document.createElement("div");
+            const identity = document.createElement("code");
+            identity.textContent = cacheDigestLabel("key", item.entry_id);
+            const metadata = document.createElement("p");
+            metadata.className = "muted";
+            metadata.textContent = `${formatBytes(item.value_bytes)} · 更新 ${dataUpdateTime(item.updated_at_utc)}`
+                + ` · ${item.expires_at_utc ? `过期 ${dataUpdateTime(item.expires_at_utc)}` : "永久"}`;
+            details.append(identity, metadata);
+            card.append(details);
+            if (!page.read_only) {
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "danger-button";
+                remove.textContent = "删除此缓存项";
+                remove.addEventListener("click", () => void deleteCacheEntry(item, remove));
+                card.append(remove);
+            }
+            else {
+                const state = document.createElement("span");
+                state.className = "badge pending";
+                state.textContent = "只读";
+                card.append(state);
+            }
+            return card;
+        }));
+    }
+    cacheTotalCount = page.total_count;
+    const totalPages = Math.max(1, Math.ceil(cacheTotalCount / cachePageSize));
+    element("#cache-page-label").textContent =
+        `第 ${page.page} / ${totalPages} 页 · ${page.total_count} 项`;
+    element("#cache-previous").disabled = page.page <= 1;
+    element("#cache-next").disabled = page.page >= totalPages;
+}
+async function loadCacheBuckets() {
+    const sequence = ++cacheRequestSequence;
+    const status = element("#cache-status");
+    setCacheBusy(true);
+    status.textContent = "正在读取安全缓存索引…";
+    try {
+        const result = await api.get(`/api/v1/cache/buckets?database=${cacheDatabase}`);
+        if (sequence !== cacheRequestSequence)
+            return;
+        cacheReadOnly = result.read_only;
+        cacheBuckets = result.items;
+        if (!cacheBuckets.some(bucket => bucket.bucket_id === activeCacheBucketId)) {
+            activeCacheBucketId = cacheBuckets[0]?.bucket_id ?? null;
+            cachePage = 1;
+        }
+        renderCacheBuckets();
+        status.textContent = `${result.database} · ${result.read_only ? "只读" : "可精确删除"} · ${result.items.length} 个 bucket`;
+        if (activeCacheBucketId) {
+            await loadCacheEntries(sequence);
+        }
+        else {
+            renderCacheEntries({
+                database: cacheDatabase,
+                read_only: cacheReadOnly,
+                bucket_id: "",
+                page: 1,
+                page_size: cachePageSize,
+                total_count: 0,
+                items: [],
+            });
+        }
+    }
+    catch (error) {
+        if (sequence !== cacheRequestSequence)
+            return;
+        status.textContent = errorMessage(error, "缓存索引读取失败");
+        cacheBuckets = [];
+        activeCacheBucketId = null;
+        renderCacheBuckets();
+    }
+    finally {
+        if (sequence === cacheRequestSequence)
+            setCacheBusy(false);
+    }
+}
+async function loadCacheEntries(parentSequence) {
+    if (!activeCacheBucketId)
+        return;
+    const sequence = parentSequence ?? ++cacheRequestSequence;
+    const status = element("#cache-status");
+    element("#cache-entries").setAttribute("aria-busy", "true");
+    try {
+        const query = new URLSearchParams({
+            database: cacheDatabase,
+            bucket_id: activeCacheBucketId,
+            page: String(cachePage),
+            page_size: String(cachePageSize),
+        });
+        const result = await api.get(`/api/v1/cache/entries?${query}`);
+        if (sequence !== cacheRequestSequence)
+            return;
+        cacheReadOnly = result.read_only;
+        renderCacheEntries(result);
+    }
+    catch (error) {
+        if (sequence !== cacheRequestSequence)
+            return;
+        status.textContent = errorMessage(error, "缓存条目读取失败");
+        element("#cache-entries").replaceChildren(Object.assign(document.createElement("p"), { className: "muted empty", textContent: "缓存条目读取失败，请刷新。" }));
+        element("#cache-previous").disabled = true;
+        element("#cache-next").disabled = true;
+    }
+    finally {
+        if (sequence === cacheRequestSequence) {
+            element("#cache-entries").setAttribute("aria-busy", "false");
+        }
+    }
+}
+async function deleteCacheEntry(item, button) {
+    if (!activeCacheBucketId || cacheReadOnly)
+        return;
+    const label = cacheDigestLabel("key", item.entry_id);
+    if (!window.confirm(`确认删除 ${label}？只删除这一条 bolt 缓存，不删除业务记录或文件。`))
+        return;
+    button.disabled = true;
+    const status = element("#cache-status");
+    status.textContent = `正在删除 ${label}…`;
+    try {
+        const result = await api.delete(`/api/v1/cache/entries/${item.entry_id}`, {
+            database: cacheDatabase,
+            bucket_id: activeCacheBucketId,
+            delete_token: item.delete_token,
+        });
+        if (!result.deleted || result.entry_id !== item.entry_id) {
+            throw new Error("缓存删除响应无效，请刷新后确认条目状态。");
+        }
+        const remainingAfterDelete = Math.max(0, cacheTotalCount - 1);
+        if (cachePage > 1 && (cachePage - 1) * cachePageSize >= remainingAfterDelete) {
+            cachePage--;
+        }
+        await loadCacheBuckets();
+        status.textContent = `${label} 已删除；列表已刷新。`;
+    }
+    catch (error) {
+        status.textContent = errorMessage(error, "缓存删除失败");
+        button.disabled = false;
+        await loadCacheEntries();
     }
 }
 function liveLogWebSocketUrl() {
@@ -5305,6 +5508,25 @@ element("#data-update-offline-package").addEventListener("change", () => {
             || element("#data-update-offline-package").files?.length !== 1;
 });
 element("#data-update-offline-form").addEventListener("submit", (event) => void importOfflineDataPackage(event));
+element("#cache-database").addEventListener("change", event => {
+    cacheDatabase = event.currentTarget.value;
+    activeCacheBucketId = null;
+    cachePage = 1;
+    void loadCacheBuckets();
+});
+element("#cache-reload").addEventListener("click", () => void loadCacheBuckets());
+element("#cache-previous").addEventListener("click", () => {
+    if (cachePage <= 1)
+        return;
+    cachePage--;
+    void loadCacheEntries();
+});
+element("#cache-next").addEventListener("click", () => {
+    if (cachePage * cachePageSize >= cacheTotalCount)
+        return;
+    cachePage++;
+    void loadCacheEntries();
+});
 element("#live-log-level").addEventListener("change", renderLiveLogs);
 element("#live-log-reconnect").addEventListener("click", () => connectLiveLogs(true));
 element("#live-log-pause").addEventListener("click", toggleLiveLogPause);
@@ -5323,6 +5545,7 @@ window.addEventListener("beforeunload", () => {
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();
+void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
 void loadConfiguration();

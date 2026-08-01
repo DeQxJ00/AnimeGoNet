@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -14,6 +16,32 @@ public sealed record CacheJsonValue(
     string ValueJson,
     DateTimeOffset? ExpiresAtUtc,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record CacheBrowserBucket(
+    string BucketId,
+    int EntryCount);
+
+public sealed record CacheBrowserEntry(
+    string EntryId,
+    string DeleteToken,
+    int ValueBytes,
+    DateTimeOffset? ExpiresAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record CacheBrowserEntryPage(
+    string BucketId,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    IReadOnlyList<CacheBrowserEntry> Items);
+
+public enum CacheBrowserDeleteResult
+{
+    Deleted,
+    NotFound,
+    Changed,
+    ReadOnly,
+}
 
 public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
 {
@@ -278,6 +306,237 @@ public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<CacheBrowserBucket>> ListBrowserBucketsAsync(
+        string databaseName,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedDatabase = NormalizeDatabaseName(databaseName);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await PurgeExpiredAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            Format(utcNow),
+            cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT b.name, COUNT(e.key)
+            FROM cache_buckets AS b
+            LEFT JOIN cache_entries AS e
+              ON e.database_name = b.database_name
+             AND e.bucket_name = b.name
+            WHERE b.database_name = $database
+            GROUP BY b.name
+            ORDER BY b.name COLLATE BINARY;
+            """;
+        command.Parameters.AddWithValue("$database", normalizedDatabase);
+        var result = new List<CacheBrowserBucket>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                result.Add(new CacheBrowserBucket(
+                    BucketId(normalizedDatabase, reader.GetString(0)),
+                    reader.GetInt32(1)));
+            }
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    public async Task<CacheBrowserEntryPage?> ListBrowserEntriesAsync(
+        string databaseName,
+        string bucketId,
+        int page,
+        int pageSize,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedDatabase = NormalizeDatabaseName(databaseName);
+        var normalizedBucketId = NormalizeDigest(bucketId, nameof(bucketId));
+        if (page is < 1 or > 1_000_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(page), "page must be between 1 and 1000000.");
+        }
+        if (pageSize is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be between 1 and 100.");
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var bucket = await ResolveBucketAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            normalizedBucketId,
+            cancellationToken).ConfigureAwait(false);
+        if (bucket is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        await PurgeExpiredAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            bucket,
+            Format(utcNow),
+            cancellationToken).ConfigureAwait(false);
+        var totalCount = await CountEntriesAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            bucket,
+            cancellationToken).ConfigureAwait(false);
+        var offset = checked((page - 1) * pageSize);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT key, value_json, expires_at_utc, updated_at_utc
+            FROM cache_entries
+            WHERE database_name = $database
+              AND bucket_name = $bucket
+            ORDER BY key COLLATE BINARY
+            LIMIT $limit OFFSET $offset;
+            """;
+        command.Parameters.AddWithValue("$database", normalizedDatabase);
+        command.Parameters.AddWithValue("$bucket", bucket);
+        command.Parameters.AddWithValue("$limit", pageSize);
+        command.Parameters.AddWithValue("$offset", offset);
+        var items = new List<CacheBrowserEntry>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var key = reader.GetString(0);
+                var valueJson = reader.GetString(1);
+                var expires = reader.IsDBNull(2) ? null : reader.GetString(2);
+                var updated = reader.GetString(3);
+                items.Add(new CacheBrowserEntry(
+                    EntryId(normalizedDatabase, bucket, key),
+                    DeleteToken(normalizedDatabase, bucket, key, valueJson, expires, updated),
+                    Encoding.UTF8.GetByteCount(valueJson),
+                    expires is null ? null : Parse(expires),
+                    Parse(updated)));
+            }
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new CacheBrowserEntryPage(
+            normalizedBucketId,
+            page,
+            pageSize,
+            totalCount,
+            items);
+    }
+
+    public async Task<CacheBrowserDeleteResult> DeleteBrowserEntryAsync(
+        string databaseName,
+        string bucketId,
+        string entryId,
+        string deleteToken,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedDatabase = NormalizeDatabaseName(databaseName);
+        var normalizedBucketId = NormalizeDigest(bucketId, nameof(bucketId));
+        var normalizedEntryId = NormalizeDigest(entryId, nameof(entryId));
+        var normalizedDeleteToken = NormalizeDigest(deleteToken, nameof(deleteToken));
+        if (!string.Equals(normalizedDatabase, "bolt", StringComparison.Ordinal))
+        {
+            return CacheBrowserDeleteResult.ReadOnly;
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var bucket = await ResolveBucketAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            normalizedBucketId,
+            cancellationToken).ConfigureAwait(false);
+        if (bucket is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return CacheBrowserDeleteResult.NotFound;
+        }
+
+        string? key = null;
+        string? valueJson = null;
+        string? expires = null;
+        string? updated = null;
+        await using (var find = connection.CreateCommand())
+        {
+            find.Transaction = transaction;
+            find.CommandText = """
+                SELECT key, value_json, expires_at_utc, updated_at_utc
+                FROM cache_entries
+                WHERE database_name = $database
+                  AND bucket_name = $bucket;
+                """;
+            find.Parameters.AddWithValue("$database", normalizedDatabase);
+            find.Parameters.AddWithValue("$bucket", bucket);
+            await using var reader = await find.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var candidateKey = reader.GetString(0);
+                if (!FixedTimeEquals(
+                    normalizedEntryId,
+                    EntryId(normalizedDatabase, bucket, candidateKey)))
+                {
+                    continue;
+                }
+                key = candidateKey;
+                valueJson = reader.GetString(1);
+                expires = reader.IsDBNull(2) ? null : reader.GetString(2);
+                updated = reader.GetString(3);
+                break;
+            }
+        }
+
+        if (key is null || valueJson is null || updated is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return CacheBrowserDeleteResult.NotFound;
+        }
+        if (!FixedTimeEquals(
+            normalizedDeleteToken,
+            DeleteToken(normalizedDatabase, bucket, key, valueJson, expires, updated)))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return CacheBrowserDeleteResult.Changed;
+        }
+
+        await using var delete = connection.CreateCommand();
+        delete.Transaction = transaction;
+        delete.CommandText = """
+            DELETE FROM cache_entries
+            WHERE database_name = $database
+              AND bucket_name = $bucket
+              AND key = $key
+              AND value_json = $value
+              AND expires_at_utc IS $expires
+              AND updated_at_utc = $updated;
+            """;
+        delete.Parameters.AddWithValue("$database", normalizedDatabase);
+        delete.Parameters.AddWithValue("$bucket", bucket);
+        delete.Parameters.AddWithValue("$key", key);
+        delete.Parameters.AddWithValue("$value", valueJson);
+        delete.Parameters.AddWithValue("$expires", expires is null ? DBNull.Value : expires);
+        delete.Parameters.AddWithValue("$updated", updated);
+        var deleted = await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return deleted == 1
+            ? CacheBrowserDeleteResult.Deleted
+            : CacheBrowserDeleteResult.Changed;
+    }
+
     private static async Task EnsureBucketAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -297,6 +556,98 @@ public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$bucket", bucket);
         command.Parameters.AddWithValue("$now", now);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task PurgeExpiredAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string databaseName,
+        string now,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM cache_entries
+            WHERE database_name = $database
+              AND expires_at_utc IS NOT NULL
+              AND expires_at_utc <= $now;
+            """;
+        command.Parameters.AddWithValue("$database", databaseName);
+        command.Parameters.AddWithValue("$now", now);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task PurgeExpiredAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string databaseName,
+        string bucket,
+        string now,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM cache_entries
+            WHERE database_name = $database
+              AND bucket_name = $bucket
+              AND expires_at_utc IS NOT NULL
+              AND expires_at_utc <= $now;
+            """;
+        command.Parameters.AddWithValue("$database", databaseName);
+        command.Parameters.AddWithValue("$bucket", bucket);
+        command.Parameters.AddWithValue("$now", now);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<string?> ResolveBucketAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string databaseName,
+        string bucketId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT name
+            FROM cache_buckets
+            WHERE database_name = $database;
+            """;
+        command.Parameters.AddWithValue("$database", databaseName);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var candidate = reader.GetString(0);
+            if (FixedTimeEquals(bucketId, BucketId(databaseName, candidate)))
+            {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static async Task<int> CountEntriesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string databaseName,
+        string bucket,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM cache_entries
+            WHERE database_name = $database
+              AND bucket_name = $bucket;
+            """;
+        command.Parameters.AddWithValue("$database", databaseName);
+        command.Parameters.AddWithValue("$bucket", bucket);
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
     }
 
     private static async Task DeleteExpiredAsync(
@@ -356,6 +707,49 @@ public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
         }
         return normalized;
     }
+
+    private static string NormalizeDigest(string value, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, name);
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.Length != 64 || normalized.Any(character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+        {
+            throw new ArgumentException($"{name} must be a SHA-256 digest.", name);
+        }
+        return normalized;
+    }
+
+    private static string BucketId(string databaseName, string bucket) =>
+        Digest("bucket", databaseName, bucket);
+
+    private static string EntryId(string databaseName, string bucket, string key) =>
+        Digest("entry", databaseName, bucket, key);
+
+    private static string DeleteToken(
+        string databaseName,
+        string bucket,
+        string key,
+        string valueJson,
+        string? expires,
+        string updated) =>
+        Digest("delete", databaseName, bucket, key, valueJson, expires ?? string.Empty, updated);
+
+    private static string Digest(params string[] parts)
+    {
+        var builder = new StringBuilder();
+        foreach (var part in parts)
+        {
+            builder.Append(part.Length.ToString(CultureInfo.InvariantCulture));
+            builder.Append(':');
+            builder.Append(part);
+        }
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+    }
+
+    private static bool FixedTimeEquals(string left, string right) =>
+        CryptographicOperations.FixedTimeEquals(
+            Convert.FromHexString(left),
+            Convert.FromHexString(right));
 
     private static string ValidateJson(string value)
     {

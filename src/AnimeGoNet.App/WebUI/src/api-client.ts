@@ -71,8 +71,12 @@ export class ApiClient {
     return this.request<TResponse, TBody>(path, { ...options, method: "PUT", body });
   }
 
-  delete<TResponse>(path: string, options: JsonRequestOptions = {}): Promise<TResponse> {
-    return this.request<TResponse>(path, { ...options, method: "DELETE" });
+  delete<TResponse, TBody = never>(
+    path: string,
+    body?: TBody,
+    options: JsonRequestOptions = {},
+  ): Promise<TResponse> {
+    return this.request<TResponse, TBody>(path, { ...options, method: "DELETE", body });
   }
 
   async request<TResponse, TBody = never>(
