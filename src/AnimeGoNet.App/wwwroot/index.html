@@ -54,7 +54,7 @@
         </div>
         <button id="external-plugin-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
-      <p class="muted">插件包只读发现，首次调用才启动；协议故障会独立退避并在达到阈值后自动禁用。</p>
+      <p class="muted">插件包只读发现且默认禁用；可按 schema 配置启停、args 与 vars。writeOnly 值只显示是否已配置，协议故障会独立退避并自动禁用。</p>
       <div id="external-plugin-list" class="external-plugin-list" aria-live="polite" aria-busy="true">
         <p class="muted empty">正在读取外部插件…</p>
       </div>

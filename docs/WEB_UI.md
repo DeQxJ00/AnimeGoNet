@@ -180,6 +180,12 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 
 存在连续故障时，页面显示计数、稳定失败码和可重试时间，并提供“清除故障状态”。该
 按钮调用 Access-Key 保护的 `POST /api/v1/plugins/{id}/reset`，关闭旧会话并清除退避/
-自动禁用；它不会立即执行插件、改写或删除包，也不会伪造“已启用”。刷新按钮只重新
-读取状态。插件 args/vars、持久启停和基于 config schema 的表单仍未开放，因此当前
-页面不会收集或回显第三方插件密钥。
+自动禁用；它不会立即执行插件、改写或删除包，也不会伪造“已启用”。刷新按钮重新读取
+运行状态和 `GET /api/v1/plugins` 配置 revision。
+
+“启停与参数”按每个包的 `config.schema.json` 生成 string/password、enum、boolean、
+integer/number 与 JSON 容器控件。args 是非凭据 JSON 对象且只作为任务缺省值；vars
+通过 schema 校验后传入协议 config。`writeOnly` 值永不回显，页面只显示“已配置”；
+密码框留空时保留旧值，勾选“清除已保存值”才删除。保存使用全局 revision 防止多页面
+覆盖，并停止旧会话；“恢复默认禁用”明确确认后删除该插件私有配置，不删除插件包或
+plugin-data。

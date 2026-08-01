@@ -25,8 +25,16 @@ public sealed partial class ExternalPluginConfigurationValidator
         JsonElement vars,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(package);
         ExternalPluginConfigurationStore.ValidateObject(vars, "vars");
+        var schema = await LoadSchemaAsync(package, cancellationToken).ConfigureAwait(false);
+        ValidateNode(schema, vars, "vars", 0);
+    }
+
+    public async Task<JsonElement> LoadSchemaAsync(
+        ExternalPluginPackage package,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(package);
         var info = new FileInfo(package.ConfigSchemaPath);
         if (!info.Exists || info.Length is <= 0 or > MaximumSchemaBytes)
         {
@@ -65,7 +73,132 @@ public sealed partial class ExternalPluginConfigurationValidator
             {
                 throw SchemaError("The plugin configuration schema root type must be object.");
             }
-            ValidateNode(document.RootElement, vars, "vars", 0);
+            EnsureUniqueProperties(document.RootElement);
+            ValidateSchemaDefinition(document.RootElement);
+            return document.RootElement.Clone();
+        }
+    }
+
+    internal static void Validate(JsonElement schema, JsonElement vars)
+    {
+        ExternalPluginConfigurationStore.ValidateObject(vars, "vars");
+        ValidateNode(schema, vars, "vars", 0);
+    }
+
+    internal static void ValidateSchemaDefinition(
+        JsonElement schema,
+        bool requireObjectRoot = true,
+        int depth = 0)
+    {
+        if (depth > MaximumDepth || schema.ValueKind != JsonValueKind.Object)
+        {
+            throw SchemaError("The plugin configuration schema is invalid or nested too deeply.");
+        }
+        string? declaredType = null;
+        if (schema.TryGetProperty("type", out var type))
+        {
+            if (type.ValueKind != JsonValueKind.String
+                || type.GetString() is not (
+                    "object" or "array" or "string" or "integer" or "number" or "boolean" or "null"))
+            {
+                throw SchemaError("Schema contains an unsupported type.");
+            }
+            declaredType = type.GetString();
+        }
+        if (requireObjectRoot && declaredType is not (null or "object"))
+        {
+            throw SchemaError("The plugin configuration schema root type must be object.");
+        }
+        if (schema.TryGetProperty("writeOnly", out var writeOnly)
+            && writeOnly.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw SchemaError("Schema keyword 'writeOnly' must be boolean.");
+        }
+        if (schema.TryGetProperty("enum", out var choices)
+            && (choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0))
+        {
+            throw SchemaError("Schema keyword 'enum' must be a non-empty array.");
+        }
+        if (schema.TryGetProperty("properties", out var properties))
+        {
+            if (properties.ValueKind != JsonValueKind.Object)
+            {
+                throw SchemaError("Schema keyword 'properties' must be an object.");
+            }
+            foreach (var property in properties.EnumerateObject())
+            {
+                ValidateSchemaDefinition(property.Value, requireObjectRoot: false, depth + 1);
+            }
+        }
+        if (schema.TryGetProperty("required", out var required))
+        {
+            if (required.ValueKind != JsonValueKind.Array)
+            {
+                throw SchemaError("Schema keyword 'required' must be an array.");
+            }
+            var requiredNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in required.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(item.GetString())
+                    || !requiredNames.Add(item.GetString()!))
+                {
+                    throw SchemaError("Schema required fields must be unique strings.");
+                }
+                if (schema.TryGetProperty("properties", out properties)
+                    && !properties.TryGetProperty(item.GetString()!, out _))
+                {
+                    throw SchemaError("Schema required fields must be declared properties.");
+                }
+            }
+        }
+        if (schema.TryGetProperty("additionalProperties", out var additional))
+        {
+            if (additional.ValueKind == JsonValueKind.Object)
+            {
+                ValidateSchemaDefinition(additional, requireObjectRoot: false, depth + 1);
+            }
+            else if (additional.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                throw SchemaError(
+                    "Schema keyword 'additionalProperties' must be boolean or object.");
+            }
+        }
+        if (schema.TryGetProperty("items", out var items))
+        {
+            ValidateSchemaDefinition(items, requireObjectRoot: false, depth + 1);
+        }
+        var minLength = OptionalNonNegativeInteger(schema, "minLength");
+        var maxLength = OptionalNonNegativeInteger(schema, "maxLength");
+        var minItems = OptionalNonNegativeInteger(schema, "minItems");
+        var maxItems = OptionalNonNegativeInteger(schema, "maxItems");
+        if (minLength > maxLength || minItems > maxItems)
+        {
+            throw SchemaError("Schema minimum constraints cannot exceed maximum constraints.");
+        }
+        var minimum = OptionalFiniteNumber(schema, "minimum");
+        var maximum = OptionalFiniteNumber(schema, "maximum");
+        if (minimum > maximum)
+        {
+            throw SchemaError("Schema minimum cannot exceed maximum.");
+        }
+        if (schema.TryGetProperty("pattern", out var pattern))
+        {
+            if (pattern.ValueKind != JsonValueKind.String)
+            {
+                throw SchemaError("Schema keyword 'pattern' must be a string.");
+            }
+            try
+            {
+                _ = new Regex(
+                    pattern.GetString()!,
+                    RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+                    TimeSpan.FromMilliseconds(250));
+            }
+            catch (ArgumentException exception)
+            {
+                throw SchemaError("Schema contains an invalid string pattern.", exception);
+            }
         }
     }
 
@@ -378,6 +511,36 @@ public sealed partial class ExternalPluginConfigurationValidator
         validate(value);
     }
 
+    private static int? OptionalNonNegativeInteger(JsonElement schema, string name)
+    {
+        if (!schema.TryGetProperty(name, out var property))
+        {
+            return null;
+        }
+        if (property.ValueKind != JsonValueKind.Number
+            || !property.TryGetInt32(out var value)
+            || value < 0)
+        {
+            throw SchemaError($"Schema keyword '{name}' must be a non-negative integer.");
+        }
+        return value;
+    }
+
+    private static double? OptionalFiniteNumber(JsonElement schema, string name)
+    {
+        if (!schema.TryGetProperty(name, out var property))
+        {
+            return null;
+        }
+        if (property.ValueKind != JsonValueKind.Number
+            || !property.TryGetDouble(out var value)
+            || !double.IsFinite(value))
+        {
+            throw SchemaError($"Schema keyword '{name}' must be a finite number.");
+        }
+        return value;
+    }
+
     private static string ChildPath(string path, string propertyName) =>
         $"{path}/{propertyName.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal)}";
 
@@ -390,4 +553,28 @@ public sealed partial class ExternalPluginConfigurationValidator
         string message,
         Exception? innerException = null) =>
         new("plugin_config_schema_invalid", "schema", message, innerException);
+
+    private static void EnsureUniqueProperties(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in value.EnumerateObject())
+            {
+                if (!names.Add(property.Name))
+                {
+                    throw SchemaError(
+                        "The plugin configuration schema contains a duplicate property.");
+                }
+                EnsureUniqueProperties(property.Value);
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                EnsureUniqueProperties(item);
+            }
+        }
+    }
 }

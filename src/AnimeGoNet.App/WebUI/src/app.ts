@@ -20,6 +20,42 @@ interface ExternalPluginPackage {
   type: "source" | "feed" | "parser" | "filter" | "rename" | "schedule";
   rid: string;
   capabilities: string[];
+  configured: boolean;
+  enabled: boolean;
+  entry_revision: number;
+}
+
+interface ExternalPluginSchema {
+  type?: "object" | "array" | "string" | "integer" | "number" | "boolean" | "null";
+  title?: string;
+  description?: string;
+  properties?: Record<string, ExternalPluginSchema>;
+  required?: string[];
+  enum?: unknown[];
+  default?: unknown;
+  writeOnly?: boolean;
+}
+
+interface ExternalPluginConfiguration {
+  id: string;
+  name: string;
+  version: string;
+  type: ExternalPluginPackage["type"];
+  rid: string;
+  capabilities: string[];
+  configured: boolean;
+  enabled: boolean;
+  entry_revision: number;
+  updated_at_utc: string | null;
+  args: Record<string, unknown>;
+  vars: Record<string, unknown>;
+  configured_write_only_paths: string[];
+  schema: ExternalPluginSchema;
+}
+
+interface ExternalPluginConfigurationList {
+  revision: number;
+  items: ExternalPluginConfiguration[];
 }
 
 interface ExternalPluginPackageError {
@@ -1179,9 +1215,325 @@ const externalPluginStateLabels: Record<ExternalPluginRuntime["state"], string> 
   unknown: "未知状态",
 };
 
-function renderExternalPlugins(status: ExternalPluginStatus): void {
+function externalPluginPointer(propertyName: string): string {
+  return `/${propertyName.replaceAll("~", "~0").replaceAll("/", "~1")}`;
+}
+
+function createExternalPluginVarField(
+  propertyName: string,
+  schema: ExternalPluginSchema,
+  value: unknown,
+  required: boolean,
+  configuredWriteOnlyPaths: Set<string>,
+): HTMLElement {
+  const field = document.createElement("label");
+  field.className = "external-plugin-field";
+  const label = document.createElement("span");
+  label.textContent = `${schema.title ?? propertyName}${required ? " *" : ""}`;
+  field.append(label);
+  const pointer = externalPluginPointer(propertyName);
+  let control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+  if (schema.writeOnly && (schema.type === "string" || schema.type === undefined)) {
+    const input = document.createElement("input");
+    input.type = "password";
+    input.autocomplete = "off";
+    input.value = "";
+    input.dataset.pluginVarKind = "write-only";
+    if (configuredWriteOnlyPaths.has(pointer)) {
+      input.placeholder = "已配置；留空保留";
+    }
+    control = input;
+  } else if (schema.writeOnly) {
+    const textarea = document.createElement("textarea");
+    textarea.rows = 4;
+    textarea.value = "";
+    textarea.placeholder = configuredWriteOnlyPaths.has(pointer)
+      ? "已配置；留空保留"
+      : "输入 JSON 值";
+    textarea.dataset.pluginVarKind = "write-only-json";
+    control = textarea;
+  } else if (schema.type === "boolean") {
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = typeof value === "boolean"
+      ? value
+      : schema.default === true;
+    input.dataset.pluginVarKind = "boolean";
+    control = input;
+  } else if (schema.type === "integer" || schema.type === "number") {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = schema.type === "integer" ? "1" : "any";
+    input.value = typeof value === "number" ? String(value) : "";
+    input.dataset.pluginVarKind = schema.type;
+    control = input;
+  } else if (schema.type === "string" && schema.enum?.every(item => typeof item === "string")) {
+    const select = document.createElement("select");
+    if (!required) {
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "未设置";
+      select.append(empty);
+    }
+    for (const choice of schema.enum) {
+      const option = document.createElement("option");
+      option.value = JSON.stringify(choice);
+      option.textContent = String(choice);
+      option.selected = choice === value;
+      select.append(option);
+    }
+    select.dataset.pluginVarKind = "enum";
+    control = select;
+  } else if (schema.type === "string" || schema.type === undefined) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.autocomplete = "off";
+    input.value = typeof value === "string" ? value : "";
+    input.dataset.pluginVarKind = "string";
+    control = input;
+  } else {
+    const textarea = document.createElement("textarea");
+    textarea.rows = 4;
+    textarea.value = value === undefined ? "" : JSON.stringify(value, null, 2);
+    textarea.placeholder = schema.type === "array" ? "[]" : "{}";
+    textarea.dataset.pluginVarKind = "json";
+    control = textarea;
+  }
+  control.dataset.pluginVar = propertyName;
+  control.dataset.pluginVarRequired = required ? "true" : "false";
+  field.append(control);
+  if (schema.description) {
+    const description = document.createElement("small");
+    description.className = "muted";
+    description.textContent = schema.description;
+    field.append(description);
+  }
+  if (configuredWriteOnlyPaths.has(pointer)) {
+    const clear = document.createElement("label");
+    clear.className = "external-plugin-clear";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.clearWriteOnly = pointer;
+    const text = document.createElement("span");
+    text.textContent = "清除已保存值";
+    clear.append(checkbox, text);
+    field.append(clear);
+  }
+  return field;
+}
+
+function createExternalPluginNestedSecretClear(path: string): HTMLElement {
+  const clear = document.createElement("label");
+  clear.className = "external-plugin-clear";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.dataset.clearWriteOnly = path;
+  const text = document.createElement("span");
+  text.textContent = `清除已保存值 ${path}`;
+  clear.append(checkbox, text);
+  return clear;
+}
+
+function collectExternalPluginVars(
+  form: HTMLFormElement,
+): { vars: Record<string, unknown>; clearWriteOnlyPaths: string[] } {
+  const vars: Record<string, unknown> = {};
+  const controls = Array.from(form.querySelectorAll<
+    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  >("[data-plugin-var]"));
+  for (const control of controls) {
+    const name = control.dataset.pluginVar;
+    const kind = control.dataset.pluginVarKind;
+    const required = control.dataset.pluginVarRequired === "true";
+    if (!name || !kind) continue;
+    if (kind === "boolean" && control instanceof HTMLInputElement) {
+      vars[name] = control.checked;
+    } else if ((kind === "integer" || kind === "number") && control.value !== "") {
+      const parsed = Number(control.value);
+      if (!Number.isFinite(parsed) || (kind === "integer" && !Number.isInteger(parsed))) {
+        throw new Error(`${name} 必须是${kind === "integer" ? "整数" : "数字"}。`);
+      }
+      vars[name] = parsed;
+    } else if (kind === "enum" && control.value !== "") {
+      vars[name] = JSON.parse(control.value) as unknown;
+    } else if (kind === "json" && control.value.trim() !== "") {
+      vars[name] = JSON.parse(control.value) as unknown;
+    } else if (kind === "write-only-json" && control.value.trim() !== "") {
+      vars[name] = JSON.parse(control.value) as unknown;
+    } else if (kind === "write-only") {
+      if (control.value !== "") vars[name] = control.value;
+    } else if (kind === "string" && (required || control.value !== "")) {
+      vars[name] = control.value;
+    }
+  }
+  const clearWriteOnlyPaths = Array.from(
+    form.querySelectorAll<HTMLInputElement>("[data-clear-write-only]"),
+  ).filter(input => input.checked).map(input => input.dataset.clearWriteOnly!);
+  return { vars, clearWriteOnlyPaths };
+}
+
+function externalPluginConfigurationForm(
+  configuration: ExternalPluginConfiguration,
+  configurationRevision: number,
+): HTMLElement {
+  const details = document.createElement("details");
+  details.className = "external-plugin-configuration";
+  const summary = document.createElement("summary");
+  summary.textContent = configuration.configured ? "启停与参数（已保存）" : "启停与参数（默认禁用）";
+  const form = document.createElement("form");
+  form.className = "external-plugin-form";
+  const enableLabel = document.createElement("label");
+  enableLabel.className = "checkbox-row";
+  const enabled = document.createElement("input");
+  enabled.type = "checkbox";
+  enabled.checked = configuration.enabled;
+  const enabledText = document.createElement("span");
+  enabledText.textContent = "启用此插件";
+  enableLabel.append(enabled, enabledText);
+  const argsLabel = document.createElement("label");
+  argsLabel.className = "external-plugin-field";
+  const argsTitle = document.createElement("span");
+  argsTitle.textContent = "默认 args（JSON 对象）";
+  const args = document.createElement("textarea");
+  args.rows = 5;
+  args.value = JSON.stringify(configuration.args, null, 2);
+  const argsHelp = document.createElement("small");
+  argsHelp.className = "muted";
+  argsHelp.textContent = "实际任务同名字段优先；凭据请放在 schema 标记 writeOnly 的 vars 中。";
+  argsLabel.append(argsTitle, args, argsHelp);
+  const vars = document.createElement("fieldset");
+  vars.className = "external-plugin-vars";
+  const legend = document.createElement("legend");
+  legend.textContent = "vars / config schema";
+  vars.append(legend);
+  const configuredSecrets = new Set(configuration.configured_write_only_paths);
+  const required = new Set(configuration.schema.required ?? []);
+  const directPointers = new Set<string>();
+  for (const [name, schema] of Object.entries(configuration.schema.properties ?? {})) {
+    directPointers.add(externalPluginPointer(name));
+    vars.append(createExternalPluginVarField(
+      name,
+      schema,
+      configuration.vars[name],
+      required.has(name),
+      configuredSecrets,
+    ));
+  }
+  for (const path of configuredSecrets) {
+    if (!directPointers.has(path)) {
+      vars.append(createExternalPluginNestedSecretClear(path));
+    }
+  }
+  if (Object.keys(configuration.schema.properties ?? {}).length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted empty";
+    empty.textContent = "该插件没有声明可编辑 vars。";
+    vars.append(empty);
+  }
+  const actions = document.createElement("div");
+  actions.className = "external-plugin-actions";
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.textContent = "保存配置";
+  actions.append(save);
+  if (configuration.configured) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-button";
+    remove.textContent = "恢复默认禁用";
+    remove.addEventListener("click", () => void deleteExternalPluginConfiguration(
+      configuration,
+      configurationRevision,
+      remove,
+    ));
+    actions.append(remove);
+  }
+  const message = document.createElement("small");
+  message.className = "external-plugin-form-message muted";
+  form.append(enableLabel, argsLabel, vars, actions, message);
+  form.addEventListener("submit", event => void saveExternalPluginConfiguration(
+    event,
+    configuration,
+    configurationRevision,
+    enabled,
+    args,
+    message,
+  ));
+  details.append(summary, form);
+  return details;
+}
+
+async function saveExternalPluginConfiguration(
+  event: SubmitEvent,
+  configuration: ExternalPluginConfiguration,
+  configurationRevision: number,
+  enabled: HTMLInputElement,
+  argsInput: HTMLTextAreaElement,
+  message: HTMLElement,
+): Promise<void> {
+  event.preventDefault();
+  const form = event.currentTarget as HTMLFormElement;
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  message.textContent = "正在校验并保存…";
+  try {
+    const args = JSON.parse(argsInput.value) as unknown;
+    if (args === null || Array.isArray(args) || typeof args !== "object") {
+      throw new Error("args 必须是 JSON 对象。");
+    }
+    const collected = collectExternalPluginVars(form);
+    const response = await fetch(
+      `/api/v1/plugins/${encodeURIComponent(configuration.id)}/configuration`,
+      {
+        method: "PUT",
+        headers: new Headers([...headers, ["Content-Type", "application/json"]]),
+        body: JSON.stringify({
+          expected_revision: configurationRevision,
+          enabled: enabled.checked,
+          args,
+          vars: collected.vars,
+          clear_write_only_paths: collected.clearWriteOnlyPaths,
+        }),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    message.textContent = "已保存；运行中的旧会话已停止。";
+    await loadStatus();
+  } catch (error) {
+    message.textContent = errorMessage(error, "插件配置保存失败");
+    if (submit) submit.disabled = false;
+  }
+}
+
+async function deleteExternalPluginConfiguration(
+  configuration: ExternalPluginConfiguration,
+  configurationRevision: number,
+  button: HTMLButtonElement,
+): Promise<void> {
+  if (!window.confirm(`恢复 ${configuration.id} 为未配置且默认禁用？已保存 args/vars 将被删除。`)) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/v1/plugins/${encodeURIComponent(configuration.id)}/configuration?expected_revision=${configurationRevision}`,
+      { method: "DELETE", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadStatus();
+  } catch (error) {
+    button.textContent = errorMessage(error, "恢复失败");
+    button.disabled = false;
+  }
+}
+
+function renderExternalPlugins(
+  status: ExternalPluginStatus,
+  configurations: ExternalPluginConfigurationList,
+): void {
   const target = element<HTMLElement>("#external-plugin-list");
   const runtimes = new Map(status.runtimes.map(runtime => [runtime.id, runtime]));
+  const configurationById = new Map(
+    configurations.items.map(configuration => [configuration.id, configuration]),
+  );
   const cards: HTMLElement[] = [];
   for (const plugin of status.packages) {
     const runtime = runtimes.get(plugin.id);
@@ -1199,7 +1551,7 @@ function renderExternalPlugins(status: ExternalPluginStatus): void {
     identity.textContent = plugin.id;
     const metadata = document.createElement("p");
     metadata.className = "muted";
-    metadata.textContent = `${plugin.type} · ${plugin.version} · ${plugin.rid}`;
+    metadata.textContent = `${plugin.type} · ${plugin.version} · ${plugin.rid} · ${plugin.enabled ? "已启用" : "已禁用"}`;
     card.append(heading, identity, metadata);
     if (plugin.capabilities.length > 0) {
       const capabilities = document.createElement("small");
@@ -1220,6 +1572,18 @@ function renderExternalPlugins(status: ExternalPluginStatus): void {
       reset.textContent = "清除故障状态";
       reset.addEventListener("click", () => void resetExternalPlugin(plugin.id, reset));
       card.append(reset);
+    }
+    const configuration = configurationById.get(plugin.id);
+    if (configuration) {
+      card.append(externalPluginConfigurationForm(
+        configuration,
+        configurations.revision,
+      ));
+    } else {
+      const missing = document.createElement("small");
+      missing.className = "external-plugin-failure";
+      missing.textContent = "配置模型不可用；请刷新或检查插件 schema。";
+      card.append(missing);
     }
     cards.push(card);
   }
@@ -1267,9 +1631,16 @@ async function resetExternalPlugin(pluginId: string, button: HTMLButtonElement):
 async function loadStatus(): Promise<void> {
   const health = element<HTMLElement>("#health");
   try {
-    const response = await fetch("/api/v1/status", { headers });
+    const [response, pluginConfigurationResponse] = await Promise.all([
+      fetch("/api/v1/status", { headers }),
+      fetch("/api/v1/plugins", { headers }),
+    ]);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!pluginConfigurationResponse.ok) {
+      throw new Error(await responseError(pluginConfigurationResponse));
+    }
     const status = await response.json() as RuntimeStatus;
+    const pluginConfigurations = await pluginConfigurationResponse.json() as ExternalPluginConfigurationList;
     element<HTMLElement>("#schema").textContent = `v${status.database_schema_version}`;
     element<HTMLElement>("#runtime").textContent = status.native_aot
       ? `NativeAOT · ${status.runtime_identifier}`
@@ -1286,7 +1657,7 @@ async function loadStatus(): Promise<void> {
       return item;
     });
     element<HTMLElement>("#modules").replaceChildren(...modules);
-    renderExternalPlugins(status.external_plugins);
+    renderExternalPlugins(status.external_plugins, pluginConfigurations);
     health.textContent = "运行中";
     health.className = "badge ready";
   } catch (error) {

@@ -160,8 +160,9 @@ data/plugins/com.example.animego.filter-resolution/
 - 宿主管理器在 `data/plugin-data/<id>` 提供独立可写目录，和可只读挂载的 `data/plugins/<package>` 分离。运行状态只投影稳定错误码，不返回包路径、数据路径、stderr 或配置。
 - 外部包即使发现成功也默认禁用。显式配置保存在 `data/config/external-plugins.private.json`，使用全局/逐插件单调 revision、同目录临时文件原子替换和 Unix `0600`；失败的 ID、对象边界、schema、manifest 身份或 revision 校验不会修改原文件。此文件可能包含第三方凭据，必须与其他 private 配置同等保护。
 - `args` 保持上游默认入口参数语义：先写入配置默认值，再由本次任务 payload 的同名字段覆盖；`vars` 通过 JSON Lines 请求的 `config` 字段传递。`config.schema.json` 校验 vars，当前支持 object/array/string/integer/number/boolean/null、properties/required/additionalProperties/items、enum、长度/数量/数值范围和无回溯 pattern。低层显式 config 调用只对宿主内部测试开放，后续 adapter 统一走启用检查与持久配置合并。
-- `GET /api/v1/status` 同时投影安全 manifest、逐包校验错误和运行状态；`POST /api/v1/plugins/{id}/reset` 受统一 Access-Key 保护，只清除退避/自动禁用并关闭旧会话，不上传、修改或执行新的插件包。静态 WebUI 对应显示分类、版本、RID、能力和可恢复故障。
-- 六类强类型 adapter、配置管理 API/schema 表单仍是后续边界；当前不会把外部包自动加入内置 `PluginCatalog`。
+- `GET /api/v1/status` 同时投影安全 manifest、逐包校验错误、启用状态和运行状态；`POST /api/v1/plugins/{id}/reset` 受统一 Access-Key 保护，只清除退避/自动禁用并关闭旧会话，不上传、修改或执行新的插件包。
+- `GET /api/v1/plugins` 返回全局/逐项 revision、args、脱敏 vars 与 schema；`PUT/DELETE /api/v1/plugins/{id}/configuration` 原子保存或恢复未配置默认。schema 的 `writeOnly: true` 值不进入响应，只返回已配置 JSON Pointer，且其 default/example/const 注解也会剥离；PUT 中省略表示保留，`clear_write_only_paths` 才清除。未声明的 vars 属性也不进入响应，避免 schema 变更意外暴露旧值。args 明确是非凭据任务默认值，凭据必须放入 writeOnly vars。
+- 静态 WebUI 提供启停、args JSON、按 schema 类型生成的 vars 控件、嵌套 JSON、writeOnly 替换/清除、revision 冲突提示和恢复默认禁用。六类强类型 adapter 仍是后续边界；当前不会把外部包自动加入内置 `PluginCatalog`。
 - 外部插件不直接获得 AnimeGoNet 的数据库连接、DI 容器或下载器对象；只接收完成任务所需 DTO。
 - 外部可执行程序不是安全沙箱。只运行用户信任的插件；首版 Web UI 不提供上传可执行文件，只负责发现、启停、配置和显示校验结果。
 - Docker 中插件目录只读挂载；需要写入的数据使用单独、受限的插件数据目录。

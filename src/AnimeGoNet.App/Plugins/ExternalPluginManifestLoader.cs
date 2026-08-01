@@ -439,6 +439,15 @@ public sealed class ExternalPluginManifestLoader
                     "The plugin config schema must contain one JSON object.");
             }
             EnsureUniqueJsonProperties(document.RootElement);
+            ExternalPluginConfigurationValidator.ValidateSchemaDefinition(
+                document.RootElement);
+        }
+        catch (ExternalPluginConfigurationValidationException exception)
+        {
+            throw new ExternalPluginManifestException(
+                "plugin_config_schema_invalid",
+                exception.Message,
+                exception);
         }
         catch (JsonException exception)
         {

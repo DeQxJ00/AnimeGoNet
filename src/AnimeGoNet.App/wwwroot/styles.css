@@ -813,6 +813,59 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .external-plugin-card button { align-self: flex-start; }
 .external-plugin-failure { color: #f3c86b; }
 
+.external-plugin-configuration {
+  margin-top: .25rem;
+  border-top: 1px solid #303d58;
+  padding-top: .65rem;
+}
+
+.external-plugin-configuration summary {
+  cursor: pointer;
+  color: #b8c9ed;
+  font-weight: 650;
+}
+
+.external-plugin-form {
+  display: grid;
+  gap: .8rem;
+  margin-top: .8rem;
+}
+
+.external-plugin-field {
+  display: grid;
+  gap: .35rem;
+}
+
+.external-plugin-field input:not([type="checkbox"]),
+.external-plugin-field select,
+.external-plugin-field textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.external-plugin-vars {
+  display: grid;
+  gap: .7rem;
+  min-width: 0;
+  margin: 0;
+  padding: .75rem;
+  border: 1px solid #344260;
+  border-radius: .7rem;
+}
+
+.external-plugin-vars legend { padding: 0 .3rem; color: #b8c9ed; }
+
+.external-plugin-clear,
+.external-plugin-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.external-plugin-clear { color: #f3c86b; font-size: .82rem; }
+.external-plugin-form-message { min-height: 1.2rem; }
+
 .live-log-actions,
 .live-log-meta {
   display: flex;

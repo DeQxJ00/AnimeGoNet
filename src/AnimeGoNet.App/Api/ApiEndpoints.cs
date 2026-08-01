@@ -43,6 +43,13 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapGet("/api/v1/plugins", ExternalPluginConfigurations);
+        app.MapPut(
+            "/api/v1/plugins/{pluginId}/configuration",
+            PutExternalPluginConfiguration);
+        app.MapDelete(
+            "/api/v1/plugins/{pluginId}/configuration",
+            DeleteExternalPluginConfiguration);
         app.MapPost("/api/v1/plugins/{pluginId}/reset", ResetExternalPlugin);
         app.MapGet("/api/v1/config", Configuration);
         app.MapPost("/api/v1/config/preview", PreviewConfiguration);
@@ -820,7 +827,8 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         LegacyDownloaderMigrationState legacyMigration,
         ExternalPluginDiscoveryResult externalPlugins,
-        ExternalPluginHostManager externalPluginHost)
+        ExternalPluginHostManager externalPluginHost,
+        ExternalPluginConfigurationService externalPluginConfigurations)
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         return TypedResults.Ok(new RuntimeStatus(
@@ -846,13 +854,20 @@ public static class ApiEndpoints
             ToResponse(legacyMigration),
             new ExternalPluginRuntimeStatusResponse(
                 externalPlugins.Packages.Select(package =>
-                    new ExternalPluginPackageResponse(
+                {
+                    var configuration = externalPluginConfigurations
+                        .GetOrDefault(package.Manifest.Id);
+                    return new ExternalPluginPackageResponse(
                         package.Manifest.Id,
                         package.Manifest.Name,
                         package.Manifest.Version,
                         package.Manifest.Type,
                         package.Manifest.Rid,
-                        package.Manifest.Capabilities)).ToArray(),
+                        package.Manifest.Capabilities,
+                        configuration.Revision > 0,
+                        configuration.Enabled,
+                        configuration.Revision);
+                }).ToArray(),
                 externalPlugins.Errors.Select(error =>
                     new ExternalPluginPackageErrorResponse(
                         error.PackageDirectoryName,
@@ -883,6 +898,146 @@ public static class ApiEndpoints
         {
             return TypedResults.BadRequest(Error(
                 "external_plugin_id_invalid",
+                exception.Message));
+        }
+    }
+
+    private static async Task<IResult> ExternalPluginConfigurations(
+        ExternalPluginConfigurationService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var items = await service.ListAsync(cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new ExternalPluginConfigurationListResponse(
+                service.Current.Revision,
+                items.Select(ToResponse).ToArray()));
+        }
+        catch (ExternalPluginConfigurationValidationException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+        catch (ExternalPluginManifestException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+        catch (ExternalPluginProtocolException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_plugin_package_unreadable",
+                "An external plugin package could not be read safely."));
+        }
+    }
+
+    private static async Task<IResult> PutExternalPluginConfiguration(
+        string pluginId,
+        ExternalPluginConfigurationUpdateRequest request,
+        ExternalPluginConfigurationService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(pluginId, "plugin id");
+            var saved = await service.SaveSafeAsync(
+                id,
+                request.Enabled,
+                request.Args,
+                request.Vars,
+                request.ClearWriteOnlyPaths,
+                request.ExpectedRevision,
+                cancellationToken).ConfigureAwait(false);
+            var item = await service.GetAsync(id, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new ExternalPluginConfigurationMutationResponse(
+                saved.Revision,
+                ToResponse(item)));
+        }
+        catch (ExternalPluginConfigurationRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_plugin_configuration_revision_conflict",
+                "External plugin configuration changed; reload before saving."));
+        }
+        catch (ExternalPluginConfigurationValidationException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                exception.Code,
+                $"{exception.Path}: {exception.Message}"));
+        }
+        catch (ExternalPluginUnavailableException exception) when (
+            exception.Code == "plugin_not_found")
+        {
+            return TypedResults.NotFound(Error(
+                "external_plugin_not_found",
+                "External plugin was not found."));
+        }
+        catch (ExternalPluginManifestException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+        catch (ExternalPluginProtocolException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "external_plugin_configuration_invalid",
+                exception.Message));
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_plugin_package_unreadable",
+                "The external plugin package could not be read safely."));
+        }
+    }
+
+    private static async Task<IResult> DeleteExternalPluginConfiguration(
+        string pluginId,
+        [FromQuery(Name = "expected_revision")] long expectedRevision,
+        ExternalPluginConfigurationService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var id = RequireCanonicalStableId(pluginId, "plugin id");
+            var saved = await service.DeleteAsync(
+                id,
+                expectedRevision,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new ExternalPluginConfigurationDeleteResponse(
+                saved.Revision,
+                id));
+        }
+        catch (ExternalPluginConfigurationRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_plugin_configuration_revision_conflict",
+                "External plugin configuration changed; reload before deleting."));
+        }
+        catch (ExternalPluginUnavailableException exception) when (
+            exception.Code == "plugin_not_found")
+        {
+            return TypedResults.NotFound(Error(
+                "external_plugin_not_found",
+                "External plugin was not found."));
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error(
+                "external_plugin_configuration_not_found",
+                "External plugin does not have saved configuration."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "external_plugin_configuration_invalid",
                 exception.Message));
         }
     }
@@ -5287,6 +5442,24 @@ public static class ApiEndpoints
             runtime.ConsecutiveFailures,
             runtime.RetryAtUtc,
             runtime.LastFailureCode);
+
+    private static ExternalPluginConfigurationResponse ToResponse(
+        ExternalPluginConfigurationView view) =>
+        new(
+            view.Package.Manifest.Id,
+            view.Package.Manifest.Name,
+            view.Package.Manifest.Version,
+            view.Package.Manifest.Type,
+            view.Package.Manifest.Rid,
+            view.Package.Manifest.Capabilities,
+            view.Configured,
+            view.Enabled,
+            view.EntryRevision,
+            view.UpdatedAtUtc,
+            view.Args,
+            view.Vars.Value,
+            view.Vars.ConfiguredWriteOnlyPaths,
+            view.Schema);
 
     private static ConfigurationMigrationDiagnosticResponse[] ToResponse(
         LegacyDownloaderMigrationState state) =>

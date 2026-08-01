@@ -81,12 +81,13 @@ $pluginManifest = @"
     $utf8NoBom)
 [IO.File]::WriteAllText(
     (Join-Path $pluginPackage 'config.schema.json'),
-    '{"type":"object","additionalProperties":false}',
+    '{"type":"object","additionalProperties":false,"properties":{"token":{"type":"string","writeOnly":true}}}',
     $utf8NoBom)
 $pluginConfigurationDirectory = Join-Path $env:data_path 'config'
 New-Item -ItemType Directory -Path $pluginConfigurationDirectory -Force | Out-Null
+$pluginWriteOnlyValue = 'native-smoke-write-only-value'
 $pluginConfiguration = @"
-{"format_version":1,"revision":1,"plugins":{"com.animegonet.native-smoke":{"enabled":false,"args":{},"vars":{},"revision":1,"updated_at_utc":"2026-08-01T00:00:00+00:00"}}}
+{"format_version":1,"revision":1,"plugins":{"com.animegonet.native-smoke":{"enabled":false,"args":{},"vars":{"token":"$pluginWriteOnlyValue"},"revision":1,"updated_at_utc":"2026-08-01T00:00:00+00:00"}}}
 "@
 $pluginConfigurationPath = Join-Path $pluginConfigurationDirectory 'external-plugins.private.json'
 [IO.File]::WriteAllText(
@@ -191,6 +192,51 @@ try {
         -or $externalRuntimes[0].consecutive_failures -ne 0 `
         -or -not (Test-Path -LiteralPath (Join-Path $env:data_path 'plugin-data') -PathType Container)) {
         throw 'NativeAOT external plugin manifest discovery smoke failed.'
+    }
+
+    $pluginConfigurations = Invoke-RestMethod `
+        -Uri "$baseUrl/api/v1/plugins" `
+        -TimeoutSec 5
+    $pluginConfigurationItems = @($pluginConfigurations.items)
+    if ($pluginConfigurations.revision -ne 1 `
+        -or $pluginConfigurationItems.Count -ne 1 `
+        -or $pluginConfigurationItems[0].enabled `
+        -or @($pluginConfigurationItems[0].configured_write_only_paths).Count -ne 1 `
+        -or $pluginConfigurationItems[0].configured_write_only_paths[0] -ne '/token' `
+        -or $null -ne $pluginConfigurationItems[0].vars.token `
+        -or ($pluginConfigurations | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)) {
+        throw 'NativeAOT external plugin configuration redaction smoke failed.'
+    }
+    $pluginPutPayload = '{"expected_revision":1,"enabled":true,"args":{"smoke":true},"vars":{},"clear_write_only_paths":[]}'
+    $pluginPut = Invoke-RestMethod `
+        -Uri "$baseUrl/api/v1/plugins/com.animegonet.native-smoke/configuration" `
+        -Method Put `
+        -ContentType 'application/json' `
+        -Body $pluginPutPayload `
+        -TimeoutSec 5
+    if ($pluginPut.revision -ne 2 `
+        -or -not $pluginPut.item.enabled `
+        -or $pluginPut.item.configured_write_only_paths[0] -ne '/token' `
+        -or ($pluginPut | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)) {
+        throw 'NativeAOT external plugin configuration update smoke failed.'
+    }
+    $pluginClearPayload = '{"expected_revision":2,"enabled":true,"args":{"smoke":true},"vars":{},"clear_write_only_paths":["/token"]}'
+    $pluginClear = Invoke-RestMethod `
+        -Uri "$baseUrl/api/v1/plugins/com.animegonet.native-smoke/configuration" `
+        -Method Put `
+        -ContentType 'application/json' `
+        -Body $pluginClearPayload `
+        -TimeoutSec 5
+    $pluginConfigurationFileText = [IO.File]::ReadAllText($pluginConfigurationPath)
+    if ($pluginClear.revision -ne 3 `
+        -or @($pluginClear.item.configured_write_only_paths).Count -ne 0 `
+        -or $pluginConfigurationFileText.Contains($pluginWriteOnlyValue)) {
+        throw 'NativeAOT external plugin write-only clear smoke failed.'
+    }
+    $updatedPluginStatus = Invoke-RestMethod -Uri "$baseUrl/api/v1/status" -TimeoutSec 5
+    if (-not $updatedPluginStatus.external_plugins.packages[0].enabled `
+        -or $updatedPluginStatus.external_plugins.packages[0].entry_revision -ne 3) {
+        throw 'NativeAOT external plugin enabled status smoke failed.'
     }
 
     $externalPluginReset = Invoke-RestMethod `

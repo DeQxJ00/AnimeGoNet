@@ -3,6 +3,16 @@ using System.Text.Json;
 
 namespace AnimeGoNet.App.Plugins;
 
+public sealed record ExternalPluginConfigurationView(
+    ExternalPluginPackage Package,
+    bool Configured,
+    bool Enabled,
+    long EntryRevision,
+    DateTimeOffset? UpdatedAtUtc,
+    JsonElement Args,
+    ExternalPluginSafeVars Vars,
+    JsonElement Schema);
+
 public sealed class ExternalPluginConfigurationService
 {
     private readonly FrozenDictionary<string, ExternalPluginPackage> _packages;
@@ -40,6 +50,54 @@ public sealed class ExternalPluginConfigurationService
     public ExternalPluginConfigurationEntry GetOrDefault(string pluginId) =>
         _store.GetOrDefault(pluginId);
 
+    public async Task<IReadOnlyList<ExternalPluginConfigurationView>> ListAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<ExternalPluginConfigurationView>(_packages.Count);
+        foreach (var package in _packages.Values.OrderBy(
+                     package => package.Manifest.Id,
+                     StringComparer.Ordinal))
+        {
+            result.Add(await GetViewCoreAsync(package, cancellationToken)
+                .ConfigureAwait(false));
+        }
+        return result;
+    }
+
+    public Task<ExternalPluginConfigurationView> GetAsync(
+        string pluginId,
+        CancellationToken cancellationToken = default) =>
+        GetViewCoreAsync(GetRequiredPackage(pluginId), cancellationToken);
+
+    public async Task<ExternalPluginConfigurationSnapshot> SaveSafeAsync(
+        string pluginId,
+        bool enabled,
+        JsonElement args,
+        JsonElement vars,
+        IReadOnlyList<string>? clearWriteOnlyPaths,
+        long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        var package = GetRequiredPackage(pluginId);
+        var currentPackage = await ReloadRequiredAsync(package, cancellationToken)
+            .ConfigureAwait(false);
+        var schema = await _validator.LoadSchemaAsync(currentPackage, cancellationToken)
+            .ConfigureAwait(false);
+        var existing = _store.GetOrDefault(pluginId);
+        var mergedVars = ExternalPluginConfigurationSecrets.MergeWriteOnly(
+            schema,
+            existing.Vars,
+            vars,
+            clearWriteOnlyPaths);
+        return await SaveAsync(
+            pluginId,
+            enabled,
+            args,
+            mergedVars,
+            expectedRevision,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<ExternalPluginConfigurationSnapshot> SaveAsync(
         string pluginId,
         bool enabled,
@@ -51,15 +109,8 @@ public sealed class ExternalPluginConfigurationService
         var package = GetRequiredPackage(pluginId);
         ExternalPluginConfigurationStore.ValidateObject(args, "args");
         ExternalPluginConfigurationStore.ValidateObject(vars, "vars");
-        var currentPackage = await _loader.LoadPackageAsync(
-            package.DirectoryPath,
-            cancellationToken).ConfigureAwait(false);
-        if (!EquivalentIdentity(package.Manifest, currentPackage.Manifest))
-        {
-            throw new ExternalPluginProtocolException(
-                "plugin_manifest_changed",
-                "The external plugin manifest changed after discovery.");
-        }
+        var currentPackage = await ReloadRequiredAsync(package, cancellationToken)
+            .ConfigureAwait(false);
         await _validator.ValidateVarsAsync(currentPackage, vars, cancellationToken)
             .ConfigureAwait(false);
         var saved = await _store.UpsertAsync(
@@ -98,6 +149,42 @@ public sealed class ExternalPluginConfigurationService
                 "plugin_not_found");
         }
         return package;
+    }
+
+    private async Task<ExternalPluginConfigurationView> GetViewCoreAsync(
+        ExternalPluginPackage package,
+        CancellationToken cancellationToken)
+    {
+        var entry = _store.GetOrDefault(package.Manifest.Id);
+        var currentPackage = await ReloadRequiredAsync(package, cancellationToken)
+            .ConfigureAwait(false);
+        var schema = await _validator.LoadSchemaAsync(currentPackage, cancellationToken)
+            .ConfigureAwait(false);
+        return new ExternalPluginConfigurationView(
+            package,
+            entry.Revision > 0,
+            entry.Enabled,
+            entry.Revision,
+            entry.Revision > 0 ? entry.UpdatedAtUtc : null,
+            entry.Args.Clone(),
+            ExternalPluginConfigurationSecrets.ProjectSafe(schema, entry.Vars),
+            ExternalPluginConfigurationSecrets.ProjectSafeSchema(schema));
+    }
+
+    private async Task<ExternalPluginPackage> ReloadRequiredAsync(
+        ExternalPluginPackage package,
+        CancellationToken cancellationToken)
+    {
+        var currentPackage = await _loader.LoadPackageAsync(
+            package.DirectoryPath,
+            cancellationToken).ConfigureAwait(false);
+        if (!EquivalentIdentity(package.Manifest, currentPackage.Manifest))
+        {
+            throw new ExternalPluginProtocolException(
+                "plugin_manifest_changed",
+                "The external plugin manifest changed after discovery.");
+        }
+        return currentPackage;
     }
 
     private static bool EquivalentIdentity(

@@ -87,12 +87,53 @@ public sealed record ExternalPluginPackageResponse(
     [property: JsonPropertyName("version")] string Version,
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("rid")] string Rid,
-    [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities);
+    [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities,
+    [property: JsonPropertyName("configured")] bool Configured,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("entry_revision")] long EntryRevision);
 
 public sealed record ExternalPluginPackageErrorResponse(
     [property: JsonPropertyName("package_directory_name")] string PackageDirectoryName,
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("message")] string Message);
+
+public sealed record ExternalPluginConfigurationListResponse(
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("items")]
+    IReadOnlyList<ExternalPluginConfigurationResponse> Items);
+
+public sealed record ExternalPluginConfigurationResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("version")] string Version,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("rid")] string Rid,
+    [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities,
+    [property: JsonPropertyName("configured")] bool Configured,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("entry_revision")] long EntryRevision,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset? UpdatedAtUtc,
+    [property: JsonPropertyName("args")] JsonElement Args,
+    [property: JsonPropertyName("vars")] JsonElement Vars,
+    [property: JsonPropertyName("configured_write_only_paths")]
+    IReadOnlyList<string> ConfiguredWriteOnlyPaths,
+    [property: JsonPropertyName("schema")] JsonElement Schema);
+
+public sealed record ExternalPluginConfigurationUpdateRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("args")] JsonElement Args,
+    [property: JsonPropertyName("vars")] JsonElement Vars,
+    [property: JsonPropertyName("clear_write_only_paths")]
+    IReadOnlyList<string>? ClearWriteOnlyPaths);
+
+public sealed record ExternalPluginConfigurationMutationResponse(
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("item")] ExternalPluginConfigurationResponse Item);
+
+public sealed record ExternalPluginConfigurationDeleteResponse(
+    [property: JsonPropertyName("revision")] long Revision,
+    [property: JsonPropertyName("id")] string Id);
 
 public sealed record RuntimePaths(
     [property: JsonPropertyName("data_path")] string DataPath,

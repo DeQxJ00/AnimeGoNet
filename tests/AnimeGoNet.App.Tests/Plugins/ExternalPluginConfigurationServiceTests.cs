@@ -79,6 +79,34 @@ public sealed class ExternalPluginConfigurationServiceTests
         Assert.False(File.Exists(fixture.Store.FilePath));
     }
 
+    [Fact]
+    public async Task SafeViewRedactsAndSafeSaveRetainsWriteOnlyVars()
+    {
+        await using var fixture = await ServiceFixture.CreateAsync();
+        await fixture.Service.SaveSafeAsync(
+            fixture.PluginId,
+            true,
+            Json("{}"),
+            Json("{\"quality\":\"1080p\",\"token\":\"secret\"}"),
+            [],
+            0);
+
+        var firstView = await fixture.Service.GetAsync(fixture.PluginId);
+        await fixture.Service.SaveSafeAsync(
+            fixture.PluginId,
+            true,
+            Json("{}"),
+            Json("{\"quality\":\"720p\"}"),
+            [],
+            1);
+        var persisted = fixture.Store.GetOrDefault(fixture.PluginId);
+
+        Assert.False(firstView.Vars.Value.TryGetProperty("token", out _));
+        Assert.Equal("/token", Assert.Single(firstView.Vars.ConfiguredWriteOnlyPaths));
+        Assert.Equal("secret", persisted.Vars.GetProperty("token").GetString());
+        Assert.Equal("720p", persisted.Vars.GetProperty("quality").GetString());
+    }
+
     private static JsonElement Json(string json) =>
         JsonDocument.Parse(json).RootElement.Clone();
 
@@ -96,7 +124,7 @@ public sealed class ExternalPluginConfigurationServiceTests
             WriteEntryPoint();
             File.WriteAllText(
                 Path.Combine(PackagePath, "config.schema.json"),
-                "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"quality\":{\"type\":\"string\",\"enum\":[\"720p\",\"1080p\"]}}}");
+                "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"quality\":{\"type\":\"string\",\"enum\":[\"720p\",\"1080p\"]},\"token\":{\"type\":\"string\",\"writeOnly\":true}}}");
             WriteManifest("1.0.0");
             Loader = new ExternalPluginManifestLoader(PluginRoot, CurrentRid());
             Store = new ExternalPluginConfigurationStore(ConfigurationPath);

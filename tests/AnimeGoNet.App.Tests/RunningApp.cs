@@ -43,11 +43,13 @@ public sealed class RunningApp : IAsyncDisposable
         HttpClient? dataUpdateHttpClient = null,
         IReadOnlyCollection<string>? deploymentEnvironmentVariables = null,
         LegacyDownloaderMigrationState? legacyDownloaderMigrationState = null,
-        bool startBackgroundWorkers = false)
+        bool startBackgroundWorkers = false,
+        Action<DirectoryLayout>? prepareData = null)
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "animegonet-app-tests", Guid.NewGuid().ToString("N"));
         var options = AnimeGoDefaults.CreateNative(rootPath);
         options = configure?.Invoke(options) ?? options;
+        prepareData?.Invoke(DirectoryLayout.From(options.Paths));
         stagingService ??= new TestTorrentStagingService(
             DirectoryLayout.From(options.Paths).StagingPath);
         var app = await AnimeGoApplication.BuildAsync(

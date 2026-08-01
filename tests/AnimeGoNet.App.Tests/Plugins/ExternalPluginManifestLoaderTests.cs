@@ -186,6 +186,25 @@ public sealed class ExternalPluginManifestLoaderTests
         Assert.Equal(expectedCode, exception.Code);
     }
 
+    [Theory]
+    [InlineData("{\"type\":\"array\",\"items\":{\"type\":\"string\"}}")]
+    [InlineData("{\"type\":\"object\",\"required\":[\"missing\"],\"properties\":{}}")]
+    [InlineData("{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\",\"writeOnly\":\"yes\"}}}")]
+    public async Task UnsupportedConfigurationSchemaFailsDuringDiscovery(string schema)
+    {
+        using var fixture = new PluginRootFixture();
+        var packagePath = fixture.CreatePackage("schema", "com.example.schema");
+        File.WriteAllText(Path.Combine(packagePath, "config.schema.json"), schema);
+        var loader = new ExternalPluginManifestLoader(fixture.RootPath, fixture.Rid);
+
+        var result = await loader.DiscoverAsync();
+
+        Assert.Empty(result.Packages);
+        Assert.Equal(
+            "plugin_config_schema_invalid",
+            Assert.Single(result.Errors).Code);
+    }
+
     [Fact]
     public async Task DiscoveryRejectsEveryDuplicateIdAndKeepsIndependentValidPackages()
     {
