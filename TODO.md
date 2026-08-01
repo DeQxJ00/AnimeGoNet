@@ -140,7 +140,7 @@
 - [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
 - [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
-- [>] 实现外部 C# 插件进程：manifest、JSON Lines、环境隔离、惰性复用、插件级指数退避/自动禁用和独立数据目录已完成。`/api/v1/status.external_plugins` 与静态 WebUI 显示分类、版本、RID、能力、校验错误及 stopped/starting/ready/backoff/auto_disabled；故障码/计数/重试时间安全可见，Access-Key 保护的 reset API/按钮可清除故障状态。持久启停/args/vars 配置、stderr 结构化限流与六类强类型 adapter 待后续模块实现。
+- [>] 实现外部 C# 插件进程：manifest、JSON Lines、环境隔离、惰性复用、插件级指数退避/自动禁用和独立数据目录已完成。`/api/v1/status.external_plugins` 与静态 WebUI 显示安全运行状态并支持 reset。启停/args/vars 已有 revision、原子私有文件、JSON Schema 子集校验和运行边界：未配置默认禁用，任务参数覆盖 args 默认值，vars 作为协议 config，校验或 manifest 身份失败不落盘。对应管理 API/schema 表单、stderr 结构化限流与六类强类型 adapter 待后续模块实现。
 - [ ] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板。
 - [ ] 实现 `AnimeGo.PluginTool`。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
@@ -225,7 +225,7 @@
 - [x] 实现四类删除命令及组合删除计划：schema v12 已完成指纹预览、逐项冻结、租约恢复、稳定失败码和部分失败重试；执行顺序为 qB 任务（永不带文件）→源文件→媒体文件→业务记录/claim，文件只允许捕获根目录内精确普通文件且不递归删目录；Minimal API 和 WebUI 四类独立勾选、目标预览、明确确认及 execution 状态查询已接入。
 - [x] Web UI 支持按失败阶段、错误码、可重试性和处理状态筛选，并提供分页与最后更新/标题/状态/失败分类排序；提供安全的“重新匹配”，明确区分“可安全重试（需显式）”、需配置修复、需人工处理、处理中、已解析、已跳过和已兜底。当前尚无自动重试编排，因此不把 `retryable=true` 误标为“已经进入自动重试队列”。
 - [x] 对当前应用配置环境变量覆盖字段显示最终有效值、环境变量来源和只读锁定状态；API 拒绝改写被锁字段和凭据，保存其他字段时保留锁字段原有底层覆盖/继承语义，避免环境变量移除后遗留伪覆盖。
-- [>] 实现插件分类、启停、args/vars 和校验视图：外部包分类/版本/RID/能力、逐包校验错误、运行/退避/自动禁用状态和显式 reset 已接入响应式静态页面；持久启停、配置 schema 表单及 args/vars 安全存储仍待实现。
+- [>] 实现插件分类、启停、args/vars 和校验视图：外部包分类/版本/RID/能力、逐包校验错误、运行/退避/自动禁用状态和显式 reset 已接入响应式静态页面；持久启停、args/vars 私有存储与服务端 schema 校验已完成，管理 API、凭据脱敏和 schema 表单仍待实现。
 - [ ] 实现缓存/数据库浏览和安全删除。
 - [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [ ] 完成响应式布局、空/错/加载状态和基本可访问性。

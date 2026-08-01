@@ -96,20 +96,23 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
     private readonly ExternalPluginHostOptions _options;
     private readonly IExternalPluginSessionFactory _sessionFactory;
     private readonly TimeProvider _timeProvider;
+    private readonly ExternalPluginConfigurationStore? _configurations;
     private bool _disposed;
 
     public ExternalPluginHostManager(
         ExternalPluginManifestLoader loader,
         ExternalPluginDiscoveryResult discovery,
         string pluginDataRoot,
-        ExternalPluginHostOptions? options = null)
+        ExternalPluginHostOptions? options = null,
+        ExternalPluginConfigurationStore? configurations = null)
         : this(
             discovery,
             pluginDataRoot,
             Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
             options,
             new ExternalPluginSessionFactory(loader),
-            TimeProvider.System)
+            TimeProvider.System,
+            configurations)
     {
     }
 
@@ -119,7 +122,8 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
         string hostVersion,
         ExternalPluginHostOptions? options,
         IExternalPluginSessionFactory sessionFactory,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ExternalPluginConfigurationStore? configurations = null)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginDataRoot);
@@ -132,6 +136,7 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
         _options.Validate();
         _sessionFactory = sessionFactory;
         _timeProvider = timeProvider;
+        _configurations = configurations;
         _plugins = discovery.Packages
             .ToFrozenDictionary(
                 package => package.Manifest.Id,
@@ -156,7 +161,45 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
             : null;
     }
 
-    public async Task<JsonElement> ExecuteAsync(
+    public async Task<JsonElement> ExecuteConfiguredAsync(
+        string pluginId,
+        string operation,
+        JsonElement payload,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        _ = GetRequired(pluginId);
+        var configuration = _configurations?.GetOrDefault(pluginId);
+        if (configuration is { Enabled: false })
+        {
+            throw new ExternalPluginUnavailableException(pluginId, "plugin_disabled");
+        }
+        var configuredPayload = configuration is null
+            ? payload.Clone()
+            : MergeArguments(configuration.Args, payload);
+        var configuredVars = configuration?.Vars ?? EmptyJsonObject();
+        return await ExecuteAsync(
+            pluginId,
+            operation,
+            configuredPayload,
+            configuredVars,
+            timeout,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<bool> HealthConfiguredAsync(
+        string pluginId,
+        CancellationToken cancellationToken = default)
+    {
+        _ = GetRequired(pluginId);
+        if (_configurations?.GetOrDefault(pluginId) is { Enabled: false })
+        {
+            throw new ExternalPluginUnavailableException(pluginId, "plugin_disabled");
+        }
+        return HealthAsync(pluginId, cancellationToken);
+    }
+
+    internal async Task<JsonElement> ExecuteAsync(
         string pluginId,
         string operation,
         JsonElement payload,
@@ -210,7 +253,7 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
         }
     }
 
-    public async Task<bool> HealthAsync(
+    internal async Task<bool> HealthAsync(
         string pluginId,
         CancellationToken cancellationToken = default)
     {
@@ -435,6 +478,50 @@ public sealed class ExternalPluginHostManager : IAsyncDisposable
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    private static JsonElement MergeArguments(
+        JsonElement configuredArgs,
+        JsonElement invocationPayload)
+    {
+        ExternalPluginConfigurationStore.ValidateObject(configuredArgs, "args");
+        if (invocationPayload.ValueKind != JsonValueKind.Object)
+        {
+            throw new ArgumentException(
+                "Configured external plugin payload must be a JSON object.",
+                nameof(invocationPayload));
+        }
+        var invocationNames = invocationPayload
+            .EnumerateObject()
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in configuredArgs.EnumerateObject())
+            {
+                if (!invocationNames.Contains(property.Name))
+                {
+                    writer.WritePropertyName(property.Name);
+                    property.Value.WriteTo(writer);
+                }
+            }
+            foreach (var property in invocationPayload.EnumerateObject())
+            {
+                writer.WritePropertyName(property.Name);
+                property.Value.WriteTo(writer);
+            }
+            writer.WriteEndObject();
+        }
+        using var document = JsonDocument.Parse(buffer.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement EmptyJsonObject()
+    {
+        using var document = JsonDocument.Parse("{}");
+        return document.RootElement.Clone();
+    }
 
     private sealed class PluginRuntime(ExternalPluginPackage package)
     {

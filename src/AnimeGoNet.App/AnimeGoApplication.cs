@@ -158,6 +158,10 @@ public static class AnimeGoApplication
         var externalPluginLoader = new ExternalPluginManifestLoader(layout.PluginsPath);
         var externalPluginDiscovery = await externalPluginLoader
             .DiscoverAsync(cancellationToken).ConfigureAwait(false);
+        var externalPluginConfigurations = new ExternalPluginConfigurationStore(
+            layout.ConfigurationPath);
+        await externalPluginConfigurations.LoadAsync(cancellationToken)
+            .ConfigureAwait(false);
         builder.Services.AddSingleton(
             _ => new RollingFileLoggerProvider(
                 new RollingFileLogOptions
@@ -275,11 +279,15 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(legacyDownloaderMigrationState);
         builder.Services.AddSingleton(externalPluginLoader);
         builder.Services.AddSingleton(externalPluginDiscovery);
+        builder.Services.AddSingleton(externalPluginConfigurations);
+        builder.Services.AddSingleton<ExternalPluginConfigurationValidator>();
         builder.Services.AddSingleton<ExternalPluginHostManager>(_ =>
             new ExternalPluginHostManager(
                 externalPluginLoader,
                 externalPluginDiscovery,
-                layout.PluginDataPath));
+                layout.PluginDataPath,
+                configurations: externalPluginConfigurations));
+        builder.Services.AddSingleton<ExternalPluginConfigurationService>();
         builder.Services.AddSingleton(applicationOverrides);
         builder.Services.AddSingleton(
             new ApplicationConfigurationRuntimeState(applicationOverrideSnapshot.Revision));

@@ -12,9 +12,16 @@ public sealed class ExternalPluginHostManagerTests
         await using var app = await RunningApp.StartAsync();
 
         var manager = app.App.Services.GetRequiredService<ExternalPluginHostManager>();
+        var configurations = app.App.Services
+            .GetRequiredService<ExternalPluginConfigurationStore>();
+        var configurationService = app.App.Services
+            .GetRequiredService<ExternalPluginConfigurationService>();
 
         Assert.Empty(manager.PluginIds);
         Assert.Empty(manager.GetSnapshots());
+        Assert.Equal(0, configurations.Current.Revision);
+        Assert.Equal(0, configurationService.Current.Revision);
+        Assert.False(File.Exists(configurations.FilePath));
         Assert.True(Directory.Exists(Path.Combine(app.RootPath, "data", "plugins")));
         Assert.True(Directory.Exists(Path.Combine(app.RootPath, "data", "plugin-data")));
     }
@@ -55,6 +62,50 @@ public sealed class ExternalPluginHostManagerTests
                 null,
                 null),
             manager.GetSnapshot("com.example.filter-one"));
+    }
+
+    [Fact]
+    public async Task ProductionConfigurationDefaultsUndeclaredPluginToDisabled()
+    {
+        using var fixture = new ManagerFixture("filter-one");
+        await fixture.Configurations.LoadAsync();
+        await using var manager = fixture.CreateConfiguredManager();
+
+        var error = await Assert.ThrowsAsync<ExternalPluginUnavailableException>(() =>
+            manager.ExecuteConfiguredAsync(
+                "com.example.filter-one",
+                "filter.all",
+                Json("{}")));
+
+        Assert.Equal("plugin_disabled", error.Code);
+        Assert.Equal(0, fixture.Factory.CreateCount("com.example.filter-one"));
+    }
+
+    [Fact]
+    public async Task ConfiguredExecutionMergesDefaultArgsAndPassesVars()
+    {
+        using var fixture = new ManagerFixture("filter-one");
+        await fixture.Configurations.LoadAsync();
+        await fixture.Configurations.UpsertAsync(
+            "com.example.filter-one",
+            true,
+            Json("{\"configured_only\":7,\"winner\":\"configured\"}"),
+            Json("{\"quality\":\"1080p\"}"),
+            0,
+            fixture.Clock.GetUtcNow());
+        var session = new FakeSession();
+        fixture.Factory.Enqueue("com.example.filter-one", session);
+        await using var manager = fixture.CreateConfiguredManager();
+
+        await manager.ExecuteConfiguredAsync(
+            "com.example.filter-one",
+            "filter.all",
+            Json("{\"winner\":\"runtime\",\"runtime_only\":true}"));
+
+        Assert.Equal(7, session.LastPayload!.Value.GetProperty("configured_only").GetInt32());
+        Assert.Equal("runtime", session.LastPayload.Value.GetProperty("winner").GetString());
+        Assert.True(session.LastPayload.Value.GetProperty("runtime_only").GetBoolean());
+        Assert.Equal("1080p", session.LastConfig!.Value.GetProperty("quality").GetString());
     }
 
     [Fact]
@@ -387,6 +438,8 @@ public sealed class ExternalPluginHostManagerTests
                 "animegonet-plugin-manager-tests",
                 Guid.NewGuid().ToString("N"));
             PluginDataRoot = Path.Combine(RootPath, "plugin-data");
+            ConfigurationPath = Path.Combine(RootPath, "config");
+            Configurations = new ExternalPluginConfigurationStore(ConfigurationPath);
             Clock = new MutableTimeProvider(now);
             Discovery = new ExternalPluginDiscoveryResult(
                 names.Select(CreatePackage).ToArray(),
@@ -396,6 +449,10 @@ public sealed class ExternalPluginHostManagerTests
         public string RootPath { get; }
 
         public string PluginDataRoot { get; }
+
+        public string ConfigurationPath { get; }
+
+        public ExternalPluginConfigurationStore Configurations { get; }
 
         public MutableTimeProvider Clock { get; }
 
@@ -412,8 +469,20 @@ public sealed class ExternalPluginHostManagerTests
                 Factory,
                 Clock);
 
+        public ExternalPluginHostManager CreateConfiguredManager(
+            ExternalPluginHostOptions? options = null) =>
+            new(
+                Discovery,
+                PluginDataRoot,
+                "9.8.7",
+                options,
+                Factory,
+                Clock,
+                Configurations);
+
         public void Dispose()
         {
+            Configurations.Dispose();
             if (Directory.Exists(RootPath))
             {
                 Directory.Delete(RootPath, recursive: true);
@@ -495,6 +564,10 @@ public sealed class ExternalPluginHostManagerTests
 
         public int ExecuteCount { get; private set; }
 
+        public JsonElement? LastPayload { get; private set; }
+
+        public JsonElement? LastConfig { get; private set; }
+
         public string? HostVersion { get; private set; }
 
         public bool Disposed { get; private set; }
@@ -526,6 +599,8 @@ public sealed class ExternalPluginHostManagerTests
         {
             Assert.Equal("filter.all", operation);
             ExecuteCount++;
+            LastPayload = payload.Clone();
+            LastConfig = config.Clone();
             return ExecuteHandler?.Invoke(this, cancellationToken)
                 ?? Task.FromResult(Json("{\"accepted\":true}"));
         }

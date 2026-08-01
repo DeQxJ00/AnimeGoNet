@@ -83,6 +83,21 @@ $pluginManifest = @"
     (Join-Path $pluginPackage 'config.schema.json'),
     '{"type":"object","additionalProperties":false}',
     $utf8NoBom)
+$pluginConfigurationDirectory = Join-Path $env:data_path 'config'
+New-Item -ItemType Directory -Path $pluginConfigurationDirectory -Force | Out-Null
+$pluginConfiguration = @"
+{"format_version":1,"revision":1,"plugins":{"com.animegonet.native-smoke":{"enabled":false,"args":{},"vars":{},"revision":1,"updated_at_utc":"2026-08-01T00:00:00+00:00"}}}
+"@
+$pluginConfigurationPath = Join-Path $pluginConfigurationDirectory 'external-plugins.private.json'
+[IO.File]::WriteAllText(
+    $pluginConfigurationPath,
+    $pluginConfiguration,
+    $utf8NoBom)
+if (-not $IsWindows) {
+    [IO.File]::SetUnixFileMode(
+        $pluginConfigurationPath,
+        [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite)
+}
 $baseUrl = "http://127.0.0.1:$Port"
 $startParameters = @{
     FilePath = $resolvedExecutable
