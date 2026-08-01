@@ -1,0 +1,64 @@
+name: Plugin NativeAOT
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            rid: win-x64
+            architecture: x64
+          - runner: windows-11-arm
+            rid: win-arm64
+            architecture: arm64
+          - runner: ubuntu-24.04
+            rid: linux-x64
+            architecture: x64
+          - runner: ubuntu-24.04-arm
+            rid: linux-arm64
+            architecture: arm64
+          - runner: macos-15
+            rid: osx-arm64
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+          architecture: ${{ matrix.architecture }}
+      - name: Install Linux NativeAOT prerequisites
+        if: startsWith(matrix.rid, 'linux-')
+        run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
+      - name: Restore
+        run: dotnet restore --runtime ${{ matrix.rid }} -p:PublishAot=true
+      - name: Publish NativeAOT
+        run: dotnet publish --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
+      - name: Prepare package manifest
+        shell: pwsh
+        run: |
+          $rid = '${{ matrix.rid }}'
+          $entryPoint = if ($rid.StartsWith('win-', [StringComparison]::Ordinal)) { 'AnimeGo.Plugin.Sample.exe' } else { 'AnimeGo.Plugin.Sample' }
+          $manifest = Get-Content plugin.json -Raw | ConvertFrom-Json
+          $manifest.rid = $rid
+          $manifest.entryPoint = $entryPoint
+          $manifest | ConvertTo-Json -Depth 8 -Compress | Set-Content "artifacts/$rid/plugin.json" -Encoding utf8NoBOM
+          Copy-Item config.schema.json "artifacts/$rid/config.schema.json" -Force
+          if (-not (Test-Path "artifacts/$rid/$entryPoint" -PathType Leaf)) { throw "Native entry point was not published." }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: animego-plugin-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 14

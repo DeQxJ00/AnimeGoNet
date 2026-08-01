@@ -148,7 +148,14 @@ data/plugins/com.example.animego.filter-resolution/
 {"apiVersion":1,"requestId":"01J...","ok":false,"error":{"code":"invalid_config","message":"resolution is required"}}
 ```
 
-`AnimeGo.Plugin.Sdk` 提供协议循环和 `System.Text.Json` source-generation context，插件作者只实现强类型处理器。
+`AnimeGo.Plugin.Sdk` 提供协议循环，插件作者只实现六类强类型 handler，并把自己的
+`System.Text.Json` source-generation `JsonTypeInfo<TRequest/TResult>` 传给对应的
+`RunSourceAsync`、`RunFeedAsync`、`RunParserAsync`、`RunFilterAsync`、
+`RunRenameAsync` 或 `RunScheduleAsync`。SDK 不调用反射序列化；完整 payload 和 vars
+配置还会以 `RawPayload`、`Config` 提供给 handler，使 manifest `args` 的扩展字段不必
+进入稳定 DTO。`AnimeGoPluginExecutionException` 产生可继续会话的稳定业务错误；畸形/
+超限输入、initialize 身份不一致、未处理异常和超限输出分别以进程码 20、21、30、31
+失败，未处理异常的 message/stack 不进入 stdout 或 stderr。
 
 ## 5. 生命周期与限制
 
@@ -182,10 +189,25 @@ data/plugins/com.example.animego.filter-resolution/
 
 - `AnimeGo.Plugin.Abstractions` NuGet 包。
 - `AnimeGo.Plugin.Sdk` NuGet 包。
-- `dotnet new animego-plugin --type filter` 模板。
+- `dotnet new animego-plugin --type filter` 语义的模板；.NET 10 CLI 将与保留参数重名的
+  template symbol 显示为 `--param:type`，因此当前可执行命令是
+  `dotnet new animego-plugin --param:type filter`（也可用 `-t filter`）。
 - source/feed/parser/filter/rename/schedule 六种最小示例。
 - Windows x64/ARM64、Linux x64/ARM64、macOS ARM64 NativeAOT GitHub Actions 模板。
 - `AnimeGo.PluginTool validate/run/pack` 命令，用 fixture 在发布前验证 manifest、协议和结果。
+
+模板打包和本机验收：
+
+```powershell
+dotnet pack templates/AnimeGo.Plugin.Templates/AnimeGo.Plugin.Templates.csproj -c Release
+./eng/verify-plugin-template.ps1 -RuntimeIdentifier win-x64
+```
+
+验收脚本使用一次性 custom hive 和本地 NuGet feed，不安装到用户的全局模板仓库。它逐一
+生成 source/feed/parser/filter/rename/schedule，验证每个输出只有所选 Program/Handler、
+manifest identity 已替换并 Release 零警告编译；随后发布 filter NativeAOT 原生程序并用
+真实 stdin/stdout 跑通 initialize → execute → health → shutdown。主项目五 RID NativeAOT
+workflow 在对应原生 runner 上运行同一脚本，Linux/Windows ARM64 不做 x64 伪交叉验证。
 
 ## 8. 验证与提交拆分
 

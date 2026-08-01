@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json.schemastore.org/dotnetcli.host",
+  "symbolInfo": {
+    "pluginType": {
+      "longName": "type",
+      "shortName": "t"
+    },
+    "pluginId": {
+      "longName": "plugin-id"
+    },
+    "pluginName": {
+      "longName": "plugin-name"
+    }
+  }
+}

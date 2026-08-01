@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "AnimeGoNet",
+  "classifications": ["AnimeGoNet", "Plugin", "NativeAOT"],
+  "identity": "AnimeGo.Plugin.Templates.External",
+  "name": "AnimeGoNet external plugin",
+  "shortName": "animego-plugin",
+  "sourceName": "AnimeGo.Plugin.Sample",
+  "preferNameDirectory": true,
+  "symbols": {
+    "pluginType": {
+      "type": "parameter",
+      "datatype": "choice",
+      "defaultValue": "filter",
+      "description": "External plugin operation type.",
+      "replaces": "__PLUGIN_TYPE__",
+      "choices": [
+        { "choice": "source", "description": "Normalize a unified import request." },
+        { "choice": "feed", "description": "Fetch feed items." },
+        { "choice": "parser", "description": "Parse release titles." },
+        { "choice": "filter", "description": "Filter and rank feed candidates." },
+        { "choice": "rename", "description": "Plan a relative library path." },
+        { "choice": "schedule", "description": "Run a scheduled operation." }
+      ]
+    },
+    "pluginId": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "com.example.animego-plugin",
+      "description": "Stable lowercase reverse-domain plugin ID.",
+      "replaces": "__PLUGIN_ID__"
+    },
+    "pluginName": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "Example AnimeGoNet Plugin",
+      "description": "Display name written to plugin.json.",
+      "replaces": "__PLUGIN_NAME__"
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [".template.config/**/*", "**/bin/**/*", "**/obj/**/*"],
+      "modifiers": [
+        { "condition": "(pluginType != \"source\")", "exclude": ["Program.Source.cs", "PluginHandler.Source.cs"] },
+        { "condition": "(pluginType != \"feed\")", "exclude": ["Program.Feed.cs", "PluginHandler.Feed.cs"] },
+        { "condition": "(pluginType != \"parser\")", "exclude": ["Program.Parser.cs", "PluginHandler.Parser.cs"] },
+        { "condition": "(pluginType != \"filter\")", "exclude": ["Program.Filter.cs", "PluginHandler.Filter.cs"] },
+        { "condition": "(pluginType != \"rename\")", "exclude": ["Program.Rename.cs", "PluginHandler.Rename.cs"] },
+        { "condition": "(pluginType != \"schedule\")", "exclude": ["Program.Schedule.cs", "PluginHandler.Schedule.cs"] }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "AnimeGo.Plugin.Sample.csproj" },
+    { "path": "plugin.json" },
+    { "path": "config.schema.json" }
+  ]
+}

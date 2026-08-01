@@ -54,6 +54,9 @@ jobs:
         run: |
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" -LegacyYamlUpgrade
+      - name: Verify plugin SDK and NativeAOT template
+        shell: pwsh
+        run: ./eng/verify-plugin-template.ps1 -RuntimeIdentifier "${{ matrix.rid }}"
       - uses: actions/upload-artifact@v7
         with:
           name: animegonet-${{ matrix.rid }}

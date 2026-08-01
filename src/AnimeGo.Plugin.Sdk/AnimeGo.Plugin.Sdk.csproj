@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <IsPackable>true</IsPackable>
+    <PackageId>AnimeGo.Plugin.Sdk</PackageId>
+    <Description>NativeAOT-safe JSON Lines process host for AnimeGoNet plugins.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AnimeGo.Plugin.Sdk.Tests" />
+  </ItemGroup>
+</Project>
