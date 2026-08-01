@@ -220,6 +220,7 @@ docs/
 - 每个最终 Series/Season/Episode 写入值同时保存取得阶段和不可变的解析 Run/Attempt 引用。Series/Season 证据保存在完成的 `metadata_resolution_runs`；Episode 证据按 `task_files` 逐文件保存，字幕关联使用自己的 `subtitle_association` Attempt，不能借用视频或同策略最后一次 Attempt。SQLite schema v32 触发器验证 Attempt 属于同一任务/Run、正确 stage、相同 strategy 且结果为 `matched`；失败分类和具体原因继续在 Web UI 中可见。
 - SQLite schema v33 将路由快照中的做种分钟固化到 download job，保存 qB 累计做种秒数、`not_required/waiting/seeding/completed` 与首次完成时间；累计值和完成状态只能前进。`wait_move` 和 `link_delete` 后续动作只依赖该持久化门禁，因此 qB 暂时离线、进程重启或 SourceProfile 修改不会改变既有任务语义。
 - SQLite schema v34 将来源动态 tag 模板固化进任务 route snapshot，并在 download job 保存实际 tag、`pending/applied/skipped/not_configured` 和稳定失败码。只在规范 TMDB 元数据确认后、qB 仍暂停时展开上游兼容日期/季度/EP变量；缺元数据可审计跳过，qB 写入失败沿下载准备租约重试。
+- SQLite schema v35 将正常整理产生的 `completion_aliases` 纳入通用查询，并在 Mikan RSS 批次条目保存早期 completion 命中证据。完成记录、来源 alias 与 Episode claim 同事务提交；RSS 在 Bangumi/Torrent 网络访问前以 IMMEDIATE 事务按 `source+mikanid+来源EP` 早停，并在 staging 前再次事务复查后 claim。删除业务完成记录时 alias 和命中证据由外键级联清除，后续同批次可重新导入。
 - 正常取得 TMDB ID 时，在动画根目录 `tvshow.nfo` 写真实 `<tmdbid>` 和对应 `<bangumiid>`。
 - TMDB 完全失败兜底开启、权威TMDB访问成功并确定无匹配、Bangumi Subject ID有效且季度已确定时，继续下载/刮削，并在 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - 兜底关闭或兜底前置条件不满足时不继续下载/刮削，也不生成失败 NFO；不得只写 `tmdbid=0`。

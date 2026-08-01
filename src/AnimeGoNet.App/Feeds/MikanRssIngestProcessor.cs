@@ -111,7 +111,36 @@ public sealed class MikanRssIngestProcessor(
         var stored = await batches.SaveAsync(
             profile.Id, ruleSnapshot.Revision, profile.RssPriorityEnabled,
             plan, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        var earlyCompleted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in plan.Items.Where(item =>
+                     item.Decision.Kind == MikanRssDecisionKind.Winner))
+        {
+            var audit = stored.Entries.Single(entry => entry.CandidateId == item.Candidate.Id);
+            if (audit.EffectState == "ingested"
+                || !TryGetEarlyCompletionIdentity(
+                    item, stored.MikanId, out var sourceWorkId, out var sourceEpisode))
+            {
+                continue;
+            }
+
+            if (await batches.TryRecordCompletedWinnerAsync(
+                    stored.Id,
+                    item.Candidate.Id,
+                    DateTimeOffset.UtcNow,
+                    profile.Id,
+                    sourceWorkId,
+                    sourceEpisode,
+                    cancellationToken).ConfigureAwait(false))
+            {
+                earlyCompleted.Add(item.Candidate.Id);
+            }
+        }
+
         var hasWinner = plan.Items.Any(item => item.Decision.Kind == MikanRssDecisionKind.Winner);
+        var hasPendingWinner = plan.Items.Any(item =>
+            item.Decision.Kind == MikanRssDecisionKind.Winner
+            && !earlyCompleted.Contains(item.Candidate.Id)
+            && stored.Entries.Single(entry => entry.CandidateId == item.Candidate.Id).EffectState != "ingested");
         if (!hasWinner)
         {
             if (stored.BangumiDiscovery.State == MikanBangumiDiscoveryStates.NotAttempted)
@@ -125,7 +154,17 @@ public sealed class MikanRssIngestProcessor(
                     cancellationToken).ConfigureAwait(false);
             }
         }
-        else if (!stored.BangumiDiscovery.IsResolved)
+        else if (!hasPendingWinner && !stored.BangumiDiscovery.IsResolved)
+        {
+            stored = await batches.SetBangumiDiscoveryAsync(
+                stored.Id,
+                new MikanBangumiDiscovery(
+                    null,
+                    MikanBangumiDiscoveryStates.NotApplicable,
+                    "mikan_bgmid_no_pending_winner"),
+                cancellationToken).ConfigureAwait(false);
+        }
+        else if (hasPendingWinner && !stored.BangumiDiscovery.IsResolved)
         {
             var discovery = await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false);
             stored = await batches.SetBangumiDiscoveryAsync(
@@ -141,8 +180,39 @@ public sealed class MikanRssIngestProcessor(
                 continue;
             }
 
+            var audit = stored.Entries.Single(entry => entry.CandidateId == item.Candidate.Id);
+            if (audit.EffectState == "ingested")
+            {
+                results.Add(Result(item, "already_ingested", audit.IngestTaskId, []));
+                continue;
+            }
+
+            if (earlyCompleted.Contains(item.Candidate.Id))
+            {
+                results.Add(Result(item, "already_completed", null, []));
+                continue;
+            }
+
             if (!stored.BangumiDiscovery.IsResolved)
             {
+                if (TryGetEarlyCompletionIdentity(
+                        item,
+                        stored.MikanId,
+                        out var failedDiscoveryWorkId,
+                        out var failedDiscoveryEpisode)
+                    && await batches.TryRecordCompletedWinnerAsync(
+                        stored.Id,
+                        item.Candidate.Id,
+                        DateTimeOffset.UtcNow,
+                        profile.Id,
+                        failedDiscoveryWorkId,
+                        failedDiscoveryEpisode,
+                        cancellationToken).ConfigureAwait(false))
+                {
+                    results.Add(Result(item, "already_completed", null, []));
+                    continue;
+                }
+
                 results.Add(Result(
                     item,
                     "bgmid_discovery_failed",
@@ -151,16 +221,43 @@ public sealed class MikanRssIngestProcessor(
                 continue;
             }
 
-            var audit = stored.Entries.Single(entry => entry.CandidateId == item.Candidate.Id);
-            if (audit.EffectState == "ingested")
+            MikanRssWinnerClaimResult claim;
+            if (TryGetEarlyCompletionIdentity(
+                    item, stored.MikanId, out var sourceWorkId, out var sourceEpisode))
             {
-                results.Add(Result(item, "already_ingested", audit.IngestTaskId, []));
+                claim = await batches.TryClaimWinnerWithCompletionCheckAsync(
+                    stored.Id,
+                    item.Candidate.Id,
+                    DateTimeOffset.UtcNow,
+                    WinnerLeaseDuration,
+                    profile.Id,
+                    sourceWorkId,
+                    sourceEpisode,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var basicLease = await batches.TryClaimWinnerAsync(
+                    stored.Id,
+                    item.Candidate.Id,
+                    DateTimeOffset.UtcNow,
+                    WinnerLeaseDuration,
+                    cancellationToken).ConfigureAwait(false);
+                claim = new MikanRssWinnerClaimResult(
+                    basicLease is null
+                        ? MikanRssWinnerClaimState.Unavailable
+                        : MikanRssWinnerClaimState.Claimed,
+                    basicLease,
+                    null,
+                    null);
+            }
+            if (claim.State == MikanRssWinnerClaimState.AlreadyCompleted)
+            {
+                results.Add(Result(item, "already_completed", null, []));
                 continue;
             }
 
-            var lease = await batches.TryClaimWinnerAsync(
-                stored.Id, item.Candidate.Id, DateTimeOffset.UtcNow,
-                WinnerLeaseDuration, cancellationToken).ConfigureAwait(false);
+            var lease = claim.Lease;
             if (lease is null)
             {
                 results.Add(Result(item, "already_claimed", null, []));
@@ -220,6 +317,31 @@ public sealed class MikanRssIngestProcessor(
             legacy.Revision,
             legacy.Enabled,
             results);
+    }
+
+    private static bool TryGetEarlyCompletionIdentity(
+        MikanRssPlannedItem item,
+        int? mikanId,
+        out string sourceWorkId,
+        out string sourceEpisode)
+    {
+        sourceWorkId = string.Empty;
+        sourceEpisode = string.Empty;
+        if (!string.Equals(item.Candidate.SourceEpisodeKind, "normal", StringComparison.Ordinal)
+            || mikanId is not > 0
+            || !int.TryParse(
+                item.Candidate.SourceEpisode,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var parsedEpisode)
+            || parsedEpisode <= 0)
+        {
+            return false;
+        }
+
+        sourceWorkId = mikanId.Value.ToString(CultureInfo.InvariantCulture);
+        sourceEpisode = parsedEpisode.ToString(CultureInfo.InvariantCulture);
+        return true;
     }
 
     private static MikanRssIngestItemResult Result(

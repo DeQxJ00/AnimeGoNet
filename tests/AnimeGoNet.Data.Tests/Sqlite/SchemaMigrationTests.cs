@@ -372,6 +372,142 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task CompletionSourceAliasAuditMigrationPreservesHistoricalAliasesAndAddsLookupEvidence()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 34))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        const string now = "2026-08-01T10:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    source_item_id, source_work_id, title, torrent_url_fingerprint,
+                    downloader_id, route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES (
+                    'historical-task', 'mikan', 1, 'mikan', 'episode-item', '3951',
+                    'Historical Episode', 'fingerprint', 'bt', '{}', 'organized', $now, $now);
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    tmdb_episode_id, disposition)
+                VALUES (
+                    'historical-file', 'historical-task', 'Show - 04.mkv', 5, '4',
+                    42, 1, 4, 4204, 'episode');
+                INSERT INTO completion_records (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    source_id, source_item_id, completed_at_utc)
+                VALUES
+                    ('completion', 42, 1, 3, 'mikan', 'duplicate-item', $now),
+                    ('historical-completion', 42, 1, 4, 'mikan', 'episode-item', $now);
+                INSERT INTO completion_aliases (
+                    id, completion_id, source_id, source_work_id, source_episode, created_at_utc)
+                VALUES
+                    ('alias-a', 'completion', 'mikan', '3951', '3', $now),
+                    ('alias-b', 'completion', 'mikan', '3951', '3', $now);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            Assert.Equal(7, await seed.ExecuteNonQueryAsync());
+        }
+
+        await using (var historicalCandidate = connection.CreateCommand())
+        {
+            historicalCandidate.CommandText = """
+                SELECT COUNT(*)
+                FROM completion_records AS completion
+                JOIN ingest_tasks AS task
+                  ON task.source_id = completion.source_id
+                 AND task.source_item_id = completion.source_item_id
+                JOIN task_files AS file
+                  ON file.task_id = task.id
+                 AND file.tmdb_series_id = completion.tmdb_series_id
+                 AND file.tmdb_season_number = completion.tmdb_season_number
+                 AND file.tmdb_episode_number = completion.tmdb_episode_number
+                WHERE completion.id = 'historical-completion'
+                  AND task.source_work_id = '3951'
+                  AND file.source_episode = '4'
+                  AND file.associated_task_file_id IS NULL;
+                """;
+            Assert.Equal(1L, await historicalCandidate.ExecuteScalarAsync());
+        }
+
+        var migration35 = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 35);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration35.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var columns = connection.CreateCommand())
+        {
+            columns.CommandText = """
+                SELECT name FROM pragma_table_info('mikan_rss_batch_entries')
+                WHERE name LIKE 'early_completion%'
+                ORDER BY name;
+                """;
+            await using var reader = await columns.ExecuteReaderAsync();
+            var names = new List<string>();
+            while (await reader.ReadAsync()) names.Add(reader.GetString(0));
+            Assert.Equal(
+                [
+                    "early_completion_alias_id",
+                    "early_completion_checked_at_utc",
+                    "early_completion_id",
+                ],
+                names);
+        }
+
+        await using (var indexes = connection.CreateCommand())
+        {
+            indexes.CommandText = """
+                SELECT name FROM sqlite_schema
+                WHERE type = 'index' AND name IN (
+                    'ix_completion_aliases_source_episode',
+                    'ix_mikan_rss_entries_early_completion')
+                ORDER BY name;
+                """;
+            await using var reader = await indexes.ExecuteReaderAsync();
+            var names = new List<string>();
+            while (await reader.ReadAsync()) names.Add(reader.GetString(0));
+            Assert.Equal(
+                [
+                    "ix_completion_aliases_source_episode",
+                    "ix_mikan_rss_entries_early_completion",
+                ],
+                names);
+        }
+
+        await using var count = connection.CreateCommand();
+        count.CommandText = """
+            SELECT COUNT(*),
+                   COUNT(*) FILTER (
+                       WHERE id = 'v35-historical-completion-historical-file'
+                         AND source_id = 'mikan'
+                         AND source_work_id = '3951'
+                         AND source_episode = '4')
+            FROM completion_aliases;
+            """;
+        await using var countReader = await count.ExecuteReaderAsync();
+        Assert.True(await countReader.ReadAsync());
+        Assert.Equal(3, countReader.GetInt32(0));
+        Assert.Equal(1, countReader.GetInt32(1));
+    }
+
+    [Fact]
     public async Task TmdbResolutionEvidenceMigrationBackfillsRunsAndGuardsReferences()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

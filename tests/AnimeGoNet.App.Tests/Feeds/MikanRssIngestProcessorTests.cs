@@ -4,9 +4,11 @@ using System.Text.Json;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Feeds;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Feeds;
+using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -61,6 +63,77 @@ public sealed class MikanRssIngestProcessorTests
                 reader.GetString(2),
                 System.Globalization.CultureInfo.InvariantCulture));
         Assert.Equal(547888, reader.GetInt32(3));
+    }
+
+    [Fact]
+    public async Task CompletedSourceEpisodeStopsBeforeTorrentStagingAndDeletionAllowsReentry()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new WorkPageTransport();
+        await using var app = await StartAsync(staging, transport);
+        var completions = app.App.Services.GetRequiredService<CompletionRecordStore>();
+        Assert.True(await completions.TryAddAsync(new CompletionRecord
+        {
+            Id = "completed-episode-3",
+            Episode = new TmdbEpisodeIdentity(72517, 4, 3),
+            SourceId = "mikan",
+            SourceItemId = "previous",
+            CompletedAtUtc = new DateTimeOffset(2026, 7, 20, 1, 2, 3, TimeSpan.Zero),
+        }));
+        Assert.True(await completions.TryAddAliasAsync(new CompletionAlias
+        {
+            Id = "completed-episode-3-alias",
+            CompletionId = "completed-episode-3",
+            SourceId = "mikan",
+            SourceWorkId = "3951",
+            SourceEpisode = "3",
+            InfoHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            CreatedAtUtc = new DateTimeOffset(2026, 7, 20, 1, 2, 4, TimeSpan.Zero),
+        }));
+
+        var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
+        var feed = Feed(Item("Show [03] [1080p]", "winner"));
+        var skipped = await processor.ProcessAsync(feed);
+
+        var skippedItem = Assert.Single(skipped.Items);
+        Assert.Equal("already_completed", skippedItem.Status);
+        Assert.Null(skippedItem.IngestTaskId);
+        Assert.Empty(skippedItem.Errors);
+        Assert.Equal(0, staging.StageCount);
+        Assert.Empty(transport.Requests);
+        Assert.Equal(MikanBangumiDiscoveryStates.NotApplicable, skipped.BangumiDiscoveryState);
+        Assert.Equal("mikan_bgmid_no_pending_winner", skipped.BangumiDiscoveryFailureCode);
+        var storedSkip = Assert.IsType<MikanRssBatchRecord>(
+            await app.App.Services.GetRequiredService<MikanRssBatchStore>().GetAsync(skipped.BatchId));
+        var storedEntry = Assert.Single(storedSkip.Entries);
+        Assert.Equal("ready", storedEntry.EffectState);
+        Assert.Equal("completed-episode-3", storedEntry.EarlyCompletionId);
+        Assert.Equal("completed-episode-3-alias", storedEntry.EarlyCompletionAliasId);
+        Assert.NotNull(storedEntry.EarlyCompletionCheckedAtUtc);
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.CommandText = "DELETE FROM completion_records WHERE id = 'completed-episode-3';";
+            Assert.Equal(1, await delete.ExecuteNonQueryAsync());
+        }
+
+        var retried = await processor.ProcessAsync(feed);
+        var retriedItem = Assert.Single(retried.Items);
+        Assert.Equal("staged", retriedItem.Status);
+        Assert.NotNull(retriedItem.IngestTaskId);
+        Assert.Equal(1, staging.StageCount);
+        Assert.Single(transport.Requests);
+        Assert.Equal(MikanBangumiDiscoveryStates.Resolved, retried.BangumiDiscoveryState);
+        Assert.Equal(skipped.BatchId, retried.BatchId);
+        var storedRetry = Assert.IsType<MikanRssBatchRecord>(
+            await app.App.Services.GetRequiredService<MikanRssBatchStore>().GetAsync(retried.BatchId));
+        var retriedEntry = Assert.Single(storedRetry.Entries);
+        Assert.Equal("ingested", retriedEntry.EffectState);
+        Assert.Null(retriedEntry.EarlyCompletionId);
+        Assert.Null(retriedEntry.EarlyCompletionAliasId);
+        Assert.Null(retriedEntry.EarlyCompletionCheckedAtUtc);
     }
 
     [Fact]

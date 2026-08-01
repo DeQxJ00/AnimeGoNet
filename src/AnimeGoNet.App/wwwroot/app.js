@@ -78,6 +78,16 @@ const statusLabels = {
     metadata_episode_resolving: "正在验证 Episode",
     metadata_resolved: "元数据已确认",
     metadata_failed: "元数据失败",
+    already_completed: "同一来源集已完成，已跳过",
+};
+const rssStatusLabels = {
+    staged: "已暂存",
+    blocked: "规则未选中",
+    already_ingested: "批次已导入",
+    already_claimed: "正在由另一请求处理",
+    already_completed: "同一 mikanid 与来源 EP 已完成，已跳过",
+    bgmid_discovery_failed: "Bangumi Subject 获取失败",
+    rejected: "导入被拒绝",
 };
 const deleteGroups = [
     { flag: "delete_business_record", label: "业务完成记录", collection: "business_records", help: "删除后该 TMDB 单集可重新导入" },
@@ -3606,12 +3616,16 @@ async function submitManualRss(event) {
                 + `bgmid ${body.bgmid ?? "未取得"}（${body.bgmid_discovery_state}`
                 + `${body.bgmid_discovery_failure_code ? ` / ${body.bgmid_discovery_failure_code}` : ""}）`
                 + ` · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
-        result.replaceChildren(summary, ...body.items.map((item, index) => manualResultItem(`候选 ${index + 1} · ${item.status}`, [
+        result.replaceChildren(summary, ...body.items.map((item, index) => manualResultItem(`候选 ${index + 1} · ${rssStatusLabels[item.status] ?? item.status}`, [
             item.decision_kind,
             item.decision_reason,
+            item.status === "already_completed"
+                ? "命中完成记录的来源别名，未抓取 Torrent"
+                : null,
             item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
             item.errors.length > 0 ? item.errors.join("；") : null,
-        ].filter((value) => value !== null).join(" · "), item.ingest_task_id === null)));
+        ].filter((value) => value !== null).join(" · "), !["staged", "blocked", "already_ingested", "already_completed"]
+            .includes(item.status))));
         void loadDownloads();
         void loadMetadataTasks();
         void loadSources(sourceId);

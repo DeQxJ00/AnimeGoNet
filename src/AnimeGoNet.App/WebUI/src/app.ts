@@ -1110,6 +1110,17 @@ const statusLabels: Record<string, string> = {
   metadata_episode_resolving: "正在验证 Episode",
   metadata_resolved: "元数据已确认",
   metadata_failed: "元数据失败",
+  already_completed: "同一来源集已完成，已跳过",
+};
+
+const rssStatusLabels: Record<string, string> = {
+  staged: "已暂存",
+  blocked: "规则未选中",
+  already_ingested: "批次已导入",
+  already_claimed: "正在由另一请求处理",
+  already_completed: "同一 mikanid 与来源 EP 已完成，已跳过",
+  bgmid_discovery_failed: "Bangumi Subject 获取失败",
+  rejected: "导入被拒绝",
 };
 
 const deleteGroups: DeleteGroup[] = [
@@ -4945,14 +4956,18 @@ async function submitManualRss(event: SubmitEvent): Promise<void> {
     result.replaceChildren(
       summary,
       ...body.items.map((item, index) => manualResultItem(
-        `候选 ${index + 1} · ${item.status}`,
+        `候选 ${index + 1} · ${rssStatusLabels[item.status] ?? item.status}`,
         [
           item.decision_kind,
           item.decision_reason,
+          item.status === "already_completed"
+            ? "命中完成记录的来源别名，未抓取 Torrent"
+            : null,
           item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
           item.errors.length > 0 ? item.errors.join("；") : null,
         ].filter((value): value is string => value !== null).join(" · "),
-        item.ingest_task_id === null,
+        !["staged", "blocked", "already_ingested", "already_completed"]
+          .includes(item.status),
       )),
     );
     void loadDownloads();

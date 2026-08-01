@@ -85,7 +85,7 @@
 - [x] 实现 SQLite KV/TTL store：schema v22 `cache_buckets/cache_entries`、原子批量 JSON、绝对 TTL、惰性/全局过期清理与并发写入已验证。
 - [x] 实现 bucket/list/get/delete 兼容接口：`bolt`/`bolt_sub` 隔离、旧 envelope、只读 archive 删除保护和 Access-Key 已验证。
 - [x] 移植目录 JSON 数据库扫描/索引/写入：按上游结构原子写 `anime.a_json`、`anime.s_json`、`*.e_json`，启动扫描并以 schema v27 建立 SQLite 索引/运行/拒绝审计；每日 6 点六字段 Cron 刷新，API/WebUI 可查看和手动刷新。
-- [>] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除（全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放已完成；删除执行器已按精确记录 ID 事务删除 completion/alias 并释放对应 completed claim，通用 alias repository 待实现）。
+- [x] 移植全局 TMDB Episode 去重索引、来源 alias 和完成记录删除：全局完成唯一键、并发 TryAdd、逐文件 EpisodeClaim、已完成/进行中精确跳过及失败释放均已完成；通用 alias repository 支持规范化写入/来源 EP 查询，正常整理在 completion 同一事务写 alias，删除完成记录级联移除 alias 并释放对应 completed claim。
 - [x] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键：schema/约束、事务 claim/release/complete、同作用域早停、同任务多文件共享 claim，以及失败释放后重试均已接入。
 - [x] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件；恢复前逐级在线验证 TMDB Series/Season/Episode。
 - [x] 移植 `tvshow.nfo` 生成和更新：整理时原子生成，TMDB fallback 恢复后以持久化重写作业更新，均限制在捕获的 save root 内。
@@ -167,7 +167,7 @@
 
 - [x] 移植下载管理状态机和 notifier：staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded 已接入；后台 qB 快照同步把不可变做种目标、单调累计秒数和 waiting/seeding/completed 写入 schema v33，整理 worker 只按该持久化门禁推进，准备、整理和 cleanup 均有独立租约与安全重试。
 - [>] 移植重启恢复、去重、失败重试和删除 callback（dispatch lease恢复、qB同hash幂等、按实例+hash运行快照恢复、离线 stale 保留与退避重试，以及每个 job 的不可变 download/save root 快照已实现；删除回调待实现）。
-- [>] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：worker 已在所有文件、原子 `tvshow.nfo`、上游兼容目录 JSON 及 schema v27 索引全部成功后才执行 completion/episode claim 事务，qB cleanup 独立在后；RSS 早期事务复查待实现。
+- [x] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：worker 在所有文件、原子 `tvshow.nfo`、上游兼容目录 JSON 及 schema v27 索引全部成功后才于同一事务写 completion、来源 alias 并完成 episode claim，qB cleanup 独立在后；RSS winner 在 Bangumi 页面和 Torrent 网络访问前以 SQLite IMMEDIATE 事务复查同 `mikanid+来源EP` alias，并在 staging 前再次事务复查以关闭并发窗口。命中即返回 `already_completed`，删除业务完成记录后可重新进入。
 - [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。
 - [>] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、目录 JSON/SQLite 索引、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联并通过 fake-qB+真实临时文件测试；真实 qB/Docker共享路径 E2E 待验收。
 - [x] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：schema v33 固化 `seeding_target_minutes`、单调 `seeding_elapsed_seconds`、waiting/seeding/completed 与完成时间，`0/-1/正数` 语义独立于 qB 瞬时 state；媒体操作、qB cleanup 与四类删除均按独立持久化状态、租约和失败重试推进，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束。
@@ -177,7 +177,7 @@
 - [x] 串联媒体目录 DB 与 NFO：NFO 与三层目录侧车都位于业务完成记录之前；侧车损坏、越界或索引失败会保持可重试且不写完成记录。
 - [x] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`；字幕生成 `Eyyy.<保留后缀>.<字幕扩展>`，Other 保留安全清洗后的原文件名，均已串联持久化 move worker。
 - [x] 确定性季度结果先执行同号 EP 快速校验；失败且统一 AI 开启、任务从未尝试 AI 时进行一次任务级映射，返回的 TMDB ID/Season 必须与已确认值相同，结果逐集由 TMDB 验证。
-- [ ] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示；未经 TMDB API 验证的 AI 值不得参与路径、数据库键或 NFO。
+- [x] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示：逐文件原始相对路径、来源 EP、本地文件候选与最终 TMDB 身份分别持久化并在任务详情并列显示；完成时写来源 alias，RSS 批次保存早期命中证据。AI 结果必须逐级通过 TMDB API 验证，未验证值不得参与路径、数据库键或 NFO。
 - [>] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；已串联 paused qB 的逐文件 priority 与恢复门禁，实际下载/落盘及字幕绑定待实现。
 - [x] 增加 `tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败沿用失败流程，不继续下载/刮削且不生成 NFO。
 - [x] 开关开启后，仅在权威 TMDB 成功访问且最终为确定性 Series 无匹配、已有有效 Bangumi Subject ID 时继续；季度固定本地 `S01`，不依赖 P2/P1，不输出有效 TMDB ID，动画根目录 `tvshow.nfo` 写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。

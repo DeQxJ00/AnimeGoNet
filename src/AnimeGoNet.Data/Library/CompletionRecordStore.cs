@@ -62,6 +62,101 @@ public sealed class CompletionRecordStore(Sqlite.AnimeGoSqliteDatabase database)
         return inserted;
     }
 
+    public async Task<bool> TryAddAliasAsync(
+        CompletionAlias alias,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(alias);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias.Id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias.CompletionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias.SourceId);
+        var sourceId = alias.SourceId.Trim().ToLowerInvariant();
+        var sourceWorkId = NullIfWhiteSpace(alias.SourceWorkId);
+        var sourceEpisode = NullIfWhiteSpace(alias.SourceEpisode);
+        var infoHash = NullIfWhiteSpace(alias.InfoHash)?.ToLowerInvariant();
+        var createdAt = alias.CreatedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO completion_aliases (
+                id, completion_id, source_id, source_work_id, source_episode,
+                info_hash, created_at_utc)
+            SELECT $id, $completion_id, $source_id, $source_work_id, $source_episode,
+                   $info_hash, $created_at_utc
+            WHERE EXISTS (
+                SELECT 1 FROM completion_records WHERE id = $completion_id)
+              AND NOT EXISTS (
+                SELECT 1 FROM completion_aliases
+                WHERE completion_id = $completion_id
+                  AND source_id = $source_id
+                  AND ifnull(source_work_id, '') = ifnull($source_work_id, '')
+                  AND ifnull(source_episode, '') = ifnull($source_episode, '')
+                  AND ifnull(info_hash, '') = ifnull($info_hash, ''));
+            """;
+        command.Parameters.AddWithValue("$id", alias.Id.Trim());
+        command.Parameters.AddWithValue("$completion_id", alias.CompletionId.Trim());
+        command.Parameters.AddWithValue("$source_id", sourceId);
+        command.Parameters.AddWithValue("$source_work_id", (object?)sourceWorkId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$source_episode", (object?)sourceEpisode ?? DBNull.Value);
+        command.Parameters.AddWithValue("$info_hash", (object?)infoHash ?? DBNull.Value);
+        command.Parameters.AddWithValue("$created_at_utc", createdAt);
+        var inserted = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return inserted;
+    }
+
+    public async Task<CompletionAliasMatch?> FindBySourceEpisodeAsync(
+        string sourceId,
+        string sourceWorkId,
+        string sourceEpisode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceWorkId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceEpisode);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT alias.id, alias.completion_id, alias.source_id, alias.source_work_id,
+                   alias.source_episode, alias.info_hash, alias.created_at_utc,
+                   completion.tmdb_series_id, completion.tmdb_season_number,
+                   completion.tmdb_episode_number, completion.completed_at_utc
+            FROM completion_aliases AS alias
+            JOIN completion_records AS completion ON completion.id = alias.completion_id
+            WHERE alias.source_id = $source_id
+              AND alias.source_work_id = $source_work_id
+              AND alias.source_episode = $source_episode
+            ORDER BY completion.completed_at_utc, alias.created_at_utc, alias.id
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$source_id", sourceId.Trim().ToLowerInvariant());
+        command.Parameters.AddWithValue("$source_work_id", sourceWorkId.Trim());
+        command.Parameters.AddWithValue("$source_episode", sourceEpisode.Trim());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var alias = new CompletionAlias
+        {
+            Id = reader.GetString(0),
+            CompletionId = reader.GetString(1),
+            SourceId = reader.GetString(2),
+            SourceWorkId = reader.IsDBNull(3) ? null : reader.GetString(3),
+            SourceEpisode = reader.IsDBNull(4) ? null : reader.GetString(4),
+            InfoHash = reader.IsDBNull(5) ? null : reader.GetString(5),
+            CreatedAtUtc = DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
+        };
+        return new CompletionAliasMatch(
+            alias,
+            new TmdbEpisodeIdentity(reader.GetInt32(7), reader.GetInt32(8), reader.GetInt32(9)),
+            DateTimeOffset.Parse(reader.GetString(10), CultureInfo.InvariantCulture));
+    }
+
     public async Task<bool> ExistsAsync(
         TmdbEpisodeIdentity episode,
         CancellationToken cancellationToken = default)
@@ -129,4 +224,7 @@ public sealed class CompletionRecordStore(Sqlite.AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$task_file_id", taskFileId);
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
+
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

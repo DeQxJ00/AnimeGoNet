@@ -20,6 +20,14 @@ public sealed class MediaOrganizationProcessorTests
         await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
         var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
         var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var sourceConnection = await database.OpenConnectionAsync())
+        await using (var source = sourceConnection.CreateCommand())
+        {
+            source.CommandText = "UPDATE task_files SET source_episode = '1' WHERE task_id = $task_id;";
+            source.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(1, await source.ExecuteNonQueryAsync());
+        }
         var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
 
         Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
@@ -43,7 +51,6 @@ public sealed class MediaOrganizationProcessorTests
             Assert.Equal(1, sidecar.RootElement.GetProperty("ep").GetInt32());
             Assert.True(sidecar.RootElement.GetProperty("state").GetProperty("downloaded").GetBoolean());
         }
-        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
         await using (var indexConnection = await database.OpenConnectionAsync())
         await using (var index = indexConnection.CreateCommand())
         {
@@ -52,6 +59,27 @@ public sealed class MediaOrganizationProcessorTests
                 WHERE anime_name = 'Series';
                 """;
             Assert.Equal(3L, await index.ExecuteScalarAsync());
+        }
+        await using (var aliasConnection = await database.OpenConnectionAsync())
+        await using (var alias = aliasConnection.CreateCommand())
+        {
+            alias.CommandText = """
+                SELECT alias.source_id, alias.source_work_id, alias.source_episode,
+                       alias.info_hash, completion.tmdb_series_id,
+                       completion.tmdb_season_number, completion.tmdb_episode_number
+                FROM completion_aliases AS alias
+                JOIN completion_records AS completion ON completion.id = alias.completion_id;
+                """;
+            await using var reader = await alias.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("mikan", reader.GetString(0));
+            Assert.Equal("3951", reader.GetString(1));
+            Assert.Equal("1", reader.GetString(2));
+            Assert.Equal(40, reader.GetString(3).Length);
+            Assert.Equal(100, reader.GetInt32(4));
+            Assert.Equal(1, reader.GetInt32(5));
+            Assert.Equal(1, reader.GetInt32(6));
+            Assert.False(await reader.ReadAsync());
         }
         Assert.Empty(client.Deleted);
         var intermediate = await ReadStateAsync(app, taskId);

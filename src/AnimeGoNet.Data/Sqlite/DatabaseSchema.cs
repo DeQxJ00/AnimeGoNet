@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 34;
+    public const int CurrentVersion = 35;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -40,7 +40,61 @@ public static class DatabaseSchema
         new SchemaMigration(32, "tmdb_resolution_evidence", TmdbResolutionEvidence),
         new SchemaMigration(33, "download_seeding_lifecycle", DownloadSeedingLifecycle),
         new SchemaMigration(34, "dynamic_download_tags", DynamicDownloadTags),
+        new SchemaMigration(35, "completion_source_alias_audit", CompletionSourceAliasAudit),
     ];
+
+    private const string CompletionSourceAliasAudit = """
+        ALTER TABLE mikan_rss_batch_entries
+        ADD COLUMN early_completion_id TEXT
+            REFERENCES completion_records(id) ON DELETE SET NULL;
+
+        ALTER TABLE mikan_rss_batch_entries
+        ADD COLUMN early_completion_alias_id TEXT
+            REFERENCES completion_aliases(id) ON DELETE SET NULL;
+
+        ALTER TABLE mikan_rss_batch_entries
+        ADD COLUMN early_completion_checked_at_utc TEXT;
+
+        CREATE INDEX ix_completion_aliases_source_episode
+        ON completion_aliases(source_id, source_work_id, source_episode, created_at_utc)
+        WHERE source_work_id IS NOT NULL AND source_episode IS NOT NULL;
+
+        CREATE INDEX ix_mikan_rss_entries_early_completion
+        ON mikan_rss_batch_entries(early_completion_id, batch_id, ordinal)
+        WHERE early_completion_id IS NOT NULL;
+
+        INSERT OR IGNORE INTO completion_aliases (
+            id, completion_id, source_id, source_work_id, source_episode,
+            info_hash, created_at_utc)
+        SELECT
+            'v35-' || completion.id || '-' || file.id,
+            completion.id,
+            lower(completion.source_id),
+            task.source_work_id,
+            file.source_episode,
+            job.info_hash,
+            completion.completed_at_utc
+        FROM completion_records AS completion
+        JOIN ingest_tasks AS task
+          ON lower(task.source_id) = lower(completion.source_id)
+         AND task.source_item_id = completion.source_item_id
+        JOIN task_files AS file
+          ON file.task_id = task.id
+         AND file.tmdb_series_id = completion.tmdb_series_id
+         AND file.tmdb_season_number = completion.tmdb_season_number
+         AND file.tmdb_episode_number = completion.tmdb_episode_number
+         AND file.associated_task_file_id IS NULL
+        LEFT JOIN download_jobs AS job ON job.task_id = task.id
+        WHERE completion.source_item_id IS NOT NULL
+          AND task.source_work_id IS NOT NULL
+          AND file.source_episode IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM completion_aliases AS alias
+              WHERE alias.completion_id = completion.id
+                AND alias.source_id = lower(completion.source_id)
+                AND alias.source_work_id = task.source_work_id
+                AND alias.source_episode = file.source_episode);
+        """;
 
     private const string DynamicDownloadTags = """
         ALTER TABLE source_profiles

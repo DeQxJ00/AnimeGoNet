@@ -69,7 +69,80 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         string candidateId,
         DateTimeOffset utcNow,
         TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default) =>
+        (await TryClaimWinnerCoreAsync(
+            batchId,
+            candidateId,
+            utcNow,
+            leaseDuration,
+            null,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false)).Lease;
+
+    public Task<MikanRssWinnerClaimResult> TryClaimWinnerWithCompletionCheckAsync(
+        string batchId,
+        string candidateId,
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
+        string sourceId,
+        string sourceWorkId,
+        string sourceEpisode,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceWorkId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceEpisode);
+        return TryClaimWinnerCoreAsync(
+            batchId,
+            candidateId,
+            utcNow,
+            leaseDuration,
+            sourceId.Trim().ToLowerInvariant(),
+            sourceWorkId.Trim(),
+            sourceEpisode.Trim(),
+            cancellationToken);
+    }
+
+    public async Task<bool> TryRecordCompletedWinnerAsync(
+        string batchId,
+        string candidateId,
+        DateTimeOffset utcNow,
+        string sourceId,
+        string sourceWorkId,
+        string sourceEpisode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(batchId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceWorkId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceEpisode);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var match = await TryAuditCompletionAsync(
+            connection,
+            transaction,
+            batchId,
+            candidateId,
+            utcNow,
+            sourceId.Trim().ToLowerInvariant(),
+            sourceWorkId.Trim(),
+            sourceEpisode.Trim(),
+            cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return match is not null;
+    }
+
+    private async Task<MikanRssWinnerClaimResult> TryClaimWinnerCoreAsync(
+        string batchId,
+        string candidateId,
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
+        string? sourceId,
+        string? sourceWorkId,
+        string? sourceEpisode,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(batchId);
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
@@ -77,10 +150,38 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         var token = Guid.NewGuid().ToString("N");
         var expires = utcNow.Add(leaseDuration);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+
+        if (sourceId is not null && sourceWorkId is not null && sourceEpisode is not null)
+        {
+            var completion = await TryAuditCompletionAsync(
+                connection,
+                transaction,
+                batchId,
+                candidateId,
+                utcNow,
+                sourceId,
+                sourceWorkId,
+                sourceEpisode,
+                cancellationToken).ConfigureAwait(false);
+            if (completion is not null)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return new MikanRssWinnerClaimResult(
+                    MikanRssWinnerClaimState.AlreadyCompleted,
+                    null,
+                    completion.Value.CompletionId,
+                    completion.Value.AliasId);
+            }
+        }
+
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             UPDATE mikan_rss_batch_entries
-            SET effect_state = 'claimed', claim_token = $token, claim_expires_at_utc = $expires
+            SET effect_state = 'claimed', claim_token = $token, claim_expires_at_utc = $expires,
+                early_completion_id = NULL, early_completion_alias_id = NULL,
+                early_completion_checked_at_utc = NULL
             WHERE batch_id = $batch AND candidate_id = $candidate AND decision_kind = 'Winner'
               AND (effect_state = 'ready'
                    OR (effect_state = 'claimed' AND claim_expires_at_utc <= $now));
@@ -90,8 +191,80 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$token", token);
         command.Parameters.AddWithValue("$expires", Format(expires));
         command.Parameters.AddWithValue("$now", Format(utcNow));
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1
-            ? new MikanRssWinnerLease(batchId, candidateId, token, expires)
+        var claimed = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return claimed
+            ? new MikanRssWinnerClaimResult(
+                MikanRssWinnerClaimState.Claimed,
+                new MikanRssWinnerLease(batchId, candidateId, token, expires),
+                null,
+                null)
+            : new MikanRssWinnerClaimResult(
+                MikanRssWinnerClaimState.Unavailable, null, null, null);
+    }
+
+    private static async Task<(string CompletionId, string AliasId)?> TryAuditCompletionAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string batchId,
+        string candidateId,
+        DateTimeOffset utcNow,
+        string sourceId,
+        string sourceWorkId,
+        string sourceEpisode,
+        CancellationToken cancellationToken)
+    {
+        string? completionId = null;
+        string? aliasId = null;
+        await using (var duplicate = connection.CreateCommand())
+        {
+            duplicate.Transaction = transaction;
+            duplicate.CommandText = """
+                SELECT alias.completion_id, alias.id
+                FROM completion_aliases AS alias
+                JOIN completion_records AS completion ON completion.id = alias.completion_id
+                WHERE alias.source_id = $source_id
+                  AND alias.source_work_id = $source_work_id
+                  AND alias.source_episode = $source_episode
+                ORDER BY completion.completed_at_utc, alias.created_at_utc, alias.id
+                LIMIT 1;
+                """;
+            duplicate.Parameters.AddWithValue("$source_id", sourceId);
+            duplicate.Parameters.AddWithValue("$source_work_id", sourceWorkId);
+            duplicate.Parameters.AddWithValue("$source_episode", sourceEpisode);
+            await using var reader = await duplicate.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                completionId = reader.GetString(0);
+                aliasId = reader.GetString(1);
+            }
+        }
+
+        if (completionId is null || aliasId is null)
+        {
+            return null;
+        }
+
+        await using var audit = connection.CreateCommand();
+        audit.Transaction = transaction;
+        audit.CommandText = """
+            UPDATE mikan_rss_batch_entries
+            SET early_completion_id = $completion_id,
+                early_completion_alias_id = $alias_id,
+                early_completion_checked_at_utc = $checked_at
+            WHERE batch_id = $batch AND candidate_id = $candidate
+              AND decision_kind = 'Winner'
+              AND (effect_state = 'ready'
+                   OR (effect_state = 'claimed' AND claim_expires_at_utc <= $now));
+            """;
+        audit.Parameters.AddWithValue("$completion_id", completionId);
+        audit.Parameters.AddWithValue("$alias_id", aliasId);
+        audit.Parameters.AddWithValue("$checked_at", Format(utcNow));
+        audit.Parameters.AddWithValue("$batch", batchId);
+        audit.Parameters.AddWithValue("$candidate", candidateId);
+        audit.Parameters.AddWithValue("$now", Format(utcNow));
+        return await audit.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1
+            ? (completionId, aliasId)
             : null;
     }
 
@@ -277,7 +450,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
                        length_bytes, published_date, source_episode_kind, source_episode,
                        decision_kind, decision_reason, winner_candidate_id,
                        legacy_filter_state, legacy_filter_reason, legacy_filter_scope, legacy_filter_key,
-                       identity_mikanid, identity_groupid, effect_state, ingest_task_id
+                       identity_mikanid, identity_groupid, effect_state, ingest_task_id,
+                       early_completion_id, early_completion_alias_id, early_completion_checked_at_utc
                 FROM mikan_rss_batch_entries WHERE batch_id = $batch ORDER BY ordinal;
                 """;
             query.Parameters.AddWithValue("$batch", id);
@@ -292,7 +466,12 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
                     rows.GetString(12), rows.GetString(13), rows.IsDBNull(14) ? null : rows.GetString(14),
                     rows.IsDBNull(15) ? null : rows.GetString(15), rows.IsDBNull(16) ? null : rows.GetInt32(16),
                     rows.IsDBNull(17) ? null : rows.GetInt32(17), rows.GetString(18),
-                    rows.IsDBNull(19) ? null : rows.GetString(19)));
+                    rows.IsDBNull(19) ? null : rows.GetString(19),
+                    rows.IsDBNull(20) ? null : rows.GetString(20),
+                    rows.IsDBNull(21) ? null : rows.GetString(21),
+                    rows.IsDBNull(22)
+                        ? null
+                        : DateTimeOffset.Parse(rows.GetString(22), CultureInfo.InvariantCulture)));
             }
         }
 
@@ -313,7 +492,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             entries.Add(new MikanRssBatchEntryRecord(
                 row.CandidateId, row.Title, row.MikanUrl, row.TorrentUrlFingerprint,
                 row.ContentType, row.LengthBytes, row.PublishedDate, row.SourceEpisodeKind,
-                row.SourceEpisode, decision, filterAudit, row.EffectState, row.IngestTaskId));
+                row.SourceEpisode, decision, filterAudit, row.EffectState, row.IngestTaskId,
+                row.EarlyCompletionId, row.EarlyCompletionAliasId, row.EarlyCompletionCheckedAtUtc));
         }
 
         return new MikanRssBatchRecord(
@@ -407,5 +587,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         int? IdentityMikanId,
         int? IdentityGroupId,
         string EffectState,
-        string? IngestTaskId);
+        string? IngestTaskId,
+        string? EarlyCompletionId,
+        string? EarlyCompletionAliasId,
+        DateTimeOffset? EarlyCompletionCheckedAtUtc);
 }

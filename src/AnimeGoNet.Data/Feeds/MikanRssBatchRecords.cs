@@ -29,10 +29,26 @@ public sealed record MikanRssBatchEntryRecord(
     MikanRssDecision Decision,
     MikanLegacyFilterAudit LegacyFilterAudit,
     string EffectState,
-    string? IngestTaskId);
+    string? IngestTaskId,
+    string? EarlyCompletionId,
+    string? EarlyCompletionAliasId,
+    DateTimeOffset? EarlyCompletionCheckedAtUtc);
 
 public sealed record MikanRssWinnerLease(
     string BatchId,
     string CandidateId,
     string LeaseToken,
     DateTimeOffset LeaseExpiresAtUtc);
+
+public enum MikanRssWinnerClaimState
+{
+    Claimed,
+    AlreadyCompleted,
+    Unavailable,
+}
+
+public sealed record MikanRssWinnerClaimResult(
+    MikanRssWinnerClaimState State,
+    MikanRssWinnerLease? Lease,
+    string? CompletionId,
+    string? CompletionAliasId);

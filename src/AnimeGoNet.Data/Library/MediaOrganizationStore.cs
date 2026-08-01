@@ -357,6 +357,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                      file.Disposition == "episode" && file.AssociatedFileId is null))
         {
             var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
+            var completionId = Guid.NewGuid().ToString("N");
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
@@ -366,13 +367,24 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 VALUES ($id, $series, $season, $episode, $source, $source_item, $path, $now);
                 UPDATE episode_claims SET state = 'completed', expires_at_utc = NULL
                 WHERE task_file_id = $file_id AND state = 'active';
+
+                INSERT INTO completion_aliases (
+                    id, completion_id, source_id, source_work_id, source_episode,
+                    info_hash, created_at_utc)
+                VALUES (
+                    $alias_id, $id, $source, $source_work_id, $source_episode,
+                    $info_hash, $now);
                 """;
-            insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            insert.Parameters.AddWithValue("$id", completionId);
+            insert.Parameters.AddWithValue("$alias_id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$series", file.TmdbSeriesId);
             insert.Parameters.AddWithValue("$season", file.SeasonNumber);
             insert.Parameters.AddWithValue("$episode", file.EpisodeNumber!.Value);
-            insert.Parameters.AddWithValue("$source", claim.SourceId);
+            insert.Parameters.AddWithValue("$source", claim.SourceId.ToLowerInvariant());
             insert.Parameters.AddWithValue("$source_item", (object?)claim.SourceItemId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$source_work_id", (object?)claim.SourceWorkId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$source_episode", (object?)file.SourceEpisode ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$info_hash", claim.InfoHash.ToLowerInvariant());
             insert.Parameters.AddWithValue("$path", operation.TargetPath);
             insert.Parameters.AddWithValue("$now", now);
             insert.Parameters.AddWithValue("$file_id", file.TaskFileId);
