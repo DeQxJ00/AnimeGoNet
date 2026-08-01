@@ -11,5 +11,14 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../src/AnimeGoNet.App/AnimeGoNet.App.csproj" />
+    <ProjectReference Include="../AnimeGoNet.PluginProtocol.Fixture/AnimeGoNet.PluginProtocol.Fixture.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <Target Name="CopyPluginProtocolFixture" AfterTargets="Build">
+    <ItemGroup>
+      <PluginProtocolFixtureFiles Include="../AnimeGoNet.PluginProtocol.Fixture/bin/$(Configuration)/net10.0/$(NETCoreSdkRuntimeIdentifier)/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PluginProtocolFixtureFiles)"
+          DestinationFolder="$(OutDir)plugin-protocol-fixture" />
+  </Target>
 </Project>

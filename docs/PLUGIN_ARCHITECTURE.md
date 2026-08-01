@@ -115,11 +115,11 @@ data/plugins/com.example.animego.filter-resolution/
 稳定 ID 使用反向域名格式。宿主启动前验证 manifest、当前 RID、协议 major、入口路径必须位于插件目录内，并拒绝符号链接逃逸和可写权限异常。
 `type` 只允许 `source`、`feed`、`parser`、`filter`、`rename`、`schedule`；source 插件只能规范化输入和返回稳定 DTO，不能自行选择未授权下载器或直接获得客户端凭据。
 
-当前 manifest loader 已注册到宿主的 `data/plugins` 目录，启动时生成一次有效包/稳定错误快照并通过 `/api/v1/status.external_plugins` 安全投影，但尚不启动任何外部进程。它只枚举根目录的直接子目录，使用有界 UTF-8 `JsonDocument` 显式读取 `plugin.json`，拒绝未知/重复字段，并验证反向域名 ID、严格 SemVer、API v1、六类 type、五个发布 RID 与当前宿主一致、唯一稳定 capability、入口和 JSON Schema。manifest 上限 64 KiB，schema 上限 256 KiB；两者均限制 JSON 深度，schema 递归拒绝重复字段。入口/schema 必须是包内相对路径且每层都不是 link/reparse point；Unix 还拒绝 group/world write，并要求入口有执行位。Windows 固定 `.exe`，ACL 等价门禁随真实非 root/只读挂载 E2E 完成。发现时重复 ID 的所有包都拒绝，不按目录顺序偷偷选择；一个坏包只产生稳定诊断，不阻塞其他独立有效包。
+当前 manifest loader 已注册到宿主的 `data/plugins` 目录，启动时生成一次有效包/稳定错误快照并通过 `/api/v1/status.external_plugins` 安全投影；发现阶段不会自动执行第三方程序，调用方必须显式创建进程会话。loader 只枚举根目录的直接子目录，使用有界 UTF-8 `JsonDocument` 显式读取 `plugin.json`，拒绝未知/重复字段，并验证反向域名 ID、严格 SemVer、API v1、六类 type、五个发布 RID 与当前宿主一致、唯一稳定 capability、入口和 JSON Schema。manifest 上限 64 KiB，schema 上限 256 KiB；两者均限制 JSON 深度，schema 递归拒绝重复字段。入口/schema 必须是包内相对路径且每层都不是 link/reparse point；Unix 还拒绝 group/world write，并要求入口有执行位。Windows 固定 `.exe`，ACL 等价门禁随真实非 root/只读挂载 E2E 完成。发现时重复 ID 的所有包都拒绝，不按目录顺序偷偷选择；一个坏包只产生稳定诊断，不阻塞其他独立有效包。
 
 ## 4. 进程协议
 
-主程序以 stdio 启动插件。stdin/stdout 每行一个 UTF-8 JSON 对象，stdout 只用于协议，日志写 stderr。
+主程序以包内固定入口和包目录作为工作目录启动插件。stdin/stdout 每行一个 UTF-8 JSON 对象，stdout 只用于协议，日志写 stderr。宿主清空继承环境，只传入 `ANIMEGO_PLUGIN_ID`、`ANIMEGO_PLUGIN_API_VERSION` 和该插件独立的 `ANIMEGO_PLUGIN_DATA_PATH`；数据库、下载器凭据和宿主其他环境变量不会传给子进程。
 
 必须支持四个操作：
 
@@ -127,6 +127,8 @@ data/plugins/com.example.animego.filter-resolution/
 - `execute`：执行对应插件类型的操作。
 - `health`：检查进程是否可继续使用。
 - `shutdown`：正常退出。
+
+每个请求使用 32 位小写十六进制 `requestId`。同一进程只有一个活动请求，避免 stdout 响应乱序；业务失败返回稳定 `error` 后会话仍可继续，协议损坏、超时、调用取消、意外 EOF 或不健康结果会立即将该会话标记为 faulted 并终止整棵子进程树。启动前会重新读取包并核对发现时的完整 manifest 身份，避免发现与执行之间被替换。
 
 请求示例：
 
@@ -152,8 +154,10 @@ data/plugins/com.example.animego.filter-resolution/
 
 - 默认一个插件一个长期进程；崩溃后指数退避，达到阈值自动禁用并告警。
 - 每次调用支持取消、执行超时、最大输入/输出大小和最大并发数。
+- 当前默认 initialize 10 秒、execute 120 秒、health/shutdown 5 秒，请求和响应各 1 MiB；可配置上限被限制为 16 MiB。
 - stdout 出现非 JSON、request ID 不匹配或协议版本不兼容时终止进程。
-- stderr 按插件 ID 写入结构化日志并限制速率。
+- 当前 stderr 使用独立异步管道持续排空，绝不当作协议；按插件 ID 写结构化日志和速率限制由宿主级进程管理器负责，尚未接入。
+- 崩溃退避、阈值自动禁用和六类强类型 adapter 由后续宿主级进程管理器提供；当前会话只隔离并终止单个故障进程，不自行重启。
 - 外部插件不直接获得 AnimeGoNet 的数据库连接、DI 容器或下载器对象；只接收完成任务所需 DTO。
 - 外部可执行程序不是安全沙箱。只运行用户信任的插件；首版 Web UI 不提供上传可执行文件，只负责发现、启停、配置和显示校验结果。
 - Docker 中插件目录只读挂载；需要写入的数据使用单独、受限的插件数据目录。

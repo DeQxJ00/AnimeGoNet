@@ -17,7 +17,7 @@
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；无 Python/DLL 动态加载 |
-| 外部可执行插件包 | RID-specific C# process package | 新增 | 进行中 | `plugin.json` 显式 AST 解析、反向域名 ID、SemVer/API/type/RID/capability、入口/schema 文件、大小、根边界、link/reparse、Unix 权限/执行位及重复 ID 故障注入已验证；JSON Lines 进程生命周期、SDK/Tool/WebUI 待实现 |
+| 外部可执行插件包 | RID-specific C# process package | 新增 | 进行中 | manifest 严格解析与包边界已验证；有界 JSON Lines initialize/execute/health/shutdown、版本/requestId/响应校验、超时/取消/崩溃/脏输出、真实进程环境隔离已验证；宿主管理器退避、SDK/Tool/WebUI 待实现 |
 | parser 首个启用实现、filter 顺序串联 | `TitleParserManager` / `OrderedFeedFilterManager` | 保留 | 已验证 | 首个/显式 parser 不 fallback；filter accepted 逐级传递、错误短路、无效/重复 index、空链 tests；Mikan RSS 生产链回归 |
 | `internal/constant`、`exceptions` | 强类型常量、稳定错误码 | 保留 | 待实现 | domain tests |
 | `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 已验证 | 编译期 provider fan-out、统一 URL/凭据脱敏、有界 WebSocket stream，以及 `data_path/logs/animego.log` 的 Info+、2 MiB/14份/14天滚动文件均通过并发、轮转、生命周期和 NativeAOT smoke |

@@ -10,5 +10,6 @@
     <Project Path="tests/AnimeGoNet.App.Tests/AnimeGoNet.App.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.Core.Tests/AnimeGoNet.Core.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.Data.Tests/AnimeGoNet.Data.Tests.csproj" />
+    <Project Path="tests/AnimeGoNet.PluginProtocol.Fixture/AnimeGoNet.PluginProtocol.Fixture.csproj" />
   </Folder>
 </Solution>

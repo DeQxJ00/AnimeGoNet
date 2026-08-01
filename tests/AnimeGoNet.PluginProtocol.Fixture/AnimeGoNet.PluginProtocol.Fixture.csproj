@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AnimeGoNet.PluginProtocol.Fixture</AssemblyName>
+    <RootNamespace>AnimeGoNet.PluginProtocol.Fixture</RootNamespace>
+    <!-- The host deliberately clears DOTNET_ROOT/PATH, so the real-process
+         fixture must not depend on the CI runner's framework environment. -->
+    <RuntimeIdentifier>$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+</Project>
