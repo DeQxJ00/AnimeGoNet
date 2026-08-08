@@ -46,7 +46,8 @@ public sealed class MikanRssIngestProcessor(
     OrderedFeedFilterManager filters,
     MikanBangumiSubjectResolver bangumiResolver,
     UnifiedIngestProcessor ingest,
-    IHostApplicationLifetime applicationLifetime)
+    IHostApplicationLifetime applicationLifetime,
+    DuplicateHitNotifier duplicateNotifier)
 {
     private static readonly TimeSpan WinnerLeaseDuration = TimeSpan.FromMinutes(10);
 
@@ -214,6 +215,19 @@ public sealed class MikanRssIngestProcessor(
 
             if (earlyCompleted.Contains(item.Candidate.Id))
             {
+                if (TryGetEarlyCompletionIdentity(
+                        item,
+                        stored.MikanId,
+                        out var completedWorkId,
+                        out var completedEpisode))
+                {
+                    NotifyDuplicate(
+                        profile,
+                        stored.Id,
+                        completedWorkId,
+                        completedEpisode,
+                        "rss_completion_alias");
+                }
                 results.Add(Result(item, "already_completed", null, []));
                 continue;
             }
@@ -234,6 +248,12 @@ public sealed class MikanRssIngestProcessor(
                         failedDiscoveryEpisode,
                         cancellationToken).ConfigureAwait(false))
                 {
+                    NotifyDuplicate(
+                        profile,
+                        stored.Id,
+                        failedDiscoveryWorkId,
+                        failedDiscoveryEpisode,
+                        "rss_completion_alias");
                     results.Add(Result(item, "already_completed", null, []));
                     continue;
                 }
@@ -278,6 +298,12 @@ public sealed class MikanRssIngestProcessor(
             }
             if (claim.State == MikanRssWinnerClaimState.AlreadyCompleted)
             {
+                NotifyDuplicate(
+                    profile,
+                    stored.Id,
+                    sourceWorkId,
+                    sourceEpisode,
+                    "rss_completion_alias");
                 results.Add(Result(item, "already_completed", null, []));
                 continue;
             }
@@ -285,6 +311,12 @@ public sealed class MikanRssIngestProcessor(
             var lease = claim.Lease;
             if (lease is null)
             {
+                NotifyDuplicate(
+                    profile,
+                    stored.Id,
+                    null,
+                    null,
+                    "rss_winner_already_claimed");
                 results.Add(Result(item, "already_claimed", null, []));
                 continue;
             }
@@ -342,6 +374,24 @@ public sealed class MikanRssIngestProcessor(
             legacy.Revision,
             legacy.Enabled,
             results);
+    }
+
+    private void NotifyDuplicate(
+        SourceProfileRecord profile,
+        string batchId,
+        string? sourceWorkId,
+        string? sourceEpisode,
+        string reason)
+    {
+        var scope = sourceWorkId is null || sourceEpisode is null
+            ? $"rss-batch:{batchId}"
+            : $"source-work:{sourceWorkId}:ep:{sourceEpisode}:batch:{batchId}";
+        duplicateNotifier.Notify(
+            profile.DuplicateNotificationEnabled,
+            profile.Id,
+            profile.Id,
+            scope,
+            reason);
     }
 
     private static bool TryGetEarlyCompletionIdentity(

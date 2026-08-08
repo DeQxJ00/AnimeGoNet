@@ -526,8 +526,10 @@
             <label><input id="source-enabled" type="checkbox">启用来源</label>
             <label><input id="source-filter-enabled" type="checkbox">执行旧 Mikan 过滤</label>
             <label><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
+            <label><input id="source-duplicate-notification-enabled" type="checkbox" checked>重复命中时通知</label>
             <label><input id="source-rss-schedule-enabled" type="checkbox">自动读取 Mikan RSS</label>
           </div>
+          <p class="muted">重复通知写入脱敏实时日志；关闭只抑制通知，不会允许重复下载。</p>
           <details class="route-preview">
             <summary>路由预览</summary>
             <p class="muted">只执行当前 adapter 字段校验和路由计算，不抓 Torrent、不写任务、不连接 qB。</p>

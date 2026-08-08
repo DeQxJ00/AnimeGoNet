@@ -196,6 +196,8 @@ public sealed record SourceProfileSeed
 
     public bool RssPriorityEnabled { get; init; }
 
+    public bool DuplicateNotificationEnabled { get; init; } = true;
+
     public string? MikanIdentityCookie { get; init; }
 
     public override string ToString() =>

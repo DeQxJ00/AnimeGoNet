@@ -17,7 +17,10 @@ public sealed record MetadataTaskClaim(
     string? SourceAdapter = null,
     string? SourcePublishedAtRaw = null,
     DateTimeOffset? SourcePublishedAt = null,
-    int TorrentFileCount = 0);
+    int TorrentFileCount = 0,
+    string? SourceProfileId = null,
+    string? SourceId = null,
+    bool DuplicateNotificationEnabled = true);
 
 public sealed record MetadataAttempt(
     string Stage,
@@ -111,6 +114,15 @@ public sealed record MetadataEpisodeFileResolution(
 {
     public int? ResolvedEpisodeNumber => Episode?.EpisodeNumber ?? TrustedEpisodeNumber;
 }
+
+public sealed record MetadataDuplicateHit(
+    long TmdbSeriesId,
+    int TmdbSeasonNumber,
+    int TmdbEpisodeNumber,
+    string Reason);
+
+public sealed record MetadataEpisodeCompletionResult(
+    IReadOnlyList<MetadataDuplicateHit> DuplicateHits);
 
 public sealed record MetadataTaskListProjection(
     string TaskId,

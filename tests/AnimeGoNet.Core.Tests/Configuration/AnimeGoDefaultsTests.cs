@@ -89,6 +89,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(0, profile.SeedingTimeMinutes);
         Assert.True(profile.RssFilterEnabled);
         Assert.True(profile.RssPriorityEnabled);
+        Assert.True(profile.DuplicateNotificationEnabled);
         Assert.Equal(2, options.Downloaders.Count);
         Assert.All(options.Downloaders.Values, downloader => Assert.Equal("qbittorrent", downloader.Type));
     }

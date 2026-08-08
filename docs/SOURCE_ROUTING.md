@@ -75,6 +75,8 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - 四种策略严格使用任务创建时的 route snapshot。schema v33 把做种分钟复制为 job 的不可变目标，并由 qB `seeding_time` 投影为单调累计秒数及 `not_required/waiting/seeding/completed`；重启、离线旧快照和后续 SourceProfile 修改都不能改变目标或倒退完成状态。`0` 直接为 `not_required`，正数达到分钟上限或 qB 报告完成后为 `completed`，`-1` 不按时长自动完成。`link` 与 `link_delete` 在 qB 首次进入已下载/做种状态后建立媒体库硬链接且不暂停做种；`link_delete` 仅在持久化做种状态完成后校验目标与源内容一致再删除源文件。`move` 在下载完成后暂停并立即安全移动；`wait_move` 等同一持久化门禁完成后才暂停并移动。文件/NFO/完成记录成功后才进入独立 qB 清理阶段，清理固定使用 `deleteFiles=false`。
 - 动态 tag 模板与 profile revision 一起写入不可变 `route_snapshot_json`，绝不在暂停 dispatch 阶段把未展开模板发送给 qB。任务达到 `metadata_resolved` 后，下载准备 worker 取按 Season/EP/路径稳定排序的首个普通规范 Episode，用其已确认 TMDB Season 的开播日期和 EP 渲染模板，并在设置文件 priority、恢复任务前调用 qB `addTags`。缺少所需日期/EP、全文件重复或渲染结果无效时，下载继续但 job 记录稳定 `skipped` 原因；qB 写入失败则保持暂停并按准备租约重试。API/WebUI 显示 `pending/applied/skipped/not_configured`、实际 tag 和失败码。
 - 去重范围固定为全局媒体库，不允许 source profile 改成来源内去重；规范键为 TMDB Series/Season/Episode。profile 只可配置发现重复后的日志/通知，不可绕过完成记录。
+- `duplicate_notification_enabled` 默认 `true`。开启时，RSS 来源完成 alias、同一批 winner 已被领取，以及 TMDB 验证后的全局 Series/Season/Episode 重复会写事件 `4301` 到脱敏应用日志并实时推送 WebSocket；消息只含 profile/source ID、稳定去重 scope 和原因码，不含 title、Torrent URL、passkey 或文件绝对路径。关闭仅抑制该通知，RSS 批次审计、逐文件 `duplicate` disposition、完成记录和下载门禁照常执行。
+- RSS 处理使用请求开始时取得的 SourceProfile 快照；统一导入任务把开关写入不可变 `route_snapshot_json`，所以修改来源只影响后续批次/任务。已有任务进入 TMDB EP 去重时仍使用创建时的值。
 
 配置优先级固定为：作品级人工规则 > 输入源 profile > 全局默认。人工规则命中失败时显式报错，不能静默落到较低层覆盖。
 
@@ -174,7 +176,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - `PUT /api/v1/sources/{id}`，请求必须带 `expected_revision`；
 - `DELETE /api/v1/sources/{id}?expected_revision=...`。
 
-创建 ID 必须已经是稳定小写 ID，adapter 只接受编译期注册的 `mikan`、`u2`、`ttg`，绑定只能指向当前部署配置中已启用的 qBittorrent 实例。Host 白名单统一转小写并校验 DNS host/`*.` 通配形式。adapter 创建后不可修改；修改下载器、文件策略、白名单或规则开关会增加 revision，只影响之后创建的任务。API 返回不可变任务和 RSS batch 引用计数；存在引用时拒绝删除，默认 `mikan` profile 始终拒绝删除。新 profile 自动初始化独立的有序 RSS 规则集，Mikan adapter 还会初始化内置 legacy filter 空配置。
+创建 ID 必须已经是稳定小写 ID，adapter 只接受编译期注册的 `mikan`、`u2`、`ttg`，绑定只能指向当前部署配置中已启用的 qBittorrent 实例。Host 白名单统一转小写并校验 DNS host/`*.` 通配形式。adapter 创建后不可修改；修改下载器、文件策略、白名单、规则开关或重复通知会增加 revision，只影响之后创建的任务。API 返回不可变任务和 RSS batch 引用计数；存在引用时拒绝删除，默认 `mikan` profile 始终拒绝删除。新 profile 自动初始化独立的有序 RSS 规则集，Mikan adapter 还会初始化内置 legacy filter 空配置。
 
 下载器连接以部署级 `AnimeGoOptions.Downloaders` 为基础，可由 data_path 私有覆盖增加或替换。`GET /api/v1/downloaders` 永不返回用户名/密码；`PUT/DELETE /api/v1/downloaders/{id}` 使用全局 configuration revision 原子写入覆盖，密码字段留空时保留、`clear_password=true` 时清除。修改不会热替换正在运行的客户端，响应与 Web 明确显示 `restart_required`；重启后在配置校验和客户端注册前应用。仍被 SourceProfile、导入任务或下载任务引用的实例不能停用或移除覆盖。
 
@@ -195,7 +197,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - “路由预览”：输入模拟 title/IDs 后显示会命中哪个下载器、哪些规则以及路径。
 - 修改只影响新任务；进行中任务保持原快照，可由用户显式重新路由。
 
-当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、category、静态 tags、动态 tag 模板、做种分钟和规则开关。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
+当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、category、静态 tags、动态 tag 模板、做种分钟、规则开关和重复通知状态。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
 
 ### 任务/作品详情
 

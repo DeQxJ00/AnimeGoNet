@@ -2920,6 +2920,7 @@ public static class ApiEndpoints
                 request.SeedingTimeMinutes,
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
+                request.DuplicateNotificationEnabled,
                 request.Enabled,
                 request.MikanIdentityCookie,
                 clearMikanIdentityCookie: false,
@@ -3004,6 +3005,7 @@ public static class ApiEndpoints
                 request.SeedingTimeMinutes,
                 request.RssFilterEnabled,
                 request.RssPriorityEnabled,
+                request.DuplicateNotificationEnabled,
                 request.Enabled,
                 request.MikanIdentityCookie,
                 request.ClearMikanIdentityCookie,
@@ -3171,6 +3173,7 @@ public static class ApiEndpoints
             profile.SeedingTimeMinutes,
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
+            profile.DuplicateNotificationEnabled,
             ruleRevision));
     }
 
@@ -5388,6 +5391,7 @@ public static class ApiEndpoints
             profile.SeedingTimeMinutes,
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
+            profile.DuplicateNotificationEnabled,
             profile.Enabled,
             locks.Select(value => new SourceProfileFieldLockResponse(
                 value.Field,
@@ -5503,6 +5507,7 @@ public static class ApiEndpoints
         int? seedingTimeMinutes,
         bool rssFilterEnabled,
         bool rssPriorityEnabled,
+        bool? duplicateNotificationEnabled,
         bool enabled,
         string? mikanIdentityCookie,
         bool clearMikanIdentityCookie,
@@ -5613,7 +5618,10 @@ public static class ApiEndpoints
             normalizedDynamicTagTemplate,
             normalizedRssFeedUrl,
             rssScheduleEnabled,
-            normalizedRssScheduleCron);
+            normalizedRssScheduleCron,
+            duplicateNotificationEnabled
+                ?? current?.DuplicateNotificationEnabled
+                ?? true);
     }
 
     private static string RequireCanonicalStableId(string? value, string name)

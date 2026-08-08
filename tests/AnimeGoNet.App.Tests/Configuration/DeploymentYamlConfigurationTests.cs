@@ -120,6 +120,7 @@ public sealed class DeploymentYamlConfigurationTests
                     seeding_time_minutes: 0
                     rss_filter_enabled: true
                     rss_priority_enabled: false
+                    duplicate_notification_enabled: false
                     mikan_identity_cookie: '.AspNetCore.Identity.Application=yaml-private-cookie'
                 metadata:
                   tmdb:
@@ -196,6 +197,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(["mikan.example.invalid"], source.AllowedTorrentHosts);
             Assert.Equal(["yaml-test"], source.Tags);
             Assert.False(source.RssPriorityEnabled);
+            Assert.False(source.DuplicateNotificationEnabled);
             Assert.Equal("yaml-private-cookie", source.MikanIdentityCookie);
             Assert.DoesNotContain(
                 "yaml-private-cookie",

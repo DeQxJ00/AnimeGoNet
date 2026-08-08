@@ -73,6 +73,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var hasMultipleSeasons = false;
         var episodeResolvedByTrustedOffset = false;
         var aiMetadataAttempted = false;
+        string? sourceProfileId = null;
+        string? sourceId = null;
+        var duplicateNotificationEnabled = true;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -105,6 +108,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
                          WHERE prior_run.task_id = task.id
                            AND attempt.strategy IN ('ai_metadata', 'ai_season', 'ai_episode'))
+                       , task.source_profile_id, task.source_id,
+                       COALESCE(json_extract(
+                           task.route_snapshot_json,
+                           '$.duplicate_notification_enabled'), 1)
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -142,6 +149,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 hasMultipleSeasons = reader.GetInt64(14) == 1;
                 episodeResolvedByTrustedOffset = reader.GetInt64(15) == 1;
                 aiMetadataAttempted = reader.GetInt64(16) == 1;
+                sourceProfileId = reader.GetString(17);
+                sourceId = reader.GetString(18);
+                duplicateNotificationEnabled = reader.GetInt64(19) == 1;
             }
         }
 
@@ -235,7 +245,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 aniDbAnimeId, imdbTitleId, SourceAdapter: sourceAdapter,
                 SourcePublishedAtRaw: sourcePublishedAtRaw,
                 SourcePublishedAt: sourcePublishedAt,
-                TorrentFileCount: torrentFileCount),
+                TorrentFileCount: torrentFileCount,
+                SourceProfileId: sourceProfileId,
+                SourceId: sourceId,
+                DuplicateNotificationEnabled: duplicateNotificationEnabled),
             tmdbSeriesId,
             tmdbSeasonNumber,
             files,
@@ -1151,7 +1164,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         string? PosterPath = null,
         IReadOnlyList<TmdbEpisode>? Episodes = null);
 
-    public async Task CompleteEpisodesAsync(
+    public async Task<MetadataEpisodeCompletionResult> CompleteEpisodesAsync(
         MetadataEpisodeTaskClaim claim,
         IReadOnlyList<MetadataEpisodeFileResolution> fileResolutions,
         DateTimeOffset utcNow,
@@ -1270,6 +1283,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                         cancellationToken).ConfigureAwait(false));
             }
         }
+
+        var duplicateHits = episodeClaims
+            .Where(item => item.Value != EpisodeClaimDecision.Owned)
+            .Select(item => new MetadataDuplicateHit(
+                item.Key.SeriesId,
+                item.Key.SeasonNumber,
+                item.Key.EpisodeNumber,
+                item.Value == EpisodeClaimDecision.AlreadyCompleted
+                    ? "episode_already_completed"
+                    : "episode_claimed_by_another_task"))
+            .OrderBy(item => item.TmdbSeriesId)
+            .ThenBy(item => item.TmdbSeasonNumber)
+            .ThenBy(item => item.TmdbEpisodeNumber)
+            .ToArray();
 
         foreach (var resolution in fileResolutions)
         {
@@ -1404,6 +1431,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new MetadataEpisodeCompletionResult(duplicateHits);
     }
 
     private static async Task<EpisodeClaimDecision> ClaimEpisodeAsync(

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Net.WebSockets;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Library;
@@ -136,8 +137,16 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         await ResolveSeasonAsync(app);
         Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
         var competingTaskId = await CloneSeasonResolvedTaskAsync(app, ownerTaskId, "Competing EP04.mkv");
+        using var logSocket = new ClientWebSocket();
+        await logSocket.ConnectAsync(WebSocketUri(app), CancellationToken.None);
 
         Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var duplicateLog = await ReceiveUntilAsync(
+            logSocket,
+            value => value.Contains("(4301)", StringComparison.Ordinal));
+        Assert.Contains("tmdb:72517:s2:e4", duplicateLog, StringComparison.Ordinal);
+        Assert.Contains("episode_claimed_by_another_task", duplicateLog, StringComparison.Ordinal);
 
         var competingFile = Assert.Single(await ReadFilesAsync(app, competingTaskId));
         Assert.Equal("duplicate", competingFile.Disposition);
@@ -815,6 +824,51 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         command.CommandText = "SELECT state FROM episode_claims WHERE task_file_id = $task_file_id;";
         command.Parameters.AddWithValue("$task_file_id", taskFileId);
         return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static Uri WebSocketUri(RunningApp app) => new UriBuilder(app.Client.BaseAddress!)
+    {
+        Scheme = "ws",
+        Path = "/websocket/log",
+    }.Uri;
+
+    private static async Task<string> ReceiveUntilAsync(
+        ClientWebSocket socket,
+        Func<string, bool> predicate)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var frame = await ReceiveTextAsync(socket, timeout.Token);
+            if (predicate(frame))
+            {
+                return frame;
+            }
+        }
+        throw new Xunit.Sdk.XunitException(
+            "Expected duplicate notification WebSocket frame was not received.");
+    }
+
+    private static async Task<string> ReceiveTextAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[1024];
+        using var payload = new MemoryStream();
+        ValueWebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    "WebSocket closed before the duplicate notification frame.");
+            }
+            Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+            payload.Write(buffer, 0, result.Count);
+        }
+        while (!result.EndOfMessage);
+        return Encoding.UTF8.GetString(payload.GetBuffer(), 0, (int)payload.Length);
     }
 
     private sealed record FileState(

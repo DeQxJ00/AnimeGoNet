@@ -223,6 +223,7 @@ docs/
 - SQLite schema v35 将正常整理产生的 `completion_aliases` 纳入通用查询，并在 Mikan RSS 批次条目保存早期 completion 命中证据。完成记录、来源 alias 与 Episode claim 同事务提交；RSS 在 Bangumi/Torrent 网络访问前以 IMMEDIATE 事务按 `source+mikanid+来源EP` 早停，并在 staging 前再次事务复查后 claim。删除业务完成记录时 alias 和命中证据由外键级联清除，后续同批次可重新导入。
 - SQLite schema v36 为每个 Mikan SourceProfile 增加只写 RSS URL、调度开关/Cron 和最近运行审计。编译期 `mikan-rss-ingest-schedule` 只从调度参数接收来源 ID/revision，执行时读取当前 URL 并进入同一 Mikan RSS 规则/去重/统一导入链；旧 revision、重叠运行、后台禁用和重启中断均有显式门禁。
 - SQLite schema v37 为每个 download job 增加持久化媒体整理阶段与单位进度。重命名规划、媒体/字幕传输、NFO、目录索引、下载器清理逐阶段上报；失败重试保留可审计阶段，已完成文件 operation 可续算，清理租约恢复不得重新执行文件工作。
+- SQLite schema v38 为每个 SourceProfile 增加默认开启的重复命中通知开关。RSS 使用批次 profile 快照，统一导入写入不可变任务路由快照；关闭只抑制脱敏日志/WebSocket 事件，不得改变全局完成记录、逐文件去重或下载门禁。
 - 正常取得 TMDB ID 时，在动画根目录 `tvshow.nfo` 写真实 `<tmdbid>` 和对应 `<bangumiid>`。
 - TMDB 完全失败兜底开启、权威TMDB访问成功并确定无匹配、Bangumi Subject ID有效且季度已确定时，继续下载/刮削，并在 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - 兜底关闭或兜底前置条件不满足时不继续下载/刮削，也不生成失败 NFO；不得只写 `tmdbid=0`。

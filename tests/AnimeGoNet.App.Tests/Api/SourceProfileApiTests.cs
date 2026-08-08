@@ -76,6 +76,8 @@ public sealed class SourceProfileApiTests
             "{year}年{quarter}月新番,EP{ep}",
             created.RootElement.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(1440, created.RootElement.GetProperty("seeding_time_minutes").GetInt32());
+        Assert.True(
+            created.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
         Assert.Equal("/api/v1/sources/u2", create.Headers.Location?.OriginalString);
 
         using var rules = await app.Client.GetAsync("/api/v1/rss-rules/u2");
@@ -115,6 +117,7 @@ public sealed class SourceProfileApiTests
             seeding_time_minutes = 0,
             rss_filter_enabled = false,
             rss_priority_enabled = false,
+            duplicate_notification_enabled = false,
             enabled = true,
             expected_revision = 1,
         }));
@@ -127,6 +130,8 @@ public sealed class SourceProfileApiTests
             "{year}年{quarter}月新番,EP{ep}",
             updated.RootElement.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(0, updated.RootElement.GetProperty("seeding_time_minutes").GetInt32());
+        Assert.False(
+            updated.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
         Assert.Contains(
             "does not preserve seeding",
             updated.RootElement.GetProperty("file_strategy_warning").GetString(),
@@ -154,7 +159,38 @@ public sealed class SourceProfileApiTests
                 "{year}年{quarter}月新番,EP{ep}",
                 route.RootElement.GetProperty("dynamic_tag_template").GetString());
             Assert.Equal(1440, route.RootElement.GetProperty("seeding_time_minutes").GetInt32());
+            Assert.True(
+                route.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
         }
+
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/sources/u2/route-preview",
+            Json(new { title = "U2 episode 2" }));
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.False(
+            previewJson.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
+
+        using var preserveNotification = await app.Client.PutAsync("/api/v1/sources/u2", Json(new
+        {
+            display_name = "U2 via BT",
+            downloader_id = "bt",
+            file_strategy = "move",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            category = "Anime/Move",
+            tags = new List<string> { "Moved" },
+            seeding_time_minutes = 0,
+            rss_filter_enabled = false,
+            rss_priority_enabled = false,
+            enabled = true,
+            expected_revision = 2,
+        }));
+        Assert.Equal(HttpStatusCode.OK, preserveNotification.StatusCode);
+        using var preserved = JsonDocument.Parse(
+            await preserveNotification.Content.ReadAsStreamAsync());
+        Assert.Equal(3, preserved.RootElement.GetProperty("revision").GetInt64());
+        Assert.False(
+            preserved.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
 
         using var stale = await app.Client.PutAsync("/api/v1/sources/u2", Json(new
         {
@@ -168,7 +204,7 @@ public sealed class SourceProfileApiTests
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
 
         using var deleteReferenced = await app.Client.DeleteAsync(
-            "/api/v1/sources/u2?expected_revision=2");
+            "/api/v1/sources/u2?expected_revision=3");
         Assert.Equal(HttpStatusCode.Conflict, deleteReferenced.StatusCode);
     }
 
@@ -186,6 +222,8 @@ public sealed class SourceProfileApiTests
             "{year}年{quarter}月新番",
             mikan.GetProperty("dynamic_tag_template").GetString());
         Assert.Equal(0, mikan.GetProperty("seeding_time_minutes").GetInt32());
+        Assert.True(
+            mikan.GetProperty("duplicate_notification_enabled").GetBoolean());
 
         using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
         {

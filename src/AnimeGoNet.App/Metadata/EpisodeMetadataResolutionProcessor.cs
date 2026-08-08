@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
@@ -13,6 +14,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
     ITmdbClient tmdb,
     AiMetadataTaskResolver aiMetadata,
     MikanTrustedOffsetStore trustedOffsets,
+    DuplicateHitNotifier duplicateNotifier,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
@@ -294,11 +296,20 @@ public sealed class EpisodeMetadataResolutionProcessor(
             }
         }
 
-        await resolutions.CompleteEpisodesAsync(
+        var completion = await resolutions.CompleteEpisodesAsync(
             claim,
             results,
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
+        foreach (var duplicate in completion.DuplicateHits)
+        {
+            duplicateNotifier.Notify(
+                claim.Resolution.DuplicateNotificationEnabled,
+                claim.Resolution.SourceProfileId ?? claim.Resolution.SourceId ?? "unknown",
+                claim.Resolution.SourceId ?? "unknown",
+                $"tmdb:{duplicate.TmdbSeriesId}:s{duplicate.TmdbSeasonNumber}:e{duplicate.TmdbEpisodeNumber}",
+                duplicate.Reason);
+        }
         await LearnTrustedOffsetAsync(claim, results, cancellationToken).ConfigureAwait(false);
         return true;
     }

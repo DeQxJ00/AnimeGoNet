@@ -656,6 +656,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             writer.WriteEndArray();
             writer.WriteBoolean("rss_filter_enabled", profile.RssFilterEnabled);
             writer.WriteBoolean("rss_priority_enabled", profile.RssPriorityEnabled);
+            writer.WriteBoolean(
+                "duplicate_notification_enabled",
+                profile.DuplicateNotificationEnabled);
             writer.WriteEndObject();
         }
 

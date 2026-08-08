@@ -1,5 +1,6 @@
 using System.Text;
 using System.Net;
+using System.Net.WebSockets;
 using System.Text.Json;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Torrents;
@@ -93,7 +94,16 @@ public sealed class MikanRssIngestProcessorTests
 
         var processor = app.App.Services.GetRequiredService<MikanRssIngestProcessor>();
         var feed = Feed(Item("Show [03] [1080p]", "winner"));
+        using var logSocket = new ClientWebSocket();
+        await logSocket.ConnectAsync(WebSocketUri(app), CancellationToken.None);
         var skipped = await processor.ProcessAsync(feed);
+
+        var duplicateLog = await ReceiveUntilAsync(
+            logSocket,
+            value => value.Contains("(4301)", StringComparison.Ordinal));
+        Assert.Contains("source-work:3951:ep:3:batch:", duplicateLog, StringComparison.Ordinal);
+        Assert.Contains("rss_completion_alias", duplicateLog, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Download/winner.torrent", duplicateLog, StringComparison.Ordinal);
 
         var skippedItem = Assert.Single(skipped.Items);
         Assert.Equal("already_completed", skippedItem.Status);
@@ -316,6 +326,51 @@ public sealed class MikanRssIngestProcessorTests
         "application/x-bittorrent",
         42,
         "2026-07-22T12:34:56.123");
+
+    private static Uri WebSocketUri(RunningApp app) => new UriBuilder(app.Client.BaseAddress!)
+    {
+        Scheme = "ws",
+        Path = "/websocket/log",
+    }.Uri;
+
+    private static async Task<string> ReceiveUntilAsync(
+        ClientWebSocket socket,
+        Func<string, bool> predicate)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var frame = await ReceiveTextAsync(socket, timeout.Token);
+            if (predicate(frame))
+            {
+                return frame;
+            }
+        }
+        throw new Xunit.Sdk.XunitException(
+            "Expected duplicate notification WebSocket frame was not received.");
+    }
+
+    private static async Task<string> ReceiveTextAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[1024];
+        using var payload = new MemoryStream();
+        ValueWebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    "WebSocket closed before the duplicate notification frame.");
+            }
+            Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+            payload.Write(buffer, 0, result.Count);
+        }
+        while (!result.EndOfMessage);
+        return Encoding.UTF8.GetString(payload.GetBuffer(), 0, (int)payload.Length);
+    }
 
     private sealed class CountingStagingService(
         int failuresBeforeSuccess = 0,

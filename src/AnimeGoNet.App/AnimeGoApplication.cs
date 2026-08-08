@@ -460,6 +460,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(aiMetadataMatcher);
         builder.Services.AddSingleton<AiMetadataResultValidator>();
         builder.Services.AddSingleton<AiMetadataTaskResolver>();
+        builder.Services.AddSingleton<DuplicateHitNotifier>();
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();
         builder.Services.AddSingleton<AutomaticMetadataResolutionProcessor>();
         builder.Services.AddSingleton<EpisodeMetadataResolutionProcessor>();
@@ -1082,6 +1083,10 @@ public static class AnimeGoApplication
                     FirstConfigurationValue(child, "rss_priority_enabled"),
                     id == "mikan",
                     $"sources:{id}:rss_priority_enabled"),
+                DuplicateNotificationEnabled = ParseOptionalBool(
+                    FirstConfigurationValue(child, "duplicate_notification_enabled"),
+                    true,
+                    $"sources:{id}:duplicate_notification_enabled"),
                 MikanIdentityCookie = string.Equals(
                     adapter,
                     "mikan",

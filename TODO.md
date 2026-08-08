@@ -210,7 +210,7 @@
 - [x] 实现下载列表/详情/文件级 priority 与 wanted 进度、筛选搜索分页和状态时间线；详情合并 SQLite 文件分配与 qB 实时文件快照，qB 离线时保留持久化信息并返回安全失败码，不暴露绝对路径或凭据。
 - [x] 实现暂停、恢复和 AnimeGoNet 业务重试；写操作校验 job revision，成功/失败均写入 schema v24 审计事件，任务卡片的删除操作仍只进入四类删除中心执行预览/确认。首版不复刻 Tracker/Peer 明细、piece 图、限速、强制校验/汇报和 qB 全局设置。
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
-- [>] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、内置及已发现 external source adapter 下拉（未启用/缺包明确禁用）、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态/动态 tags、做种分钟、Mikan Cookie 只写设置、revision 冲突、move 提示，以及复用真实 adapter 且无副作用的路由预览；重复命中通知待实现。
+- [x] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、内置及已发现 external source adapter 下拉（未启用/缺包明确禁用）、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态/动态 tags、做种分钟、Mikan Cookie 只写设置、revision 冲突、move 提示，以及复用真实 adapter 且无副作用的路由预览。schema v38 增加默认开启的来源级重复命中通知开关并固化进任务路由快照；RSS 来源 alias/并发 winner 与规范 TMDB Episode 重复会通过事件 4301 写入脱敏实时日志，关闭仅抑制通知且不改变全局去重。
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥只写不回显，保存前 diff 只显示 `继承/已配置/已清除` 状态，环境锁、即时生效和需重启字段均可见。

@@ -43,6 +43,8 @@ public sealed class IngestTaskStoreTests
             Assert.Equal(
                 "{year}年{quarter}月新番",
                 route.RootElement.GetProperty("dynamic_tag_template").GetString());
+            Assert.True(
+                route.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
         }
         Assert.Contains("\"seeding_time_minutes\":0", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);

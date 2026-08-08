@@ -35,7 +35,7 @@
 | 不支持的下载器类型 | 旧Transmission配置读取、诊断、禁用、零路由 | C/E | 明确永久Unsupported，不崩溃、不误转qB、不提供创建入口 |
 | 多下载器路由 | 命名实例、SourceProfile、ID schema、规则/路径/做种/去重、路由快照 | U/C/I/E | Mikan→bt、U2/TTG→pt；改配置不改变进行中任务，实例状态隔离 |
 | 下载状态机 | init/wait/download/seed/complete/pause/error/restart、0/-1/正数做种目标 | U/C/I | schema v33 目标/累计秒数/完成时间持久化；状态和累计值不回退；整理只按持久化门禁推进 |
-| 去重 | RSS alias早停、全局TMDB Episode键、包内逐文件跳过、事务复查、删除记录后重下 | U/I/E | 跨来源只认第一个完整成功Episode；其他Episode不受影响，无并发双写 |
+| 去重 | RSS alias早停、全局TMDB Episode键、包内逐文件跳过、事务复查、来源级通知开关、删除记录后重下 | U/I/E | 跨来源只认第一个完整成功Episode；其他Episode不受影响，无并发双写；schema v38 通知默认开启并固化到路由快照，关闭不绕过去重，RSS/TMDB 命中事件经脱敏 WebSocket 可见 |
 | 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 进入 `Other`，未知季度或冲突文件不落盘 |
 | 字幕 | 同stem、多语言/轨道后缀、按EP唯一绑定、idx/sub、歧义、Other | U/P/I/E | 匹配字幕随视频继承TMDB EP且后缀不丢；未匹配字幕不猜测，其他附件不移动 |
 | 文件策略 | link/link_delete/move/wait_move、跨盘、失败回滚 | U/I/E | 测试根外零写入/删除 |

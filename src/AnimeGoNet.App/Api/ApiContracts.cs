@@ -1036,6 +1036,8 @@ public sealed record SourceProfileCreateRequest(
     [property: JsonPropertyName("seeding_time_minutes")] int? SeedingTimeMinutes,
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("duplicate_notification_enabled")]
+    bool? DuplicateNotificationEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
     [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
@@ -1053,6 +1055,8 @@ public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("seeding_time_minutes")] int? SeedingTimeMinutes,
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("duplicate_notification_enabled")]
+    bool? DuplicateNotificationEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
     [property: JsonPropertyName("clear_mikan_identity_cookie")] bool ClearMikanIdentityCookie,
@@ -1075,6 +1079,8 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("seeding_time_minutes")] int SeedingTimeMinutes,
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("duplicate_notification_enabled")]
+    bool DuplicateNotificationEnabled,
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("locked_fields")]
     IReadOnlyList<SourceProfileFieldLockResponse> LockedFields,
@@ -1211,6 +1217,8 @@ public sealed record SourceRoutePreviewResponse(
     [property: JsonPropertyName("seeding_time_minutes")] int SeedingTimeMinutes,
     [property: JsonPropertyName("rss_filter_enabled")] bool RssFilterEnabled,
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
+    [property: JsonPropertyName("duplicate_notification_enabled")]
+    bool DuplicateNotificationEnabled,
     [property: JsonPropertyName("rss_rule_revision")] long? RssRuleRevision);
 
 public sealed record LegacyMikanFilterRuleResponse(

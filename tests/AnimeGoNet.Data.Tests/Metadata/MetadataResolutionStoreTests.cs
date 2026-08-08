@@ -344,6 +344,20 @@ public sealed class MetadataResolutionStoreTests
             ],
             now);
 
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var emulateLegacySnapshot = connection.CreateCommand())
+        {
+            emulateLegacySnapshot.CommandText = """
+                UPDATE ingest_tasks
+                SET route_snapshot_json = json_remove(
+                    route_snapshot_json,
+                    '$.duplicate_notification_enabled')
+                WHERE id = $task_id;
+                """;
+            emulateLegacySnapshot.Parameters.AddWithValue("$task_id", fixture.TaskId);
+            Assert.Equal(1, await emulateLegacySnapshot.ExecuteNonQueryAsync());
+        }
+
         var seasonRun = Assert.IsType<MetadataRunProjection>(
             await fixture.Store.GetLatestAsync(fixture.TaskId));
         Assert.Equal("season_resolved", seasonRun.Status);
@@ -355,6 +369,7 @@ public sealed class MetadataResolutionStoreTests
         Assert.True(episodeClaim.SeasonResolvedByAi);
         Assert.True(episodeClaim.AiMetadataAttempted);
         Assert.True(episodeClaim.HasMultipleSeasons);
+        Assert.True(episodeClaim.Resolution.DuplicateNotificationEnabled);
         Assert.Equal(
             [1, 2],
             episodeClaim.Files
@@ -670,6 +685,20 @@ public sealed class MetadataResolutionStoreTests
         var seasonClaim = Assert.IsType<MetadataTaskClaim>(await fixture.Store.TryClaimNextDownloadedAsync(
             now,
             TimeSpan.FromMinutes(1)));
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var disableNotification = connection.CreateCommand())
+        {
+            disableNotification.CommandText = """
+                UPDATE ingest_tasks
+                SET route_snapshot_json = json_set(
+                    route_snapshot_json,
+                    '$.duplicate_notification_enabled',
+                    0)
+                WHERE id = $task_id;
+                """;
+            disableNotification.Parameters.AddWithValue("$task_id", fixture.TaskId);
+            Assert.Equal(1, await disableNotification.ExecuteNonQueryAsync());
+        }
         await fixture.Store.CompleteSeasonAsync(
             seasonClaim,
             new TmdbSeries(72517, "来自深渊", "メイドインアビス", new DateOnly(2017, 7, 7)),
@@ -688,6 +717,9 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(999, episodeClaim.Resolution.AniDbAnimeId);
         Assert.Equal("tt1234567", episodeClaim.Resolution.ImdbTitleId);
         Assert.Equal("mikan", episodeClaim.Resolution.SourceAdapter);
+        Assert.Equal("mikan", episodeClaim.Resolution.SourceProfileId);
+        Assert.Equal("mikan", episodeClaim.Resolution.SourceId);
+        Assert.False(episodeClaim.Resolution.DuplicateNotificationEnabled);
         Assert.Equal(
             new DateTimeOffset(2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)),
             episodeClaim.Resolution.SourcePublishedAt);

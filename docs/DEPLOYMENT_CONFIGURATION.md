@@ -165,6 +165,7 @@ sources:
     seeding_time_minutes: 0
     rss_filter_enabled: true
     rss_priority_enabled: true
+    duplicate_notification_enabled: true
 
 metadata:
   tmdb:
@@ -221,6 +222,11 @@ data_update:
 `downloader_id` 绑定不同 qBittorrent 实例。所有下载器 `download_path` 必须位于
 全局 `paths.download_path` 内。Mikan 默认整理语义固定为 `move`，因此做种分钟
 必须为 0。
+
+`sources.<id>.duplicate_notification_enabled` 默认 `true`，只控制发现重复时是否向
+脱敏应用日志/WebSocket 写事件；不会改变全局 TMDB Episode 去重、RSS 早停或
+下载门禁。它在首次创建 SourceProfile 时作为初始值，之后可在 WebUI 修改并随
+profile revision 固化到新任务路由快照。
 
 `dynamic_tag_template` 留空即关闭；默认 Mikan 值与上游一致。支持 `{year}`、
 `{quarter}`、`{quarter_index}`、`{quarter_name}`、`{ep}`、`{week}`、

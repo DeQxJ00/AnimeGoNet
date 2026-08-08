@@ -95,6 +95,7 @@ public static class AnimeGoDefaults
                     SeedingTimeMinutes = 0,
                     RssFilterEnabled = true,
                     RssPriorityEnabled = true,
+                    DuplicateNotificationEnabled = true,
                 },
             ],
         };

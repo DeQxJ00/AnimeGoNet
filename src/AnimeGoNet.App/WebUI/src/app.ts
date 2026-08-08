@@ -1057,6 +1057,7 @@ interface SourceProfile {
   seeding_time_minutes: number;
   rss_filter_enabled: boolean;
   rss_priority_enabled: boolean;
+  duplicate_notification_enabled: boolean;
   enabled: boolean;
   locked_fields: Array<{
     field: "category" | "dynamic_tag_template" | "mikan_identity_cookie";
@@ -1102,6 +1103,7 @@ interface SourceRoutePreview {
   seeding_time_minutes: number;
   rss_filter_enabled: boolean;
   rss_priority_enabled: boolean;
+  duplicate_notification_enabled: boolean;
   rss_rule_revision: number | null;
 }
 
@@ -5547,6 +5549,8 @@ function populateSourceForm(profile: SourceProfile | null): void {
   element<HTMLInputElement>("#source-enabled").checked = profile?.enabled ?? true;
   element<HTMLInputElement>("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
   element<HTMLInputElement>("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
+  element<HTMLInputElement>("#source-duplicate-notification-enabled").checked =
+    profile?.duplicate_notification_enabled ?? true;
   element<HTMLInputElement>("#source-mikan-cookie").value = "";
   element<HTMLInputElement>("#source-mikan-cookie-clear").checked = false;
   element<HTMLInputElement>("#source-rss-url").value = "";
@@ -5588,7 +5592,7 @@ function renderSourceList(): void {
     const lockState = profile.locked_fields.length > 0
       ? ` · 部署锁 ${profile.locked_fields.map((lock) => lock.field).join("/")}`
       : "";
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
@@ -5635,6 +5639,7 @@ async function previewSourceRoute(): Promise<void> {
           `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
           `动态 Tag 模板 ${route.dynamic_tag_template ?? "关闭"}`,
           `做种 ${route.seeding_time_minutes} 分钟 · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
+          `重复命中通知 ${route.duplicate_notification_enabled ? "开启" : "关闭"}（不改变全局去重）`,
         ].join("\n")
       : `无效\n${route.errors.map((error) => `• ${error}`).join("\n")}`;
   } catch (error) {
@@ -6219,6 +6224,8 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     allowed_torrent_hosts: sourceHosts(),
     rss_filter_enabled: element<HTMLInputElement>("#source-filter-enabled").checked,
     rss_priority_enabled: element<HTMLInputElement>("#source-priority-enabled").checked,
+    duplicate_notification_enabled:
+      element<HTMLInputElement>("#source-duplicate-notification-enabled").checked,
     enabled: element<HTMLInputElement>("#source-enabled").checked,
     mikan_identity_cookie:
       element<HTMLInputElement>("#source-mikan-cookie").value || null,

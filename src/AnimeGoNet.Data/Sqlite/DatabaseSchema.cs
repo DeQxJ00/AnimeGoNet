@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 37;
+    public const int CurrentVersion = 38;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -43,7 +43,14 @@ public static class DatabaseSchema
         new SchemaMigration(35, "completion_source_alias_audit", CompletionSourceAliasAudit),
         new SchemaMigration(36, "source_rss_scheduling", SourceRssScheduling),
         new SchemaMigration(37, "media_organization_progress", MediaOrganizationProgress),
+        new SchemaMigration(38, "source_duplicate_notifications", SourceDuplicateNotifications),
     ];
+
+    private const string SourceDuplicateNotifications = """
+        ALTER TABLE source_profiles
+        ADD COLUMN duplicate_notification_enabled INTEGER NOT NULL DEFAULT 1
+        CHECK (duplicate_notification_enabled IN (0, 1));
+        """;
 
     private const string MediaOrganizationProgress = """
         ALTER TABLE download_jobs

@@ -243,6 +243,72 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task SourceDuplicateNotificationMigrationDefaultsExistingProfilesToEnabled()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 37))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'mikan', 'Mikan', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-08-08T00:00:00.0000000+00:00");
+            Assert.Equal(1, await seed.ExecuteNonQueryAsync());
+        }
+
+        var notificationMigration = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 38);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = notificationMigration.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT duplicate_notification_enabled
+                FROM source_profiles
+                WHERE id = 'mikan';
+                """;
+            Assert.Equal(1L, await query.ExecuteScalarAsync());
+        }
+
+        await using (var disable = connection.CreateCommand())
+        {
+            disable.CommandText = """
+                UPDATE source_profiles
+                SET duplicate_notification_enabled = 0
+                WHERE id = 'mikan';
+                """;
+            Assert.Equal(1, await disable.ExecuteNonQueryAsync());
+        }
+
+        await using var invalid = connection.CreateCommand();
+        invalid.CommandText = """
+            UPDATE source_profiles
+            SET duplicate_notification_enabled = 2
+            WHERE id = 'mikan';
+            """;
+        await Assert.ThrowsAsync<SqliteException>(invalid.ExecuteNonQueryAsync);
+    }
+
+    [Fact]
     public async Task DownloadSeedingLifecycleMigrationBackfillsImmutableTargetsAndStates()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

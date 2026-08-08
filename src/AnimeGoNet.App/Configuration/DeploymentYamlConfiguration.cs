@@ -367,6 +367,7 @@ internal static class DeploymentYamlConfiguration
         Add(values, "sources:mikan:seeding_time_minutes", "0");
         Add(values, "sources:mikan:rss_filter_enabled", "true");
         Add(values, "sources:mikan:rss_priority_enabled", "true");
+        Add(values, "sources:mikan:duplicate_notification_enabled", "true");
         AliasAny(
             values,
             [
@@ -631,6 +632,7 @@ internal static class DeploymentYamlConfiguration
                 seeding_time_minutes: {{Integer(values, "sources:mikan:seeding_time_minutes", 0)}}
                 rss_filter_enabled: true
                 rss_priority_enabled: true
+                duplicate_notification_enabled: true
                 mikan_identity_cookie: {{Scalar(Configured(values, "sources:mikan:mikan_identity_cookie", string.Empty))}}
 
             metadata:
@@ -830,6 +832,7 @@ internal static class DeploymentYamlConfiguration
                 seeding_time_minutes: 0
                 rss_filter_enabled: true
                 rss_priority_enabled: true
+                duplicate_notification_enabled: true
                 # 可填写 Cookie 值或完整的 .AspNetCore.Identity.Application=...；Web API 永不回显。
                 mikan_identity_cookie: ''
 

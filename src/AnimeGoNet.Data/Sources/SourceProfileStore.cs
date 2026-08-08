@@ -35,13 +35,14 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 INSERT INTO source_profiles (
                     id, display_name, adapter, downloader_id, file_strategy,
                     allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
-                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled,
+                    revision, enabled,
                     created_at_utc, updated_at_utc, mikan_identity_cookie,
                     dynamic_tag_template, dynamic_tag_template_initialized)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
                     $allowed_torrent_hosts_json, $category, $tags_json, $seeding_time_minutes,
-                    $rss_filter_enabled, $rss_priority_enabled, 1, 1,
+                    $rss_filter_enabled, $rss_priority_enabled, $duplicate_notification_enabled, 1, 1,
                     $created_at_utc, $updated_at_utc, $mikan_identity_cookie,
                     $dynamic_tag_template, 1)
                 ON CONFLICT(id) DO UPDATE SET
@@ -107,6 +108,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             command.Parameters.AddWithValue("$seeding_time_minutes", seedingTimeMinutes);
             command.Parameters.AddWithValue("$rss_filter_enabled", seed.RssFilterEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$rss_priority_enabled", seed.RssPriorityEnabled ? 1 : 0);
+            command.Parameters.AddWithValue(
+                "$duplicate_notification_enabled",
+                seed.DuplicateNotificationEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$created_at_utc", now);
             command.Parameters.AddWithValue("$updated_at_utc", now);
             command.Parameters.AddWithValue(
@@ -198,7 +202,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.CommandText = """
             SELECT id, adapter, downloader_id, file_strategy,
                    allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
-                   rss_filter_enabled, rss_priority_enabled, revision,
+                   rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled, revision,
                    mikan_identity_cookie, dynamic_tag_template,
                    rss_feed_url, rss_schedule_enabled, rss_schedule_cron
             FROM source_profiles
@@ -222,12 +226,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(7),
             reader.GetInt64(8) != 0,
             reader.GetInt64(9) != 0,
-            reader.GetInt64(10),
-            reader.IsDBNull(11) ? null : reader.GetString(11),
+            reader.GetInt64(11),
             reader.IsDBNull(12) ? null : reader.GetString(12),
             reader.IsDBNull(13) ? null : reader.GetString(13),
-            reader.GetBoolean(14),
-            reader.GetString(15));
+            reader.IsDBNull(14) ? null : reader.GetString(14),
+            reader.GetBoolean(15),
+            reader.GetString(16),
+            reader.GetInt64(10) != 0);
     }
 
     public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
@@ -269,13 +274,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             INSERT INTO source_profiles (
                 id, display_name, adapter, downloader_id, file_strategy,
                 allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
-                rss_filter_enabled, rss_priority_enabled,
+                rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled,
                 revision, enabled, created_at_utc, updated_at_utc,
                 mikan_identity_cookie, dynamic_tag_template,
                 dynamic_tag_template_initialized, rss_feed_url,
                 rss_schedule_enabled, rss_schedule_cron)
             VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts,
-                    $category, $tags, $seeding_time, $filter, $priority,
+                    $category, $tags, $seeding_time, $filter, $priority, $duplicate_notification,
                     1, $enabled, $now, $now, $mikan_identity_cookie,
                     $dynamic_tag_template, 1, $rss_feed_url,
                     $rss_schedule_enabled, $rss_schedule_cron);
@@ -309,7 +314,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             SET display_name = $name, downloader_id = $downloader, file_strategy = $strategy,
                 allowed_torrent_hosts_json = $hosts, category = $category, tags_json = $tags,
                 seeding_time_minutes = $seeding_time, rss_filter_enabled = $filter,
-                rss_priority_enabled = $priority, enabled = $enabled,
+                rss_priority_enabled = $priority,
+                duplicate_notification_enabled = $duplicate_notification,
+                enabled = $enabled,
                 mikan_identity_cookie = $mikan_identity_cookie,
                 dynamic_tag_template = $dynamic_tag_template,
                 rss_feed_url = $rss_feed_url,
@@ -513,7 +520,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
     private const string AdminSelect = """
         SELECT p.id, p.display_name, p.adapter, p.downloader_id, p.file_strategy,
                p.allowed_torrent_hosts_json, p.category, p.tags_json, p.seeding_time_minutes,
-               p.rss_filter_enabled, p.rss_priority_enabled, p.enabled, p.revision,
+               p.rss_filter_enabled, p.rss_priority_enabled,
+               p.duplicate_notification_enabled, p.enabled, p.revision,
                (SELECT COUNT(*) FROM ingest_tasks i WHERE i.source_profile_id = p.id),
                (SELECT COUNT(*) FROM mikan_rss_batches b WHERE b.source_profile_id = p.id),
                p.created_at_utc, p.updated_at_utc, p.mikan_identity_cookie,
@@ -536,26 +544,27 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         reader.GetInt32(8),
         reader.GetBoolean(9),
         reader.GetBoolean(10),
-        reader.GetBoolean(11),
-        reader.GetInt64(12),
+        reader.GetBoolean(12),
         reader.GetInt64(13),
         reader.GetInt64(14),
-        DateTimeOffset.Parse(reader.GetString(15), CultureInfo.InvariantCulture),
+        reader.GetInt64(15),
         DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture),
-        reader.IsDBNull(17) ? null : reader.GetString(17),
+        DateTimeOffset.Parse(reader.GetString(17), CultureInfo.InvariantCulture),
         reader.IsDBNull(18) ? null : reader.GetString(18),
         reader.IsDBNull(19) ? null : reader.GetString(19),
-        reader.GetBoolean(20),
-        reader.GetString(21),
+        reader.IsDBNull(20) ? null : reader.GetString(20),
+        reader.GetBoolean(21),
         reader.GetString(22),
-        reader.IsDBNull(23)
-            ? null
-            : DateTimeOffset.Parse(reader.GetString(23), CultureInfo.InvariantCulture),
+        reader.GetString(23),
         reader.IsDBNull(24)
             ? null
             : DateTimeOffset.Parse(reader.GetString(24), CultureInfo.InvariantCulture),
-        reader.IsDBNull(25) ? null : reader.GetString(25),
-        reader.IsDBNull(26) ? null : reader.GetString(26));
+        reader.IsDBNull(25)
+            ? null
+            : DateTimeOffset.Parse(reader.GetString(25), CultureInfo.InvariantCulture),
+        reader.IsDBNull(26) ? null : reader.GetString(26),
+        reader.IsDBNull(27) ? null : reader.GetString(27),
+        reader.GetBoolean(11));
 
     private static void BindDefinition(
         SqliteCommand command,
@@ -602,6 +611,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$seeding_time", seedingTimeMinutes);
         command.Parameters.AddWithValue("$filter", definition.RssFilterEnabled);
         command.Parameters.AddWithValue("$priority", definition.RssPriorityEnabled);
+        command.Parameters.AddWithValue(
+            "$duplicate_notification",
+            definition.DuplicateNotificationEnabled);
         command.Parameters.AddWithValue("$enabled", definition.Enabled);
         command.Parameters.AddWithValue(
             "$mikan_identity_cookie",
