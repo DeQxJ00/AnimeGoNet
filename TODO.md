@@ -246,7 +246,7 @@
 - [ ] 构建并实机验证 `linux/amd64`，按确认结果验证 `linux/arm64`。
 - [>] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退：`data/plugins` 包目录与 `data/plugin-data` 写目录已分离；平台/RID、入口执行位、Unix group/world write、链接逃逸、逐包错误隔离、真实本机子进程/环境隔离、自动禁用与显式 reset 已有测试。Docker 只读挂载和真实 Linux 非 root 子进程待验收。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
-- [ ] 生成 checksums、SBOM、第三方许可证。
+- [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
 - [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；最新 win-x64 原生二进制也完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt/目录业务数据迁移演练仍待实现。
 - [ ] 完成全链路 JIT/AOT/Docker E2E。
 - [ ] 用发布镜像完成 Web UI Playwright E2E。

@@ -100,7 +100,7 @@
 | 上游行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | Go release workflows | .NET 10 build/test | 替换 | 进行中 | Windows/Linux/macOS Actions 已建立且 YAML 通过解析；远端运行待验收 |
-| 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 进行中 | 五 RID NativeAOT 矩阵已建立；win-x64 本机 publish/smoke 已通过 |
+| 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 进行中 | 五 RID NativeAOT 矩阵已建立；每个 RID 在上传前从实际产物和精确 NuGet graph 生成逐文件 `SHA256SUMS`、CycloneDX 1.5 SBOM 与第三方许可证清单，确定性/哈希/脱敏测试已通过；win-x64 本机 publish/smoke 已通过，其他 RID 仍待远端实跑验收 |
 | MIPS/386/macOS x64 | 不在首版 RID | 例外 | 例外 | 文档化 |
 | Go Dockerfile | NativeAOT runtime image | 替换 | 进行中 | amd64/arm64 Buildx 与容器 smoke 已建立；本机无 Docker，待 CI 实跑 |
 | 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 已验证 | win-x64 published binary 静态 WebUI smoke |
