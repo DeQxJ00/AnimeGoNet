@@ -1,0 +1,26 @@
+# Upstream pure-function parity
+
+Baseline: `wetor/AnimeGo@develop@c7475dfc55a374cd0dd08821bf17125dab1e3145`.
+
+This ledger maps the fixed upstream helper surface by observable use, rather than copying helpers that only support Go reflection, Python plugins or unsafe filesystem behavior. `Preserved` means matching output for valid upstream inputs. `Hardened` means the same business purpose is retained with an explicit fail-closed boundary. `Excluded` means no retained business path calls the helper after an already-approved architectural replacement.
+
+| Upstream helper | AnimeGoNet implementation | Status and evidence |
+|---|---|---|
+| `utils.Sha256` | `StableHash.Sha256LowerHex` | Preserved UTF-8 lowercase hex; used by `/sha256`, legacy Access-Key comparison, unified ingest URL fingerprints, RSS candidate identity and batch fingerprints. Empty, ASCII, Unicode and raw-byte tests are fixed vectors. |
+| `utils.MD5*` | SHA-256 release/static-resource verification | Excluded. Upstream only used MD5 while copying embedded plugin assets and in test-only fake torrent IDs. Python assets are removed; .NET release/static assets use SHA-256 and are not runtime-copied through this helper. MD5 is not exposed as a compatibility API. |
+| `utils.Format` / `utils.Tag` | `DownloadDynamicTagTemplate` | Preserved placeholders for year, quarter month/index/name, Episode and weekday/name. Invalid dates/placeholders now fail closed instead of silently rendering Go zero-time values. |
+| `utils.RemoveNameSuffix` / `utils.SimilarText` | `TmdbTitleHeuristics` | Preserved four regex steps, retry order, UTF-8 byte similarity and 0.75 threshold. Golden fixtures come from upstream `pkg/utils/name_test.go`. |
+| TMDB `StrTimeSub*` | `TmdbSeasonSelector` | Preserved absolute whole-day comparison for valid ISO dates; typed `DateOnly.DayNumber` avoids local timezone/DST drift, ignores Season 0 and enforces the approved 90-day boundary. |
+| `UTCToTimeStr` and Mikan publication parsing | `MikanPublishedAtParser` / `RssFeedParser` | Preserved valid RFC/Mikan timestamps while retaining the full offset-aware value. Missing or malformed values return no evidence rather than Go year-one output. |
+| `Unix` | `DateTimeOffset.ToUnixTimeSeconds` and ISO-8601 UTC persistence | Preserved where the legacy HTTP/KV contract requires Unix seconds; new SQLite audit timestamps retain offset-aware ISO-8601 text. |
+| `String2Bool` | .NET configuration providers plus strong validators | Hardened. Canonical booleans are parsed by the deployment/environment/CLI configuration layer; invalid values are rejected instead of silently becoming false. |
+| `xpath.P/Abs/IsAbs/Root` | `Path`, `Path.GetFullPath`, `PathBoundary`, `DirectoryLayout` | Hardened cross-platform normalization. Windows/UNC/POSIX absolute paths are explicit; root containment rejects mixed platforms and `..` escape. Business code never infers a writable root from an arbitrary media string. |
+| `models.FileName` / `AnimeToFilePath*` | `MediaPathPlanner` | Hardened. TMDB canonical Series/Season/Episode drive paths; Unicode is NFC-normalized, invalid/control characters collapse deterministically, Windows reserved names and trailing dots/spaces are protected, and unresolved items go only to a confirmed Season `Other`. |
+| `ToMetaData` | `TvShowNfoWriter` | Preserved normal TMDB+Bgm and `tmdbid=0` fallback XML semantics with atomic writes and captured-root checks. Recovery uses a durable rewrite job. |
+| `CreateLink/Rename/Remove` and existence/size helpers | safe mover/linker, organization and deletion stores | Hardened. Paths must remain under captured roots, reparse/symlink traversal is rejected, cross-volume moves verify SHA-256 before source deletion, and retries are persisted. |
+| `Sleep` | cancellable `Task.Delay`, scheduler time provider | Hardened. Cancellation interrupts immediately; workers do not poll once per second inside a blocking helper. Virtual-time scheduler tests cover retry and shutdown behavior. |
+| `MapToStruct` / `StructToMap` | explicit records plus source-generated JSON contexts | Replaced for NativeAOT. No reflection map conversion is allowed in production DTO/plugin protocols. Unknown/duplicate fields and bounds are validated explicitly. |
+| `HandleError` | HostedService/API/plugin exception boundaries | Replaced. Expected cancellation is separated from failure; worker/plugin faults are classified and persisted or isolated rather than recovered from Go panics. |
+| `ToIntervals` | task/library counts and authoritative TMDB Episode grid | Excluded from the retained UI/API. The upstream formatter only fed `AnimeEntity.String()` log text and assumes a non-empty pre-sorted list; AnimeGoNet does not use that string as identity or progress. |
+
+The hardened differences above are intentional NativeAOT and data-safety boundaries, not silent compatibility gaps. The authoritative behavior tests are `StableHashTests`, `DownloadDynamicTagTemplateTests`, `TmdbTitleHeuristicsTests`, `TmdbSeasonSelectorTests`, `MikanPublishedAtParserTests`, `MediaPathPlannerTests`, path/configuration tests, NFO/file-operation integration tests, and legacy API Access-Key contracts.

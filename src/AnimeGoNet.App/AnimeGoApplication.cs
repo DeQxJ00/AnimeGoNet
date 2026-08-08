@@ -16,6 +16,7 @@ using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Plugins;
@@ -1390,7 +1391,7 @@ public static class AnimeGoApplication
             suppliedHash = request.Headers["Access-Key"].ToString();
         }
 
-        var expectedHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(configuredKey)));
+        var expectedHash = StableHash.Sha256LowerHex(configuredKey);
         return FixedTimeEquals(suppliedHash.ToLowerInvariant(), expectedHash);
     }
 

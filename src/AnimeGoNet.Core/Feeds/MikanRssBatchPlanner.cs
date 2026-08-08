@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Rules;
 
@@ -190,8 +189,7 @@ public static class MikanRssBatchPlanner
         var identity = string.IsNullOrWhiteSpace(item.MikanUrl)
             ? item.TorrentUrl
             : item.MikanUrl;
-        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
-        return Convert.ToHexStringLower(digest);
+        return StableHash.Sha256LowerHex(identity);
     }
 
     private static string UniqueId(string baseId, HashSet<string> usedIds)

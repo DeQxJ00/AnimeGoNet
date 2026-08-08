@@ -16,6 +16,7 @@
 | CLI/生命周期 | 参数、env 优先级、Ctrl+C、SIGTERM、5 秒退出保护 | U/C/E | JIT/AOT 行为一致，退出无数据损坏 |
 | 配置 | 默认生成、注释、12 版升级、备份、非法值、相对路径 | U/P/E | 所有历史 fixture 通过 |
 | JSON/YAML | 字段名、零值、map/list、Unicode、round-trip | U/P/E | 无反射 fallback；AOT 通过 |
+| 纯函数 | UTF-8 SHA-256、动态 Tag、名称清理/相似度、路径清洗/边界、日期解析/差值/Unix 秒 | U/P/I/E | 上游可观察输入保持 parity；路径/无效输入使用已记录的 fail-closed 安全替代；NativeAOT 无反射 helper |
 | 缓存 | bucket、TTL、batch、delete、重开、并发 | U/I/E | 时间边界与崩溃恢复通过 |
 | 目录 DB | 扫描 anime/season/episode、索引、重复、损坏文件 | U/P/I | 已有媒体目录结果一致 |
 | HTTP | UA、proxy、redirect、cookie、query、retry、timeout | U/C | 请求录制与预期一致 |

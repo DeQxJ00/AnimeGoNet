@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.DataUpdate;
@@ -154,8 +155,7 @@ public static class ApiEndpoints
 
     private static Ok<LegacyApiResponse<string>> Sha256(string accessKey)
     {
-        var hash = Convert.ToHexStringLower(
-            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(accessKey)));
+        var hash = StableHash.Sha256LowerHex(accessKey);
         return TypedResults.Ok(new LegacyApiResponse<string>(200, "Access-Key", hash));
     }
 

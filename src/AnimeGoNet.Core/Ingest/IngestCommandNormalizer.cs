@@ -1,7 +1,6 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Plugins;
 
 namespace AnimeGoNet.Core.Ingest;
@@ -167,8 +166,7 @@ public static class IngestCommandNormalizer
             return new IngestValidationResult(null, errors);
         }
 
-        var fingerprint = Convert.ToHexStringLower(
-            SHA256.HashData(Encoding.UTF8.GetBytes(torrentUrl.AbsoluteUri)));
+        var fingerprint = StableHash.Sha256LowerHex(torrentUrl.AbsoluteUri);
         return new IngestValidationResult(
             new NormalizedIngestItem(
                 normalizedSource,

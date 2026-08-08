@@ -1,6 +1,6 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Data.Sqlite;
@@ -538,8 +538,7 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
         return Sha256(value.ToString());
     }
 
-    private static string Sha256(string value) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    private static string Sha256(string value) => StableHash.Sha256LowerHex(value);
 
     private static string Format(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
