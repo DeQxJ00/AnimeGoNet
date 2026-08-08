@@ -29,7 +29,7 @@ jobs:
       - name: Test WebUI client
         run: npm run web:test
       - name: Verify committed WebUI output
-        run: git diff --exit-code -- src/AnimeGoNet.App/wwwroot/app.js src/AnimeGoNet.App/wwwroot/api-client.js
+        run: git diff --exit-code -- src/AnimeGoNet.App/wwwroot/app.js src/AnimeGoNet.App/wwwroot/api-client.js src/AnimeGoNet.App/wwwroot/ui-state.js
 
   build-test:
     strategy:

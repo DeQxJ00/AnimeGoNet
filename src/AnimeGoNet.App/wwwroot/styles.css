@@ -3,10 +3,38 @@
   color: #edf2ff;
   background: #080b13;
   font-synthesis: none;
+  --muted: #aebbd3;
+  --focus-ring: #8ab4f8;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #1d2740 0, #080b13 45%); }
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  padding: 10px 14px;
+  border: 2px solid var(--focus-ring);
+  border-radius: 10px;
+  color: #07101e;
+  background: #dceaff;
+  font-weight: 750;
+  transform: translateY(calc(-100% - 20px));
+  transition: transform .12s ease;
+}
+.skip-link:focus { transform: translateY(0); }
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+main:focus { outline: none; }
+button, input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
+.ui-state { width: 100%; margin: 0; grid-column: 1 / -1; }
+.ui-state--loading { border-color: #526585; color: #c9d7f0; }
+.ui-state--error { border-color: #813f49; color: #ffb4b4; background: rgba(82,28,37,.28); }
+.ui-state--empty { color: var(--muted); }
+[data-ui-state="loading"] { cursor: progress; }
 .topbar, main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 30px 0 18px; }
 h1, h2, h3, p { margin-top: 0; }
@@ -468,6 +496,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .rss-group-heading input { width: 100%; margin-top: 5px; border: 1px solid #344260; border-radius: 8px; padding: 8px; color: #edf2ff; background: #090e19; }
 .rss-preview-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
 .rss-preview-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rss-preview-titles-label { display: block; margin-top: 10px; color: #8da2c9; font-size: .72rem; }
 #rss-preview-titles { resize: vertical; margin: 10px 0; line-height: 1.5; }
 .rss-preview-results { display: grid; align-content: start; gap: 8px; }
 .rss-decision { padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.55); color: #aebbd3; font-size: .82rem; overflow-wrap: anywhere; }
@@ -649,6 +678,13 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   display: grid;
   gap: .5rem;
   margin-top: .8rem;
+}
+
+.legacy-filter-json-label {
+  display: block;
+  margin-bottom: .4rem;
+  color: var(--muted);
+  font-size: .78rem;
 }
 
 .legacy-filter-trace {
@@ -1001,4 +1037,57 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .cache-browser-actions { justify-content: flex-start; }
   .live-log-heading { align-items: flex-start; }
   .live-log-actions { justify-content: flex-start; }
+}
+
+@media (max-width: 620px) {
+  .topbar, main { width: min(100% - 20px, 1120px); }
+  .topbar { align-items: flex-start; padding-top: 20px; }
+  .topbar > div { min-width: 0; }
+  .topbar .badge { flex: 0 0 auto; margin-left: 10px; }
+  .hero { padding: 24px 18px; border-radius: 20px; }
+  .section-heading,
+  .library-detail-heading,
+  .download-heading,
+  .metadata-heading,
+  .delete-heading,
+  .delete-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .section-heading > button,
+  .section-heading > .configuration-actions,
+  .section-heading > .downloader-heading-actions,
+  .section-heading > .data-update-actions,
+  .section-heading > .live-log-actions {
+    align-self: stretch;
+  }
+  .configuration-actions > button,
+  .downloader-heading-actions > button,
+  .data-update-actions > button,
+  .live-log-actions > button {
+    flex: 1 1 auto;
+  }
+  .library-pagination,
+  .metadata-pagination,
+  .download-pagination { flex-wrap: wrap; }
+  dialog,
+  #configuration-dialog,
+  #delete-dialog,
+  #downloader-config-dialog {
+    width: calc(100% - 12px);
+    max-height: calc(100dvh - 12px);
+    border-radius: 14px;
+  }
+  .configuration-form,
+  .delete-panel,
+  .downloader-config-panel { padding: 18px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

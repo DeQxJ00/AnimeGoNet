@@ -1,4 +1,9 @@
 import { ApiClient } from "./api-client.js";
+import {
+  renderRegionContent,
+  renderRegionMessage,
+  setRegionState,
+} from "./ui-state.js";
 
 interface RuntimeStatus {
   database_schema_version: number;
@@ -1660,13 +1665,14 @@ function renderExternalPlugins(
     cards.push(card);
   }
   if (cards.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted empty";
-    empty.textContent = "没有发现外部插件包。内置 C# 插件不在此处重复显示。";
-    cards.push(empty);
+    renderRegionMessage(
+      target,
+      "empty",
+      "没有发现外部插件包。内置 C# 插件不在此处重复显示。",
+    );
+    return;
   }
-  target.replaceChildren(...cards);
-  target.setAttribute("aria-busy", "false");
+  renderRegionContent(target, ...cards);
 }
 
 async function resetExternalPlugin(pluginId: string, button: HTMLButtonElement): Promise<void> {
@@ -1690,6 +1696,10 @@ async function resetExternalPlugin(pluginId: string, button: HTMLButtonElement):
 
 async function loadStatus(): Promise<void> {
   const health = element<HTMLElement>("#health");
+  const modulesTarget = element<HTMLElement>("#modules");
+  const pluginsTarget = element<HTMLElement>("#external-plugin-list");
+  setRegionState(modulesTarget, "loading");
+  setRegionState(pluginsTarget, "loading");
   try {
     const [status, pluginConfigurations] = await Promise.all([
       api.get<RuntimeStatus>("/api/v1/status"),
@@ -1714,13 +1724,16 @@ async function loadStatus(): Promise<void> {
       item.append(title, state);
       return item;
     });
-    element<HTMLElement>("#modules").replaceChildren(...modules);
+    renderRegionContent(modulesTarget, ...modules);
     renderExternalPlugins(status.external_plugins, pluginConfigurations);
     health.textContent = "运行中";
     health.className = "badge ready";
   } catch (error) {
-    health.textContent = errorMessage(error, "连接失败");
+    const message = errorMessage(error, "连接失败");
+    health.textContent = message;
     health.className = "badge error";
+    renderRegionMessage(modulesTarget, "error", `模块状态读取失败：${message}`);
+    renderRegionMessage(pluginsTarget, "error", `外部插件状态读取失败：${message}`);
   }
 }
 
@@ -2006,20 +2019,25 @@ function cacheDigestLabel(kind: "bucket" | "key", digest: string): string {
 function setCacheBusy(busy: boolean): void {
   element<HTMLSelectElement>("#cache-database").disabled = busy;
   element<HTMLButtonElement>("#cache-reload").disabled = busy;
-  element<HTMLElement>("#cache-buckets").setAttribute("aria-busy", String(busy));
-  element<HTMLElement>("#cache-entries").setAttribute("aria-busy", String(busy));
+  for (const target of [
+    element<HTMLElement>("#cache-buckets"),
+    element<HTMLElement>("#cache-entries"),
+  ]) {
+    if (busy) {
+      setRegionState(target, "loading");
+    } else if (target.dataset.uiState === "loading") {
+      setRegionState(target, "ready");
+    }
+  }
 }
 
 function renderCacheBuckets(): void {
   const target = element<HTMLElement>("#cache-buckets");
   if (cacheBuckets.length === 0) {
-    target.replaceChildren(Object.assign(document.createElement("p"), {
-      className: "muted empty",
-      textContent: "当前命名空间没有 bucket。",
-    }));
+    renderRegionMessage(target, "empty", "当前命名空间没有 bucket。");
     return;
   }
-  target.replaceChildren(...cacheBuckets.map(bucket => {
+  renderRegionContent(target, ...cacheBuckets.map(bucket => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "secondary-button cache-bucket-button";
@@ -2043,14 +2061,15 @@ function renderCacheBuckets(): void {
 function renderCacheEntries(page: CacheBrowserEntryList): void {
   const target = element<HTMLElement>("#cache-entries");
   if (page.items.length === 0) {
-    target.replaceChildren(Object.assign(document.createElement("p"), {
-      className: "muted empty",
-      textContent: page.bucket_id === ""
+    renderRegionMessage(
+      target,
+      "empty",
+      page.bucket_id === ""
         ? "当前命名空间没有 bucket。"
         : page.total_count === 0 ? "此 bucket 没有有效条目。" : "当前页没有条目。",
-    }));
+    );
   } else {
-    target.replaceChildren(...page.items.map(item => {
+    renderRegionContent(target, ...page.items.map(item => {
       const card = document.createElement("article");
       card.className = "cache-entry";
       const details = document.createElement("div");
@@ -2122,7 +2141,16 @@ async function loadCacheBuckets(): Promise<void> {
     status.textContent = errorMessage(error, "缓存索引读取失败");
     cacheBuckets = [];
     activeCacheBucketId = null;
-    renderCacheBuckets();
+    renderRegionMessage(
+      element<HTMLElement>("#cache-buckets"),
+      "error",
+      "缓存 bucket 读取失败，请刷新。",
+    );
+    renderRegionMessage(
+      element<HTMLElement>("#cache-entries"),
+      "error",
+      "缓存索引读取失败，无法读取条目。",
+    );
   } finally {
     if (sequence === cacheRequestSequence) setCacheBusy(false);
   }
@@ -2132,7 +2160,8 @@ async function loadCacheEntries(parentSequence?: number): Promise<void> {
   if (!activeCacheBucketId) return;
   const sequence = parentSequence ?? ++cacheRequestSequence;
   const status = element<HTMLElement>("#cache-status");
-  element<HTMLElement>("#cache-entries").setAttribute("aria-busy", "true");
+  const entries = element<HTMLElement>("#cache-entries");
+  setRegionState(entries, "loading");
   try {
     const query = new URLSearchParams({
       database: cacheDatabase,
@@ -2147,15 +2176,12 @@ async function loadCacheEntries(parentSequence?: number): Promise<void> {
   } catch (error) {
     if (sequence !== cacheRequestSequence) return;
     status.textContent = errorMessage(error, "缓存条目读取失败");
-    element<HTMLElement>("#cache-entries").replaceChildren(Object.assign(
-      document.createElement("p"),
-      { className: "muted empty", textContent: "缓存条目读取失败，请刷新。" },
-    ));
+    renderRegionMessage(entries, "error", "缓存条目读取失败，请刷新。");
     element<HTMLButtonElement>("#cache-previous").disabled = true;
     element<HTMLButtonElement>("#cache-next").disabled = true;
   } finally {
-    if (sequence === cacheRequestSequence) {
-      element<HTMLElement>("#cache-entries").setAttribute("aria-busy", "false");
+    if (sequence === cacheRequestSequence && entries.dataset.uiState === "loading") {
+      setRegionState(entries, "ready");
     }
   }
 }
@@ -2667,7 +2693,6 @@ function renderLibraryWarnings(values: string[]): HTMLElement {
 
 function renderLibraryPage(page: AnimeSeasonListPage): void {
   const list = element<HTMLElement>("#library-list");
-  list.setAttribute("aria-busy", "false");
   const pageCount = Math.max(1, Math.ceil(page.total_items / page.page_size));
   element<HTMLElement>("#library-status").textContent =
     `${page.total_items} 个季度 · ${librarySortLabel(page.sort)} · `
@@ -2677,14 +2702,15 @@ function renderLibraryPage(page: AnimeSeasonListPage): void {
   element<HTMLButtonElement>("#library-previous").disabled = page.page <= 1;
   element<HTMLButtonElement>("#library-next").disabled = page.page >= pageCount;
   if (page.items.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted empty";
-    empty.textContent = "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。";
-    list.replaceChildren(empty);
+    renderRegionMessage(
+      list,
+      "empty",
+      "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。",
+    );
     return;
   }
 
-  list.replaceChildren(...page.items.map((item) => {
+  renderRegionContent(list, ...page.items.map((item) => {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "library-card";
@@ -3033,7 +3059,7 @@ async function loadLibraryDetail(
 async function loadLibrary(): Promise<void> {
   const sequence = ++libraryListRequestSequence;
   const list = element<HTMLElement>("#library-list");
-  list.setAttribute("aria-busy", "true");
+  setRegionState(list, "loading");
   element<HTMLElement>("#library-status").textContent = "正在读取作品库…";
   const query = new URLSearchParams({
     page: String(libraryState.page),
@@ -3072,11 +3098,11 @@ async function loadLibrary(): Promise<void> {
     }
   } catch (error) {
     if (sequence !== libraryListRequestSequence) return;
-    list.setAttribute("aria-busy", "false");
-    const failure = document.createElement("p");
-    failure.className = "muted empty";
-    failure.textContent = `作品库读取失败：${errorMessage(error, "未知错误")}`;
-    list.replaceChildren(failure);
+    renderRegionMessage(
+      list,
+      "error",
+      `作品库读取失败：${errorMessage(error, "未知错误")}`,
+    );
     element<HTMLElement>("#library-status").textContent = "读取失败";
   }
 }
@@ -4173,16 +4199,17 @@ function renderDownloadPage(body: DownloadListPage): void {
   element<HTMLButtonElement>("#download-previous").disabled = body.page <= 1;
   element<HTMLButtonElement>("#download-next").disabled = body.page >= totalPages;
   if (body.items.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted empty";
-    empty.textContent = body.total_items === 0
-      ? "暂无符合筛选条件的下载任务"
-      : "当前页没有任务，请返回上一页。";
-    container.replaceChildren(empty);
+    renderRegionMessage(
+      container,
+      "empty",
+      body.total_items === 0
+        ? "暂无符合筛选条件的下载任务"
+        : "当前页没有任务，请返回上一页。",
+    );
     return;
   }
 
-  container.replaceChildren(...body.items.map((item) => {
+  renderRegionContent(container, ...body.items.map((item) => {
     const card = document.createElement("article");
     card.className = `download-card ${item.is_stale ? "stale" : ""}`;
     const heading = document.createElement("div");
@@ -4247,6 +4274,7 @@ function renderDownloadPage(body: DownloadListPage): void {
 
 async function loadDownloads(): Promise<void> {
   const container = element<HTMLElement>("#downloads");
+  setRegionState(container, "loading");
   const query = new URLSearchParams({
     page: String(downloadState.page),
     page_size: String(downloadState.page_size),
@@ -4275,29 +4303,28 @@ async function loadDownloads(): Promise<void> {
     saveDownloadState();
     renderDownloadPage(body);
   } catch (error) {
-    const failed = document.createElement("p");
-    failed.className = "muted empty";
-    failed.textContent = `下载状态读取失败：${errorMessage(error, "未知错误")}`;
-    container.replaceChildren(failed);
+    renderRegionMessage(
+      container,
+      "error",
+      `下载状态读取失败：${errorMessage(error, "未知错误")}`,
+    );
     element<HTMLElement>("#download-list-status").textContent = "下载任务读取失败";
   }
 }
 
 async function loadTrustedOffsets(): Promise<void> {
   const container = element<HTMLElement>("#trusted-offsets");
+  setRegionState(container, "loading");
   try {
     const response = await fetch("/api/v1/mikan/trusted-offsets", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as { items: MikanTrustedOffsetItem[] };
     if (body.items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "muted empty";
-      empty.textContent = "暂无自动 offset 学习证据";
-      container.replaceChildren(empty);
+      renderRegionMessage(container, "empty", "暂无自动 offset 学习证据");
       return;
     }
 
-    container.replaceChildren(...body.items.map((item) => {
+    renderRegionContent(container, ...body.items.map((item) => {
       const card = document.createElement("article");
       card.className = "offset-card";
       const summary = document.createElement("div");
@@ -4326,10 +4353,11 @@ async function loadTrustedOffsets(): Promise<void> {
       return card;
     }));
   } catch (error) {
-    const failed = document.createElement("p");
-    failed.className = "muted empty";
-    failed.textContent = `可信 offset 读取失败：${errorMessage(error, "未知错误")}`;
-    container.replaceChildren(failed);
+    renderRegionMessage(
+      container,
+      "error",
+      `可信 offset 读取失败：${errorMessage(error, "未知错误")}`,
+    );
   }
 }
 
@@ -4675,6 +4703,7 @@ async function loadMetadataAttempts(
 
 async function loadMetadataTasks(): Promise<void> {
   const container = element<HTMLElement>("#metadata-tasks");
+  setRegionState(container, "loading");
   const query = new URLSearchParams({
     page: String(metadataState.page),
     page_size: String(metadataState.page_size),
@@ -4709,10 +4738,11 @@ async function loadMetadataTasks(): Promise<void> {
     element<HTMLButtonElement>("#metadata-previous").disabled = body.page <= 1;
     element<HTMLButtonElement>("#metadata-next").disabled = body.page >= totalPages;
     if (body.items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "muted empty";
-      empty.textContent = "暂无符合筛选条件的元数据任务";
-      container.replaceChildren(empty);
+      renderRegionMessage(
+        container,
+        "empty",
+        "暂无符合筛选条件的元数据任务",
+      );
       return;
     }
 
@@ -4830,12 +4860,13 @@ async function loadMetadataTasks(): Promise<void> {
       }
       return card;
     });
-    container.replaceChildren(...cards);
+    renderRegionContent(container, ...cards);
   } catch (error) {
-    const failed = document.createElement("p");
-    failed.className = "muted empty";
-    failed.textContent = `元数据状态读取失败：${errorMessage(error, "未知错误")}`;
-    container.replaceChildren(failed);
+    renderRegionMessage(
+      container,
+      "error",
+      `元数据状态读取失败：${errorMessage(error, "未知错误")}`,
+    );
   }
 }
 
@@ -5044,18 +5075,16 @@ async function loadPendingTmdbDetail(
 async function loadPendingTmdb(force = false): Promise<void> {
   if (!force && document.querySelector(".pending-recovery-form")) return;
   const container = element<HTMLElement>("#pending-tmdb-list");
+  setRegionState(container, "loading");
   try {
     const response = await fetch("/api/v1/metadata/pending-tmdb", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as { items: PendingTmdbSummary[] };
     if (body.items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "muted empty";
-      empty.textContent = "暂无待补全 TMDB 的作品";
-      container.replaceChildren(empty);
+      renderRegionMessage(container, "empty", "暂无待补全 TMDB 的作品");
       return;
     }
-    container.replaceChildren(...body.items.map((item) => {
+    renderRegionContent(container, ...body.items.map((item) => {
       const card = document.createElement("article");
       card.className = "pending-tmdb-card";
       const heading = document.createElement("div");
@@ -5103,10 +5132,11 @@ async function loadPendingTmdb(force = false): Promise<void> {
       return card;
     }));
   } catch (error) {
-    const failed = document.createElement("p");
-    failed.className = "muted empty";
-    failed.textContent = `待补全状态读取失败：${errorMessage(error, "未知错误")}`;
-    container.replaceChildren(failed);
+    renderRegionMessage(
+      container,
+      "error",
+      `待补全状态读取失败：${errorMessage(error, "未知错误")}`,
+    );
   }
 }
 
@@ -5284,6 +5314,7 @@ async function deleteDownloaderOverride(): Promise<void> {
 async function loadDownloaders(): Promise<void> {
   const status = element<HTMLElement>("#downloader-status");
   const list = element<HTMLElement>("#downloader-list");
+  setRegionState(list, "loading");
   status.textContent = "正在读取下载器实例…";
   try {
     const response = await fetch("/api/v1/downloaders", { headers });
@@ -5292,7 +5323,7 @@ async function loadDownloaders(): Promise<void> {
     downloaderInstances = body.items;
     downloaderConfigurationRevision = body.configuration_revision;
     refreshSourceDownloaderOptions();
-    list.replaceChildren(...downloaderInstances.map((instance) => {
+    const cards = downloaderInstances.map((instance) => {
       const card = document.createElement("article");
       card.className = `downloader-card ${instance.connected === true ? "connected" : instance.connected === false ? "failed" : ""}`;
       const heading = document.createElement("div");
@@ -5341,18 +5372,21 @@ async function loadDownloaders(): Promise<void> {
       actions.append(edit, test, probe);
       card.append(heading, facts, endpoint, actions);
       return card;
-    }));
+    });
+    if (cards.length === 0) {
+      renderRegionMessage(list, "empty", "尚未配置 qBittorrent 实例。");
+    } else {
+      renderRegionContent(list, ...cards);
+    }
     status.textContent = body.downloads_blocked
       ? `下载已被 ${body.migration_diagnostics.map((item) => item.code).join("、")} 阻断；不会连接或启动任何下载器任务`
       : body.restart_required
       ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
       : `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
   } catch (error) {
-    const failed = document.createElement("p");
-    failed.className = "muted empty";
-    failed.textContent = `下载器读取失败：${errorMessage(error, "未知错误")}`;
-    list.replaceChildren(failed);
-    status.textContent = failed.textContent;
+    const message = `下载器读取失败：${errorMessage(error, "未知错误")}`;
+    renderRegionMessage(list, "error", message);
+    status.textContent = message;
   }
 }
 
@@ -5498,13 +5532,10 @@ function populateSourceForm(profile: SourceProfile | null): void {
 function renderSourceList(): void {
   const list = element<HTMLElement>("#source-list");
   if (sourceProfiles.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted empty";
-    empty.textContent = "暂无来源";
-    list.replaceChildren(empty);
+    renderRegionMessage(list, "empty", "暂无来源");
     return;
   }
-  list.replaceChildren(...sourceProfiles.map((profile) => {
+  renderRegionContent(list, ...sourceProfiles.map((profile) => {
     const card = document.createElement("button");
     card.type = "button";
     card.className = `source-card ${profile.id === activeSourceId ? "active" : ""}`;
@@ -5577,6 +5608,8 @@ async function previewSourceRoute(): Promise<void> {
 
 async function loadSources(selectedId?: string): Promise<void> {
   const status = element<HTMLElement>("#source-status");
+  const list = element<HTMLElement>("#source-list");
+  setRegionState(list, "loading");
   status.textContent = "正在读取来源配置…";
   try {
     const response = await fetch("/api/v1/sources", { headers });
@@ -5597,8 +5630,9 @@ async function loadSources(selectedId?: string): Promise<void> {
     activeSourceId = null;
     refreshSourceAdapterOptions();
     refreshManualSourceOptions();
-    renderSourceList();
-    status.textContent = `来源读取失败：${errorMessage(error, "未知错误")}`;
+    const message = `来源读取失败：${errorMessage(error, "未知错误")}`;
+    renderRegionMessage(list, "error", message);
+    status.textContent = message;
   }
 }
 

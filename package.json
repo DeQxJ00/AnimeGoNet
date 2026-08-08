@@ -11,6 +11,7 @@
     "web:test": "npm run web:build && node --test tests/web/*.test.mjs"
   },
   "devDependencies": {
+    "linkedom": "0.18.13",
     "typescript": "7.0.2"
   }
 }

@@ -211,7 +211,22 @@ Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共�
 运行状态、外部插件配置和目录数据库状态已经使用该 client。其余旧页面请求可按功能
 模块逐步迁移，不改变服务端契约。`npm run web:test` 先确定性编译，再使用 Node 内置
 runner 验证同源门禁、凭据/header、请求体、取消传播、结构化失败、不可信正文和 204；
-CI 同时检查 `app.js` 与 `api-client.js` 必须和 TypeScript 源码一致。
+CI 同时检查 `app.js`、`api-client.js` 与 `ui-state.js` 必须和 TypeScript 源码一致。
+
+### 14.1 状态、响应式与可访问性契约
+
+主异步区域使用共享 `ui-state.ts`，状态固定为 `loading / ready / empty /
+error`。`loading` 设置 `aria-busy=true`；空状态和加载状态使用原子 `status`；
+错误使用 `alert`，并且所有消息只写入 `textContent`。成功内容会原子替换旧状态节点并
+清除 busy，避免把读取失败伪装成“暂无数据”。作品库、缓存、下载、元数据、待补全
+TMDB、下载器、来源、可信 offset、模块和外部插件均使用该边界。
+
+页面首个可聚焦元素为“跳到主要内容”，`main` 可接收程序化焦点；交互控件统一显示
+高对比 `focus-visible`，常规控件最小高度 44px，并响应 `prefers-reduced-motion`。
+620px 以下标题操作区、对话框和分页收敛为可换行/单列结构，既有复杂网格在
+760–1000px 逐级收敛。Node 测试通过 linkedom 解析真实 `index.html` 和编译后的状态
+模块，检查唯一 ID、section/dialog/控件可访问名称、非正 tabindex、初始异步状态和
+不可信消息不会解释为 HTML；CI 同时校验 `ui-state.js` 是确定性提交产物。
 
 ## 15. 缓存浏览与精确删除
 

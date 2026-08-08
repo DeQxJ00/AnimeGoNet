@@ -8,19 +8,20 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
   <header class="topbar">
     <div>
       <p class="eyebrow">Anime library automation</p>
       <h1>AnimeGoNet</h1>
     </div>
-    <span id="health" class="badge pending">连接中</span>
+    <span id="health" class="badge pending" role="status" aria-live="polite" aria-atomic="true">连接中</span>
   </header>
 
-  <main>
-    <section class="hero">
+  <main id="main-content" tabindex="-1">
+    <section class="hero" aria-labelledby="hero-title">
       <div>
         <p class="eyebrow">主程序迁移状态</p>
-        <h2>从统一导入到媒体库，每一步都可追踪。</h2>
+        <h2 id="hero-title">从统一导入到媒体库，每一步都可追踪。</h2>
         <p class="muted">当前已启用配置/目录模型、SQLite schema、Minimal API 与静态 WebUI 骨架。</p>
       </div>
       <dl class="runtime">
@@ -43,7 +44,9 @@
           <h2 id="modules-title">模块</h2>
         </div>
       </div>
-      <div id="modules" class="grid" aria-live="polite"></div>
+      <div id="modules" class="grid" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取模块状态…</p>
+      </div>
     </section>
 
     <section id="external-plugins" aria-labelledby="external-plugins-title">
@@ -55,8 +58,8 @@
         <button id="external-plugin-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
       <p class="muted">插件包只读发现且默认禁用；可按 schema 配置启停、args 与 vars。writeOnly 值只显示是否已配置，协议故障会独立退避并自动禁用。</p>
-      <div id="external-plugin-list" class="external-plugin-list" aria-live="polite" aria-busy="true">
-        <p class="muted empty">正在读取外部插件…</p>
+      <div id="external-plugin-list" class="external-plugin-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取外部插件…</p>
       </div>
     </section>
 
@@ -103,8 +106,8 @@
         </label>
         <span id="library-status" class="muted" role="status">正在读取作品库…</span>
       </div>
-      <div id="library-list" class="library-list" aria-live="polite" aria-busy="true">
-        <p class="muted empty">正在读取 TMDB 季度…</p>
+      <div id="library-list" class="library-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取 TMDB 季度…</p>
       </div>
       <nav class="library-pagination" aria-label="作品库分页">
         <button id="library-previous" type="button" class="secondary-button">上一页</button>
@@ -221,13 +224,13 @@
       <div class="cache-browser-layout">
         <aside aria-labelledby="cache-buckets-title">
           <h3 id="cache-buckets-title">Buckets</h3>
-          <div id="cache-buckets" class="cache-bucket-list" aria-live="polite" aria-busy="true">
-            <p class="muted empty">正在读取 bucket…</p>
+          <div id="cache-buckets" class="cache-bucket-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+            <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取 bucket…</p>
           </div>
         </aside>
         <div>
-          <div id="cache-entries" class="cache-entry-list" aria-live="polite" aria-busy="true">
-            <p class="muted empty">请选择一个 bucket。</p>
+          <div id="cache-entries" class="cache-entry-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+            <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">请选择一个 bucket。</p>
           </div>
           <nav class="cache-pagination" aria-label="缓存条目分页">
             <button id="cache-previous" type="button" class="secondary-button" disabled>上一页</button>
@@ -346,8 +349,8 @@
         </div>
       </form>
       <p id="metadata-list-status" class="muted" role="status">正在读取元数据任务…</p>
-      <div id="metadata-tasks" class="metadata-tasks" aria-live="polite">
-        <p class="muted empty">正在读取元数据任务…</p>
+      <div id="metadata-tasks" class="metadata-tasks" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取元数据任务…</p>
       </div>
       <nav class="metadata-pagination" aria-label="元数据任务分页">
         <button id="metadata-previous" type="button" class="secondary-button">上一页</button>
@@ -365,8 +368,8 @@
         <button id="pending-tmdb-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
       <p class="muted">这里只显示兜底处理记录和去重范围，不生成 TMDB EP 网格、完成比例或伪造进度。详情可提交人工 TMDB 映射，并在写入前在线验证。</p>
-      <div id="pending-tmdb-list" class="pending-tmdb-list" aria-live="polite">
-        <p class="muted empty">正在读取待补全作品…</p>
+      <div id="pending-tmdb-list" class="pending-tmdb-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取待补全作品…</p>
       </div>
     </section>
 
@@ -427,8 +430,8 @@
         </div>
       </form>
       <p id="download-list-status" class="muted" role="status">正在读取下载任务…</p>
-      <div id="downloads" class="downloads" aria-live="polite">
-        <p class="muted empty">正在读取下载任务…</p>
+      <div id="downloads" class="downloads" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取下载任务…</p>
       </div>
       <nav class="download-pagination" aria-label="下载任务分页">
         <button id="download-previous" type="button" class="secondary-button">上一页</button>
@@ -448,8 +451,10 @@
           <button id="downloader-new" type="button" class="primary-button">新增实例</button>
         </div>
       </div>
-      <p id="downloader-status" class="muted">正在读取下载器实例…</p>
-      <div id="downloader-list" class="downloader-list" aria-live="polite"></div>
+      <p id="downloader-status" class="muted" role="status">正在读取下载器实例…</p>
+      <div id="downloader-list" class="downloader-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取下载器实例…</p>
+      </div>
     </section>
 
     <section aria-labelledby="sources-title">
@@ -460,9 +465,11 @@
         </div>
         <button id="source-new" type="button" class="secondary-button">新增来源</button>
       </div>
-      <p id="source-status" class="muted">正在读取来源配置…</p>
+      <p id="source-status" class="muted" role="status">正在读取来源配置…</p>
       <div class="source-workspace">
-        <div id="source-list" class="source-list" aria-live="polite"></div>
+        <div id="source-list" class="source-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+          <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取来源配置…</p>
+        </div>
         <form id="source-form" class="source-form">
           <div class="source-form-grid">
             <label>稳定 ID<input id="source-id" required pattern="[a-z0-9][a-z0-9._-]*" autocomplete="off"></label>
@@ -685,8 +692,8 @@
         <button id="trusted-offsets-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
       <p class="muted">按 mikanid + groupid 隔离；清理只删除自动学习证据与缓存，不影响人工规则、下载记录或媒体文件。</p>
-      <div id="trusted-offsets" class="offset-list" aria-live="polite">
-        <p class="muted empty">正在读取可信 offset 状态…</p>
+      <div id="trusted-offsets" class="offset-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取可信 offset 状态…</p>
       </div>
     </section>
 
@@ -732,6 +739,7 @@
             <label>来源类型 <input id="rss-preview-kind" value="normal"></label>
             <label>来源 EP <input id="rss-preview-episode" value="1"></label>
           </div>
+          <label class="rss-preview-titles-label" for="rss-preview-titles">候选标题（每行一个）</label>
           <textarea id="rss-preview-titles" rows="5" placeholder="[字幕组] 动画 简体 1080P&#10;[字幕组] 动画 繁体 1080P"></textarea>
           <button id="rss-preview-run" type="button" class="secondary-button">服务端预览</button>
         </div>
@@ -793,6 +801,7 @@
         <article>
           <h3>旧版 JSON 导入 / 导出</h3>
           <p class="muted">保留上游拼写 Filiter0…Filiter4、顺序、重复项、空字符串和大小写。</p>
+          <label class="legacy-filter-json-label" for="legacy-filter-json">兼容规则 JSON</label>
           <textarea id="legacy-filter-json" rows="12" spellcheck="false"></textarea>
           <div class="rss-actions">
             <button id="legacy-filter-export" type="button" class="secondary-button">刷新导出内容</button>

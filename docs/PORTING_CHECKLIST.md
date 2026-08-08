@@ -93,7 +93,7 @@
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 已验证 | 非 upgrade 兼容响应、直接/旧 hash 鉴权、旧帧 envelope、逐连接 pause/resume/terminate、1000 条缓存、异常命令、敏感字段脱敏、WebUI 和 win-x64 NativeAOT upgrade/control smoke 已通过 |
 | 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配、TMDB 权威季度 CRUD 及四类删除 API 已实现；官方 .NET 10 AOT-safe OpenAPI 覆盖全部当前路由和 12 个上游 operation，确定性与不泄密测试及原生进程 smoke 已通过；完整管理 UI 与发布镜像总体验收待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；TypeScript 7 strict ES module 工程、同源安全的共享类型化 JSON client、Node 内置协议/安全单测和确定性产物 CI 已建立；运行配置、手动导入、下载/元数据、待补全 TMDB、Mikan 规则、SourceProfile、下载器、作品库、opaque 缓存浏览/精确删除及实时日志页面均使用安全 DOM API；DOM/发布镜像 E2E 与剩余管理 UI 待实现 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；TypeScript 7 strict ES module、同源安全的共享类型化 JSON client、确定性产物 CI，以及真实 DOM 状态/可访问性单测已建立；主列表统一 loading/empty/error/ready 语义，提供 skip link、全局焦点、reduced-motion、移动/桌面无横向溢出布局；运行配置、手动导入、下载/元数据、待补全 TMDB、Mikan 规则、SourceProfile、下载器、作品库、opaque 缓存浏览/精确删除及实时日志页面均使用安全 DOM API；发布镜像 Playwright E2E 与剩余管理 UI 待实现 |
 
 ## 构建、发布与平台
 
