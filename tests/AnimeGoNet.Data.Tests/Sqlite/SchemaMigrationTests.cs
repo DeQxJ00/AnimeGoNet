@@ -56,6 +56,7 @@ public sealed class SchemaMigrationTests
             "fallback_completion_records",
             "file_operations",
             "ingest_tasks",
+            "legacy_cache_imports",
             "legacy_mikan_filter_rules",
             "legacy_mikan_filter_sets",
             "legacy_mikan_filter_snapshots",
@@ -305,6 +306,61 @@ public sealed class SchemaMigrationTests
             SET duplicate_notification_enabled = 2
             WHERE id = 'mikan';
             """;
+        await Assert.ThrowsAsync<SqliteException>(invalid.ExecuteNonQueryAsync);
+    }
+
+    [Fact]
+    public async Task LegacyCacheImportAuditMigrationUpgradesVersion38WithStrictConstraints()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 38))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.Equal(
+            0L,
+            await ScalarInt64Async(
+                connection,
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'legacy_cache_imports';"));
+        var migration39 = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 39);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration39.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using (var valid = connection.CreateCommand())
+        {
+            valid.CommandText = """
+                INSERT INTO legacy_cache_imports (
+                    package_sha256, format_version, source_commit,
+                    bucket_count, entry_count, imported_entry_count,
+                    skipped_expired_entry_count, imported_at_utc,
+                    last_seen_at_utc, repeat_count)
+                VALUES ($digest, 1, 'develop@test', 1, 2, 1, 1, $now, $now, 0);
+                """;
+            valid.Parameters.AddWithValue("$digest", new string('a', 64));
+            valid.Parameters.AddWithValue("$now", "2026-08-08T00:00:00.0000000+00:00");
+            Assert.Equal(1, await valid.ExecuteNonQueryAsync());
+        }
+
+        await using var invalid = connection.CreateCommand();
+        invalid.CommandText = """
+            INSERT INTO legacy_cache_imports (
+                package_sha256, format_version, source_commit,
+                bucket_count, entry_count, imported_entry_count,
+                skipped_expired_entry_count, imported_at_utc,
+                last_seen_at_utc, repeat_count)
+            VALUES ('short', 1, 'develop@test', 0, 0, 0, 0, $now, $now, 0);
+            """;
+        invalid.Parameters.AddWithValue("$now", "2026-08-08T00:00:00.0000000+00:00");
         await Assert.ThrowsAsync<SqliteException>(invalid.ExecuteNonQueryAsync);
     }
 
@@ -1689,5 +1745,14 @@ public sealed class SchemaMigrationTests
         var columns = new HashSet<string>(StringComparer.Ordinal);
         while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
         return columns;
+    }
+
+    private static async Task<long> ScalarInt64Async(
+        SqliteConnection connection,
+        string commandText)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        return (long)(await command.ExecuteScalarAsync() ?? -1L);
     }
 }

@@ -89,7 +89,7 @@
 - [x] 实现 `tmdbid=0` 的 `FallbackEpisodeClaim`、`FallbackCompletionRecord` 和分层唯一键：schema/约束、事务 claim/release/complete、同作用域早停、同任务多文件共享 claim，以及失败释放后重试均已接入。
 - [x] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件；恢复前逐级在线验证 TMDB Series/Season/Episode。
 - [x] 移植 `tvshow.nfo` 生成和更新：整理时原子生成，TMDB fallback 恢复后以持久化重写作业更新，均限制在捕获的 save root 内。
-- [ ] 按需实现旧 Go 已知 bucket → JSON 导出及 .NET 幂等导入，不阻塞首版。
+- [x] 实现旧 Go 已知 bucket → schema-v1 JSON 导出及 .NET 幂等导入：固定 `bolt`/`bolt_sub` 六个上游 bucket、原始 JSON key/value 与绝对 TTL；64 MiB/50000 entry 有界验证、未知/损坏整包拒绝、过期跳过、IMMEDIATE 单事务、schema v39 内容指纹审计和重复导入不覆盖新数据均有测试。只读 Go 导出器与独立 .NET CLI 均拒绝危险隐式路径/覆盖；五 RID NativeAOT artifact 附带导入器，操作和回滚见 `docs/LEGACY_DATA_MIGRATION.md`。
 - [x] 通过存储故障恢复、并发和迁移测试：8 个独立连接并发首次启动只记录一次 schema v38；单个 migration 的 DDL 与版本记录同事务回滚、修复后可续跑；历史缺口/改名及高于应用的数据库版本 fail closed；各 Store 的唯一约束、租约恢复、原子导入、删除重试和重开/TTL 并发均有自动测试。范围与非声明项见 `docs/STORAGE_RELIABILITY.md`。
 
 ## P4 — HTTP、Feed、Torrent
@@ -247,7 +247,7 @@
 - [>] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退：`data/plugins` 包目录与 `data/plugin-data` 写目录已分离；平台/RID、入口执行位、Unix group/world write、链接逃逸、逐包错误隔离、真实本机子进程/环境隔离、自动禁用与显式 reset 已有测试。Docker 只读挂载和真实 Linux 非 root 子进程待验收。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
-- [>] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；最新 win-x64 原生二进制也完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt/目录业务数据迁移演练仍待实现。
+- [x] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；win-x64 原生二进制完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt 以只读 Go schema-v1 JSON 导出后由 .NET schema v39 单事务导入；跨平台 CI 的组合 smoke 在同一隔离目录验证 3 条旧 sidecar 索引、六个 bucket、过期跳过、重复导入和重启保留。
 - [ ] 完成全链路 JIT/AOT/Docker E2E。
 - [ ] 用发布镜像完成 Web UI Playwright E2E。
 - [>] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker 路径和本机 qB 隔离验收文档已完成；旧配置迁移、外部插件和完整运维手册待完成。

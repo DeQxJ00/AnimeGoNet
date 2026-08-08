@@ -3,7 +3,8 @@
 ## 当前门禁
 
 - `.github/workflows/dotnet-ci.yml`：在 Windows 2025、Ubuntu 24.04 和 macOS 15 上还原、Release 构建并运行全部 .NET 测试。
-- `.github/workflows/animegonet-native-aot.yml`：分别在原生 runner 发布并冒烟 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64`。
+- `.github/workflows/animegonet-native-aot.yml`：分别在原生 runner 发布并冒烟 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64`；每个 artifact 同时包含相同 RID 的 NativeAOT 旧缓存导入器，并执行 cache JSON + 目录 sidecar 组合迁移 smoke。
+- `.github/workflows/dotnet-ci.yml`：除三平台 .NET/WebUI 门禁外，用 Go 1.22 对只读 legacy bbolt exporter 的真实 fixture 运行测试。
 - `.github/workflows/animegonet-docker.yml`：使用 Buildx 构建 `linux/amd64`、`linux/arm64`，并加载 amd64 镜像验证 API、SQLite、NativeAOT 和挂载路径。
 
 原上游 Go 工作流保留作为行为基准，没有覆盖或删除。

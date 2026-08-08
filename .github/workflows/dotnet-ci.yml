@@ -14,6 +14,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  legacy-cache-exporter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: tools/legacy-cache-exporter/go.sum
+      - name: Test read-only legacy Bolt exporter
+        working-directory: tools/legacy-cache-exporter
+        run: go test ./...
+
   webui:
     runs-on: ubuntu-24.04
     steps:
@@ -57,6 +69,9 @@ jobs:
         run: dotnet test AnimeGoNet.slnx --configuration Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
         env:
           ANIMEGO_UPSTREAM_REPO: ${{ github.workspace }}/upstream-animego
+      - name: Smoke legacy cache and directory-sidecar migration
+        shell: pwsh
+        run: ./eng/smoke-legacy-data-migration.ps1
       - uses: actions/upload-artifact@v7
         if: always()
         with:

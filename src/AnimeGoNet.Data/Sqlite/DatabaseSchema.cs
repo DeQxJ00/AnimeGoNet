@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 38;
+    public const int CurrentVersion = 39;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -44,7 +44,28 @@ public static class DatabaseSchema
         new SchemaMigration(36, "source_rss_scheduling", SourceRssScheduling),
         new SchemaMigration(37, "media_organization_progress", MediaOrganizationProgress),
         new SchemaMigration(38, "source_duplicate_notifications", SourceDuplicateNotifications),
+        new SchemaMigration(39, "legacy_cache_import_audit", LegacyCacheImportAudit),
     ];
+
+    private const string LegacyCacheImportAudit = """
+        CREATE TABLE legacy_cache_imports (
+            package_sha256 TEXT PRIMARY KEY CHECK (
+                length(package_sha256) = 64
+                AND package_sha256 = lower(package_sha256)),
+            format_version INTEGER NOT NULL CHECK (format_version = 1),
+            source_commit TEXT NOT NULL CHECK (length(source_commit) BETWEEN 1 AND 128),
+            bucket_count INTEGER NOT NULL CHECK (bucket_count BETWEEN 0 AND 6),
+            entry_count INTEGER NOT NULL CHECK (entry_count BETWEEN 0 AND 50000),
+            imported_entry_count INTEGER NOT NULL CHECK (
+                imported_entry_count BETWEEN 0 AND entry_count),
+            skipped_expired_entry_count INTEGER NOT NULL CHECK (
+                skipped_expired_entry_count BETWEEN 0 AND entry_count
+                AND imported_entry_count + skipped_expired_entry_count = entry_count),
+            imported_at_utc TEXT NOT NULL,
+            last_seen_at_utc TEXT NOT NULL,
+            repeat_count INTEGER NOT NULL DEFAULT 0 CHECK (repeat_count >= 0)
+        ) STRICT;
+        """;
 
     private const string SourceDuplicateNotifications = """
         ALTER TABLE source_profiles

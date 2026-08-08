@@ -87,13 +87,13 @@ public sealed class SchemaReliabilityTests
 
     [Theory]
     [InlineData(
-        "UPDATE schema_migrations SET name = 'tampered' WHERE version = 38;",
+        "UPDATE schema_migrations SET name = 'tampered' WHERE version = 39;",
         SchemaMigrationException.HistoryInvalidCode)]
     [InlineData(
         "DELETE FROM schema_migrations WHERE version = 20;",
         SchemaMigrationException.HistoryInvalidCode)]
     [InlineData(
-        "INSERT INTO schema_migrations(version, name, applied_at_utc) VALUES (39, 'future', '2026-08-08T00:00:00Z');",
+        "INSERT INTO schema_migrations(version, name, applied_at_utc) VALUES (40, 'future', '2026-08-08T00:00:00Z');",
         SchemaMigrationException.DatabaseNewerCode)]
     public async Task InvalidOrNewerMigrationHistoryFailsClosed(
         string mutation,

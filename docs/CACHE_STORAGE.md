@@ -1,6 +1,6 @@
 # SQLite JSON Cache
 
-AnimeGoNet 使用 SQLite schema v22 的 `cache_buckets` 与 `cache_entries` 取代 Go/bbolt。新程序不直接解析旧 `.bolt` 二进制；旧数据需要由可选导出器转为 JSON 后写入。
+AnimeGoNet 使用 SQLite schema v22 的 `cache_buckets` 与 `cache_entries` 取代 Go/bbolt。新程序不直接解析旧 `.bolt` 二进制；旧数据由仓库内的只读 Go 导出器转为 schema-v1 JSON，再由独立 .NET 导入器写入。
 
 ## 数据边界
 
@@ -35,3 +35,13 @@ AnimeGoNet 使用 SQLite schema v22 的 `cache_buckets` 与 `cache_entries` 取�
 响应只包含 bucket/key 的不可逆 SHA-256 ID、条目数、`value_json` UTF-8 字节数、过期和更新时间。原始 bucket、key、JSON value、SQLite 文件路径及配置凭据都不会进入浏览器响应或 DOM。页面因此是受限缓存视图，不是任意 SQL/业务表浏览器。
 
 删除请求体携带 database、opaque bucket ID 和删除 token。token 绑定当前原始 key、value、TTL 与更新时间；服务端在单个 SQLite 事务内重新解析 ID、固定时间比较 token，并使用全部原值做条件删除。条目在列表读取后发生任何变化会返回 `cache_entry_changed`，不存在返回 `cache_entry_not_found`。只有 `bolt` 可删除；`bolt_sub` 固定返回 `cache_namespace_read_only`。所有删除都只影响一条 `cache_entries` 记录，不级联业务表、文件或下载器任务。
+
+## 旧 Go 缓存迁移
+
+完整操作步骤见 [LEGACY_DATA_MIGRATION.md](LEGACY_DATA_MIGRATION.md)。迁移边界固定如下：
+
+- `bolt.db` 只导出 `bangumi`、`mikan`、`themoviedb`、`hash2entity`、`name2hash`；`bolt_sub.db` 只导出 `bangumi_sub`。其他 bucket 计数后忽略，不把未知插件数据伪装成内置数据。
+- Go key 的原始 JSON 和 value 的 JSON payload 保持不变；value 前 8 字节的小端绝对 Unix TTL 转为 SQLite 绝对 UTC。导入时已经过期的 entry 只计入报告，不写 SQLite。
+- JSON 包最大 64 MiB、最多 50000 entries、key 最大 4096 UTF-8 bytes、单 value 最大 8 MiB。未知字段、重复 database/bucket/key、跨 namespace bucket、损坏 JSON 或非法 TTL 都会在写事务前拒绝整包。
+- schema v39 的 `legacy_cache_imports` 只记录内容 SHA-256、固定格式版本、上游 commit、计数和时间，不记录 bucket/key/value。首次导入把全部 bucket/entry 与审计行放在同一个 IMMEDIATE 事务；相同语义包再次导入只增加 `repeat_count`，不会覆盖导入后产生的新缓存值。
+- 导出器只读打开 Bolt，使用新临时文件原子发布 JSON，并拒绝覆盖已有输出；导入器只接受已经存在的 AnimeGoNet `data_path/animegonet.db`，避免路径写错时创建一套假数据。

@@ -23,18 +23,23 @@ jobs:
           - runner: windows-2025
             rid: win-x64
             executable: AnimeGoNet.App.exe
+            importer: AnimeGoNet.LegacyCacheImporter.exe
           - runner: windows-11-arm
             rid: win-arm64
             executable: AnimeGoNet.App.exe
+            importer: AnimeGoNet.LegacyCacheImporter.exe
           - runner: ubuntu-24.04
             rid: linux-x64
             executable: AnimeGoNet.App
+            importer: AnimeGoNet.LegacyCacheImporter
           - runner: ubuntu-24.04-arm
             rid: linux-arm64
             executable: AnimeGoNet.App
+            importer: AnimeGoNet.LegacyCacheImporter
           - runner: macos-15
             rid: osx-arm64
             executable: AnimeGoNet.App
+            importer: AnimeGoNet.LegacyCacheImporter
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -46,15 +51,24 @@ jobs:
         if: startsWith(matrix.rid, 'linux-')
         run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
       - name: Restore RID graph
-        run: dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime ${{ matrix.rid }} -p:PublishAot=true
+        shell: pwsh
+        run: |
+          dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime ${{ matrix.rid }} -p:PublishAot=true
+          dotnet restore tools/AnimeGoNet.LegacyCacheImporter/AnimeGoNet.LegacyCacheImporter.csproj --runtime ${{ matrix.rid }} -p:PublishAot=true
       - name: Publish NativeAOT
-        run: dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/publish/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
+        shell: pwsh
+        run: |
+          dotnet publish src/AnimeGoNet.App/AnimeGoNet.App.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/publish/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
+          dotnet publish tools/AnimeGoNet.LegacyCacheImporter/AnimeGoNet.LegacyCacheImporter.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/publish/${{ matrix.rid }} -p:PublishAot=true -p:ContinuousIntegrationBuild=true
       - name: Smoke published binary
         shell: pwsh
         run: |
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" -LegacyYamlUpgrade
           ./eng/smoke-native-metadata.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
+          ./eng/smoke-legacy-data-migration.ps1 `
+            -Application "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" `
+            -Importer "artifacts/publish/${{ matrix.rid }}/${{ matrix.importer }}"
       - name: Verify plugin SDK and NativeAOT template
         shell: pwsh
         run: ./eng/verify-plugin-template.ps1 -RuntimeIdentifier "${{ matrix.rid }}"

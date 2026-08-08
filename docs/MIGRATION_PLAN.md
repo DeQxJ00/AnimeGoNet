@@ -176,6 +176,7 @@ docs/
 - 实现媒体目录 JSON 扫描、anime/season/episode 索引和写入。
 - 实现全局 TMDB Episode 去重索引、来源 alias、完成记录删除和 `tvshow.nfo` 更新。规范键固定为 TMDB Series/Season/Episode；Mikan/U2/TTG 来源键只作 alias 和审计。删除规范完成记录时同时失效全部 alias。
 - 不在 .NET 主程序解析 Bolt；若确有历史数据保留需求，提供独立旧 Go 导出器，将已知 bucket 导出为带 schema 的 JSON，再由 .NET 幂等导入。
+- 已实现的 schema-v1 工具链固定主库五个 bucket 与归档库 `bangumi_sub`，导出只读且拒绝覆盖；导入采用 schema v39 内容指纹审计和单事务 upsert，相同包复跑不覆盖后续缓存。用户步骤见 `LEGACY_DATA_MIGRATION.md`。
 
 提交：
 
@@ -224,6 +225,7 @@ docs/
 - SQLite schema v36 为每个 Mikan SourceProfile 增加只写 RSS URL、调度开关/Cron 和最近运行审计。编译期 `mikan-rss-ingest-schedule` 只从调度参数接收来源 ID/revision，执行时读取当前 URL 并进入同一 Mikan RSS 规则/去重/统一导入链；旧 revision、重叠运行、后台禁用和重启中断均有显式门禁。
 - SQLite schema v37 为每个 download job 增加持久化媒体整理阶段与单位进度。重命名规划、媒体/字幕传输、NFO、目录索引、下载器清理逐阶段上报；失败重试保留可审计阶段，已完成文件 operation 可续算，清理租约恢复不得重新执行文件工作。
 - SQLite schema v38 为每个 SourceProfile 增加默认开启的重复命中通知开关。RSS 使用批次 profile 快照，统一导入写入不可变任务路由快照；关闭只抑制脱敏日志/WebSocket 事件，不得改变全局完成记录、逐文件去重或下载门禁。
+- SQLite schema v39 增加旧 Go cache JSON 的内容指纹迁移审计；报告不保存或展示原始 key/value，重复包不覆盖新缓存。
 - 正常取得 TMDB ID 时，在动画根目录 `tvshow.nfo` 写真实 `<tmdbid>` 和对应 `<bangumiid>`。
 - TMDB 完全失败兜底开启、权威TMDB访问成功并确定无匹配、Bangumi Subject ID有效且季度已确定时，继续下载/刮削，并在 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - 兜底关闭或兜底前置条件不满足时不继续下载/刮削，也不生成失败 NFO；不得只写 `tmdbid=0`。

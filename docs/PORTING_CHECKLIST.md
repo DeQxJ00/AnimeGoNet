@@ -57,7 +57,7 @@
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 已验证 | schema v22、`bolt`/`bolt_sub` bucket 隔离、JSON upsert/batch、绝对 TTL、惰性/批量过期清理和原子失败 tests 已通过 |
-| `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 例外 | migration report |
+| `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 已验证 | 独立 Go 工具只读解码固定六个 bucket；schema-v1 包保留 JSON key/value 与绝对 TTL；.NET 有界验证、过期跳过、schema v39 IMMEDIATE 事务、内容指纹审计及重复导入不覆盖新数据；migration report 不含 key/value |
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 已验证 | 上游三层 JSON sidecar 由原子 Writer 兼容输出并在 NFO/业务 completion 前落盘；Scanner 只读取明确 sidecar、逐项隔离损坏，SQLite refresh 事务替换并审计 issue，增量 upsert 同路径覆盖不重复；崩溃遗留 atomic partial 不参与扫描且不阻塞下次写入；scan/upsert/recovery + 整理流水线 tests |
 | 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 已验证 | 固定上游 `internal/models` 全文件/导出类型由 `UPSTREAM_DOMAIN_CONTRACTS.psv` 穷尽映射；来源证据、TMDB 权威身份、逐文件候选、解析 Run/Attempt、下载/整理/删除状态拆为闭合 record/enum/SQLite 状态机，公开 JSON 边界进入 source-generated context，无反射 `map[string]any` 回退 |
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 已验证 | SQLite 唯一约束、并发完成写入、逐文件 claim、同任务字幕共享、跨任务完成/进行中精确跳过及失败释放已验证；正常整理与 completion 同事务写来源 alias，RSS winner 以 IMMEDIATE 事务复查同 `mikanid+来源EP` 并保存命中证据，业务记录删除级联清除 alias 后可重新导入；qB 文件 priority 已接入下载准备 |
