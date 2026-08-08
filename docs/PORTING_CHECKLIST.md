@@ -72,7 +72,7 @@
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 已验证 | `ANIMEGO_CLIENT`、显式旧配置路径和 `data_path/animego.yaml` 只读检测；`UnsupportedDownloaderType`/不可读旧配置 fail-closed，workers/registry/ingest/控制/连接探测均阻断，Web 可进入修复；AOT/API tests |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v10 的 media organization 租约、按 Torrent 路径稳定执行的逐文件 operation、跨盘校验复制、目标冲突保全、部分完成后 pending-only 恢复、独立 cleanup 重试与完成记录事务门禁已由后台 worker 串联；schema v33 另持久化不可变做种目标、单调累计秒数、完成门禁与审计。qB 状态/paused preparation/不可变路径/实例故障恢复 tests 已通过；真实容器全链待验收 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB 快照同步驱动持久化 waiting/seeding/completed，link/link_delete 先发布媒体后等待做种门禁，wait_move 等门禁完成；上游完成 callback 的 `DeleteFile:true` 已明确替换为独立 `deleteFiles=false` cleanup，覆盖失败释放、新租约、实例 circuit 打开、健康探测恢复、媒体/completion 保全及成功清理；真实容器状态转换待验收 |
-| `renamer` 与 rename Python | C# 整理器 | 替换 | 进行中 | C# TMDB canonical path planner、跨平台名称清洗和 Other 路径 tests 已通过；字幕/NFO/持久化 worker 待实现 |
+| `renamer` 与 rename Python | C# 整理器 | 替换 | 已验证 | 编译期 `anime-library` C# rename 插件完整替换 Python；TMDB 规范 EP、已确认季度 Other、字幕多语言后缀、原子 NFO/三层 sidecar、四种文件策略及 SQLite organization/cleanup 租约均由持久化 worker 串联；冲突/部分完成/重启恢复与固定 qB `deleteFiles=false` 已用真实临时文件 + fake qB tests 验证 |
 | `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 进行中 | 四策略已接入不可变 route snapshot：link/link_delete 的 NativeAOT 硬链接、做种门控、安全源文件删除，move/wait_move 的安全移动、逐文件/NFO/completion/cleanup 持久化与临时真实 FS tests 已通过；跨容器同 inode 与跨卷失败 E2E 待实现 |
 | Mikan 默认整理 | `move` | 扩展默认 | 已验证 | 默认profile、paused preparation、真实临时文件 move/NFO/completion 与 fake-qB deleteFiles=false cleanup flow tests |
 | 字幕整理 | EP 绑定、重命名、保留语言后缀 | 扩展 | 已验证 | 同stem/唯一来源EP、歧义Other、多语言/default/forced/SDH、ass/srt/idx/sub、单TMDB请求/claim/completion及真实临时文件move tests |
