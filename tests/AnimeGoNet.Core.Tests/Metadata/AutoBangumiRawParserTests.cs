@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Rules;
 
 namespace AnimeGoNet.Core.Tests.Metadata;
 
@@ -29,6 +30,25 @@ public sealed class AutoBangumiRawParserTests
             Assert.Equal(fixture.GetProperty("group").GetString(), result.Group);
             Assert.Equal(fixture.GetProperty("resolution").GetString(), result.Resolution);
             Assert.Equal(fixture.GetProperty("source").GetString(), result.Source);
+        }
+    }
+
+    [Fact]
+    public void GroupParserMatchesRawParserForEveryDevelopBranchGoldenFixture()
+    {
+        var fixturePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "auto-bangumi-raw-parser.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(fixturePath));
+
+        foreach (var fixture in document.RootElement.EnumerateArray())
+        {
+            var input = fixture.GetProperty("input").GetString()!;
+            var expected = fixture.GetProperty("group").GetString()!;
+
+            Assert.Equal(expected, LegacyMikanFilterEngine.ParseGroupName(input));
+            Assert.Equal(AutoBangumiRawParser.Parse(input).Group, LegacyMikanFilterEngine.ParseGroupName(input));
         }
     }
 

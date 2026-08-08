@@ -39,7 +39,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 进行中 | Go ParseEp 整数模式与安全小数/特别篇分类已由 NativeAOT C# parser 覆盖；Torrent 文件入库和 Mikan RSS title 最后可靠标记均有独立 tests，完整 parser fixtures/字幕组待实现 |
+| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 已验证 | Go develop 的 3 个 ParseEp fixtures、扩展整数模式、小数/特别篇隔离、Mikan RSS 最后可靠标记、19 组 AutoBangumi Python 标题/季度/EP/字幕/字幕组/分辨率/来源 golden fixtures 均已覆盖；RSS 字幕组解析与 raw parser 对全部 golden 输入交叉一致，持久化前的年份/分辨率/歧义/非正片安全层已验证 |
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 已验证 | 与 raw_parser.py 共用的完整解析主体已由 `AutoBangumiRawParser` 编译期替换；无 Python 运行时，develop Python golden fixture 逐字段通过 |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 已验证 | 19 组 develop Python golden 覆盖全部输出字段和原始 E04/EP04 不识别语义；独立安全层才拒绝年份/分辨率/歧义/非正片，数据层证明只对 Mikan adapter 落候选 |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 已验证 | 编译期注册过滤器按稳定顺序串行执行；上一规则仅将 accepted 候选传给下一规则；显式空链等价于上游 `skipFilter`；业务错误、无效结果与意外异常均立即停止且后续规则不执行；生产 Mikan RSS 显式使用 `mikan-tool` 链，外部过滤器必须显式启用；PluginManager 回归 tests |
