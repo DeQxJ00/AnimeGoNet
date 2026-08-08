@@ -90,7 +90,7 @@
 - [x] TMDB 恢复后事务合并 fallback 完成记录和 alias；多个记录收敛到同一 TMDB Episode 时标记 `DuplicateAfterResolution`，不重复下载、不自动删除文件；恢复前逐级在线验证 TMDB Series/Season/Episode。
 - [x] 移植 `tvshow.nfo` 生成和更新：整理时原子生成，TMDB fallback 恢复后以持久化重写作业更新，均限制在捕获的 save root 内。
 - [ ] 按需实现旧 Go 已知 bucket → JSON 导出及 .NET 幂等导入，不阻塞首版。
-- [ ] 通过存储故障恢复、并发和迁移测试。
+- [x] 通过存储故障恢复、并发和迁移测试：8 个独立连接并发首次启动只记录一次 schema v38；单个 migration 的 DDL 与版本记录同事务回滚、修复后可续跑；历史缺口/改名及高于应用的数据库版本 fail closed；各 Store 的唯一约束、租约恢复、原子导入、删除重试和重开/TTL 并发均有自动测试。范围与非声明项见 `docs/STORAGE_RELIABILITY.md`。
 
 ## P4 — HTTP、Feed、Torrent
 
