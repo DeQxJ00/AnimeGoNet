@@ -35,7 +35,9 @@ public sealed record DataManifestAsset(
     int SubjectIdMax);
 
 public sealed class DataManifestException(string code, string message)
-    : FormatException(message)
+    : FormatException(message), IStableError
 {
     public string Code { get; } = StableErrorCode.Require(code, nameof(code));
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }

@@ -4,9 +4,11 @@ using AnimeGoNet.Core.Diagnostics;
 namespace AnimeGoNet.Core.Scheduling;
 
 public sealed class CronExpressionException(string code, string message)
-    : FormatException(message)
+    : FormatException(message), IStableError
 {
     public string Code { get; } = StableErrorCode.Require(code, nameof(code));
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }
 
 public sealed class SixFieldCronExpression
@@ -15,15 +17,29 @@ public sealed class SixFieldCronExpression
 
     private static readonly Dictionary<string, int> Months = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["JAN"] = 1, ["FEB"] = 2, ["MAR"] = 3, ["APR"] = 4,
-        ["MAY"] = 5, ["JUN"] = 6, ["JUL"] = 7, ["AUG"] = 8,
-        ["SEP"] = 9, ["OCT"] = 10, ["NOV"] = 11, ["DEC"] = 12,
+        ["JAN"] = 1,
+        ["FEB"] = 2,
+        ["MAR"] = 3,
+        ["APR"] = 4,
+        ["MAY"] = 5,
+        ["JUN"] = 6,
+        ["JUL"] = 7,
+        ["AUG"] = 8,
+        ["SEP"] = 9,
+        ["OCT"] = 10,
+        ["NOV"] = 11,
+        ["DEC"] = 12,
     };
 
     private static readonly Dictionary<string, int> DaysOfWeek = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["SUN"] = 0, ["MON"] = 1, ["TUE"] = 2, ["WED"] = 3,
-        ["THU"] = 4, ["FRI"] = 5, ["SAT"] = 6,
+        ["SUN"] = 0,
+        ["MON"] = 1,
+        ["TUE"] = 2,
+        ["WED"] = 3,
+        ["THU"] = 4,
+        ["FRI"] = 5,
+        ["SAT"] = 6,
     };
 
     private readonly CronField _seconds;

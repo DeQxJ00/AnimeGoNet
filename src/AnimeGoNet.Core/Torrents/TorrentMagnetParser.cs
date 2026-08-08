@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.Core.Torrents;
 
@@ -8,7 +9,7 @@ public sealed record TorrentMagnetMetadata(
     string DisplayName,
     int TrackerCount);
 
-public sealed class TorrentMagnetException : FormatException
+public sealed class TorrentMagnetException : FormatException, IStableError
 {
     public const string StableCode = "torrent_magnet_invalid";
 
@@ -18,6 +19,8 @@ public sealed class TorrentMagnetException : FormatException
     }
 
     public string Code { get; } = StableCode;
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }
 
 public static class TorrentMagnetParser

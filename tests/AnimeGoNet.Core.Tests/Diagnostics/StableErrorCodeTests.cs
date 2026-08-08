@@ -68,4 +68,79 @@ public sealed class StableErrorCodeTests
         Assert.True(StableErrorCode.IsValid(TorrentMagnetException.StableCode));
         Assert.True(StableErrorCode.IsValid(TorrentMetainfoException.StableCode));
     }
+
+    [Fact]
+    public void FindsStableSemanticsThroughWrappedErrors()
+    {
+        var parseFailure = new RssFeedException(
+            "rss_parse_failed",
+            "RSS could not be parsed.");
+        var wrapped = new InvalidOperationException("wrapper", parseFailure);
+
+        Assert.True(StableErrorCode.HasSemantic(
+            wrapped,
+            StableErrorSemantic.ParseFailed));
+        Assert.False(StableErrorCode.HasSemantic(
+            wrapped,
+            StableErrorSemantic.NotFound));
+        Assert.False(StableErrorCode.HasSemantic(
+            wrapped,
+            StableErrorSemantic.None));
+        Assert.True(StableErrorCode.TryGet(wrapped, out var code, out var semantics));
+        Assert.Equal("rss_parse_failed", code);
+        Assert.Equal(StableErrorSemantic.ParseFailed, semantics);
+    }
+
+    [Fact]
+    public void TorrentAndStructuredParserErrorsExposeParseFailedSemantic()
+    {
+        IStableError[] errors =
+        [
+            new TorrentMagnetException("invalid"),
+            new TorrentMetainfoException("invalid"),
+            new RssFeedException("rss_empty", "invalid"),
+            new MikanBangumiSubjectException("mikan_bgmid_html_empty", "invalid"),
+            new MikanEpisodeIdentityException("mikan_identity_html_empty", "invalid"),
+            new DataManifestException("data_manifest_invalid", "invalid"),
+            new CronExpressionException("cron_invalid", "invalid"),
+        ];
+
+        Assert.All(errors, error =>
+        {
+            Assert.Equal(StableErrorSemantic.ParseFailed, error.Semantics);
+            Assert.True(StableErrorCode.IsValid(error.Code));
+        });
+    }
+
+    [Fact]
+    public void MissingStableErrorReturnsNoCodeOrSemantic()
+    {
+        Assert.False(StableErrorCode.TryGet(
+            new InvalidOperationException("plain"),
+            out var code,
+            out var semantics));
+        Assert.Null(code);
+        Assert.Equal(StableErrorSemantic.None, semantics);
+    }
+
+    [Fact]
+    public void InvalidThirdPartyStableErrorFailsClosed()
+    {
+        Assert.False(StableErrorCode.HasSemantic(
+            new InvalidStableError(),
+            StableErrorSemantic.ParseFailed));
+        Assert.False(StableErrorCode.TryGet(
+            new InvalidStableError(),
+            out var code,
+            out var semantics));
+        Assert.Null(code);
+        Assert.Equal(StableErrorSemantic.None, semantics);
+    }
+
+    private sealed class InvalidStableError : Exception, IStableError
+    {
+        public string Code => "unsafe code";
+
+        public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
+    }
 }

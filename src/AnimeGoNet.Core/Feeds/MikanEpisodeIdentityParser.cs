@@ -8,9 +8,11 @@ namespace AnimeGoNet.Core.Feeds;
 public sealed record MikanEpisodeIdentity(int MikanId, int SubGroupId);
 
 public sealed class MikanEpisodeIdentityException(string code, string message, Exception? innerException = null)
-    : FormatException(message, innerException)
+    : FormatException(message, innerException), IStableError
 {
     public string Code { get; } = StableErrorCode.Require(code, nameof(code));
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }
 
 public static class MikanEpisodeIdentityParser

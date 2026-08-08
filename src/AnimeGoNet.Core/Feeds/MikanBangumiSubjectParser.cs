@@ -8,9 +8,11 @@ namespace AnimeGoNet.Core.Feeds;
 public sealed class MikanBangumiSubjectException(
     string code,
     string message,
-    Exception? innerException = null) : FormatException(message, innerException)
+    Exception? innerException = null) : FormatException(message, innerException), IStableError
 {
     public string Code { get; } = StableErrorCode.Require(code, nameof(code));
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }
 
 public static class MikanBangumiSubjectParser

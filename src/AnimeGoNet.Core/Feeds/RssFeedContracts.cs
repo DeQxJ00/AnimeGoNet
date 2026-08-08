@@ -15,7 +15,9 @@ public sealed record RssFeedDocument(
     int? MikanId);
 
 public sealed class RssFeedException(string code, string message, Exception? innerException = null)
-    : Exception(message, innerException)
+    : Exception(message, innerException), IStableError
 {
     public string Code { get; } = StableErrorCode.Require(code, nameof(code));
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }

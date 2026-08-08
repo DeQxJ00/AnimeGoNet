@@ -61,7 +61,7 @@
 
 ## P2 — 领域与配置
 
-- [ ] 移植所有领域模型、枚举和错误类型。
+- [x] 移植所有领域模型、枚举和错误类型：固定 `develop@c7475df` 的机器清单逐文件/逐导出类型覆盖 `internal/models`、`internal/constant`、`internal/exceptions`、`pkg/exceptions`，每项标记保留/强类型替代/NativeAOT 例外并绑定真实目标文件；契约测试同时校验上游 HEAD、目录无漏项和目标存在。旧 `ExistError`/`NotFoundError`/`ParseFailedError` 由显式业务结果及可跨 InnerException 识别的 `IStableError`/`StableErrorSemantic` 替代，结构解析异常已统一暴露稳定 `ParseFailed` 语义。
 - [x] 建立首阶段强类型配置/目录模型与校验：Docker 三路径、命名 qBittorrent、Mikan `move` 默认、AI 600 秒和高风险 fallback 默认关闭。
 - [>] 固化 JSON source-generation context（状态、统一导入和 legacy manager DTO 已覆盖；后续 API DTO 持续加入）。
 - [x] 完成上游 hash、name、path、时间等纯函数的可观察行为映射：SHA-256 统一由 `StableHash` 生成 UTF-8 小写 hex 并用于 access-key、统一导入 URL 指纹和 RSS batch/candidate 身份；四步去后缀与 UTF-8 byte 相似度保持上游 parity；动态 tag 的季度/星期、Mikan 时间解析、TMDB 日期差、Unix 秒均使用强类型时间；路径/文件名改由 `PathBoundary`、`MediaPathPlanner` 和安全文件执行器实现跨平台边界。反射 map 转换、Python/资源 MD5、panic recovery 等仅服务旧实现的 helper 明确由 source-generated DTO、编译期资源和 HostedService 异常隔离替换，见 `docs/PURE_FUNCTION_PARITY.md`。

@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Diagnostics;
+
 namespace AnimeGoNet.Core.Torrents;
 
 public sealed record TorrentMetadata(
@@ -19,7 +21,7 @@ public sealed record TorrentMetainfoLimits
     public long MaxTotalSize { get; init; } = 16L * 1024 * 1024 * 1024 * 1024;
 }
 
-public sealed class TorrentMetainfoException : FormatException
+public sealed class TorrentMetainfoException : FormatException, IStableError
 {
     public const string StableCode = "torrent_metainfo_invalid";
 
@@ -34,4 +36,6 @@ public sealed class TorrentMetainfoException : FormatException
     }
 
     public string Code { get; } = StableCode;
+
+    public StableErrorSemantic Semantics => StableErrorSemantic.ParseFailed;
 }
