@@ -1,0 +1,293 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using AnimeGoNet.Core.DataUpdate;
+using AnimeGoNet.Data.DataUpdate;
+using AnimeGoNet.Data.Metadata;
+using AnimeGoNet.DataBuilder;
+using YamlDotNet.RepresentationModel;
+
+namespace AnimeGoNet.Data.Tests.DataUpdate;
+
+public sealed class BangumiArchivePackageBuilderTests
+{
+    private static readonly string[] ManifestEntryName = ["manifest.json"];
+
+    [Fact]
+    public async Task BuildsShardedPackageThatImportsIntoTheProductionStore()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = await WriteArchiveAsync(root);
+            var hash = await Sha256Async(archivePath);
+            var output = Path.Combine(root, "package");
+
+            var result = await BangumiArchivePackageBuilder.BuildAsync(
+                Options(archivePath, output, hash));
+
+            Assert.Equal(3, result.Manifest.SubjectCount);
+            Assert.Equal(3, result.Manifest.EpisodeCount);
+            Assert.Equal(5, result.Manifest.Assets.Count);
+            foreach (var asset in result.Manifest.Assets)
+            {
+                Assert.True(File.Exists(Path.Combine(output, asset.FileName)));
+                Assert.Equal(
+                    asset.Sha256,
+                    await Sha256Async(Path.Combine(output, asset.FileName)));
+            }
+            var parsedManifest = DataManifestParser.Parse(
+                await File.ReadAllBytesAsync(result.ManifestPath));
+            Assert.Equal(result.Manifest.DataVersion, parsedManifest.DataVersion);
+            Assert.Equal(result.Manifest.Upstream, parsedManifest.Upstream);
+            Assert.Equal(result.Manifest.Assets, parsedManifest.Assets);
+            Assert.Equal(result.Manifest.SubjectCount, parsedManifest.SubjectCount);
+            Assert.Equal(result.Manifest.EpisodeCount, parsedManifest.EpisodeCount);
+
+            var subjectLines = await ReadAssetsAsync(
+                output,
+                result.Manifest.Assets.Where(asset => asset.Kind == DataAssetKind.Subjects));
+            var episodeLines = await ReadAssetsAsync(
+                output,
+                result.Manifest.Assets.Where(asset => asset.Kind == DataAssetKind.Episodes));
+            Assert.Equal([2, 3, 4], subjectLines.Select(line => line.GetProperty("id").GetInt32()).ToArray());
+            Assert.Equal([20, 21, 30], episodeLines.Select(line => line.GetProperty("id").GetInt32()).ToArray());
+            Assert.Equal(["1.5", "2", "1"], episodeLines.Select(line => line.GetProperty("episode").GetString()!).ToArray());
+            Assert.Equal([1, 2, 1], episodeLines.Select(line => line.GetProperty("sort").GetInt32()).ToArray());
+            Assert.Equal(JsonValueKind.Null, episodeLines[0].GetProperty("air_date").ValueKind);
+            Assert.Equal(2, subjectLines[0].GetProperty("episode_count").GetInt32());
+            Assert.Equal(0, subjectLines[2].GetProperty("episode_count").GetInt32());
+
+            using (var package = ZipFile.OpenRead(result.OfflinePackagePath))
+            {
+                Assert.Equal(
+                    ManifestEntryName.Concat(
+                        result.Manifest.Assets.Select(asset => asset.FileName).Order(StringComparer.Ordinal)),
+                    package.Entries.Select(entry => entry.FullName));
+            }
+
+            await using var database = await SqliteDatabaseFixture.CreateAsync();
+            using var store = new DataPackageStore(database.Database);
+            var imported = await store.ImportAsync(new DataPackageImportRequest(
+                result.Manifest,
+                result.ManifestSha256,
+                output,
+                new Version(1, 0, 0),
+                2,
+                new DateTimeOffset(2026, 8, 8, 1, 0, 0, TimeSpan.Zero)));
+            var snapshot = Assert.IsType<BangumiArchiveSnapshot>(
+                await new BangumiArchiveStore(database.Database).GetAsync(2));
+
+            Assert.Equal(3, imported.SubjectCount);
+            Assert.Equal(3, imported.EpisodeCount);
+            Assert.True(snapshot.HasCompleteEpisodeSet);
+            Assert.Equal([1.5m, 2m], snapshot.Episodes.Select(episode => episode.EpisodeNumber).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SameInputsProduceByteIdenticalReleaseArtifacts()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = await WriteArchiveAsync(root);
+            var hash = await Sha256Async(archivePath);
+            var first = await BangumiArchivePackageBuilder.BuildAsync(
+                Options(archivePath, Path.Combine(root, "first"), hash));
+            var second = await BangumiArchivePackageBuilder.BuildAsync(
+                Options(archivePath, Path.Combine(root, "second"), hash));
+
+            var firstFiles = Directory.GetFiles(first.OutputDirectory)
+                .ToDictionary(path => Path.GetFileName(path)!, Sha256Async, StringComparer.Ordinal);
+            var secondFiles = Directory.GetFiles(second.OutputDirectory)
+                .ToDictionary(path => Path.GetFileName(path)!, Sha256Async, StringComparer.Ordinal);
+            Assert.Equal(firstFiles.Keys.Order(), secondFiles.Keys.Order());
+            foreach (var name in firstFiles.Keys)
+            {
+                Assert.Equal(await firstFiles[name], await secondFiles[name]);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HashMismatchLeavesNoOutputOrPartialDirectory()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = await WriteArchiveAsync(root);
+            var output = Path.Combine(root, "package");
+
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BangumiArchivePackageBuilder.BuildAsync(
+                    Options(archivePath, output, new string('0', 64))));
+
+            Assert.Contains("SHA-256", exception.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(output));
+            Assert.Empty(Directory.GetDirectories(root, ".package.partial-*"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScheduledWorkflowUsesOfficialMetadataAndDoesNotPublishAutomatically()
+    {
+        var workflow = await File.ReadAllTextAsync(Path.Combine(
+            RepositoryRoot(),
+            ".github",
+            "workflows",
+            "animegonet-data.yml"));
+        var yaml = new YamlStream();
+        yaml.Load(new StringReader(workflow));
+
+        Assert.Single(yaml.Documents);
+        Assert.Contains("bangumi/Archive/master/aux/latest.json", workflow, StringComparison.Ordinal);
+        Assert.Contains("sha256sum --check --strict", workflow, StringComparison.Ordinal);
+        Assert.Contains("tools/AnimeGoNet.DataBuilder", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
+        Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("gh release", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TestSpace", workflow, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task OversizedJsonLineIsRejectedBeforeOutputIsExposed()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = Path.Combine(root, "dump-fixture.zip");
+            await using (var file = new FileStream(archivePath, FileMode.CreateNew, FileAccess.Write))
+            using (var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                await WriteEntryAsync(
+                    archive,
+                    "subject.jsonlines",
+                    "{\"id\":1,\"type\":2,\"name\":\""
+                    + new string('a', (8 * 1024 * 1024) + 1)
+                    + "\",\"name_cn\":null,\"date\":null}");
+                await WriteEntryAsync(
+                    archive,
+                    "episode.jsonlines",
+                    "{\"id\":1,\"type\":0,\"subject_id\":1,\"sort\":1,\"airdate\":null}");
+            }
+            var output = Path.Combine(root, "package");
+            var hash = await Sha256Async(archivePath);
+
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BangumiArchivePackageBuilder.BuildAsync(
+                    Options(archivePath, output, hash)));
+
+            Assert.Contains("too large", exception.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(output));
+            Assert.Empty(Directory.GetDirectories(root, ".package.partial-*"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static BangumiArchiveBuildOptions Options(
+        string archivePath,
+        string output,
+        string hash) =>
+        new(
+            archivePath,
+            output,
+            "2026.08.04.1",
+            new Uri("https://updates.example.invalid/2026.08.04.1/"),
+            "https://github.com/bangumi/Archive",
+            "archive",
+            "dump-fixture.zip",
+            hash,
+            new DateTimeOffset(2026, 8, 4, 21, 5, 3, TimeSpan.Zero),
+            "0.1.0",
+            SubjectsPerShard: 1);
+
+    private static async Task<string> WriteArchiveAsync(string root)
+    {
+        var path = Path.Combine(root, "dump-fixture.zip");
+        await using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+        using var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: true);
+        await WriteEntryAsync(archive, "subject.jsonlines", """
+            {"id":4,"type":2,"name":"No Episodes","name_cn":"","date":""}
+            {"id":1,"type":1,"name":"Book","name_cn":"书","date":"2020-01-01"}
+            {"id":3,"type":2,"name":"Third","name_cn":null,"date":"2024-02-30"}
+            {"id":2,"type":2,"name":"Second","name_cn":" 第二部 ","date":"2024-01-01"}
+            """);
+        await WriteEntryAsync(archive, "episode.jsonlines", """
+            {"id":21,"type":0,"subject_id":2,"sort":2,"airdate":"2024-01-08"}
+            {"id":99,"type":0,"subject_id":1,"sort":1,"airdate":"2020-01-01"}
+            {"id":31,"type":1,"subject_id":3,"sort":1,"airdate":"2024-02-01"}
+            {"id":20,"type":0,"subject_id":2,"sort":1.5,"airdate":"invalid"}
+            {"id":30,"type":0,"subject_id":3,"sort":1,"airdate":"2024-02-01"}
+            """);
+        await WriteEntryAsync(archive, "person.jsonlines", "{\"id\":1}\n");
+        return path;
+    }
+
+    private static async Task WriteEntryAsync(ZipArchive archive, string name, string value)
+    {
+        var entry = archive.CreateEntry(name, CompressionLevel.SmallestSize);
+        await using var stream = entry.Open();
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n"));
+    }
+
+    private static async Task<List<JsonElement>> ReadAssetsAsync(
+        string root,
+        IEnumerable<DataManifestAsset> assets)
+    {
+        var result = new List<JsonElement>();
+        foreach (var asset in assets.OrderBy(asset => asset.FileName, StringComparer.Ordinal))
+        {
+            await using var file = File.OpenRead(Path.Combine(root, asset.FileName));
+            await using var gzip = new GZipStream(file, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                using var document = JsonDocument.Parse(line);
+                result.Add(document.RootElement.Clone());
+            }
+        }
+        return result;
+    }
+
+    private static async Task<string> Sha256Async(string path)
+    {
+        await using var stream = File.OpenRead(path);
+        return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream));
+    }
+
+    private static string CreateRoot()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-data-builder",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private static string RepositoryRoot() =>
+        Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            ".."));
+}
