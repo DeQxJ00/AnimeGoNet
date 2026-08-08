@@ -1,5 +1,6 @@
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Sources;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Configuration;
@@ -27,6 +28,11 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("127.0.0.1", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
             Assert.Equal("move", snapshot.Values["sources:mikan:file_strategy"]);
+            Assert.Equal(string.Empty, snapshot.Values["sources:mikan:rss_feed_url"]);
+            Assert.Equal("false", snapshot.Values["sources:mikan:rss_schedule_enabled"]);
+            Assert.Equal(
+                "0 0/15 * * * ?",
+                snapshot.Values["sources:mikan:rss_schedule_cron"]);
             Assert.Equal(
                 string.Empty,
                 snapshot.Values["sources:mikan:mikan_identity_cookie"]);
@@ -38,6 +44,122 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Contains("# P4→P3→P2→P1", text, StringComparison.Ordinal);
             Assert.Contains("password: ''", text, StringComparison.Ordinal);
             Assert.DoesNotContain("\uFEFF", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("url", "cron", "name")]
+    [InlineData("__url__", "__cron__", "__name__")]
+    public async Task LegacyMikanRssPluginMigratesIntoSourceSeedAndSqlite(
+        string urlVariable,
+        string cronVariable,
+        string nameVariable)
+    {
+        const string rssUrl =
+            "https://mikan.example.invalid/RSS/MyBangumi?token=legacy-private-value";
+        var root = CreateRoot();
+        try
+        {
+            var path = Path.Combine(root, "animego.yaml");
+            await File.WriteAllTextAsync(
+                path,
+                $$"""
+                version: 1.7.1
+                setting:
+                  client:
+                    client: QBittorrent
+                    url: http://127.0.0.1:18080/
+                    username: legacy-user
+                    password: legacy-password
+                    download_path: '{{Yaml(Path.Combine(root, "download"))}}'
+                  data_path: '{{Yaml(Path.Combine(root, "data"))}}'
+                  download_path: '{{Yaml(Path.Combine(root, "download"))}}'
+                  save_path: '{{Yaml(Path.Combine(root, "save"))}}'
+                plugin:
+                  feed:
+                    - enable: true
+                      type: builtin
+                      file: builtin_mikan_rss.py
+                      vars:
+                        {{nameVariable}}: 'Legacy Mikan Feed'
+                        {{urlVariable}}: '{{rssUrl}}'
+                        {{cronVariable}}: '0 7/20 * * * ?'
+                advanced:
+                  download:
+                    rename: move
+                """);
+
+            await using var app = await AnimeGoApplication.BuildAsync(
+                ["--config", path],
+                runningInContainer: false,
+                startBackgroundWorkers: false);
+            var options = app.Services.GetRequiredService<AnimeGoOptions>();
+            var seed = Assert.Single(options.InitialSourceProfiles);
+            var stored = Assert.IsType<SourceProfileAdminRecord>(
+                await app.Services.GetRequiredService<SourceProfileStore>()
+                    .GetAsync("mikan"));
+
+            Assert.Equal(rssUrl, seed.RssFeedUrl);
+            Assert.Equal("Legacy Mikan Feed", seed.DisplayName);
+            Assert.True(seed.RssScheduleEnabled);
+            Assert.Equal("0 7/20 * * * ?", seed.RssScheduleCron);
+            Assert.Contains("mikan.example.invalid", seed.AllowedTorrentHosts);
+            Assert.Equal(rssUrl, stored.RssFeedUrl);
+            Assert.Equal("Legacy Mikan Feed", stored.DisplayName);
+            Assert.True(stored.RssScheduleEnabled);
+            Assert.Equal("0 7/20 * * * ?", stored.RssScheduleCron);
+            Assert.DoesNotContain("legacy-private-value", stored.ToString(), StringComparison.Ordinal);
+
+            var canonical = await File.ReadAllTextAsync(path);
+            Assert.Contains("rss_schedule_enabled: true", canonical, StringComparison.Ordinal);
+            Assert.Contains("- 'mikan.example.invalid'", canonical, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task LegacyPrePluginMikanRssUrlIsPreservedButRemainsDisabled()
+    {
+        const string rssUrl = "https://mikanani.me/RSS/MyBangumi?token=old-private-value";
+        var root = CreateRoot();
+        try
+        {
+            var path = Path.Combine(root, "animego.yaml");
+            await File.WriteAllTextAsync(
+                path,
+                $$"""
+                version: 1.3.0
+                setting:
+                  feed:
+                    mikan:
+                      name: Mikan
+                      url: '{{rssUrl}}'
+                  data_path: '{{Yaml(Path.Combine(root, "data"))}}'
+                  download_path: '{{Yaml(Path.Combine(root, "download"))}}'
+                  save_path: '{{Yaml(Path.Combine(root, "save"))}}'
+                advanced:
+                  download:
+                    rename: move
+                """);
+
+            var snapshot = await DeploymentYamlConfiguration.LoadOrCreateAsync(
+                path,
+                AnimeGoDefaults.CreateNative(root),
+                backupLegacy: false);
+
+            Assert.Equal(rssUrl, snapshot.Values["sources:mikan:rss_feed_url"]);
+            Assert.Equal("Mikan", snapshot.Values["sources:mikan:display_name"]);
+            Assert.Equal("false", snapshot.Values["sources:mikan:rss_schedule_enabled"]);
+            Assert.Equal(
+                "0 0/20 * * * ?",
+                snapshot.Values["sources:mikan:rss_schedule_cron"]);
         }
         finally
         {

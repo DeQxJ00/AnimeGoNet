@@ -1040,6 +1040,8 @@ public static class AnimeGoApplication
             result.Add(new SourceProfileSeed
             {
                 Id = id,
+                DisplayName = NormalizeOptional(
+                    FirstConfigurationValue(child, "display_name")) ?? id,
                 Adapter = adapter,
                 DownloaderId = NormalizeOptional(
                     FirstConfigurationValue(child, "downloader_id"))
@@ -1089,6 +1091,15 @@ public static class AnimeGoApplication
                     FirstConfigurationValue(child, "duplicate_notification_enabled"),
                     true,
                     $"sources:{id}:duplicate_notification_enabled"),
+                RssFeedUrl = SourceRssSchedulePolicy.NormalizeFeedUrl(
+                    adapter,
+                    FirstConfigurationValue(child, "rss_feed_url")),
+                RssScheduleEnabled = ParseOptionalBool(
+                    FirstConfigurationValue(child, "rss_schedule_enabled"),
+                    false,
+                    $"sources:{id}:rss_schedule_enabled"),
+                RssScheduleCron = SourceRssSchedulePolicy.NormalizeCron(
+                    FirstConfigurationValue(child, "rss_schedule_cron")),
                 MikanIdentityCookie = string.Equals(
                     adapter,
                     "mikan",

@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Sources;
+
 namespace AnimeGoNet.Core.Configuration;
 
 public sealed record AnimeGoOptions
@@ -176,6 +178,8 @@ public sealed record SourceProfileSeed
 {
     public required string Id { get; init; }
 
+    public string? DisplayName { get; init; }
+
     public required string Adapter { get; init; }
 
     public required string DownloaderId { get; init; }
@@ -199,6 +203,13 @@ public sealed record SourceProfileSeed
     public bool DuplicateNotificationEnabled { get; init; } = true;
 
     public string? MikanIdentityCookie { get; init; }
+
+    public string? RssFeedUrl { get; init; }
+
+    public bool RssScheduleEnabled { get; init; }
+
+    public string RssScheduleCron { get; init; } =
+        SourceRssSchedulePolicy.DefaultCron;
 
     public override string ToString() =>
         $"SourceProfileSeed {{ Id = {Id}, Adapter = {Adapter}, "

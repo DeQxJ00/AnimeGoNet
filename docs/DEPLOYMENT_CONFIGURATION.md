@@ -228,6 +228,15 @@ data_update:
 下载门禁。它在首次创建 SourceProfile 时作为初始值，之后可在 WebUI 修改并随
 profile revision 固化到新任务路由快照。
 
+部署 YAML 的 `sources.<id>.display_name`、`rss_feed_url`、
+`rss_schedule_enabled` 和 `rss_schedule_cron` 是首次创建 SourceProfile 的 seed；已有
+SQLite profile 不会在每次重启时被 seed 覆盖，后续修改使用来源管理 API/WebUI。
+`rss_feed_url` 可带 passkey query，但必须是无 userinfo/fragment 的 HTTP(S) URL，Host
+必须同时列入 `allowed_torrent_hosts`。旧 AnimeGo `setting.feed.mikan` 及
+`plugin.feed` 的 `name/__name__`、`url/__url__`、`cron/__cron__`、`enable` 会迁移到
+这些字段；上游把 1.3 及更早 feed 升级为默认关闭，因此该路径只保留 URL/Cron，不会
+擅自启用网络任务。配置值首次落入 SQLite 后属于敏感 `data_path` 数据。
+
 `dynamic_tag_template` 留空即关闭；默认 Mikan 值与上游一致。支持 `{year}`、
 `{quarter}`、`{quarter_index}`、`{quarter_name}`、`{ep}`、`{week}`、
 `{week_name}`，逗号分隔多个 qB tag。模板在任务创建时随 SourceProfile revision

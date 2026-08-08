@@ -63,6 +63,13 @@ public static partial class AnimeGoOptionsValidator
         var sourceProfileIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in options.InitialSourceProfiles)
         {
+            var displayName = profile.DisplayName?.Trim() ?? profile.Id;
+            if (displayName.Length is < 1 or > 128)
+            {
+                errors.Add(
+                    $"Source profile '{profile.Id}' display name must contain 1 to 128 characters.");
+            }
+
             if (!profile.Id.Equals(profile.Id.ToLowerInvariant(), StringComparison.Ordinal) || !IsStableId(profile.Id))
             {
                 errors.Add($"Source profile id '{profile.Id}' is not a stable lowercase id.");
@@ -121,6 +128,32 @@ public static partial class AnimeGoOptionsValidator
             {
                 errors.Add(
                     $"Source profile '{profile.Id}' has an invalid Mikan identity Cookie: {exception.Message}");
+            }
+
+            try
+            {
+                var feedUrl = SourceRssSchedulePolicy.NormalizeFeedUrl(
+                    profile.Adapter,
+                    profile.RssFeedUrl);
+                _ = SourceRssSchedulePolicy.NormalizeCron(profile.RssScheduleCron);
+                SourceRssSchedulePolicy.ValidateEnabled(
+                    profile.Adapter,
+                    sourceEnabled: true,
+                    profile.RssScheduleEnabled,
+                    feedUrl);
+                if (feedUrl is not null
+                    && !SourceRssSchedulePolicy.IsHostAllowed(
+                        new Uri(feedUrl, UriKind.Absolute).IdnHost,
+                        profile.AllowedTorrentHosts))
+                {
+                    errors.Add(
+                        $"Source profile '{profile.Id}' RSS feed host must be included in allowed Torrent hosts.");
+                }
+            }
+            catch (ArgumentException exception)
+            {
+                errors.Add(
+                    $"Source profile '{profile.Id}' RSS schedule is invalid: {exception.Message}");
             }
 
             try

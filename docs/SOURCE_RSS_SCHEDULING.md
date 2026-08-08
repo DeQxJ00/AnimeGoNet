@@ -2,6 +2,12 @@
 
 首版自动调度只支持 `adapter=mikan`。每个 SourceProfile 可独立绑定 RSS URL、六字段 Cron、规则开关和 qBittorrent 路由，因此不同输入源可以按各自周期进入已有的 `MikanRssIngestProcessor`，不会绕过黑白名单、有序优选、SQLite 去重、TMDB 流程或不可变下载路由。
 
+首次部署 YAML 也可为 SourceProfile 提供 `display_name`、`rss_feed_url`、
+`rss_schedule_enabled` 和 `rss_schedule_cron` seed。旧 AnimeGo 的
+`setting.feed.mikan` 与内置 `plugin.feed` name/URL/Cron/enable 会在原子升级时迁入；
+上游原本关闭的 feed 保持关闭。seed 只作用于首次创建，用户在 SQLite/WebUI 中明确
+清除后，重启不会从旧 YAML 反复恢复私密 URL。
+
 ## 配置和私密字段
 
 - `rss_feed_url` 必须是无 userinfo、无 fragment 的绝对 HTTP(S) URL，可保留包含 passkey 的 query；原始 Host 必须包含在该来源的 `allowed_torrent_hosts` 中，重定向的每一跳仍执行同一白名单和公网 DNS 校验。

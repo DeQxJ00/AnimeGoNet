@@ -10,7 +10,7 @@
 |---|---|---:|---:|---|
 | `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 待验证 |
 | `cmd/plugin` | `AnimeGo.PluginTool` validate/run/pack | 替换 | 已验证 | 严格 fixture/config/typed-result tests、确定性 ZIP、真实 NativeAOT 插件进程 smoke |
-| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 已验证 | Docker/Native 路径、Web、双 qB、Mikan move、元数据/重试/缓存/调度均为强类型安全默认；12 份固定上游 YAML 逐字段迁移，旧字段按保留映射、业务替换或明确例外分类，无 Python/Transmission/旧不安全默认泄漏 |
+| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 已验证 | `configs` 全部生产文件/导出符号与 `config_test.go` 入口由机器清单锁定；Docker/Native 路径、Web、双 qB、Mikan move、元数据/重试/缓存/调度均为强类型安全默认。12 份固定上游 YAML 迁移，旧 Mikan feed 的 display name、带 passkey URL、Cron 与 enable 落入 SourceProfile/SQLite；旧字段按保留映射、业务替换或明确例外分类，无 Python/Transmission/旧不安全默认泄漏 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 已验证 | 首次创建使用 CreateNew/0600、旧配置先完整解析与规范化再备份/原子替换；路径边界、Web、qB URL/类型/ID、来源唯一 ID/路由/Host/Cookie/策略、TMDB/Bangumi/AI/Torrent/调度/数据更新均 fail-closed；旧 `refresh_second` 最小值行为由独立 HostedService 节奏替换 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 已验证 | 固定 `develop@c7475df` 的 12 份历史 YAML 均以 SHA-256 锁定并迁移到规范 1.7.1；只接受上游 13 个精确版本，范围内伪版本在备份/写入前拒绝；原字节备份、原子替换、幂等、无备份开关与非 qB fail-closed tests |
 | `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 已验证 | 上游全部 `ANIMEGO_*`、规范嵌套键、扁平键和命令行按实际 Provider 层级解析，跨别名保持命令行→环境→YAML；三路径、命名下载器、SourceProfile、统一 AI 旧双键和显式空值均有冲突层 tests。应用全部可编辑字段、下载器实例与来源字段投影环境/命令行 `locked_fields`，API/WebUI 拒绝越级改写且私有 JSON/SQLite 不固化部署凭据；Cookie、secret 与命令行值不回显；Web 安全默认、标准 URL 覆盖和真实 Kestrel tests 已验证 |
@@ -59,7 +59,7 @@
 | `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 已验证 | schema v22、`bolt`/`bolt_sub` bucket 隔离、JSON upsert/batch、绝对 TTL、惰性/批量过期清理和原子失败 tests 已通过 |
 | `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 例外 | migration report |
 | `pkg/dirdb` | SQLite library tables + NFO | 替换 | 已验证 | 上游三层 JSON sidecar 由原子 Writer 兼容输出并在 NFO/业务 completion 前落盘；Scanner 只读取明确 sidecar、逐项隔离损坏，SQLite refresh 事务替换并审计 issue，增量 upsert 同路径覆盖不重复；崩溃遗留 atomic partial 不参与扫描且不阻塞下次写入；scan/upsert/recovery + 整理流水线 tests |
-| 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 进行中 | ingest command/response 和 JSON context 已验证；其余模型待实现 |
+| 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 已验证 | 固定上游 `internal/models` 全文件/导出类型由 `UPSTREAM_DOMAIN_CONTRACTS.psv` 穷尽映射；来源证据、TMDB 权威身份、逐文件候选、解析 Run/Attempt、下载/整理/删除状态拆为闭合 record/enum/SQLite 状态机，公开 JSON 边界进入 source-generated context，无反射 `map[string]any` 回退 |
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 已验证 | SQLite 唯一约束、并发完成写入、逐文件 claim、同任务字幕共享、跨任务完成/进行中精确跳过及失败释放已验证；正常整理与 completion 同事务写来源 alias，RSS winner 以 IMMEDIATE 事务复查同 `mikanid+来源EP` 并保存命中证据，业务记录删除级联清除 alias 后可重新导入；qB 文件 priority 已接入下载准备 |
 | TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 已验证 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid、固定本地 S01 且不依赖 P2/P1、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API/UI 已验证；Run 级 TMDB 访问确认/兜底资格/拒绝原因由列表和详情 API/WebUI 原样投影，六类非权威失败均经处理器门禁测试；唯一普通 Bangumi Episode ID 提供跨来源最高可信 scope，歧义/小数/特别篇保守降级；schema v20 恢复合并保存 alias 并标记 `DuplicateAfterResolution`；人工恢复逐项在线验证 TMDB；schema v21 在原兜底目录可恢复地重写真实 TMDB/Bangumi NFO |
 | 元数据解析尝试 | failure kind/reason/timeline + 三级最终证据 | 扩展 | 已验证 | schema v32 固化 Series/Season/Episode `resolution_source + run_id + attempt_id`，SQLite 触发器拒绝跨 Run/Stage/策略伪造引用；逐文件 Episode/字幕精确 Attempt、混合证据摘要、任务/作品库 API/WebUI、失败时间线和显式 retry tests |

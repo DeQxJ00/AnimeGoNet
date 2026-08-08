@@ -14,7 +14,7 @@
 | 模块 | 必测行为 | 层级 | 完成门禁 |
 |---|---|---|---|
 | CLI/生命周期 | 参数、env 优先级、Ctrl+C、SIGTERM、5 秒退出保护 | U/C/E | JIT/AOT 行为一致，退出无数据损坏 |
-| 配置 | 默认生成、注释、12 版升级、备份、非法值、相对路径 | U/P/E | 所有历史 fixture 通过 |
+| 配置 | 默认生成、注释、12 版升级、备份、非法值、相对路径、旧 Mikan RSS name/URL/Cron/enable | U/P/I/E | 固定上游 `configs` 文件/符号与测试入口无漏项；所有历史 fixture 通过；RSS seed 真正落入 SQLite，passkey URL 不进入响应/异常 |
 | JSON/YAML | 字段名、零值、map/list、Unicode、round-trip | U/P/E | 无反射 fallback；AOT 通过 |
 | 领域模型/错误 | 上游 models/constants/exceptions 全文件与导出类型、稳定值、包装错误语义、AOT 替代边界 | U/P/E | 固定 HEAD 清单无漏项；每项有真实 C# 目标或批准例外；结构解析统一 `ParseFailed` 且稳定码安全 |
 | 纯函数 | UTF-8 SHA-256、动态 Tag、名称清理/相似度、路径清洗/边界、日期解析/差值/Unix 秒 | U/P/I/E | 上游可观察输入保持 parity；路径/无效输入使用已记录的 fail-closed 安全替代；NativeAOT 无反射 helper |

@@ -113,10 +113,10 @@ public sealed class SourceProfileStoreAdminTests
         var store = new SourceProfileStore(fixture.Database);
         var seed = AnimeGoDefaults.CreateDocker().InitialSourceProfiles[0]
             with
-            {
-                MikanIdentityCookie =
+        {
+            MikanIdentityCookie =
                     ".AspNetCore.Identity.Application=first-secret",
-            };
+        };
 
         await store.EnsureSeedsAsync([seed]);
         await store.EnsureSeedsAsync([seed]);
@@ -142,6 +142,44 @@ public sealed class SourceProfileStoreAdminTests
         Assert.DoesNotContain(
             "second-secret",
             second.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SeedRssScheduleIsPersistedOnceAndUserClearSurvivesRestart()
+    {
+        const string feedUrl =
+            "https://mikanani.me/RSS/MyBangumi?token=seed-private-value";
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var seed = AnimeGoDefaults.CreateDocker().InitialSourceProfiles[0] with
+        {
+            RssFeedUrl = feedUrl,
+            RssScheduleEnabled = true,
+            RssScheduleCron = "0 3/20 * * * ?",
+        };
+
+        await store.EnsureSeedsAsync([seed]);
+        var inserted = Assert.IsType<SourceProfileAdminRecord>(
+            await store.GetAsync("mikan"));
+        Assert.Equal(feedUrl, inserted.RssFeedUrl);
+        Assert.True(inserted.RssScheduleEnabled);
+        Assert.Equal("0 3/20 * * * ?", inserted.RssScheduleCron);
+
+        _ = await store.UpdateAsync(
+            "mikan",
+            Definition("Mikan", "mikan", "bt", "move", ["mikanani.me"]),
+            inserted.Revision,
+            At(10));
+        await store.EnsureSeedsAsync([seed]);
+
+        var afterRestart = Assert.IsType<SourceProfileAdminRecord>(
+            await store.GetAsync("mikan"));
+        Assert.Null(afterRestart.RssFeedUrl);
+        Assert.False(afterRestart.RssScheduleEnabled);
+        Assert.DoesNotContain(
+            "seed-private-value",
+            afterRestart.ToString(),
             StringComparison.Ordinal);
     }
 

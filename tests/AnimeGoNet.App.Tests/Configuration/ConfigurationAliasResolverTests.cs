@@ -7,6 +7,39 @@ namespace AnimeGoNet.App.Tests.Configuration;
 public sealed class ConfigurationAliasResolverTests
 {
     [Fact]
+    public void LegacyEnvironmentAliasesMapEveryUpstreamField()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-upstream-env-parity");
+        var clientDownload = Path.Combine(root, "client-download");
+        var download = Path.Combine(root, "download");
+        var configuration = new ConfigurationManager();
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["downloaders:bt:type"] = "qbittorrent",
+            ["downloaders:bt:base_url"] = "http://127.0.0.1:8080/",
+            ["downloaders:bt:download_path"] = Path.Combine(root, "yaml-download"),
+            ["sources:mikan:adapter"] = "mikan",
+            ["sources:mikan:downloader_id"] = "bt",
+            ["sources:mikan:file_strategy"] = "move",
+            ["sources:mikan:allowed_torrent_hosts:0"] = "mikanani.me",
+        });
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ANIMEGO_CLIENT_URL"] = "http://127.0.0.1:18080/",
+            ["ANIMEGO_CLIENT_DOWNLOAD_PATH"] = clientDownload,
+            ["ANIMEGO_DOWNLOAD_PATH"] = download,
+            ["ANIMEGO_WEB_PORT"] = "10086",
+        });
+
+        var options = AnimeGoApplication.LoadOptions(configuration, inContainer: false);
+
+        Assert.Equal(new Uri("http://127.0.0.1:18080/"), options.Downloaders["bt"].BaseUrl);
+        Assert.Equal(Path.GetFullPath(clientDownload), options.Downloaders["bt"].DownloadPath);
+        Assert.Equal(Path.GetFullPath(download), options.Paths.DownloadPath);
+        Assert.Equal(10086, options.Web.Port);
+    }
+
+    [Fact]
     public void HighestPriorityProviderWinsAcrossLegacyAndCanonicalAliases()
     {
         var configuration = new ConfigurationManager();

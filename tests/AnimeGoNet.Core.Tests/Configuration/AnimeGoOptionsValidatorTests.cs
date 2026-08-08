@@ -333,6 +333,57 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
+    public void RejectsInvalidOrUnroutableSourceRssScheduleWithoutEchoingUrl()
+    {
+        const string secret = "https://private.invalid/rss?passkey=do-not-echo";
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    RssFeedUrl = secret,
+                    RssScheduleEnabled = true,
+                    RssScheduleCron = "not a cron",
+                },
+            ],
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(
+            errors,
+            error => error.Contains("RSS schedule", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            errors,
+            error => error.Contains(secret, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            errors,
+            error => error.Contains("do-not-echo", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptsSourceRssHostCoveredByWildcard()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    AllowedTorrentHosts = ["*.example.invalid"],
+                    RssFeedUrl = "https://rss.example.invalid/feed",
+                    RssScheduleEnabled = true,
+                },
+            ],
+        };
+
+        Assert.Empty(AnimeGoOptionsValidator.Validate(options));
+    }
+
+    [Fact]
     public void RejectsInvalidDirectoryDatabaseRefreshCron()
     {
         var defaults = AnimeGoDefaults.CreateDocker();

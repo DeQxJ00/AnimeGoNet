@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Sources;
 using Microsoft.Extensions.Configuration;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -368,6 +369,7 @@ internal static class DeploymentYamlConfiguration
         Add(values, "sources:mikan:rss_filter_enabled", "true");
         Add(values, "sources:mikan:rss_priority_enabled", "true");
         Add(values, "sources:mikan:duplicate_notification_enabled", "true");
+        AddLegacyMikanRssAliases(values);
         AliasAny(
             values,
             [
@@ -621,11 +623,13 @@ internal static class DeploymentYamlConfiguration
 
             sources:
               mikan:
+                display_name: {{Scalar(Configured(values, "sources:mikan:display_name", "mikan"))}}
                 adapter: mikan
                 downloader_id: bt
                 file_strategy: {{LegacyFileStrategy(values)}}
                 allowed_torrent_hosts:
                   - mikanani.me
+            {{LegacyMikanAdditionalAllowedHost(values)}}
                 category: {{Scalar(Configured(values, "sources:mikan:category", "animegonet"))}}
                 tags: []
                 dynamic_tag_template: {{Scalar(Configured(values, "sources:mikan:dynamic_tag_template", "{year}年{quarter}月新番"))}}
@@ -633,6 +637,9 @@ internal static class DeploymentYamlConfiguration
                 rss_filter_enabled: true
                 rss_priority_enabled: true
                 duplicate_notification_enabled: true
+                rss_feed_url: {{Scalar(Configured(values, "sources:mikan:rss_feed_url", string.Empty))}}
+                rss_schedule_enabled: {{Boolean(values, "sources:mikan:rss_schedule_enabled", false)}}
+                rss_schedule_cron: {{Scalar(Configured(values, "sources:mikan:rss_schedule_cron", SourceRssSchedulePolicy.DefaultCron))}}
                 mikan_identity_cookie: {{Scalar(Configured(values, "sources:mikan:mikan_identity_cookie", string.Empty))}}
 
             metadata:
@@ -821,6 +828,7 @@ internal static class DeploymentYamlConfiguration
 
             sources:
               mikan:
+                display_name: mikan
                 adapter: mikan
                 downloader_id: bt
                 file_strategy: move
@@ -833,6 +841,9 @@ internal static class DeploymentYamlConfiguration
                 rss_filter_enabled: true
                 rss_priority_enabled: true
                 duplicate_notification_enabled: true
+                rss_feed_url: ''
+                rss_schedule_enabled: false
+                rss_schedule_cron: '0 0/15 * * * ?'
                 # 可填写 Cookie 值或完整的 .AspNetCore.Identity.Application=...；Web API 永不回显。
                 mikan_identity_cookie: ''
 
@@ -969,6 +980,130 @@ internal static class DeploymentYamlConfiguration
                 return;
             }
         }
+    }
+
+    private static void AddLegacyMikanRssAliases(
+        Dictionary<string, string?> values)
+    {
+        if (values.ContainsKey("sources:mikan:rss_feed_url"))
+        {
+            return;
+        }
+
+        var candidates = values.Keys
+            .Where(key => key.StartsWith("plugin:feed:", StringComparison.Ordinal))
+            .Select(key => key.Split(':'))
+            .Where(parts => parts.Length >= 4
+                && int.TryParse(
+                    parts[2],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out _))
+            .Select(parts => parts[2])
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => int.Parse(value, CultureInfo.InvariantCulture))
+            .Where(index => string.Equals(
+                Optional(values, $"plugin:feed:{index}:file"),
+                "builtin_mikan_rss.py",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (candidates.Length > 1)
+        {
+            throw new DeploymentYamlException(
+                "Legacy deployment YAML contains multiple Mikan RSS feed plugins and cannot be migrated unambiguously.");
+        }
+
+        if (candidates.Length == 1)
+        {
+            var prefix = $"plugin:feed:{candidates[0]}";
+            AddLegacyMikanDisplayName(
+                values,
+                First(
+                    Value(values, $"{prefix}:vars:name"),
+                    Value(values, $"{prefix}:vars:__name__")));
+            SetLegacyMikanRss(
+                values,
+                First(
+                    Value(values, $"{prefix}:vars:url"),
+                    Value(values, $"{prefix}:vars:__url__")),
+                First(
+                    Value(values, $"{prefix}:vars:cron"),
+                    Value(values, $"{prefix}:vars:__cron__"))
+                    ?? "0 0/20 * * * ?",
+                Boolean(values, $"{prefix}:enable", false));
+            return;
+        }
+
+        AddLegacyMikanDisplayName(
+            values,
+            Optional(values, "setting:feed:mikan:name"));
+        SetLegacyMikanRss(
+            values,
+            Optional(values, "setting:feed:mikan:url"),
+            "0 0/20 * * * ?",
+            enabled: "false");
+    }
+
+    private static void AddLegacyMikanDisplayName(
+        Dictionary<string, string?> values,
+        string? displayName)
+    {
+        if (displayName is null)
+        {
+            return;
+        }
+        if (displayName.Length > 128)
+        {
+            throw new DeploymentYamlException(
+                "Legacy deployment YAML Mikan display name is invalid.");
+        }
+        values["sources:mikan:display_name"] = displayName;
+    }
+
+    private static void SetLegacyMikanRss(
+        Dictionary<string, string?> values,
+        string? rawUrl,
+        string rawCron,
+        string enabled)
+    {
+        string? normalizedUrl;
+        try
+        {
+            normalizedUrl = SourceRssSchedulePolicy.NormalizeFeedUrl("mikan", rawUrl);
+            var normalizedCron = SourceRssSchedulePolicy.NormalizeCron(rawCron);
+            if (string.Equals(enabled, "true", StringComparison.Ordinal)
+                && normalizedUrl is null)
+            {
+                throw new ArgumentException(
+                    "An enabled Mikan RSS feed requires a URL.");
+            }
+
+            if (normalizedUrl is not null)
+            {
+                values["sources:mikan:rss_feed_url"] = normalizedUrl;
+                var host = new Uri(normalizedUrl, UriKind.Absolute).IdnHost;
+                if (!string.Equals(host, "mikanani.me", StringComparison.OrdinalIgnoreCase))
+                {
+                    values["sources:mikan:allowed_torrent_hosts:1"] = host;
+                }
+            }
+
+            values["sources:mikan:rss_schedule_cron"] = normalizedCron;
+            values["sources:mikan:rss_schedule_enabled"] = enabled;
+        }
+        catch (ArgumentException exception)
+        {
+            throw new DeploymentYamlException(
+                "Legacy deployment YAML Mikan RSS configuration is invalid.",
+                exception);
+        }
+    }
+
+    private static string LegacyMikanAdditionalAllowedHost(
+        IReadOnlyDictionary<string, string?> values)
+    {
+        var host = Optional(values, "sources:mikan:allowed_torrent_hosts:1");
+        return host is null ? string.Empty : $"      - {Scalar(host)}";
     }
 
     private static void Add(

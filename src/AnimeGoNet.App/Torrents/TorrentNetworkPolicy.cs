@@ -6,24 +6,9 @@ namespace AnimeGoNet.App.Torrents;
 public static class TorrentNetworkPolicy
 {
     public static bool IsHostAllowed(string host, IReadOnlyList<string> allowedPatterns)
-    {
-        var normalizedHost = new Uri($"https://{host}/").IdnHost.ToLowerInvariant();
-        foreach (var rawPattern in allowedPatterns)
-        {
-            var wildcard = rawPattern.StartsWith("*.", StringComparison.Ordinal);
-            var pattern = wildcard ? rawPattern[2..] : rawPattern;
-            var normalizedPattern = new Uri($"https://{pattern}/").IdnHost.ToLowerInvariant();
-            if ((!wildcard && string.Equals(normalizedHost, normalizedPattern, StringComparison.Ordinal))
-                || (wildcard
-                    && normalizedHost.Length > normalizedPattern.Length
-                    && normalizedHost.EndsWith('.' + normalizedPattern, StringComparison.Ordinal)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => AnimeGoNet.Core.Sources.SourceRssSchedulePolicy.IsHostAllowed(
+            host,
+            allowedPatterns);
 
     public static bool IsPublicAddress(IPAddress address)
     {

@@ -67,7 +67,7 @@
 - [x] 完成上游 hash、name、path、时间等纯函数的可观察行为映射：SHA-256 统一由 `StableHash` 生成 UTF-8 小写 hex 并用于 access-key、统一导入 URL 指纹和 RSS batch/candidate 身份；四步去后缀与 UTF-8 byte 相似度保持上游 parity；动态 tag 的季度/星期、Mikan 时间解析、TMDB 日期差、Unix 秒均使用强类型时间；路径/文件名改由 `PathBoundary`、`MediaPathPlanner` 和安全文件执行器实现跨平台边界。反射 map 转换、Python/资源 MD5、panic recovery 等仅服务旧实现的 helper 明确由 source-generated DTO、编译期资源和 HostedService 异常隔离替换，见 `docs/PURE_FUNCTION_PARITY.md`。
 - [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
 - [x] 移植环境变量覆盖：上游全部 `ANIMEGO_*`、规范嵌套键、现有扁平键、旧 qB 键和命令行均按 Provider 实际层级解析，跨别名仍固定命令行→环境→YAML→默认，路径/下载器/来源/统一 AI 旧双键均有冲突层测试；Web 监听安全默认和标准 `--urls`/`ASPNETCORE_URLS` 高优先级有真实 Kestrel 测试；全局代理、SourceProfile 与下载器实例保持各自部署语义。全部可编辑应用字段及来源/下载器字段均在 API/WebUI 投影环境/命令行控制键、拒绝改写，私有 JSON/SQLite 不复制部署凭据或越级覆盖；Cookie、命令行值和 secret 不回显。
-- [>] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均已有测试；全部旧 Go 配置异常 parity 仍待补齐。
+- [x] 移植配置检查、路径初始化和资源释放：严格 YAML 输入边界、强类型值校验、三路径和下载器子目录边界、首次目录/文件初始化、宿主释放均有测试；固定上游 `configs` 的全部生产文件/导出符号和 `config_test.go` 入口已由机器清单穷尽映射。旧 Mikan feed 的 name/URL/Cron/enable 同时迁入 SourceProfile seed 与 SQLite，异常输入 fail closed 且不回显 URL。
 - [x] 移植配置 `1.1.0` → `1.7.1` 升级链与备份：只接受上游明确列出的 13 个版本，12 份固定 `develop@c7475df` 历史 YAML 以 SHA-256 锁定并逐份迁移验证；旧 qB `setting:`/`advanced:` 默认保存同目录原字节 `CreateNew` 版本化备份，再经同目录临时文件原子重写规范 1.7.1；路径/qB/Mikan策略/category/做种/动态 tag 模板/TMDB/代理/失败链/Cron 与 `advanced.source|anidata.mikan.cookie` 已迁移，错误值及上游不存在的范围内版本均在落盘前拒绝，Transmission 保持原文件并 fail closed。
 - [x] 新配置加入 Skip/Backtrace/TitleSeason/FirstSeason 四档确定性季度策略和一个任务级 AI 元数据开关，全部默认 `false`；规范 YAML/扁平键/API/WebUI 已使用 `ai_use_metadata_match`，旧双键兼容读取、新安装默认注释及旧 YAML 自动重写新默认值均已完成。
 - [x] 增加 OpenAI-compatible AI 配置 DTO、扁平环境变量、敏感值脱敏和 source-generated JSON 上下文；API 只返回 provider/base/model/工具端点与 `api_key_configured`，不返回密钥。
@@ -77,7 +77,7 @@
 - [x] 已建立 NativeAOT-safe Torrent 文件和 Mikan RSS title EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，RSS title 另支持不受扩展名截断的最后可靠标记；小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 均不形成普通整数。入库的 Mikan `file_episode_candidate` 由 raw_parser.py 兼容层与独立安全层决定，其他 adapter 固定不写；确认 Season 后仍逐文件经 TMDB Episode API 验证。统一任务详情现通过持久关联展示一个任务来自哪些 RSS batch/entry、规则与 Legacy revision、实际决策/有序组和入口来源 EP，并与逐文件候选并列审计；不返回原始 Mikan/Torrent URL、candidate ID 或其指纹。
 - [x] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中后在 AI/TMDB Episode 调用前本地计算并验证目标 EP，API/WebUI 显示 Learning/Trusted/ConflictReset。
 - [x] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用：schema v32 在解析完成事务中固化 Series/Season 的 Run+Attempt，并为每个 Episode/字幕文件保存精确 Attempt；API、任务面板和作品库均显示权威来源及证据引用，混合文件明确下钻到逐文件详情。
-- [ ] 通过全部配置/模型 parity tests。
+- [x] 通过全部配置/模型 parity tests：`UPSTREAM_CONFIGURATION_CONTRACTS.psv`/`UPSTREAM_CONFIGURATION_TESTS.psv` 锁定上游配置面，12 份历史 YAML 继续锁定 SHA-256 和保留字段；领域模型、枚举和错误另由 `UPSTREAM_DOMAIN_CONTRACTS.psv` 穷尽校验，目标文件与替代测试必须真实存在。
 
 ## P3 — 存储
 

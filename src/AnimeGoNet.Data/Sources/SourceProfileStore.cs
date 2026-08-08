@@ -19,6 +19,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         foreach (var seed in seeds)
         {
+            var displayName = seed.DisplayName?.Trim() ?? seed.Id;
+            if (displayName.Length is < 1 or > 128)
+            {
+                throw new ArgumentException(
+                    "Source profile display name must contain 1 to 128 characters.",
+                    nameof(seeds));
+            }
             var fileStrategy = ToDatabaseValue(seed.FileStrategy);
             var category = SourceDownloadPolicy.NormalizeCategory(seed.Category);
             var tags = SourceDownloadPolicy.NormalizeTags(seed.Tags);
@@ -29,6 +36,25 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             var mikanIdentityCookie = NormalizeMikanIdentityCookie(
                 seed.Adapter,
                 seed.MikanIdentityCookie);
+            var rssFeedUrl = SourceRssSchedulePolicy.NormalizeFeedUrl(
+                seed.Adapter,
+                seed.RssFeedUrl);
+            var rssScheduleCron = SourceRssSchedulePolicy.NormalizeCron(
+                seed.RssScheduleCron);
+            SourceRssSchedulePolicy.ValidateEnabled(
+                seed.Adapter,
+                sourceEnabled: true,
+                seed.RssScheduleEnabled,
+                rssFeedUrl);
+            if (rssFeedUrl is not null
+                && !SourceRssSchedulePolicy.IsHostAllowed(
+                    new Uri(rssFeedUrl, UriKind.Absolute).IdnHost,
+                    seed.AllowedTorrentHosts))
+            {
+                throw new ArgumentException(
+                    "Source profile RSS feed host must be included in allowed Torrent hosts.",
+                    nameof(seeds));
+            }
             await using var command = connection.CreateCommand();
             command.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
             command.CommandText = """
@@ -38,13 +64,15 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled,
                     revision, enabled,
                     created_at_utc, updated_at_utc, mikan_identity_cookie,
-                    dynamic_tag_template, dynamic_tag_template_initialized)
+                    dynamic_tag_template, dynamic_tag_template_initialized,
+                    rss_feed_url, rss_schedule_enabled, rss_schedule_cron)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
                     $allowed_torrent_hosts_json, $category, $tags_json, $seeding_time_minutes,
                     $rss_filter_enabled, $rss_priority_enabled, $duplicate_notification_enabled, 1, 1,
                     $created_at_utc, $updated_at_utc, $mikan_identity_cookie,
-                    $dynamic_tag_template, 1)
+                    $dynamic_tag_template, 1,
+                    $rss_feed_url, $rss_schedule_enabled, $rss_schedule_cron)
                 ON CONFLICT(id) DO UPDATE SET
                     allowed_torrent_hosts_json = CASE
                         WHEN source_profiles.allowed_torrent_hosts_json = '[]'
@@ -94,7 +122,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                            <> COALESCE(source_profiles.mikan_identity_cookie, ''));
                 """;
             command.Parameters.AddWithValue("$id", seed.Id);
-            command.Parameters.AddWithValue("$display_name", seed.Id);
+            command.Parameters.AddWithValue("$display_name", displayName);
             command.Parameters.AddWithValue("$adapter", seed.Adapter);
             command.Parameters.AddWithValue("$downloader_id", seed.DownloaderId);
             command.Parameters.AddWithValue("$file_strategy", fileStrategy);
@@ -119,6 +147,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             command.Parameters.AddWithValue(
                 "$dynamic_tag_template",
                 (object?)dynamicTagTemplate ?? DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$rss_feed_url",
+                (object?)rssFeedUrl ?? DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$rss_schedule_enabled",
+                seed.RssScheduleEnabled ? 1 : 0);
+            command.Parameters.AddWithValue("$rss_schedule_cron", rssScheduleCron);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 

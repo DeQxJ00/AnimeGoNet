@@ -67,4 +67,39 @@ public static class SourceRssSchedulePolicy
             throw new ArgumentException("rss_feed_url is required when RSS scheduling is enabled.");
         }
     }
+
+    public static bool IsHostAllowed(
+        string host,
+        IReadOnlyList<string> allowedPatterns)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        ArgumentNullException.ThrowIfNull(allowedPatterns);
+        var normalizedHost = new Uri($"https://{host}/").IdnHost.ToLowerInvariant();
+        foreach (var rawPattern in allowedPatterns)
+        {
+            var wildcard = rawPattern.StartsWith("*.", StringComparison.Ordinal);
+            var pattern = wildcard ? rawPattern[2..] : rawPattern;
+            if (!Uri.TryCreate($"https://{pattern}/", UriKind.Absolute, out var patternUri))
+            {
+                continue;
+            }
+
+            var normalizedPattern = patternUri.IdnHost.ToLowerInvariant();
+            if ((!wildcard
+                    && string.Equals(
+                        normalizedHost,
+                        normalizedPattern,
+                        StringComparison.Ordinal))
+                || (wildcard
+                    && normalizedHost.Length > normalizedPattern.Length
+                    && normalizedHost.EndsWith(
+                        '.' + normalizedPattern,
+                        StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
