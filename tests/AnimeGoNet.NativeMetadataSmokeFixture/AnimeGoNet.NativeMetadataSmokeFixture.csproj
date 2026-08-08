@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AnimeGoNet.Core/AnimeGoNet.Core.csproj" />
+    <ProjectReference Include="../../src/AnimeGoNet.Data/AnimeGoNet.Data.csproj" />
+  </ItemGroup>
+</Project>

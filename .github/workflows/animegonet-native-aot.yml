@@ -54,6 +54,7 @@ jobs:
         run: |
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" -LegacyYamlUpgrade
+          ./eng/smoke-native-metadata.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
       - name: Verify plugin SDK and NativeAOT template
         shell: pwsh
         run: ./eng/verify-plugin-template.ps1 -RuntimeIdentifier "${{ matrix.rid }}"

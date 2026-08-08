@@ -203,4 +203,4 @@ AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/
 - 输入/输出数量、顺序或名称不一致时拒绝整个响应。
 - fake AI 覆盖超时、429、5xx、取消、非 JSON、超长响应和部分文件失败。
 - fake TMDB 覆盖真实/伪造 TV ID、普通季度、Season 0 拒绝、Episode 缺失、季度 `Other` 和重复目标。
-- NativeAOT 发布二进制完成 fake AI → fake TMDB → 规范重命名 smoke。
+- NativeAOT 发布二进制以正式后台 worker 完成 fake AI 两轮 → MCP 工具 → fake TMDB Series/Season/Episode 二次验证 → SQLite/API 权威状态落库；fixture 不连接真实 AI、TMDB、qBittorrent 或用户 TestSpace。
