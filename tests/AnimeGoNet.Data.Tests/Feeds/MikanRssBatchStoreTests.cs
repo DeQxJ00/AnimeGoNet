@@ -101,6 +101,55 @@ public sealed class MikanRssBatchStoreTests
     }
 
     [Fact]
+    public async Task TaskEvidenceLinksPersistedRssDecisionWithoutReturningSourceUrls()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var now = DateTimeOffset.Parse(
+            "2026-07-22T10:00:00Z",
+            System.Globalization.CultureInfo.InvariantCulture);
+        var stored = await fixture.Store.SaveAsync("mikan", 7, true, Plan(), now);
+        var winner = stored.Entries.Single(entry => entry.Decision.Kind == MikanRssDecisionKind.Winner);
+        var lease = Assert.IsType<MikanRssWinnerLease>(await fixture.Store.TryClaimWinnerAsync(
+            stored.Id, winner.CandidateId, now, TimeSpan.FromMinutes(5)));
+        var profile = Assert.IsType<SourceProfileRecord>(
+            await new SourceProfileStore(fixture.Database.Database).GetEnabledAsync("mikan"));
+        var task = await new IngestTaskStore(fixture.Database.Database).AddAsync(
+            new NormalizedIngestItem(
+                "mikan",
+                new Uri("https://example.invalid/private-passkey/episode.torrent"),
+                new string('f', 64),
+                "Show [03] x265",
+                winner.CandidateId,
+                "3951",
+                3951,
+                null,
+                null,
+                null),
+            profile);
+        Assert.True(await fixture.Store.CompleteWinnerAsync(lease, task.Id));
+
+        var evidence = Assert.Single(
+            await new MikanRssTaskEvidenceStore(fixture.Database.Database)
+                .ListForTaskAsync(task.Id));
+
+        Assert.Equal(stored.Id, evidence.BatchId);
+        Assert.Equal(1, evidence.EntryOrdinal);
+        Assert.Equal("mikan", evidence.SourceProfileId);
+        Assert.Equal(7, evidence.RuleRevision);
+        Assert.True(evidence.PriorityEnabled);
+        Assert.Equal(3951, evidence.MikanId);
+        Assert.Equal("normal", evidence.SourceEpisodeKind);
+        Assert.Equal("3", evidence.SourceEpisode);
+        Assert.Equal("Winner", evidence.DecisionKind);
+        Assert.Equal("PriorityWinner", evidence.DecisionReason);
+        Assert.Equal(["codec"], evidence.EvaluatedPriorityGroups);
+        Assert.Equal("ingested", evidence.EffectState);
+        Assert.Equal(now, evidence.BatchCreatedAtUtc);
+        Assert.Empty(await new MikanRssTaskEvidenceStore(fixture.Database.Database)
+            .ListForTaskAsync("missing-task"));
+    }
+
+    [Fact]
     public async Task LostWinnerLeaseRollsBackTaskFilesAndStagedTorrentTogether()
     {
         await using var fixture = await BatchFixture.CreateAsync();

@@ -39,12 +39,12 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 已验证 | Go develop 的 3 个 ParseEp fixtures、扩展整数模式、小数/特别篇隔离、Mikan RSS 最后可靠标记、19 组 AutoBangumi Python 标题/季度/EP/字幕/字幕组/分辨率/来源 golden fixtures 均已覆盖；RSS 字幕组解析与 raw parser 对全部 golden 输入交叉一致，持久化前的年份/分辨率/歧义/非正片安全层已验证 |
+| `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 已验证 | Go develop 的 3 个 ParseEp fixtures、扩展整数模式、小数/特别篇隔离、Mikan RSS 最后可靠标记、19 组 AutoBangumi Python 标题/季度/EP/字幕/字幕组/分辨率/来源 golden fixtures 均已覆盖；RSS 字幕组解析与 raw parser 对全部 golden 输入交叉一致，持久化前的年份/分辨率/歧义/非正片安全层已验证；任务详情把持久 RSS batch/revision/decision/groups 与实际 Torrent `file_episode_candidate` 跨请求并列审计且不返回 URL/指纹 |
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 已验证 | 与 raw_parser.py 共用的完整解析主体已由 `AutoBangumiRawParser` 编译期替换；无 Python 运行时，develop Python golden fixture 逐字段通过 |
 | `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 已验证 | 19 组 develop Python golden 覆盖全部输出字段和原始 E04/EP04 不识别语义；独立安全层才拒绝年份/分辨率/歧义/非正片，数据层证明只对 Mikan adapter 落候选 |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 已验证 | 编译期注册过滤器按稳定顺序串行执行；上一规则仅将 accepted 候选传给下一规则；显式空链等价于上游 `skipFilter`；业务错误、无效结果与意外异常均立即停止且后续规则不执行；生产 Mikan RSS 显式使用 `mikan-tool` 链，外部过滤器必须显式启用；PluginManager 回归 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 已验证 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit、安全页面抓取/批内缓存/真实 RSS 前置执行，以及五档 WebUI CRUD/排序、开关、可解释预览、legacy JSON 导入导出和快照回滚均已验证；原油猴发布镜像浏览器 E2E 待总体验收 |
-| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 已验证 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss`、winner→统一 staging，以及 schema v25 关系型历史快照和 revision 安全回滚均已验证；首版以可键盘操作的上下移动排序代替拖拽 |
+| RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 已验证 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss`、winner→统一 staging，以及 schema v25 关系型历史快照和 revision 安全回滚均已验证；统一任务详情按 `ingest_task_id` 安全投影一个任务关联的全部历史 batch/entry ordinal 与实际执行组，重复请求不丢入口证据且不返回 URL 派生 candidate ID；首版以可键盘操作的上下移动排序代替拖拽 |
 | Mikan 人工规则 | `MikanWorkMetadataRule` | 扩展 | 已验证 | 作品级共享、乐观并发、最高优先级 Series/Season/EP Offset TMDB 验证、无效阻断及可选 `sample_source_episode` 保存前 Series→Season→目标 Episode 预验证；管理 API/WebUI 已支持 revision-safe 创建/更新/禁用/清除、权威影响分类和只重置无租约失败任务的显式重匹配，已解析/已整理/完成记录/媒体文件保持不变 |
 | `mikanid+groupid` offset 学习 | SQLite evidence/trusted cache | 扩展 | 已验证 | 默认关闭、3 个不同 EP 建立信任/冲突撤销、已验证 Episode 自动学习、AI 前任务级命中、零 AI/零 TMDB Episode 调用、主视频/多语言字幕关联、fake qB priority/恢复、规范实际落盘、单一 completion、`deleteFiles=false` cleanup、Learning/Trusted/ConflictReset API/WebUI 与自动状态安全清理已通过 |
 | TMDB 季度失败链 | `TMDBFailSkip=4`→`TMDBFailBacktrace=3`→`TMDBFailUseTitleSeason=2`→`TMDBFailUseFirstSeason=1` | 扩展 | 已验证 | 日文名→中文名及每名多轮清理均以完整 `tmdbid+Season` 为成功条件；P3 对每个前作重新联合搜索且可恢复不同 Series，无前传/多层/同层多候选/缺日期/回溯到底/防环/Bangumi与TMDB失败/取消等确定性 fixture 已验证，并以真实 loopback HTTP 证明 Bangumi 503、TMDB 429 重试后跨两层前作联合验证；P2 只读任务 title、P1 本地 S01 且均不验证 TMDB Season |

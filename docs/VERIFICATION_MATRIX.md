@@ -29,7 +29,7 @@
 | C# 外部插件 | manifest、协议版本、五 RID、配置、超时、取消、崩溃 | C/P/I/E | JIT/AOT 示例均通过，故障不拖垮主进程 |
 | Parser | 标题/季度/集数/字幕组/Mikan人工规则/EP偏移/Skip=4/Backtrace=3/Title=2/First=1/独立AI | U/P | 人工规则最高优先级；上游 fixture + 新策略通过；来源值与 TMDB 规范值不混用 |
 | Filter | 顺序、多插件、skip、异常、MikanTool五档/优先级/黑白名单/legacy顺序 | U/P | 上游 Python差分与filter fixture全过 |
-| Mikan RSS 同集优选 | mikanid+来源EP分组、动态优先级组/具名数组、逐组短路、黑白名单、双开关 | U/C/P/I/E | 单候选旁路优先级；重复组选出一个winner；默认720p拒绝；loser无昂贵副作用 |
+| Mikan RSS 同集优选 | mikanid+来源EP分组、动态优先级组/具名数组、逐组短路、黑白名单、双开关、winner→任务→逐文件候选跨请求审计 | U/C/P/I/E | 单候选旁路优先级；重复组选出一个winner；默认720p拒绝；loser无昂贵副作用；任务详情保留历史 batch/revision/decision/groups 且不泄露 URL、URL 派生 candidate ID 或指纹 |
 | AnimeGoHelper | 单集、全集、过滤配置上传/获取/往返、认证、CORS | C/P/E | 原油猴脚本无需修改即可完成四个主流程，配置无损往返且真实参与RSS过滤 |
 | qBittorrent | connect/retry/add/list/state/delete/category/static tag/metadata dynamic tag/seed | C/I/E | fake + `addTags` HTTP 合同与后置准备流程通过；真实容器主合同进入 CI |
 | 不支持的下载器类型 | 旧Transmission配置读取、诊断、禁用、零路由 | C/E | 明确永久Unsupported，不崩溃、不误转qB、不提供创建入口 |

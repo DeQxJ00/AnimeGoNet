@@ -3123,6 +3123,44 @@ async function loadMetadataDetail(taskId, target, button) {
                 `${textOrDash(detail.ai.error_code)} · ${textOrDash(detail.ai.reason)}`;
             ai.append(reason);
         }
+        const rssEvidence = document.createElement("section");
+        rssEvidence.className = "metadata-rss-evidence";
+        if (detail.rss_evidence.length > 0) {
+            const rssHeading = document.createElement("h4");
+            rssHeading.textContent = "RSS 入口与文件候选审计";
+            const rssExplanation = document.createElement("p");
+            rssExplanation.className = "muted";
+            rssExplanation.textContent =
+                "按持久化关联展示 RSS 批次、筛选决策和统一导入任务；下方逐文件候选来自该任务实际 Torrent 文件名解析。";
+            rssEvidence.append(rssHeading, rssExplanation);
+            for (const evidence of detail.rss_evidence) {
+                const row = document.createElement("article");
+                row.className = "metadata-rss-evidence-row";
+                const heading = document.createElement("div");
+                const title = document.createElement("strong");
+                title.textContent =
+                    `${evidence.source_profile_id} · batch ${evidence.batch_id.slice(0, 12)}… · entry ${evidence.entry_ordinal}`;
+                title.title = `batch_id=${evidence.batch_id}\nentry_ordinal=${evidence.entry_ordinal}`;
+                const state = document.createElement("span");
+                state.className = `badge ${evidence.effect_state === "ingested" ? "ready" : ""}`;
+                state.textContent = evidence.effect_state;
+                heading.append(title, state);
+                const identity = document.createElement("p");
+                identity.textContent =
+                    `mikanid ${evidence.mikanid ?? "—"} · RSS EP ${textOrDash(evidence.source_episode_kind)}:${textOrDash(evidence.source_episode)} · ${new Date(evidence.batch_created_at_utc).toLocaleString()}`;
+                const rules = document.createElement("p");
+                rules.textContent =
+                    `规则 rev ${evidence.rule_revision}（优选${evidence.priority_enabled ? "开启" : "关闭"}） · Legacy rev ${evidence.legacy_filter_revision}（${evidence.legacy_filter_enabled ? "开启" : "关闭"}）`;
+                const decision = document.createElement("p");
+                decision.textContent =
+                    `${evidence.decision_kind} · ${evidence.decision_reason} · 有序规则组 ${evidence.evaluated_priority_groups.length === 0 ? "未执行" : evidence.evaluated_priority_groups.join(" → ")}`;
+                const legacy = document.createElement("p");
+                legacy.textContent =
+                    `Legacy ${evidence.legacy_filter_state} · ${evidence.legacy_filter_reason} · ${textOrDash(evidence.legacy_filter_scope)} · identity ${evidence.identity_mikanid ?? "—"}/${evidence.identity_groupid ?? "—"}`;
+                row.append(heading, identity, rules, decision, legacy);
+                rssEvidence.append(row);
+            }
+        }
         const nfoRewrites = document.createElement("section");
         nfoRewrites.className = "metadata-nfo-rewrites";
         if (detail.nfo_rewrites.length > 0) {
@@ -3212,7 +3250,7 @@ async function loadMetadataDetail(taskId, target, button) {
                 files.append(row);
             }
         }
-        target.replaceChildren(ai, ...(detail.nfo_rewrites.length > 0 ? [nfoRewrites] : []), files);
+        target.replaceChildren(ai, ...(detail.rss_evidence.length > 0 ? [rssEvidence] : []), ...(detail.nfo_rewrites.length > 0 ? [nfoRewrites] : []), files);
         button.disabled = false;
         button.textContent = "收起来源 / TMDB 对照";
         button.onclick = () => {

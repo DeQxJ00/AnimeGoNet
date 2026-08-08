@@ -645,10 +645,35 @@ public sealed record MetadataTaskListItem(
 
 public sealed record MetadataTaskDetailResponse(
     [property: JsonPropertyName("summary")] MetadataTaskListItem Summary,
+    [property: JsonPropertyName("rss_evidence")]
+    IReadOnlyList<MetadataTaskRssEvidenceItem> RssEvidence,
     [property: JsonPropertyName("ai")] MetadataTaskAiItem Ai,
     [property: JsonPropertyName("nfo_rewrites")]
     IReadOnlyList<MetadataTaskNfoRewriteItem> NfoRewrites,
     [property: JsonPropertyName("files")] IReadOnlyList<MetadataTaskFileItem> Files);
+
+public sealed record MetadataTaskRssEvidenceItem(
+    [property: JsonPropertyName("batch_id")] string BatchId,
+    [property: JsonPropertyName("entry_ordinal")] int EntryOrdinal,
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("rule_revision")] long RuleRevision,
+    [property: JsonPropertyName("priority_enabled")] bool PriorityEnabled,
+    [property: JsonPropertyName("legacy_filter_revision")] long LegacyFilterRevision,
+    [property: JsonPropertyName("legacy_filter_enabled")] bool LegacyFilterEnabled,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("source_episode_kind")] string? SourceEpisodeKind,
+    [property: JsonPropertyName("source_episode")] string? SourceEpisode,
+    [property: JsonPropertyName("decision_kind")] string DecisionKind,
+    [property: JsonPropertyName("decision_reason")] string DecisionReason,
+    [property: JsonPropertyName("evaluated_priority_groups")]
+    IReadOnlyList<string> EvaluatedPriorityGroups,
+    [property: JsonPropertyName("legacy_filter_state")] string LegacyFilterState,
+    [property: JsonPropertyName("legacy_filter_reason")] string LegacyFilterReason,
+    [property: JsonPropertyName("legacy_filter_scope")] string? LegacyFilterScope,
+    [property: JsonPropertyName("identity_mikanid")] int? IdentityMikanId,
+    [property: JsonPropertyName("identity_groupid")] int? IdentityGroupId,
+    [property: JsonPropertyName("effect_state")] string EffectState,
+    [property: JsonPropertyName("batch_created_at_utc")] DateTimeOffset BatchCreatedAtUtc);
 
 public sealed record MetadataTaskAiItem(
     [property: JsonPropertyName("status")] string Status,

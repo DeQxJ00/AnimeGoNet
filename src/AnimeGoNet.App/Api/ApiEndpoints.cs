@@ -24,6 +24,7 @@ using AnimeGoNet.Data.Cache;
 using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Deletion;
 using AnimeGoNet.Data.DataUpdate;
+using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
@@ -4074,6 +4075,7 @@ public static class ApiEndpoints
     private static async Task<IResult> MetadataTaskDetail(
         string taskId,
         MetadataResolutionStore resolutions,
+        MikanRssTaskEvidenceStore rssEvidence,
         PendingTmdbNfoRewriteStore nfoRewrites,
         CancellationToken cancellationToken)
     {
@@ -4094,10 +4096,33 @@ public static class ApiEndpoints
 
         var item = detail.Summary;
         var ai = detail.Ai;
+        var rssEntries = await rssEvidence.ListForTaskAsync(taskId, cancellationToken)
+            .ConfigureAwait(false);
         var rewriteJobs = await nfoRewrites.ListForTaskAsync(taskId, cancellationToken)
             .ConfigureAwait(false);
         return TypedResults.Ok(new MetadataTaskDetailResponse(
             ToResponse(item),
+            rssEntries.Select(entry => new MetadataTaskRssEvidenceItem(
+                entry.BatchId,
+                entry.EntryOrdinal,
+                entry.SourceProfileId,
+                entry.RuleRevision,
+                entry.PriorityEnabled,
+                entry.LegacyFilterRevision,
+                entry.LegacyFilterEnabled,
+                entry.MikanId,
+                entry.SourceEpisodeKind,
+                entry.SourceEpisode,
+                entry.DecisionKind,
+                entry.DecisionReason,
+                entry.EvaluatedPriorityGroups,
+                entry.LegacyFilterState,
+                entry.LegacyFilterReason,
+                entry.LegacyFilterScope,
+                entry.IdentityMikanId,
+                entry.IdentityGroupId,
+                entry.EffectState,
+                entry.BatchCreatedAtUtc)).ToArray(),
             ai is null
                 ? new MetadataTaskAiItem(
                     "not_attempted",

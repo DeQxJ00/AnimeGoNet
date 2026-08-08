@@ -139,9 +139,48 @@ public sealed class MetadataTaskDetailApiTests
                     episode_resolution_run_id = 'run-detail',
                     episode_resolution_attempt_id = 'attempt-detail-subtitle'
                 WHERE id = 'file-detail-subtitle';
+
+                INSERT INTO mikan_rss_batches (
+                    id, source_profile_id, rule_revision, fingerprint, mikanid,
+                    priority_enabled, entry_count, created_at_utc,
+                    legacy_filter_revision, legacy_filter_enabled,
+                    bangumi_subject_id, bangumi_discovery_state,
+                    bangumi_discovery_failure_code)
+                VALUES (
+                    'rss-detail-batch', 'mikan', 8, $batch_fingerprint, 3951,
+                    1, 1, $now,
+                    5, 1,
+                    547888, 'resolved', NULL);
+
+                INSERT INTO mikan_rss_batch_entries (
+                    batch_id, candidate_id, ordinal, title, mikan_url,
+                    torrent_url_fingerprint, content_type, length_bytes,
+                    published_date, source_episode_kind, source_episode,
+                    decision_kind, decision_reason, winner_candidate_id,
+                    legacy_filter_state, legacy_filter_reason,
+                    legacy_filter_scope, legacy_filter_key,
+                    identity_mikanid, identity_groupid,
+                    effect_state, claim_token, claim_expires_at_utc, ingest_task_id)
+                VALUES (
+                    'rss-detail-batch', $candidate_id, 0, '来源作品 第03话',
+                    'https://mikanani.me/Home/Episode/private-rss-passkey',
+                    $torrent_fingerprint, 'application/x-bittorrent', 734003200,
+                    '2026-07-01', 'normal', '3',
+                    'Winner', 'PriorityWinner', $candidate_id,
+                    'Accepted', 'Accepted',
+                    'Filiter1', 'key_3951_370',
+                    3951, 370,
+                    'ingested', NULL, NULL, $task_id);
+
+                INSERT INTO mikan_rss_decision_groups (
+                    batch_id, candidate_id, position, group_id)
+                VALUES ('rss-detail-batch', $candidate_id, 0, 'codec');
                 """;
             command.Parameters.AddWithValue("$task_id", taskId);
             command.Parameters.AddWithValue("$now", now);
+            command.Parameters.AddWithValue("$batch_fingerprint", new string('b', 64));
+            command.Parameters.AddWithValue("$candidate_id", new string('a', 64));
+            command.Parameters.AddWithValue("$torrent_fingerprint", new string('c', 64));
             await command.ExecuteNonQueryAsync();
         }
 
@@ -151,6 +190,7 @@ public sealed class MetadataTaskDetailApiTests
         using var json = JsonDocument.Parse(body);
         var root = json.RootElement;
         var files = root.GetProperty("files").EnumerateArray().ToArray();
+        var rssEvidence = Assert.Single(root.GetProperty("rss_evidence").EnumerateArray());
         Assert.Equal(2, files.Length);
         var file = Assert.Single(
             files,
@@ -161,6 +201,22 @@ public sealed class MetadataTaskDetailApiTests
                 == "Source Show - 03.zh-Hans.ass");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("rss-detail-batch", rssEvidence.GetProperty("batch_id").GetString());
+        Assert.Equal(0, rssEvidence.GetProperty("entry_ordinal").GetInt32());
+        Assert.Equal("mikan", rssEvidence.GetProperty("source_profile_id").GetString());
+        Assert.Equal(8, rssEvidence.GetProperty("rule_revision").GetInt64());
+        Assert.True(rssEvidence.GetProperty("priority_enabled").GetBoolean());
+        Assert.Equal(5, rssEvidence.GetProperty("legacy_filter_revision").GetInt64());
+        Assert.Equal("normal", rssEvidence.GetProperty("source_episode_kind").GetString());
+        Assert.Equal("3", rssEvidence.GetProperty("source_episode").GetString());
+        Assert.Equal("PriorityWinner", rssEvidence.GetProperty("decision_reason").GetString());
+        Assert.Equal(
+            "codec",
+            Assert.Single(rssEvidence.GetProperty("evaluated_priority_groups").EnumerateArray())
+                .GetString());
+        Assert.Equal("Filiter1", rssEvidence.GetProperty("legacy_filter_scope").GetString());
+        Assert.Equal(370, rssEvidence.GetProperty("identity_groupid").GetInt32());
+        Assert.Equal("ingested", rssEvidence.GetProperty("effect_state").GetString());
         Assert.Equal("来源作品 第03话", root.GetProperty("summary").GetProperty("title").GetString());
         Assert.Equal(
             "ai_metadata",
@@ -216,6 +272,10 @@ public sealed class MetadataTaskDetailApiTests
             subtitle.GetProperty("episode_attempt_id").GetString());
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
         Assert.DoesNotContain("task-detail.torrent", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-rss-passkey", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('a', 64), body, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('b', 64), body, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('c', 64), body, StringComparison.Ordinal);
     }
 
     [Fact]
