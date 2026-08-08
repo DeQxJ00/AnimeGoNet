@@ -25,6 +25,7 @@ using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Cache;
 using AnimeGoNet.App.Ingest;
+using AnimeGoNet.App.Hosting;
 using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.Data.Downloads;
@@ -36,7 +37,9 @@ using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AnimeGoNet.App;
 
@@ -62,6 +65,7 @@ public static class AnimeGoApplication
         LegacyDownloaderMigrationState? legacyDownloaderMigrationState = null,
         CancellationToken cancellationToken = default)
     {
+        args = AnimeGoHostCommandLine.Normalize(args);
         var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -69,6 +73,27 @@ public static class AnimeGoApplication
             ContentRootPath = AppContext.BaseDirectory,
             WebRootPath = webRootPath,
         });
+        var debugEnabled = ParseOptionalBool(
+            FirstConfigurationValue(
+                builder.Configuration,
+                "ANIMEGO_DEBUG",
+                "debug"),
+            false,
+            "debug");
+        var webEnabled = ParseOptionalBool(
+            FirstConfigurationValue(
+                builder.Configuration,
+                "ANIMEGO_WEB",
+                "web"),
+            true,
+            "web");
+        builder.Logging.SetMinimumLevel(
+            debugEnabled ? LogLevel.Debug : LogLevel.Information);
+        if (!webEnabled)
+        {
+            builder.Services.Replace(
+                ServiceDescriptor.Singleton<IServer, HeadlessServer>());
+        }
         builder.Services.Configure<HostOptions>(host =>
             host.ShutdownTimeout = TimeSpan.FromSeconds(5));
         builder.Services.AddSingleton<WebSocketLogHub>();
@@ -179,6 +204,9 @@ public static class AnimeGoApplication
                     FilePath = Path.Combine(
                         layout.LogsPath,
                         "animego.log"),
+                    MinimumLevel = debugEnabled
+                        ? LogLevel.Debug
+                        : LogLevel.Information,
                 }));
         builder.Services.AddSingleton<ILoggerProvider>(
             static services =>
@@ -210,7 +238,7 @@ public static class AnimeGoApplication
         {
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
         }
-        if (!optionsWereSupplied)
+        if (!optionsWereSupplied && webEnabled)
         {
             ConfigureWebBinding(builder, options.Web);
         }

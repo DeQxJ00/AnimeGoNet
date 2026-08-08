@@ -692,8 +692,8 @@ public sealed class DeploymentYamlConfigurationTests
 
             await using var app = await AnimeGoApplication.BuildAsync(
                 [
-                    "--config", path,
-                    "--backup=false",
+                    "-config", path,
+                    "-backup=false",
                 ],
                 runningInContainer: false,
                 startBackgroundWorkers: false);

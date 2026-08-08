@@ -65,6 +65,7 @@ jobs:
         run: |
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           ./eng/smoke-native.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" -LegacyYamlUpgrade
+          ./eng/smoke-native-cli.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           ./eng/smoke-native-metadata.ps1 -Executable "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}"
           ./eng/smoke-legacy-data-migration.ps1 `
             -Application "artifacts/publish/${{ matrix.rid }}/${{ matrix.executable }}" `

@@ -24,6 +24,8 @@ HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 re
 
 宿主使用 5 秒 `ShutdownTimeout`。所有后台循环把 HostedService 的停止令牌继续传给 SQLite、HTTP、qBittorrent 和插件调用；配置文件已经持久化后的 schedule 热应用忽略客户端断开，但改用 `ApplicationStopping`，因此不会拖住进程退出。RSS winner 失败清理也只跨越请求取消，宿主停止时允许租约按超时恢复。日志 WebSocket 同时链接 `RequestAborted` 与 `ApplicationStopping`，停止时先结束收发并发送正常关闭帧。Linux/macOS 发布 smoke 对进程发送 `SIGTERM` 并要求 7 秒内零退出；5 秒是应用业务期限，额外 2 秒只用于 CI 调度余量。
 
+`web=false`/`ANIMEGO_WEB=false` 用显式 `HeadlessServer` 替换 Kestrel 的 `IServer`，而不是偷偷绑定随机或 loopback 端口；HostedService 生命周期和 5 秒退出期限保持不变。`debug=true` 在创建 provider 前同时设置宿主 filter 与滚动文件最低等级。CLI 只把固定上游的四个单短横线开关归一为 .NET 配置形式，其余现代部署配置参数原样交给 Configuration provider；帮助路径在构建宿主前返回，因此不会触碰数据目录。
+
 上游 Go 源码位于独立的 `AnimeGo` 目录和 Git 仓库，仅作为差分 fixture 与业务行为索引；本仓库只保存 `DotnetProject` 的 C# 主程序、测试、文档和交付资产，两边不共享 Git 历史。
 
 ## 2. 配置、数据与目录真相源

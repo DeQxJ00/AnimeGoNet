@@ -22,6 +22,28 @@ secret 回显到浏览器。
 最多 4096 个节点。重复键、非标量 mapping key、多个文档和不支持的版本会使启动
 失败。错误不回显配置值。
 
+## 主程序命令行
+
+固定上游 `cmd/animego` 的四个开关全部保留，并同时接受 Go 风格单短横线和现代双横线：
+
+```text
+-config <path> / --config <path>
+-debug[=true|false] / --debug[=true|false]
+-web[=true|false] / --web[=true|false]
+-backup[=true|false] / --backup[=true|false]
+```
+
+裸 bool 开关等价于 `=true`。`debug=true` 同时启用宿主和
+`data_path/logs/animego.log` 的 Debug 级别；默认只记录 Information 及以上。
+`web=false` 不绑定任何 TCP 端口，但仍启动已启用的后台 worker，适合只运行调度、
+下载和整理的 headless 实例。`-h`、`-help` 或 `--help` 只打印帮助并以 0 退出，
+不会创建 YAML、SQLite 或运行目录。非法 bool 值在任何运行目录写入前拒绝启动。
+
+对应环境别名为 `ANIMEGO_CONFIG`、`ANIMEGO_DEBUG`、`ANIMEGO_WEB`、
+`ANIMEGO_CONFIG_BACKUP`。AnimeGoNet 的统一覆盖约定仍是命令行高于环境变量；这是
+为全部配置键保持一致的已记录差异，而不是复制上游在解析 flag 后再强制读取环境变量
+的偶然顺序。
+
 ## 覆盖优先级
 
 最终优先级从高到低为：

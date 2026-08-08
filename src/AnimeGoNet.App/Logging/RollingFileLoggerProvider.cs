@@ -16,6 +16,8 @@ public sealed record RollingFileLogOptions
     public int MaximumBackups { get; init; } = DefaultMaximumBackups;
 
     public TimeSpan MaximumAge { get; init; } = DefaultMaximumAge;
+
+    public LogLevel MinimumLevel { get; init; } = LogLevel.Information;
 }
 
 public sealed class RollingFileLoggerProvider : ILoggerProvider
@@ -27,6 +29,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     private readonly long _maximumFileBytes;
     private readonly int _maximumBackups;
     private readonly TimeSpan _maximumAge;
+    private readonly LogLevel _minimumLevel;
     private FileStream? _stream;
     private bool _disabled;
     private bool _disposed;
@@ -59,11 +62,20 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
                 nameof(options),
                 "The rolling log maximum age must be between one tick and ten years.");
         }
+        if (options.MinimumLevel is LogLevel.None
+            || options.MinimumLevel < LogLevel.Trace
+            || options.MinimumLevel > LogLevel.Critical)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "The rolling log minimum level must be between Trace and Critical.");
+        }
 
         _filePath = Path.GetFullPath(options.FilePath);
         _maximumFileBytes = options.MaximumFileBytes;
         _maximumBackups = options.MaximumBackups;
         _maximumAge = options.MaximumAge;
+        _minimumLevel = options.MinimumLevel;
         var directory = Path.GetDirectoryName(_filePath)
             ?? throw new ArgumentException(
                 "The rolling log file must have a parent directory.",
@@ -251,7 +263,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
             NullScope.Instance;
 
         public bool IsEnabled(LogLevel logLevel) =>
-            logLevel >= LogLevel.Information
+            logLevel >= provider._minimumLevel
             && logLevel != LogLevel.None;
 
         public void Log<TState>(

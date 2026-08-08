@@ -235,7 +235,7 @@
 
 ## P10 — 组合与发布
 
-- [>] 完成 Host DI 和 CLI 行为：宿主组合、优雅退出、`--config`、三路径和规范嵌套配置的命令行覆盖已完成；上游其余 CLI parity 待审计。
+- [x] 完成 Host DI 和 CLI 行为：固定上游 `cmd/animego` 的 `config/debug/web/backup` 四个开关与对应 `ANIMEGO_*` 环境别名均已审计；兼容 Go 单短横线及现代双横线，裸 bool 等价 true，非法值在创建运行目录前失败；debug 同时放开宿主与滚动文件 Debug 日志，`web=false` 使用无监听 `IServer` 保留后台 worker，`-h/-help/--help` 不启动宿主。五 RID NativeAOT workflow 验证 help 和 headless 零 TCP 监听。
 - [>] 完成 Docker NativeAOT 镜像（双架构 Dockerfile、Buildx CI 和容器 smoke 已建立；本机无 Docker CLI，待 GitHub runner 实跑）。
 - [>] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证：基础容器 smoke 已强制使用 runner 的任意非 root UID/GID、只读 rootfs、`/tmp` noexec tmpfs 与 no-new-privileges，实际验证 `/data`/`/download`/`/tmp` 可写、镜像 healthcheck 变为 healthy，并要求 SIGTERM 7 秒内零退出且 SQLite 保留；Compose 的 PUID/PGID 替换与声明均有契约门禁，Docker runner 实跑结果待验收。
 - [x] 添加连接外部下载器和内置 Compose 下载器的部署示例：规范 YAML、环境变量、本机 TestSpace、官方双 qB Compose 均已记录；外部/远程双 qB 示例只启动 AnimeGoNet，强制地址和凭据由未跟踪环境变量传入，明确两端同一共享存储必须映射成相同 `/download`，并记录连接测试、硬链接路径探测、显式 Torrent 验收和清理边界。
