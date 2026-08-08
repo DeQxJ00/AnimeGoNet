@@ -19,7 +19,9 @@ public sealed record BangumiArchiveBuildOptions(
     string UpstreamSha256,
     DateTimeOffset GeneratedAtUtc,
     string MinimumClientVersion = "0.1.0",
-    int SubjectsPerShard = 25_000);
+    int SubjectsPerShard = 25_000,
+    int MinimumSubjectCount = 1,
+    int MinimumEpisodeCount = 1);
 
 public sealed record BangumiArchiveBuildResult(
     string OutputDirectory,
@@ -77,6 +79,16 @@ public static partial class BangumiArchivePackageBuilder
         try
         {
             var data = await ReadArchiveAsync(inputPath, cancellationToken).ConfigureAwait(false);
+            if (data.Subjects.Count < options.MinimumSubjectCount)
+            {
+                throw new InvalidDataException(
+                    $"The Bangumi Archive contains {data.Subjects.Count} anime Subjects, below the configured minimum of {options.MinimumSubjectCount}.");
+            }
+            if (data.Episodes.Count < options.MinimumEpisodeCount)
+            {
+                throw new InvalidDataException(
+                    $"The Bangumi Archive contains {data.Episodes.Count} normal anime Episodes, below the configured minimum of {options.MinimumEpisodeCount}.");
+            }
             var assets = await WriteAssetsAsync(stagingPath, options, data, cancellationToken)
                 .ConfigureAwait(false);
             var manifest = new DataManifest(
@@ -191,6 +203,7 @@ public static partial class BangumiArchivePackageBuilder
                     id,
                     subjectId,
                     episodeNumber,
+                    0,
                     NormalizeDate(root, "airdate")));
             },
             cancellationToken).ConfigureAwait(false);
@@ -206,6 +219,17 @@ public static partial class BangumiArchivePackageBuilder
             var episode = left.EpisodeNumber.CompareTo(right.EpisodeNumber);
             return episode != 0 ? episode : left.Id.CompareTo(right.Id);
         });
+        var currentSubjectId = 0;
+        var subjectSort = 0;
+        for (var index = 0; index < episodes.Count; index++)
+        {
+            if (episodes[index].SubjectId != currentSubjectId)
+            {
+                currentSubjectId = episodes[index].SubjectId;
+                subjectSort = 0;
+            }
+            episodes[index] = episodes[index] with { Sort = ++subjectSort };
+        }
         var episodeCounts = episodes
             .GroupBy(episode => episode.SubjectId)
             .ToDictionary(group => group.Key, group => group.Count());
@@ -269,17 +293,9 @@ public static partial class BangumiArchivePackageBuilder
                 episodeSlice[^1].SubjectId,
                 async gzip =>
                 {
-                    var currentSubjectId = 0;
-                    var sort = 0;
-                    foreach (var episode in episodeSlice)
+                    foreach (var episode in episodeSlice.OrderBy(static episode => episode.Id))
                     {
-                        if (episode.SubjectId != currentSubjectId)
-                        {
-                            currentSubjectId = episode.SubjectId;
-                            sort = 0;
-                        }
-                        sort++;
-                        await WriteEpisodeAsync(gzip, episode, sort, cancellationToken)
+                        await WriteEpisodeAsync(gzip, episode, cancellationToken)
                             .ConfigureAwait(false);
                     }
                 },
@@ -349,7 +365,6 @@ public static partial class BangumiArchivePackageBuilder
     private static async Task WriteEpisodeAsync(
         Stream output,
         NormalizedEpisode episode,
-        int sort,
         CancellationToken cancellationToken)
     {
         var buffer = new ArrayBufferWriter<byte>();
@@ -358,7 +373,7 @@ public static partial class BangumiArchivePackageBuilder
             writer.WriteStartObject();
             writer.WriteNumber("id", episode.Id);
             writer.WriteNumber("subject_id", episode.SubjectId);
-            writer.WriteNumber("sort", sort);
+            writer.WriteNumber("sort", episode.Sort);
             writer.WriteString(
                 "episode",
                 episode.EpisodeNumber.ToString("0.############################", CultureInfo.InvariantCulture));
@@ -624,6 +639,10 @@ public static partial class BangumiArchivePackageBuilder
             throw new ArgumentException("The generated timestamp must be UTC and ZIP-compatible.", nameof(options));
         if (options.SubjectsPerShard is < 1 or > 1_000_000)
             throw new ArgumentException("Subjects per shard must be between 1 and 1000000.", nameof(options));
+        if (options.MinimumSubjectCount is < 1 or > 10_000_000)
+            throw new ArgumentException("Minimum Subject count must be between 1 and 10000000.", nameof(options));
+        if (options.MinimumEpisodeCount is < 1 or > 100_000_000)
+            throw new ArgumentException("Minimum Episode count must be between 1 and 100000000.", nameof(options));
         if (!IsSafeHttpBaseUrl(options.AssetBaseUrl))
             throw new ArgumentException("The asset base URL is invalid.", nameof(options));
         ValidateText(options.UpstreamRepository, 512, "upstream repository");
@@ -669,7 +688,12 @@ public static partial class BangumiArchivePackageBuilder
 
     private sealed record NormalizedSubject(int Id, string Name, string? ChineseName, DateOnly? AirDate);
 
-    private sealed record NormalizedEpisode(int Id, int SubjectId, decimal EpisodeNumber, DateOnly? AirDate);
+    private sealed record NormalizedEpisode(
+        int Id,
+        int SubjectId,
+        decimal EpisodeNumber,
+        int Sort,
+        DateOnly? AirDate);
 
     private sealed record ArchiveData(
         IReadOnlyList<NormalizedSubject> Subjects,

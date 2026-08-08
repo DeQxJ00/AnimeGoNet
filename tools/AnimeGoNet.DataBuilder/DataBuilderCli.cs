@@ -17,6 +17,8 @@ internal static class DataBuilderCli
         "generated-at-utc",
         "minimum-client-version",
         "subjects-per-shard",
+        "minimum-subject-count",
+        "minimum-episode-count",
     ];
 
     private const string Usage = """
@@ -31,6 +33,8 @@ internal static class DataBuilderCli
           --generated-at-utc <ISO-8601 UTC>
           [--minimum-client-version <version>]
           [--subjects-per-shard <count>]
+          [--minimum-subject-count <count>]
+          [--minimum-episode-count <count>]
           [--upstream-repository <url>]
         """;
 
@@ -63,7 +67,15 @@ internal static class DataBuilderCli
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind),
                     values.GetValueOrDefault("minimum-client-version", "0.1.0"),
-                    ParsePositiveInt(values.GetValueOrDefault("subjects-per-shard", "25000"))));
+                    ParsePositiveInt(
+                        values.GetValueOrDefault("subjects-per-shard", "25000"),
+                        "subjects-per-shard"),
+                    ParsePositiveInt(
+                        values.GetValueOrDefault("minimum-subject-count", "1"),
+                        "minimum-subject-count"),
+                    ParsePositiveInt(
+                        values.GetValueOrDefault("minimum-episode-count", "1"),
+                        "minimum-episode-count")));
             Console.WriteLine(
                 $"Built {result.Manifest.DataVersion}: "
                 + $"{result.Manifest.SubjectCount} subjects, "
@@ -109,9 +121,9 @@ internal static class DataBuilderCli
             ? value
             : throw new ArgumentException($"--{name} is required.");
 
-    private static int ParsePositiveInt(string value) =>
+    private static int ParsePositiveInt(string value, string optionName) =>
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result)
         && result > 0
             ? result
-            : throw new ArgumentException("--subjects-per-shard must be a positive integer.");
+            : throw new ArgumentException($"--{optionName} must be a positive integer.");
 }

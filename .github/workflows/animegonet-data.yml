@@ -3,7 +3,7 @@ name: AnimeGoNetData build
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 23 * * 3'
+    - cron: '0 23 * * *'
 
 permissions:
   contents: read
@@ -56,7 +56,9 @@ jobs:
             --upstream-release archive \
             --upstream-asset '${{ steps.archive.outputs.asset }}' \
             --upstream-sha256 '${{ steps.archive.outputs.sha256 }}' \
-            --generated-at-utc '${{ steps.archive.outputs.generated_at }}'
+            --generated-at-utc '${{ steps.archive.outputs.generated_at }}' \
+            --minimum-subject-count 30000 \
+            --minimum-episode-count 300000
       - uses: actions/upload-artifact@v4
         with:
           name: animegonet-data-${{ steps.archive.outputs.data_version }}

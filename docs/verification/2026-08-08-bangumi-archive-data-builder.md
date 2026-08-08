@@ -21,34 +21,43 @@ before starting the builder.
   Episode numbers;
 - sorts IDs deterministically, assigns an integer storage order per Subject and
   calculates the normal-Episode count used by archive completeness checks;
+- writes each Episode asset in strict Episode-ID order required by the importer,
+  while preserving the separately calculated per-Subject episode ordering;
 - shards Subjects and their Episodes by Subject range, writes LF-only UTF-8
   JSONL.gz, then records size, count, range and SHA-256 in schema-v1 manifest;
 - parses its own manifest through the production `DataManifestParser`;
 - creates a strict offline ZIP containing only `manifest.json` and declared
   assets, with a fixed timestamp and byte-identical output for identical input;
+- refuses to expose output when retained anime Subjects or normal Episodes fall
+  below caller-configured count floors; the official workflow fixes these at
+  30,000 and 300,000 respectively;
 - builds in a unique sibling partial directory and exposes the destination only
   by final atomic directory rename. Hash/format failures remove partial output.
 
-The workflow has read-only repository permission and uploads a seven-day
-Actions artifact. It does not create or overwrite a GitHub Release; publishing
-remains an explicit repository-owner action.
+The workflow runs daily at 23:00 UTC and supports manual dispatch. It has
+read-only repository permission and uploads a seven-day Actions artifact. It
+does not create or overwrite a GitHub Release in the main program repository;
+publishing to the independent AnimeGoNetData repository remains a separate
+repository-owner action.
 
 ## Test evidence
 
-`BangumiArchivePackageBuilderTests` constructs a safe miniature ZIP using the
+`BangumiArchivePackageBuilderTests` constructs safe miniature ZIPs using the
 official field shapes. It proves filtering, out-of-order sorting, fractional EP
-preservation, invalid-date nulling, Subject-range shards, hashes, strict offline
-ZIP entries, deterministic bytes, hash-failure cleanup and workflow safety. The
-generated assets are imported by the real `DataPackageStore`, activated in a
-temporary SQLite database and read through `BangumiArchiveStore`, proving the
-publisher and consumer schemas agree.
+preservation, invalid-date nulling, Subject-range shards, unique retained
+Subject/Episode IDs, output Episode-to-Subject references, configured count
+floors, reverse ID/episode ordering, hashes, strict offline ZIP entries,
+deterministic bytes, failure cleanup
+and daily/manual workflow safety. The generated assets are imported by the real
+`DataPackageStore`, activated in a temporary SQLite database and read through
+`BangumiArchiveStore`, proving the publisher and consumer schemas agree.
 
-Revalidated on 2026-08-08: builder/workflow tests passed 5/5, including the
-8 MiB streaming JSONL line boundary; the complete solution passed 1358/1358
+Revalidated on 2026-08-08: builder/workflow tests passed 9/9, including the
+8 MiB streaming JSONL line boundary; the complete solution passed 1364/1364
 with zero failures and zero skips; changed-file
 `dotnet format --verify-no-changes`, workflow YAML parsing and
 `git diff --check` passed. A fresh win-x64 `PublishAot=true` publish completed
 `Generating native code`, and the resulting native DataBuilder executable
-returned its complete `--help` contract successfully. The tests used only a
-generated miniature Archive ZIP and did not download the current 429 MB public
-release or access any user data.
+returned both count-floor options in its complete `--help` contract. The tests
+used only generated miniature Archive ZIPs and did not download the current
+public release or access any user data.

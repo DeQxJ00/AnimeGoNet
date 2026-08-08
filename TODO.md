@@ -104,7 +104,7 @@
 - [>] 移植 Mikan：RSS/页面身份、`mikanid`/`groupid`、作品页 `bgmid` 发现、五档 legacy filter、新黑白名单与有序优选、SourceProfile 级私有身份 Cookie、winner 统一导入均已接入；完整上游边界仍按本节其他未完成项继续验收。
 - [x] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`：RSS source URL 优先、channel link 回退及 path/query 解析已验证；RSS winner 会安全抓取对应作品页，仅接受 `p.bangumi-info` 内 `bgm.tv`/`bangumi.tv` 的正整数 Subject 链接，把 `bgmid` 与发现状态/失败码写入 schema v26 批次和统一导入任务。成功结果按批次复用；失败不下载且允许下一次显式 RSS 处理重试。
 - [x] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}`、官方 `/v0/subjects/{bgmid}/subjects` 与分页 `/v0/episodes` 实现 AOT-safe Subject/关系/Episode 客户端、固定 User-Agent、日期/身份/分页校验和稳定网络/协议失败分类；主程序默认先读活动 AnimeGoNet Data Archive 的 SQLite Subject/完整 Episode 快照，不存在、不完整或零集未知时回退在线 API，关系保持在线，版本激活/回滚无需重启即生效。
-- [>] 移植 Bangumi Archive 下载/缓存刷新：主程序已支持 manifest/asset 下载、校验、原子版本导入、活动/前一版本切换与回滚，并已把活动版本接入 Bangumi Subject/Episode 读取；从上游原始 Archive 生成、清洗、分片、gzip 和发布数据包仍属于 P13 待实现边界。
+- [x] 移植 Bangumi Archive 下载/缓存刷新：主程序已支持 manifest/asset 下载、校验、原子版本导入、活动/前一版本切换与回滚，并已把活动版本接入 Bangumi Subject/Episode 读取；独立 AOT DataBuilder 已完成官方 Archive SHA 门禁、动画/正片清洗、确定性分片/gzip/manifest/离线包及生产数量下限，发布到独立数据仓库仍由 P11 的不可变 Release 项单独跟踪。
 - [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；安全可取消的网络/429/5xx 重试已接入；Search/Series/Season/Episode 的 SQLite 成功响应缓存、14 天默认 TTL、旧配置迁移、环境/命令行锁和 WebUI 管理已验证，失败/404 不做 negative cache；Bangumi Subject → TMDB Series/Season、活动 Archive 缓存与逐文件 Episode worker/运行审计已接入，Bangumi Episode 确定性匹配的其余 parity 待实现）。
 - [>] 实现 AnimeGoNet 新增的 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：日文名、中文名、各自多轮清理及每轮全部合格 Series 均以完整 `tmdbid+Season` 为成功条件；P3 已按每个 Bangumi 前作的日文名、中文名和开播日期重新联合搜索，可恢复不同 TMDB Series，并覆盖多层、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；TMDB/Bangumi 网络重试策略已完成，受控 live fixture 仍待实现。
 - [x] 实现统一 `ai_use_metadata_match`（默认 `false`）：一个共享解析器按下载任务发送总标题、候选视频相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB Series/Season/Episode 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
@@ -258,9 +258,9 @@
 - [x] 确认独立数据仓库名称为 `AnimeGoNetData`；托管地址由该独立任务配置。
 - [x] 定义 `manifest.json`、subjects/episodes JSONL schema 和版本策略：v1 字段、兼容规则、不可变发布、确定性 gzip/JSONL、哈希/大小/数量/ID 范围与引用语义见 `docs/DATA_MANIFEST_V1.md`；主程序已有 NativeAOT-safe 严格 manifest 解析器。
 - [x] 定义并验证 `setting.data_update` 配置 schema、默认值、环境变量覆盖和热重载行为：主程序提供默认关闭、04:00 六字段 Cron、可空 manifest URL、自动下载/导入、保留 2 版和 300 秒超时的强类型绑定/校验；Web/API 使用 `data_path/config/application.private.json` 安全私有覆盖而不改写部署 YAML，采用 revision 原子写入。七个字段均支持环境变量只读锁；保存或恢复后共享运行快照与 Cron 任务立即热重排，其他配置字段仍明确要求重启。
-- [ ] 实现 Bangumi Archive 下载、校验、清洗、分片和 gzip。
-- [ ] 建立每日检查 + 手动触发 GitHub Action。
-- [ ] 建立数据唯一性、引用完整性、数量下限和确定性测试。
+- [x] 实现 Bangumi Archive 下载、校验、清洗、分片和 gzip：官方 `aux/latest.json` 锁定 URL/文件名/时间/SHA-256，AOT DataBuilder 原子生成 schema-v1 assets、manifest 和离线包。
+- [x] 建立每日检查 + 手动触发 GitHub Action：每日 23:00 UTC 检查官方 Archive，亦支持 `workflow_dispatch`；只读权限构建并上传短期 Actions artifact，不误发到主程序仓库。
+- [x] 建立数据唯一性、引用完整性、数量下限和确定性测试：重复 Subject/Episode ID、输出 Episode→Subject 引用、生产 30000/300000 下限、字节确定性及失败零暴露均有契约测试。
 - [ ] 发布不可变 Release assets、SHA-256 和 latest manifest。
 - [x] AnimeGoNet 实现检查更新、流式下载、校验和 staging SQLite 导入：schema v28 已加入版本、运行审计、独立 staging 与版本化 Bangumi Archive 表；本地包导入会先验压缩文件大小/SHA-256，再以有界单行缓冲流式解 gzip/JSONL，校验字段、顺序、分片范围、计数、唯一 ID 与 Subject 引用。schema v29 记录检查/下载/导入阶段与已验证下载目录；HTTP 使用 headers-first、有界 manifest 和 64 KiB 流式 asset 下载，逐资产验证长度/SHA-256 后才原子移动到托管包目录。
 - [x] 实现事务切换、上版保留、失败回滚和离线手工导入：存储核心原子切换 active/previous、保留 2–10 版、支持显式回滚和同版本不可变/幂等；离线 ZIP API/WebUI 只接受根目录 `manifest.json + 声明资产`，流式落盘后逐条验证路径、长度、SHA-256、gzip/JSONL、数量和引用，再进入相同事务导入。全部失败路径保持旧 active 并清理 partial。

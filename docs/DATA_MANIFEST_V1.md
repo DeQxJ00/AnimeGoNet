@@ -126,4 +126,7 @@ Publisher output is sorted, UTF-8 without BOM, one LF per line, JSON properties
 in the order shown, and gzip metadata is normalized. The same upstream input
 must produce byte-identical assets. Publication requires unique IDs, valid
 ranges, Subject references, exact counts, SHA-256/size checks and configured
-minimum count thresholds.
+minimum count thresholds. The official daily workflow currently requires at
+least 30,000 retained anime Subjects and 300,000 retained normal anime Episodes;
+the builder applies both thresholds before exposing its atomically renamed
+output directory.

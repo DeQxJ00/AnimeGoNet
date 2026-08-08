@@ -53,9 +53,15 @@ public sealed class BangumiArchivePackageBuilderTests
                 result.Manifest.Assets.Where(asset => asset.Kind == DataAssetKind.Episodes));
             Assert.Equal([2, 3, 4], subjectLines.Select(line => line.GetProperty("id").GetInt32()).ToArray());
             Assert.Equal([20, 21, 30], episodeLines.Select(line => line.GetProperty("id").GetInt32()).ToArray());
-            Assert.Equal(["1.5", "2", "1"], episodeLines.Select(line => line.GetProperty("episode").GetString()!).ToArray());
-            Assert.Equal([1, 2, 1], episodeLines.Select(line => line.GetProperty("sort").GetInt32()).ToArray());
-            Assert.Equal(JsonValueKind.Null, episodeLines[0].GetProperty("air_date").ValueKind);
+            var subjectIds = subjectLines
+                .Select(line => line.GetProperty("id").GetInt32())
+                .ToHashSet();
+            Assert.All(
+                episodeLines,
+                line => Assert.Contains(line.GetProperty("subject_id").GetInt32(), subjectIds));
+            Assert.Equal(["2", "1.5", "1"], episodeLines.Select(line => line.GetProperty("episode").GetString()!).ToArray());
+            Assert.Equal([2, 1, 1], episodeLines.Select(line => line.GetProperty("sort").GetInt32()).ToArray());
+            Assert.Equal(JsonValueKind.Null, episodeLines[1].GetProperty("air_date").ValueKind);
             Assert.Equal(2, subjectLines[0].GetProperty("episode_count").GetInt32());
             Assert.Equal(0, subjectLines[2].GetProperty("episode_count").GetInt32());
 
@@ -142,6 +148,105 @@ public sealed class BangumiArchivePackageBuilderTests
         }
     }
 
+    [Theory]
+    [InlineData(4, 1, "anime Subjects")]
+    [InlineData(1, 4, "normal anime Episodes")]
+    public async Task ConfiguredProductionCountFloorRejectsTruncatedArchive(
+        int minimumSubjects,
+        int minimumEpisodes,
+        string expectedKind)
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = await WriteArchiveAsync(root);
+            var hash = await Sha256Async(archivePath);
+            var output = Path.Combine(root, "package");
+
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BangumiArchivePackageBuilder.BuildAsync(
+                    Options(
+                        archivePath,
+                        output,
+                        hash,
+                        minimumSubjects,
+                        minimumEpisodes)));
+
+            Assert.Contains(expectedKind, exception.Message, StringComparison.Ordinal);
+            Assert.Contains("configured minimum", exception.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(output));
+            Assert.Empty(Directory.GetDirectories(root, ".package.partial-*"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DuplicateAnimeSubjectIdIsRejectedBeforeOutputIsExposed()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = await WriteArchiveAsync(
+                root,
+                """
+                {"id":1,"type":2,"name":"One","name_cn":null,"date":null}
+                {"id":1,"type":2,"name":"Duplicate","name_cn":null,"date":null}
+                """,
+                """
+                {"id":10,"type":0,"subject_id":1,"sort":1,"airdate":null}
+                """);
+            var output = Path.Combine(root, "package");
+            var hash = await Sha256Async(archivePath);
+
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BangumiArchivePackageBuilder.BuildAsync(
+                    Options(archivePath, output, hash)));
+
+            Assert.Contains("duplicate anime Subject ID", exception.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(output));
+            Assert.Empty(Directory.GetDirectories(root, ".package.partial-*"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DuplicateNormalEpisodeIdIsRejectedBeforeOutputIsExposed()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archivePath = await WriteArchiveAsync(
+                root,
+                """
+                {"id":1,"type":2,"name":"One","name_cn":null,"date":null}
+                """,
+                """
+                {"id":10,"type":0,"subject_id":1,"sort":1,"airdate":null}
+                {"id":10,"type":0,"subject_id":1,"sort":2,"airdate":null}
+                """);
+            var output = Path.Combine(root, "package");
+            var hash = await Sha256Async(archivePath);
+
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BangumiArchivePackageBuilder.BuildAsync(
+                    Options(archivePath, output, hash)));
+
+            Assert.Contains("duplicate normal Episode ID", exception.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(output));
+            Assert.Empty(Directory.GetDirectories(root, ".package.partial-*"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ScheduledWorkflowUsesOfficialMetadataAndDoesNotPublishAutomatically()
     {
@@ -157,6 +262,9 @@ public sealed class BangumiArchivePackageBuilderTests
         Assert.Contains("bangumi/Archive/master/aux/latest.json", workflow, StringComparison.Ordinal);
         Assert.Contains("sha256sum --check --strict", workflow, StringComparison.Ordinal);
         Assert.Contains("tools/AnimeGoNet.DataBuilder", workflow, StringComparison.Ordinal);
+        Assert.Contains("cron: '0 23 * * *'", workflow, StringComparison.Ordinal);
+        Assert.Contains("--minimum-subject-count 30000", workflow, StringComparison.Ordinal);
+        Assert.Contains("--minimum-episode-count 300000", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
         Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("gh release", workflow, StringComparison.OrdinalIgnoreCase);
@@ -204,7 +312,9 @@ public sealed class BangumiArchivePackageBuilderTests
     private static BangumiArchiveBuildOptions Options(
         string archivePath,
         string output,
-        string hash) =>
+        string hash,
+        int minimumSubjects = 1,
+        int minimumEpisodes = 1) =>
         new(
             archivePath,
             output,
@@ -216,26 +326,39 @@ public sealed class BangumiArchivePackageBuilderTests
             hash,
             new DateTimeOffset(2026, 8, 4, 21, 5, 3, TimeSpan.Zero),
             "0.1.0",
-            SubjectsPerShard: 1);
+            SubjectsPerShard: 1,
+            MinimumSubjectCount: minimumSubjects,
+            MinimumEpisodeCount: minimumEpisodes);
 
     private static async Task<string> WriteArchiveAsync(string root)
     {
-        var path = Path.Combine(root, "dump-fixture.zip");
-        await using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-        using var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: true);
-        await WriteEntryAsync(archive, "subject.jsonlines", """
+        return await WriteArchiveAsync(
+            root,
+            """
             {"id":4,"type":2,"name":"No Episodes","name_cn":"","date":""}
             {"id":1,"type":1,"name":"Book","name_cn":"书","date":"2020-01-01"}
             {"id":3,"type":2,"name":"Third","name_cn":null,"date":"2024-02-30"}
             {"id":2,"type":2,"name":"Second","name_cn":" 第二部 ","date":"2024-01-01"}
-            """);
-        await WriteEntryAsync(archive, "episode.jsonlines", """
-            {"id":21,"type":0,"subject_id":2,"sort":2,"airdate":"2024-01-08"}
+            """,
+            """
+            {"id":21,"type":0,"subject_id":2,"sort":1.5,"airdate":"invalid"}
             {"id":99,"type":0,"subject_id":1,"sort":1,"airdate":"2020-01-01"}
             {"id":31,"type":1,"subject_id":3,"sort":1,"airdate":"2024-02-01"}
-            {"id":20,"type":0,"subject_id":2,"sort":1.5,"airdate":"invalid"}
+            {"id":20,"type":0,"subject_id":2,"sort":2,"airdate":"2024-01-08"}
             {"id":30,"type":0,"subject_id":3,"sort":1,"airdate":"2024-02-01"}
             """);
+    }
+
+    private static async Task<string> WriteArchiveAsync(
+        string root,
+        string subjects,
+        string episodes)
+    {
+        var path = Path.Combine(root, "dump-fixture.zip");
+        await using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+        using var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: true);
+        await WriteEntryAsync(archive, "subject.jsonlines", subjects);
+        await WriteEntryAsync(archive, "episode.jsonlines", episodes);
         await WriteEntryAsync(archive, "person.jsonlines", "{\"id\":1}\n");
         return path;
     }

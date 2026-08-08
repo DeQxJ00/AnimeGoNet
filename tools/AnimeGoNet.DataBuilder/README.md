@@ -11,7 +11,9 @@ name to match the local file, reads only the root `subject.jsonlines` and
 sorts records, calculates normal Episode counts, shards by Subject range, emits
 deterministic JSONL.gz assets and `manifest.json`, then creates the strict
 offline-import ZIP. Output is staged beside the destination and renamed only
-after every hash and manifest validation succeeds.
+after every hash and manifest validation succeeds. Production callers should set
+`--minimum-subject-count` and `--minimum-episode-count` so a truncated or
+unexpectedly filtered upstream export fails before any output is exposed.
 
 Example:
 
@@ -24,7 +26,9 @@ dotnet run --project tools/AnimeGoNet.DataBuilder -- `
   --upstream-release archive `
   --upstream-asset dump-2026-08-04.210502Z.zip `
   --upstream-sha256 <sha256-from-latest-json> `
-  --generated-at-utc 2026-08-04T21:05:03.0000000+00:00
+  --generated-at-utc 2026-08-04T21:05:03.0000000+00:00 `
+  --minimum-subject-count 30000 `
+  --minimum-episode-count 300000
 ```
 
 The builder never downloads data itself and never accepts credentials. The
