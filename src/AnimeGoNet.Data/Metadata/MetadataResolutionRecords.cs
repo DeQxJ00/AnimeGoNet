@@ -179,8 +179,24 @@ public sealed record MetadataTaskAiProjection(
     long DurationMilliseconds,
     DateTimeOffset AttemptedAtUtc);
 
+public sealed record MetadataTaskSourceProjection(
+    string SourceProfileId,
+    long SourceProfileRevision,
+    string SourceId,
+    string SourceTitle,
+    string? SourceItemIdFingerprint,
+    string? SourceWorkIdFingerprint,
+    int? MikanId,
+    int? GroupId,
+    int? BangumiSubjectId,
+    int? AniDbAnimeId,
+    string? ImdbTitleId,
+    bool SourcePublishedAtRawAvailable,
+    DateTimeOffset? SourcePublishedAt);
+
 public sealed record MetadataTaskDetailProjection(
     MetadataTaskListProjection Summary,
+    MetadataTaskSourceProjection Source,
     MetadataTaskAiProjection? Ai,
     IReadOnlyList<MetadataTaskFileDetailProjection> Files);
 

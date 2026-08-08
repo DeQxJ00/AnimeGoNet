@@ -80,7 +80,7 @@ AnimeGoNet.slnx
 
 ### 任务、去重与生命周期
 
-- `IngestTask`：接受一个统一导入 item 后的总任务，保存来源/路由/规则快照。
+- `IngestTask`：接受一个统一导入 item 后的总任务，保存 source profile/revision、adapter、来源标题、item/work ID、Mikan/group/Bangumi/AniDB/IMDb、来源发布时间及路由/规则快照；这些均为来源证据，不得写入 TMDB 规范身份。详情 API 只返回不透明 item/work ID 的域隔离 SHA-256 指纹，不返回原值。
 - `TaskFile`：Torrent 内可信文件路径、容量、来源 EP 候选、规范 TMDB 目标或 `Other` 原因。
 - `EpisodeClaim`：恢复暂停下载器前事务占位；规范唯一键 `(tmdb_series_id, season_number, episode_number)`。
 - `CompletionRecord`：只在下载、文件策略、整理和必要 NFO 全部成功后写入；同 TMDB+Season+EP 的后续输入直接跳过，其他 EP 不受影响。

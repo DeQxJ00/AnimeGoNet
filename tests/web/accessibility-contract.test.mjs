@@ -5,6 +5,7 @@ import { parseHTML } from "linkedom";
 
 const htmlPath = new URL("../../src/AnimeGoNet.App/wwwroot/index.html", import.meta.url);
 const cssPath = new URL("../../src/AnimeGoNet.App/wwwroot/styles.css", import.meta.url);
+const appPath = new URL("../../src/AnimeGoNet.App/wwwroot/app.js", import.meta.url);
 
 async function page() {
   const html = await readFile(htmlPath, "utf8");
@@ -78,4 +79,15 @@ test("stylesheet provides focus, responsive and reduced-motion contracts", async
   assert.match(css, /@media\s*\(max-width:\s*620px\)/);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(css, /min-height:\s*44px/);
+});
+
+test("metadata detail visibly separates source evidence from TMDB authority", async () => {
+  const [app, css] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  assert.match(app, /来源持久证据（不作为 TMDB 规范字段）/);
+  assert.match(app, /source_item_id_fingerprint/);
+  assert.match(app, /source_work_id_fingerprint/);
+  assert.match(css, /\.metadata-source-evidence\s*\{/);
 });

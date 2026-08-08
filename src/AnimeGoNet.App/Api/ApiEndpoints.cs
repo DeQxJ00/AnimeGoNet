@@ -4102,6 +4102,20 @@ public static class ApiEndpoints
             .ConfigureAwait(false);
         return TypedResults.Ok(new MetadataTaskDetailResponse(
             ToResponse(item),
+            new MetadataTaskSourceEvidenceItem(
+                detail.Source.SourceProfileId,
+                detail.Source.SourceProfileRevision,
+                detail.Source.SourceId,
+                detail.Source.SourceTitle,
+                detail.Source.SourceItemIdFingerprint,
+                detail.Source.SourceWorkIdFingerprint,
+                detail.Source.MikanId,
+                detail.Source.GroupId,
+                detail.Source.BangumiSubjectId,
+                detail.Source.AniDbAnimeId,
+                detail.Source.ImdbTitleId,
+                detail.Source.SourcePublishedAtRawAvailable,
+                detail.Source.SourcePublishedAt),
             rssEntries.Select(entry => new MetadataTaskRssEvidenceItem(
                 entry.BatchId,
                 entry.EntryOrdinal,

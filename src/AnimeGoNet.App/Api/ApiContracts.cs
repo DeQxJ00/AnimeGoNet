@@ -645,12 +645,29 @@ public sealed record MetadataTaskListItem(
 
 public sealed record MetadataTaskDetailResponse(
     [property: JsonPropertyName("summary")] MetadataTaskListItem Summary,
+    [property: JsonPropertyName("source_evidence")]
+    MetadataTaskSourceEvidenceItem SourceEvidence,
     [property: JsonPropertyName("rss_evidence")]
     IReadOnlyList<MetadataTaskRssEvidenceItem> RssEvidence,
     [property: JsonPropertyName("ai")] MetadataTaskAiItem Ai,
     [property: JsonPropertyName("nfo_rewrites")]
     IReadOnlyList<MetadataTaskNfoRewriteItem> NfoRewrites,
     [property: JsonPropertyName("files")] IReadOnlyList<MetadataTaskFileItem> Files);
+
+public sealed record MetadataTaskSourceEvidenceItem(
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("source_profile_revision")] long SourceProfileRevision,
+    [property: JsonPropertyName("source_id")] string SourceId,
+    [property: JsonPropertyName("source_title")] string SourceTitle,
+    [property: JsonPropertyName("source_item_id_fingerprint")] string? SourceItemIdFingerprint,
+    [property: JsonPropertyName("source_work_id_fingerprint")] string? SourceWorkIdFingerprint,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("groupid")] int? GroupId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("anidbid")] int? AniDbAnimeId,
+    [property: JsonPropertyName("imdbid")] string? ImdbTitleId,
+    [property: JsonPropertyName("published_at_raw_available")] bool PublishedAtRawAvailable,
+    [property: JsonPropertyName("published_at")] DateTimeOffset? PublishedAt);
 
 public sealed record MetadataTaskRssEvidenceItem(
     [property: JsonPropertyName("batch_id")] string BatchId,

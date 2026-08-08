@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
@@ -2053,6 +2054,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         MetadataTaskListProjection? summary;
+        MetadataTaskSourceProjection source;
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
@@ -2180,7 +2182,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
-                       task.updated_at_utc
+                       task.updated_at_utc,
+                       task.source_profile_id, task.source_profile_revision,
+                       task.source_item_id, task.source_work_id, task.groupid,
+                       task.anidb_id, task.imdb_id,
+                       task.source_published_at_raw IS NOT NULL,
+                       task.source_published_at
                 FROM ingest_tasks AS task
                 LEFT JOIN task_files AS file ON file.task_id = task.id
                 WHERE task.id = $task_id
@@ -2194,6 +2201,30 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             }
 
             summary = ReadTaskListProjection(reader);
+            var sourceId = summary.SourceId;
+            source = new MetadataTaskSourceProjection(
+                reader.GetString(32),
+                reader.GetInt64(33),
+                sourceId,
+                summary.Title,
+                reader.IsDBNull(34)
+                    ? null
+                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(34)),
+                reader.IsDBNull(35)
+                    ? null
+                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(35)),
+                summary.MikanId,
+                reader.IsDBNull(36) ? null : reader.GetInt32(36),
+                summary.BangumiSubjectId,
+                reader.IsDBNull(37) ? null : reader.GetInt32(37),
+                reader.IsDBNull(38) ? null : reader.GetString(38),
+                reader.GetInt64(39) != 0,
+                reader.IsDBNull(40)
+                    ? null
+                    : DateTimeOffset.Parse(
+                        reader.GetString(40),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind));
         }
 
         MetadataTaskAiProjection? ai = null;
@@ -2271,8 +2302,14 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             }
         }
 
-        return new MetadataTaskDetailProjection(summary, ai, files);
+        return new MetadataTaskDetailProjection(summary, source, ai, files);
     }
+
+    private static string FingerprintSourceIdentifier(
+        string sourceId,
+        string kind,
+        string value) =>
+        StableHash.Sha256LowerHex($"animegonet-source-id\0{sourceId}\0{kind}\0{value}");
 
     private static MetadataTaskListProjection ReadTaskListProjection(SqliteDataReader reader)
     {

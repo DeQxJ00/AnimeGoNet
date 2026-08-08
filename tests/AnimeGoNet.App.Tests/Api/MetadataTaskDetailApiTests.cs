@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,7 +18,15 @@ public sealed class MetadataTaskDetailApiTests
               "source": "mikan",
               "data": [{
                 "torrent": "https://mikanani.me/private-passkey/task-detail.torrent",
-                "info": { "title": "来源作品 第03话", "mikanid": 3951, "bgmid": 547888 }
+                "info": {
+                  "title": "来源作品 第03话",
+                  "source_item_id": "private-source-item-id",
+                  "source_work_id": "3951",
+                  "mikanid": 3951,
+                  "bgmid": 547888,
+                  "anidbid": 999,
+                  "imdbid": "tt1234567"
+                }
               }]
             }
             """;
@@ -189,6 +198,7 @@ public sealed class MetadataTaskDetailApiTests
         var body = await response.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(body);
         var root = json.RootElement;
+        var sourceEvidence = root.GetProperty("source_evidence");
         var files = root.GetProperty("files").EnumerateArray().ToArray();
         var rssEvidence = Assert.Single(root.GetProperty("rss_evidence").EnumerateArray());
         Assert.Equal(2, files.Length);
@@ -201,6 +211,24 @@ public sealed class MetadataTaskDetailApiTests
                 == "Source Show - 03.zh-Hans.ass");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("mikan", sourceEvidence.GetProperty("source_profile_id").GetString());
+        Assert.True(sourceEvidence.GetProperty("source_profile_revision").GetInt64() > 0);
+        Assert.Equal("mikan", sourceEvidence.GetProperty("source_id").GetString());
+        Assert.Equal("来源作品 第03话", sourceEvidence.GetProperty("source_title").GetString());
+        Assert.Equal(
+            StableHash.Sha256LowerHex(
+                "animegonet-source-id\0mikan\0item\0private-source-item-id"),
+            sourceEvidence.GetProperty("source_item_id_fingerprint").GetString());
+        Assert.Equal(
+            StableHash.Sha256LowerHex("animegonet-source-id\0mikan\0work\03951"),
+            sourceEvidence.GetProperty("source_work_id_fingerprint").GetString());
+        Assert.Equal(3951, sourceEvidence.GetProperty("mikanid").GetInt32());
+        Assert.Equal(JsonValueKind.Null, sourceEvidence.GetProperty("groupid").ValueKind);
+        Assert.Equal(547888, sourceEvidence.GetProperty("bgmid").GetInt32());
+        Assert.Equal(999, sourceEvidence.GetProperty("anidbid").GetInt32());
+        Assert.Equal("tt1234567", sourceEvidence.GetProperty("imdbid").GetString());
+        Assert.False(sourceEvidence.GetProperty("published_at_raw_available").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, sourceEvidence.GetProperty("published_at").ValueKind);
         Assert.Equal("rss-detail-batch", rssEvidence.GetProperty("batch_id").GetString());
         Assert.Equal(0, rssEvidence.GetProperty("entry_ordinal").GetInt32());
         Assert.Equal("mikan", rssEvidence.GetProperty("source_profile_id").GetString());
@@ -273,6 +301,7 @@ public sealed class MetadataTaskDetailApiTests
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
         Assert.DoesNotContain("task-detail.torrent", body, StringComparison.Ordinal);
         Assert.DoesNotContain("private-rss-passkey", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-source-item-id", body, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('a', 64), body, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('b', 64), body, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('c', 64), body, StringComparison.Ordinal);

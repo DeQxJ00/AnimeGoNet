@@ -3123,6 +3123,32 @@ async function loadMetadataDetail(taskId, target, button) {
                 `${textOrDash(detail.ai.error_code)} · ${textOrDash(detail.ai.reason)}`;
             ai.append(reason);
         }
+        const sourceEvidence = document.createElement("section");
+        sourceEvidence.className = "metadata-source-evidence";
+        const sourceHeading = document.createElement("h4");
+        sourceHeading.textContent = "来源持久证据（不作为 TMDB 规范字段）";
+        const sourceTitle = document.createElement("strong");
+        sourceTitle.textContent = detail.source_evidence.source_title;
+        const sourceRoute = document.createElement("p");
+        sourceRoute.textContent =
+            `${detail.source_evidence.source_id} / ${detail.source_evidence.source_profile_id}`
+                + ` rev ${detail.source_evidence.source_profile_revision}`;
+        const sourceIds = document.createElement("p");
+        sourceIds.textContent =
+            `mikanid ${detail.source_evidence.mikanid ?? "—"} · groupid ${detail.source_evidence.groupid ?? "—"}`
+                + ` · bgmid ${detail.source_evidence.bgmid ?? "—"} · AniDB ${detail.source_evidence.anidbid ?? "—"}`
+                + ` · IMDb ${detail.source_evidence.imdbid ?? "—"}`;
+        const sourceOpaqueIds = document.createElement("p");
+        sourceOpaqueIds.textContent =
+            `来源条目指纹 ${detail.source_evidence.source_item_id_fingerprint?.slice(0, 12) ?? "—"}`
+                + ` · 来源作品指纹 ${detail.source_evidence.source_work_id_fingerprint?.slice(0, 12) ?? "—"}`;
+        const sourcePublished = document.createElement("p");
+        sourcePublished.textContent = detail.source_evidence.published_at
+            ? `来源发布时间 ${new Date(detail.source_evidence.published_at).toLocaleString()}`
+            : detail.source_evidence.published_at_raw_available
+                ? "来源发布时间原文已保存，但没有可靠的规范时间"
+                : "没有来源发布时间证据";
+        sourceEvidence.append(sourceHeading, sourceTitle, sourceRoute, sourceIds, sourceOpaqueIds, sourcePublished);
         const rssEvidence = document.createElement("section");
         rssEvidence.className = "metadata-rss-evidence";
         if (detail.rss_evidence.length > 0) {
@@ -3250,7 +3276,7 @@ async function loadMetadataDetail(taskId, target, button) {
                 files.append(row);
             }
         }
-        target.replaceChildren(ai, ...(detail.rss_evidence.length > 0 ? [rssEvidence] : []), ...(detail.nfo_rewrites.length > 0 ? [nfoRewrites] : []), files);
+        target.replaceChildren(sourceEvidence, ai, ...(detail.rss_evidence.length > 0 ? [rssEvidence] : []), ...(detail.nfo_rewrites.length > 0 ? [nfoRewrites] : []), files);
         button.disabled = false;
         button.textContent = "收起来源 / TMDB 对照";
         button.onclick = () => {

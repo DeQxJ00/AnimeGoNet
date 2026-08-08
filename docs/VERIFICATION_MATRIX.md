@@ -29,7 +29,7 @@
 | AI 元数据匹配 | 单开关/单Prompt/每任务最多一次调用、任务标题+文件名+容量+可空Bgm/AniDB/IMDb、本地MCP、候选验证、Web Search后备、Season 0拒绝、Other、缓存 | U/C/E | fake server 全过；AniDB/IMDb候选经TMDB验证，已确认Series/Season不能被AI改写，阶段间不得二次调用 |
 | C# 内置插件 | source/feed/parser/filter/rename/schedule 的配置、顺序、结果 | U/P/E | 显式注册；上游五类保持 parity，新增 source adapter 通过路由契约 |
 | C# 外部插件 | manifest、协议版本、五 RID、配置、超时、取消、崩溃 | C/P/I/E | JIT/AOT 示例均通过，故障不拖垮主进程 |
-| Parser | 标题/季度/集数/字幕组/Mikan人工规则/EP偏移/Skip=4/Backtrace=3/Title=2/First=1/独立AI | U/P | 人工规则最高优先级；上游 fixture + 新策略通过；来源值与 TMDB 规范值不混用 |
+| Parser | 标题/季度/集数/字幕组/Mikan人工规则/EP偏移/Skip=4/Backtrace=3/Title=2/First=1/独立AI | U/P | 人工规则最高优先级；上游 fixture + 新策略通过；任务级来源证据、逐文件来源候选与经验证 TMDB 规范字段分表/分 DTO/分 UI 区域，不混用 |
 | Filter | 顺序、多插件、skip、异常、MikanTool五档/优先级/黑白名单/legacy顺序 | U/P | 上游 Python差分与filter fixture全过 |
 | Mikan RSS 同集优选 | mikanid+来源EP分组、动态优先级组/具名数组、逐组短路、黑白名单、双开关、winner→任务→逐文件候选跨请求审计 | U/C/P/I/E | 单候选旁路优先级；重复组选出一个winner；默认720p拒绝；loser无昂贵副作用；任务详情保留历史 batch/revision/decision/groups 且不泄露 URL、URL 派生 candidate ID 或指纹 |
 | AnimeGoHelper | 单集、全集、过滤配置上传/获取/往返、认证、CORS | C/P/E | 原油猴脚本无需修改即可完成四个主流程，配置无损往返且真实参与RSS过滤 |
@@ -201,7 +201,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 6. `bt` 离线不影响 `pt`；不同实例认证、超时、熔断、category/tag 和任务列表相互隔离。
 7. `bt`、`pt` 分别使用 `/download/incomplete/bt`、`/download/incomplete/pt`，共同媒体库为 `/download/anime`；两个容器均通过同一父挂载的硬链接探测。
 8. 删除仍被 source profile 或活动任务引用的下载器实例被拒绝；禁用实例保留历史任务可读信息。
-9. Web 路由预览与实际 ingest 结果一致，任务详情显示 source、work/item ID、metadata IDs、downloader ID、规则/profile版本和路由原因。
+9. Web 路由预览与实际 ingest 结果一致；任务详情的 `source_evidence` 显示 source/profile revision、来源标题、metadata IDs 和不透明 work/item ID 的域隔离 SHA-256 指纹，不返回 ID 原值、URL 或 passkey；TMDB 规范字段只显示验证结果。
 10. 带 passkey 的 Torrent URL 成功导入后，日志、API响应、Web、审计和AI请求均找不到完整 URL、path/query/announce；只保存来源和不可逆指纹。
 11. 未授权 host、跨host redirect、DNS重绑定、超长响应、非torrent、路径穿越和 info-hash 不一致均在进入下载器前拒绝。
 12. staging `.torrent` 权限受限且不进入备份；下载器确认接收后删除，模拟崩溃后由 TTL 清理任务回收。

@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
@@ -13,6 +14,37 @@ namespace AnimeGoNet.Data.Tests.Metadata;
 
 public sealed class MetadataResolutionStoreTests
 {
+    [Fact]
+    public async Task TaskDetailSeparatesSafeSourceEvidenceFromCanonicalProjection()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+
+        var detail = Assert.IsType<MetadataTaskDetailProjection>(
+            await fixture.Store.GetTaskDetailAsync(fixture.TaskId));
+
+        Assert.Equal("mikan", detail.Source.SourceProfileId);
+        Assert.True(detail.Source.SourceProfileRevision > 0);
+        Assert.Equal("mikan", detail.Source.SourceId);
+        Assert.Equal("Episode", detail.Source.SourceTitle);
+        Assert.Equal(
+            StableHash.Sha256LowerHex("animegonet-source-id\0mikan\0item\0one"),
+            detail.Source.SourceItemIdFingerprint);
+        Assert.Equal(
+            StableHash.Sha256LowerHex("animegonet-source-id\0mikan\0work\03951"),
+            detail.Source.SourceWorkIdFingerprint);
+        Assert.Equal(3951, detail.Source.MikanId);
+        Assert.Null(detail.Source.GroupId);
+        Assert.Equal(547888, detail.Source.BangumiSubjectId);
+        Assert.Equal(999, detail.Source.AniDbAnimeId);
+        Assert.Equal("tt1234567", detail.Source.ImdbTitleId);
+        Assert.True(detail.Source.SourcePublishedAtRawAvailable);
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 22, 12, 34, 56, 123, TimeSpan.FromHours(8)),
+            detail.Source.SourcePublishedAt);
+        Assert.Null(detail.Summary.TmdbSeriesId);
+        Assert.Null(detail.Summary.TmdbSeasonNumber);
+    }
+
     [Fact]
     public async Task ConcurrentClaimsReturnDownloadedTaskAtMostOnce()
     {
