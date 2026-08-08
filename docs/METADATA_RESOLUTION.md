@@ -239,6 +239,15 @@ advanced:
 
 “一次”指一个下载任务在季度和 Episode 全流程合计最多一次语义匹配，不对无效答案继续改写 Prompt 追问。季度阶段已经成功或失败尝试 AI 后，Episode 阶段均不得再次请求。没有收到响应时可按网络策略幂等重试同一请求；重试不得改变任务标题、文件列表、Prompt 或已确认的 Series/Season。
 
+AI 输入经过显式白名单数据边界：仅投影任务 `title`、候选视频相对文件名/字节容量、
+可空 `bgmid`/`anidbid`/`imdbid`、实际 Torrent 文件数，以及通过 Mikan 单文件门禁后
+取得的发布日期/候选 Bgm EP。元数据 claim 的 run/task/lease、来源 adapter/raw 日期等
+编排字段不会进入输入；SQL claim 本身也不读取 Torrent URL 指纹。完整 Torrent URL、
+passkey、announce、info-hash、暂存字节、route snapshot、Cookie、Authorization 和
+下载器凭据在该类型中没有字段，Prompt renderer 只逐项读取上述白名单。结构契约测试
+会在输入 record 新增字段时失败，统一导入 E2E 另从 SQLite 读取实际 URL fingerprint，
+验证 URL、passkey 和 fingerprint 均不出现在 matcher 输入或最终 Prompt。
+
 Mikan RSS 可在统一 AI Prompt 中增加单文件发布日期优先分支。配置开关开启后，主程序仍只在 Torrent 实际文件条目数恰好为1、`bgmid` 和合法内部 `pubDate` 同时存在且没有命中更高优先级人工 Episode Offset 时尝试计算；Torrent单文件模式和根目录下仅一个文件均满足，目录节点不计数，但字幕、图片及已标记为 ignored/duplicate 的实际文件条目都计数。`pubDate` 无时区时按 Mikan SourceProfile 默认 `Asia/Shanghai` 解析。主程序从该 Subject 的普通正整数 Episode 中找到播出日期最接近且相差不超过31日者并写入 `bgm_episode_candidate`；同距优先不晚于发布日期，再按集号/ID稳定排序。查询失败、候选为空或超出窗口时最终门禁保持 false。门禁为 true 时，Prompt 直接把该候选与文件名解析EP用于定向查询TMDB。两个来源集号都不能复制为TMDB Episode Number，最终结果仍须TMDB验证；优先分支失败时继续原通用AI流程。
 
 AI 和确定性匹配均不接受 Season 0。Series 和大于0的普通季度已经确认、但 Episode 无法确认时，不用来源集号冒充 TMDB Episode；该文件保留原名进入 `<TmdbSeriesName>/Sxx/Other/`，并保存未匹配原因。季度也无法确认时保留在下载目录，等待重试或人工处理。多文件任务中的其他已验证文件可以正常落盘。

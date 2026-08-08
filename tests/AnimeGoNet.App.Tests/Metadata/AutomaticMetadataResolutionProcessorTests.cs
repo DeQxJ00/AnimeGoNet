@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
@@ -15,6 +16,10 @@ namespace AnimeGoNet.App.Tests.Metadata;
 
 public sealed class AutomaticMetadataResolutionProcessorTests
 {
+    private const string FakeSecretTorrentUrl =
+        "https://mikanani.me/download/automatic-metadata.torrent?passkey=ai-input-secret";
+    private const string FakeSecretPasskey = "ai-input-secret";
+
     private static readonly TmdbSeries Series =
         new(72517, "来自深渊", "メイドインアビス", new DateOnly(2017, 7, 7));
     private static readonly TmdbSeason SeasonOne =
@@ -682,6 +687,15 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal("tt1234567", request.ImdbTitleId);
         Assert.Single(request.Files);
         Assert.False(request.UseBangumiPubDateFirst);
+        var fingerprint = await ReadTorrentUrlFingerprintAsync(app, taskId);
+        var serializedInput = JsonSerializer.Serialize(request);
+        var renderedPrompt = AiMetadataPromptRenderer.LoadAndRender(request);
+        Assert.DoesNotContain(FakeSecretTorrentUrl, serializedInput, StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeSecretPasskey, serializedInput, StringComparison.Ordinal);
+        Assert.DoesNotContain(fingerprint, serializedInput, StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeSecretTorrentUrl, renderedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeSecretPasskey, renderedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(fingerprint, renderedPrompt, StringComparison.Ordinal);
         Assert.Equal(7, await ReadTaskFileEpisodeAsync(app, taskId));
 
         Assert.True(await app.App.Services
@@ -1265,7 +1279,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             {
               "source": "mikan",
               "data": [{
-                "torrent": "https://mikanani.me/passkey/automatic-metadata.torrent",
+                "torrent": "{{FakeSecretTorrentUrl}}",
                 "info": {
                   "title": "{{title}}",
                   "mikanid": 3951,
@@ -1298,6 +1312,20 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             [new DownloadTaskSnapshot(hash, title, DownloadTaskState.Complete, 1, 5, 5, 0, 0)],
             DateTimeOffset.UtcNow);
         return taskId;
+    }
+
+    private static async Task<string> ReadTorrentUrlFingerprintAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT torrent_url_fingerprint FROM ingest_tasks WHERE id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Assert.IsType<string>(await command.ExecuteScalarAsync());
     }
 
     private static async Task SetTrustedPublicationEvidenceAsync(

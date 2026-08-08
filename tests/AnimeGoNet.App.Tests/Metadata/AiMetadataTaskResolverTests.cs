@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
@@ -19,17 +20,18 @@ public sealed class AiMetadataTaskResolverTests
                 null,
                 new AiMatchingOptions { UseBangumiPubDateFirst = false }));
         var claim = new MetadataTaskClaim(
-            "run",
-            "task",
+            "route-secret-run",
+            "route-secret-task",
             "Task title",
             3951,
             7,
             547888,
             1,
-            "lease",
+            "route-secret-lease",
             AniDbAnimeId: 999,
             ImdbTitleId: "tt1234567",
-            SourceAdapter: "mikan",
+            SourceAdapter: "route-secret-adapter",
+            SourcePublishedAtRaw: "route-secret-raw-date",
             TorrentFileCount: 2);
         MetadataTaskFileProjection[] files =
         [
@@ -46,9 +48,32 @@ public sealed class AiMetadataTaskResolverTests
         var file = Assert.Single(input.Files);
         Assert.Equal("episode-04.mkv", file.Name);
         Assert.Equal(1234, file.SizeBytes);
+        var serializedInput = JsonSerializer.Serialize(input);
+        Assert.DoesNotContain("route-secret", serializedInput, StringComparison.Ordinal);
         Assert.Equal(72517, result.Value!.Series.Id);
         Assert.Equal(2, Assert.Single(result.Value.Files).Season.SeasonNumber);
         Assert.Equal(4, Assert.Single(result.Value.Files).Episode!.EpisodeNumber);
+    }
+
+    [Fact]
+    public void AiInputTypesExposeOnlyApprovedEvidenceFields()
+    {
+        Assert.Equal(
+            [
+                "Title",
+                "Files",
+                "BangumiSubjectId",
+                "AniDbAnimeId",
+                "ImdbTitleId",
+                "TorrentFileCount",
+                "PublishedAt",
+                "BangumiEpisodeCandidate",
+                "UseBangumiPubDateFirst",
+            ],
+            typeof(AiMetadataMatchInput).GetProperties().Select(property => property.Name));
+        Assert.Equal(
+            ["Name", "SizeBytes"],
+            typeof(AiMetadataFileInput).GetProperties().Select(property => property.Name));
     }
 
     [Fact]

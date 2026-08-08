@@ -45,18 +45,7 @@ public sealed class AiMetadataTaskResolver(
         var publication = await publicationEvidence.ResolveAsync(
             claim,
             cancellationToken).ConfigureAwait(false);
-        var input = new AiMetadataMatchInput(
-            claim.Title,
-            videos.Select(file => new AiMetadataFileInput(
-                file.RelativePath,
-                file.SizeBytes)).ToArray(),
-            claim.BangumiSubjectId,
-            claim.AniDbAnimeId,
-            claim.ImdbTitleId,
-            claim.TorrentFileCount,
-            publication.PublishedAt,
-            publication.BangumiEpisodeCandidate,
-            publication.UseBangumiPubDateFirst);
+        var input = AiMetadataInputBoundary.Create(claim, videos, publication);
 
         AiMetadataMatchCandidate candidate;
         try

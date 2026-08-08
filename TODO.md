@@ -192,7 +192,7 @@
 - [>] 实现优雅退出和取消传播：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT 宿主停止与 win-x64 NativeAOT 停止后句柄清理已验证；Linux/macOS NativeAOT `SIGTERM` 已加入五 RID smoke，待 CI 实机结果后完成。
 - [x] 移植上游 HTTP API：计划原称“10 个”，权威 OpenAPI 实际列出 11 个 REST operation + 1 个 WebSocket operation；契约测试逐项比对基线，12/12 均有 AnimeGoNet 路由。最后缺失的 `/api/config` 已实现 `all/default/comment/raw` GET、`all/raw` PUT、legacy envelope/参数错误/Access-Key、写前强类型校验、可选不可覆盖备份和同目录原子替换；更新仅在重启后应用。
 - [x] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与现代 `/api/v1/rss/ingest` 均已接入来源规则、统一 staging 与后台 qB dispatch。
-- [>] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI负向门禁待串联。
+- [x] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI 使用显式白名单数据边界，输入类型无 URL/fingerprint/announce/暂存字节/route/Cookie/凭据字段，统一导入 E2E 验证实际 URL、passkey 与 SQLite fingerprint 均不可达 matcher 和最终 Prompt。
 - [x] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile CRUD/无副作用预览、下载器脱敏投影/连接测试、data_path 私有覆盖文件、凭据只写 create/update/remove、全局 revision、重启应用和引用保护均已完成。
 - [x] 移植 access-key、响应 envelope、参数错误：直接 key、旧 SHA-256 hash、ping/sha256、RSS/manager/plugin/config/Bolt、WebSocket 均接入统一鉴权；legacy HTTP 保持 HTTP 200 + `code=200/300`，配置畸形 JSON/Base64/YAML/强类型值在替换前失败。
 - [x] 移植 WebSocket 日志 pause/resume：保留 `/websocket/log`、旧 `type=log/count` 帧和三种控制命令；鉴权、逐连接暂停、1000 条有界缓存、慢消费者有界队列、脱敏及取消均已验证。
