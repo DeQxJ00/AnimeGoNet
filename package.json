@@ -9,7 +9,8 @@
     "web:build": "tsc --project tsconfig.json",
     "web:check": "tsc --project tsconfig.json --noEmit",
     "web:test": "npm run web:build && node --test tests/web/*.test.mjs",
-    "web:e2e": "playwright test --config playwright.config.mjs"
+    "web:e2e": "playwright test --config playwright.config.mjs tests/web-e2e/release-container.spec.mjs",
+    "helper:e2e": "playwright test --config playwright.config.mjs tests/web-e2e/animegohelper-compat.spec.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.0",

@@ -105,4 +105,11 @@ GET 同时返回当前强类型规则、可直接交给 AnimeGoHelper 的 `legac
 - 总开关默认开启、关闭后 RSS 跳过、重新开启后原规则恢复，以及变更不影响已有任务快照。
 - 原 AnimeGoHelper 未修改脚本上传、读取、再次上传的完整往返。
 - Web 与油猴脚本交替修改的 revision 冲突、快照和回滚。
-- 五个 NativeAOT RID 的单元/契约测试，以及 Docker `linux/amd64`、`linux/arm64` 浏览器端到端测试。
+- 五个 NativeAOT RID 的单元/契约测试；Docker `linux/amd64`、`linux/arm64`
+  浏览器端到端入口保留，但按项目所有者要求暂不声称已验证。
+
+原脚本浏览器门禁固定 `DeQxJ00/AnimeGoHelper@78a9d0d8` 及文件 SHA-256。CI
+单独签出该仓库，Chromium 在隔离 Mikan 页执行未经改写的 `AnimeGoHelper.js`；fixture
+只补齐 Tampermonkey API、Tagify/Ladda 页面全局量和确定性响应。门禁实际点击“单”“全”
+以及“上传过滤配置/获取过滤配置”，并与真实 C# Kestrel 契约测试共同覆盖浏览器和服务端
+两侧。详细结果见 `docs/verification/2026-08-08-animegohelper-browser-e2e.md`。

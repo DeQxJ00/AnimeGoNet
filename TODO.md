@@ -197,7 +197,7 @@
 - [x] 移植 access-key、响应 envelope、参数错误：直接 key、旧 SHA-256 hash、ping/sha256、RSS/manager/plugin/config/Bolt、WebSocket 均接入统一鉴权；legacy HTTP 保持 HTTP 200 + `code=200/300`，配置畸形 JSON/Base64/YAML/强类型值在替换前失败。
 - [x] 移植 WebSocket 日志 pause/resume：保留 `/websocket/log`、旧 `type=log/count` 帧和三种控制命令；鉴权、逐连接暂停、1000 条有界缓存、慢消费者有界队列、脱敏及取消均已验证。
 - [x] 移植轻量滚动文件日志：固定写入 `data_path/logs/animego.log`，仅 Information 以上，2 MiB、14 份备份、14 天保留；与 WebSocket 共用脱敏格式，宿主停止后由 DI 唯一释放句柄。
-- [>] 兼容 `DeQxJ00/AnimeGoHelper`：`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖；Kestrel 契约已验证配置上传立即影响 RSS、快速下载仍跳过过滤。原油猴脚本浏览器 E2E 待验收。
+- [x] 兼容 `DeQxJ00/AnimeGoHelper`：固定原脚本 `78a9d0d8` 与 SHA-256，不修改执行；`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖。Kestrel 契约验证配置上传立即影响 RSS、快速下载仍跳过过滤；Chromium Mikan fixture 验证可见“单/全”控件、上传/获取配置和无损 Base64 往返。
 - [x] 将旧插件名 `filter/mikan_tool.py` 及等价别名映射到 SQLite 过滤规则；Base64 JSON 可无损同构往返、并发 legacy 上传完整提交，不查找、不创建且不执行 Python 文件。
 - [x] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停/排序、关键词 JSON 数组编辑、服务端样例预览及逐档决策详情、旧 JSON 导入导出、revision 冲突和快照回滚均已接入；页面明确警告多 F0“最后结果生效”、空关键词匹配全部标题和区分大小写语义。
 - [x] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、SourceProfile 独立开关、expected-revision 保存、真实服务端批次 preview（名单结果、winner、实际执行组），以及 schema v25 历史快照选择与 revision 安全回滚；首版使用可键盘操作的上下移动，不依赖拖拽。
@@ -231,7 +231,7 @@
 - [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [x] 完成响应式布局、统一空/错/加载状态和基本可访问性：主异步区域共享显式状态机与安全文本节点，loading/empty/error 使用对应 busy/status/alert 语义；提供首个键盘跳转入口、全局可见焦点、44px 控件目标、reduced-motion 和 620px 移动端收敛布局；静态 DOM 契约自动检查唯一 ID、section/dialog/控件名称、非正 tabindex 与初始状态，390×844 / 1280×800 本机 Kestrel 验收均无横向溢出和 console error。
 - [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2；Docker workflow、加固容器 launcher 和报告上传已生成，但按用户要求标记为未验证，等待后续自行实跑。
-- [ ] 用 Tampermonkey + Mikan fixture 页验证“单集”“全集”“上传/获取过滤配置”。
+- [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
 
 ## P10 — 组合与发布
 

@@ -30,6 +30,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Check out pinned AnimeGoHelper userscript
+        uses: actions/checkout@v6
+        with:
+          repository: DeQxJ00/AnimeGoHelper
+          ref: 78a9d0d832801d38efd6294841e9962e0bc791cf
+          path: .artifacts/upstream-animegohelper
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -40,6 +47,12 @@ jobs:
         run: npm run web:check
       - name: Test WebUI client
         run: npm run web:test
+      - name: Install Chromium for AnimeGoHelper compatibility
+        run: npx playwright install --with-deps chromium
+      - name: Test unmodified AnimeGoHelper against Mikan fixture
+        run: npm run helper:e2e
+        env:
+          ANIMEGOHELPER_SCRIPT_PATH: ${{ github.workspace }}/.artifacts/upstream-animegohelper/AnimeGoHelper.js
       - name: Verify committed WebUI output
         run: git diff --exit-code -- src/AnimeGoNet.App/wwwroot/app.js src/AnimeGoNet.App/wwwroot/api-client.js src/AnimeGoNet.App/wwwroot/ui-state.js
 

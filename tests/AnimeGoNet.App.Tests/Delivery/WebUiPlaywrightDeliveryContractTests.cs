@@ -12,7 +12,7 @@ public sealed class WebUiPlaywrightDeliveryContractTests
             Path.Combine(repositoryRoot, "package.json")));
         JsonElement root = package.RootElement;
         Assert.Equal(
-            "playwright test --config playwright.config.mjs",
+            "playwright test --config playwright.config.mjs tests/web-e2e/release-container.spec.mjs",
             root.GetProperty("scripts").GetProperty("web:e2e").GetString());
         Assert.Equal(
             "1.62.0",
