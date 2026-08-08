@@ -356,6 +356,23 @@ public sealed class MinimalApiTests
             Assert.Equal(1, reader.GetInt32(3));
         }
 
+        using (var taskDetail = await app.Client.GetAsync(
+                   $"/api/v1/metadata/tasks/{taskId}"))
+        {
+            var detailBody = await taskDetail.Content.ReadAsStringAsync();
+            using var detailJson = JsonDocument.Parse(detailBody);
+            Assert.Equal(HttpStatusCode.OK, taskDetail.StatusCode);
+            var rewrite = Assert.Single(
+                detailJson.RootElement.GetProperty("nfo_rewrites").EnumerateArray());
+            Assert.Equal("pending", rewrite.GetProperty("state").GetString());
+            Assert.Equal(0, rewrite.GetProperty("attempt_count").GetInt32());
+            Assert.Equal(547888, rewrite.GetProperty("bgmid").GetInt32());
+            Assert.Equal(700, rewrite.GetProperty("tmdb_series_id").GetInt32());
+            Assert.DoesNotContain("save_root_path", detailBody, StringComparison.Ordinal);
+            Assert.DoesNotContain("/private/media", detailBody, StringComparison.Ordinal);
+            Assert.DoesNotContain(app.RootPath, detailBody, StringComparison.OrdinalIgnoreCase);
+        }
+
         using var missing = await app.Client.GetAsync("/api/v1/metadata/pending-tmdb/547888");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }

@@ -14,8 +14,65 @@ public sealed record PendingTmdbNfoRewriteClaim(
     string CanonicalSeriesName,
     int AttemptCount);
 
+public sealed record PendingTmdbNfoRewriteProjection(
+    string JobId,
+    int BangumiSubjectId,
+    int TmdbSeriesId,
+    string State,
+    int AttemptCount,
+    string? FailureCode,
+    DateTimeOffset? NextAttemptAtUtc,
+    DateTimeOffset UpdatedAtUtc,
+    DateTimeOffset? CompletedAtUtc);
+
 public sealed class PendingTmdbNfoRewriteStore(AnimeGoSqliteDatabase database)
 {
+    public async Task<IReadOnlyList<PendingTmdbNfoRewriteProjection>> ListForTaskAsync(
+        string taskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT DISTINCT rewrite.id, rewrite.bangumi_subject_id,
+                   rewrite.tmdb_series_id, rewrite.state, rewrite.attempt_count,
+                   rewrite.failure_code, rewrite.next_attempt_at_utc,
+                   rewrite.updated_at_utc, rewrite.completed_at_utc
+            FROM ingest_tasks AS task
+            JOIN task_files AS file ON file.task_id = task.id
+            JOIN download_jobs AS download ON download.task_id = task.id
+            JOIN pending_tmdb_nfo_rewrite_jobs AS rewrite
+              ON rewrite.bangumi_subject_id = task.bangumi_subject_id
+             AND rewrite.tmdb_series_id = file.tmdb_series_id
+             AND rewrite.save_root_path = download.save_root_path
+            WHERE task.id = $task_id
+              AND task.bangumi_subject_id IS NOT NULL
+              AND file.tmdb_series_id IS NOT NULL
+            ORDER BY rewrite.updated_at_utc DESC, rewrite.id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        var results = new List<PendingTmdbNfoRewriteProjection>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            results.Add(new PendingTmdbNfoRewriteProjection(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetString(3),
+                reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : Parse(reader.GetString(6)),
+                Parse(reader.GetString(7)),
+                reader.IsDBNull(8) ? null : Parse(reader.GetString(8))));
+        }
+
+        return results;
+    }
+
     public async Task<PendingTmdbNfoRewriteClaim?> TryClaimNextAsync(
         DateTimeOffset utcNow,
         TimeSpan leaseDuration,
@@ -135,4 +192,10 @@ public sealed class PendingTmdbNfoRewriteStore(AnimeGoSqliteDatabase database)
 
     private static string Format(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset Parse(string value) =>
+        DateTimeOffset.Parse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind);
 }

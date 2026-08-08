@@ -219,7 +219,7 @@
 - [x] 实现作品库服务端分页排序和前端升/降序：服务端与页面支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；排序、方向、页大小、EP 筛选和当前详情保存在浏览器本地。
 - [x] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。`poster_url` 只指向同源 `/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}`；Season/Series 回退、5 MiB 流式上限、图片魔数校验、并发合并、磁盘缓存与失败占位均有测试。
 - [x] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格、季度封面或完成比例；逐项恢复并验证真实 TMDB 映射后，再事务并入标准作品库。
-- [x] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态；API 不暴露内部 scope key、媒体路径或伪造 TMDB 身份。
+- [x] 待补全 TMDB 详情展示兜底完成记录、实际去重身份/作用域和跨来源重复风险，但不把它表示为 TMDB EP 下载状态；API 不暴露内部 scope key、媒体路径或伪造 TMDB 身份。恢复后的原任务详情会显示同 bgmid/TMDB/save-root 关联的 NFO 重写作业 `pending/writing/failed/completed`、尝试次数、稳定失败码和重试/完成时间，响应不返回 save root 或系列目录名。
 - [x] 实现 TMDB 作品库季度 CRUD：创建只接受 `TMDB Series ID + Season` 并在线验证后保存 Series/Season/完整 EP snapshot；更新是带 `resource_revision` 的 TMDB 权威刷新，不提供手工改名或伪造季度；删除只允许无任务、完成记录、claim、Mikan 人工规则、fallback 记录和待写 NFO 引用的本地投影，绝不顺带删除下载器任务、下载源文件或媒体文件，有引用时引导进入四类删除流程。
 - [x] 增加 Mikan 作品规则 CRUD：原生 TypeScript 页面按 `mikanid` 读取并以 expected revision 创建/更新/禁用/清除 Bgm/TMDB Series/Season/EP Offset；影响预览权威区分未来自动应用、可显式重试的失败任务、活动中保护、已解析保护和已整理保护。显式重新匹配只重置未持有运行租约的 `metadata_failed` 任务，不改写已解析/已整理任务、完成记录或媒体文件；可选样例来源 EP 继续执行保存前 TMDB Series→Season→目标 Episode 在线验证。
 - [x] 作品详情展示 Series/Season/Episode 的 TMDB 获取阶段、验证状态、人工偏移和最后解析时间：季度详情现在汇总当前 Mikan 人工 EP offset、最多 50 个关联任务和最多 200 条跨 Run 逐次验证记录；保留任务/Run/策略优先级、阶段、结果、稳定错误码、可重试性、耗时与脱敏原因，并明确标记截断，不把当前规则冒充历史实际值。

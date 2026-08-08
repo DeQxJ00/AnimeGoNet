@@ -588,6 +588,17 @@ interface MetadataTaskDetail {
     duration_ms: number | null;
     attempted_at_utc: string | null;
   };
+  nfo_rewrites: Array<{
+    job_id: string;
+    bgmid: number;
+    tmdb_series_id: number;
+    state: "pending" | "writing" | "completed" | "failed";
+    attempt_count: number;
+    failure_code: string | null;
+    next_attempt_at_utc: string | null;
+    updated_at_utc: string;
+    completed_at_utc: string | null;
+  }>;
   files: Array<{
     source_name: string;
     size_bytes: number;
@@ -4614,6 +4625,46 @@ async function loadMetadataDetail(
       ai.append(reason);
     }
 
+    const nfoRewrites = document.createElement("section");
+    nfoRewrites.className = "metadata-nfo-rewrites";
+    if (detail.nfo_rewrites.length > 0) {
+      const nfoHeading = document.createElement("h4");
+      nfoHeading.textContent = "TMDB 恢复后的 NFO 重写";
+      nfoRewrites.append(nfoHeading);
+      const stateLabels: Record<string, string> = {
+        pending: "等待写入",
+        writing: "正在写入",
+        failed: "失败，等待自动重试",
+        completed: "已完成",
+      };
+      for (const rewrite of detail.nfo_rewrites) {
+        const row = document.createElement("article");
+        row.className = `metadata-nfo-rewrite ${rewrite.state}`;
+        const heading = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = `TMDB ${rewrite.tmdb_series_id} · bgmid ${rewrite.bgmid}`;
+        const state = document.createElement("span");
+        state.className = `badge ${rewrite.state === "failed" ? "error" : "ready"}`;
+        state.textContent = stateLabels[rewrite.state] ?? rewrite.state;
+        heading.append(title, state);
+        const audit = document.createElement("p");
+        audit.textContent = `已尝试 ${rewrite.attempt_count} 次 · 更新 ${new Date(rewrite.updated_at_utc).toLocaleString()}`;
+        row.append(heading, audit);
+        if (rewrite.failure_code !== null || rewrite.next_attempt_at_utc !== null) {
+          const retry = document.createElement("p");
+          retry.className = "metadata-detail-reason";
+          retry.textContent = `${textOrDash(rewrite.failure_code)} · 下次重试 ${rewrite.next_attempt_at_utc === null ? "—" : new Date(rewrite.next_attempt_at_utc).toLocaleString()}`;
+          row.append(retry);
+        }
+        if (rewrite.completed_at_utc !== null) {
+          const completed = document.createElement("p");
+          completed.textContent = `完成于 ${new Date(rewrite.completed_at_utc).toLocaleString()}`;
+          row.append(completed);
+        }
+        nfoRewrites.append(row);
+      }
+    }
+
     const files = document.createElement("div");
     files.className = "metadata-file-comparisons";
     if (detail.files.length === 0) {
@@ -4664,7 +4715,11 @@ async function loadMetadataDetail(
       }
     }
 
-    target.replaceChildren(ai, files);
+    target.replaceChildren(
+      ai,
+      ...(detail.nfo_rewrites.length > 0 ? [nfoRewrites] : []),
+      files,
+    );
     button.disabled = false;
     button.textContent = "收起来源 / TMDB 对照";
     button.onclick = () => {

@@ -4074,6 +4074,7 @@ public static class ApiEndpoints
     private static async Task<IResult> MetadataTaskDetail(
         string taskId,
         MetadataResolutionStore resolutions,
+        PendingTmdbNfoRewriteStore nfoRewrites,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(taskId))
@@ -4093,6 +4094,8 @@ public static class ApiEndpoints
 
         var item = detail.Summary;
         var ai = detail.Ai;
+        var rewriteJobs = await nfoRewrites.ListForTaskAsync(taskId, cancellationToken)
+            .ConfigureAwait(false);
         return TypedResults.Ok(new MetadataTaskDetailResponse(
             ToResponse(item),
             ai is null
@@ -4112,6 +4115,16 @@ public static class ApiEndpoints
                     ai.Result == "matched" ? "tmdb_verified" : "not_established",
                     ai.DurationMilliseconds,
                     ai.AttemptedAtUtc),
+            rewriteJobs.Select(job => new MetadataTaskNfoRewriteItem(
+                job.JobId,
+                job.BangumiSubjectId,
+                job.TmdbSeriesId,
+                job.State,
+                job.AttemptCount,
+                job.FailureCode,
+                job.NextAttemptAtUtc,
+                job.UpdatedAtUtc,
+                job.CompletedAtUtc)).ToArray(),
             detail.Files.Select(file => new MetadataTaskFileItem(
                 file.RelativePath,
                 file.SizeBytes,

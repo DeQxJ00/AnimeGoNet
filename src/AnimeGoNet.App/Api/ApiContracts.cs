@@ -646,6 +646,8 @@ public sealed record MetadataTaskListItem(
 public sealed record MetadataTaskDetailResponse(
     [property: JsonPropertyName("summary")] MetadataTaskListItem Summary,
     [property: JsonPropertyName("ai")] MetadataTaskAiItem Ai,
+    [property: JsonPropertyName("nfo_rewrites")]
+    IReadOnlyList<MetadataTaskNfoRewriteItem> NfoRewrites,
     [property: JsonPropertyName("files")] IReadOnlyList<MetadataTaskFileItem> Files);
 
 public sealed record MetadataTaskAiItem(
@@ -656,6 +658,17 @@ public sealed record MetadataTaskAiItem(
     [property: JsonPropertyName("confidence_basis")] string ConfidenceBasis,
     [property: JsonPropertyName("duration_ms")] long? DurationMilliseconds,
     [property: JsonPropertyName("attempted_at_utc")] DateTimeOffset? AttemptedAtUtc);
+
+public sealed record MetadataTaskNfoRewriteItem(
+    [property: JsonPropertyName("job_id")] string JobId,
+    [property: JsonPropertyName("bgmid")] int BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("attempt_count")] int AttemptCount,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("next_attempt_at_utc")] DateTimeOffset? NextAttemptAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc);
 
 public sealed record MetadataTaskFileItem(
     [property: JsonPropertyName("source_name")] string SourceName,

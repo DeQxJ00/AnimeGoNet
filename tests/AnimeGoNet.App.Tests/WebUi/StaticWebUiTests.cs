@@ -47,6 +47,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "not_downloaded")]
     [InlineData("/app.js", "text/javascript", "/api/v1/metadata/tasks")]
     [InlineData("/app.js", "text/javascript", "查看来源 / TMDB 对照")]
+    [InlineData("/app.js", "text/javascript", "TMDB 恢复后的 NFO 重写")]
     [InlineData("/app.js", "text/javascript", "可信依据：TMDB 已验证")]
     [InlineData("/app.js", "text/javascript", "多个文件使用不同来源或证据")]
     [InlineData("/app.js", "text/javascript", "episode_attempt_id")]
@@ -115,6 +116,7 @@ public sealed class StaticWebUiTests
     [InlineData("/styles.css", "text/css", ".manual-submit-card")]
     [InlineData("/styles.css", "text/css", ".mikan-work-impact-task")]
     [InlineData("/styles.css", "text/css", ".metadata-fallback-decision")]
+    [InlineData("/styles.css", "text/css", ".metadata-nfo-rewrite")]
     public async Task ServesStaticAssets(string path, string mediaType, string marker)
     {
         await using var app = await RunningApp.StartAsync();

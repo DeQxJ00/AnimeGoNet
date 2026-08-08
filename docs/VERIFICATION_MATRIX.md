@@ -39,7 +39,7 @@
 | 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 进入 `Other`，未知季度或冲突文件不落盘 |
 | 字幕 | 同stem、多语言/轨道后缀、按EP唯一绑定、idx/sub、歧义、Other | U/P/I/E | 匹配字幕随视频继承TMDB EP且后缀不丢；未匹配字幕不猜测，其他附件不移动 |
 | 文件策略 | link/link_delete/move/wait_move、跨盘、失败回滚 | U/I/E | 测试根外零写入/删除 |
-| 刮削 | `tvshow.nfo` 新建/更新、正常 TMDB+Bgm、兜底 `tmdbid=0`+Bgm、Unicode | U/P/I | 开启时 XML snapshot 一致；关闭或前置条件失败时断言没有失败 NFO |
+| 刮削 | `tvshow.nfo` 新建/更新、正常 TMDB+Bgm、兜底 `tmdbid=0`+Bgm、恢复重写作业投影、Unicode | U/P/I | 开启时 XML snapshot 一致；关闭或前置条件失败时断言没有失败 NFO；恢复作业四态、尝试/重试/完成时间在任务详情可见且不泄露 save root |
 | 调度 | 六字段 Cron、NextTime、StartRun、取消、异常隔离 | U/C/E | 虚拟时间稳定，退出不挂起 |
 | Web API | 10 路由、method、body/query、auth、响应 envelope | C/P/E | OpenAPI 与响应契约通过 |
 | WebSocket | 认证、日志流、pause/resume、断线、慢消费者 | C/E | 无泄漏/死锁，AOT 实机通过 |

@@ -338,6 +338,15 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-ai strong { color: #dce7fb; font-size: .8rem; }
 .metadata-ai p { grid-column: 1 / -1; margin: 0; color: #94a7c8; font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
 .metadata-ai .metadata-detail-reason { color: #ffb0b0; }
+.metadata-nfo-rewrites { display: grid; gap: 8px; }
+.metadata-nfo-rewrites h4 { margin: 0; color: #dce7fb; font-size: .82rem; }
+.metadata-nfo-rewrite { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid #394761; border-radius: 10px; background: rgba(5,8,16,.45); }
+.metadata-nfo-rewrite.completed { border-color: #356757; }
+.metadata-nfo-rewrite.failed { border-color: #7b3e48; }
+.metadata-nfo-rewrite > div { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.metadata-nfo-rewrite strong { color: #dce7fb; font-size: .76rem; }
+.metadata-nfo-rewrite p { margin: 0; color: #94a7c8; font-size: .7rem; overflow-wrap: anywhere; }
+.metadata-nfo-rewrite .metadata-detail-reason { color: #ffb0b0; }
 .metadata-file-comparisons { display: grid; gap: 8px; }
 .metadata-file-comparison { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid #334565; border-radius: 12px; background: rgba(5,8,16,.52); }
 .metadata-file-comparison.other, .metadata-file-comparison.duplicate { border-color: #695736; }
