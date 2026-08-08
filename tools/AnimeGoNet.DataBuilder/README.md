@@ -10,7 +10,8 @@ name to match the local file, reads only the root `subject.jsonlines` and
 (`type=0`), normalizes dates/text and preserves fractional Episode numbers. It
 sorts records, calculates normal Episode counts, shards by Subject range, emits
 deterministic JSONL.gz assets and `manifest.json`, then creates the strict
-offline-import ZIP. Output is staged beside the destination and renamed only
+offline-import ZIP plus a deterministic `SHA256SUMS` covering the manifest,
+every online asset and the offline ZIP. Output is staged beside the destination and renamed only
 after every hash and manifest validation succeeds. Production callers should set
 `--minimum-subject-count` and `--minimum-episode-count` so a truncated or
 unexpectedly filtered upstream export fails before any output is exposed.
@@ -32,6 +33,8 @@ dotnet run --project tools/AnimeGoNet.DataBuilder -- `
 ```
 
 The builder never downloads data itself and never accepts credentials. The
-scheduled workflow performs the official metadata/download step and publishes
-only a short-lived Actions artifact; creating a public release remains an
-explicit repository-owner operation.
+scheduled workflow performs the official metadata/download step, retains a
+short-lived Actions artifact, and publishes to the separately configured
+`AnimeGoNetData` repository. It creates a draft, uploads only missing assets,
+byte-compares existing assets, verifies the complete remote set, and only then
+publishes it as GitHub's latest release. Published assets are never overwritten.

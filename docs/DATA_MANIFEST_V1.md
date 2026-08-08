@@ -54,8 +54,13 @@ Required invariants:
 - totals exactly equal the sum of asset record counts by kind.
 
 The release is immutable: an existing `data_version`, manifest or named asset
-must never be replaced. Publish all versioned assets first and the `latest`
-manifest last.
+must never be replaced. `SHA256SUMS` covers `manifest.json`, every versioned
+asset and the offline ZIP, but does not recursively list itself. Publication
+first creates a draft version tag, uploads or byte-verifies every asset, verifies
+the exact remote name set, and only then makes that release public and marks it
+latest. GitHub's `/releases/latest/download/manifest.json` pointer therefore
+changes only after the whole version is available; there is no separately
+mutable `manifest.json` asset.
 
 ## Offline ZIP package
 

@@ -29,6 +29,14 @@ fixture 不复制进 AnimeGoNet Git 历史。
 
 每个 RID 在 `upload-artifact` 前运行 `eng/generate-release-metadata.ps1`。脚本只读取该 RID 的实际 publish 目录和本次 restore 的 `project.assets.json`，生成三项随 artifact 一起交付的确定性元数据：覆盖所有发布文件但不自包含的 `SHA256SUMS`、包含精确 NuGet 名称/版本/package SHA-512/SPDX 许可证和 purl 的 CycloneDX 1.5 `sbom.cdx.json`，以及 `THIRD-PARTY-LICENSES.txt`。NuGet 声明许可证文件时会把有界 UTF-8 原文纳入清单；缺失/未知许可证、非法 nuspec URL、包缓存缺失、符号链接、重复规范路径或不安全输入均使 job 失败。输出不包含本机包缓存路径、仓库路径、凭据或生成时间，重复执行字节一致。
 
+AnimeGoNetData 日常工作流使用仓库变量 `ANIMEGONET_DATA_REPOSITORY`
+（必须是独立仓库且不能等于主程序仓库）、可选目标分支变量
+`ANIMEGONET_DATA_TARGET` 和仅对目标仓库有 Release 写权限的 secret
+`ANIMEGONET_DATA_TOKEN`。主仓库 workflow 权限仍为 `contents: read`。DataBuilder
+生成包含上游精确 UTC 秒的版本号与 `SHA256SUMS`；发布先建 draft，已有同名资产必须
+逐字节相等，缺失资产只允许补进 draft，远端集合和每个字节再次校验后才标记 public
+和 latest。已发布版本缺文件、多文件或内容不同会失败，工作流不使用 `--clobber`。
+
 ## Docker 契约
 
 为保留上游 `Dockerfile`，新主程序使用 `Dockerfile.animegonet`。镜像为 .NET 10 NativeAOT、非 root 用户运行，并固定：

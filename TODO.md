@@ -261,7 +261,7 @@
 - [x] 实现 Bangumi Archive 下载、校验、清洗、分片和 gzip：官方 `aux/latest.json` 锁定 URL/文件名/时间/SHA-256，AOT DataBuilder 原子生成 schema-v1 assets、manifest 和离线包。
 - [x] 建立每日检查 + 手动触发 GitHub Action：每日 23:00 UTC 检查官方 Archive，亦支持 `workflow_dispatch`；只读权限构建并上传短期 Actions artifact，不误发到主程序仓库。
 - [x] 建立数据唯一性、引用完整性、数量下限和确定性测试：重复 Subject/Episode ID、输出 Episode→Subject 引用、生产 30000/300000 下限、字节确定性及失败零暴露均有契约测试。
-- [ ] 发布不可变 Release assets、SHA-256 和 latest manifest。
+- [>] 发布不可变 Release assets、SHA-256 和 latest manifest：DataBuilder 已确定性生成覆盖 manifest/在线资产/离线 ZIP 的 `SHA256SUMS`；每日 Action 只向独立 `AnimeGoNetData` 仓库创建 draft，逐字节复用或补齐 draft 资产，远端完整复验后才发布并更新 GitHub latest 指针，已发布 tag 永不覆盖。外部仓库变量、最小权限 token 和首次真实 Release 仍待仓库所有者配置/验收。
 - [x] AnimeGoNet 实现检查更新、流式下载、校验和 staging SQLite 导入：schema v28 已加入版本、运行审计、独立 staging 与版本化 Bangumi Archive 表；本地包导入会先验压缩文件大小/SHA-256，再以有界单行缓冲流式解 gzip/JSONL，校验字段、顺序、分片范围、计数、唯一 ID 与 Subject 引用。schema v29 记录检查/下载/导入阶段与已验证下载目录；HTTP 使用 headers-first、有界 manifest 和 64 KiB 流式 asset 下载，逐资产验证长度/SHA-256 后才原子移动到托管包目录。
 - [x] 实现事务切换、上版保留、失败回滚和离线手工导入：存储核心原子切换 active/previous、保留 2–10 版、支持显式回滚和同版本不可变/幂等；离线 ZIP API/WebUI 只接受根目录 `manifest.json + 声明资产`，流式落盘后逐条验证路径、长度、SHA-256、gzip/JSONL、数量和引用，再进入相同事务导入。全部失败路径保持旧 active 并清理 partial。
 - [x] Web UI 增加数据版本、更新时间、检查/更新/回滚状态：静态 TypeScript 页面已接入状态刷新、手动检查、仅下载、下载并导入、已下载包延后导入和上一版回滚；显示调度策略、传输字节进度、稳定失败码、active/previous、已安装版本与本地下载包，未配置 manifest 或无可回滚版本时禁用对应动作。

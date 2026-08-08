@@ -72,6 +72,28 @@ public sealed class BangumiArchivePackageBuilderTests
                         result.Manifest.Assets.Select(asset => asset.FileName).Order(StringComparer.Ordinal)),
                     package.Entries.Select(entry => entry.FullName));
             }
+            Assert.Equal("SHA256SUMS", Path.GetFileName(result.ReleaseChecksumsPath));
+            var checksumLines = await File.ReadAllLinesAsync(result.ReleaseChecksumsPath);
+            var expectedReleaseFiles = new[]
+                {
+                    Path.GetFileName(result.OfflinePackagePath),
+                    Path.GetFileName(result.ManifestPath),
+                }
+                .Concat(result.Manifest.Assets.Select(asset => asset.FileName))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            Assert.Equal(expectedReleaseFiles.Length, checksumLines.Length);
+            Assert.Equal(
+                expectedReleaseFiles,
+                checksumLines.Select(line => line[66..]).ToArray());
+            foreach (var line in checksumLines)
+            {
+                Assert.Matches("^[0-9a-f]{64}  [^/\\\\]+$", line);
+                var name = line[66..];
+                Assert.Equal(
+                    line[..64],
+                    await Sha256Async(Path.Combine(result.OutputDirectory, name)));
+            }
 
             await using var database = await SqliteDatabaseFixture.CreateAsync();
             using var store = new DataPackageStore(database.Database);
@@ -248,7 +270,7 @@ public sealed class BangumiArchivePackageBuilderTests
     }
 
     [Fact]
-    public async Task ScheduledWorkflowUsesOfficialMetadataAndDoesNotPublishAutomatically()
+    public async Task ScheduledWorkflowPublishesVerifiedImmutableExternalRelease()
     {
         var workflow = await File.ReadAllTextAsync(Path.Combine(
             RepositoryRoot(),
@@ -267,7 +289,19 @@ public sealed class BangumiArchivePackageBuilderTests
         Assert.Contains("--minimum-episode-count 300000", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
         Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("gh release", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ANIMEGONET_DATA_REPOSITORY", workflow, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_DATA_TOKEN", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh release create", workflow, StringComparison.Ordinal);
+        Assert.Contains("--draft", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh release edit", workflow, StringComparison.Ordinal);
+        Assert.Contains("--latest", workflow, StringComparison.Ordinal);
+        Assert.Contains("sha256sum --check --strict", workflow, StringComparison.Ordinal);
+        Assert.Contains("releases/assets/$asset_id", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "[[ \"$DATA_REPOSITORY\" != \"$GITHUB_REPOSITORY\" ]]",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("--clobber", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TestSpace", workflow, StringComparison.OrdinalIgnoreCase);
     }
 

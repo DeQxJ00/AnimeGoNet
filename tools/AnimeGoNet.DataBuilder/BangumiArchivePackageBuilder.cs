@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AnimeGoNet.Core.DataUpdate;
@@ -27,6 +28,7 @@ public sealed record BangumiArchiveBuildResult(
     string OutputDirectory,
     string ManifestPath,
     string OfflinePackagePath,
+    string ReleaseChecksumsPath,
     string ManifestSha256,
     DataManifest Manifest);
 
@@ -118,12 +120,16 @@ public static partial class BangumiArchivePackageBuilder
                 assets.Select(asset => Path.Combine(stagingPath, asset.FileName)),
                 options.GeneratedAtUtc,
                 cancellationToken).ConfigureAwait(false);
+            var releaseChecksumsPath = await WriteReleaseChecksumsAsync(
+                stagingPath,
+                cancellationToken).ConfigureAwait(false);
 
             Directory.Move(stagingPath, outputPath);
             return new BangumiArchiveBuildResult(
                 outputPath,
                 Path.Combine(outputPath, "manifest.json"),
                 Path.Combine(outputPath, packageName),
+                Path.Combine(outputPath, Path.GetFileName(releaseChecksumsPath)),
                 manifestSha256,
                 manifest);
         }
@@ -465,6 +471,57 @@ public static partial class BangumiArchivePackageBuilder
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<string> WriteReleaseChecksumsAsync(
+        string stagingPath,
+        CancellationToken cancellationToken)
+    {
+        const string checksumName = "SHA256SUMS";
+        var checksumPath = Path.Combine(stagingPath, checksumName);
+        var files = Directory.EnumerateFiles(stagingPath, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => !string.Equals(
+                Path.GetFileName(path),
+                checksumName,
+                StringComparison.Ordinal))
+            .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
+            .ToArray();
+        if (files.Length == 0)
+        {
+            throw new InvalidDataException("The data release contains no files to checksum.");
+        }
+
+        var checksums = new StringBuilder(files.Length * 96);
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var name = Path.GetFileName(file);
+            if (name.IndexOfAny(['\r', '\n']) >= 0)
+            {
+                throw new InvalidDataException("A data release file name is invalid.");
+            }
+
+            await using var input = new FileStream(
+                file,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                128 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var hash = await SHA256.HashDataAsync(input, cancellationToken).ConfigureAwait(false);
+            checksums
+                .Append(Convert.ToHexStringLower(hash))
+                .Append("  ")
+                .Append(name)
+                .Append('\n');
+        }
+
+        await File.WriteAllTextAsync(
+            checksumPath,
+            checksums.ToString(),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            cancellationToken).ConfigureAwait(false);
+        return checksumPath;
     }
 
     private static async Task ReadJsonLinesAsync(
