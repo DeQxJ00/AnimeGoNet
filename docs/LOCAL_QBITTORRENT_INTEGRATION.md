@@ -67,6 +67,10 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 真实 qB 文件 priority/resume/download、SQLite snapshot、Mikan 默认 `move`、NFO 与
 三层 sidecar、completion 和 `deleteFiles=false` downloader cleanup。Episode 边界
 使用测试 SQLite 中的合成已验证身份，不调用真实 TMDB/Bangumi，也不消耗 API key。
+同一命令还运行四文件多文件 fixture：主视频与关联的 `.zh-Hans.forced.ass` 字幕为
+wanted，重复 EP 与 ignored 海报为 unwanted；验收 qB priority 固定为 `1,1,0,0`，
+unwanted 文件下载进度保持 0，字幕随主视频整理为 `E001.zh-Hans.forced.ass`，并且只
+产生一条 Episode completion。
 
 ## 验收
 
@@ -87,6 +91,9 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
   的真实长度/逐字节内容、`downloaded → organizing_cleanup → organized` 状态、媒体库
   `E001.mkv`/NFO/sidecar 和单一 completion；随后精确任务、category、tag、源/媒体
   文件及本次 `qbit-legal-download-<runid>` 数据目录全部不存在。
+- 多文件 fixture 还必须看到 wanted 主视频/字幕 priority=1，duplicate/ignored
+  priority=0 且 progress=0；媒体库只能出现 `E001.mkv`、
+  `E001.zh-Hans.forced.ass` 和该 EP 的 sidecar，不能出现重复 EP 或海报。
 
 ## 真实 Torrent 的安全边界与清理
 
@@ -99,7 +106,7 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 只可按控制台中的 run ID 清理上述固定前缀对象，不能批量删除其他任务。
 
 `-DownloadFixture` 使用相同唯一前缀，并只删除本次精确 payload、`!qB` 临时名、
-唯一系列目录和独立 SQLite 根。即使下载或整理断言失败，`finally` 仍先对精确
+多文件 Torrent 根、唯一系列目录和独立 SQLite 根。即使下载或整理断言失败，`finally` 仍先对精确
 info-hash 调用 `deleteFiles=false`，再执行这些受父目录边界验证的精确清理；不枚举、
 不读取也不删除其他 qB 任务或其他媒体目录。
 

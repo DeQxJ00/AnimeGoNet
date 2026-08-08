@@ -59,6 +59,13 @@ public sealed class LocalIntegrationScriptTests
             "QbittorrentLegalDownloadE2ETests.cs"));
         Assert.Contains("http://127.0.0.1:9/announce", legalDownloadTest, StringComparison.Ordinal);
         Assert.Contains("LoopbackFileServer", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains("LoopbackMultiFileServer", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains(
+            "LegalMultiFileDownloadAppliesPrioritiesAndMovesAssociatedSubtitle",
+            legalDownloadTest,
+            StringComparison.Ordinal);
+        Assert.Contains("download_wanted = 0", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains(".zh-Hans.forced.ass", legalDownloadTest, StringComparison.Ordinal);
         Assert.Contains("deleteFiles: false", legalDownloadTest, StringComparison.Ordinal);
         Assert.Contains("MediaOrganizationResult.FilesCompleted", legalDownloadTest, StringComparison.Ordinal);
         Assert.Contains("MediaOrganizationResult.CleanupCompleted", legalDownloadTest, StringComparison.Ordinal);

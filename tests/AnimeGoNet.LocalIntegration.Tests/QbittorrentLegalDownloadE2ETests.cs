@@ -268,6 +268,287 @@ public sealed class QbittorrentLegalDownloadE2ETests
         Assert.False(Directory.Exists(dataPath));
     }
 
+    [Fact]
+    [Trait("Category", "LocalIntegration")]
+    public async Task LegalMultiFileDownloadAppliesPrioritiesAndMovesAssociatedSubtitle()
+    {
+        Assert.Equal("1", Required("ANIMEGONET_QBIT_INTEGRATION"));
+        Assert.Equal("1", Required("ANIMEGONET_QBIT_DOWNLOAD_FIXTURE"));
+
+        string sandbox = Path.GetFullPath(Required("ANIMEGONET_QBIT_SANDBOX"));
+        string downloadPath = Path.GetFullPath(Required("ANIMEGONET_QBIT_DOWNLOAD_PATH"));
+        string savePath = Path.GetFullPath(Required("ANIMEGONET_QBIT_SAVE_PATH"));
+        string integrationDataPath = Path.GetFullPath(Required("ANIMEGONET_QBIT_DATA_PATH"));
+        var baseUrl = new Uri(Required("ANIMEGONET_QBIT_BASE_URL"));
+        string runId = Guid.NewGuid().ToString("N");
+        string shortRunId = runId[..12];
+        string torrentRootName = $"animegonet-legal-multi-{runId}";
+        string seriesName = $"AnimeGoNet Legal Multi Fixture {shortRunId}";
+        string category = $"animegonet-integration-{runId}";
+        string tag = $"animegonet-test-{runId}";
+        string dataPath = Path.Combine(
+            integrationDataPath,
+            "integration",
+            $"qbit-legal-multi-download-{runId}");
+        string torrentRootPath = Path.Combine(downloadPath, torrentRootName);
+        string seriesPath = Path.Combine(savePath, seriesName);
+        string seasonPath = Path.Combine(seriesPath, "S01");
+        string targetVideoPath = Path.Combine(seasonPath, "E001.mkv");
+        string targetSubtitlePath = Path.Combine(seasonPath, "E001.zh-Hans.forced.ass");
+        LegalTorrentFile[] files =
+        [
+            new(["Episode 01.mkv"], CreatePayload(64 * 1024, 11)),
+            new(["Episode 01.zh-Hans.forced.ass"], CreatePayload(16 * 1024, 23)),
+            new(["Episode 02.mkv"], CreatePayload(32 * 1024, 37)),
+            new(["poster.jpg"], CreatePayload(16 * 1024, 53)),
+        ];
+
+        AssertWithin(sandbox, downloadPath);
+        AssertWithin(sandbox, savePath);
+        AssertWithin(sandbox, dataPath);
+        AssertWithin(downloadPath, torrentRootPath);
+        AssertWithin(savePath, seriesPath);
+        Assert.False(Directory.Exists(torrentRootPath));
+        Assert.False(Directory.Exists(seriesPath));
+
+        await using var fileServer = new LoopbackMultiFileServer(torrentRootName, files);
+        byte[] torrentBytes = BuildMultiFileTorrent(
+            torrentRootName,
+            files,
+            fileServer.BaseUrl);
+        TorrentMetadata metadata = TorrentMetainfoParser.Parse(torrentBytes);
+        Assert.Equal(files.Sum(file => file.Payload.LongLength), metadata.TotalSize);
+        Assert.Equal(
+            files.Select(file => $"{torrentRootName}/{string.Join('/', file.PathComponents)}"),
+            metadata.Files.Select(file => file.RelativePath));
+
+        var downloader = new QbittorrentInstanceOptions
+        {
+            BaseUrl = baseUrl,
+            Username = Required("ANIMEGONET_QBIT_USERNAME"),
+            Password = Required("ANIMEGONET_QBIT_PASSWORD"),
+            DownloadPath = downloadPath,
+        };
+        using var adminHttp = new HttpClient(new HttpClientHandler { UseCookies = true })
+        {
+            BaseAddress = baseUrl,
+            Timeout = TimeSpan.FromSeconds(15),
+        };
+        adminHttp.DefaultRequestHeaders.Referrer = baseUrl;
+        var admin = new QbittorrentClient(adminHttp, downloader);
+        await admin.ConnectAsync();
+        Assert.Empty(await admin.ListAsync());
+
+        await PostFormAsync(
+            adminHttp,
+            "api/v2/torrents/createCategory",
+            new Dictionary<string, string>
+            {
+                ["category"] = category,
+                ["savePath"] = string.Empty,
+            });
+        await PostFormAsync(
+            adminHttp,
+            "api/v2/torrents/createTags",
+            new Dictionary<string, string> { ["tags"] = tag });
+
+        AnimeGoOptions options = CreateOptions(
+            dataPath,
+            downloadPath,
+            savePath,
+            downloader,
+            category,
+            tag);
+        DirectoryLayout layout = DirectoryLayout.From(options.Paths);
+        var staging = new GeneratedTorrentStagingService(
+            layout.StagingPath,
+            torrentBytes,
+            metadata);
+        using var registry = new QbittorrentClientRegistry(options);
+        WebApplication? app = null;
+        string? taskId = null;
+        try
+        {
+            app = await AnimeGoApplication.BuildAsync(
+                [],
+                options,
+                runningInContainer: false,
+                torrentStagingService: staging,
+                downloadClientRegistry: registry,
+                startBackgroundWorkers: false);
+
+            var processor = app.Services.GetRequiredService<UnifiedIngestProcessor>();
+            var result = await processor.ProcessAsync(
+                "mikan",
+                new IngestItemCommand(
+                    "https://fixture.invalid/animegonet-legal-multi-download.torrent?token=local-only",
+                    new IngestItemInfo(
+                        $"{seriesName} S01E01-E02",
+                        null,
+                        $"legal-multi-{runId}",
+                        "3951",
+                        "https://mikanani.me/Home/Bangumi/3951",
+                        null,
+                        3951,
+                        547888,
+                        null,
+                        null)),
+                requireModernMetadata: true);
+
+            Assert.True(result.Accepted, string.Join("; ", result.Errors));
+            Assert.Equal("staged", result.Status);
+            Assert.Equal(metadata.InfoHash, result.InfoHash);
+            Assert.Equal("bt", result.DownloaderId);
+            taskId = Assert.IsType<string>(result.IngestId);
+
+            Assert.Equal(
+                StagedDispatchResult.Completed,
+                await app.Services.GetRequiredService<StagedTorrentDispatcher>()
+                    .DispatchNextAsync());
+            DownloadTaskSnapshot paused = await WaitForTaskAsync(
+                admin,
+                metadata.InfoHash,
+                static task => task.State == DownloadTaskState.Paused,
+                TimeSpan.FromSeconds(10));
+            Assert.Equal(metadata.TotalSize, paused.TotalBytes);
+            Assert.False(Directory.Exists(torrentRootPath));
+
+            var database = app.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+            await SeedVerifiedMultiFileEpisodeAsync(
+                database,
+                taskId,
+                seriesName,
+                torrentRootName,
+                900002,
+                90000201);
+
+            Assert.Equal(
+                DownloadPreparationResult.Completed,
+                await app.Services.GetRequiredService<DownloadPreparationProcessor>()
+                    .RunOnceAsync());
+            IReadOnlyList<DownloadFileSnapshot> preparedFiles =
+                await admin.ListFilesAsync(metadata.InfoHash);
+            Assert.Equal(4, preparedFiles.Count);
+            Assert.Equal(
+                [1, 1, 0, 0],
+                preparedFiles.OrderBy(file => file.Index).Select(file => file.Priority).ToArray());
+            Assert.Collection(
+                await ReadWantedFilesAsync(database, taskId),
+                Assert.True,
+                Assert.True,
+                Assert.False,
+                Assert.False);
+
+            string sourceVideoPath = Path.Combine(torrentRootPath, "Episode 01.mkv");
+            string sourceSubtitlePath = Path.Combine(
+                torrentRootPath,
+                "Episode 01.zh-Hans.forced.ass");
+            DownloadTaskSnapshot completed = await WaitForTaskAsync(
+                admin,
+                metadata.InfoHash,
+                task => task.Progress >= 1
+                    && File.Exists(sourceVideoPath)
+                    && File.Exists(sourceSubtitlePath)
+                    && new FileInfo(sourceVideoPath).Length == files[0].Payload.Length
+                    && new FileInfo(sourceSubtitlePath).Length == files[1].Payload.Length,
+                TimeSpan.FromSeconds(30),
+                () => $"video_exists={File.Exists(sourceVideoPath)}, " +
+                    $"subtitle_exists={File.Exists(sourceSubtitlePath)}, " +
+                    $"web_seed_requests={fileServer.RequestCount}");
+            Assert.True(
+                completed.State is DownloadTaskState.Seeding or DownloadTaskState.Complete,
+                $"Unexpected completed qB state: {completed.State}");
+            Assert.True(fileServer.RequestCount > 0);
+            Assert.Equal(files[0].Payload, await File.ReadAllBytesAsync(sourceVideoPath));
+            Assert.Equal(files[1].Payload, await File.ReadAllBytesAsync(sourceSubtitlePath));
+
+            IReadOnlyList<DownloadFileSnapshot> downloadedFiles =
+                await admin.ListFilesAsync(metadata.InfoHash);
+            Assert.All(
+                downloadedFiles.Where(file => file.Priority == 0),
+                file => Assert.Equal(0, file.Progress));
+
+            await app.Services.GetRequiredService<DownloadSnapshotSynchronizer>()
+                .SyncOnceAsync();
+            Assert.Equal(
+                ("downloaded", "completed"),
+                await ReadDownloadStateAsync(database, taskId));
+
+            var organizer = app.Services.GetRequiredService<MediaOrganizationProcessor>();
+            Assert.Equal(
+                MediaOrganizationResult.FilesCompleted,
+                await RunOrganizationUntilFilesCompletedAsync(
+                    organizer,
+                    database,
+                    taskId));
+            Assert.False(File.Exists(sourceVideoPath));
+            Assert.False(File.Exists(sourceSubtitlePath));
+            Assert.Equal(files[0].Payload, await File.ReadAllBytesAsync(targetVideoPath));
+            Assert.Equal(files[1].Payload, await File.ReadAllBytesAsync(targetSubtitlePath));
+            Assert.False(File.Exists(Path.Combine(seasonPath, "E002.mkv")));
+            Assert.False(File.Exists(Path.Combine(seriesPath, "poster.jpg")));
+            Assert.True(File.Exists(Path.Combine(seriesPath, "tvshow.nfo")));
+            Assert.True(File.Exists(Path.Combine(seriesPath, "anime.a_json")));
+            Assert.True(File.Exists(Path.Combine(seasonPath, "anime.s_json")));
+            Assert.True(File.Exists(Path.Combine(seasonPath, "E001.e_json")));
+            Assert.Equal(1, await CountCompletionsAsync(database));
+
+            Assert.Equal(MediaOrganizationResult.CleanupCompleted, await organizer.RunOnceAsync());
+            Assert.Equal(
+                ("organized", "completed"),
+                await ReadOrganizationStateAsync(database, taskId));
+            await admin.ConnectAsync();
+            Assert.DoesNotContain(
+                await admin.ListAsync(),
+                task => string.Equals(
+                    task.Hash,
+                    metadata.InfoHash,
+                    StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(files[0].Payload, await File.ReadAllBytesAsync(targetVideoPath));
+            Assert.Equal(files[1].Payload, await File.ReadAllBytesAsync(targetSubtitlePath));
+        }
+        finally
+        {
+            if (app is not null)
+            {
+                await app.DisposeAsync();
+            }
+
+            await BestEffortDeleteTorrentAsync(admin, metadata.InfoHash);
+            await BestEffortPostFormAsync(
+                adminHttp,
+                "api/v2/torrents/removeCategories",
+                new Dictionary<string, string> { ["categories"] = category });
+            await BestEffortPostFormAsync(
+                adminHttp,
+                "api/v2/torrents/deleteTags",
+                new Dictionary<string, string> { ["tags"] = tag });
+
+            await DeleteExactDirectoryAsync(torrentRootPath, downloadPath);
+            await DeleteExactDirectoryAsync(seriesPath, savePath);
+            await DeleteExactDirectoryAsync(dataPath, integrationDataPath);
+        }
+
+        await admin.ConnectAsync();
+        Assert.DoesNotContain(
+            await admin.ListAsync(),
+            task => string.Equals(
+                task.Hash,
+                metadata.InfoHash,
+                StringComparison.OrdinalIgnoreCase));
+        using var categories = JsonDocument.Parse(
+            await adminHttp.GetStringAsync("api/v2/torrents/categories"));
+        Assert.False(categories.RootElement.TryGetProperty(category, out _));
+        using var tags = JsonDocument.Parse(
+            await adminHttp.GetStringAsync("api/v2/torrents/tags"));
+        Assert.DoesNotContain(
+            tags.RootElement.EnumerateArray(),
+            value => string.Equals(value.GetString(), tag, StringComparison.Ordinal));
+        Assert.False(Directory.Exists(torrentRootPath));
+        Assert.False(Directory.Exists(seriesPath));
+        Assert.False(Directory.Exists(dataPath));
+    }
+
     private static AnimeGoOptions CreateOptions(
         string dataPath,
         string downloadPath,
@@ -343,6 +624,96 @@ public sealed class QbittorrentLegalDownloadE2ETests
         command.Parameters.AddWithValue("$task_id", taskId);
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
         Assert.Equal(3, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SeedVerifiedMultiFileEpisodeAsync(
+        AnimeGoSqliteDatabase database,
+        string taskId,
+        string seriesName,
+        string torrentRootName,
+        int tmdbSeriesId,
+        int tmdbEpisodeId)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO anime_series (
+                id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
+                needs_tmdb_completion, created_at_utc, updated_at_utc)
+            VALUES ($series_id, $tmdb_series_id, 547888, $series_name, $series_name, 0, $now, $now);
+
+            UPDATE task_files
+            SET disposition = 'episode', source_episode = '1', file_episode_candidate = '1',
+                tmdb_series_id = $tmdb_series_id,
+                tmdb_season_number = 1, tmdb_episode_number = 1,
+                tmdb_episode_id = $tmdb_episode_id,
+                download_wanted = 1
+            WHERE task_id = $task_id
+              AND relative_path = $video_path;
+
+            UPDATE task_files
+            SET disposition = 'episode', source_episode = '1', file_episode_candidate = '1',
+                tmdb_series_id = $tmdb_series_id,
+                tmdb_season_number = 1, tmdb_episode_number = 1,
+                tmdb_episode_id = $tmdb_episode_id,
+                associated_task_file_id = (
+                    SELECT id FROM task_files
+                    WHERE task_id = $task_id AND relative_path = $video_path),
+                rename_suffix = '.zh-Hans.forced.ass',
+                download_wanted = 1
+            WHERE task_id = $task_id
+              AND relative_path = $subtitle_path;
+
+            UPDATE task_files
+            SET disposition = 'duplicate', source_episode = '2', file_episode_candidate = '2',
+                download_wanted = 0
+            WHERE task_id = $task_id
+              AND relative_path = $duplicate_path;
+
+            UPDATE task_files
+            SET disposition = 'ignored', download_wanted = 0
+            WHERE task_id = $task_id
+              AND relative_path = $ignored_path;
+
+            UPDATE ingest_tasks
+            SET status = 'metadata_resolved', updated_at_utc = $now
+            WHERE id = $task_id AND status = 'download_preparing';
+            """;
+        command.Parameters.AddWithValue("$series_id", $"series-{taskId}");
+        command.Parameters.AddWithValue("$tmdb_series_id", tmdbSeriesId);
+        command.Parameters.AddWithValue("$tmdb_episode_id", tmdbEpisodeId);
+        command.Parameters.AddWithValue("$series_name", seriesName);
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue("$video_path", $"{torrentRootName}/Episode 01.mkv");
+        command.Parameters.AddWithValue(
+            "$subtitle_path",
+            $"{torrentRootName}/Episode 01.zh-Hans.forced.ass");
+        command.Parameters.AddWithValue("$duplicate_path", $"{torrentRootName}/Episode 02.mkv");
+        command.Parameters.AddWithValue("$ignored_path", $"{torrentRootName}/poster.jpg");
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        Assert.Equal(6, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<bool[]> ReadWantedFilesAsync(
+        AnimeGoSqliteDatabase database,
+        string taskId)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT download_wanted
+            FROM task_files
+            WHERE task_id = $task_id
+            ORDER BY download_file_index;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        var result = new List<bool>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            result.Add(!reader.IsDBNull(0) && reader.GetInt64(0) != 0);
+        }
+        return result.ToArray();
     }
 
     private static async Task<(string TaskStatus, string PreparationState)> ReadDownloadStateAsync(
@@ -473,12 +844,14 @@ public sealed class QbittorrentLegalDownloadE2ETests
             $"{diagnostic?.Invoke()}.");
     }
 
-    private static byte[] CreatePayload()
+    private static byte[] CreatePayload() => CreatePayload(PayloadLength, 17);
+
+    private static byte[] CreatePayload(int length, int seed)
     {
-        var payload = new byte[PayloadLength];
+        var payload = new byte[length];
         for (var index = 0; index < payload.Length; index++)
         {
-            payload[index] = (byte)((index * 31 + 17) % 251);
+            payload[index] = (byte)((index * 31 + seed) % 251);
         }
 
         return payload;
@@ -517,6 +890,65 @@ public sealed class QbittorrentLegalDownloadE2ETests
         WriteAscii(output, "e");
         WriteString(output, "url-list");
         WriteString(output, webSeed.AbsoluteUri);
+        WriteAscii(output, "e");
+        return output.ToArray();
+    }
+
+    private static byte[] BuildMultiFileTorrent(
+        string rootName,
+        IReadOnlyList<LegalTorrentFile> files,
+        Uri webSeedBaseUrl)
+    {
+        using var concatenated = new MemoryStream();
+        foreach (LegalTorrentFile file in files)
+        {
+            concatenated.Write(file.Payload);
+        }
+        byte[] payload = concatenated.ToArray();
+
+        using var output = new MemoryStream();
+        WriteAscii(output, "d");
+        WriteString(output, "announce");
+        WriteString(output, "http://127.0.0.1:9/announce");
+        WriteString(output, "info");
+        WriteAscii(output, "d");
+        WriteString(output, "files");
+        WriteAscii(output, "l");
+        foreach (LegalTorrentFile file in files)
+        {
+            WriteAscii(output, "d");
+            WriteString(output, "length");
+            WriteInteger(output, file.Payload.LongLength);
+            WriteString(output, "path");
+            WriteAscii(output, "l");
+            foreach (string component in file.PathComponents)
+            {
+                WriteString(output, component);
+            }
+            WriteAscii(output, "e");
+            WriteAscii(output, "e");
+        }
+        WriteAscii(output, "e");
+        WriteString(output, "name");
+        WriteString(output, rootName);
+        WriteString(output, "piece length");
+        WriteInteger(output, PieceLength);
+        WriteString(output, "pieces");
+        using (var hashes = new MemoryStream())
+        {
+            for (var offset = 0; offset < payload.Length; offset += PieceLength)
+            {
+                int count = Math.Min(PieceLength, payload.Length - offset);
+#pragma warning disable CA5350 // BitTorrent v1 mandates SHA-1 piece hashes.
+                hashes.Write(SHA1.HashData(payload.AsSpan(offset, count)));
+#pragma warning restore CA5350
+            }
+
+            WriteBytes(output, hashes.ToArray());
+        }
+        WriteAscii(output, "e");
+        WriteString(output, "url-list");
+        WriteString(output, webSeedBaseUrl.AbsoluteUri);
         WriteAscii(output, "e");
         return output.ToArray();
     }
@@ -682,6 +1114,175 @@ public sealed class QbittorrentLegalDownloadE2ETests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(0);
+        }
+    }
+
+    private sealed record LegalTorrentFile(
+        string[] PathComponents,
+        byte[] Payload);
+
+    private sealed class LoopbackMultiFileServer : IAsyncDisposable
+    {
+        private readonly Dictionary<string, byte[]> _files;
+        private readonly TcpListener _listener;
+        private readonly CancellationTokenSource _stopping = new();
+        private readonly Task _serveTask;
+        private int _requestCount;
+
+        public LoopbackMultiFileServer(
+            string rootName,
+            IReadOnlyList<LegalTorrentFile> files)
+        {
+            _files = files.ToDictionary(
+                file => "/" + rootName + "/" + string.Join('/', file.PathComponents),
+                file => file.Payload,
+                StringComparer.Ordinal);
+            _listener = new TcpListener(IPAddress.Loopback, 0);
+            _listener.Start();
+            int port = ((IPEndPoint)_listener.LocalEndpoint).Port;
+            BaseUrl = new Uri($"http://127.0.0.1:{port}/");
+            _serveTask = ServeAsync(_stopping.Token);
+        }
+
+        public Uri BaseUrl { get; }
+
+        public int RequestCount => Volatile.Read(ref _requestCount);
+
+        public async ValueTask DisposeAsync()
+        {
+            await _stopping.CancelAsync();
+            _listener.Stop();
+            try
+            {
+                await _serveTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (SocketException) when (_stopping.IsCancellationRequested)
+            {
+            }
+            _stopping.Dispose();
+        }
+
+        private async Task ServeAsync(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
+                using (client)
+                {
+                    await ServeClientAsync(client, cancellationToken);
+                }
+            }
+        }
+
+        private async Task ServeClientAsync(
+            TcpClient client,
+            CancellationToken cancellationToken)
+        {
+            client.ReceiveTimeout = 5000;
+            client.SendTimeout = 5000;
+            await using NetworkStream stream = client.GetStream();
+            using var reader = new StreamReader(
+                stream,
+                Encoding.ASCII,
+                detectEncodingFromByteOrderMarks: false,
+                bufferSize: 4096,
+                leaveOpen: true);
+            string? requestLine = await reader.ReadLineAsync(cancellationToken);
+            if (requestLine is null)
+            {
+                return;
+            }
+
+            string? range = null;
+            while (await reader.ReadLineAsync(cancellationToken) is { Length: > 0 } line)
+            {
+                if (line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase))
+                {
+                    range = line[6..].Trim();
+                }
+            }
+
+            string[] requestParts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            string requestPath = requestParts.Length == 3
+                ? Uri.UnescapeDataString(requestParts[1].Split('?', 2)[0])
+                : string.Empty;
+            if (requestParts.Length != 3
+                || requestParts[0] is not ("GET" or "HEAD")
+                || !_files.TryGetValue(requestPath, out byte[]? payload))
+            {
+                await WriteStatusAsync(stream, "404 Not Found", 0, cancellationToken);
+                return;
+            }
+
+            Interlocked.Increment(ref _requestCount);
+            (int start, int end, bool partial) = ParseRange(range, payload.Length);
+            int count = end - start + 1;
+            var header = new StringBuilder()
+                .Append("HTTP/1.1 ")
+                .Append(partial ? "206 Partial Content" : "200 OK")
+                .Append("\r\nContent-Type: application/octet-stream\r\nAccept-Ranges: bytes\r\n")
+                .Append("Content-Length: ")
+                .Append(count)
+                .Append("\r\n");
+            if (partial)
+            {
+                header.Append("Content-Range: bytes ")
+                    .Append(start)
+                    .Append('-')
+                    .Append(end)
+                    .Append('/')
+                    .Append(payload.Length)
+                    .Append("\r\n");
+            }
+            header.Append("Connection: close\r\n\r\n");
+            await stream.WriteAsync(
+                Encoding.ASCII.GetBytes(header.ToString()),
+                cancellationToken);
+            if (requestParts[0] == "GET")
+            {
+                await stream.WriteAsync(payload.AsMemory(start, count), cancellationToken);
+            }
+        }
+
+        private static (int Start, int End, bool Partial) ParseRange(
+            string? value,
+            int length)
+        {
+            if (value is null
+                || !value.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))
+            {
+                return (0, length - 1, false);
+            }
+
+            string[] bounds = value[6..].Split('-', 2);
+            if (bounds.Length != 2
+                || !int.TryParse(bounds[0], out int start)
+                || start < 0
+                || start >= length)
+            {
+                return (0, length - 1, false);
+            }
+
+            int end = int.TryParse(bounds[1], out int parsedEnd)
+                ? Math.Min(parsedEnd, length - 1)
+                : length - 1;
+            return end >= start
+                ? (start, end, true)
+                : (0, length - 1, false);
+        }
+
+        private static async Task WriteStatusAsync(
+            Stream stream,
+            string status,
+            int contentLength,
+            CancellationToken cancellationToken)
+        {
+            byte[] response = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 {status}\r\nContent-Length: {contentLength}\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(response, cancellationToken);
         }
     }
 
