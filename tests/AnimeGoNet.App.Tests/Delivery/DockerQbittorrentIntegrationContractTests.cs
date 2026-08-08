@@ -5,6 +5,43 @@ namespace AnimeGoNet.App.Tests.Delivery;
 public sealed class DockerQbittorrentIntegrationContractTests
 {
     [Fact]
+    public async Task BaseContainerSmokeForcesRuntimeHardeningAndCleanSigterm()
+    {
+        var root = RepositoryRoot();
+        var dockerfile = await File.ReadAllTextAsync(Path.Combine(root, "Dockerfile.animegonet"));
+        var compose = await File.ReadAllTextAsync(Path.Combine(root, "docker-compose.animegonet.yml"));
+        var smoke = await File.ReadAllTextAsync(Path.Combine(root, "eng", "smoke-container.sh"));
+        var workflow = await File.ReadAllTextAsync(Path.Combine(
+            root,
+            ".github",
+            "workflows",
+            "animegonet-docker.yml"));
+
+        Assert.Contains("USER 10001:10001", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("user: \"${PUID:-1000}:${PGID:-1000}\"", compose, StringComparison.Ordinal);
+        Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
+        Assert.Contains("- /tmp", compose, StringComparison.Ordinal);
+        Assert.Contains("no-new-privileges:true", compose, StringComparison.Ordinal);
+
+        Assert.Contains("--user \"$test_uid:$test_gid\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("--read-only", smoke, StringComparison.Ordinal);
+        Assert.Contains("--tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m", smoke, StringComparison.Ordinal);
+        Assert.Contains("--security-opt no-new-privileges:true", smoke, StringComparison.Ordinal);
+        Assert.Contains("{{.HostConfig.ReadonlyRootfs}}", smoke, StringComparison.Ordinal);
+        Assert.Contains("{{json .HostConfig.Tmpfs}}", smoke, StringComparison.Ordinal);
+        Assert.Contains("{{json .HostConfig.SecurityOpt}}", smoke, StringComparison.Ordinal);
+        Assert.Contains("test \"$(id -u)\" -ne 0", smoke, StringComparison.Ordinal);
+        Assert.Contains("touch /data/.animegonet-smoke-write", smoke, StringComparison.Ordinal);
+        Assert.Contains("touch /download/.animegonet-smoke-write", smoke, StringComparison.Ordinal);
+        Assert.Contains("touch /tmp/.animegonet-smoke-write", smoke, StringComparison.Ordinal);
+        Assert.Contains("{{.State.Health.Status}}", smoke, StringComparison.Ordinal);
+        Assert.Contains("docker stop --signal SIGTERM --time 7", smoke, StringComparison.Ordinal);
+        Assert.Contains("{{.State.ExitCode}}", smoke, StringComparison.Ordinal);
+        Assert.Contains("./eng/smoke-container.sh animegonet:ci", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("TestSpace", dockerfile + compose + smoke, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task IsolatedComposeAndSmokeCoverDualInstanceLifecycleWithoutPrivateInputs()
     {
         var root = RepositoryRoot();

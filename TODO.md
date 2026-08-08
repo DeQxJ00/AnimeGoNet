@@ -237,7 +237,7 @@
 
 - [>] 完成 Host DI 和 CLI 行为：宿主组合、优雅退出、`--config`、三路径和规范嵌套配置的命令行覆盖已完成；上游其余 CLI parity 待审计。
 - [>] 完成 Docker NativeAOT 镜像（双架构 Dockerfile、Buildx CI 和容器 smoke 已建立；本机无 Docker CLI，待 GitHub runner 实跑）。
-- [>] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证：Linux/macOS NativeAOT smoke 已在成功验收后发送 `SIGTERM`，要求 7 秒内零退出并可删除隔离数据目录；非 root、PUID/PGID 与只读根仍待完成。
+- [>] 添加非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统验证：基础容器 smoke 已强制使用 runner 的任意非 root UID/GID、只读 rootfs、`/tmp` noexec tmpfs 与 no-new-privileges，实际验证 `/data`/`/download`/`/tmp` 可写、镜像 healthcheck 变为 healthy，并要求 SIGTERM 7 秒内零退出且 SQLite 保留；Compose 的 PUID/PGID 替换与声明均有契约门禁，Docker runner 实跑结果待验收。
 - [>] 添加连接外部下载器和内置 Compose 下载器的部署示例：规范 YAML、环境变量、本机 TestSpace 和官方 `/download` Compose 路径契约已记录；远程外部 qB 的容器路径映射完整示例仍待补充。
 - [x] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
 - [x] 提供写有上述绝对路径的 Docker 容器配置；Compose 卷与配置逐项一致，不依赖隐藏路径修正。

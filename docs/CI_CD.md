@@ -47,6 +47,13 @@ Compose 用同一组 `PUID`/`PGID` 运行 AnimeGoNet 和两个 qBittorrent，避
 `qbittorrent/pt`，并把这些目录所有权设为配置的 `PUID:PGID`；不要依赖 Docker
 以 root 自动创建宿主 bind 目录。
 
+基础镜像 smoke 不依赖 Dockerfile 的默认 UID：它显式用 runner 的非 root
+UID/GID 启动同一镜像，并强制 `--read-only`、`/tmp` noexec tmpfs 与
+`no-new-privileges`。启动后同时检查 Docker 实际 HostConfig、容器内 UID/GID、
+`/data`/`/download`/`/tmp` 精确临时写删、镜像 healthcheck、NativeAOT 状态和
+SQLite 建库；最后发送 SIGTERM，要求 7 秒内退出码为 0 且挂载数据库仍存在。
+这证明自定义 PUID/PGID 不要求写入 `/app` 或根文件系统。
+
 LinuxServer qBittorrent 首次启动会在容器日志中提供临时 `admin` 密码。生产部署
 必须先登录两个实例并设置各自密码，再通过 WebUI 写入 AnimeGoNet 私有下载器
 配置；不要把密码写入 Compose 或 Git。两个实例的默认保存路径应分别设为
