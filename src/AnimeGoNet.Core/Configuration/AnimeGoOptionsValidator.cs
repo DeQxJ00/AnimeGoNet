@@ -48,9 +48,10 @@ public static partial class AnimeGoOptionsValidator
                 errors.Add($"Downloader '{rawId}' has unsupported type '{downloader.Type}'. Only qBittorrent is supported.");
             }
 
-            if (downloader.BaseUrl.Scheme is not ("http" or "https"))
+            if (!IsDownloaderBaseUrl(downloader.BaseUrl))
             {
-                errors.Add($"Downloader '{rawId}' base URL must use HTTP or HTTPS.");
+                errors.Add(
+                    $"Downloader '{rawId}' base URL must be an absolute HTTP(S) URL without credentials, query or fragment.");
             }
 
             if (!PathBoundary.IsWithin(options.Paths.DownloadPath, downloader.DownloadPath))
@@ -59,11 +60,29 @@ public static partial class AnimeGoOptionsValidator
             }
         }
 
+        var sourceProfileIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in options.InitialSourceProfiles)
         {
             if (!profile.Id.Equals(profile.Id.ToLowerInvariant(), StringComparison.Ordinal) || !IsStableId(profile.Id))
             {
                 errors.Add($"Source profile id '{profile.Id}' is not a stable lowercase id.");
+            }
+
+            if (!sourceProfileIds.Add(profile.Id))
+            {
+                errors.Add($"Source profile id '{profile.Id}' is duplicated.");
+            }
+
+            if (!profile.Adapter.Equals(profile.Adapter.ToLowerInvariant(), StringComparison.Ordinal)
+                || !IsStableId(profile.Adapter))
+            {
+                errors.Add($"Source profile '{profile.Id}' adapter is not a stable lowercase id.");
+            }
+
+            if (!profile.DownloaderId.Equals(profile.DownloaderId.ToLowerInvariant(), StringComparison.Ordinal)
+                || !IsStableId(profile.DownloaderId))
+            {
+                errors.Add($"Source profile '{profile.Id}' downloader reference is not a stable lowercase id.");
             }
 
             if (!options.Downloaders.ContainsKey(profile.DownloaderId))
@@ -335,6 +354,11 @@ public static partial class AnimeGoOptionsValidator
         && uri.Scheme is "http" or "https"
         && string.IsNullOrEmpty(uri.UserInfo)
         && string.IsNullOrEmpty(uri.Fragment);
+
+    private static bool IsDownloaderBaseUrl(Uri uri) =>
+        IsHttpEndpoint(uri)
+        && string.IsNullOrEmpty(uri.UserInfo)
+        && string.IsNullOrEmpty(uri.Query);
 
     private static bool IsMetadataApiBaseUrl(Uri uri) =>
         IsHttpEndpoint(uri)

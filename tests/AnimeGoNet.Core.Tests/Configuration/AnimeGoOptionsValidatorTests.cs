@@ -41,6 +41,53 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
+    public void RejectsUnsafeDownloaderEndpointWithoutEchoingCredentials()
+    {
+        const string secret = "do-not-echo";
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Downloaders = new Dictionary<string, QbittorrentInstanceOptions>
+            {
+                ["bt"] = defaults.Downloaders["bt"] with
+                {
+                    BaseUrl = new Uri($"https://admin:{secret}@qbt.invalid/api?token=private#fragment"),
+                },
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("base URL", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors, error => error.Contains(secret, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RejectsDuplicateOrUnstableSourceRoutingIdentity()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var first = defaults.InitialSourceProfiles[0] with
+        {
+            Adapter = "Mikan",
+            DownloaderId = "BT",
+        };
+        var options = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                first,
+                first with { Adapter = "mikan", DownloaderId = "bt" },
+            ],
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("duplicated", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("adapter", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("downloader reference", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RejectsTransmissionWithoutSilentlyConvertingIt()
     {
         var defaults = AnimeGoDefaults.CreateDocker();

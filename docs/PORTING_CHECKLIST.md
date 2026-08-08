@@ -10,8 +10,8 @@
 |---|---|---:|---:|---|
 | `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 待验证 |
 | `cmd/plugin` | `AnimeGo.PluginTool` validate/run/pack | 替换 | 已验证 | 严格 fixture/config/typed-result tests、确定性 ZIP、真实 NativeAOT 插件进程 smoke |
-| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 进行中 | Docker/Native 默认路径、下载器及 Web 监听强类型配置通过；12 份旧 YAML 已验证，剩余配置字段 parity 按环境变量行继续跟踪 |
-| `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 进行中 | 路径/下载器/目录边界 tests 已通过；完整旧配置校验待实现 |
+| `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 已验证 | Docker/Native 路径、Web、双 qB、Mikan move、元数据/重试/缓存/调度均为强类型安全默认；12 份固定上游 YAML 逐字段迁移，旧字段按保留映射、业务替换或明确例外分类，无 Python/Transmission/旧不安全默认泄漏 |
+| `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 已验证 | 首次创建使用 CreateNew/0600、旧配置先完整解析与规范化再备份/原子替换；路径边界、Web、qB URL/类型/ID、来源唯一 ID/路由/Host/Cookie/策略、TMDB/Bangumi/AI/Torrent/调度/数据更新均 fail-closed；旧 `refresh_second` 最小值行为由独立 HostedService 节奏替换 |
 | `configs/update.go`、`version/v_*` | 1.1.0→1.7.1 迁移链 | 保留 | 已验证 | 固定 `develop@c7475df` 的 12 份历史 YAML 均以 SHA-256 锁定并迁移到规范 1.7.1；只接受上游 13 个精确版本，范围内伪版本在备份/写入前拒绝；原字节备份、原子替换、幂等、无备份开关与非 qB fail-closed tests |
 | `configs/utils.go` 环境变量 | 部署配置环境变量覆盖 | 保留 | 已验证 | 上游全部 `ANIMEGO_*`、规范嵌套键、扁平键和命令行按实际 Provider 层级解析，跨别名保持命令行→环境→YAML；三路径、命名下载器、SourceProfile、统一 AI 旧双键和显式空值均有冲突层 tests。应用全部可编辑字段、下载器实例与来源字段投影环境/命令行 `locked_fields`，API/WebUI 拒绝越级改写且私有 JSON/SQLite 不固化部署凭据；Cookie、secret 与命令行值不回显；Web 安全默认、标准 URL 覆盖和真实 Kestrel tests 已验证 |
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
