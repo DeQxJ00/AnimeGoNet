@@ -35,6 +35,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install WebUI E2E dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -45,5 +53,16 @@ jobs:
           cache-from: type=gha
       - name: Smoke container paths, API, SQLite and NativeAOT
         run: ./eng/smoke-container.sh animegonet:ci
+      - name: Smoke release-container WebUI in Chromium
+        run: ./eng/smoke-webui-container.sh animegonet:ci
       - name: Smoke isolated dual qBittorrent routing and Web API
         run: ./eng/smoke-qbittorrent-compose.sh animegonet:ci
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: webui-playwright-report
+          path: |
+            .artifacts/playwright-report
+            .artifacts/playwright-results
+          if-no-files-found: ignore
+          retention-days: 14

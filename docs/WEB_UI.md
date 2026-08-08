@@ -202,6 +202,19 @@ Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共�
 响应与请求体类型，client 统一序列化 JSON、传播 `AbortSignal`、携带页面已有的旧
 `Access-Key`，并把结构化失败投影为稳定的 `ApiHttpError`。
 
+## 发布态浏览器 E2E
+
+仓库使用固定 `@playwright/test` 与 Chromium 运行 `npm run web:e2e`。测试目标由
+`ANIMEGONET_WEBUI_BASE_URL` 指定，`ANIMEGONET_WEBUI_ACCESS_KEY` 只作为进程环境值：
+直连 API 使用明文 `X-AnimeGo-Access-Key`，页面 URL 与 WebSocket 使用同一 key 的
+lowercase SHA-256 `access_key`，不会把明文 key 放入 URL。
+
+`eng/smoke-webui-container.sh IMAGE` 会用随机回环端口、非 root UID/GID、只读根
+文件系统、`no-new-privileges` 和独立临时 `/data`/`/download` 启动发布镜像，再运行
+桌面与 390×844 移动端用例。当前 Docker 脚本及 Actions 门禁已生成，但按项目所有者
+要求标记为未验证，等待后续自行在 Docker 环境实跑；本机 win-x64 NativeAOT 二进制
+已通过相同 Playwright 用例。
+
 客户端只接受以单个 `/` 开头且不含反斜杠的同源路径，在进入 `fetch` 前拒绝绝对 URL、
 协议相对 URL和浏览器可重解释的反斜杠 host，防止 Access-Key 被发送到外部来源。失败
 响应只读取类型正确的 `code/message/errors` 字段；HTML、畸形 JSON 或错误字段类型只

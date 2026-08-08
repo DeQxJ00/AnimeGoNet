@@ -8,9 +8,11 @@
   "scripts": {
     "web:build": "tsc --project tsconfig.json",
     "web:check": "tsc --project tsconfig.json --noEmit",
-    "web:test": "npm run web:build && node --test tests/web/*.test.mjs"
+    "web:test": "npm run web:build && node --test tests/web/*.test.mjs",
+    "web:e2e": "playwright test --config playwright.config.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.0",
     "linkedom": "0.18.13",
     "typescript": "7.0.2"
   }

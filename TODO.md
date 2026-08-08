@@ -230,7 +230,7 @@
 - [x] 实现缓存/数据库浏览和安全删除：现代 `/api/v1/cache` 只投影 `bolt`/`bolt_sub` 的不可逆 bucket/key SHA-256 ID、条目数、JSON 字节数和时间，不返回原始 key/value、SQLite 路径或凭据；分页读取惰性清理过期项，`bolt_sub` 永久只读，`bolt` 单项删除需要二次确认及绑定当前 key/value/TTL/更新时间的 opaque token，预览后变化返回冲突。静态 TypeScript 页面、Access-Key、Kestrel/OpenAPI 和 NativeAOT smoke 均已接入；不开放任意 SQL 或业务表删除。
 - [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [x] 完成响应式布局、统一空/错/加载状态和基本可访问性：主异步区域共享显式状态机与安全文本节点，loading/empty/error 使用对应 busy/status/alert 语义；提供首个键盘跳转入口、全局可见焦点、44px 控件目标、reduced-motion 和 620px 移动端收敛布局；静态 DOM 契约自动检查唯一 ID、section/dialog/控件名称、非正 tabindex 与初始状态，390×844 / 1280×800 本机 Kestrel 验收均无横向溢出和 console error。
-- [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入，发布镜像 Playwright UI E2E 待实现。
+- [>] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2；Docker workflow、加固容器 launcher 和报告上传已生成，但按用户要求标记为未验证，等待后续自行实跑。
 - [ ] 用 Tampermonkey + Mikan fixture 页验证“单集”“全集”“上传/获取过滤配置”。
 
 ## P10 — 组合与发布
@@ -249,7 +249,7 @@
 - [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
 - [x] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；win-x64 原生二进制完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt 以只读 Go schema-v1 JSON 导出后由 .NET schema v39 单事务导入；跨平台 CI 的组合 smoke 在同一隔离目录验证 3 条旧 sidecar 索引、六个 bucket、过期跳过、重复导入和重启保留。
 - [ ] 完成全链路 JIT/AOT/Docker E2E。
-- [ ] 用发布镜像完成 Web UI Playwright E2E。
+- [>] 用发布镜像完成 Web UI Playwright E2E：固定 Playwright 1.62.0/Chromium，验证 NativeAOT 状态、Access-Key 双边界、主要异步区域、WebSocket、TMDB fallback 可视顺序、键盘跳转、移动端无横向溢出和零 console error；本机 NativeAOT 2/2 已通过，Docker 镜像脚本与 CI 门禁已生成但按用户要求不声称已验证。
 - [>] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker 路径和本机 qB 隔离验收文档已完成；旧配置迁移、外部插件和完整运维手册待完成。
 - [ ] 标记第一个可用预发布版本。
 
