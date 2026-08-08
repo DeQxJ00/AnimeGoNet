@@ -357,6 +357,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         int organizationAttemptCount;
         DateTimeOffset? organizationNextAttemptAtUtc;
         string? organizationFailureCode;
+        string organizationPhase;
+        int organizationCompletedUnits;
+        int organizationTotalUnits;
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
@@ -364,7 +367,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                        job.preparation_state, job.preparation_attempt_count,
                        job.preparation_next_attempt_at_utc, job.preparation_failure_code,
                        job.organization_state, job.organization_attempt_count,
-                       job.organization_next_attempt_at_utc, job.organization_failure_code
+                       job.organization_next_attempt_at_utc, job.organization_failure_code,
+                       job.organization_phase, job.organization_completed_units,
+                       job.organization_total_units
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
                 WHERE job.id = $job_id;
@@ -386,6 +391,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             organizationAttemptCount = reader.GetInt32(7);
             organizationNextAttemptAtUtc = ReadDateTimeOffset(reader, 8);
             organizationFailureCode = reader.IsDBNull(9) ? null : reader.GetString(9);
+            organizationPhase = reader.GetString(10);
+            organizationCompletedUnits = reader.GetInt32(11);
+            organizationTotalUnits = reader.GetInt32(12);
         }
 
         var files = new List<DownloadJobFileRecord>();
@@ -454,6 +462,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             organizationAttemptCount,
             organizationNextAttemptAtUtc,
             organizationFailureCode,
+            organizationPhase,
+            organizationCompletedUnits,
+            organizationTotalUnits,
             files,
             events);
     }

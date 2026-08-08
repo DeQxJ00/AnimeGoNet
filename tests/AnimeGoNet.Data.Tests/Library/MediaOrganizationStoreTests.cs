@@ -31,6 +31,8 @@ public sealed class MediaOrganizationStoreTests
         var afterMoves = await fixture.ReadStateAsync();
         Assert.Equal("organizing_cleanup", afterMoves.TaskStatus);
         Assert.Equal("cleanup", afterMoves.OrganizationState);
+        Assert.Equal(MediaOrganizationPhases.CleanupDownloader, afterMoves.OrganizationPhase);
+        Assert.Equal((0, 1), (afterMoves.CompletedUnits, afterMoves.TotalUnits));
         Assert.Equal(1, afterMoves.CompletionCount);
         Assert.Equal("/download/anime/Series/S01/E001.mkv", afterMoves.MediaPath);
 
@@ -43,6 +45,8 @@ public sealed class MediaOrganizationStoreTests
         var completed = await fixture.ReadStateAsync();
         Assert.Equal("organized", completed.TaskStatus);
         Assert.Equal("completed", completed.OrganizationState);
+        Assert.Equal(MediaOrganizationPhases.Completed, completed.OrganizationPhase);
+        Assert.Equal((1, 1), (completed.CompletedUnits, completed.TotalUnits));
     }
 
     [Fact]
@@ -149,6 +153,67 @@ public sealed class MediaOrganizationStoreTests
         Assert.Equal(1, state.CompletionCount);
     }
 
+    [Fact]
+    public async Task ProgressIsValidatedAndSurvivesRetryRelease()
+    {
+        await using var fixture = await OrganizationFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Store.UpdateProgressAsync(
+            claim,
+            MediaOrganizationPhases.CleanupDownloader,
+            0,
+            1,
+            now));
+        await fixture.Store.UpdateProgressAsync(
+            claim,
+            MediaOrganizationPhases.RenamePlanning,
+            1,
+            1,
+            now);
+        await fixture.Store.ReleaseAsync(claim, "target_conflict", now.AddSeconds(30), now);
+
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("pending", state.OrganizationState);
+        Assert.Equal(MediaOrganizationPhases.RenamePlanning, state.OrganizationPhase);
+        Assert.Equal((1, 1), (state.CompletedUnits, state.TotalUnits));
+    }
+
+    [Fact]
+    public async Task ExpiredLinkCleanupLeaseReturnsToCleanupInsteadOfRepeatingFileWork()
+    {
+        await using var fixture = await OrganizationFixture.CreateAsync();
+        await fixture.SetFileStrategyAsync("link");
+        var now = DateTimeOffset.UtcNow;
+        var move = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        var file = Assert.Single(move.Files);
+        var operation = Assert.Single(await fixture.Store.EnsureOperationsAsync(
+            move,
+            [new MediaOperationPlan(
+                file.TaskFileId,
+                "/download/incomplete/bt/episode.mkv",
+                "/download/anime/Series/S01/E001.mkv")],
+            now));
+        await fixture.Store.CompleteFileAsync(move, operation.OperationId, file.SizeBytes, now);
+        await fixture.Store.CompleteMovesAsync(move, now);
+        var cleanup = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now.AddSeconds(1),
+            TimeSpan.FromMinutes(1)));
+        Assert.Equal(MediaOrganizationStage.CleanupDownloader, cleanup.Stage);
+
+        var recovered = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now.AddMinutes(2),
+            TimeSpan.FromMinutes(1)));
+
+        Assert.Equal(MediaOrganizationStage.CleanupDownloader, recovered.Stage);
+        Assert.Equal(cleanup.AttemptCount + 1, recovered.AttemptCount);
+    }
+
     private sealed class OrganizationFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _database;
@@ -220,7 +285,9 @@ public sealed class MediaOrganizationStoreTests
             command.CommandText = """
                 SELECT task.status, job.organization_state,
                        (SELECT COUNT(*) FROM completion_records),
-                       (SELECT media_path FROM completion_records LIMIT 1)
+                       (SELECT media_path FROM completion_records LIMIT 1),
+                       job.organization_phase, job.organization_completed_units,
+                       job.organization_total_units
                 FROM ingest_tasks AS task
                 JOIN download_jobs AS job ON job.task_id = task.id
                 WHERE task.id = $task_id;
@@ -230,7 +297,22 @@ public sealed class MediaOrganizationStoreTests
             Assert.True(await reader.ReadAsync());
             return new State(
                 reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3));
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.GetString(4), reader.GetInt32(5), reader.GetInt32(6));
+        }
+
+        public async Task SetFileStrategyAsync(string strategy)
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET route_snapshot_json = json_set(route_snapshot_json, '$.file_strategy', $strategy)
+                WHERE id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$strategy", strategy);
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public async Task AddEpisodeFileAsync(
@@ -266,5 +348,12 @@ public sealed class MediaOrganizationStoreTests
         public ValueTask DisposeAsync() => _database.DisposeAsync();
     }
 
-    private sealed record State(string TaskStatus, string OrganizationState, int CompletionCount, string? MediaPath);
+    private sealed record State(
+        string TaskStatus,
+        string OrganizationState,
+        int CompletionCount,
+        string? MediaPath,
+        string OrganizationPhase,
+        int CompletedUnits,
+        int TotalUnits);
 }

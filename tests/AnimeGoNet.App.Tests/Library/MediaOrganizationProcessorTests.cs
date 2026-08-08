@@ -85,12 +85,18 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Empty(client.Deleted);
         var intermediate = await ReadStateAsync(app, taskId);
         Assert.Equal(("organizing_cleanup", "cleanup", 1), intermediate);
+        Assert.Equal(
+            (MediaOrganizationPhases.CleanupDownloader, 0, 1),
+            await ReadProgressAsync(app, taskId));
 
         Assert.Equal(MediaOrganizationResult.CleanupCompleted, await processor.RunOnceAsync());
 
         var deleted = Assert.Single(client.Deleted);
         Assert.False(deleted.DeleteFiles);
         Assert.Equal(("organized", "completed", 1), await ReadStateAsync(app, taskId));
+        Assert.Equal(
+            (MediaOrganizationPhases.Completed, 1, 1),
+            await ReadProgressAsync(app, taskId));
         Assert.False(File.Exists(Path.Combine(paths.DownloadPath, "bt", "episode.mkv")));
         Assert.NotEmpty(client.Paused);
     }
@@ -182,7 +188,10 @@ public sealed class MediaOrganizationProcessorTests
             SELECT
                 (SELECT COUNT(*) FROM completion_records),
                 (SELECT organization_state FROM download_jobs WHERE task_id = $task_id),
-                (SELECT status FROM ingest_tasks WHERE id = $task_id);
+                (SELECT status FROM ingest_tasks WHERE id = $task_id),
+                (SELECT organization_phase FROM download_jobs WHERE task_id = $task_id),
+                (SELECT organization_completed_units FROM download_jobs WHERE task_id = $task_id),
+                (SELECT organization_total_units FROM download_jobs WHERE task_id = $task_id);
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
         await using var reader = await command.ExecuteReaderAsync();
@@ -190,6 +199,9 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Equal(0, reader.GetInt32(0));
         Assert.Equal("pending", reader.GetString(1));
         Assert.Equal("downloaded", reader.GetString(2));
+        Assert.Equal(MediaOrganizationPhases.DirectoryIndex, reader.GetString(3));
+        Assert.Equal(0, reader.GetInt32(4));
+        Assert.Equal(1, reader.GetInt32(5));
     }
 
     [Fact]
@@ -768,5 +780,24 @@ public sealed class MediaOrganizationProcessorTests
                 ? Task.CompletedTask
                 : Task.FromException(DeleteFailure);
         }
+    }
+
+    private static async Task<(string Phase, int Completed, int Total)> ReadProgressAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT organization_phase, organization_completed_units,
+                   organization_total_units
+            FROM download_jobs
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2));
     }
 }

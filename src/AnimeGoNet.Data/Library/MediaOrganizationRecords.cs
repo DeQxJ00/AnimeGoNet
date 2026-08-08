@@ -6,6 +6,21 @@ public enum MediaOrganizationStage
     CleanupDownloader,
 }
 
+public static class MediaOrganizationPhases
+{
+    public const string NotStarted = "not_started";
+    public const string RenamePlanning = "rename_planning";
+    public const string MediaTransfer = "media_transfer";
+    public const string SubtitleTransfer = "subtitle_transfer";
+    public const string NfoWrite = "nfo_write";
+    public const string DirectoryIndex = "directory_index";
+    public const string CleanupDownloader = "cleanup_downloader";
+    public const string Completed = "completed";
+
+    public static bool IsMovePhase(string phase) => phase is
+        RenamePlanning or MediaTransfer or SubtitleTransfer or NfoWrite or DirectoryIndex;
+}
+
 public sealed record MediaOrganizationFile(
     string TaskFileId,
     string RelativePath,

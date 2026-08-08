@@ -205,7 +205,7 @@
 - [>] 通过 API/WS 契约差分测试：生成文档与所有当前非排除 HTTP endpoint 的 method/path 精确相等，上游 OpenAPI 12 个 operation 也逐项自动对比；legacy config/rss/plugin/manager/Bolt、access-key 与 WebSocket 控制帧已有 Kestrel 契约，全响应字段 golden 与原油猴浏览器 E2E 仍待完成。
 - [x] 创建 Web 前端工程、类型化 API client 和前端测试基线：TypeScript 7 strict 工程输出原生 ES module；共享 JSON client 只接受同源绝对路径、集中携带 Access-Key、序列化类型化请求体，并以稳定错误类型处理结构化失败/非 JSON 响应；运行状态与目录数据库请求已接入，Node 内置 runner 的 5 项安全/协议测试及 CI 产物差分门禁已建立。
 - [x] 实现仪表盘和下载器/任务状态：下载状态卡片、进度、连接且非 stale 的跨实例速度汇总、活动/暂停/失败/等待整理/完成/离线指标、qB 状态与 AnimeGoNet 业务阶段独立筛选，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、策略尝试时间线、文件归类计数、准备/整理失败详情和显式重试入口均已接入。
-- [>] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；下载 API/WebUI 另显示持久化做种目标、状态、累计时间、百分比和完成时间。解析/移动/重命名/字幕/NFO的更细粒度进度仍待串联。
+- [x] 实现两层下载进度投影：qB规范状态/百分比/容量/速度/ETA/Seeds/Peers与AnimeGoNet业务状态已分离，qB 100%映射为 `downloaded` 而非最终业务完成；下载 API/WebUI 另显示持久化做种目标、状态、累计时间、百分比和完成时间。schema v37 以 SQLite 持久化 `rename_planning/media_transfer/subtitle_transfer/nfo_write/directory_index/cleanup_downloader/completed` 阶段及单位进度；重试保留失败阶段，文件传输从已完成的不可变 operation 续算，`link/link_delete` 清理租约过期不会误回退并重复文件整理。
 - [x] 实现按实例隔离的qB同步器和`DownloaderTaskSnapshot`：活动约2秒、空闲约10秒、单实例单在途、实例失败隔离、离线保留stale快照、重启按实例+hash恢复，以及首错2秒、连续半开失败指数增长并封顶120秒的熔断已完成；显式连接测试可安全绕过等待窗并在成功后复位。
 - [x] 实现下载列表/详情/文件级 priority 与 wanted 进度、筛选搜索分页和状态时间线；详情合并 SQLite 文件分配与 qB 实时文件快照，qB 离线时保留持久化信息并返回安全失败码，不暴露绝对路径或凭据。
 - [x] 实现暂停、恢复和 AnimeGoNet 业务重试；写操作校验 job revision，成功/失败均写入 schema v24 审计事件，任务卡片的删除操作仍只进入四类删除中心执行预览/确认。首版不复刻 Tracker/Peer 明细、piece 图、限速、强制校验/汇报和 qB 全局设置。

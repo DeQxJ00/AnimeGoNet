@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 36;
+    public const int CurrentVersion = 37;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -42,7 +42,96 @@ public static class DatabaseSchema
         new SchemaMigration(34, "dynamic_download_tags", DynamicDownloadTags),
         new SchemaMigration(35, "completion_source_alias_audit", CompletionSourceAliasAudit),
         new SchemaMigration(36, "source_rss_scheduling", SourceRssScheduling),
+        new SchemaMigration(37, "media_organization_progress", MediaOrganizationProgress),
     ];
+
+    private const string MediaOrganizationProgress = """
+        ALTER TABLE download_jobs
+        ADD COLUMN organization_phase TEXT NOT NULL DEFAULT 'not_started'
+        CHECK (organization_phase IN (
+            'not_started', 'rename_planning', 'media_transfer', 'subtitle_transfer',
+            'nfo_write', 'directory_index', 'cleanup_downloader', 'completed'));
+
+        ALTER TABLE download_jobs
+        ADD COLUMN organization_total_units INTEGER NOT NULL DEFAULT 0
+        CHECK (organization_total_units >= 0);
+
+        ALTER TABLE download_jobs
+        ADD COLUMN organization_completed_units INTEGER NOT NULL DEFAULT 0
+        CHECK (organization_completed_units >= 0
+            AND organization_completed_units <= organization_total_units);
+
+        UPDATE download_jobs
+        SET organization_phase = CASE organization_state
+                WHEN 'completed' THEN 'completed'
+                WHEN 'cleanup' THEN 'cleanup_downloader'
+                ELSE 'not_started'
+            END,
+            organization_total_units = CASE
+                WHEN organization_state IN ('completed', 'cleanup') THEN 1 ELSE 0 END,
+            organization_completed_units = CASE
+                WHEN organization_state = 'completed' THEN 1 ELSE 0 END;
+
+        CREATE TRIGGER tr_download_jobs_organization_progress_insert
+        BEFORE INSERT ON download_jobs
+        WHEN NOT (
+            NEW.organization_completed_units BETWEEN 0 AND NEW.organization_total_units
+            AND (
+                (NEW.organization_phase = 'not_started'
+                    AND NEW.organization_total_units = 0
+                    AND NEW.organization_completed_units = 0)
+                OR (NEW.organization_phase = 'completed'
+                    AND NEW.organization_total_units = 1
+                    AND NEW.organization_completed_units = 1)
+                OR (NEW.organization_phase IN (
+                        'rename_planning', 'media_transfer', 'subtitle_transfer',
+                        'nfo_write', 'directory_index', 'cleanup_downloader')
+                    AND NEW.organization_total_units > 0)
+            )
+            AND (NEW.organization_state != 'not_required'
+                OR NEW.organization_phase = 'not_started')
+            AND (NEW.organization_state != 'cleanup'
+                OR NEW.organization_phase = 'cleanup_downloader')
+            AND (NEW.organization_state != 'completed'
+                OR NEW.organization_phase = 'completed')
+            AND (NEW.organization_phase != 'completed'
+                OR NEW.organization_state = 'completed')
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid media organization progress');
+        END;
+
+        CREATE TRIGGER tr_download_jobs_organization_progress_update
+        BEFORE UPDATE OF organization_state, organization_phase,
+            organization_total_units, organization_completed_units
+        ON download_jobs
+        WHEN NOT (
+            NEW.organization_completed_units BETWEEN 0 AND NEW.organization_total_units
+            AND (
+                (NEW.organization_phase = 'not_started'
+                    AND NEW.organization_total_units = 0
+                    AND NEW.organization_completed_units = 0)
+                OR (NEW.organization_phase = 'completed'
+                    AND NEW.organization_total_units = 1
+                    AND NEW.organization_completed_units = 1)
+                OR (NEW.organization_phase IN (
+                        'rename_planning', 'media_transfer', 'subtitle_transfer',
+                        'nfo_write', 'directory_index', 'cleanup_downloader')
+                    AND NEW.organization_total_units > 0)
+            )
+            AND (NEW.organization_state != 'not_required'
+                OR NEW.organization_phase = 'not_started')
+            AND (NEW.organization_state != 'cleanup'
+                OR NEW.organization_phase = 'cleanup_downloader')
+            AND (NEW.organization_state != 'completed'
+                OR NEW.organization_phase = 'completed')
+            AND (NEW.organization_phase != 'completed'
+                OR NEW.organization_state = 'completed')
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid media organization progress');
+        END;
+        """;
 
     private const string SourceRssScheduling = """
         ALTER TABLE source_profiles

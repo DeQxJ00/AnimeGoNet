@@ -494,7 +494,11 @@ public sealed record DownloadStageDetail(
     [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("attempt_count")] int AttemptCount,
     [property: JsonPropertyName("next_attempt_at_utc")] DateTimeOffset? NextAttemptAtUtc,
-    [property: JsonPropertyName("failure_code")] string? FailureCode);
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("phase")] string? Phase,
+    [property: JsonPropertyName("completed_units")] int? CompletedUnits,
+    [property: JsonPropertyName("total_units")] int? TotalUnits,
+    [property: JsonPropertyName("progress")] double? Progress);
 
 public sealed record DownloadFileDetail(
     [property: JsonPropertyName("relative_path")] string RelativePath,

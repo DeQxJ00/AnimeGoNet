@@ -43,6 +43,15 @@ public sealed class MediaOrganizationProcessor(
         {
             if (claim.Stage == MediaOrganizationStage.CleanupDownloader)
             {
+                var cleanupUnits = claim.FileStrategy == "link_delete" ? claim.Files.Count + 1 : 1;
+                var completedCleanupUnits = 0;
+                await store.UpdateProgressAsync(
+                    claim,
+                    MediaOrganizationPhases.CleanupDownloader,
+                    completedCleanupUnits,
+                    cleanupUnits,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
                 if (claim.FileStrategy == "link_delete")
                 {
                     var completed = await store.GetOperationsAsync(claim, cancellationToken).ConfigureAwait(false);
@@ -55,6 +64,14 @@ public sealed class MediaOrganizationProcessor(
                             operation.SourcePath,
                             operation.TargetPath,
                             file.SizeBytes), cancellationToken).ConfigureAwait(false);
+                        completedCleanupUnits++;
+                        await store.UpdateProgressAsync(
+                            claim,
+                            MediaOrganizationPhases.CleanupDownloader,
+                            completedCleanupUnits,
+                            cleanupUnits,
+                            _timeProvider.GetUtcNow(),
+                            cancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -66,6 +83,13 @@ public sealed class MediaOrganizationProcessor(
                         await client.DeleteAsync([claim.InfoHash], deleteFiles: false, token).ConfigureAwait(false);
                         return true;
                     },
+                    cancellationToken).ConfigureAwait(false);
+                await store.UpdateProgressAsync(
+                    claim,
+                    MediaOrganizationPhases.CleanupDownloader,
+                    cleanupUnits,
+                    cleanupUnits,
+                    _timeProvider.GetUtcNow(),
                     cancellationToken).ConfigureAwait(false);
                 await store.CompleteCleanupAsync(claim, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
                 return MediaOrganizationResult.CleanupCompleted;
@@ -85,46 +109,79 @@ public sealed class MediaOrganizationProcessor(
             }
 
             var plans = new List<MediaOperationPlan>(claim.Files.Count);
+            await store.UpdateProgressAsync(
+                claim,
+                MediaOrganizationPhases.RenamePlanning,
+                0,
+                claim.Files.Count,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
             foreach (var file in claim.Files)
             {
                 plans.Add(await PlanAsync(claim, file, cancellationToken).ConfigureAwait(false));
+                await store.UpdateProgressAsync(
+                    claim,
+                    MediaOrganizationPhases.RenamePlanning,
+                    plans.Count,
+                    claim.Files.Count,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
             }
             var operations = await store.EnsureOperationsAsync(
                 claim, plans, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-            foreach (var operation in operations.Where(operation => operation.State != "completed"))
-            {
-                var file = claim.Files.Single(file => file.TaskFileId == operation.TaskFileId);
-                var bytesVerified = claim.FileStrategy is "link" or "link_delete"
-                    ? (await linker.LinkAsync(new SafeFileLinkRequest(
-                        claim.DownloadRootPath,
-                        claim.SaveRootPath,
-                        operation.SourcePath,
-                        operation.TargetPath,
-                        file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
-                    : (await mover.MoveAsync(new SafeFileMoveRequest(
-                        operation.OperationId,
-                        claim.DownloadRootPath,
-                        claim.SaveRootPath,
-                        operation.SourcePath,
-                        operation.TargetPath,
-                        file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified;
-                await store.CompleteFileAsync(
-                    claim, operation.OperationId, bytesVerified,
-                    _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-            }
+            var filesById = claim.Files.ToDictionary(file => file.TaskFileId, StringComparer.Ordinal);
+            await ProcessOperationsAsync(
+                claim,
+                operations.Where(operation => filesById[operation.TaskFileId].AssociatedFileId is null).ToArray(),
+                filesById,
+                MediaOrganizationPhases.MediaTransfer,
+                cancellationToken).ConfigureAwait(false);
+            await ProcessOperationsAsync(
+                claim,
+                operations.Where(operation => filesById[operation.TaskFileId].AssociatedFileId is not null).ToArray(),
+                filesById,
+                MediaOrganizationPhases.SubtitleTransfer,
+                cancellationToken).ConfigureAwait(false);
 
-            foreach (var series in claim.Files
+            var seriesGroups = claim.Files
                          .GroupBy(file => (file.TmdbSeriesId, file.CanonicalSeriesName))
-                         .Select(group => group.Key))
+                         .Select(group => group.Key)
+                         .ToArray();
+            await store.UpdateProgressAsync(
+                claim,
+                MediaOrganizationPhases.NfoWrite,
+                0,
+                seriesGroups.Length,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            for (var index = 0; index < seriesGroups.Length; index++)
             {
+                var series = seriesGroups[index];
                 await nfoWriter.WriteAsync(
                     claim.SaveRootPath, series.CanonicalSeriesName, series.TmdbSeriesId,
                     claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+                await store.UpdateProgressAsync(
+                    claim,
+                    MediaOrganizationPhases.NfoWrite,
+                    index + 1,
+                    seriesGroups.Length,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
             }
 
-            foreach (var seasonGroup in claim.Files.GroupBy(file =>
-                         (file.TmdbSeriesId, file.CanonicalSeriesName, file.SeasonNumber)))
+            var seasonGroups = claim.Files.GroupBy(file =>
+                    (file.TmdbSeriesId, file.CanonicalSeriesName, file.SeasonNumber))
+                .ToArray();
+            await store.UpdateProgressAsync(
+                claim,
+                MediaOrganizationPhases.DirectoryIndex,
+                0,
+                seasonGroups.Length,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            for (var index = 0; index < seasonGroups.Length; index++)
             {
+                var seasonGroup = seasonGroups[index];
                 var episodeSidecars = seasonGroup
                     .Where(file => file.Disposition == "episode" && file.AssociatedFileId is null)
                     .Select(file =>
@@ -149,6 +206,13 @@ public sealed class MediaOrganizationProcessor(
                     directoryEntries,
                     _timeProvider.GetUtcNow(),
                     cancellationToken).ConfigureAwait(false);
+                await store.UpdateProgressAsync(
+                    claim,
+                    MediaOrganizationPhases.DirectoryIndex,
+                    index + 1,
+                    seasonGroups.Length,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
             }
 
             await store.CompleteMovesAsync(claim, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
@@ -170,6 +234,60 @@ public sealed class MediaOrganizationProcessor(
                 claim, Classify(exception), _timeProvider.GetUtcNow() + RetryDelay,
                 _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
             return MediaOrganizationResult.RetryScheduled;
+        }
+    }
+
+    private async Task ProcessOperationsAsync(
+        MediaOrganizationClaim claim,
+        MediaOperationRecord[] operations,
+        Dictionary<string, MediaOrganizationFile> filesById,
+        string phase,
+        CancellationToken cancellationToken)
+    {
+        if (operations.Length == 0)
+        {
+            return;
+        }
+
+        var completedUnits = operations.Count(operation => operation.State == "completed");
+        await store.UpdateProgressAsync(
+            claim,
+            phase,
+            completedUnits,
+            operations.Length,
+            _timeProvider.GetUtcNow(),
+            cancellationToken).ConfigureAwait(false);
+        foreach (var operation in operations.Where(operation => operation.State != "completed"))
+        {
+            var file = filesById[operation.TaskFileId];
+            var bytesVerified = claim.FileStrategy is "link" or "link_delete"
+                ? (await linker.LinkAsync(new SafeFileLinkRequest(
+                    claim.DownloadRootPath,
+                    claim.SaveRootPath,
+                    operation.SourcePath,
+                    operation.TargetPath,
+                    file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
+                : (await mover.MoveAsync(new SafeFileMoveRequest(
+                    operation.OperationId,
+                    claim.DownloadRootPath,
+                    claim.SaveRootPath,
+                    operation.SourcePath,
+                    operation.TargetPath,
+                    file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified;
+            await store.CompleteFileAsync(
+                claim,
+                operation.OperationId,
+                bytesVerified,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+            completedUnits++;
+            await store.UpdateProgressAsync(
+                claim,
+                phase,
+                completedUnits,
+                operations.Length,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
         }
     }
 

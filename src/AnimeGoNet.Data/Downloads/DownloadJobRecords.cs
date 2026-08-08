@@ -94,6 +94,9 @@ public sealed record DownloadJobDetailRecord(
     int OrganizationAttemptCount,
     DateTimeOffset? OrganizationNextAttemptAtUtc,
     string? OrganizationFailureCode,
+    string OrganizationPhase,
+    int OrganizationCompletedUnits,
+    int OrganizationTotalUnits,
     IReadOnlyList<DownloadJobFileRecord> Files,
     IReadOnlyList<DownloadJobEventRecord> Events);
 

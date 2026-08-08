@@ -241,6 +241,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-stage-grid > div { padding: 10px 12px; border: 1px solid #344260; border-radius: 10px; background: rgba(5,8,16,.5); }
 .download-stage-grid dt { color: #8094b7; font-size: .68rem; }
 .download-stage-grid dd { margin: 4px 0 0; color: #dce7fb; font-size: .74rem; overflow-wrap: anywhere; }
+.download-stage-phase { display: block; margin-top: 8px; color: #a8bee3; font-size: .72rem; }
+.download-stage-progress { display: block; width: 100%; height: 8px; margin-top: 6px; accent-color: #62d9b7; }
 .download-detail-failure { grid-column: 1 / -1; margin: 0; color: #ffb0b0; font-size: .75rem; }
 .download-file-snapshot { margin: 0; padding: 9px 11px; border: 1px solid #356757; border-radius: 10px; color: #b8efd8; background: rgba(24,67,52,.3); font-size: .73rem; }
 .download-file-snapshot.error { border-color: #813f49; color: #ffb4b4; background: rgba(82,28,37,.28); }

@@ -49,7 +49,9 @@ AnimeGoNet ：等待解析 → TMDB匹配 → 等待下载 → 移动/整理 →
 
 多文件任务的总容量和进度仅按 wanted/priority非零文件计算；unwanted重复EP及其字幕不进入分母。磁力链接尚未取得metadata时使用不确定进度，不显示伪造的总容量或ETA。ETA未知、无限或速度为0时返回`null`并显示“未知”。
 
-Mikan默认`move`时，下载完成后依次显示`Moving → Renaming → WritingNfo/Persisting → Completed`；成功后显示“已移动到媒体库，不做种”。同卷原子移动可以很快，但仍必须记录阶段。跨卷复制可按已复制字节显示整理子进度，复制未完成不能把qB下载百分比倒退。
+Mikan默认`move`时，下载完成后依次持久化并显示 `rename_planning → media_transfer → subtitle_transfer（适用时）→ nfo_write → directory_index → cleanup_downloader → completed`。`rename_planning` 只读取已持久化的 Torrent 相对路径并生成/复核不可变目标计划；`media_transfer` 和 `subtitle_transfer` 按逐文件 operation 计数，重试时从 SQLite 中已完成 operation 续算；NFO 按 Series、目录数据库/索引按 Season 分组计数。成功后显示“已移动到媒体库，不做种”。同卷原子移动可以很快，但仍必须记录阶段；跨卷复制完成并校验一个 operation 后才增加单位进度，不能把 qB 下载百分比倒退。
+
+整理阶段、已完成单位和总单位属于 SQLite 权威状态，不由 WebUI 根据文件数量临时估算。失败释放租约时保留当前阶段和计数，页面同时显示稳定失败码与下次重试时间。文件工作完成后原子切换到 `cleanup_downloader`；即使 `link/link_delete` 的清理租约过期，也只能恢复下载器清理，不得重新领取媒体移动阶段。最终业务完成必须同时满足 `organization_state=completed` 与 `phase=completed, 1/1`。
 
 ## 4. 首版操作边界
 

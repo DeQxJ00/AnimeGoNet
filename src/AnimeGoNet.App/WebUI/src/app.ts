@@ -486,12 +486,20 @@ interface DownloadDetail {
     attempt_count: number;
     next_attempt_at_utc: string | null;
     failure_code: string | null;
+    phase: string | null;
+    completed_units: number | null;
+    total_units: number | null;
+    progress: number | null;
   };
   organization: {
     state: string;
     attempt_count: number;
     next_attempt_at_utc: string | null;
     failure_code: string | null;
+    phase: string | null;
+    completed_units: number | null;
+    total_units: number | null;
+    progress: number | null;
   };
   file_snapshot_state: "live" | "unavailable";
   file_snapshot_failure_code: string | null;
@@ -4039,6 +4047,23 @@ async function loadDownloadDetail(
           ? ` · 下次 ${new Date(stage.next_attempt_at_utc).toLocaleString()}`
           : "");
       group.append(term, value);
+      if (stage.phase) {
+        const phase = document.createElement("small");
+        phase.className = "download-stage-phase";
+        phase.textContent = organizationPhaseLabel(stage.phase)
+          + (stage.total_units && stage.completed_units !== null
+            ? ` · ${stage.completed_units}/${stage.total_units}`
+            : "");
+        group.append(phase);
+        if (stage.total_units && stage.progress !== null) {
+          const progress = document.createElement("progress");
+          progress.className = "download-stage-progress";
+          progress.max = 1;
+          progress.value = Math.min(1, Math.max(0, stage.progress));
+          progress.setAttribute("aria-label", `${label}：${phase.textContent}`);
+          group.append(progress);
+        }
+      }
       stages.append(group);
     }
     const seedingGroup = document.createElement("div");
@@ -4146,6 +4171,19 @@ async function loadDownloadDetail(
     button.disabled = false;
     button.textContent = "重试文件与时间线";
   }
+}
+
+function organizationPhaseLabel(phase: string): string {
+  return ({
+    not_started: "尚未开始",
+    rename_planning: "文件解析与重命名规划",
+    media_transfer: "媒体移动或链接",
+    subtitle_transfer: "字幕关联与移动",
+    nfo_write: "NFO 写入",
+    directory_index: "目录数据库与索引",
+    cleanup_downloader: "下载器清理",
+    completed: "整理完成",
+  } as Record<string, string>)[phase] ?? phase;
 }
 
 function renderDownloadSummary(body: DownloadListPage): void {

@@ -158,6 +158,91 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task MediaOrganizationProgressMigrationBackfillsDurableStages()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using (var foreignKeys = connection.CreateCommand())
+        {
+            foreignKeys.CommandText = "PRAGMA foreign_keys = ON;";
+            await foreignKeys.ExecuteNonQueryAsync();
+        }
+
+        foreach (var migration in DatabaseSchema.Migrations.Where(item => item.Version <= 36))
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = migration.Sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES ('mikan', 'Mikan', 'mikan', 'bt', 'move', 1, 1, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                    status, created_at_utc, updated_at_utc)
+                VALUES
+                    ('completed-task', 'mikan', 1, 'mikan', 'Completed', $fingerprint_a,
+                     'bt', '{}', 'organized', $now, $now),
+                    ('cleanup-task', 'mikan', 1, 'mikan', 'Cleanup', $fingerprint_b,
+                     'bt', '{}', 'organizing_cleanup', $now, $now);
+
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, info_hash, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    created_at_utc, updated_at_utc, organization_state)
+                VALUES
+                    ('completed-job', 'completed-task', 'bt', $hash_a, 'complete', 1,
+                     5, 5, 0, $now, $now, 'completed'),
+                    ('cleanup-job', 'cleanup-task', 'bt', $hash_b, 'complete', 1,
+                     5, 5, 0, $now, $now, 'cleanup');
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-08-08T00:00:00.0000000+00:00");
+            seed.Parameters.AddWithValue("$fingerprint_a", new string('a', 64));
+            seed.Parameters.AddWithValue("$fingerprint_b", new string('b', 64));
+            seed.Parameters.AddWithValue("$hash_a", new string('a', 40));
+            seed.Parameters.AddWithValue("$hash_b", new string('b', 40));
+            Assert.Equal(5, await seed.ExecuteNonQueryAsync());
+        }
+
+        var progressMigration = Assert.Single(
+            DatabaseSchema.Migrations,
+            item => item.Version == 37);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = progressMigration.Sql;
+            await migrate.ExecuteNonQueryAsync();
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT id, organization_phase, organization_completed_units,
+                   organization_total_units
+            FROM download_jobs
+            ORDER BY id;
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("cleanup-job", reader.GetString(0));
+        Assert.Equal("cleanup_downloader", reader.GetString(1));
+        Assert.Equal(0, reader.GetInt32(2));
+        Assert.Equal(1, reader.GetInt32(3));
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("completed-job", reader.GetString(0));
+        Assert.Equal("completed", reader.GetString(1));
+        Assert.Equal(1, reader.GetInt32(2));
+        Assert.Equal(1, reader.GetInt32(3));
+        Assert.False(await reader.ReadAsync());
+    }
+
+    [Fact]
     public async Task DownloadSeedingLifecycleMigrationBackfillsImmutableTargetsAndStates()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

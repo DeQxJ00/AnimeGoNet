@@ -4,6 +4,54 @@ namespace AnimeGoNet.Data.Tests.Sqlite;
 
 public sealed class SchemaConstraintTests
 {
+    [Theory]
+    [InlineData("completed", 0, 1)]
+    [InlineData("rename_planning", 2, 1)]
+    [InlineData("not_started", 0, 1)]
+    public async Task MediaOrganizationProgressRejectsContradictoryState(
+        string phase,
+        int completed,
+        int total)
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE download_jobs
+            SET organization_phase = $phase,
+                organization_completed_units = $completed,
+                organization_total_units = $total
+            WHERE id = 'missing';
+
+            INSERT INTO source_profiles (
+                id, display_name, adapter, downloader_id, file_strategy,
+                rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                created_at_utc, updated_at_utc)
+            VALUES ('constraint-source', 'Constraint', 'mikan', 'bt', 'move',
+                    1, 1, 1, 1, $now, $now);
+            INSERT INTO ingest_tasks (
+                id, source_profile_id, source_profile_revision, source_id,
+                title, torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                status, created_at_utc, updated_at_utc)
+            VALUES ('constraint-task', 'constraint-source', 1, 'mikan', 'Constraint',
+                    $fingerprint, 'bt', '{}', 'downloaded', $now, $now);
+            INSERT INTO download_jobs (
+                id, task_id, downloader_id, state, progress, downloaded_bytes,
+                total_bytes, speed_bytes_per_second, created_at_utc, updated_at_utc,
+                organization_state, organization_phase,
+                organization_completed_units, organization_total_units)
+            VALUES ('constraint-job', 'constraint-task', 'bt', 'complete', 1, 5,
+                    5, 0, $now, $now, 'pending', $phase, $completed, $total);
+            """;
+        command.Parameters.AddWithValue("$phase", phase);
+        command.Parameters.AddWithValue("$completed", completed);
+        command.Parameters.AddWithValue("$total", total);
+        command.Parameters.AddWithValue("$now", "2026-08-08T00:00:00.0000000+00:00");
+        command.Parameters.AddWithValue("$fingerprint", new string('c', 64));
+
+        await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
+    }
+
     [Fact]
     public async Task TrustedOffsetRequiresThreeDistinctEpisodeEvidenceCount()
     {

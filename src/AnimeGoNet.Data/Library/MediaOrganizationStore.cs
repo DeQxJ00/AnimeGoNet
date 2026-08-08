@@ -24,7 +24,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             recover.CommandText = """
                 UPDATE download_jobs
                 SET organization_state = CASE
-                        WHEN task_id IN (SELECT id FROM ingest_tasks WHERE status = 'organizing_cleanup')
+                        WHEN organization_phase = 'cleanup_downloader'
                         THEN 'cleanup' ELSE 'pending' END,
                     organization_lease_token = NULL,
                     organization_lease_expires_at_utc = NULL,
@@ -339,6 +339,53 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task UpdateProgressAsync(
+        MediaOrganizationClaim claim,
+        string phase,
+        int completedUnits,
+        int totalUnits,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(phase);
+        ArgumentOutOfRangeException.ThrowIfLessThan(totalUnits, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(completedUnits);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(completedUnits, totalUnits);
+        if (claim.Stage == MediaOrganizationStage.MoveFiles
+            ? !MediaOrganizationPhases.IsMovePhase(phase)
+            : phase != MediaOrganizationPhases.CleanupDownloader)
+        {
+            throw new ArgumentException("Progress phase does not match the claimed organization stage.", nameof(phase));
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE download_jobs
+            SET organization_phase = $phase,
+                organization_completed_units = $completed,
+                organization_total_units = $total,
+                updated_at_utc = $now
+            WHERE id = $job_id AND task_id = $task_id
+              AND organization_state = 'organizing'
+              AND organization_lease_token = $token;
+            """;
+        AddIdentity(update, claim);
+        update.Parameters.AddWithValue("$phase", phase);
+        update.Parameters.AddWithValue("$completed", completedUnits);
+        update.Parameters.AddWithValue("$total", totalUnits);
+        update.Parameters.AddWithValue("$now", Format(utcNow));
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException("Media organization progress changed concurrently.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task CompleteMovesAsync(
         MediaOrganizationClaim claim,
         DateTimeOffset utcNow,
@@ -443,7 +490,10 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             UPDATE download_jobs
             SET organization_state = 'cleanup', organization_lease_token = NULL,
                 organization_lease_expires_at_utc = NULL, organization_next_attempt_at_utc = NULL,
-                organization_failure_code = NULL, updated_at_utc = $now, revision = revision + 1
+                organization_failure_code = NULL,
+                organization_phase = 'cleanup_downloader',
+                organization_completed_units = 0, organization_total_units = 1,
+                updated_at_utc = $now, revision = revision + 1
             WHERE id = $job_id AND task_id = $task_id AND organization_state = 'organizing'
               AND organization_lease_token = $token;
             UPDATE ingest_tasks
@@ -530,7 +580,10 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         command.CommandText = """
             UPDATE download_jobs SET organization_state = $state, organization_lease_token = NULL,
                 organization_lease_expires_at_utc = NULL, organization_next_attempt_at_utc = NULL,
-                organization_failure_code = NULL, updated_at_utc = $now, revision = revision + 1
+                organization_failure_code = NULL,
+                organization_phase = 'completed',
+                organization_completed_units = 1, organization_total_units = 1,
+                updated_at_utc = $now, revision = revision + 1
             WHERE id = $job_id AND task_id = $task_id AND organization_state = 'organizing'
               AND organization_lease_token = $token;
             UPDATE ingest_tasks SET status = $task_status, failure_kind = NULL,

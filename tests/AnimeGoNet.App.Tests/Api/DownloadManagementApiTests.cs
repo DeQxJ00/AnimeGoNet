@@ -65,6 +65,14 @@ public sealed class DownloadManagementApiTests
         Assert.Equal(
             "pending",
             detail.RootElement.GetProperty("summary").GetProperty("dynamic_tag_state").GetString());
+        var preparation = detail.RootElement.GetProperty("preparation");
+        Assert.Equal(JsonValueKind.Null, preparation.GetProperty("phase").ValueKind);
+        Assert.Equal(JsonValueKind.Null, preparation.GetProperty("progress").ValueKind);
+        var organization = detail.RootElement.GetProperty("organization");
+        Assert.Equal("not_started", organization.GetProperty("phase").GetString());
+        Assert.Equal(0, organization.GetProperty("completed_units").GetInt32());
+        Assert.Equal(0, organization.GetProperty("total_units").GetInt32());
+        Assert.Equal(0, organization.GetProperty("progress").GetDouble());
         Assert.Equal("episode.mkv", file.GetProperty("relative_path").GetString());
         Assert.Equal(0.6, file.GetProperty("progress").GetDouble());
         Assert.True(file.GetProperty("wanted").GetBoolean());
