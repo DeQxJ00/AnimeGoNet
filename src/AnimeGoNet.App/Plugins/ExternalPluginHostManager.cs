@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Reflection;
 using System.Text.Json;
+using AnimeGoNet.Core.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeGoNet.App.Plugins;
@@ -66,7 +67,7 @@ public sealed class ExternalPluginUnavailableException(
 {
     public string PluginId { get; } = pluginId;
 
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 
     public DateTimeOffset? RetryAtUtc { get; } = retryAtUtc;
 }

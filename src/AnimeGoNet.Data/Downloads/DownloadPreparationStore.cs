@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -343,7 +344,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
-        ValidateFailureCode(safeFailureCode);
+        StableErrorCode.Require(safeFailureCode, nameof(safeFailureCode));
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -372,16 +373,6 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$lease_token", claim.LeaseToken);
     }
 
-    private static void ValidateFailureCode(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Length > 128
-            || value.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
-        {
-            throw new ArgumentException("Failure code must be a stable ASCII identifier.", nameof(value));
-        }
-    }
-
     private static void ValidateDynamicTags(DownloadDynamicTagAssignment assignment)
     {
         ArgumentNullException.ThrowIfNull(assignment.Tags);
@@ -401,7 +392,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
 
         if (assignment.FailureCode is not null)
         {
-            ValidateFailureCode(assignment.FailureCode);
+            StableErrorCode.Require(assignment.FailureCode, nameof(assignment.FailureCode));
         }
     }
 

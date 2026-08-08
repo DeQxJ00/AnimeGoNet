@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.App.Library;
 
@@ -18,7 +19,7 @@ public sealed record SafeFileMoveResult(long BytesVerified, bool RecoveredExisti
 public sealed class SafeFileMoveException(string code, string message, Exception? innerException = null)
     : IOException(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }
 
 public sealed class SafeFileMover

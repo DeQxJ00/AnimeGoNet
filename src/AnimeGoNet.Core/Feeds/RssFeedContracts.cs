@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Diagnostics;
+
 namespace AnimeGoNet.Core.Feeds;
 
 public sealed record RssFeedItem(
@@ -15,5 +17,5 @@ public sealed record RssFeedDocument(
 public sealed class RssFeedException(string code, string message, Exception? innerException = null)
     : Exception(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }

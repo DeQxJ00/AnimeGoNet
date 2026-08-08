@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.App.Plugins;
 
@@ -163,7 +164,7 @@ public class ExternalPluginProtocolException(
     string message,
     Exception? innerException = null) : Exception(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }
 
 public sealed class ExternalPluginRemoteException(

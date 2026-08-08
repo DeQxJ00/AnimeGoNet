@@ -1,4 +1,5 @@
 using AnimeGo.Plugin.Abstractions;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Scheduling;
 
 namespace AnimeGoNet.App.Scheduling;
@@ -25,7 +26,7 @@ public sealed record PluginScheduleSnapshot(
 public sealed class PluginScheduleException(string code, string message, Exception? innerException = null)
     : InvalidOperationException(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }
 
 internal interface IScheduleClock

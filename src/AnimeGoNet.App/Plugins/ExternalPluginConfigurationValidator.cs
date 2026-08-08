@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.App.Plugins;
 
@@ -10,7 +11,7 @@ public sealed class ExternalPluginConfigurationValidationException(
     string message,
     Exception? innerException = null) : ArgumentException(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 
     public string Path { get; } = path;
 }

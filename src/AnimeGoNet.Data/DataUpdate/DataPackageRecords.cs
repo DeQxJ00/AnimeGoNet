@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.DataUpdate;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.Data.DataUpdate;
 
@@ -53,5 +54,5 @@ public sealed record DataPackageStatus(
 public sealed class DataPackageException(string code, string message, Exception? innerException = null)
     : InvalidOperationException(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }

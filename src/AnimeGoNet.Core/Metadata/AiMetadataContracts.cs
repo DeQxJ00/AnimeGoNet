@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Diagnostics;
+
 namespace AnimeGoNet.Core.Metadata;
 
 public sealed record AiMetadataMatchInput(
@@ -63,5 +65,5 @@ public sealed class AiMetadataMatcherException(
 {
     public MetadataFailureKind Kind { get; } = kind;
 
-    public string SafeCode { get; } = safeCode;
+    public string SafeCode { get; } = StableErrorCode.Require(safeCode, nameof(safeCode));
 }

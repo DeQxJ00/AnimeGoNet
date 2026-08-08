@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Diagnostics;
+
 namespace AnimeGoNet.App.DataUpdate;
 
 public interface IDataUpdateService
@@ -32,5 +34,5 @@ public sealed class DataUpdateServiceException(
     Exception? innerException = null)
     : InvalidOperationException(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }

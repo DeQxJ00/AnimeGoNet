@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.Data.Library;
 
@@ -250,6 +251,6 @@ public sealed class DirectoryDatabaseScanner
 
     internal sealed class SidecarException(string code) : Exception(code)
     {
-        public string Code { get; } = code;
+        public string Code { get; } = StableErrorCode.Require(code, nameof(code));
     }
 }

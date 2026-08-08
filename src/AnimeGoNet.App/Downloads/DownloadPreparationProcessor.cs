@@ -1,3 +1,4 @@
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Downloads;
 
@@ -241,6 +242,6 @@ public sealed class DownloadPreparationProcessor(
 
     private sealed class PreparationFailureException(string code) : Exception
     {
-        public string Code { get; } = code;
+        public string Code { get; } = StableErrorCode.Require(code, nameof(code));
     }
 }

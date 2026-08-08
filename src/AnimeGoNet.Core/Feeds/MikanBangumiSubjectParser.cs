@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.Core.Feeds;
 
@@ -9,7 +10,7 @@ public sealed class MikanBangumiSubjectException(
     string message,
     Exception? innerException = null) : FormatException(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }
 
 public static class MikanBangumiSubjectParser

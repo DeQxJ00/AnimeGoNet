@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -477,7 +478,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
-        ValidateFailureCode(failureCode);
+        StableErrorCode.Require(failureCode, nameof(failureCode));
         var restoredState = claim.Stage == MediaOrganizationStage.CleanupDownloader ? "cleanup" : "pending";
         var taskStatus = claim.Stage == MediaOrganizationStage.CleanupDownloader
             && claim.FileStrategy is "move" or "wait_move"
@@ -609,15 +610,6 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$job_id", claim.JobId);
         command.Parameters.AddWithValue("$task_id", claim.TaskId);
         command.Parameters.AddWithValue("$token", claim.LeaseToken);
-    }
-
-    private static void ValidateFailureCode(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
-        {
-            throw new ArgumentException("Failure code must be a stable ASCII identifier.", nameof(value));
-        }
     }
 
     private static string Format(DateTimeOffset value) =>

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.App.Plugins;
 
@@ -47,5 +48,5 @@ public sealed class ExternalPluginManifestException(
     string message,
     Exception? innerException = null) : Exception(message, innerException)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }

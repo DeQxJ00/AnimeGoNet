@@ -10,10 +10,14 @@ public sealed record TorrentMagnetMetadata(
 
 public sealed class TorrentMagnetException : FormatException
 {
+    public const string StableCode = "torrent_magnet_invalid";
+
     public TorrentMagnetException(string message)
         : base(message)
     {
     }
+
+    public string Code { get; } = StableCode;
 }
 
 public static class TorrentMagnetParser

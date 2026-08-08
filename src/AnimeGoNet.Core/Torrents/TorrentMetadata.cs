@@ -21,6 +21,8 @@ public sealed record TorrentMetainfoLimits
 
 public sealed class TorrentMetainfoException : FormatException
 {
+    public const string StableCode = "torrent_metainfo_invalid";
+
     public TorrentMetainfoException(string message)
         : base(message)
     {
@@ -30,4 +32,6 @@ public sealed class TorrentMetainfoException : FormatException
         : base(message, innerException)
     {
     }
+
+    public string Code { get; } = StableCode;
 }

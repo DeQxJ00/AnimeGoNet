@@ -1,11 +1,12 @@
 using System.Globalization;
+using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.Core.Scheduling;
 
 public sealed class CronExpressionException(string code, string message)
     : FormatException(message)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }
 
 public sealed class SixFieldCronExpression

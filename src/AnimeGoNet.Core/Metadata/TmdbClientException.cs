@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Diagnostics;
+
 namespace AnimeGoNet.Core.Metadata;
 
 public sealed class TmdbClientException : Exception
@@ -8,14 +10,8 @@ public sealed class TmdbClientException : Exception
         bool tmdbAccessConfirmed)
         : base($"TMDB request failed ({safeCode}).")
     {
-        if (string.IsNullOrWhiteSpace(safeCode)
-            || safeCode.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
-        {
-            throw new ArgumentException("TMDB error code must be a stable ASCII identifier.", nameof(safeCode));
-        }
-
         Kind = kind;
-        SafeCode = safeCode;
+        SafeCode = StableErrorCode.Require(safeCode, nameof(safeCode));
         TmdbAccessConfirmed = tmdbAccessConfirmed;
     }
 

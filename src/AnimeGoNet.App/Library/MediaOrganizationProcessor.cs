@@ -1,6 +1,7 @@
 using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Data.Library;
 
@@ -240,5 +241,5 @@ public sealed class MediaOrganizationProcessor(
 
 internal sealed class MediaRenamePluginException(string code) : Exception(code)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }

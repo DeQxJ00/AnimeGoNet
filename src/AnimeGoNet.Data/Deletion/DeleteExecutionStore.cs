@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -272,7 +273,7 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         DateTimeOffset retryAtUtc,
         CancellationToken cancellationToken = default)
     {
-        ValidateFailureCode(failureCode);
+        StableErrorCode.Require(failureCode, nameof(failureCode));
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
@@ -364,15 +365,6 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
     {
         command.Parameters.AddWithValue("$id", claim.ExecutionId);
         command.Parameters.AddWithValue("$token", claim.LeaseToken);
-    }
-
-    private static void ValidateFailureCode(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
-        {
-            throw new ArgumentException("Failure code must be a stable ASCII identifier.", nameof(value));
-        }
     }
 
     private static string Format(DateTimeOffset value) =>

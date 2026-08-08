@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Diagnostics;
+
 namespace AnimeGoNet.Core.DataUpdate;
 
 public enum DataAssetKind
@@ -35,5 +37,5 @@ public sealed record DataManifestAsset(
 public sealed class DataManifestException(string code, string message)
     : FormatException(message)
 {
-    public string Code { get; } = code;
+    public string Code { get; } = StableErrorCode.Require(code, nameof(code));
 }

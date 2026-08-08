@@ -1,5 +1,6 @@
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Ingest;
 
@@ -179,6 +180,6 @@ public sealed class StagedTorrentDispatcher(
 
     private sealed class DispatchFailureException(string code) : Exception
     {
-        public string Code { get; } = code;
+        public string Code { get; } = StableErrorCode.Require(code, nameof(code));
     }
 }

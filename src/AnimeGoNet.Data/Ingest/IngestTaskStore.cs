@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Core.Downloads;
@@ -579,11 +580,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
-        if (string.IsNullOrWhiteSpace(safeFailureCode)
-            || safeFailureCode.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
-        {
-            throw new ArgumentException("Failure code must be a stable ASCII identifier.", nameof(safeFailureCode));
-        }
+        StableErrorCode.Require(safeFailureCode, nameof(safeFailureCode));
 
         var now = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
@@ -192,7 +193,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
-        ValidateFailureCode(safeFailureCode);
+        StableErrorCode.Require(safeFailureCode, nameof(safeFailureCode));
         var now = utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
@@ -1020,15 +1021,6 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         DownloadTaskState.Error => "download_error",
         _ => "download_queued",
     };
-
-    private static void ValidateFailureCode(string safeFailureCode)
-    {
-        if (string.IsNullOrWhiteSpace(safeFailureCode)
-            || safeFailureCode.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '_' or '-')))
-        {
-            throw new ArgumentException("Failure code must be a stable ASCII identifier.", nameof(safeFailureCode));
-        }
-    }
 
     private static DateTimeOffset? ReadDateTimeOffset(Microsoft.Data.Sqlite.SqliteDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal)

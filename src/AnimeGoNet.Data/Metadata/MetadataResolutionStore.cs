@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Library;
@@ -494,7 +495,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         ValidateIdentifier(attempt.Result, nameof(attempt.Result));
         if (attempt.ErrorCode is not null)
         {
-            ValidateIdentifier(attempt.ErrorCode, nameof(attempt.ErrorCode));
+            StableErrorCode.Require(attempt.ErrorCode, nameof(attempt.ErrorCode));
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(attempt.DurationMilliseconds);
@@ -1590,7 +1591,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(failure);
-        ValidateIdentifier(failure.Code, nameof(failure.Code));
+        StableErrorCode.Require(failure.Code, nameof(failure.Code));
         var now = Format(utcNow);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -1635,8 +1636,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(failure);
-        ValidateIdentifier(failure.Code, nameof(failure.Code));
-        ValidateIdentifier(fallbackDenialReason, nameof(fallbackDenialReason));
+        StableErrorCode.Require(failure.Code, nameof(failure.Code));
+        StableErrorCode.Require(fallbackDenialReason, nameof(fallbackDenialReason));
         if (fallbackEligible
             && (failure.Kind != MetadataFailureKind.SemanticNoMatch || !failure.TmdbAccessConfirmed))
         {
