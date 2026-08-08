@@ -1,0 +1,53 @@
+{
+  "GET /api/bolt": {
+    "root": ["code", "data", "msg"],
+    "data_bucket": ["data", "type"],
+    "data_key": ["bucket", "data", "type"]
+  },
+  "GET /api/bolt/value": {
+    "root": ["code", "data", "msg"],
+    "data": ["bucket", "key", "ttl", "value"]
+  },
+  "DELETE /api/bolt/value": {
+    "root": ["code", "data", "msg"],
+    "data_kind": "null"
+  },
+  "GET /api/config": {
+    "root": ["code", "data", "msg"],
+    "data_kind": "string"
+  },
+  "PUT /api/config": {
+    "root": ["code", "data", "msg"],
+    "data_kind": "null"
+  },
+  "POST /api/download/manager": {
+    "root": ["code", "data", "msg"],
+    "data": ["accepted_count", "items", "rejected_count", "source"],
+    "item": ["downloader_id", "errors", "file_count", "index", "info_hash", "ingest_id", "source_profile_id", "source_profile_revision", "status", "torrent_url_fingerprint"]
+  },
+  "GET /api/plugin/config": {
+    "root": ["code", "data", "msg"],
+    "data": ["data", "name"]
+  },
+  "POST /api/plugin/config": {
+    "root": ["code", "data", "msg"],
+    "data": ["name"]
+  },
+  "POST /api/rss": {
+    "root": ["code", "data", "msg"],
+    "data": ["batch_id", "bgmid", "bgmid_discovery_failure_code", "bgmid_discovery_state", "items", "legacy_filter_enabled", "legacy_filter_revision", "mikanid", "rule_revision"],
+    "item": ["candidate_id", "decision_kind", "decision_reason", "errors", "identity_groupid", "identity_mikanid", "ingest_task_id", "legacy_filter_key", "legacy_filter_reason", "legacy_filter_scope", "legacy_filter_state", "status"]
+  },
+  "GET /ping": {
+    "root": ["code", "data", "msg"],
+    "data": ["time", "version"]
+  },
+  "GET /sha256": {
+    "root": ["code", "data", "msg"],
+    "data_kind": "string"
+  },
+  "GET /websocket/log": {
+    "frame_header": ["count", "type"],
+    "control": ["action", "code", "status", "type"]
+  }
+}

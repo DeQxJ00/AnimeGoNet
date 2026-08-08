@@ -21,6 +21,11 @@ key is optional at deployment time:
 3. `Access-Key`: lowercase SHA-256 of the configured key for upstream compatibility;
 4. `access_key`: the same lowercase SHA-256 value in the query string for legacy clients.
 
+固定上游的 12 个 operation 另有机器可读响应字段 golden：
+`tests/AnimeGoNet.App.Tests/Api/Fixtures/legacy-response-fields.golden.json`。测试不仅
+比较 method/path，还会启动真实 Kestrel，逐项验证 11 个 HTTP 响应和 WebSocket 日志/
+控制帧的精确字段集合；动态时间、ID 和 hash 不固化为易碎字面量。
+
 Public compatibility endpoints such as `/ping` do not carry a security requirement.
 The generated document never includes an actual key, credential, local directory,
 listening address, or port.

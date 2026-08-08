@@ -132,6 +132,18 @@ try {
         throw 'Published binary /ping smoke failed.'
     }
 
+    $sha256 = Invoke-RestMethod `
+        -Uri "$baseUrl/sha256?access_key=NativeAOT%20smoke" `
+        -TimeoutSec 5
+    $expectedSha256 = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData(
+            [Text.Encoding]::UTF8.GetBytes('NativeAOT smoke'))).ToLowerInvariant()
+    if ($sha256.code -ne 200 `
+        -or $sha256.msg -ne 'Access-Key' `
+        -or $sha256.data -ne $expectedSha256) {
+        throw 'Published binary legacy /sha256?access_key= smoke failed.'
+    }
+
     $status = Invoke-RestMethod -Uri "$baseUrl/api/v1/status" -TimeoutSec 5
     $sourceResponse =
         Invoke-RestMethod -Uri "$baseUrl/api/v1/sources" -TimeoutSec 5

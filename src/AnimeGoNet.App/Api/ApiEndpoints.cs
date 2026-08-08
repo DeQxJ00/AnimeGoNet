@@ -153,7 +153,8 @@ public static class ApiEndpoints
             new PingData(version, DateTimeOffset.UtcNow.ToUnixTimeSeconds())));
     }
 
-    private static Ok<LegacyApiResponse<string>> Sha256(string accessKey)
+    private static Ok<LegacyApiResponse<string>> Sha256(
+        [FromQuery(Name = "access_key")] string accessKey)
     {
         var hash = StableHash.Sha256LowerHex(accessKey);
         return TypedResults.Ok(new LegacyApiResponse<string>(200, "Access-Key", hash));
