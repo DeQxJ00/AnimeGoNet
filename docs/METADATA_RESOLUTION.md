@@ -47,6 +47,15 @@
 
 每个来源同时关联解析运行 ID、策略尝试 ID和取得时间。Bangumi 完全兜底时 TMDB 三层来源均为 `None`，另显示 `BangumiFallback` 状态，不能伪装成某种 TMDB 获取方式。Web UI 的作品详情页固定展示“TMDB 获取方式”卡片，包含 Series/Season/Episode 来源、人工规则 `mikanid`、偏移值、验证状态和最后解析时间。
 
+确定性 Series/Season 搜索不是“每个名字只取首个 Series”。顺序固定为：
+
+1. 先用 Bangumi `name`（通常是日文原名），穷尽原始标题与四步上游后缀清理产生的不同搜索词；再对 `name_cn` 执行同样流程。重复搜索词不重复请求。
+2. 每个 TMDB 搜索响应内，先按原名/本地化名精确匹配、UTF-8 byte 相似度和响应顺序稳定排序，再逐个检查所有达到阈值的 TV Series。
+3. 每个候选都必须取得身份一致的 Series details，以 Bangumi 开播日期选出 90 天内的普通季度，再从官方 Season endpoint 验证 `tmdbid + Season Number`。候选详情、日期季度或 Season endpoint 任一不成立，只拒绝该候选。
+4. 当前响应内还有候选时继续候选；响应穷尽后继续当前名字的下一条清理搜索词；该名字穷尽后才切到另一个名字。只有完整 Series+Season 验证成功才立即停止。认证、配置、网络、远端服务或协议失败不会伪装成“无匹配”并继续低优先级语义搜索。
+
+例如 `name="Re:ゼロから始める異世界生活 4th season 喪失編"`、`name_cn="Re：从零开始的异世界生活 第四季 丧失篇"` 时，日文原始词选出的 Series 如果季度验证失败，仍会尝试清理后的 `Re:ゼロから始める異世界生活`；日文轮次全部穷尽后再尝试中文名。中文搜索返回多个同名 Series 时也逐个做季度验证，不会因第一个失败而提前进入 P4/P3/P2/P1。
+
 ### 1.3 已下载记录与重复集
 
 重复集/多版本采用“第一个成功记录生效”，不实现自动多版本管理。规范去重键固定为 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)`，作用域是整个媒体库，不区分 Mikan、U2、TTG、字幕组、Torrent 或下载器实例。同一 TMDB 剧集不整体阻断：只跳过已经完成的具体 Episode，其他 Episode 正常处理。

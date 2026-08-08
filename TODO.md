@@ -105,8 +105,8 @@
 - [x] 从 Mikan RSS/页面 `/Home/Bangumi/{mikanid}` 提取并持久化正整数 `mikanid`：RSS source URL 优先、channel link 回退及 path/query 解析已验证；RSS winner 会安全抓取对应作品页，仅接受 `p.bangumi-info` 内 `bgm.tv`/`bangumi.tv` 的正整数 Subject 链接，把 `bgmid` 与发现状态/失败码写入 schema v26 批次和统一导入任务。成功结果按批次复用；失败不下载且允许下一次显式 RSS 处理重试。
 - [x] 移植 Bangumi API：已按上游 `/v0/subjects/{bgmid}`、官方 `/v0/subjects/{bgmid}/subjects` 与分页 `/v0/episodes` 实现 AOT-safe Subject/关系/Episode 客户端、固定 User-Agent、日期/身份/分页校验和稳定网络/协议失败分类；主程序默认先读活动 AnimeGoNet Data Archive 的 SQLite Subject/完整 Episode 快照，不存在、不完整或零集未知时回退在线 API，关系保持在线，版本激活/回滚无需重启即生效。
 - [x] 移植 Bangumi Archive 下载/缓存刷新：主程序已支持 manifest/asset 下载、校验、原子版本导入、活动/前一版本切换与回滚，并已把活动版本接入 Bangumi Subject/Episode 读取；独立 AOT DataBuilder 已完成官方 Archive SHA 门禁、动画/正片清洗、确定性分片/gzip/manifest/离线包及生产数量下限，发布到独立数据仓库仍由 P11 的不可变 Release 项单独跟踪。
-- [>] 移植 TMDB 搜索、相似度和季度匹配（上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；安全可取消的网络/429/5xx 重试已接入；Search/Series/Season/Episode 的 SQLite 成功响应缓存、14 天默认 TTL、旧配置迁移、环境/命令行锁和 WebUI 管理已验证，失败/404 不做 negative cache；Bangumi Subject → TMDB Series/Season、活动 Archive 缓存与逐文件 Episode worker/运行审计已接入，Bangumi Episode 确定性匹配的其余 parity 待实现）。
-- [>] 实现 AnimeGoNet 新增的 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：日文名、中文名、各自多轮清理及每轮全部合格 Series 均以完整 `tmdbid+Season` 为成功条件；P3 已按每个 Bangumi 前作的日文名、中文名和开播日期重新联合搜索，可恢复不同 TMDB Series，并覆盖多层、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略；TMDB/Bangumi 网络重试策略已完成，受控 live fixture 仍待实现。
+- [x] 移植 TMDB 搜索、相似度和季度匹配：上游 discover/tv 查询参数、四步去后缀、UTF-8 byte 相似度、0.75 阈值、普通季度过滤、90 天日期阈值、zh-CN DTO 与 Series/Season/Episode 三级身份验证已实现；每个 Bangumi `name/name_cn` 的全部唯一搜索词及每轮全部合格 Series 均以完整 `tmdbid+Season` 为成功条件。受控 loopback HTTP 用实际 `TmdbClient` 验证日文轮次穷尽→中文名→同响应第二候选成功；Bangumi Episode 正整数唯一身份、发布日期最近候选、小数/重复/特别篇拒绝和逐文件 TMDB Episode 验证均有 fixture。Search/Series/Season/Episode SQLite 成功缓存、失败不缓存及安全重试也已验收。
+- [x] 实现 AnimeGoNet 新增的 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：P3 需要 `bgmid`，并按每个 Bangumi 前作的日文名、中文名和开播日期重新联合搜索，可恢复不同 TMDB Series；多层、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略均已覆盖。受控 loopback 同时验证 Bangumi 503 与 TMDB 429 重试、二级前作、完整 Series/Season endpoint 和请求次数。
 - [x] 实现统一 `ai_use_metadata_match`（默认 `false`）：一个共享解析器按下载任务发送总标题、候选视频相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB Series/Season/Episode 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [x] 季度与 Episode 阶段共用同一 AI 尝试门禁和 `ai_metadata` 审计；确定性季度成功后普通 EP 匹配失败可首次触发，季度阶段成功或失败尝试过 AI 后均禁止 Episode 阶段再次调用；历史 `ai_season`/`ai_episode` 记录仍能阻止重复调用。
 - [x] 实现 Mikan 单文件发布日期 Prompt 门禁和显式开关：保留完整 `pubDate`，无偏移时按 SourceProfile 时区解析；仅在实际 Torrent 文件条目数为 1、bgmid/日期有效且主程序成功计算 `bgm_episode_candidate` 时启用，日期候选失败安全回通用统一 AI 流程。
@@ -126,7 +126,7 @@
 - [x] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误：客户端稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；连接/逐次超时/429/5xx 可配置重试，404/认证/协议失败不重试，取消立即传播。
 - [x] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`：SQLite Run 持久化、最终门禁、列表/详情 API 与 WebUI 决策说明均已串联；只有权威 `SemanticNoMatch + access_confirmed` 可进入兜底，Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput/Ambiguous 全部经过处理器测试证明拒绝且不创建 `tmdbid=0`。
 - [x] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；SQLite 重启后可按任务查询，版本化 API 与任务卡片策略时间线均已接入。
-- [ ] 通过 fixture parity 和受控 live smoke。
+- [x] 通过 fixture parity 和受控 live smoke：纯函数/DTO/fake 覆盖标题清理、相似度、全部候选、季度日期、Bangumi Episode 与失败分类；两个随机 loopback Kestrel fixture 分别验证 name/name_cn 多轮搜索和 P3 跨两级回溯重试，不访问真实 TMDB/Bangumi 或测试密钥。
 
 ## P6 — 插件与业务流水线
 
