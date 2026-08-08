@@ -42,5 +42,8 @@ publish/
 # Local qBittorrent integration sandbox and secrets
 TestSpace/
 *.local-integration.json
+.env
+.env.*
+!.env.example
 .env.integration
 *.private.json

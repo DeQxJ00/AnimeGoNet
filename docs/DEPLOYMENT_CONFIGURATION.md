@@ -260,7 +260,9 @@ downloaders:
 
 AnimeGoNet 和 qBittorrent 必须把同一个宿主共享父目录映射到相同容器路径
 `/download`。不要分别映射成不同的容器内名称；否则 qB 返回的文件路径无法安全
-整理。`/data` 必须单独持久化。
+整理。`/data` 必须单独持久化。只启动 AnimeGoNet、连接已有或远程 qB 的完整
+双实例 Compose、环境变量、验收和故障诊断见
+[EXTERNAL_QBITTORRENT.md](EXTERNAL_QBITTORRENT.md)。
 
 ## 本机 TestSpace
 

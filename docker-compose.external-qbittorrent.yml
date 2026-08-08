@@ -1,0 +1,45 @@
+services:
+  animegonet:
+    build:
+      context: .
+      dockerfile: Dockerfile.animegonet
+    image: ${ANIMEGONET_IMAGE:-animegonet:local}
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      ASPNETCORE_ENVIRONMENT: Container
+      DOTNET_RUNNING_IN_CONTAINER: "true"
+      access_key: ${ANIMEGONET_ACCESS_KEY:?ANIMEGONET_ACCESS_KEY is required}
+      data_path: /data
+      download_path: /download/incomplete
+      save_path: /download/anime
+      background_workers_enabled: "true"
+
+      # Both qBittorrent WebUI endpoints must be reachable from this container.
+      downloaders__bt__type: qbittorrent
+      downloaders__bt__base_url: ${QBITTORRENT_BT_URL:?QBITTORRENT_BT_URL is required}
+      downloaders__bt__username: ${QBITTORRENT_BT_USERNAME:?QBITTORRENT_BT_USERNAME is required}
+      downloaders__bt__password: ${QBITTORRENT_BT_PASSWORD:?QBITTORRENT_BT_PASSWORD is required}
+      downloaders__bt__download_path: /download/incomplete/bt
+      downloaders__bt__enabled: "true"
+
+      downloaders__pt__type: qbittorrent
+      downloaders__pt__base_url: ${QBITTORRENT_PT_URL:?QBITTORRENT_PT_URL is required}
+      downloaders__pt__username: ${QBITTORRENT_PT_USERNAME:?QBITTORRENT_PT_USERNAME is required}
+      downloaders__pt__password: ${QBITTORRENT_PT_PASSWORD:?QBITTORRENT_PT_PASSWORD is required}
+      downloaders__pt__download_path: /download/incomplete/pt
+      downloaders__pt__enabled: "true"
+    ports:
+      - "${ANIMEGONET_BIND_ADDRESS:-127.0.0.1}:7991:7991"
+    volumes:
+      - type: bind
+        source: ${ANIMEGONET_DATA_ROOT:?ANIMEGONET_DATA_ROOT is required}
+        target: /data
+      - type: bind
+        source: ${ANIMEGONET_SHARED_DOWNLOAD_ROOT:?ANIMEGONET_SHARED_DOWNLOAD_ROOT is required}
+        target: /download
+    security_opt:
+      - no-new-privileges:true

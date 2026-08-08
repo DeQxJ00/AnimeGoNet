@@ -67,6 +67,12 @@ Compose 将 `./data` 挂载到 `/data`，将同一个 `./download` 同时挂载�
 AnimeGoNet 和两个 qB 容器；首次启动生成的 `/data/animego.yaml` 因此可持久化。
 容器模式必须设置 Access Key。
 
+已有独立或远程 qBittorrent 时，使用
+[`docker-compose.external-qbittorrent.yml`](docker-compose.external-qbittorrent.yml)，
+并按[外部 qBittorrent 路径映射文档](docs/EXTERNAL_QBITTORRENT.md)把两端同一份共享
+存储映射为完全相同的容器路径 `/download`。地址、用户名、密码和 Access Key 只
+通过未跟踪环境变量或 secret 管理器传入。
+
 ## 测试
 
 ```powershell
@@ -93,4 +99,5 @@ NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
 - [TMDB/Bangumi/AI 元数据流程](docs/METADATA_RESOLUTION.md)
 - [OpenAPI 契约](docs/API_OPENAPI.md)
 - [WebUI](docs/WEB_UI.md)
+- [外部 qBittorrent 部署](docs/EXTERNAL_QBITTORRENT.md)
 - [CI / NativeAOT / Docker](docs/CI_CD.md)
