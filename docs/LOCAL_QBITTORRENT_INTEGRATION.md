@@ -54,6 +54,20 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 `StagedTorrentDispatcher` 和真实 qB Web API，并验证任务进入
 `download_preparing`。它不会读取 RSS、私人 Torrent URL 或现有任务内容。
 
+要显式执行合法小文件的真实下载、状态和 `move` 整理闭环，使用：
+
+```powershell
+./eng/qbittorrent-local-integration.ps1 -DownloadFixture
+```
+
+这个模式不读取仓库外 Torrent。测试进程每次动态生成一个 128 KiB 确定性 payload
+和 BitTorrent v1 metainfo；唯一 web seed 是测试进程自身随机端口上的
+`127.0.0.1` HTTP server，tracker 仍固定为不可用的 `127.0.0.1:9`。测试先要求
+隔离 qB 任务为空，然后依次执行统一导入、暂停 dispatch、已验证 Episode 边界注入、
+真实 qB 文件 priority/resume/download、SQLite snapshot、Mikan 默认 `move`、NFO 与
+三层 sidecar、completion 和 `deleteFiles=false` downloader cleanup。Episode 边界
+使用测试 SQLite 中的合成已验证身份，不调用真实 TMDB/Bangumi，也不消耗 API key。
+
 ## 验收
 
 - `qbittorrent.exe` 和监听端口属于同一个沙箱进程。
@@ -69,6 +83,10 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 - 写入测试结束后用 `deleteFiles=false` 删除精确 info-hash，再删除精确
   category/tag；测试前不存在、测试中也未创建 fixture payload，运行 SQLite
   位于 `animegonet_data/integration/qbit-dispatch-<runid>` 并在结束后清理。
+- `-DownloadFixture` 必须看到 qB 文件 priority=1、loopback web-seed 请求、源文件
+  的真实长度/逐字节内容、`downloaded → organizing_cleanup → organized` 状态、媒体库
+  `E001.mkv`/NFO/sidecar 和单一 completion；随后精确任务、category、tag、源/媒体
+  文件及本次 `qbit-legal-download-<runid>` 数据目录全部不存在。
 
 ## 真实 Torrent 的安全边界与清理
 
@@ -79,6 +97,11 @@ dotnet restore tests/AnimeGoNet.LocalIntegration.Tests/AnimeGoNet.LocalIntegrati
 可能的精确 fixture payload 和本次 SQLite 根目录；即使断言失败也执行清理。
 它固定使用 `deleteFiles=false`，不会让 qB 递归删除下载目录。若进程被强制终止，
 只可按控制台中的 run ID 清理上述固定前缀对象，不能批量删除其他任务。
+
+`-DownloadFixture` 使用相同唯一前缀，并只删除本次精确 payload、`!qB` 临时名、
+唯一系列目录和独立 SQLite 根。即使下载或整理断言失败，`finally` 仍先对精确
+info-hash 调用 `deleteFiles=false`，再执行这些受父目录边界验证的精确清理；不枚举、
+不读取也不删除其他 qB 任务或其他媒体目录。
 
 结束后清除当前 PowerShell 中的 `ANIMEGONET_QBIT_*` 认证变量；不要删除 portable
 profile。`animegonet_data` 是独立测试数据目录，可在确认 AnimeGoNet 测试进程已

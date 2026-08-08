@@ -21,6 +21,7 @@ public sealed class LocalIntegrationScriptTests
         var script = await File.ReadAllTextAsync(scriptPath);
 
         Assert.Contains("[switch]$DispatchFixture", script, StringComparison.Ordinal);
+        Assert.Contains("[switch]$DownloadFixture", script, StringComparison.Ordinal);
         Assert.Contains(
             "'FullyQualifiedName~QbittorrentSandboxTests'",
             script,
@@ -30,7 +31,15 @@ public sealed class LocalIntegrationScriptTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
+            "'FullyQualifiedName~QbittorrentSandboxTests|FullyQualifiedName~QbittorrentLegalDownloadE2ETests'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "$env:ANIMEGONET_QBIT_DISPATCH_FIXTURE = $(if ($DispatchFixture) { '1' } else { '0' })",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$env:ANIMEGONET_QBIT_DOWNLOAD_FIXTURE = $(if ($DownloadFixture) { '1' } else { '0' })",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -42,5 +51,18 @@ public sealed class LocalIntegrationScriptTests
             script,
             StringComparison.Ordinal);
         Assert.DoesNotContain("123456", script, StringComparison.Ordinal);
+
+        string legalDownloadTest = await File.ReadAllTextAsync(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "AnimeGoNet.LocalIntegration.Tests",
+            "QbittorrentLegalDownloadE2ETests.cs"));
+        Assert.Contains("http://127.0.0.1:9/announce", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains("LoopbackFileServer", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains("deleteFiles: false", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains("MediaOrganizationResult.FilesCompleted", legalDownloadTest, StringComparison.Ordinal);
+        Assert.Contains("MediaOrganizationResult.CleanupCompleted", legalDownloadTest, StringComparison.Ordinal);
+        Assert.DoesNotContain("TestSpace", legalDownloadTest, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("123456", legalDownloadTest, StringComparison.Ordinal);
     }
 }

@@ -1,7 +1,8 @@
 param(
     [string]$SandboxRoot = 'E:\WorkSpaceAI\AnimeGoNet\TestSpace',
     [string]$BaseUrl = $(if ($env:ANIMEGONET_QBIT_BASE_URL) { $env:ANIMEGONET_QBIT_BASE_URL } else { 'http://127.0.0.1:8080/' }),
-    [switch]$DispatchFixture
+    [switch]$DispatchFixture,
+    [switch]$DownloadFixture
 )
 
 $ErrorActionPreference = 'Stop'
@@ -71,10 +72,14 @@ $env:ANIMEGONET_QBIT_DOWNLOAD_PATH = $downloadPath
 $env:ANIMEGONET_QBIT_SAVE_PATH = $savePath
 $env:ANIMEGONET_QBIT_DATA_PATH = $dataPath
 $env:ANIMEGONET_QBIT_DISPATCH_FIXTURE = $(if ($DispatchFixture) { '1' } else { '0' })
+$env:ANIMEGONET_QBIT_DOWNLOAD_FIXTURE = $(if ($DownloadFixture) { '1' } else { '0' })
 $env:ANIMEGONET_QBIT_TORRENT_FIXTURE = $fixturePath
 
 try {
-    $testFilter = if ($DispatchFixture) {
+    $testFilter = if ($DownloadFixture) {
+        'FullyQualifiedName~QbittorrentSandboxTests|FullyQualifiedName~QbittorrentLegalDownloadE2ETests'
+    }
+    elseif ($DispatchFixture) {
         'FullyQualifiedName~QbittorrentSandboxTests|FullyQualifiedName~QbittorrentDispatchFixtureTests'
     }
     else {
@@ -95,6 +100,7 @@ try {
     Write-Output "save_path=$savePath"
     Write-Output "data_path=$dataPath"
     Write-Output "dispatch_fixture=$($DispatchFixture.IsPresent)"
+    Write-Output "download_fixture=$($DownloadFixture.IsPresent)"
 }
 finally {
     foreach ($name in @(
@@ -107,6 +113,7 @@ finally {
         'ANIMEGONET_QBIT_SAVE_PATH',
         'ANIMEGONET_QBIT_DATA_PATH',
         'ANIMEGONET_QBIT_DISPATCH_FIXTURE',
+        'ANIMEGONET_QBIT_DOWNLOAD_FIXTURE',
         'ANIMEGONET_QBIT_TORRENT_FIXTURE')) {
         [Environment]::SetEnvironmentVariable($name, $null, 'Process')
     }
