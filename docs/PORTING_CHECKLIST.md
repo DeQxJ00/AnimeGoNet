@@ -57,7 +57,7 @@
 |---|---|---:|---:|---|
 | `pkg/cache/bolt` | SQLite KV/TTL 显式 SQL | 替换 | 已验证 | schema v22、`bolt`/`bolt_sub` bucket 隔离、JSON upsert/batch、绝对 TTL、惰性/批量过期清理和原子失败 tests 已通过 |
 | `.bolt` 二进制直接读取 | 可选 JSON 导出/导入 | 例外 | 例外 | migration report |
-| `pkg/dirdb` | SQLite library tables + NFO | 替换 | 待实现 | scan/upsert/recovery tests |
+| `pkg/dirdb` | SQLite library tables + NFO | 替换 | 已验证 | 上游三层 JSON sidecar 由原子 Writer 兼容输出并在 NFO/业务 completion 前落盘；Scanner 只读取明确 sidecar、逐项隔离损坏，SQLite refresh 事务替换并审计 issue，增量 upsert 同路径覆盖不重复；崩溃遗留 atomic partial 不参与扫描且不阻塞下次写入；scan/upsert/recovery + 整理流水线 tests |
 | 上游下载/解析实体 | 显式领域模型与 source-generated JSON | 保留+扩展 | 进行中 | ingest command/response 和 JSON context 已验证；其余模型待实现 |
 | TMDB EP 完成记录 | `(series,season,episode)` 全局去重 | 扩展 | 已验证 | SQLite 唯一约束、并发完成写入、逐文件 claim、同任务字幕共享、跨任务完成/进行中精确跳过及失败释放已验证；正常整理与 completion 同事务写来源 alias，RSS winner 以 IMMEDIATE 事务复查同 `mikanid+来源EP` 并保存命中证据，业务记录删除级联清除 alias 后可重新导入；qB 文件 priority 已接入下载准备 |
 | TMDB 完全失败记录 | `tmdbid=0` + bgmid + 待补全 | 扩展 | 已验证 | 权威 SemanticNoMatch 白名单、AI 优先恢复、有效 bgmid、固定本地 S01 且不依赖 P2/P1、`anime_series(tmdbid=0)`、无伪造 EP 的 Other 整理、根级 NFO、fallback completion、下载恢复前 claim/完成与进行中重复早停、显式失败释放、待补全 summary/detail API/UI 已验证；Run 级 TMDB 访问确认/兜底资格/拒绝原因由列表和详情 API/WebUI 原样投影，六类非权威失败均经处理器门禁测试；唯一普通 Bangumi Episode ID 提供跨来源最高可信 scope，歧义/小数/特别篇保守降级；schema v20 恢复合并保存 alias 并标记 `DuplicateAfterResolution`；人工恢复逐项在线验证 TMDB；schema v21 在原兜底目录可恢复地重写真实 TMDB/Bangumi NFO |

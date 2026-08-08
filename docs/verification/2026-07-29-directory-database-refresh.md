@@ -27,7 +27,16 @@ compatible, auditable media-side mirror.
 - exact JSON shape and create/update/seed-state preservation;
 - valid anime/season/Episode scan plus malformed-file continuation;
 - transactional index replacement, missing-file removal and issue audit;
+- direct incremental upsert replaces the same relative path without duplication;
+- an orphaned atomic `.partial` from an interrupted write is ignored by the
+  scanner and does not block the next canonical sidecar write;
 - media organization creates NFO plus all sidecars and three index rows;
 - malformed pre-existing sidecar schedules retry and leaves completion count 0;
 - schedule plugin, status API and explicit refresh API;
 - strict TypeScript, all .NET tests and win-x64 NativeAOT publish/smoke.
+
+Revalidated on 2026-08-08 with direct incremental-upsert and orphan-partial
+recovery coverage: directory database tests 6/6 and the full solution
+1349/1349 passed, with zero failures and zero skips. Production code was
+unchanged, so the immediately preceding win-x64 NativeAOT gate remains the
+binary evidence for this tree.

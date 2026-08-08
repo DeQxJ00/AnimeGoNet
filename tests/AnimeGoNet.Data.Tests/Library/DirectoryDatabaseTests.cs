@@ -148,6 +148,86 @@ public sealed class DirectoryDatabaseTests
     }
 
     [Fact]
+    public async Task IncrementalUpsertReplacesTheSamePathWithoutDuplicatingIt()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        using var store = new DirectoryDatabaseIndexStore(
+            fixture.Database,
+            new DirectoryDatabaseScanner());
+        var relativePath = "Show/S01/E001.e_json";
+        var first = new DirectoryDatabaseEntry(
+            relativePath,
+            DirectoryDatabaseEntryKind.Episode,
+            "FIRST",
+            "Show",
+            Now.ToUnixTimeSeconds(),
+            Now.ToUnixTimeSeconds(),
+            1,
+            1,
+            1,
+            false,
+            true,
+            true,
+            true);
+        var updatedAt = Now.AddMinutes(1);
+        var second = first with
+        {
+            InfoHash = "SECOND",
+            UpdateAtUnix = updatedAt.ToUnixTimeSeconds(),
+            Seeded = true,
+        };
+
+        await store.UpsertAsync([first], Now);
+        await store.UpsertAsync([second], updatedAt);
+
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*), info_hash, update_at_unix, seeded
+            FROM directory_database_entries
+            WHERE relative_path = $path;
+            """;
+        command.Parameters.AddWithValue("$path", relativePath);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1, reader.GetInt32(0));
+        Assert.Equal("SECOND", reader.GetString(1));
+        Assert.Equal(updatedAt.ToUnixTimeSeconds(), reader.GetInt64(2));
+        Assert.Equal(1, reader.GetInt32(3));
+    }
+
+    [Fact]
+    public async Task WriterAndScannerRecoverPastAnOrphanedAtomicPartial()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var saveRoot = Path.Combine(fixture.RootPath, "save");
+        var media = Path.Combine(saveRoot, "Show", "S01", "E001.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(media)!);
+        await File.WriteAllBytesAsync(media, [1]);
+        var episodePath = Path.Combine(saveRoot, "Show", "S01", "E001.e_json");
+        var orphanedPartial = episodePath
+            + ".animegonet-00000000000000000000000000000000.partial";
+        await File.WriteAllTextAsync(orphanedPartial, "interrupted write");
+
+        var entries = await new DirectoryDatabaseWriter().WriteAsync(
+            new DirectoryDatabaseWriteRequest(
+                saveRoot,
+                "HASH",
+                "Show",
+                1,
+                [new DirectoryDatabaseEpisodeWrite(media, 1, 1)]),
+            Now);
+        var scan = await new DirectoryDatabaseScanner().ScanAsync(saveRoot);
+
+        Assert.Equal(3, entries.Count);
+        Assert.True(File.Exists(episodePath));
+        Assert.True(File.Exists(orphanedPartial));
+        Assert.Equal(3, scan.ScannedCount);
+        Assert.Equal(3, scan.Entries.Count);
+        Assert.Empty(scan.Issues);
+    }
+
+    [Fact]
     public async Task WriterRejectsMediaOutsideCapturedSaveRoot()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
