@@ -63,7 +63,7 @@
 
 - [x] 移植所有领域模型、枚举和错误类型：固定 `develop@c7475df` 的机器清单逐文件/逐导出类型覆盖 `internal/models`、`internal/constant`、`internal/exceptions`、`pkg/exceptions`，每项标记保留/强类型替代/NativeAOT 例外并绑定真实目标文件；契约测试同时校验上游 HEAD、目录无漏项和目标存在。旧 `ExistError`/`NotFoundError`/`ParseFailedError` 由显式业务结果及可跨 InnerException 识别的 `IStableError`/`StableErrorSemantic` 替代，结构解析异常已统一暴露稳定 `ParseFailed` 语义。
 - [x] 建立首阶段强类型配置/目录模型与校验：Docker 三路径、命名 qBittorrent、Mikan `move` 默认、AI 600 秒和高风险 fallback 默认关闭。
-- [>] 固化 JSON source-generation context（状态、统一导入和 legacy manager DTO 已覆盖；后续 API DTO 持续加入）。
+- [x] 固化 API JSON source-generation context：所有公开、闭合 API DTO 以及 `ApiEndpoints` 方法签名中出现的闭合泛型 envelope 都由测试穷尽反射并要求 `ApiJsonContext` 返回生成元数据；新增 DTO/endpoint 漏登记会在 JIT 测试中失败，win-x64 NativeAOT 发布与 API smoke 继续作为运行门禁。
 - [x] 完成上游 hash、name、path、时间等纯函数的可观察行为映射：SHA-256 统一由 `StableHash` 生成 UTF-8 小写 hex 并用于 access-key、统一导入 URL 指纹和 RSS batch/candidate 身份；四步去后缀与 UTF-8 byte 相似度保持上游 parity；动态 tag 的季度/星期、Mikan 时间解析、TMDB 日期差、Unix 秒均使用强类型时间；路径/文件名改由 `PathBoundary`、`MediaPathPlanner` 和安全文件执行器实现跨平台边界。反射 map 转换、Python/资源 MD5、panic recovery 等仅服务旧实现的 helper 明确由 source-generated DTO、编译期资源和 HostedService 异常隔离替换，见 `docs/PURE_FUNCTION_PARITY.md`。
 - [x] 移植默认 YAML 与注释：首次启动 `CreateNew` 原子生成 1.7.1、无 BOM UTF-8、Unix `0600`；涵盖路径、命名 qB、来源绑定、TMDB/Bangumi/AI、四档失败链、Torrent、Cron 和数据更新，secret 为空且高风险开关默认关闭。
 - [x] 移植环境变量覆盖：上游全部 `ANIMEGO_*`、规范嵌套键、现有扁平键、旧 qB 键和命令行均按 Provider 实际层级解析，跨别名仍固定命令行→环境→YAML→默认，路径/下载器/来源/统一 AI 旧双键均有冲突层测试；Web 监听安全默认和标准 `--urls`/`ASPNETCORE_URLS` 高优先级有真实 Kestrel 测试；全局代理、SourceProfile 与下载器实例保持各自部署语义。全部可编辑应用字段及来源/下载器字段均在 API/WebUI 投影环境/命令行控制键、拒绝改写，私有 JSON/SQLite 不复制部署凭据或越级覆盖；Cookie、命令行值和 secret 不回显。
