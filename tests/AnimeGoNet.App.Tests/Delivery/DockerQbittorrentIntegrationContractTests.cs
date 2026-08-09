@@ -20,6 +20,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
             "animegonet-docker.yml"));
 
         Assert.Contains("USER 10001:10001", dockerfile, StringComparison.Ordinal);
+        Assert.Contains(
+            "COPY src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj src/AnimeGo.Plugin.Abstractions/",
+            dockerfile,
+            StringComparison.Ordinal);
         Assert.Contains("user: \"${PUID:-1000}:${PGID:-1000}\"", compose, StringComparison.Ordinal);
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
         Assert.Contains("- /tmp", compose, StringComparison.Ordinal);

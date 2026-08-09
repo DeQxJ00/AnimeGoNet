@@ -8,6 +8,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY global.json Directory.Build.props Directory.Packages.props AnimeGoNet.slnx ./
+COPY src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj src/AnimeGo.Plugin.Abstractions/
 COPY src/AnimeGoNet.Core/AnimeGoNet.Core.csproj src/AnimeGoNet.Core/
 COPY src/AnimeGoNet.Data/AnimeGoNet.Data.csproj src/AnimeGoNet.Data/
 COPY src/AnimeGoNet.App/AnimeGoNet.App.csproj src/AnimeGoNet.App/
