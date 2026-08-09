@@ -9,7 +9,6 @@ fixture_pt_base64="$repository_root/tests/fixtures/animegonet-ci-pt.torrent.b64"
 integration_root="$(mktemp -d)"
 project_name="animegonet-qbt-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
 access_key="animegonet-compose-smoke"
-runtime_password="animegonet-ci-password"
 test_uid="$(id -u)"
 test_gid="$(id -g)"
 container_e2e_fixture_image="animegonet-container-e2e-fixture:${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
@@ -148,17 +147,14 @@ configure_qbittorrent() {
   login "$base_url" "$temporary_password" "$cookie_jar"
 
   preferences="$(
-    printf '{"save_path":"/download/incomplete/%s","temp_path":"/download/incomplete/%s","temp_path_enabled":false,"web_ui_password":"%s"}' \
-      "$instance" "$instance" "$runtime_password"
+    printf '{"save_path":"/download/incomplete/%s","temp_path":"/download/incomplete/%s","temp_path_enabled":false}' \
+      "$instance" "$instance"
   )"
   authenticated_post \
     "$base_url" \
     "$cookie_jar" \
     "/api/v2/app/setPreferences" \
     --data-urlencode "json=$preferences" >/dev/null
-
-  rm -f -- "$cookie_jar"
-  login "$base_url" "$runtime_password" "$cookie_jar"
 
   local version=""
   local api_version=""
@@ -178,14 +174,15 @@ assert preferences["save_path"].rstrip("/") == expected
 assert not preferences["temp_path_enabled"]
 ' "$instance" "$version" "$api_version" <<<"$preferences_after"
 
-  printf '%s|%s' "$base_url" "$cookie_jar"
+  printf '%s|%s|%s' "$base_url" "$cookie_jar" "$temporary_password"
 }
 
 exercise_fixture() {
   local instance="$1"
   local connection="$2"
   local base_url="${connection%%|*}"
-  local cookie_jar="${connection#*|}"
+  local connection_tail="${connection#*|}"
+  local cookie_jar="${connection_tail%%|*}"
   local category="animegonet-ci-${instance}-${GITHUB_RUN_ID:-local}-$$"
   local tag="animegonet-ci-${instance}-${GITHUB_RUN_ID:-local}-$$"
   local tasks=""
@@ -340,6 +337,8 @@ for attempt in $(seq 1 80); do
 done
 bt_connection="$(configure_qbittorrent qbittorrent-bt bt)"
 pt_connection="$(configure_qbittorrent qbittorrent-pt pt)"
+bt_password="${bt_connection##*|}"
+pt_password="${pt_connection##*|}"
 exercise_fixture bt "$bt_connection"
 exercise_fixture pt "$pt_connection"
 
@@ -352,7 +351,7 @@ cat >"$integration_root/animegonet/data/config/downloaders.private.json" <<JSON
     "bt": {
       "base_url": "http://qbittorrent-bt:8080",
       "username": "admin",
-      "password": "$runtime_password",
+      "password": "$bt_password",
       "download_path": "/download/incomplete/bt",
       "enabled": true,
       "revision": 1,
@@ -361,7 +360,7 @@ cat >"$integration_root/animegonet/data/config/downloaders.private.json" <<JSON
     "pt": {
       "base_url": "http://qbittorrent-pt:8080",
       "username": "admin",
-      "password": "$runtime_password",
+      "password": "$pt_password",
       "download_path": "/download/incomplete/pt",
       "enabled": true,
       "revision": 1,

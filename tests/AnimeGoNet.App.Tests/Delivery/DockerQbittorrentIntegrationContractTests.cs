@@ -89,7 +89,9 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("emporary password is provided for this session:", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/auth/login", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/app/setPreferences", smoke, StringComparison.Ordinal);
-        Assert.Contains("login \"$base_url\" \"$runtime_password\" \"$cookie_jar\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("login \"$base_url\" \"$temporary_password\" \"$cookie_jar\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("bt_password=\"${bt_connection##*|}\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("\"password\": \"$bt_password\"", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/add", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/info", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/files", smoke, StringComparison.Ordinal);
