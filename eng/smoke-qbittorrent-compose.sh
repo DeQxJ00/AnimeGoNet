@@ -53,6 +53,8 @@ fi
 base64 --decode "$fixture_base64" >"$integration_root/animegonet-ci.torrent"
 base64 --decode "$fixture_base64" >"$integration_root/fixtures/animegonet-ci.torrent"
 base64 --decode "$fixture_pt_base64" >"$integration_root/fixtures/animegonet-ci-pt.torrent"
+"$repository_root/eng/export-external-plugin-fixture.sh" \
+  "$integration_root/animegonet/data/plugins" amd64
 
 service_port() {
   local service="$1"
@@ -394,6 +396,152 @@ animegonet_post() {
   curl "${arguments[@]}" "$animegonet_url$endpoint"
 }
 
+animegonet_get() {
+  local endpoint="$1"
+  curl --fail-with-body --silent --show-error \
+    --header "X-AnimeGo-Access-Key: $access_key" \
+    "$animegonet_url$endpoint"
+}
+
+animegonet_put() {
+  local endpoint="$1"
+  local json="$2"
+  curl --fail-with-body --silent --show-error \
+    --request PUT \
+    --header "X-AnimeGo-Access-Key: $access_key" \
+    --header "Content-Type: application/json" \
+    --data "$json" \
+    "$animegonet_url$endpoint"
+}
+
+exercise_external_plugin() {
+  local plugin_id="com.animegonet.container-source"
+  local marker="$integration_root/animegonet/data/plugin-data/$plugin_id/container-smoke.txt"
+  local status=""
+  local enabled=""
+  local created=""
+  local rejected=""
+  local disabled=""
+
+  status="$(animegonet_get "/api/v1/status")"
+  python3 -c '
+import json
+import sys
+plugin_id = sys.argv[1]
+external = json.load(sys.stdin)["external_plugins"]
+assert external["errors"] == []
+package = next(item for item in external["packages"] if item["id"] == plugin_id)
+runtime = next(item for item in external["runtimes"] if item["id"] == plugin_id)
+assert package["type"] == "source"
+assert package["rid"] == "linux-x64"
+assert package["configured"] is False
+assert package["enabled"] is False
+assert runtime["state"] == "stopped"
+' "$plugin_id" <<<"$status"
+
+  enabled="$(animegonet_put "/api/v1/plugins/$plugin_id/configuration" \
+    '{"expected_revision":0,"enabled":true,"args":{},"vars":{},"clear_write_only_paths":[]}')"
+  python3 -c '
+import json
+import sys
+plugin_id = sys.argv[1]
+result = json.load(sys.stdin)
+assert result["revision"] == 1
+assert result["item"]["id"] == plugin_id
+assert result["item"]["enabled"] is True
+assert result["item"]["entry_revision"] == 1
+' "$plugin_id" <<<"$enabled"
+
+  created="$(animegonet_post "/api/v1/sources" \
+    '{"id":"container-source-ci","display_name":"Container source CI","adapter":"com.animegonet.container-source","downloader_id":"bt","file_strategy":"move","allowed_torrent_hosts":["allowed.invalid"],"category":"animegonet-ci-plugin","tags":["animegonet-ci-plugin"],"seeding_time_minutes":0,"rss_filter_enabled":true,"rss_priority_enabled":true,"enabled":true}')"
+  python3 -c '
+import json
+import sys
+result = json.load(sys.stdin)
+assert result["id"] == "container-source-ci"
+assert result["adapter"] == "com.animegonet.container-source"
+assert result["downloader_id"] == "bt"
+' <<<"$created"
+
+  rejected="$(animegonet_post "/api/v1/ingest" \
+    '{"source":"container-source-ci","data":[{"torrent":"https://not-allowed.invalid/container-smoke.torrent","info":{"title":"Container plugin smoke","source_item_id":"container-plugin-smoke","source_work_id":"container-plugin-work"}}]}')"
+  python3 -c '
+import json
+import sys
+result = json.load(sys.stdin)
+assert result["source"] == "container-source-ci"
+assert result["accepted_count"] == 0
+assert result["rejected_count"] == 1
+item = result["items"][0]
+assert item["status"] == "rejected"
+assert item["ingest_id"] is None
+assert item["errors"] == ["torrent staging failed: HostNotAllowed"]
+' <<<"$rejected"
+  if [[ "$rejected" == *"not-allowed.invalid"* ]]; then
+    echo "External plugin ingest response leaked the synthetic Torrent URL" >&2
+    exit 1
+  fi
+
+  test -f "$marker"
+  grep --fixed-strings --line-regexp "uid=$test_uid" "$marker" >/dev/null
+  grep --fixed-strings --line-regexp "package_read_only=true" "$marker" >/dev/null
+
+  status="$(animegonet_get "/api/v1/status")"
+  python3 -c '
+import json
+import sys
+plugin_id = sys.argv[1]
+external = json.load(sys.stdin)["external_plugins"]
+package = next(item for item in external["packages"] if item["id"] == plugin_id)
+runtime = next(item for item in external["runtimes"] if item["id"] == plugin_id)
+assert package["configured"] is True
+assert package["enabled"] is True
+assert runtime["state"] == "ready"
+assert runtime["consecutive_failures"] == 0
+assert runtime["last_failure_code"] is None
+' "$plugin_id" <<<"$status"
+
+  disabled="$(animegonet_put "/api/v1/plugins/$plugin_id/configuration" \
+    '{"expected_revision":1,"enabled":false,"args":{},"vars":{},"clear_write_only_paths":[]}')"
+  python3 -c '
+import json
+import sys
+result = json.load(sys.stdin)
+assert result["revision"] == 2
+assert result["item"]["enabled"] is False
+assert result["item"]["entry_revision"] == 2
+' <<<"$disabled"
+  rm -f -- "$marker"
+
+  rejected="$(animegonet_post "/api/v1/ingest" \
+    '{"source":"container-source-ci","data":[{"torrent":"https://not-allowed.invalid/disabled.torrent","info":{"title":"Disabled container plugin smoke","source_item_id":"container-plugin-disabled","source_work_id":"container-plugin-work"}}]}')"
+  python3 -c '
+import json
+import sys
+result = json.load(sys.stdin)
+assert result["accepted_count"] == 0
+assert result["rejected_count"] == 1
+item = result["items"][0]
+assert item["status"] == "rejected"
+assert item["ingest_id"] is None
+assert len(item["errors"]) == 1
+assert "unavailable" in item["errors"][0].lower()
+' <<<"$rejected"
+  test ! -e "$marker"
+
+  status="$(animegonet_get "/api/v1/status")"
+  python3 -c '
+import json
+import sys
+plugin_id = sys.argv[1]
+external = json.load(sys.stdin)["external_plugins"]
+package = next(item for item in external["packages"] if item["id"] == plugin_id)
+runtime = next(item for item in external["runtimes"] if item["id"] == plugin_id)
+assert package["enabled"] is False
+assert runtime["state"] == "stopped"
+' "$plugin_id" <<<"$status"
+}
+
 prepare_route_identity() {
   local connection="$1"
   local instance="$2"
@@ -538,6 +686,8 @@ cleanup_routed_task() {
     "$base_url" "$cookie_jar" "/api/v2/torrents/removeCategories" \
     --data-urlencode "categories=$category" >/dev/null
 }
+
+exercise_external_plugin
 
 for instance in bt pt; do
   connection_test="$(animegonet_post "/api/v1/downloaders/$instance/test")"

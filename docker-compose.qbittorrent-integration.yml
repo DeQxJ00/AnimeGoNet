@@ -64,6 +64,7 @@ services:
       background_workers_enabled: "true"
     volumes:
       - ${ANIMEGONET_INTEGRATION_ROOT}/animegonet/data:/data
+      - ${ANIMEGONET_INTEGRATION_ROOT}/animegonet/data/plugins/com.animegonet.container-source:/data/plugins/com.animegonet.container-source:ro
       - ${ANIMEGONET_INTEGRATION_ROOT}/download:/download
     ports:
       - "127.0.0.1::7991"

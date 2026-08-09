@@ -14,7 +14,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(8, unverified.Length);
+        Assert.Equal(9, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
         AssertUnverified(unverified, "Linux Go 容器基线 job");
@@ -24,6 +24,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
         AssertUnverified(unverified, "非 root、PUID/PGID");
         AssertUnverified(unverified, "官方 Compose");
         AssertUnverified(unverified, "client.download_path");
+        AssertUnverified(unverified, "外部 C# 插件目录挂载");
         AssertUnverified(unverified, "发布镜像 Web UI Playwright E2E");
 
         AssertCompleted(todo, "移植 Mikan：");
@@ -58,10 +59,12 @@ public sealed class UnverifiedDeliveryStatusContractTests
             ".github/workflows/upstream-go-baseline.yml",
             ".github/workflows/animegonet-docker.yml",
             "Dockerfile.animegonet",
+            "Dockerfile.external-plugin-fixture",
             "docker-compose.animegonet.yml",
             "docker-compose.external-qbittorrent.yml",
             "docker-compose.qbittorrent-integration.yml",
             "eng/capture-upstream-go-baseline.sh",
+            "eng/export-external-plugin-fixture.sh",
             "eng/smoke-container.sh",
             "eng/smoke-webui-container.sh",
             "eng/smoke-qbittorrent-compose.sh",

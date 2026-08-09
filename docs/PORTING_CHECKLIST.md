@@ -17,7 +17,7 @@
 | `assets/assets.go` | 编译期嵌入静态 WebUI/默认资源 | 替换 | 已验证 | 静态资源随 win-x64 NativeAOT 产物发布并通过 HTTP smoke |
 | Python 资源释放与 gpython | C# 内置实现、显式编译期注册 | 例外 | 例外 | 启动无 Python；兼容别名诊断 |
 | `assets/plugin/feed/parser/filter/rename/schedule` builtin | 五类 C# 内置插件 | 替换 | 已验证 | 同一显式目录；legacy RSS、Mikan filter/parser、媒体整理、staging schedule 委托 tests；固定 develop 的 59 个 plugin/fixture/Go 测试入口由机器清单逐文件映射并锁定 SHA-256 与证据目标，5 个真实 RSS fixture 和 filter 13/4/9/1 结果直接复现；无 Python/DLL 动态加载 |
-| 外部可执行插件包 | RID-specific C# process package | 新增 | 已验证 | manifest、JSON Lines、真实进程环境隔离、惰性复用/退避/reset、配置 API/UI、六类 typed adapter、stderr、SDK/模板及 AOT-safe PluginTool 均有 fake/真实进程/五 RID 验收 |
+| 外部可执行插件包 | RID-specific C# process package | 新增 | 已验证 | manifest、JSON Lines、真实进程环境隔离、惰性复用/退避/reset、配置 API/UI、六类 typed adapter、stderr、SDK/模板及 AOT-safe PluginTool 均有 fake/真实进程/五 RID 门禁；另生成 linux-x64/arm64 NativeAOT source fixture、不可覆盖安全导出、只读包子挂载、非 root UID/可写 plugin-data 自检和启用→统一导入→禁用回退容器门禁，Docker 执行按用户要求未验证 |
 | parser 首个启用实现、filter 顺序串联 | `TitleParserManager` / `OrderedFeedFilterManager` | 保留 | 已验证 | 首个/显式 parser 不 fallback；filter accepted 逐级传递、错误短路、无效/重复 index、空链 tests；Mikan RSS 生产链回归 |
 | `internal/models`、`internal/constant`、`internal/exceptions`、`pkg/exceptions` | 强类型领域模型、常量、稳定错误语义 | 保留+替换 | 已验证 | 固定上游提交的机器清单逐文件/逐导出类型穷尽映射到闭合 enum/record、SQLite 状态机和编译期常量；测试校验 HEAD、文件/类型无漏项、每个替代目标真实存在。`IStableError`/`StableErrorSemantic` 保留 Go marker error 的跨包装识别，RSS/Torrent/Mikan HTML/Data manifest/Cron 解析公开统一 `ParseFailed`；正常重复/不存在使用显式结果。完整依据见 `docs/DOMAIN_MODEL_MAPPING.md` |
 | `internal/logger` | `Microsoft.Extensions.Logging` | 替换 | 已验证 | 编译期 provider fan-out、统一 URL/凭据脱敏、有界 WebSocket stream，以及 `data_path/logs/animego.log` 的 Info+、2 MiB/14份/14天滚动文件均通过并发、轮转、生命周期和 NativeAOT smoke |

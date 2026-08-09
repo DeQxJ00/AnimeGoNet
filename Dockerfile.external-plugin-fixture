@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1.7
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+
+ARG TARGETARCH
+WORKDIR /src
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends clang zlib1g-dev libstdc++-12-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY global.json Directory.Build.props Directory.Packages.props NuGet.config ./
+COPY src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj src/AnimeGo.Plugin.Abstractions/
+COPY src/AnimeGo.Plugin.Sdk/AnimeGo.Plugin.Sdk.csproj src/AnimeGo.Plugin.Sdk/
+COPY tests/AnimeGoNet.ContainerPluginFixture/AnimeGoNet.ContainerPluginFixture.csproj tests/AnimeGoNet.ContainerPluginFixture/
+RUN case "$TARGETARCH" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet restore tests/AnimeGoNet.ContainerPluginFixture/AnimeGoNet.ContainerPluginFixture.csproj \
+      --runtime "$rid" -p:PublishAot=true
+
+COPY src/AnimeGo.Plugin.Abstractions/ src/AnimeGo.Plugin.Abstractions/
+COPY src/AnimeGo.Plugin.Sdk/ src/AnimeGo.Plugin.Sdk/
+COPY tests/AnimeGoNet.ContainerPluginFixture/ tests/AnimeGoNet.ContainerPluginFixture/
+RUN case "$TARGETARCH" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet publish tests/AnimeGoNet.ContainerPluginFixture/AnimeGoNet.ContainerPluginFixture.csproj \
+      --configuration Release \
+      --runtime "$rid" \
+      --self-contained true \
+      --no-restore \
+      --output /out \
+      -p:PublishAot=true \
+      -p:ContinuousIntegrationBuild=true \
+    && sed --in-place "s/__RID__/$rid/g" /out/plugin.json \
+    && find /out -type d -exec chmod 0555 {} + \
+    && find /out -type f -exec chmod 0444 {} + \
+    && chmod 0555 /out/AnimeGoNet.ContainerPluginFixture
+
+FROM scratch
+COPY --from=build /out/ /plugin/
+ENTRYPOINT ["/plugin/AnimeGoNet.ContainerPluginFixture"]

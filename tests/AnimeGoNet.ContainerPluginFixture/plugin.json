@@ -1,0 +1,11 @@
+{
+  "id": "com.animegonet.container-source",
+  "name": "AnimeGoNet container source fixture",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "source",
+  "rid": "__RID__",
+  "entryPoint": "AnimeGoNet.ContainerPluginFixture",
+  "configSchema": "config.schema.json",
+  "capabilities": []
+}

@@ -25,25 +25,28 @@ The following generated gates are now explicitly `[~]`:
 - dual-qBittorrent unified-ingest dispatch and exact cleanup;
 - amd64/arm64 NativeAOT Docker build and runtime smoke;
 - non-root/read-only/health/SIGTERM container hardening;
-- shared `/download` Compose mapping and external qB path probe;
+- shared `/download` Compose mapping;
+- external qB path probe;
+- external NativeAOT C# plugin read-only mount, non-root execution and disable fallback;
 - release-container Playwright WebUI E2E.
 
 Mikan, the local feed-to-download pipeline, move organization, multifile dedup,
 per-file TMDB Episode processing and TypeScript/WebUI are marked complete based
 on their existing non-Docker evidence. The dual-container unified task driver is
 now generated and separately marked unverified. Non-Windows RID execution,
-external-plugin container flow and full JIT/AOT/Docker E2E remain ordinary
-unfinished items; they were not relabeled.
+full JIT/AOT/Docker E2E remain ordinary unfinished items; they were not
+relabeled. The external-plugin container driver is now generated and separately
+marked unverified.
 
 ## Automated evidence
 
-`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact eight
+`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact nine
 `[~]` rows, required `未验证` wording, completed local modules, checklist status
 and the existence of every referenced workflow, Dockerfile, Compose file and
 smoke script. It also rejects the stale checklist phrase that implied Docker
 runner acceptance was still part of implementation completion.
 
-The focused Release delivery suite passed 7/7 and the complete solution passed
-1460/1460 with zero failures and zero skips. `git diff --check` and the
+The focused Release delivery suite passed 10/10 and the complete solution passed
+1463/1463 with zero failures and zero skips. `git diff --check` and the
 formatter restricted to the changed C# contract tests passed. No Docker or
 remote runner command was executed.

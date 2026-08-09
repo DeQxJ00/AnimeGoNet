@@ -244,7 +244,7 @@
 - [~] 官方 Compose 已将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`，配置和 smoke 断言已生成；真实容器路径验证按用户要求未验证。
 - [~] 外部下载器 `client.download_path` 路径转换与错误诊断已生成：主程序提供 qB 默认保存路径读取和显式路径/硬链接能力探测，临时目录成功/缺失 fixture 已通过；真实外部容器的跨容器映射按用户要求未验证。
 - [ ] 构建并实机验证 `linux/amd64`，按确认结果验证 `linux/arm64`。
-- [>] 验证外部 C# 插件目录挂载、平台/RID 校验、非 root 启动和禁用回退：`data/plugins` 包目录与 `data/plugin-data` 写目录已分离；平台/RID、入口执行位、Unix group/world write、链接逃逸、逐包错误隔离、真实本机子进程/环境隔离、自动禁用与显式 reset 已有测试。Docker 只读挂载和真实 Linux 非 root 子进程待验收。
+- [~] 外部 C# 插件目录挂载、非 root 启动和禁用回退门禁已生成但未验证：专用 NativeAOT source fixture 直接引用官方 SDK，amd64/arm64 Dockerfile 生成精确 RID 包；导出器拒绝覆盖现有目录和符号链接并固定只读/执行权限，Compose 将包子目录 `:ro` 覆盖挂载而保留 `plugin-data` 可写。统一导入实际启动插件，插件记录有效 UID、主动确认包目录不可写；随后 API 禁用并证明不再执行。平台/RID、入口权限、逐包隔离、退避/自动禁用/reset 的非 Docker 测试继续有效；按用户要求 Docker/Linux 进程执行标记为未验证。
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
 - [x] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；win-x64 原生二进制完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt 以只读 Go schema-v1 JSON 导出后由 .NET schema v39 单事务导入；跨平台 CI 的组合 smoke 在同一隔离目录验证 3 条旧 sidecar 索引、六个 bucket、过期跳过、重复导入和重启保留。
