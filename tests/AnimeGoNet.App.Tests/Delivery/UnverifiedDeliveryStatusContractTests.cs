@@ -14,7 +14,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(10, unverified.Length);
+        Assert.Equal(15, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
         AssertUnverified(unverified, "Linux Go 容器基线 job");
@@ -27,6 +27,11 @@ public sealed class UnverifiedDeliveryStatusContractTests
         AssertUnverified(unverified, "外部 C# 插件目录挂载");
         AssertUnverified(unverified, "发布镜像 Web UI Playwright E2E");
         AssertUnverified(unverified, "全链路 JIT/AOT/Docker E2E");
+        AssertUnverified(unverified, "优雅退出和取消传播");
+        AssertUnverified(unverified, "Linux x64/arm64 NativeAOT");
+        AssertUnverified(unverified, "五 RID NativeAOT artifact");
+        AssertUnverified(unverified, "首个可用预发布自动化");
+        AssertUnverified(unverified, "AnimeGoNetData 不可变 Release");
 
         AssertCompleted(todo, "移植 Mikan：");
         AssertCompleted(todo, "移植 feed → filter → parse → download pipeline");

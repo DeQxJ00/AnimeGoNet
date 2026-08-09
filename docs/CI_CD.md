@@ -30,6 +30,14 @@ fixture 不复制进 AnimeGoNet Git 历史。
 
 每个 RID 在 `upload-artifact` 前运行 `eng/generate-release-metadata.ps1`。脚本只读取该 RID 的实际 publish 目录和本次 restore 的 `project.assets.json`，生成三项随 artifact 一起交付的确定性元数据：覆盖所有发布文件但不自包含的 `SHA256SUMS`、包含精确 NuGet 名称/版本/package SHA-512/SPDX 许可证和 purl 的 CycloneDX 1.5 `sbom.cdx.json`，以及 `THIRD-PARTY-LICENSES.txt`。NuGet 声明许可证文件时会把有界 UTF-8 原文纳入清单；缺失/未知许可证、非法 nuspec URL、包缓存缺失、符号链接、重复规范路径或不安全输入均使 job 失败。输出不包含本机包缓存路径、仓库路径、凭据或生成时间，重复执行字节一致。
 
+推送 `vMAJOR.MINOR.PATCH-SUFFIX` 标签后，只有五个 RID 的 publish、原生 smoke、
+插件模板和发布元数据任务全部成功，`prerelease` job 才会下载五份 Actions artifact。
+它逐 RID 调用 `eng/package-native-release.ps1`，重新验证内部 `SHA256SUMS` 的精确文件集，
+生成五个确定性 ZIP 及各自 `.sha256`，并要求包数完整后使用已有远端标签创建 GitHub
+Prerelease。`--verify-tag` 禁止工作流暗中创建标签，`--latest=false` 不把预发布误设为
+稳定最新版；工作流不使用覆盖资产的 `--clobber`。普通 branch/PR/workflow_dispatch
+只构建 artifact，不发布 Release。
+
 AnimeGoNetData 日常工作流使用仓库变量 `ANIMEGONET_DATA_REPOSITORY`
 （必须是独立仓库且不能等于主程序仓库）、可选目标分支变量
 `ANIMEGONET_DATA_TARGET` 和仅对目标仓库有 Release 写权限的 secret
@@ -101,8 +109,9 @@ GitHub Actions 运行并提供最终外部证据。
 - `actions/checkout@v6`
 - `actions/setup-dotnet@v5`
 - `actions/upload-artifact@v7`
+- `actions/download-artifact@v8`
 - `docker/setup-qemu-action@v4`
 - `docker/setup-buildx-action@v4`
 - `docker/build-push-action@v7`
 
-这些 major tag 和 runner label 在 2026-07-19 对照官方 action 仓库及 GitHub-hosted runner 文档确认。
+这些 major tag 和 runner label 在 2026-07-19 对照官方 action 仓库及 GitHub-hosted runner 文档确认；`actions/download-artifact@v8` 与 GitHub CLI `gh release create --verify-tag --prerelease` 在 2026-08-10 复核官方发布页/手册。

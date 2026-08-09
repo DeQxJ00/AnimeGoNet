@@ -8,7 +8,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 进行中 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 待验证 |
+| `cmd/animego`：启动、退出、信号 | `AnimeGoNet.App` composition root | 保留 | 未验证 | 固定 5 秒停止期限，活动 qB Worker/调度/WS/配置热应用与 RSS 清理的宿主取消传播已验证；win-x64 NativeAOT 启停和句柄清理通过，Linux/macOS NativeAOT smoke 已加入 7 秒 SIGTERM 零退出门禁；CI 实机结果与 CTRL+C 未验证 |
 | `cmd/plugin` | `AnimeGo.PluginTool` validate/run/pack | 替换 | 已验证 | 严格 fixture/config/typed-result tests、确定性 ZIP、真实 NativeAOT 插件进程 smoke |
 | `configs/default.go`、`models.go` | `Configuration` 强类型模型与默认值 | 保留+扩展 | 已验证 | `configs` 全部生产文件/导出符号与 `config_test.go` 入口由机器清单锁定；Docker/Native 路径、Web、双 qB、Mikan move、元数据/重试/缓存/调度均为强类型安全默认。12 份固定上游 YAML 迁移，旧 Mikan feed 的 display name、带 passkey URL、Cron 与 enable 落入 SourceProfile/SQLite；旧字段按保留映射、业务替换或明确例外分类，无 Python/Transmission/旧不安全默认泄漏 |
 | `configs/check.go`、`init.go` | 配置校验、目录初始化 | 保留+扩展 | 已验证 | 首次创建使用 CreateNew/0600、旧配置先完整解析与规范化再备份/原子替换；路径边界、Web、qB URL/类型/ID、来源唯一 ID/路由/Host/Cookie/策略、TMDB/Bangumi/AI/Torrent/调度/数据更新均 fail-closed；旧 `refresh_second` 最小值行为由独立 HostedService 节奏替换 |
@@ -103,7 +103,7 @@
 | 上游行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
 | Go release workflows | .NET 10 build/test | 替换 | 未验证 | Windows/Linux/macOS Actions 已生成且 YAML 通过解析；另生成固定 Go 1.22.10 Linux 容器的上游串行 `go test -json` 基线 job，锁定提交、原始事件/stderr/summary/SHA-256 且失败也上传；容器与远端运行按用户要求标记为未验证 |
-| 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 进行中 | 五 RID NativeAOT 矩阵已建立；每个 RID 在上传前从实际产物和精确 NuGet graph 生成逐文件 `SHA256SUMS`、CycloneDX 1.5 SBOM 与第三方许可证清单，确定性/哈希/脱敏测试已通过；win-x64 本机 publish/smoke 已通过，其他 RID 仍待远端实跑验收 |
+| 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 未验证 | 五 RID NativeAOT 矩阵及标签预发布闭环已建立；每个 RID 在上传前从实际产物和精确 NuGet graph 生成逐文件 `SHA256SUMS`、CycloneDX 1.5 SBOM 与第三方许可证清单，五份完整 artifact 再确定性打包为 ZIP 与独立校验和；win-x64 本机 publish/smoke 已通过，其他 RID 与首个 Prerelease 仍待远端实跑验收 |
 | MIPS/386/macOS x64 | 不在首版 RID | 例外 | 例外 | 文档化 |
 | Go Dockerfile | NativeAOT runtime image | 替换 | 未验证 | amd64/arm64 Buildx 与容器 smoke 已生成；按用户要求不执行 Docker，后续自行实跑 |
 | 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 已验证 | win-x64 published binary 静态 WebUI smoke |
