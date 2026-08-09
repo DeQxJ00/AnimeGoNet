@@ -1,9 +1,10 @@
 # 外部 qBittorrent 部署与路径映射
 
 `docker-compose.external-qbittorrent.yml` 只启动 AnimeGoNet，连接已有的两个
-qBittorrent WebUI 实例。`bt` 可绑定 Mikan，`pt` 可绑定 U2/TTG；来源和下载器绑定
-仍可在 WebUI 中修改。只使用一个实例时，可让所有来源绑定 `bt`，并从自己的部署
-文件中删除 `pt` 的六个 `downloaders__pt__*` 环境项。
+qBittorrent WebUI 实例。首版正式来源 Mikan 可绑定 `bt`。`pt` 和 U2/TTG 绑定仅是
+为未来扩展保留的部署示例；U2/TTG 已确认首版暂缓，不生成默认来源或默认文件策略。
+只使用一个实例时，可从自己的部署文件中删除 `pt` 的六个
+`downloaders__pt__*` 环境项。
 
 ## 不可省略的路径契约
 

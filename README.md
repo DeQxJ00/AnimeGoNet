@@ -2,9 +2,10 @@
 
 AnimeGoNet 是 `wetor/AnimeGo develop` 业务行为的 .NET 10 / NativeAOT
 移植。主程序使用 ASP.NET Core Minimal API、SQLite 显式 SQL 和静态
-TypeScript/HTML/CSS WebUI；首版下载器只支持 qBittorrent，可配置多个命名实例并
-按 Mikan/U2/TTG 输入源路由。Python 插件已移除，官方插件均为编译期注册的 C#
-实现。
+TypeScript/HTML/CSS WebUI；首版下载器只支持 qBittorrent，可配置多个命名实例，
+正式输入源仅交付 Mikan。U2/TTG 已由项目所有者确认为首版暂缓；现有通用
+adapter/API/路由骨架只作为未来扩展兼容面保留，不声明为首版可用功能。Python 插件
+已移除，官方插件均为编译期注册的 C# 实现。
 
 当前开发基线和未完成项以 [TODO.md](TODO.md) 为准，上游逐项映射见
 [docs/PORTING_CHECKLIST.md](docs/PORTING_CHECKLIST.md)。

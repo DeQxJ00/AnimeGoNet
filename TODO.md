@@ -35,14 +35,14 @@
 - [x] 确认重复集默认只认首个成功完成记录；后续同集在 RSS 解析阶段命中完成记录即停止，删除该业务记录后允许重新进入流程。
 - [x] 确认附属文件首版只整理字幕；唯一匹配 EP 时随视频重命名并保留多语言/轨道后缀，无法对应时季度已知则进入 `Other`。
 - [x] 确认支持多个命名下载器实例，并按输入源配置下载器、元数据字段、过滤/匹配规则、文件/做种策略；Mikan/U2/TTG 使用同一通用导入流水线和 API 契约。
-- [x] 确认示例路由：Mikan（bgmid必填）→ `bt` qBittorrent；U2（anidbid可空）和 TTG（imdbid可空）→ `pt` qBittorrent，名称和绑定均可配置。
+- [x] 原多源示例路由已完成通用骨架：Mikan（bgmid必填）→ `bt` qBittorrent；U2/TTG → `pt` 仅保留 adapter/API/路由回归夹具，不作为首版支持承诺。
 - [x] 确认项目只支持 qBittorrent 下载器及其多命名实例；取消 Transmission 适配计划，旧类型仅作不支持诊断。
-- [x] 确认 U2/TTG 首版采用外部油猴/扩展/API提交模式；调用方传回带个人 passkey 的 Torrent URL，主程序不保存站点账号/Cookie、不登录或抓取网页。
+- [x] U2/TTG 原外部油猴/扩展/API 提交设计已记录，但项目所有者现已确认首版暂缓；主程序不新增站点登录、抓取、账号/Cookie 或默认来源配置。
 - [x] 确认沿用并强类型化 Mikan `source + data[].torrent + data[].info` 批量格式，所有来源统一调用 `/api/v1/ingest`；旧 API 转同一 command。
 - [x] 确认跨输入源按 `(TMDB Series, Season, Episode)` 全局去重；只跳过已完成 EP，同剧集和多文件 Torrent 中的其他 EP 不受影响。
 - [x] 确认 Mikan RSS 同集优选的黑白名单是前置资格过滤，单候选也执行；只有资格过滤后同一 `mikanid+来源EP` 仍有多个候选时才运行可配置优先级组。
 - [x] 确认默认 Mikan SourceProfile 使用 `move`：下载完成后移动到媒体库、不继续做种；Web可改其他策略且只影响新任务。
-- [ ] 确认 U2/TTG 默认文件策略是否使用候选 `link` 以长期做种；四种模式和上游完成回调的隐式删除偏差已记录。
+- [x] 确认 U2/TTG 首版暂缓：不选择默认文件策略、不生成默认 SourceProfile、不做站点业务验收；现有通用 adapter/API/路由骨架保留，未来恢复范围时重新确认策略。
 - [~] Linux Go 容器基线 job 已生成：固定 `golang:1.22.10-bookworm` 与上游 `c7475df`，以 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...` 串行采集 `events.jsonl`、stderr、稳定 summary 和 SHA-256，失败也上传 30 天 artifact；按用户要求容器执行标记为未验证，等待后续自行实跑。
 - [x] 生成上游 fixture SHA-256 清单和 OpenAPI 快照。
 

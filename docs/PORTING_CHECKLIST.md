@@ -2,7 +2,7 @@
 
 本清单把 `wetor/AnimeGo@c7475dfc55a374cd0dd08821bf17125dab1e3145` 的可观察业务面映射到 AnimeGoNet 模块。状态只在对应测试证据通过后更新；`保留` 表示要求行为等价，`替换` 表示用户已确认的实现替换，`例外` 表示明确不移植。
 
-状态：`基线` 已盘点、`待实现` 尚无 .NET 实现、`进行中` 已有未完成实现、`已验证` 验收通过、`未验证` 表示功能/门禁已生成但按用户要求未执行 Docker/远端实跑且不声称成功、`例外` 经确认排除。
+状态：`基线` 已盘点、`待实现` 尚无 .NET 实现、`进行中` 已有未完成实现、`已验证` 验收通过、`暂缓` 表示所有者明确移出首版且保留的代码不构成支持承诺、`未验证` 表示功能/门禁已生成但按用户要求未执行 Docker/远端实跑且不声称成功、`例外` 经确认排除。
 
 ## 入口、配置与基础设施
 
@@ -34,7 +34,8 @@
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 已验证 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选、逐次超时和安全可取消重试已通过；活动 AnimeGoNet Data 版本的 SQLite Subject/完整 Episode 快照优先读取，缺失/不完整/零集未知回退在线 API，版本激活与回滚无需重启 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 已验证 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选、逐次超时和安全可取消重试及自动 Series/Season/Episode worker tests 已通过；实际 `TmdbClient` 随机 loopback 证明 `name` 全部清理轮次→`name_cn`→每响应全部合格 Series 的完整验证早停；SQLite `bolt/themoviedb` 成功响应缓存按 Base URL/语言/operation 分区，14 天默认 TTL、旧 `themoviedb_cache_hour` 迁移、WebUI 配置/锁/精确删除、无凭据/搜索词泄漏、到期/损坏/身份伪造回源及 NativeAOT source-generated JSON 已验证 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 已验证 | 官方 `aux/latest.json`/ZIP SHA 门禁、AOT-compatible DataBuilder 的动画/正片筛选、文本/日期/小数 EP 规范化、Subject 范围分片、确定性 JSONL.gz/manifest/离线 ZIP、原子输出、唯一/引用完整性、生产数量下限及真实 SQLite 导入已验证；版本化下载/导入、保留/回滚和活动版本 read-through 完整串联，Actions 每日/手动构建但不自动发布到主程序仓库 |
-| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 未验证 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全 Torrent staging 及后台 qB dispatch 已由非 Docker 测试验证；双 qB Compose 已生成实际统一导入门禁：Mikan→bt、U2→pt，核对 hash/category/tag/暂停状态/保存路径、反向实例不存在和精确清理；按用户要求容器执行未验证，TTG 与 U2 共享同一可配置 pt 路由且保留 route-preview 覆盖 |
+| 外部 Mikan 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 已验证 | Mikan 统一校验、版本化 SourceProfile、legacy contract、安全 Torrent staging、后台 qB dispatch 与本机合法下载整理闭环均已验证；容器全链另按用户要求标记未验证 |
+| 外部 U2/TTG 调用 | 保留的通用 source adapter/API/路由骨架 | 扩展 | 暂缓 | 所有者确认移出首版；不生成默认 SourceProfile、不选择默认文件策略、不新增站点登录/抓取或首版业务验收。已有 normalizer、route-preview 和测试夹具保留，未来恢复范围时重新确认 |
 
 ## 解析、规则与元数据编排
 
@@ -88,7 +89,8 @@
 | `/api/rss` | Mikan legacy → unified ingest | 保留内部替换 | 已验证 | 上游 JSON、精确 ep_links、legacy envelope/message、安全 feed/Episode 获取、Filiter0..4、批内 identity cache、失败隔离、新优选和 winner 原子 staging Kestrel tests |
 | `/api/v1/rss/ingest` | 现代 Mikan RSS 手动导入 | 扩展 | 已验证 | 明确 SourceProfile、adapter 预检后再抓取、规则 revision、winner 原子 staging、错误脱敏和带 passkey URL 不回显 Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
-| Mikan/U2/TTG source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出、真实统一导入 normalizer tests |
+| Mikan source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出和真实统一导入 normalizer tests |
+| U2/TTG source adapter | 保留编译期扩展骨架 | 扩展 | 暂缓 | 代码与协议回归测试保留，但不属于首版正式支持范围 |
 | `/api/config` | legacy deployment config + typed private overrides | 保留+扩展 | 已验证 | legacy `all/default/comment/raw` GET 与 `all/raw` PUT 保持 HTTP 200 + code 200/300、query 覆盖 body、Access-Key 和“重启后应用”；JSON/Base64/YAML/版本/强类型值先在同目录隔离文件验证，通过后才以 CreateNew 保存可选原字节备份并原子替换。现代 `/api/v1/config` 继续只返回脱敏生效值/safe editable desired projection，并通过 preview、revision PUT/DELETE、私有 0600 覆盖和 Web 两步确认管理；WebUI 不调用会回传 secret 的 legacy raw/all 接口 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |

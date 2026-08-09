@@ -35,7 +35,7 @@
 | 数据更新 | 已确认：完全由 YAML 配置驱动 | 开关、Cron、manifest、自动下载/导入、保留版本数可配置并由 Web 安全编辑。 |
 | TMDB 规范命名 | 已确认：TMDB 匹配成功时名称、季度和集号全部以经官方 API 验证的 TMDB 数据为准 | TMDB 语言固定 `zh-CN`，中文名缺失时仍使用 TMDB `original_name`；Bangumi/文件名值仅保留为来源字段。 |
 | Mikan 人工规则 | 已确认：人工覆盖最高优先级；Mikan URL 中的作品 ID 统一称 `mikanid` | 相同 `mikanid` 视为同一作品，共享 `bgmid`、TMDB Series/Season 和 Episode Offset；自动解析不得覆盖。 |
-| 多源路由 | 已确认：多个命名下载器实例，按输入源配置路由和规则 | Mikan（bgmid必填）可绑定 `bt`；U2（anidbid可空）和TTG（imdbid可空）可绑定 `pt`；名称、客户端类型和绑定均可在UI配置。 |
+| 多源路由 | 已确认：多个命名下载器实例；首版正式来源仅 Mikan，U2/TTG 暂缓 | Mikan（bgmid必填）可绑定 `bt`；U2/TTG 的 adapter/API/`pt` 路由仅保留未来扩展骨架，不生成默认 SourceProfile 或文件策略。 |
 | AI 匹配 | 已确认：确定性季度链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；AI 是一个独立、默认关闭的任务级开关 | 每个任务最多一次调用和一个 Prompt，发送总标题、候选视频相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`，同时返回 Series/Season/全部 Episode；非空 ID 与任务作品级绑定但跨站标题/季度/EP 仅供参考；最终结果必须由 TMDB 验证。P2/P1 是明确的本地 Season 回退例外，不验证 TMDB Season。 |
 | 在线数据源测试 | CI 默认回放 fixture；手动/定时任务运行受控 live smoke | 避免 Mikan/Bangumi/TMDB 波动导致 CI 不稳定。 |
 
