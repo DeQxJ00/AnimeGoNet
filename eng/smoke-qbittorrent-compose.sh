@@ -157,6 +157,10 @@ configure_qbittorrent() {
     "/api/v2/app/setPreferences" \
     --data-urlencode "json=$preferences" >/dev/null
 
+  rm -f -- "$cookie_jar"
+  login "$base_url" "$runtime_password" "$cookie_jar"
+  sleep 3
+
   compose restart "$service" >/dev/null
   rm -f -- "$cookie_jar"
   for attempt in $(seq 1 80); do

@@ -90,6 +90,8 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("/api/v2/auth/login", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/app/setPreferences", smoke, StringComparison.Ordinal);
         Assert.Contains("compose restart", smoke, StringComparison.Ordinal);
+        Assert.Contains("login \"$base_url\" \"$runtime_password\" \"$cookie_jar\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("sleep 3", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/add", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/info", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/files", smoke, StringComparison.Ordinal);
