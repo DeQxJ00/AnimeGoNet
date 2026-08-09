@@ -72,4 +72,48 @@ public sealed class LocalIntegrationScriptTests
         Assert.DoesNotContain("TestSpace", legalDownloadTest, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("123456", legalDownloadTest, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task MikanAuditIsExplicitSecretSafePausedAndAuditable()
+    {
+        var repositoryRoot = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            ".."));
+        var script = await File.ReadAllTextAsync(Path.Combine(
+            repositoryRoot,
+            "eng",
+            "mikan-live-audit.ps1"));
+        var test = await File.ReadAllTextAsync(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "AnimeGoNet.LocalIntegration.Tests",
+            "MikanLiveChainAuditTests.cs"));
+
+        Assert.Contains("FullyQualifiedName~MikanLiveChainAuditTests", script, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_MIKAN_LIVE_AUDIT", script, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_AI_API_KEY", script, StringComparison.Ordinal);
+        Assert.Contains("mikan-live-audit", script, StringComparison.Ordinal);
+        Assert.Contains("[switch]$RealDownload", script, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_MIKAN_REAL_DOWNLOAD", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("123456", script, StringComparison.Ordinal);
+        Assert.Contains("WaitForPausedTaskAsync", test, StringComparison.Ordinal);
+        Assert.Contains("deleteFiles: false", test, StringComparison.Ordinal);
+        Assert.Contains("ListAttemptsAsync", test, StringComparison.Ordinal);
+        Assert.Contains("AiUsageSummary", test, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal(29, sourceCases.Length)", test, StringComparison.Ordinal);
+        Assert.Contains("DownloadPreparationProcessor", test, StringComparison.Ordinal);
+        Assert.Contains("MediaOrganizationProcessor", test, StringComparison.Ordinal);
+        Assert.Contains("WaitForDownloadAsync", test, StringComparison.Ordinal);
+        Assert.Contains("ReadMediaRelativePathsAsync", test, StringComparison.Ordinal);
+        Assert.Contains("Path.GetRelativePath", test, StringComparison.Ordinal);
+        Assert.DoesNotContain("exception.Message", test, StringComparison.Ordinal);
+        Assert.Contains("WriteReportAtomicallyAsync", test, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-", test, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("123456", test, StringComparison.Ordinal);
+    }
 }

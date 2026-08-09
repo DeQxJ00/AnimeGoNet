@@ -9,6 +9,8 @@ adapter/API/路由骨架只作为未来扩展兼容面保留，不声明为首�
 
 当前开发基线和未完成项以 [TODO.md](TODO.md) 为准，上游逐项映射见
 [docs/PORTING_CHECKLIST.md](docs/PORTING_CHECKLIST.md)。
+本机私有 Mikan/qB 真实链路的显式验收方法见
+[docs/MIKAN_LIVE_INTEGRATION.md](docs/MIKAN_LIVE_INTEGRATION.md)。
 
 ## 本机启动
 
