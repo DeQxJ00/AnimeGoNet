@@ -11,7 +11,7 @@ checklist. Every business leaf in `configs/models.go` has one explicit owner:
 | data/download/save path | `PathOptions`, absolute and boundary checked |
 | category and dynamic tag | immutable SourceProfile route snapshot |
 | Web host/port/access key | deployment-only Web binding and private authentication |
-| global proxy | migrated to independent TMDB and Bangumi proxy values |
+| global proxy | replaced before production by one `outbound_proxy.url + hosts` domain-selective policy; old/per-client keys intentionally removed |
 | Mikan Cookie | private, write-only SourceProfile credential |
 | Mikan feed name/URL/Cron/enable | SourceProfile display name and persisted RSS schedule seed; old disabled feeds remain disabled |
 | Bangumi/TMDB redirects and TMDB key | independent metadata clients |

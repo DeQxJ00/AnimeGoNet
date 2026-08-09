@@ -9,6 +9,7 @@ using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Metadata;
+using AnimeGoNet.App.Networking;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Logging;
 using AnimeGoNet.App.Plugins;
@@ -249,10 +250,7 @@ public static class AnimeGoApplication
         var bangumiArchive = new BangumiArchiveStore(database);
         var dataUpdateTransfers = new DataUpdateTransferStore(database);
         var ownsDataUpdateHttpClient = dataUpdateHttpClient is null;
-        dataUpdateHttpClient ??= new HttpClient
-        {
-            Timeout = Timeout.InfiniteTimeSpan,
-        };
+        dataUpdateHttpClient ??= OutboundHttpClientFactory.Create(options.OutboundProxy);
         var dataUpdates = new DataUpdateService(
             dataUpdateHttpClient,
             dataUpdateRuntime,
@@ -294,7 +292,7 @@ public static class AnimeGoApplication
             layout,
             options.TorrentFetch,
             new SystemTorrentDnsResolver(),
-            new PinnedTorrentHttpTransport());
+            new PinnedTorrentHttpTransport(options.OutboundProxy));
         var expiredStaging = await ingestTasks
             .ExpireStagedAsync(DateTimeOffset.UtcNow, cancellationToken)
             .ConfigureAwait(false);
@@ -391,7 +389,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanBangumiSubjectResolver>();
         builder.Services.AddSingleton<MikanRssIngestProcessor>();
         rssDnsResolver ??= new SystemTorrentDnsResolver();
-        rssHttpTransport ??= new PinnedTorrentHttpTransport();
+        rssHttpTransport ??= new PinnedTorrentHttpTransport(options.OutboundProxy);
         builder.Services.AddSingleton<IRssFeedHttpClient>(new ProfileBoundRssFeedHttpClient(
             sourceProfiles, rssDnsResolver, rssHttpTransport, options));
         builder.Services.AddSingleton<RssFeedReader>();
@@ -418,7 +416,7 @@ public static class AnimeGoApplication
         {
             builder.Services.AddSingleton<ITmdbPosterTransport>(_ =>
                 new HttpTmdbPosterTransport(
-                    MetadataHttpClientFactory.Create(options.Metadata.Tmdb.ProxyUrl),
+                    MetadataHttpClientFactory.Create(options.OutboundProxy),
                     ownsHttpClient: true));
         }
         else
@@ -441,7 +439,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<DeleteExecutionProcessor>();
         tmdbClient ??= new TmdbCachingClient(
             new TmdbClient(
-                MetadataHttpClientFactory.Create(options.Metadata.Tmdb.ProxyUrl),
+                MetadataHttpClientFactory.Create(options.OutboundProxy),
                 options.Metadata.Tmdb,
                 ownsHttpClient: true),
             jsonCache,
@@ -455,7 +453,7 @@ public static class AnimeGoApplication
         if (bangumiSubjectClient is null)
         {
             var upstream = new BangumiSubjectClient(
-                MetadataHttpClientFactory.Create(options.Metadata.Bangumi.ProxyUrl),
+                MetadataHttpClientFactory.Create(options.OutboundProxy),
                 options.Metadata.Bangumi,
                 ownsHttpClient: true);
             var cached = new BangumiArchiveCachingClient(
@@ -482,7 +480,7 @@ public static class AnimeGoApplication
             bangumiEpisodeClient,
             options.Metadata.Ai));
         aiMetadataMatcher ??= new OpenAiCompatibleMetadataMatcher(
-            new HttpClient { Timeout = Timeout.InfiniteTimeSpan },
+            OutboundHttpClientFactory.Create(options.OutboundProxy),
             options.Metadata.Ai,
             ownsHttpClient: true,
             referenceHttpClient: CreateAiReferenceHttpClient(),
@@ -596,6 +594,17 @@ public static class AnimeGoApplication
         {
             Paths = paths,
             Web = web,
+            OutboundProxy = new OutboundProxyOptions
+            {
+                Url = ParseOptionalAbsoluteUri(
+                    FirstPresentConfigurationValue(
+                        configuration,
+                        "outbound_proxy_url",
+                        "ANIMEGO_OUTBOUND_PROXY_URL",
+                        "outbound_proxy:url"),
+                    "outbound_proxy_url"),
+                HostPatterns = LoadOutboundProxyHosts(configuration),
+            },
             Metadata = defaults.Metadata with
             {
                 Mikan = defaults.Metadata.Mikan with
@@ -621,13 +630,6 @@ public static class AnimeGoApplication
                             "tmdb_image_base_url",
                             "metadata:tmdb:image_base_url"),
                         "tmdb_image_base_url") ?? defaults.Metadata.Tmdb.ImageBaseUrl,
-                    ProxyUrl = ParseOptionalAbsoluteUri(
-                        FirstPresentConfigurationValue(
-                            configuration,
-                            "tmdb_proxy_url",
-                            "ANIMEGO_PROXY_URL",
-                            "metadata:tmdb:proxy_url"),
-                        "tmdb_proxy_url"),
                     ApiKey = NormalizeOptional(FirstConfigurationValue(
                         configuration,
                         "ANIMEGO_THEMOVIEDB_KEY",
@@ -680,13 +682,6 @@ public static class AnimeGoApplication
                             "bangumi_base_url",
                             "metadata:bangumi:base_url"),
                         "bangumi_base_url") ?? defaults.Metadata.Bangumi.BaseUrl,
-                    ProxyUrl = ParseOptionalAbsoluteUri(
-                        FirstPresentConfigurationValue(
-                            configuration,
-                            "bangumi_proxy_url",
-                            "ANIMEGO_PROXY_URL",
-                            "metadata:bangumi:proxy_url"),
-                        "bangumi_proxy_url"),
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
                         FirstConfigurationValue(
                             configuration,
@@ -1178,6 +1173,23 @@ public static class AnimeGoApplication
             .Where(value => value is not null)
             .Select(value => value!)
             .ToArray();
+
+    private static string[] LoadOutboundProxyHosts(ConfigurationManager configuration)
+    {
+        var scalar = NormalizeOptional(FirstConfigurationValue(
+            configuration,
+            "outbound_proxy_hosts",
+            "ANIMEGO_OUTBOUND_PROXY_HOSTS"));
+        var values = scalar is null
+            ? ReadScalarList(configuration.GetSection("outbound_proxy:hosts"))
+            : scalar.Split(
+                [',', ';', '\r', '\n'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return values
+            .Select(value => value.ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
 
     private static string? FirstConfigurationValue(
         IConfiguration configuration,

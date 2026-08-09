@@ -8,6 +8,8 @@ public sealed record AnimeGoOptions
 
     public required WebBindingOptions Web { get; init; }
 
+    public required OutboundProxyOptions OutboundProxy { get; init; }
+
     public required IReadOnlyDictionary<string, QbittorrentInstanceOptions> Downloaders { get; init; }
 
     public required MetadataMatchingOptions Metadata { get; init; }
@@ -19,6 +21,13 @@ public sealed record AnimeGoOptions
     public required DataUpdateOptions DataUpdate { get; init; }
 
     public required IReadOnlyList<SourceProfileSeed> InitialSourceProfiles { get; init; }
+}
+
+public sealed record OutboundProxyOptions
+{
+    public Uri? Url { get; init; }
+
+    public IReadOnlyList<string> HostPatterns { get; init; } = [];
 }
 
 public sealed record WebBindingOptions
@@ -113,8 +122,6 @@ public sealed record TmdbClientOptions
 
     public Uri ImageBaseUrl { get; init; } = new("https://image.tmdb.org/t/p/");
 
-    public Uri? ProxyUrl { get; init; }
-
     public string? ApiKey { get; init; }
 
     public string? ReadAccessToken { get; init; }
@@ -133,8 +140,6 @@ public sealed record TmdbClientOptions
 public sealed record BangumiClientOptions
 {
     public Uri BaseUrl { get; init; } = new("https://api.bgm.tv/");
-
-    public Uri? ProxyUrl { get; init; }
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(30);
 

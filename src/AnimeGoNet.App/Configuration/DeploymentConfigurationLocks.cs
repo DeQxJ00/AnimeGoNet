@@ -27,9 +27,10 @@ public sealed class DeploymentConfigurationLocks
     private static readonly LockDefinition[] Definitions =
     [
         new("mikan_base_url", ["mikan_base_url", "metadata:mikan:base_url"]),
+        new("outbound_proxy_url", ["outbound_proxy_url", "ANIMEGO_OUTBOUND_PROXY_URL", "outbound_proxy:url"]),
+        new("outbound_proxy_hosts", ["outbound_proxy_hosts", "ANIMEGO_OUTBOUND_PROXY_HOSTS", "outbound_proxy:hosts"]),
         new("tmdb_base_url", ["tmdb_base_url", "metadata:tmdb:base_url"]),
         new("tmdb_image_base_url", ["tmdb_image_base_url", "metadata:tmdb:image_base_url"]),
-        new("tmdb_proxy_url", ["tmdb_proxy_url", "ANIMEGO_PROXY_URL", "metadata:tmdb:proxy_url"]),
         new("tmdb_language", ["tmdb_language", "metadata:tmdb:language"]),
         new("tmdb_http_timeout_seconds", ["tmdb_timeout_second", "metadata:tmdb:timeout_seconds"]),
         new("tmdb_retry_count", ["tmdb_retry_count", "metadata:tmdb:retry_count"]),
@@ -38,7 +39,6 @@ public sealed class DeploymentConfigurationLocks
         new("tmdb_api_key", ["tmdb_api_key", "ANIMEGO_THEMOVIEDB_KEY", "metadata:tmdb:api_key"]),
         new("tmdb_read_access_token", ["tmdb_read_access_token", "metadata:tmdb:read_access_token"]),
         new("bangumi_base_url", ["bangumi_base_url", "metadata:bangumi:base_url"]),
-        new("bangumi_proxy_url", ["bangumi_proxy_url", "ANIMEGO_PROXY_URL", "metadata:bangumi:proxy_url"]),
         new("bangumi_http_timeout_seconds", ["bangumi_timeout_second", "metadata:bangumi:timeout_seconds"]),
         new("bangumi_retry_count", ["bangumi_retry_count", "metadata:bangumi:retry_count"]),
         new("bangumi_retry_delay_seconds", ["bangumi_retry_wait_second", "metadata:bangumi:retry_wait_seconds"]),
@@ -194,6 +194,18 @@ public sealed class DeploymentConfigurationLocks
                     "mikan_base_url",
                     current.MikanBaseUrl,
                     candidate.MikanBaseUrl),
+                OutboundProxyUrlOverridden = Preserve(
+                    "outbound_proxy_url",
+                    current.OutboundProxyUrlOverridden,
+                    candidate.OutboundProxyUrlOverridden),
+                OutboundProxyUrl = Preserve(
+                    "outbound_proxy_url",
+                    current.OutboundProxyUrl,
+                    candidate.OutboundProxyUrl),
+                OutboundProxyHosts = Preserve(
+                    "outbound_proxy_hosts",
+                    current.OutboundProxyHosts,
+                    candidate.OutboundProxyHosts),
                 TmdbBaseUrl = Preserve(
                     "tmdb_base_url",
                     current.TmdbBaseUrl,
@@ -202,14 +214,6 @@ public sealed class DeploymentConfigurationLocks
                     "tmdb_image_base_url",
                     current.TmdbImageBaseUrl,
                     candidate.TmdbImageBaseUrl),
-                TmdbProxyUrlOverridden = Preserve(
-                    "tmdb_proxy_url",
-                    current.TmdbProxyUrlOverridden,
-                    candidate.TmdbProxyUrlOverridden),
-                TmdbProxyUrl = Preserve(
-                    "tmdb_proxy_url",
-                    current.TmdbProxyUrl,
-                    candidate.TmdbProxyUrl),
                 TmdbLanguage = Preserve(
                     "tmdb_language",
                     current.TmdbLanguage,
@@ -250,14 +254,6 @@ public sealed class DeploymentConfigurationLocks
                     "bangumi_base_url",
                     current.BangumiBaseUrl,
                     candidate.BangumiBaseUrl),
-                BangumiProxyUrlOverridden = Preserve(
-                    "bangumi_proxy_url",
-                    current.BangumiProxyUrlOverridden,
-                    candidate.BangumiProxyUrlOverridden),
-                BangumiProxyUrl = Preserve(
-                    "bangumi_proxy_url",
-                    current.BangumiProxyUrl,
-                    candidate.BangumiProxyUrl),
                 BangumiHttpTimeoutSeconds = Preserve(
                     "bangumi_http_timeout_seconds",
                     current.BangumiHttpTimeoutSeconds,
@@ -382,6 +378,19 @@ public sealed class DeploymentConfigurationLocks
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(candidate);
 
+        var outboundProxy = candidate.OutboundProxy;
+        if (IsLocked("outbound_proxy_url"))
+        {
+            outboundProxy = outboundProxy with { Url = deployment.OutboundProxy.Url };
+        }
+        if (IsLocked("outbound_proxy_hosts"))
+        {
+            outboundProxy = outboundProxy with
+            {
+                HostPatterns = deployment.OutboundProxy.HostPatterns,
+            };
+        }
+
         var mikan = candidate.Metadata.Mikan;
         if (IsLocked("mikan_base_url"))
         {
@@ -396,10 +405,6 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("tmdb_image_base_url"))
         {
             tmdb = tmdb with { ImageBaseUrl = deployment.Metadata.Tmdb.ImageBaseUrl };
-        }
-        if (IsLocked("tmdb_proxy_url"))
-        {
-            tmdb = tmdb with { ProxyUrl = deployment.Metadata.Tmdb.ProxyUrl };
         }
         if (IsLocked("tmdb_language"))
         {
@@ -437,10 +442,6 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("bangumi_base_url"))
         {
             bangumi = bangumi with { BaseUrl = deployment.Metadata.Bangumi.BaseUrl };
-        }
-        if (IsLocked("bangumi_proxy_url"))
-        {
-            bangumi = bangumi with { ProxyUrl = deployment.Metadata.Bangumi.ProxyUrl };
         }
         if (IsLocked("bangumi_http_timeout_seconds"))
         {
@@ -580,6 +581,7 @@ public sealed class DeploymentConfigurationLocks
 
         return candidate with
         {
+            OutboundProxy = outboundProxy,
             Metadata = candidate.Metadata with
             {
                 Mikan = mikan,
@@ -603,6 +605,14 @@ public sealed class DeploymentConfigurationLocks
         ArgumentNullException.ThrowIfNull(candidate);
         var changed = new List<string>();
         AddIfChanged(
+            "outbound_proxy_url",
+            deployment.OutboundProxy.Url,
+            candidate.OutboundProxy.Url);
+        AddIfChanged(
+            "outbound_proxy_hosts",
+            string.Join("\n", deployment.OutboundProxy.HostPatterns),
+            string.Join("\n", candidate.OutboundProxy.HostPatterns));
+        AddIfChanged(
             "mikan_base_url",
             deployment.Metadata.Mikan.BaseUrl,
             candidate.Metadata.Mikan.BaseUrl);
@@ -614,10 +624,6 @@ public sealed class DeploymentConfigurationLocks
             "tmdb_image_base_url",
             deployment.Metadata.Tmdb.ImageBaseUrl,
             candidate.Metadata.Tmdb.ImageBaseUrl);
-        AddIfChanged(
-            "tmdb_proxy_url",
-            deployment.Metadata.Tmdb.ProxyUrl,
-            candidate.Metadata.Tmdb.ProxyUrl);
         AddIfChanged(
             "tmdb_language",
             deployment.Metadata.Tmdb.Language,
@@ -642,10 +648,6 @@ public sealed class DeploymentConfigurationLocks
             "bangumi_base_url",
             deployment.Metadata.Bangumi.BaseUrl,
             candidate.Metadata.Bangumi.BaseUrl);
-        AddIfChanged(
-            "bangumi_proxy_url",
-            deployment.Metadata.Bangumi.ProxyUrl,
-            candidate.Metadata.Bangumi.ProxyUrl);
         AddIfChanged(
             "bangumi_http_timeout_seconds",
             deployment.Metadata.Bangumi.HttpTimeout,

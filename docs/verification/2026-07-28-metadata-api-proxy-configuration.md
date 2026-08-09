@@ -1,5 +1,7 @@
 # TMDB / Bangumi API 地址与代理配置（2026-07-28）
 
+> 已被 2026-08-09 的唯一全局选择性代理模型取代。本文件只记录当时实现，不再描述当前配置契约；当前程序已删除 TMDB/Bangumi 独立代理字段。
+
 ## 行为
 
 - TMDB 与 Bangumi 各自拥有强类型 `BaseUrl`、可空 `ProxyUrl` 和 HTTP timeout。

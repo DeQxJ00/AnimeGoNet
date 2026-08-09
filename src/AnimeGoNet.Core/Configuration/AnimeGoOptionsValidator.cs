@@ -30,6 +30,32 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("Web port must be between 0 and 65535.");
         }
 
+        if (options.OutboundProxy.Url is not null
+            && !IsProxyUrl(options.OutboundProxy.Url))
+        {
+            errors.Add("Outbound proxy URL must be an absolute HTTP(S) or SOCKS5 origin without credentials, query or fragment.");
+        }
+
+        if (options.OutboundProxy.Url is null
+            && options.OutboundProxy.HostPatterns.Count > 0)
+        {
+            errors.Add("Outbound proxy host patterns require a configured proxy URL.");
+        }
+
+        var proxyPatterns = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pattern in options.OutboundProxy.HostPatterns)
+        {
+            if (!pattern.Equals(pattern.ToLowerInvariant(), StringComparison.Ordinal)
+                || !IsValidTorrentHostPattern(pattern))
+            {
+                errors.Add($"Outbound proxy host pattern '{pattern}' must be a valid lowercase exact host or '*.example.com'.");
+            }
+            else if (!proxyPatterns.Add(pattern))
+            {
+                errors.Add($"Outbound proxy host pattern '{pattern}' is duplicated.");
+            }
+        }
+
         if (options.Downloaders.Count == 0)
         {
             errors.Add("At least one qBittorrent instance is required.");
@@ -241,12 +267,6 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("TMDB image base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
         }
 
-        if (options.Metadata.Tmdb.ProxyUrl is not null
-            && !IsMetadataProxyUrl(options.Metadata.Tmdb.ProxyUrl))
-        {
-            errors.Add("TMDB proxy URL must be an absolute HTTP(S) or SOCKS5 origin without credentials, query or fragment.");
-        }
-
         if (options.Metadata.Tmdb.HttpTimeout <= TimeSpan.Zero)
         {
             errors.Add("TMDB HTTP timeout must be positive.");
@@ -272,12 +292,6 @@ public static partial class AnimeGoOptionsValidator
         if (!IsMetadataApiBaseUrl(options.Metadata.Bangumi.BaseUrl))
         {
             errors.Add("Bangumi base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
-        }
-
-        if (options.Metadata.Bangumi.ProxyUrl is not null
-            && !IsMetadataProxyUrl(options.Metadata.Bangumi.ProxyUrl))
-        {
-            errors.Add("Bangumi proxy URL must be an absolute HTTP(S) or SOCKS5 origin without credentials, query or fragment.");
         }
 
         if (options.Metadata.Bangumi.HttpTimeout <= TimeSpan.Zero)
@@ -409,7 +423,7 @@ public static partial class AnimeGoOptionsValidator
         && uri.AbsolutePath.EndsWith('/')
         && string.IsNullOrEmpty(uri.Query);
 
-    private static bool IsMetadataProxyUrl(Uri uri) =>
+    private static bool IsProxyUrl(Uri uri) =>
         uri.IsAbsoluteUri
         && uri.Scheme is "http" or "https" or "socks5"
         && string.IsNullOrEmpty(uri.UserInfo)

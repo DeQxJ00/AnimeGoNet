@@ -1,5 +1,7 @@
 # Legacy global proxy compatibility verification — 2026-08-01
 
+> Superseded on 2026-08-09 before any production deployment. The owner confirmed there is no historical runtime data to preserve, so the legacy and per-client proxy keys described below were removed instead of migrated.
+
 ## Mapping
 
 Upstream AnimeGo exposes one `ANIMEGO_PROXY_URL`. AnimeGoNet has independent

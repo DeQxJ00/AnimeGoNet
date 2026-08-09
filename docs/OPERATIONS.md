@@ -68,7 +68,7 @@ sqlite3 E:\AnimeGoNet\data\animegonet.db "PRAGMA quick_check;"
 | 启动时 legacy downloader 阻断 | 状态中的 migration diagnostic | 人工改成 qBittorrent；不要删除诊断或伪造默认实例 |
 | qB 离线/stale | 实例 URL、登录、circuit、路径探测 | 修复连接后等健康探测恢复；不要重建已有任务 |
 | 文件路径不一致 | AnimeGoNet 与 qB 的共享目录映射 | 修正为同一绝对/容器路径；不要复制一份同名假目录 |
-| TMDB/Bangumi 网络失败 | failure category、代理/API 地址、超时 | 保持任务待重试；网络错误不能启用完全失败兜底 |
+| TMDB/Bangumi 网络失败 | failure category、全局代理域名匹配/API 地址、超时 | 保持任务待重试；网络错误不能启用完全失败兜底 |
 | metadata semantic no-match | P4/P3/AI/P2/P1 审计 | 人工覆盖优先；只有明确满足条件才使用 Bangumi 最终兜底 |
 | 整理中断 | 持久化 stage、file operation、cleanup | 让 worker 从 pending-only 恢复；不要手工标记完成 |
 | 插件自动禁用 | 稳定错误码、RID、manifest、stderr | 修复后显式 reset；不要删除 private config 绕过退避 |

@@ -1404,13 +1404,15 @@ public static class ApiEndpoints
                 runtime.BackgroundWorkersEnabled,
                 runtime.AccessKeyConfigured,
                 PathsRestartRequired: true),
+            new OutboundProxyConfigurationResponse(
+                options.OutboundProxy.Url?.AbsoluteUri,
+                options.OutboundProxy.HostPatterns),
             new MetadataConfigurationResponse(
                 new MikanConfigurationResponse(
                     mikan.BaseUrl.AbsoluteUri),
                 new TmdbConfigurationResponse(
                     tmdb.BaseUrl.AbsoluteUri,
                     tmdb.ImageBaseUrl.AbsoluteUri,
-                    tmdb.ProxyUrl?.AbsoluteUri,
                     tmdb.Language,
                     tmdb.HttpTimeout.TotalSeconds,
                     tmdb.RetryCount,
@@ -1420,7 +1422,6 @@ public static class ApiEndpoints
                     !string.IsNullOrWhiteSpace(tmdb.ReadAccessToken)),
                 new BangumiConfigurationResponse(
                     bangumi.BaseUrl.AbsoluteUri,
-                    bangumi.ProxyUrl?.AbsoluteUri,
                     bangumi.HttpTimeout.TotalSeconds,
                     bangumi.RetryCount,
                     bangumi.RetryDelay.TotalSeconds),
@@ -1474,10 +1475,11 @@ public static class ApiEndpoints
         var fetch = desired.TorrentFetch;
         var dataUpdate = desired.DataUpdate;
         return new EditableConfigurationResponse(
+            desired.OutboundProxy.Url?.AbsoluteUri,
+            desired.OutboundProxy.HostPatterns,
             mikan.BaseUrl.AbsoluteUri,
             tmdb.BaseUrl.AbsoluteUri,
             tmdb.ImageBaseUrl.AbsoluteUri,
-            tmdb.ProxyUrl?.AbsoluteUri,
             tmdb.Language,
             tmdb.HttpTimeout.TotalSeconds,
             tmdb.RetryCount,
@@ -1488,7 +1490,6 @@ public static class ApiEndpoints
                 settings?.TmdbReadAccessTokenOverridden == true,
                 settings?.TmdbReadAccessToken),
             bangumi.BaseUrl.AbsoluteUri,
-            bangumi.ProxyUrl?.AbsoluteUri,
             bangumi.HttpTimeout.TotalSeconds,
             bangumi.RetryCount,
             bangumi.RetryDelay.TotalSeconds,
@@ -1619,13 +1620,20 @@ public static class ApiEndpoints
         var beforeDataUpdate = current.DataUpdate;
         var afterDataUpdate = candidate.DataUpdate;
 
+        Add(
+            "outbound_proxy_url",
+            current.OutboundProxy.Url?.AbsoluteUri,
+            candidate.OutboundProxy.Url?.AbsoluteUri);
+        Add(
+            "outbound_proxy_hosts",
+            string.Join("\n", current.OutboundProxy.HostPatterns),
+            string.Join("\n", candidate.OutboundProxy.HostPatterns));
         Add("mikan_base_url", beforeMikan.BaseUrl.AbsoluteUri, afterMikan.BaseUrl.AbsoluteUri);
         Add("tmdb_base_url", beforeTmdb.BaseUrl.AbsoluteUri, afterTmdb.BaseUrl.AbsoluteUri);
         Add(
             "tmdb_image_base_url",
             beforeTmdb.ImageBaseUrl.AbsoluteUri,
             afterTmdb.ImageBaseUrl.AbsoluteUri);
-        Add("tmdb_proxy_url", beforeTmdb.ProxyUrl?.AbsoluteUri, afterTmdb.ProxyUrl?.AbsoluteUri);
         Add("tmdb_language", beforeTmdb.Language, afterTmdb.Language);
         AddSeconds(
             "tmdb_http_timeout_seconds",
@@ -1659,10 +1667,6 @@ public static class ApiEndpoints
             "bangumi_base_url",
             beforeBangumi.BaseUrl.AbsoluteUri,
             afterBangumi.BaseUrl.AbsoluteUri);
-        Add(
-            "bangumi_proxy_url",
-            beforeBangumi.ProxyUrl?.AbsoluteUri,
-            afterBangumi.ProxyUrl?.AbsoluteUri);
         AddSeconds(
             "bangumi_http_timeout_seconds",
             beforeBangumi.HttpTimeout,
@@ -1866,17 +1870,19 @@ public static class ApiEndpoints
             throw new ArgumentException(
                 "tmdb_image_base_url must contain an absolute URL of at most 2048 characters.");
         }
-        var tmdbProxyUrl = NormalizeOptionalUrl(request.TmdbProxyUrl, "tmdb_proxy_url");
-
         if (bangumiBaseUrl.Length is < 1 or > 2048
             || !Uri.TryCreate(bangumiBaseUrl, UriKind.Absolute, out _))
         {
             throw new ArgumentException(
                 "bangumi_base_url must contain an absolute URL of at most 2048 characters.");
         }
-        var bangumiProxyUrl = NormalizeOptionalUrl(
-            request.BangumiProxyUrl,
-            "bangumi_proxy_url");
+        var outboundProxyUrl = NormalizeOptionalUrl(
+            request.OutboundProxyUrl,
+            "outbound_proxy_url");
+        var outboundProxyHosts = NormalizeHostPatterns(
+            request.OutboundProxyHosts
+                ?? current?.OutboundProxyHosts
+                ?? []);
 
         if (language.Length is < 1 or > 32)
         {
@@ -1981,11 +1987,7 @@ public static class ApiEndpoints
             request.TorrentMaxRedirects,
             request.TorrentStagingTtlSeconds,
             utcNow,
-            TmdbProxyUrlOverridden: true,
-            TmdbProxyUrl: tmdbProxyUrl,
             BangumiBaseUrl: bangumiBaseUrl,
-            BangumiProxyUrlOverridden: true,
-            BangumiProxyUrl: bangumiProxyUrl,
             BangumiHttpTimeoutSeconds: request.BangumiHttpTimeoutSeconds,
             AiUseMetadataMatch: aiUseMetadataMatch,
             DataUpdateEnabled: request.DataUpdateEnabled,
@@ -2006,11 +2008,25 @@ public static class ApiEndpoints
                 ?? current?.BangumiRetryDelaySeconds,
             TmdbCacheHours: tmdbCacheHours,
             MikanBaseUrl: mikanBaseUrl,
-            TmdbImageBaseUrl: tmdbImageBaseUrl);
+            TmdbImageBaseUrl: tmdbImageBaseUrl,
+            OutboundProxyUrlOverridden: true,
+            OutboundProxyUrl: outboundProxyUrl,
+            OutboundProxyHosts: outboundProxyHosts);
     }
 
-    private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate) =>
-        current != candidate with { DataUpdate = current.DataUpdate };
+    private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate)
+    {
+        var candidateWithoutHotAppliedOrProxy = candidate with
+        {
+            DataUpdate = current.DataUpdate,
+            OutboundProxy = current.OutboundProxy,
+        };
+        return current != candidateWithoutHotAppliedOrProxy
+            || current.OutboundProxy.Url != candidate.OutboundProxy.Url
+            || !current.OutboundProxy.HostPatterns.SequenceEqual(
+                candidate.OutboundProxy.HostPatterns,
+                StringComparer.Ordinal);
+    }
 
     private static void ValidateSeconds(double value, string name, double maximum)
     {
@@ -2071,6 +2087,27 @@ public static class ApiEndpoints
             throw new ArgumentException($"{name} must be an absolute URL of at most 2048 characters.");
         }
         return normalized;
+    }
+
+    private static string[] NormalizeHostPatterns(IEnumerable<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in values)
+        {
+            var normalized = value?.Trim().ToLowerInvariant() ?? string.Empty;
+            if (!AnimeGoOptionsValidator.IsValidTorrentHostPattern(normalized))
+            {
+                throw new ArgumentException(
+                    "outbound_proxy_hosts must contain only exact hosts or '*.example.com'.");
+            }
+            if (seen.Add(normalized))
+            {
+                result.Add(normalized);
+            }
+        }
+        return result.ToArray();
     }
 
     private static async Task<IResult> Downloads(

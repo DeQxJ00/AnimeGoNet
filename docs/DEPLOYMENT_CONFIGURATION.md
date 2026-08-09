@@ -125,19 +125,22 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 ```
 
 兼容的扁平变量包括 `data_path`、`download_path`、`save_path`、
-`mikan_base_url`、`tmdb_base_url`、`tmdb_image_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、`tmdb_cache_hour`、
-`ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`bangumi_proxy_url`、
+`mikan_base_url`、`tmdb_base_url`、`tmdb_image_base_url`、`tmdb_api_key`、`tmdb_cache_hour`、
+`ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`outbound_proxy_url`、
+`outbound_proxy_hosts`、`ANIMEGO_OUTBOUND_PROXY_URL`、`ANIMEGO_OUTBOUND_PROXY_HOSTS`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
-`ANIMEGO_PROXY_URL`、`ANIMEGO_WEB_HOST`、
+`ANIMEGO_WEB_HOST`、
 `ANIMEGO_WEB_PORT`。标准 ASP.NET Core
 `--urls` / `ASPNETCORE_URLS` 覆盖 `web.host` / `web.port`；推荐新部署优先使用
 规范嵌套键。
 
-旧 `ANIMEGO_PROXY_URL` 同时覆盖 TMDB 和 Bangumi 代理，以保留上游“一个全局
-代理”的语义；显式空值同时关闭两者。`tmdb_proxy_url` / `bangumi_proxy_url` 专用
-变量优先于旧全局变量。旧全局变量存在时，WebUI 将两个独立代理字段都标记为环境
-锁并拒绝私有覆盖。
+代理只有一个规范模型：`outbound_proxy.url` 配合 `outbound_proxy.hosts`。
+扁平或环境变量的 hosts 使用逗号、分号或换行分隔；YAML 使用列表。匹配支持精确
+域名和 `*.example.com`，通配符只匹配子域名、不匹配 apex，比较不区分大小写但保存
+与部署模型统一规范为小写。未命中域名不继承系统代理，保持直连。程序从未投入正式
+运行，因此按所有者确认直接移除了 `tmdb_proxy_url`、`bangumi_proxy_url` 与
+`ANIMEGO_PROXY_URL`，这些旧键不会生效。
 
 原生默认监听 `127.0.0.1:7991`，不会默认暴露到局域网。Docker 默认监听
 `0.0.0.0:7991`，并继续强制要求非空 Access Key。host 只接受 DNS 名或 IP 地址，
@@ -164,6 +167,10 @@ web:
   port: 7991
   access_key: ''
   background_workers_enabled: true
+
+outbound_proxy:
+  url: ''
+  hosts: []
 
 downloaders:
   bt:
@@ -195,7 +202,6 @@ metadata:
   tmdb:
     base_url: https://api.themoviedb.org/
     image_base_url: https://image.tmdb.org/t/p/
-    proxy_url: ''
     api_key: ''
     read_access_token: ''
     language: zh-CN
@@ -205,7 +211,6 @@ metadata:
     cache_hours: 336
   bangumi:
     base_url: https://api.bgm.tv/
-    proxy_url: ''
     timeout_seconds: 30
   season_failure:
     skip: false
@@ -253,6 +258,13 @@ SSRF 公网地址门禁。
 `/t/p/`；若反向代理根目录保持 TMDB 图片路径结构，应写成
 `http://image.tmdb.local/t/p/`。Mikan、TMDB API、TMDB 图片和 Bangumi API 四个
 地址都能在 WebUI 应用配置中修改，保存后需重启生效。
+
+`outbound_proxy.url` 只接受无凭据、无 path/query/fragment 的 `http://`、`https://`
+或 `socks5://` origin。`hosts` 非空时必须同时配置 URL。该策略覆盖 Mikan RSS 与
+Torrent、TMDB/Bangumi、封面、AI/MCP 和 AnimeGoNetData；qBittorrent 实例连接和
+编译期固定的 AniDB 参考查询明确直连。Torrent 走代理前仍逐跳检查来源 host
+allowlist、DNS 地址、redirect 和 HTTPS downgrade；forward proxy 自行解析目标，
+因此只有直连分支承诺连接钉在预先校验的 IP。
 
 `downloaders` 和 `sources` 是按 ID 命名的 mapping。不同来源通过
 `downloader_id` 绑定不同 qBittorrent 实例。所有下载器 `download_path` 必须位于

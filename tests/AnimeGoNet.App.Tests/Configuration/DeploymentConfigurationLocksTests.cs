@@ -33,16 +33,18 @@ public sealed class DeploymentConfigurationLocksTests
     }
 
     [Fact]
-    public void LegacyGlobalProxyLocksBothIndependentProxyFields()
+    public void GlobalProxyUrlAndHostsHaveIndependentCanonicalLocks()
     {
         var locks = DeploymentConfigurationLocks.FromVariableNames(
-            ["animego_proxy_url"]);
+            ["ANIMEGO_OUTBOUND_PROXY_URL", "ANIMEGO_OUTBOUND_PROXY_HOSTS"]);
 
-        Assert.True(locks.IsLocked("tmdb_proxy_url"));
-        Assert.True(locks.IsLocked("bangumi_proxy_url"));
-        Assert.All(
-            locks.Items,
-            item => Assert.Equal(["animego_proxy_url"], item.EnvironmentVariables));
+        Assert.True(locks.IsLocked("outbound_proxy_url"));
+        Assert.True(locks.IsLocked("outbound_proxy_hosts"));
+        Assert.Equal(2, locks.Items.Count);
+        Assert.Equal(
+            ["ANIMEGO_OUTBOUND_PROXY_URL"],
+            Assert.Single(locks.Items, item => item.Field == "outbound_proxy_url")
+                .EnvironmentVariables);
     }
 
     [Fact]

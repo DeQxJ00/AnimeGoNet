@@ -228,6 +228,10 @@ interface RuntimeConfiguration {
     access_key_configured: boolean;
     paths_restart_required: boolean;
   };
+  outbound_proxy: {
+    url: string | null;
+    hosts: string[];
+  };
   metadata: {
     mikan: {
       base_url: string;
@@ -235,7 +239,6 @@ interface RuntimeConfiguration {
     tmdb: {
       base_url: string;
       image_base_url: string;
-      proxy_url: string | null;
       language: string;
       http_timeout_seconds: number;
       retry_count: number;
@@ -246,7 +249,6 @@ interface RuntimeConfiguration {
     };
     bangumi: {
       base_url: string;
-      proxy_url: string | null;
       http_timeout_seconds: number;
       retry_count: number;
       retry_delay_seconds: number;
@@ -283,10 +285,11 @@ interface RuntimeConfiguration {
     hot_reload_supported: boolean;
   };
   editable: {
+    outbound_proxy_url: string | null;
+    outbound_proxy_hosts: string[];
     mikan_base_url: string;
     tmdb_base_url: string;
     tmdb_image_base_url: string;
-    tmdb_proxy_url: string | null;
     tmdb_language: string;
     tmdb_http_timeout_seconds: number;
     tmdb_retry_count: number;
@@ -295,7 +298,6 @@ interface RuntimeConfiguration {
     tmdb_api_key_state: "inherit" | "configured" | "cleared";
     tmdb_read_access_token_state: "inherit" | "configured" | "cleared";
     bangumi_base_url: string;
-    bangumi_proxy_url: string | null;
     bangumi_http_timeout_seconds: number;
     bangumi_retry_count: number;
     bangumi_retry_delay_seconds: number;
@@ -339,10 +341,11 @@ interface ConfigurationMigrationDiagnostic {
 }
 
 interface ConfigurationUpdatePayload {
+  outbound_proxy_url: string | null;
+  outbound_proxy_hosts: string[];
   mikan_base_url: string;
   tmdb_base_url: string;
   tmdb_image_base_url: string;
-  tmdb_proxy_url: string | null;
   tmdb_language: string;
   tmdb_http_timeout_seconds: number;
   tmdb_retry_count: number;
@@ -353,7 +356,6 @@ interface ConfigurationUpdatePayload {
   tmdb_read_access_token: string | null;
   clear_tmdb_read_access_token: boolean;
   bangumi_base_url: string;
-  bangumi_proxy_url: string | null;
   bangumi_http_timeout_seconds: number;
   bangumi_retry_count: number;
   bangumi_retry_delay_seconds: number;
@@ -3654,7 +3656,6 @@ function metadataConfigurationCard(config: RuntimeConfiguration): HTMLElement {
   const card = configurationCard("TMDB 与季度失败链", [
     ["TMDB", tmdbCredential ? "凭据已配置（值已隐藏）" : "未配置凭据"],
     ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
-    ["TMDB 代理", config.metadata.tmdb.proxy_url ?? "直连（未配置）"],
     ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
     [
       "TMDB 重试",
@@ -3663,7 +3664,6 @@ function metadataConfigurationCard(config: RuntimeConfiguration): HTMLElement {
     ],
     ["TMDB 缓存", `${config.metadata.tmdb.cache_hours} 小时（仅缓存验证成功的响应）`],
     ["Bangumi API", config.metadata.bangumi.base_url],
-    ["Bangumi 代理", config.metadata.bangumi.proxy_url ?? "直连（未配置）"],
     ["Bangumi 超时", `${config.metadata.bangumi.http_timeout_seconds} 秒`],
     [
       "Bangumi 重试",
@@ -3703,6 +3703,16 @@ async function loadConfiguration(): Promise<void> {
         ["容器模式", enabledLabel(config.deployment.running_in_container)],
         ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
         ["Access-Key", config.deployment.access_key_configured ? "已配置（值已隐藏）" : "未配置"],
+      ]),
+      configurationCard("全局选择性代理", [
+        ["代理地址", config.outbound_proxy.url ?? "未配置（全部直连）"],
+        [
+          "代理域名",
+          config.outbound_proxy.hosts.length === 0
+            ? "未配置"
+            : config.outbound_proxy.hosts.join("、"),
+        ],
+        ["匹配规则", "精确域名或 *.example.com；未命中的地址保持直连"],
       ]),
       metadataConfigurationCard(config),
       configurationCard("AI、偏移与 Torrent", [
@@ -3794,10 +3804,11 @@ function syncConfigurationSecretInputs(): void {
 }
 
 const configurationLockSelectors: Record<string, string[]> = {
+  outbound_proxy_url: ["#configuration-outbound-proxy-url"],
+  outbound_proxy_hosts: ["#configuration-outbound-proxy-hosts"],
   mikan_base_url: ["#configuration-mikan-url"],
   tmdb_base_url: ["#configuration-tmdb-url"],
   tmdb_image_base_url: ["#configuration-tmdb-image-url"],
-  tmdb_proxy_url: ["#configuration-tmdb-proxy"],
   tmdb_language: ["#configuration-tmdb-language"],
   tmdb_http_timeout_seconds: ["#configuration-tmdb-timeout"],
   tmdb_retry_count: ["#configuration-tmdb-retry-count"],
@@ -3806,7 +3817,6 @@ const configurationLockSelectors: Record<string, string[]> = {
   tmdb_api_key: ["#configuration-tmdb-key", "#configuration-tmdb-key-clear"],
   tmdb_read_access_token: ["#configuration-tmdb-token", "#configuration-tmdb-token-clear"],
   bangumi_base_url: ["#configuration-bangumi-url"],
-  bangumi_proxy_url: ["#configuration-bangumi-proxy"],
   bangumi_http_timeout_seconds: ["#configuration-bangumi-timeout"],
   bangumi_retry_count: ["#configuration-bangumi-retry-count"],
   bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
@@ -3858,13 +3868,18 @@ function openConfigurationEditor(): void {
   if (!currentConfiguration) return;
   clearConfigurationPreview();
   const editable = currentConfiguration.editable;
+  setConfigurationValue(
+    "#configuration-outbound-proxy-url",
+    editable.outbound_proxy_url ?? "",
+  );
+  element<HTMLTextAreaElement>("#configuration-outbound-proxy-hosts").value =
+    editable.outbound_proxy_hosts.join("\n");
   setConfigurationValue("#configuration-mikan-url", editable.mikan_base_url);
   setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
   setConfigurationValue(
     "#configuration-tmdb-image-url",
     editable.tmdb_image_base_url,
   );
-  setConfigurationValue("#configuration-tmdb-proxy", editable.tmdb_proxy_url ?? "");
   setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
   setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
   setConfigurationValue("#configuration-tmdb-retry-count", editable.tmdb_retry_count);
@@ -3882,7 +3897,6 @@ function openConfigurationEditor(): void {
   element<HTMLElement>("#configuration-tmdb-token-state").textContent =
     configurationSecretLabel(editable.tmdb_read_access_token_state);
   setConfigurationValue("#configuration-bangumi-url", editable.bangumi_base_url);
-  setConfigurationValue("#configuration-bangumi-proxy", editable.bangumi_proxy_url ?? "");
   setConfigurationValue(
     "#configuration-bangumi-timeout",
     editable.bangumi_http_timeout_seconds,
@@ -3943,10 +3957,11 @@ function openConfigurationEditor(): void {
 }
 
 const configurationFieldLabels: Record<string, string> = {
+  outbound_proxy_url: "全局代理地址",
+  outbound_proxy_hosts: "使用代理的域名",
   mikan_base_url: "Mikan 地址",
   tmdb_base_url: "TMDB API 地址",
   tmdb_image_base_url: "TMDB 图片地址",
-  tmdb_proxy_url: "TMDB 代理",
   tmdb_language: "TMDB 语言",
   tmdb_http_timeout_seconds: "TMDB 超时（秒）",
   tmdb_retry_count: "TMDB 额外重试次数",
@@ -3955,7 +3970,6 @@ const configurationFieldLabels: Record<string, string> = {
   tmdb_api_key: "TMDB API Key",
   tmdb_read_access_token: "TMDB Read Token",
   bangumi_base_url: "Bangumi API 地址",
-  bangumi_proxy_url: "Bangumi 代理",
   bangumi_http_timeout_seconds: "Bangumi 超时（秒）",
   bangumi_retry_count: "Bangumi 额外重试次数",
   bangumi_retry_delay_seconds: "Bangumi 重试间隔（秒）",
@@ -3985,13 +3999,18 @@ function configurationRequest(): ConfigurationUpdatePayload {
     throw new Error("配置尚未载入");
   }
   return {
+    outbound_proxy_url:
+      element<HTMLInputElement>("#configuration-outbound-proxy-url").value || null,
+    outbound_proxy_hosts:
+      element<HTMLTextAreaElement>("#configuration-outbound-proxy-hosts")
+        .value.split(/[,;\r\n]+/u)
+        .map(value => value.trim().toLowerCase())
+        .filter(value => value.length > 0),
     mikan_base_url:
       element<HTMLInputElement>("#configuration-mikan-url").value,
     tmdb_base_url: element<HTMLInputElement>("#configuration-tmdb-url").value,
     tmdb_image_base_url:
       element<HTMLInputElement>("#configuration-tmdb-image-url").value,
-    tmdb_proxy_url:
-      element<HTMLInputElement>("#configuration-tmdb-proxy").value || null,
     tmdb_language: element<HTMLInputElement>("#configuration-tmdb-language").value,
     tmdb_http_timeout_seconds:
       element<HTMLInputElement>("#configuration-tmdb-timeout").valueAsNumber,
@@ -4010,8 +4029,6 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-tmdb-token-clear").checked,
     bangumi_base_url:
       element<HTMLInputElement>("#configuration-bangumi-url").value,
-    bangumi_proxy_url:
-      element<HTMLInputElement>("#configuration-bangumi-proxy").value || null,
     bangumi_http_timeout_seconds:
       element<HTMLInputElement>("#configuration-bangumi-timeout").valueAsNumber,
     bangumi_retry_count:

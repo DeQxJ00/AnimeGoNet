@@ -55,7 +55,7 @@ dotnet run --project src/AnimeGoNet.App -- `
 - `data_path`、`download_path`、`save_path`；
 - 每个 `downloaders.<id>` 的 qBittorrent WebUI 地址、用户名、密码、下载路径和启用状态；
 - 每个 `sources.<id>` 的 adapter、下载器绑定、文件策略、Torrent Host 白名单和规则开关；
-- TMDB/Bangumi 的 API 地址或代理，以及默认关闭的高风险 fallback/AI 选项；
+- Mikan/TMDB/Bangumi/图片 API 地址、唯一全局代理 URL 与域名列表，以及默认关闭的高风险 fallback/AI 选项；
 - Mikan 的默认 `file_strategy=move`。
 
 不同来源可以绑定不同 qBittorrent 实例。任务创建时会冻结来源 revision 和下载器路由，

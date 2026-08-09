@@ -418,20 +418,6 @@ internal static class DeploymentYamlConfiguration
             values,
             "advanced:request:retry_wait_second",
             "metadata:bangumi:retry_wait_seconds");
-        if (string.Equals(
-                Value(values, "setting:proxy:enable"),
-                "true",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            AliasAbsoluteUrl(
-                values,
-                "setting:proxy:url",
-                "metadata:tmdb:proxy_url");
-            AliasAbsoluteUrl(
-                values,
-                "setting:proxy:url",
-                "metadata:bangumi:proxy_url");
-        }
     }
 
     private static void ValidateVersion(string version)
@@ -612,6 +598,10 @@ internal static class DeploymentYamlConfiguration
               access_key: {{Scalar(Configured(values, "web:access_key", string.Empty))}}
               background_workers_enabled: true
 
+            outbound_proxy:
+              url: ''
+              hosts: []
+
             downloaders:
               bt:
                 type: qbittorrent
@@ -648,7 +638,6 @@ internal static class DeploymentYamlConfiguration
               tmdb:
                 base_url: {{Scalar(Configured(values, "metadata:tmdb:base_url", defaults.Metadata.Tmdb.BaseUrl.AbsoluteUri))}}
                 image_base_url: {{Scalar(Configured(values, "metadata:tmdb:image_base_url", defaults.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri))}}
-                proxy_url: {{Scalar(Configured(values, "metadata:tmdb:proxy_url", string.Empty))}}
                 api_key: {{Scalar(Configured(values, "metadata:tmdb:api_key", string.Empty))}}
                 read_access_token: ''
                 language: {{Scalar(defaults.Metadata.Tmdb.Language)}}
@@ -658,7 +647,6 @@ internal static class DeploymentYamlConfiguration
                 cache_hours: {{Number(values, "metadata:tmdb:cache_hours", defaults.Metadata.Tmdb.CacheTtl.TotalHours)}}
               bangumi:
                 base_url: {{Scalar(Configured(values, "metadata:bangumi:base_url", defaults.Metadata.Bangumi.BaseUrl.AbsoluteUri))}}
-                proxy_url: {{Scalar(Configured(values, "metadata:bangumi:proxy_url", string.Empty))}}
                 timeout_seconds: {{Number(values, "metadata:bangumi:timeout_seconds", defaults.Metadata.Bangumi.HttpTimeout.TotalSeconds)}}
                 retry_count: {{Integer(values, "metadata:bangumi:retry_count", defaults.Metadata.Bangumi.RetryCount)}}
                 retry_wait_seconds: {{Number(values, "metadata:bangumi:retry_wait_seconds", defaults.Metadata.Bangumi.RetryDelay.TotalSeconds)}}
@@ -813,6 +801,12 @@ internal static class DeploymentYamlConfiguration
               access_key: ''
               background_workers_enabled: true
 
+            # 唯一出站代理。仅匹配 hosts 的目标使用代理；其余保持直连。
+            outbound_proxy:
+              url: ''
+              # 支持精确域名和 *.example.com；统一使用小写。
+              hosts: []
+
             downloaders:
               bt:
                 type: qbittorrent
@@ -856,7 +850,6 @@ internal static class DeploymentYamlConfiguration
               tmdb:
                 base_url: https://api.themoviedb.org/
                 image_base_url: https://image.tmdb.org/t/p/
-                proxy_url: ''
                 api_key: ''
                 read_access_token: ''
                 language: zh-CN
@@ -865,7 +858,6 @@ internal static class DeploymentYamlConfiguration
                 retry_wait_seconds: 5
               bangumi:
                 base_url: https://api.bgm.tv/
-                proxy_url: ''
                 timeout_seconds: 30
                 retry_count: 3
                 retry_wait_seconds: 5

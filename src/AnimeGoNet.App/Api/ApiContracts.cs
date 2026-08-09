@@ -195,6 +195,7 @@ public sealed record ConfigurationResponse(
     IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics,
     [property: JsonPropertyName("paths")] RuntimePaths Paths,
     [property: JsonPropertyName("deployment")] DeploymentConfigurationResponse Deployment,
+    [property: JsonPropertyName("outbound_proxy")] OutboundProxyConfigurationResponse OutboundProxy,
     [property: JsonPropertyName("metadata")] MetadataConfigurationResponse Metadata,
     [property: JsonPropertyName("torrent_fetch")] TorrentFetchConfigurationResponse TorrentFetch,
     [property: JsonPropertyName("data_update")] DataUpdateConfigurationResponse DataUpdate,
@@ -208,10 +209,11 @@ public sealed record ConfigurationMigrationDiagnosticResponse(
     [property: JsonPropertyName("blocks_downloads")] bool BlocksDownloads);
 
 public sealed record EditableConfigurationResponse(
+    [property: JsonPropertyName("outbound_proxy_url")] string? OutboundProxyUrl,
+    [property: JsonPropertyName("outbound_proxy_hosts")] IReadOnlyList<string> OutboundProxyHosts,
     [property: JsonPropertyName("mikan_base_url")] string MikanBaseUrl,
     [property: JsonPropertyName("tmdb_base_url")] string TmdbBaseUrl,
     [property: JsonPropertyName("tmdb_image_base_url")] string TmdbImageBaseUrl,
-    [property: JsonPropertyName("tmdb_proxy_url")] string? TmdbProxyUrl,
     [property: JsonPropertyName("tmdb_language")] string TmdbLanguage,
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_retry_count")] int TmdbRetryCount,
@@ -220,7 +222,6 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("tmdb_api_key_state")] string TmdbApiKeyState,
     [property: JsonPropertyName("tmdb_read_access_token_state")] string TmdbReadAccessTokenState,
     [property: JsonPropertyName("bangumi_base_url")] string BangumiBaseUrl,
-    [property: JsonPropertyName("bangumi_proxy_url")] string? BangumiProxyUrl,
     [property: JsonPropertyName("bangumi_http_timeout_seconds")] double BangumiHttpTimeoutSeconds,
     [property: JsonPropertyName("bangumi_retry_count")] int BangumiRetryCount,
     [property: JsonPropertyName("bangumi_retry_delay_seconds")] double BangumiRetryDelaySeconds,
@@ -258,7 +259,6 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("mikan_base_url")] string? MikanBaseUrl,
     [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,
     [property: JsonPropertyName("tmdb_image_base_url")] string? TmdbImageBaseUrl,
-    [property: JsonPropertyName("tmdb_proxy_url")] string? TmdbProxyUrl,
     [property: JsonPropertyName("tmdb_language")] string? TmdbLanguage,
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_retry_count")] int? TmdbRetryCount,
@@ -269,7 +269,6 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("tmdb_read_access_token")] string? TmdbReadAccessToken,
     [property: JsonPropertyName("clear_tmdb_read_access_token")] bool ClearTmdbReadAccessToken,
     [property: JsonPropertyName("bangumi_base_url")] string? BangumiBaseUrl,
-    [property: JsonPropertyName("bangumi_proxy_url")] string? BangumiProxyUrl,
     [property: JsonPropertyName("bangumi_http_timeout_seconds")] double BangumiHttpTimeoutSeconds,
     [property: JsonPropertyName("bangumi_retry_count")] int? BangumiRetryCount,
     [property: JsonPropertyName("bangumi_retry_delay_seconds")] double? BangumiRetryDelaySeconds,
@@ -294,7 +293,9 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("data_update_auto_import")] bool DataUpdateAutoImport,
     [property: JsonPropertyName("data_update_keep_versions")] int DataUpdateKeepVersions,
     [property: JsonPropertyName("data_update_http_timeout_seconds")] double DataUpdateHttpTimeoutSeconds,
-    [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision);
+    [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision,
+    [property: JsonPropertyName("outbound_proxy_url")] string? OutboundProxyUrl = null,
+    [property: JsonPropertyName("outbound_proxy_hosts")] IReadOnlyList<string>? OutboundProxyHosts = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -344,10 +345,13 @@ public sealed record MetadataConfigurationResponse(
 public sealed record MikanConfigurationResponse(
     [property: JsonPropertyName("base_url")] string BaseUrl);
 
+public sealed record OutboundProxyConfigurationResponse(
+    [property: JsonPropertyName("url")] string? Url,
+    [property: JsonPropertyName("hosts")] IReadOnlyList<string> Hosts);
+
 public sealed record TmdbConfigurationResponse(
     [property: JsonPropertyName("base_url")] string BaseUrl,
     [property: JsonPropertyName("image_base_url")] string ImageBaseUrl,
-    [property: JsonPropertyName("proxy_url")] string? ProxyUrl,
     [property: JsonPropertyName("language")] string Language,
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
     [property: JsonPropertyName("retry_count")] int RetryCount,
@@ -358,7 +362,6 @@ public sealed record TmdbConfigurationResponse(
 
 public sealed record BangumiConfigurationResponse(
     [property: JsonPropertyName("base_url")] string BaseUrl,
-    [property: JsonPropertyName("proxy_url")] string? ProxyUrl,
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
     [property: JsonPropertyName("retry_count")] int RetryCount,
     [property: JsonPropertyName("retry_delay_seconds")] double RetryDelaySeconds);

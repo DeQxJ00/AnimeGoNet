@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.Core.Configuration;
 
 namespace AnimeGoNet.App.Tests.Networking;
 
@@ -119,6 +120,35 @@ public sealed class LoopbackHttpFixtureTests
             request,
             StringComparison.Ordinal);
         Assert.DoesNotContain(secret, options.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MatchingTorrentHostUsesConfiguredForwardProxyAfterAddressValidation()
+    {
+        await using var proxy = new OneShotLoopbackServer(
+            BuildResponse(HttpStatusCode.OK, "proxied"u8.ToArray()));
+        var transport = new PinnedTorrentHttpTransport(new OutboundProxyOptions
+        {
+            Url = proxy.Origin,
+            HostPatterns = ["torrent.example.invalid"],
+        });
+        var destination = new Uri(
+            "http://torrent.example.invalid/private/file.torrent?token=opaque");
+
+        await using var response = await transport.SendAsync(
+            destination,
+            [IPAddress.Parse("203.0.113.10")],
+            CancellationToken.None);
+        using var content = new MemoryStream();
+        await response.Content.CopyToAsync(content);
+
+        Assert.Equal("proxied", Encoding.UTF8.GetString(content.ToArray()));
+        var request = await proxy.RequestHeaders;
+        Assert.StartsWith(
+            "GET http://torrent.example.invalid/private/file.torrent?token=opaque HTTP/1.1\r\n",
+            request,
+            StringComparison.Ordinal);
+        Assert.Equal(1, proxy.AcceptedConnections);
     }
 
     private static byte[] BuildResponse(

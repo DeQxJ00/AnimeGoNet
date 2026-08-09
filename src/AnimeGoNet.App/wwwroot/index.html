@@ -891,10 +891,17 @@
       <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；AnimeGoNetData 更新策略与 Cron 即时生效，其他修改仍需重启。</p>
       <p id="configuration-lock-summary" class="configuration-lock-summary muted" aria-live="polite">正在读取部署环境锁定状态…</p>
       <div class="configuration-form-grid">
+        <fieldset class="wide configuration-data-update-editor">
+          <legend>全局选择性代理</legend>
+          <p class="configuration-data-update-caption">只有命中下方域名规则的出站请求才使用代理；未命中保持直连。适用于 Mikan、TMDB/Bangumi、封面、AI/MCP 和数据更新，qBittorrent 本地连接与固定 AniDB 参考地址不使用。</p>
+          <div class="configuration-data-update-grid">
+            <label class="wide">代理地址（可选）<input id="configuration-outbound-proxy-url" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
+            <label class="wide">使用代理的域名<textarea id="configuration-outbound-proxy-hosts" rows="4" placeholder="api.themoviedb.org&#10;*.mikanime.tv"></textarea><small>每行一个，也可用逗号或分号；支持精确域名和 *.example.com，保存时统一转小写。</small></label>
+          </div>
+        </fieldset>
         <label class="wide">Mikan 地址<input id="configuration-mikan-url" type="url" required placeholder="https://mikanime.tv/"></label>
         <label class="wide">TMDB API 地址<input id="configuration-tmdb-url" type="url" required placeholder="https://api.themoviedb.org/"></label>
         <label class="wide">TMDB 图片地址<input id="configuration-tmdb-image-url" type="url" required placeholder="https://image.tmdb.org/t/p/"></label>
-        <label class="wide">TMDB 代理（可选）<input id="configuration-tmdb-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>TMDB 语言<input id="configuration-tmdb-language" required maxlength="32"></label>
         <label>TMDB 超时（秒）<input id="configuration-tmdb-timeout" type="number" min="1" max="86400" required></label>
         <label>TMDB 额外重试次数<input id="configuration-tmdb-retry-count" type="number" min="0" max="10" required></label>
@@ -907,7 +914,6 @@
         <label class="configuration-clear"><input id="configuration-tmdb-token-clear" type="checkbox">明确清除 Read Token</label>
         <p id="configuration-tmdb-token-state" class="configuration-secret-state wide"></p>
         <label class="wide">Bangumi API 地址<input id="configuration-bangumi-url" type="url" required placeholder="https://api.bgm.tv/"></label>
-        <label class="wide">Bangumi 代理（可选）<input id="configuration-bangumi-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>Bangumi 超时（秒）<input id="configuration-bangumi-timeout" type="number" min="1" max="86400" required></label>
         <label>Bangumi 额外重试次数<input id="configuration-bangumi-retry-count" type="number" min="0" max="10" required></label>
         <label>Bangumi 重试间隔（秒）<input id="configuration-bangumi-retry-delay" type="number" min="0" max="300" step="0.1" required></label>

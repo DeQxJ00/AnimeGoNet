@@ -250,13 +250,17 @@ public sealed class DeploymentYamlConfigurationTests
                     rss_priority_enabled: false
                     duplicate_notification_enabled: false
                     mikan_identity_cookie: '.AspNetCore.Identity.Application=yaml-private-cookie'
+                outbound_proxy:
+                  url: http://127.0.0.1:17890/
+                  hosts:
+                    - tmdb.example.invalid
+                    - '*.example.invalid'
                 metadata:
                   mikan:
                     base_url: http://mikan.local/
                   tmdb:
                     base_url: https://tmdb.example.invalid/api/
                     image_base_url: http://image.tmdb.local/t/p/
-                    proxy_url: http://127.0.0.1:17890/
                     api_key: yaml-key
                     read_access_token: ''
                     language: ja-JP
@@ -266,7 +270,6 @@ public sealed class DeploymentYamlConfigurationTests
                     cache_hours: 72
                   bangumi:
                     base_url: https://bangumi.example.invalid/v0/
-                    proxy_url: ''
                     timeout_seconds: 42
                     retry_count: 5
                     retry_wait_seconds: 7.5
@@ -334,13 +337,16 @@ public sealed class DeploymentYamlConfigurationTests
                 "yaml-private-cookie",
                 source.ToString(),
                 StringComparison.Ordinal);
+            Assert.Equal(new Uri("http://127.0.0.1:17890/"), options.OutboundProxy.Url);
+            Assert.Equal(
+                ["tmdb.example.invalid", "*.example.invalid"],
+                options.OutboundProxy.HostPatterns);
 
             Assert.Equal(new Uri("http://mikan.local/"), options.Metadata.Mikan.BaseUrl);
             Assert.Equal(new Uri("https://tmdb.example.invalid/api/"), options.Metadata.Tmdb.BaseUrl);
             Assert.Equal(
                 new Uri("http://image.tmdb.local/t/p/"),
                 options.Metadata.Tmdb.ImageBaseUrl);
-            Assert.Equal(new Uri("http://127.0.0.1:17890/"), options.Metadata.Tmdb.ProxyUrl);
             Assert.Equal("yaml-key", options.Metadata.Tmdb.ApiKey);
             Assert.Equal("en-US", options.Metadata.Tmdb.Language);
             Assert.Equal(TimeSpan.FromSeconds(41), options.Metadata.Tmdb.HttpTimeout);
@@ -542,9 +548,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(
                 "https://bangumi.example.invalid/",
                 snapshot.Values["metadata:bangumi:base_url"]);
-            Assert.Equal(
-                "http://127.0.0.1:17890/",
-                snapshot.Values["metadata:tmdb:proxy_url"]);
+            Assert.DoesNotContain("metadata:tmdb:proxy_url", snapshot.Values.Keys);
             Assert.Equal("legacy-tmdb-key", snapshot.Values["metadata:tmdb:api_key"]);
             Assert.Equal("47", snapshot.Values["metadata:tmdb:timeout_seconds"]);
             Assert.Equal("4", snapshot.Values["metadata:tmdb:retry_count"]);
@@ -555,6 +559,7 @@ public sealed class DeploymentYamlConfigurationTests
                 ".AspNetCore.Identity.Application=legacy-private-cookie",
                 snapshot.Values["sources:mikan:mikan_identity_cookie"]);
             var upgradedText = await File.ReadAllTextAsync(path);
+            Assert.DoesNotContain("proxy_url:", upgradedText, StringComparison.Ordinal);
             Assert.Contains(
                 "mikan_identity_cookie: '.AspNetCore.Identity.Application=legacy-private-cookie'",
                 upgradedText,

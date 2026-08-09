@@ -103,13 +103,13 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 季度详情同时返回元数据审计投影。`manual_offsets` 只显示当前仍与该规范季度或其关联 Mikan 任务有关、且确实含 EP offset 的人工规则，并同时标明启停、作用域和 revision；它是“当前配置”，不冒充某次历史 Run 实际使用的值。关联任务用规范 `task_files` 或任一解析 Run 的 `tmdb_series_id + tmdb_season_number` 建立，按最近更新时间返回最多 50 条。季度时间线再读取这些任务的全部历史 Run，按尝试时间倒序返回最多 200 条，保留阶段、策略、确定性优先级、结果、稳定错误码、脱敏原因、可重试性和耗时。响应提供总数与 `*_truncated`，页面把三类信息放在独立可展开区块，不用单个“最后成功策略”覆盖历史失败。
 
-`GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}` 依次读取 Season poster、Series poster、本地 SVG 占位图。远端图片使用 TMDB 的无密钥图片地址并复用 TMDB 代理设置，限制 5 MiB、校验 JPEG/PNG/WebP 魔数、合并同一 poster 的并发下载，并缓存到 `data_path/cache/covers`。上游超时、不可用或返回非图片时均返回短缓存占位图；响应头标明来源、缓存命中和安全警告码。浏览器请求、URL 和响应中都没有 TMDB API key。
+`GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}` 依次读取 Season poster、Series poster、本地 SVG 占位图。远端图片使用 TMDB 的无密钥图片地址并按全局域名代理规则选择直连/代理，限制 5 MiB、校验 JPEG/PNG/WebP 魔数、合并同一 poster 的并发下载，并缓存到 `data_path/cache/covers`。上游超时、不可用或返回非图片时均返回短缓存占位图；响应头标明来源、缓存命中和安全警告码。浏览器请求、URL 和响应中都没有 TMDB API key。
 
 可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同 EP 进度。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
 
 ## 8. 当前生效配置投影
 
-首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、TMDB API 地址/代理/语言、Bangumi API 地址/代理、季度失败链、一个任务级 AI 元数据开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 纵向显示；P3 明确标注需要 `bgmid`，并说明当前联合匹配失败后会逐层回溯前作，以每个前作的日文名、中文名和开播日期重新验证完整 `tmdbid + Season`，而不是锁定当前 tmdbid 只换季度。P2 在前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器，解析成功即使用该本地季度，不验证 TMDB Season；解析不到时继续 P1。P1 直接使用本地 `S01`，同样不验证 TMDB Season。P4、P3 和统一 AI 使用的远端结果仍执行 TMDB 验证。AI 在实际执行位置以“独立 AI”标记，明确不占确定性优先级且默认关闭；其一个开关和一个 Prompt 同时处理 Series/Season/全部 Episode，每任务最多调用一次。Bangumi 完全兜底明确标为“一般不启用”：仅在 TMDB 完全失败且已有 `bgmid` 时使用 Bangumi，季度固定为 `S01`，页面不提供有效 TMDB ID；内部既有 `tmdbid=0` 写入与待补全逻辑保持不变。编辑器允许 TMDB 与 Bangumi 分别选择自定义 API 地址或无凭据 HTTP(S)/SOCKS5 代理；Base URL 必须以 `/` 结尾，代理留空表示直连。TMDB 卡片同时显示并允许修改验证成功响应的缓存小时数，默认 336 小时；修改需要重启，部署环境或命令行设置后该字段只读。缓存浏览页只显示 opaque bucket/key 标识，可精确清除 `bolt/themoviedb` 条目，不展示原始请求、响应或凭据。
+首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、唯一全局选择性代理、TMDB/Bangumi API 地址、季度失败链、一个任务级 AI 元数据开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 纵向显示；P3 明确标注需要 `bgmid`，并说明当前联合匹配失败后会逐层回溯前作，以每个前作的日文名、中文名和开播日期重新验证完整 `tmdbid + Season`，而不是锁定当前 tmdbid 只换季度。P2 在前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器，解析成功即使用该本地季度，不验证 TMDB Season；解析不到时继续 P1。P1 直接使用本地 `S01`，同样不验证 TMDB Season。P4、P3 和统一 AI 使用的远端结果仍执行 TMDB 验证。AI 在实际执行位置以“独立 AI”标记，明确不占确定性优先级且默认关闭；其一个开关和一个 Prompt 同时处理 Series/Season/全部 Episode，每任务最多调用一次。Bangumi 完全兜底明确标为“一般不启用”：仅在 TMDB 完全失败且已有 `bgmid` 时使用 Bangumi，季度固定为 `S01`，页面不提供有效 TMDB ID；内部既有 `tmdbid=0` 写入与待补全逻辑保持不变。编辑器允许分别修改 Mikan、TMDB API、TMDB 图片和 Bangumi API 地址；代理只在独立的“全局选择性代理”区域设置一个 URL 与域名列表，支持精确域名和 `*.example.com`，未命中保持直连。TMDB 卡片同时显示并允许修改验证成功响应的缓存小时数，默认 336 小时；修改需要重启，部署环境或命令行设置后该字段只读。缓存浏览页只显示 opaque bucket/key 标识，可精确清除 `bolt/themoviedb` 条目，不展示原始请求、响应或凭据。
 
 Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进入同一个配置编辑器。Mikan 内网反向代理只对明确配置的 host 放宽私网 DNS 门禁，不会把其它 Torrent host 一并设为可信；TMDB 图片 Base URL 保留 `/t/p/` 等路径前缀。
 
@@ -121,7 +121,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 
-`editable.locked_fields` 为每个环境变量控制的字段返回规范字段名、`source=environment` 和实际命中的环境变量名，但不返回环境变量值。当前覆盖 TMDB 地址/代理/语言/超时/API Key/Read Token、Bangumi 地址/代理/超时，以及统一 AI 开关和超时；旧 `ai_use_season_match`、`ai_use_episode_match` 也会锁定规范的 `ai_use_metadata_match`。页面显示最终有效值和锁来源，禁用对应输入、凭据清除控件与提交语义。服务端不信任前端禁用状态：不同值或显式凭据写入统一返回 `configuration_field_locked`，错误只列字段名，不包含凭据。保存其他未锁字段时，锁字段保留其保存前的底层私有覆盖，首次保存则记录为“继承部署”；因此移除环境变量后不会把当时的环境值误当成新的私有覆盖。
+`editable.locked_fields` 为每个环境变量控制的字段返回规范字段名、`source=environment` 和实际命中的环境变量名，但不返回环境变量值。当前覆盖全局代理 URL/域名列表、TMDB 地址/语言/超时/API Key/Read Token、Bangumi 地址/超时，以及统一 AI 开关和超时；旧 `ai_use_season_match`、`ai_use_episode_match` 也会锁定规范的 `ai_use_metadata_match`。页面显示最终有效值和锁来源，禁用对应输入、凭据清除控件与提交语义。服务端不信任前端禁用状态：不同值或显式凭据写入统一返回 `configuration_field_locked`，错误只列字段名，不包含凭据。保存其他未锁字段时，锁字段保留其保存前的底层私有覆盖，首次保存则记录为“继承部署”；因此移除环境变量后不会把当时的环境值误当成新的私有覆盖。
 
 ## 9. 手动 Torrent 与 RSS 提交
 

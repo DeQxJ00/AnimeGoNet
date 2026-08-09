@@ -14,12 +14,16 @@ public sealed class TmdbLiveSmokeTests
         var baseUrl = new Uri(
             Environment.GetEnvironmentVariable("ANIMEGONET_TMDB_BASE_URL")
             ?? "https://api.themoviedb.org/");
-        var proxyValue = Environment.GetEnvironmentVariable("ANIMEGONET_TMDB_PROXY_URL");
+        var proxyValue = Environment.GetEnvironmentVariable("ANIMEGONET_OUTBOUND_PROXY_URL");
         var proxyUrl = string.IsNullOrWhiteSpace(proxyValue) ? null : new Uri(proxyValue);
+        var outboundProxy = new OutboundProxyOptions
+        {
+            Url = proxyUrl,
+            HostPatterns = proxyUrl is null ? [] : [baseUrl.IdnHost.ToLowerInvariant()],
+        };
         var options = new TmdbClientOptions
         {
             BaseUrl = baseUrl,
-            ProxyUrl = proxyUrl,
             ApiKey = apiKey,
             Language = "zh-CN",
             HttpTimeout = TimeSpan.FromSeconds(30),
@@ -27,6 +31,7 @@ public sealed class TmdbLiveSmokeTests
         var errors = AnimeGoOptionsValidator.Validate(
             AnimeGoDefaults.CreateNative(Path.GetTempPath()) with
             {
+                OutboundProxy = outboundProxy,
                 Metadata = AnimeGoDefaults.CreateNative(Path.GetTempPath()).Metadata with
                 {
                     Tmdb = options,
@@ -35,7 +40,7 @@ public sealed class TmdbLiveSmokeTests
         Assert.Empty(errors);
 
         using var client = new TmdbClient(
-            MetadataHttpClientFactory.Create(proxyUrl),
+            MetadataHttpClientFactory.Create(outboundProxy),
             options,
             ownsHttpClient: true);
         var details = await client.GetSeriesDetailsAsync(72517);

@@ -16,6 +16,11 @@ public sealed class ConfigurationApiTests
             accessKey: "local-access-secret",
             configure: options => options with
             {
+                OutboundProxy = new OutboundProxyOptions
+                {
+                    Url = new Uri("http://127.0.0.1:7890/"),
+                    HostPatterns = ["metadata.test.invalid", "*.mikanime.tv"],
+                },
                 Metadata = options.Metadata with
                 {
                     Mikan = new MikanClientOptions
@@ -26,7 +31,6 @@ public sealed class ConfigurationApiTests
                     {
                         BaseUrl = new Uri("https://metadata.test.invalid/tmdb/"),
                         ImageBaseUrl = new Uri("http://image.tmdb.local/t/p/"),
-                        ProxyUrl = new Uri("http://127.0.0.1:7890/"),
                         ApiKey = "tmdb-api-secret",
                         ReadAccessToken = "tmdb-bearer-secret",
                         Language = "ja-JP",
@@ -37,7 +41,6 @@ public sealed class ConfigurationApiTests
                     Bangumi = options.Metadata.Bangumi with
                     {
                         BaseUrl = new Uri("https://metadata.test.invalid/bangumi/"),
-                        ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
                         HttpTimeout = TimeSpan.FromSeconds(45),
                         RetryCount = 5,
                         RetryDelay = TimeSpan.FromSeconds(7.5),
@@ -84,6 +87,11 @@ public sealed class ConfigurationApiTests
         Assert.False(deployment.GetProperty("background_workers_enabled").GetBoolean());
         Assert.True(deployment.GetProperty("access_key_configured").GetBoolean());
         Assert.True(deployment.GetProperty("paths_restart_required").GetBoolean());
+        var outboundProxy = json.RootElement.GetProperty("outbound_proxy");
+        Assert.Equal("http://127.0.0.1:7890/", outboundProxy.GetProperty("url").GetString());
+        Assert.Equal(
+            ["metadata.test.invalid", "*.mikanime.tv"],
+            outboundProxy.GetProperty("hosts").EnumerateArray().Select(item => item.GetString()));
         var metadata = json.RootElement.GetProperty("metadata");
         Assert.Equal(
             "http://mikan.local/",
@@ -96,7 +104,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             "http://image.tmdb.local/t/p/",
             tmdb.GetProperty("image_base_url").GetString());
-        Assert.Equal("http://127.0.0.1:7890/", tmdb.GetProperty("proxy_url").GetString());
+        Assert.False(tmdb.TryGetProperty("proxy_url", out _));
         Assert.True(tmdb.GetProperty("api_key_configured").GetBoolean());
         Assert.True(tmdb.GetProperty("read_access_token_configured").GetBoolean());
         Assert.Equal(4, tmdb.GetProperty("retry_count").GetInt32());
@@ -106,9 +114,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             "https://metadata.test.invalid/bangumi/",
             bangumi.GetProperty("base_url").GetString());
-        Assert.Equal(
-            "socks5://127.0.0.1:1080/",
-            bangumi.GetProperty("proxy_url").GetString());
+        Assert.False(bangumi.TryGetProperty("proxy_url", out _));
         Assert.Equal(45, bangumi.GetProperty("http_timeout_seconds").GetDouble());
         Assert.Equal(5, bangumi.GetProperty("retry_count").GetInt32());
         Assert.Equal(7.5, bangumi.GetProperty("retry_delay_seconds").GetDouble());
@@ -167,11 +173,13 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-mikan-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-image-url\"", html, StringComparison.Ordinal);
-        Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-outbound-proxy-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-outbound-proxy-hosts\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-retry-count\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-retry-delay\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-url\"", html, StringComparison.Ordinal);
-        Assert.Contains("id=\"configuration-bangumi-proxy\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"configuration-bangumi-proxy\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-retry-count\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-retry-delay\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-enabled\"", html, StringComparison.Ordinal);
@@ -198,7 +206,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("勾选即使用本地 S01，不验证 TMDB Season", html, StringComparison.Ordinal);
         Assert.Contains("Bangumi 完全兜底（一般不启用这个）", html, StringComparison.Ordinal);
         Assert.Contains("季度固定 S01；需要 bgmid；不输出有效 tmdbid", html, StringComparison.Ordinal);
-        Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
+        Assert.Contains("outbound_proxy_hosts", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("bangumi_proxy_url", script, StringComparison.Ordinal);
         Assert.Contains("mikan_base_url", script, StringComparison.Ordinal);
         Assert.Contains("tmdb_image_base_url", script, StringComparison.Ordinal);
         Assert.Contains("seasonFailurePriority", script, StringComparison.Ordinal);
@@ -511,9 +520,9 @@ public sealed class ConfigurationApiTests
                 expectedRevision: 0,
                 apiKey: "new-api-secret",
                 readToken: "new-read-secret",
-                tmdbProxy: "http://127.0.0.1:7890/",
+                outboundProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
-                bangumiProxy: "socks5://127.0.0.1:1080/"));
+                outboundHosts: ["api.themoviedb.org", "api.bgm.tv"]));
         var firstText = await first.Content.ReadAsStringAsync();
         using var firstJson = JsonDocument.Parse(firstText);
 
@@ -543,11 +552,13 @@ public sealed class ConfigurationApiTests
         var saved = await store.LoadAsync();
         Assert.Equal("new-api-secret", saved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", saved.Settings?.TmdbReadAccessToken);
-        Assert.Equal("http://127.0.0.1:7890/", saved.Settings?.TmdbProxyUrl);
+        Assert.Equal("http://127.0.0.1:7890/", saved.Settings?.OutboundProxyUrl);
+        Assert.Equal(
+            ["api.themoviedb.org", "api.bgm.tv"],
+            saved.Settings?.OutboundProxyHosts);
         Assert.Equal(
             "https://metadata.test.invalid/bangumi/",
             saved.Settings?.BangumiBaseUrl);
-        Assert.Equal("socks5://127.0.0.1:1080/", saved.Settings?.BangumiProxyUrl);
         Assert.Equal(3, saved.Settings?.TmdbRetryCount);
         Assert.Equal(5, saved.Settings?.TmdbRetryDelaySeconds);
         Assert.Equal(336, saved.Settings?.TmdbCacheHours);
@@ -559,9 +570,9 @@ public sealed class ConfigurationApiTests
             Payload(
                 expectedRevision: 1,
                 aiMetadata: true,
-                tmdbProxy: "http://127.0.0.1:7890/",
+                outboundProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
-                bangumiProxy: "socks5://127.0.0.1:1080/"));
+                outboundHosts: ["api.themoviedb.org", "api.bgm.tv"]));
         Assert.Equal(HttpStatusCode.OK, preserve.StatusCode);
         var preserved = await store.LoadAsync();
         Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
@@ -583,9 +594,9 @@ public sealed class ConfigurationApiTests
             Payload(
                 expectedRevision: 2,
                 clearApiKey: true,
-                tmdbProxy: "http://127.0.0.1:7890/",
+                outboundProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
-                bangumiProxy: "socks5://127.0.0.1:1080/"));
+                outboundHosts: ["api.themoviedb.org", "api.bgm.tv"]));
         Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
         var cleared = await store.LoadAsync();
         Assert.True(cleared.Settings?.TmdbApiKeyOverridden);
@@ -665,7 +676,8 @@ public sealed class ConfigurationApiTests
             "/api/v1/config",
             Payload(
                 expectedRevision: 0,
-                tmdbProxy: "http://user:password@proxy.invalid/"));
+                outboundProxy: "http://user:password@proxy.invalid/",
+                outboundHosts: ["api.themoviedb.org"]));
         using var invalidBangumiBase = await app.Client.PutAsync(
             "/api/v1/config",
             Payload(
@@ -888,19 +900,23 @@ public sealed class ConfigurationApiTests
     }
 
     [Fact]
-    public async Task LegacyGlobalProxyProjectsAndRejectsBothIndependentProxyWrites()
+    public async Task DeploymentGlobalProxyProjectsAndRejectsLockedWrites()
     {
         var proxy = new Uri("http://127.0.0.1:7890/");
         await using var app = await RunningApp.StartAsync(
             configure: options => options with
             {
-                Metadata = options.Metadata with
+                OutboundProxy = new OutboundProxyOptions
                 {
-                    Tmdb = options.Metadata.Tmdb with { ProxyUrl = proxy },
-                    Bangumi = options.Metadata.Bangumi with { ProxyUrl = proxy },
+                    Url = proxy,
+                    HostPatterns = ["api.themoviedb.org"],
                 },
             },
-            deploymentEnvironmentVariables: ["ANIMEGO_PROXY_URL"]);
+            deploymentEnvironmentVariables:
+            [
+                "ANIMEGO_OUTBOUND_PROXY_URL",
+                "ANIMEGO_OUTBOUND_PROXY_HOSTS",
+            ]);
 
         using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var current = JsonDocument.Parse(
@@ -910,28 +926,30 @@ public sealed class ConfigurationApiTests
             var locks = editable.GetProperty("locked_fields")
                 .EnumerateArray()
                 .ToDictionary(item => item.GetProperty("field").GetString()!);
-            Assert.Equal(proxy.AbsoluteUri, editable.GetProperty("tmdb_proxy_url").GetString());
-            Assert.Equal(proxy.AbsoluteUri, editable.GetProperty("bangumi_proxy_url").GetString());
+            Assert.Equal(proxy.AbsoluteUri, editable.GetProperty("outbound_proxy_url").GetString());
             Assert.Equal(
-                "ANIMEGO_PROXY_URL",
-                locks["tmdb_proxy_url"].GetProperty("environment_variables")[0].GetString());
+                "api.themoviedb.org",
+                editable.GetProperty("outbound_proxy_hosts")[0].GetString());
             Assert.Equal(
-                "ANIMEGO_PROXY_URL",
-                locks["bangumi_proxy_url"].GetProperty("environment_variables")[0].GetString());
+                "ANIMEGO_OUTBOUND_PROXY_URL",
+                locks["outbound_proxy_url"].GetProperty("environment_variables")[0].GetString());
+            Assert.Equal(
+                "ANIMEGO_OUTBOUND_PROXY_HOSTS",
+                locks["outbound_proxy_hosts"].GetProperty("environment_variables")[0].GetString());
         }
 
         using var write = await app.Client.PutAsync(
             "/api/v1/config",
             Payload(
                 expectedRevision: 0,
-                tmdbProxy: "http://127.0.0.1:7891/",
-                bangumiProxy: "http://127.0.0.1:7892/"));
+                outboundProxy: "http://127.0.0.1:7891/",
+                outboundHosts: ["api.bgm.tv"]));
         var error = await write.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.BadRequest, write.StatusCode);
         Assert.Contains("configuration_field_locked", error, StringComparison.Ordinal);
-        Assert.Contains("tmdb_proxy_url", error, StringComparison.Ordinal);
-        Assert.Contains("bangumi_proxy_url", error, StringComparison.Ordinal);
+        Assert.Contains("outbound_proxy_url", error, StringComparison.Ordinal);
+        Assert.Contains("outbound_proxy_hosts", error, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(
             app.RootPath,
             "data",
@@ -948,9 +966,9 @@ public sealed class ConfigurationApiTests
         bool legacyAiSeason = false,
         bool legacyAiEpisode = false,
         string baseUrl = "https://api.themoviedb.org/",
-        string? tmdbProxy = null,
+        string? outboundProxy = null,
+        string[]? outboundHosts = null,
         string bangumiBase = "https://api.bgm.tv/",
-        string? bangumiProxy = null,
         int tmdbRetryCount = 3,
         double tmdbRetryDelaySeconds = 5,
         int bangumiRetryCount = 3,
@@ -958,8 +976,9 @@ public sealed class ConfigurationApiTests
     {
         var json = JsonSerializer.Serialize(new
         {
+            outbound_proxy_url = outboundProxy,
+            outbound_proxy_hosts = outboundHosts ?? [],
             tmdb_base_url = baseUrl,
-            tmdb_proxy_url = tmdbProxy,
             tmdb_language = "zh-CN",
             tmdb_http_timeout_seconds = 30,
             tmdb_retry_count = tmdbRetryCount,
@@ -970,7 +989,6 @@ public sealed class ConfigurationApiTests
             tmdb_read_access_token = readToken,
             clear_tmdb_read_access_token = false,
             bangumi_base_url = bangumiBase,
-            bangumi_proxy_url = bangumiProxy,
             bangumi_http_timeout_seconds = 30,
             bangumi_retry_count = bangumiRetryCount,
             bangumi_retry_delay_seconds = bangumiRetryDelaySeconds,
@@ -1014,8 +1032,9 @@ public sealed class ConfigurationApiTests
     {
         var json = JsonSerializer.Serialize(new
         {
+            outbound_proxy_url = (string?)null,
+            outbound_proxy_hosts = Array.Empty<string>(),
             tmdb_base_url = "https://api.themoviedb.org/",
-            tmdb_proxy_url = (string?)null,
             tmdb_language = tmdbLanguage,
             tmdb_http_timeout_seconds = 30,
             tmdb_api_key = apiKey,
@@ -1023,7 +1042,6 @@ public sealed class ConfigurationApiTests
             tmdb_read_access_token = (string?)null,
             clear_tmdb_read_access_token = false,
             bangumi_base_url = "https://api.bgm.tv/",
-            bangumi_proxy_url = (string?)null,
             bangumi_http_timeout_seconds = 30,
             season_failure_skip = false,
             season_failure_backtrace = false,

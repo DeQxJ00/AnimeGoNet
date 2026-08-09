@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Sockets;
+using AnimeGoNet.App.Networking;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Sources;
 
 namespace AnimeGoNet.App.Torrents;
 
-public sealed class PinnedTorrentHttpTransport : ITorrentHttpTransport
+public sealed class PinnedTorrentHttpTransport(
+    OutboundProxyOptions? outboundProxy = null) : ITorrentHttpTransport
 {
     public async ValueTask<TorrentHttpResponse> SendAsync(
         Uri uri,
@@ -30,10 +33,59 @@ public sealed class PinnedTorrentHttpTransport : ITorrentHttpTransport
             throw new ArgumentException("At least one validated address is required.", nameof(validatedAddresses));
         }
 
-        var handler = new SocketsHttpHandler
+        var useProxy = outboundProxy is not null
+            && OutboundProxyPolicy.ShouldProxy(uri, outboundProxy);
+        HttpMessageHandler handler = useProxy
+            ? new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                UseProxy = true,
+                Proxy = new SelectiveWebProxy(outboundProxy!),
+            }
+            : CreatePinnedHandler(uri, validatedAddresses);
+        var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.UserAgent.ParseAdd("AnimeGoNet/1.0");
+        if (requestOptions.MikanIdentityCookie is { } cookie)
+        {
+            request.Headers.TryAddWithoutValidation(
+                "Cookie",
+                $"{MikanIdentityCookie.Name}={cookie}");
+        }
+        try
+        {
+            var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+            var content = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var owner = new HttpResponseOwner(response, client);
+            return new TorrentHttpResponse(
+                response.StatusCode,
+                response.Headers.Location,
+                response.Content.Headers.ContentLength,
+                content,
+                owner);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
+    private static SocketsHttpHandler CreatePinnedHandler(
+        Uri uri,
+        IReadOnlyList<IPAddress> validatedAddresses) =>
+        new()
         {
             AllowAutoRedirect = false,
             UseCookies = false,
+            UseProxy = false,
             ConnectCallback = async (context, token) =>
             {
                 if (!string.Equals(context.DnsEndPoint.Host, uri.IdnHost, StringComparison.OrdinalIgnoreCase))
@@ -69,39 +121,6 @@ public sealed class PinnedTorrentHttpTransport : ITorrentHttpTransport
                 throw new HttpRequestException("No validated address accepted the connection.", lastError);
             },
         };
-        var client = new HttpClient(handler, disposeHandler: true)
-        {
-            Timeout = Timeout.InfiniteTimeSpan,
-        };
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        request.Headers.UserAgent.ParseAdd("AnimeGoNet/1.0");
-        if (requestOptions.MikanIdentityCookie is { } cookie)
-        {
-            request.Headers.TryAddWithoutValidation(
-                "Cookie",
-                $"{MikanIdentityCookie.Name}={cookie}");
-        }
-        try
-        {
-            var response = await client.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
-            var content = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            var owner = new HttpResponseOwner(response, client);
-            return new TorrentHttpResponse(
-                response.StatusCode,
-                response.Headers.Location,
-                response.Content.Headers.ContentLength,
-                content,
-                owner);
-        }
-        catch
-        {
-            client.Dispose();
-            throw;
-        }
-    }
 
     private sealed class HttpResponseOwner(HttpResponseMessage response, HttpClient client) : IAsyncDisposable
     {

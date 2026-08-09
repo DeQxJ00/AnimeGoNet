@@ -1,5 +1,7 @@
 # 作品库 Cover 安全代理与缓存（2026-07-29）
 
+> 2026-08-09 更新：下文“TMDB 代理”现指唯一 `outbound_proxy` 的域名选择结果；TMDB 地址下已无独立代理字段。
+
 ## 接口与回退
 
 `GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}`

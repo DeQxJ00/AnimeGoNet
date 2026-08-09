@@ -8,7 +8,7 @@
 $env:ANIMEGONET_TMDB_INTEGRATION = '1'
 $env:ANIMEGONET_TMDB_API_KEY = '<local-test-key>'
 $env:ANIMEGONET_TMDB_BASE_URL = 'https://api.themoviedb.org/' # 可省略
-$env:ANIMEGONET_TMDB_PROXY_URL = 'http://127.0.0.1:7890/'      # 可省略；也支持 socks5://
+$env:ANIMEGONET_OUTBOUND_PROXY_URL = 'http://127.0.0.1:7890/'  # 可省略；也支持 socks5://
 
 dotnet test tests\AnimeGoNet.LocalIntegration.Tests\AnimeGoNet.LocalIntegration.Tests.csproj `
   --filter FullyQualifiedName~TmdbLiveSmokeTests
@@ -20,7 +20,8 @@ dotnet test tests\AnimeGoNet.LocalIntegration.Tests\AnimeGoNet.LocalIntegration.
 
 主程序支持以下部署键，也可通过 WebUI 私密覆盖编辑：
 
-- `tmdb_base_url`、`tmdb_proxy_url`、`tmdb_timeout_second`
-- `bangumi_base_url`、`bangumi_proxy_url`、`bangumi_timeout_second`
+- `tmdb_base_url`、`tmdb_timeout_second`
+- `bangumi_base_url`、`bangumi_timeout_second`
+- `outbound_proxy_url`、`outbound_proxy_hosts`
 
-Base URL 支持带路径前缀的 HTTP(S) 地址，但必须以 `/` 结尾。代理支持无凭据的 `http://`、`https://` 和 `socks5://` origin；TMDB 与 Bangumi 可使用不同代理，也可以只配置 API 地址而不启用代理。
+Base URL 支持带路径前缀的 HTTP(S) 地址，但必须以 `/` 结尾。全局代理支持无凭据的 `http://`、`https://` 和 `socks5://` origin；只有命中精确域名或 `*.example.com` 的地址走代理，TMDB/Bangumi 地址下不再设置独立代理。

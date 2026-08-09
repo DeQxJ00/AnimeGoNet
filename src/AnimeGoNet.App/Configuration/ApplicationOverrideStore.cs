@@ -26,11 +26,7 @@ public sealed record ApplicationOverrideEntry(
     int TorrentMaxRedirects,
     double TorrentStagingTtlSeconds,
     DateTimeOffset UpdatedAtUtc,
-    bool? TmdbProxyUrlOverridden = null,
-    string? TmdbProxyUrl = null,
     string? BangumiBaseUrl = null,
-    bool? BangumiProxyUrlOverridden = null,
-    string? BangumiProxyUrl = null,
     double? BangumiHttpTimeoutSeconds = null,
     bool? AiUseMetadataMatch = null,
     IReadOnlyList<string>? InheritedFields = null,
@@ -48,7 +44,10 @@ public sealed record ApplicationOverrideEntry(
     double? BangumiRetryDelaySeconds = null,
     double? TmdbCacheHours = null,
     string? MikanBaseUrl = null,
-    string? TmdbImageBaseUrl = null);
+    string? TmdbImageBaseUrl = null,
+    bool? OutboundProxyUrlOverridden = null,
+    string? OutboundProxyUrl = null,
+    IReadOnlyList<string>? OutboundProxyHosts = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -193,11 +192,6 @@ public sealed class ApplicationOverrideStore : IDisposable
         {
             throw new InvalidOperationException("Application private configuration has an invalid TMDB base URL.");
         }
-        var tmdbProxyUrl = inheritedFields.Contains("tmdb_proxy_url")
-            ? options.Metadata.Tmdb.ProxyUrl
-            : settings.TmdbProxyUrlOverridden == true
-            ? ParseOptionalUri(settings.TmdbProxyUrl, "TMDB proxy URL")
-            : options.Metadata.Tmdb.ProxyUrl;
         var tmdbImageBaseUrl = inheritedFields.Contains("tmdb_image_base_url")
             || settings.TmdbImageBaseUrl is null
             ? options.Metadata.Tmdb.ImageBaseUrl
@@ -206,11 +200,30 @@ public sealed class ApplicationOverrideStore : IDisposable
             || settings.BangumiBaseUrl is null
             ? options.Metadata.Bangumi.BaseUrl
             : ParseRequiredUri(settings.BangumiBaseUrl, "Bangumi base URL");
-        var bangumiProxyUrl = inheritedFields.Contains("bangumi_proxy_url")
-            ? options.Metadata.Bangumi.ProxyUrl
-            : settings.BangumiProxyUrlOverridden == true
-            ? ParseOptionalUri(settings.BangumiProxyUrl, "Bangumi proxy URL")
-            : options.Metadata.Bangumi.ProxyUrl;
+        var outboundProxy = options.OutboundProxy;
+        if (!inheritedFields.Contains("outbound_proxy_url")
+            && settings.OutboundProxyUrlOverridden == true)
+        {
+            outboundProxy = outboundProxy with
+            {
+                Url = ParseOptionalUri(settings.OutboundProxyUrl, "outbound proxy URL"),
+            };
+        }
+        if (!inheritedFields.Contains("outbound_proxy_hosts")
+            && settings.OutboundProxyHosts is not null)
+        {
+            outboundProxy = outboundProxy with
+            {
+                HostPatterns = settings.OutboundProxyHosts,
+            };
+        }
+        if (outboundProxy.Url == options.OutboundProxy.Url
+            && outboundProxy.HostPatterns.SequenceEqual(
+                options.OutboundProxy.HostPatterns,
+                StringComparer.Ordinal))
+        {
+            outboundProxy = options.OutboundProxy;
+        }
         var dataUpdate = options.DataUpdate with
         {
             Enabled = !inheritedFields.Contains("data_update_enabled")
@@ -240,6 +253,7 @@ public sealed class ApplicationOverrideStore : IDisposable
 
         return options with
         {
+            OutboundProxy = outboundProxy,
             Metadata = options.Metadata with
             {
                 Mikan = options.Metadata.Mikan with
@@ -250,7 +264,6 @@ public sealed class ApplicationOverrideStore : IDisposable
                 {
                     BaseUrl = tmdbBaseUrl,
                     ImageBaseUrl = tmdbImageBaseUrl,
-                    ProxyUrl = tmdbProxyUrl,
                     Language = inheritedFields.Contains("tmdb_language")
                         ? options.Metadata.Tmdb.Language
                         : settings.TmdbLanguage,
@@ -283,7 +296,6 @@ public sealed class ApplicationOverrideStore : IDisposable
                 Bangumi = options.Metadata.Bangumi with
                 {
                     BaseUrl = bangumiBaseUrl,
-                    ProxyUrl = bangumiProxyUrl,
                     HttpTimeout = !inheritedFields.Contains("bangumi_http_timeout_seconds")
                         && settings.BangumiHttpTimeoutSeconds is > 0
                         ? TimeSpan.FromSeconds(settings.BangumiHttpTimeoutSeconds.Value)

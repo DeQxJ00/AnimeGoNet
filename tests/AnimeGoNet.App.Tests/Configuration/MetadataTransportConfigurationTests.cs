@@ -9,42 +9,43 @@ namespace AnimeGoNet.App.Tests.Configuration;
 public sealed class MetadataTransportConfigurationTests
 {
     [Fact]
-    public void LegacyGlobalProxyMapsToBothClientsAndSpecificValueWins()
+    public void CanonicalGlobalProxyBindsUrlAndHostPatterns()
+    {
+        var configuration = new ConfigurationManager();
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["outbound_proxy:url"] = "socks5://127.0.0.1:1080/",
+            ["outbound_proxy:hosts:0"] = "api.themoviedb.org",
+            ["outbound_proxy:hosts:1"] = "*.mikanime.tv",
+        });
+
+        var options = AnimeGoApplication.LoadOptions(configuration, inContainer: false);
+
+        Assert.Equal(new Uri("socks5://127.0.0.1:1080/"), options.OutboundProxy.Url);
+        Assert.Equal(["api.themoviedb.org", "*.mikanime.tv"], options.OutboundProxy.HostPatterns);
+    }
+
+    [Fact]
+    public void RemovedLegacyProxyKeysAreIgnored()
     {
         var configuration = new ConfigurationManager();
         configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ANIMEGO_PROXY_URL"] = "http://127.0.0.1:7890/",
-            ["tmdb_proxy_url"] = "socks5://127.0.0.1:1080/",
+            ["tmdb_proxy_url"] = "http://127.0.0.1:7891/",
+            ["bangumi_proxy_url"] = "http://127.0.0.1:7892/",
             ["metadata:tmdb:proxy_url"] = "https://yaml-tmdb.invalid/",
             ["metadata:bangumi:proxy_url"] = "https://yaml-bangumi.invalid/",
         });
 
         var options = AnimeGoApplication.LoadOptions(configuration, inContainer: false);
 
-        Assert.Equal(new Uri("socks5://127.0.0.1:1080/"), options.Metadata.Tmdb.ProxyUrl);
-        Assert.Equal(new Uri("http://127.0.0.1:7890/"), options.Metadata.Bangumi.ProxyUrl);
+        Assert.Null(options.OutboundProxy.Url);
+        Assert.Empty(options.OutboundProxy.HostPatterns);
     }
 
     [Fact]
-    public void ExplicitEmptyLegacyGlobalProxyDisablesBothYamlProxies()
-    {
-        var configuration = new ConfigurationManager();
-        configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["ANIMEGO_PROXY_URL"] = string.Empty,
-            ["metadata:tmdb:proxy_url"] = "https://yaml-tmdb.invalid/",
-            ["metadata:bangumi:proxy_url"] = "https://yaml-bangumi.invalid/",
-        });
-
-        var options = AnimeGoApplication.LoadOptions(configuration, inContainer: false);
-
-        Assert.Null(options.Metadata.Tmdb.ProxyUrl);
-        Assert.Null(options.Metadata.Bangumi.ProxyUrl);
-    }
-
-    [Fact]
-    public async Task CommandLineConfigurationBindsIndependentApiAndProxyUrls()
+    public async Task CommandLineConfigurationBindsApisAndOneSelectiveProxy()
     {
         var root = Path.Combine(
             Path.GetTempPath(),
@@ -60,14 +61,14 @@ public sealed class MetadataTransportConfigurationTests
                     "--data_path", data,
                     "--download_path", download,
                     "--save_path", save,
+                    "--outbound_proxy_url", "http://127.0.0.1:7890/",
+                    "--outbound_proxy_hosts", "metadata.test.invalid,*.mikanime.tv",
                     "--tmdb_base_url", "https://metadata.test.invalid/tmdb/",
-                    "--tmdb_proxy_url", "http://127.0.0.1:7890/",
                     "--tmdb_language", "ja-JP",
                     "--tmdb_timeout_second", "40",
                     "--tmdb_retry_count", "4",
                     "--tmdb_retry_wait_second", "6.5",
                     "--bangumi_base_url", "https://metadata.test.invalid/bangumi/",
-                    "--bangumi_proxy_url", "socks5://127.0.0.1:1080/",
                     "--bangumi_timeout_second", "45",
                     "--bangumi_retry_count", "5",
                     "--bangumi_retry_wait_second", "7.5",
@@ -81,9 +82,10 @@ public sealed class MetadataTransportConfigurationTests
             Assert.Equal(
                 new Uri("https://metadata.test.invalid/tmdb/"),
                 options.Metadata.Tmdb.BaseUrl);
+            Assert.Equal(new Uri("http://127.0.0.1:7890/"), options.OutboundProxy.Url);
             Assert.Equal(
-                new Uri("http://127.0.0.1:7890/"),
-                options.Metadata.Tmdb.ProxyUrl);
+                ["metadata.test.invalid", "*.mikanime.tv"],
+                options.OutboundProxy.HostPatterns);
             Assert.Equal("ja-JP", options.Metadata.Tmdb.Language);
             Assert.Equal(TimeSpan.FromSeconds(40), options.Metadata.Tmdb.HttpTimeout);
             Assert.Equal(4, options.Metadata.Tmdb.RetryCount);
@@ -91,13 +93,11 @@ public sealed class MetadataTransportConfigurationTests
             Assert.Equal(
                 new Uri("https://metadata.test.invalid/bangumi/"),
                 options.Metadata.Bangumi.BaseUrl);
-            Assert.Equal(
-                new Uri("socks5://127.0.0.1:1080/"),
-                options.Metadata.Bangumi.ProxyUrl);
             Assert.Equal(TimeSpan.FromSeconds(45), options.Metadata.Bangumi.HttpTimeout);
             Assert.Equal(5, options.Metadata.Bangumi.RetryCount);
             Assert.Equal(TimeSpan.FromSeconds(7.5), options.Metadata.Bangumi.RetryDelay);
             Assert.Equal(options.Metadata, deployment.Value.Metadata);
+            Assert.Equal(options.OutboundProxy, deployment.Value.OutboundProxy);
         }
         finally
         {

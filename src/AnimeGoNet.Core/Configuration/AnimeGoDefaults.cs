@@ -52,6 +52,7 @@ public static class AnimeGoDefaults
                 Host = webHost,
                 Port = 7991,
             },
+            OutboundProxy = new OutboundProxyOptions(),
             Downloaders = new Dictionary<string, QbittorrentInstanceOptions>(StringComparer.OrdinalIgnoreCase)
             {
                 ["bt"] = new()

@@ -71,24 +71,24 @@ public sealed class ConfigurationAliasResolverTests
         var configuration = new ConfigurationManager();
         configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["metadata:tmdb:proxy_url"] = "http://yaml.invalid:7890/",
+            ["outbound_proxy:url"] = "http://yaml.invalid:7890/",
         });
         configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["ANIMEGO_PROXY_URL"] = "http://environment.invalid:7890/",
+            ["ANIMEGO_OUTBOUND_PROXY_URL"] = "http://environment.invalid:7890/",
         });
         configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["tmdb_proxy_url"] = string.Empty,
+            ["outbound_proxy_url"] = string.Empty,
         });
 
         Assert.Equal(
             string.Empty,
             ConfigurationAliasResolver.FirstPresent(
                 configuration,
-                "tmdb_proxy_url",
-                "ANIMEGO_PROXY_URL",
-                "metadata:tmdb:proxy_url"));
+                "outbound_proxy_url",
+                "ANIMEGO_OUTBOUND_PROXY_URL",
+                "outbound_proxy:url"));
     }
 
     [Fact]

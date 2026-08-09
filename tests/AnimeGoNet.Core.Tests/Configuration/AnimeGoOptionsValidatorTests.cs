@@ -148,7 +148,6 @@ public sealed class AnimeGoOptionsValidatorTests
                 {
                     BaseUrl = new Uri("ftp://tmdb.invalid/"),
                     ImageBaseUrl = new Uri("https://image.invalid/no-trailing-slash"),
-                    ProxyUrl = new Uri("https://user:secret@proxy.invalid/"),
                     HttpTimeout = TimeSpan.Zero,
                     RetryCount = 11,
                     RetryDelay = TimeSpan.FromMinutes(6),
@@ -158,7 +157,6 @@ public sealed class AnimeGoOptionsValidatorTests
                 Bangumi = defaults.Metadata.Bangumi with
                 {
                     BaseUrl = new Uri("https://bangumi.invalid/no-trailing-slash"),
-                    ProxyUrl = new Uri("https://proxy.invalid/path"),
                     HttpTimeout = TimeSpan.Zero,
                     RetryCount = -1,
                     RetryDelay = TimeSpan.FromSeconds(-1),
@@ -170,14 +168,12 @@ public sealed class AnimeGoOptionsValidatorTests
 
         Assert.Contains(errors, error => error.Contains("TMDB base URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB image base URL", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("TMDB proxy URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB HTTP timeout", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB retry count", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB retry delay", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB cache TTL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB language", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi base URL", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("Bangumi proxy URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi HTTP timeout", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi retry count", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi retry delay", StringComparison.Ordinal));
@@ -204,27 +200,67 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
-    public void AcceptsPrefixedMetadataApisAndIndependentProxySchemes()
+    public void AcceptsPrefixedMetadataApisAndGlobalSelectiveProxy()
     {
         var defaults = AnimeGoDefaults.CreateDocker();
         var options = defaults with
         {
+            OutboundProxy = new OutboundProxyOptions
+            {
+                Url = new Uri("socks5://127.0.0.1:1080/"),
+                HostPatterns = ["metadata.invalid", "*.mikanime.tv"],
+            },
             Metadata = defaults.Metadata with
             {
                 Tmdb = defaults.Metadata.Tmdb with
                 {
                     BaseUrl = new Uri("https://metadata.invalid/tmdb/"),
-                    ProxyUrl = new Uri("http://127.0.0.1:7890/"),
                 },
                 Bangumi = defaults.Metadata.Bangumi with
                 {
                     BaseUrl = new Uri("https://metadata.invalid/bangumi/"),
-                    ProxyUrl = new Uri("socks5://127.0.0.1:1080/"),
                 },
             },
         };
 
         Assert.Empty(AnimeGoOptionsValidator.Validate(options));
+    }
+
+    [Fact]
+    public void RejectsInvalidGlobalSelectiveProxy()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            OutboundProxy = new OutboundProxyOptions
+            {
+                Url = new Uri("https://user:secret@proxy.invalid/path"),
+                HostPatterns = ["API.Example.com", "*.example.com", "*.example.com"],
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("Outbound proxy URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("lowercase", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("duplicated", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RejectsProxyHostsWithoutProxyUrl()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            OutboundProxy = new OutboundProxyOptions
+            {
+                HostPatterns = ["api.example.com"],
+            },
+        };
+
+        Assert.Contains(
+            AnimeGoOptionsValidator.Validate(options),
+            error => error.Contains("require a configured proxy URL", StringComparison.Ordinal));
     }
 
     [Fact]
