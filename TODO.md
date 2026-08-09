@@ -126,6 +126,7 @@
 - [x] 区分 TMDB 无结果、季度无匹配、瞬时网络错误和认证/配置错误：客户端稳定分类 SemanticNoMatch/Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput 且异常脱敏；连接/逐次超时/429/5xx 可配置重试，404/认证/协议失败不重试，取消立即传播。
 - [x] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`：SQLite Run 持久化、最终门禁、列表/详情 API 与 WebUI 决策说明均已串联；只有权威 `SemanticNoMatch + access_confirmed` 可进入兜底，Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput/Ambiguous 全部经过处理器测试证明拒绝且不创建 `tmdbid=0`。
 - [x] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；SQLite 重启后可按任务查询，版本化 API 与任务卡片策略时间线均已接入。
+- [x] 为统一 AI 元数据尝试持久化可审计用量：schema v40 在实际承载 AI 调用的单条 attempt 保存 provider 返回模型、累计 prompt/completion/total token、HTTP 请求数与工具调用数；多轮 MCP function-calling 累加且 429 重试计入请求数，任务详情/时间线 API 与 WebUI 可见，API key、Prompt、工具正文和来源 URL 不入用量表。
 - [x] 通过 fixture parity 和受控 live smoke：纯函数/DTO/fake 覆盖标题清理、相似度、全部候选、季度日期、Bangumi Episode 与失败分类；两个随机 loopback Kestrel fixture 分别验证 name/name_cn 多轮搜索和 P3 跨两级回溯重试，不访问真实 TMDB/Bangumi 或测试密钥。
 
 ## P6 — 插件与业务流水线

@@ -495,7 +495,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 resolved.Failure!.Code,
                 false,
                 started,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                resolved.Usage).ConfigureAwait(false);
             return false;
         }
 
@@ -511,7 +512,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 failure.Code,
                 IsRetryable(failure.Kind),
                 started,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                resolved.Usage).ConfigureAwait(false);
             return false;
         }
 
@@ -590,7 +592,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                     "ai_cross_season_file_unassigned",
                     false,
                     started,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    resolved.Usage).ConfigureAwait(false);
                 return false;
             }
 
@@ -606,7 +609,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
             null,
             false,
             started,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            resolved.Usage).ConfigureAwait(false);
         await RecordAsync(
             claim,
             "season",
@@ -651,7 +655,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
         string? errorCode,
         bool retryable,
         long started,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        AiMetadataProviderUsage? aiUsage = null) =>
         await resolutions.RecordAttemptAsync(
             claim,
             new MetadataAttempt(
@@ -662,7 +667,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 errorCode,
                 retryable,
                 claim.AttemptNumber,
-                ElapsedMilliseconds(started)),
+                ElapsedMilliseconds(started),
+                AiUsage: aiUsage),
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
 

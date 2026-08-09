@@ -3116,6 +3116,17 @@ async function loadMetadataDetail(taskId, target, button) {
             ? `${textOrDash(detail.ai.stage)} 阶段 · ${detail.ai.duration_ms} ms · ${new Date(detail.ai.attempted_at_utc).toLocaleString()}`
             : "模型自报置信度不被采信；只有 TMDB Series / Season / Episode 验证通过才建立可信结果。";
         ai.append(aiHeading, confidence, aiMeta);
+        if (detail.ai.model !== null) {
+            const usage = document.createElement("p");
+            usage.className = "metadata-ai-usage";
+            usage.textContent =
+                `模型 ${detail.ai.model} · Prompt ${textOrDash(detail.ai.prompt_tokens)}`
+                    + ` · Completion ${textOrDash(detail.ai.completion_tokens)}`
+                    + ` · Total ${textOrDash(detail.ai.total_tokens)}`
+                    + ` · HTTP ${textOrDash(detail.ai.request_count)}`
+                    + ` · Tool calls ${textOrDash(detail.ai.tool_call_count)}`;
+            ai.append(usage);
+        }
         if (detail.ai.error_code || detail.ai.reason) {
             const reason = document.createElement("p");
             reason.className = "metadata-detail-reason";
@@ -3324,6 +3335,17 @@ async function loadMetadataAttempts(taskId, target, button) {
                 const execution = document.createElement("p");
                 execution.textContent = `P${textOrDash(attempt.priority)} · Run #${attempt.run_attempt_number} (${attempt.run_status}) · 尝试 #${attempt.attempt_number} · ${attempt.duration_ms} ms · ${new Date(attempt.created_at_utc).toLocaleString()}`;
                 row.append(heading, execution);
+                if (attempt.ai_model !== null) {
+                    const usage = document.createElement("p");
+                    usage.className = "metadata-ai-usage";
+                    usage.textContent =
+                        `AI ${attempt.ai_model} · Prompt ${textOrDash(attempt.ai_prompt_tokens)}`
+                            + ` · Completion ${textOrDash(attempt.ai_completion_tokens)}`
+                            + ` · Total ${textOrDash(attempt.ai_total_tokens)}`
+                            + ` · HTTP ${textOrDash(attempt.ai_request_count)}`
+                            + ` · Tool calls ${textOrDash(attempt.ai_tool_call_count)}`;
+                    row.append(usage);
+                }
                 if (attempt.error_code || attempt.reason) {
                     const reason = document.createElement("p");
                     reason.className = "metadata-attempt-reason";

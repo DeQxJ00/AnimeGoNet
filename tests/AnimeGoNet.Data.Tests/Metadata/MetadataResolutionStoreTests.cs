@@ -136,6 +136,43 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
+    public async Task AiUsageIsPersistedOnOneAttemptAndProjectedInTaskDetail()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+        var usage = new AiMetadataProviderUsage(
+            "gpt-5.4-mini",
+            120,
+            35,
+            155,
+            2,
+            1);
+        await fixture.Store.RecordAttemptAsync(
+            claim,
+            new MetadataAttempt(
+                "season",
+                "ai_metadata",
+                null,
+                "matched",
+                null,
+                false,
+                claim.AttemptNumber,
+                250,
+                AiUsage: usage),
+            now);
+
+        var attempt = Assert.Single(await fixture.Store.ListAttemptsAsync(fixture.TaskId));
+        Assert.Equal(usage, attempt.AiUsage);
+        var detail = Assert.IsType<MetadataTaskDetailProjection>(
+            await fixture.Store.GetTaskDetailAsync(fixture.TaskId));
+        Assert.Equal(usage, detail.Ai!.Usage);
+    }
+
+    [Fact]
     public async Task ManualClaimRequiresEnabledCompleteTmdbOverride()
     {
         await using var fixture = await MetadataFixture.CreateAsync();

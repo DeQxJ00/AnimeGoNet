@@ -1823,19 +1823,20 @@ public sealed class AutomaticMetadataResolutionProcessorTests
 
         public List<AiMetadataMatchInput> Requests { get; } = [];
 
-        public Task<AiMetadataMatchCandidate> MatchAsync(
+        public Task<AiMetadataMatchResponse> MatchAsync(
             AiMetadataMatchInput input,
             CancellationToken cancellationToken = default)
         {
             Requests.Add(input);
             if (Failure is not null)
             {
-                return Task.FromException<AiMetadataMatchCandidate>(Failure);
+                return Task.FromException<AiMetadataMatchResponse>(Failure);
             }
 
-            return Task.FromResult(
+            return Task.FromResult(new AiMetadataMatchResponse(
                 ResultFactory?.Invoke(input)
-                ?? new AiMetadataMatchCandidate(false, null, [], "not matched"));
+                    ?? new AiMetadataMatchCandidate(false, null, [], "not matched"),
+                null));
         }
     }
 

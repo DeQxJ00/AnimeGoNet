@@ -46,7 +46,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         }
     }
 
-    public async Task<AiMetadataMatchCandidate> MatchAsync(
+    public async Task<AiMetadataMatchResponse> MatchAsync(
         AiMetadataMatchInput input,
         CancellationToken cancellationToken = default)
     {
@@ -75,6 +75,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 "ai_metadata_input_invalid");
         }
 
+        var usage = new UsageAccumulator(options.Model);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(options.HttpTimeout);
         try
@@ -95,8 +96,10 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             {
                 var responseJson = await SendWithRetryAsync(
                     BuildRequestJson(messages, registry.Tools),
+                    usage,
                     timeout.Token).ConfigureAwait(false);
                 var parsed = ParseResponse(responseJson);
+                usage.Add(parsed.Model, parsed.Usage, parsed.ToolCalls.Count);
                 if (parsed.ToolCalls.Count == 0)
                 {
                     if (string.IsNullOrWhiteSpace(parsed.Content))
@@ -106,7 +109,9 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                             "ai_response_content_missing");
                     }
 
-                    return ParseCandidate(parsed.Content);
+                    return new AiMetadataMatchResponse(
+                        ParseCandidate(parsed.Content),
+                        usage.Snapshot());
                 }
 
                 messages.Add(new ChatMessageState(
@@ -132,6 +137,14 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 MetadataFailureKind.Protocol,
                 "ai_tool_round_limit_exceeded");
         }
+        catch (AiMetadataMatcherException exception) when (exception.Usage is null)
+        {
+            throw new AiMetadataMatcherException(
+                exception.Kind,
+                exception.SafeCode,
+                exception,
+                usage.Snapshot());
+        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
@@ -141,21 +154,24 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             throw new AiMetadataMatcherException(
                 MetadataFailureKind.Network,
                 "ai_http_timeout",
-                exception);
+                exception,
+                usage.Snapshot());
         }
         catch (HttpRequestException exception)
         {
             throw new AiMetadataMatcherException(
                 MetadataFailureKind.Network,
                 "ai_network_error",
-                exception);
+                exception,
+                usage.Snapshot());
         }
         catch (JsonException exception)
         {
             throw new AiMetadataMatcherException(
                 MetadataFailureKind.Protocol,
                 "ai_response_json_invalid",
-                exception);
+                exception,
+                usage.Snapshot());
         }
         catch (InvalidDataException exception)
         {
@@ -164,7 +180,8 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 exception.Message == "response_too_large"
                     ? "ai_response_too_large"
                     : "ai_response_invalid",
-                exception);
+                exception,
+                usage.Snapshot());
         }
     }
 
@@ -208,6 +225,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
 
     private async Task<string> SendWithRetryAsync(
         string json,
+        UsageAccumulator usage,
         CancellationToken cancellationToken)
     {
         for (var attempt = 0; ; attempt++)
@@ -225,6 +243,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
             try
             {
+                usage.RegisterRequest();
                 using var response = await httpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -422,7 +441,34 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             }
         }
 
-        return new ParsedChatResponse(content, calls);
+        var model = document.RootElement.TryGetProperty("model", out var modelElement)
+            && modelElement.ValueKind == JsonValueKind.String
+                ? modelElement.GetString()
+                : null;
+        ParsedUsage? usage = null;
+        if (document.RootElement.TryGetProperty("usage", out var usageElement)
+            && usageElement.ValueKind == JsonValueKind.Object)
+        {
+            usage = new ParsedUsage(
+                ReadNonNegativeInt64(usageElement, "prompt_tokens"),
+                ReadNonNegativeInt64(usageElement, "completion_tokens"),
+                ReadNonNegativeInt64(usageElement, "total_tokens"));
+        }
+
+        return new ParsedChatResponse(content, calls, model, usage);
+    }
+
+    private static long? ReadNonNegativeInt64(JsonElement parent, string propertyName)
+    {
+        if (!parent.TryGetProperty(propertyName, out var value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt64(out var parsed)
+            || parsed < 0)
+        {
+            return null;
+        }
+
+        return parsed;
     }
 
     private sealed record ChatMessageState(
@@ -438,5 +484,48 @@ public sealed class OpenAiCompatibleMetadataMatcher(
 
     private sealed record ParsedChatResponse(
         string? Content,
-        IReadOnlyList<AiFunctionCall> ToolCalls);
+        IReadOnlyList<AiFunctionCall> ToolCalls,
+        string? Model,
+        ParsedUsage? Usage);
+
+    private sealed record ParsedUsage(
+        long? PromptTokens,
+        long? CompletionTokens,
+        long? TotalTokens);
+
+    private sealed class UsageAccumulator(string configuredModel)
+    {
+        private string _model = configuredModel;
+        private long? _promptTokens;
+        private long? _completionTokens;
+        private long? _totalTokens;
+        private int _requestCount;
+        private int _toolCallCount;
+
+        public void RegisterRequest() => _requestCount++;
+
+        public void Add(string? model, ParsedUsage? usage, int toolCallCount)
+        {
+            if (!string.IsNullOrWhiteSpace(model))
+            {
+                _model = model;
+            }
+
+            _promptTokens = AddNullable(_promptTokens, usage?.PromptTokens);
+            _completionTokens = AddNullable(_completionTokens, usage?.CompletionTokens);
+            _totalTokens = AddNullable(_totalTokens, usage?.TotalTokens);
+            _toolCallCount = checked(_toolCallCount + toolCallCount);
+        }
+
+        public AiMetadataProviderUsage Snapshot() => new(
+            _model,
+            _promptTokens,
+            _completionTokens,
+            _totalTokens,
+            _requestCount,
+            _toolCallCount);
+
+        private static long? AddNullable(long? current, long? value) =>
+            value is null ? current : checked((current ?? 0) + value.Value);
+    }
 }

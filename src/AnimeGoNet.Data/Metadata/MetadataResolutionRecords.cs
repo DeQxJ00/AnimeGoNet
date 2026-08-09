@@ -31,7 +31,8 @@ public sealed record MetadataAttempt(
     bool Retryable,
     int AttemptNumber,
     long DurationMilliseconds,
-    string? Reason = null);
+    string? Reason = null,
+    AiMetadataProviderUsage? AiUsage = null);
 
 public sealed record MetadataAttemptProjection(
     string AttemptId,
@@ -49,7 +50,8 @@ public sealed record MetadataAttemptProjection(
     long DurationMilliseconds,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset RunStartedAtUtc,
-    DateTimeOffset? RunCompletedAtUtc);
+    DateTimeOffset? RunCompletedAtUtc,
+    AiMetadataProviderUsage? AiUsage);
 
 public sealed record MetadataRunProjection(
     string RunId,
@@ -177,7 +179,8 @@ public sealed record MetadataTaskAiProjection(
     string? ErrorCode,
     string? Reason,
     long DurationMilliseconds,
-    DateTimeOffset AttemptedAtUtc);
+    DateTimeOffset AttemptedAtUtc,
+    AiMetadataProviderUsage? Usage);
 
 public sealed record MetadataTaskSourceProjection(
     string SourceProfileId,

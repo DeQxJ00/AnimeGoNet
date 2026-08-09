@@ -53,6 +53,8 @@ public sealed class AiMetadataTaskResolverTests
         Assert.Equal(72517, result.Value!.Series.Id);
         Assert.Equal(2, Assert.Single(result.Value.Files).Season.SeasonNumber);
         Assert.Equal(4, Assert.Single(result.Value.Files).Episode!.EpisodeNumber);
+        Assert.Equal("fake-model", result.Usage!.Model);
+        Assert.Equal(42, result.Usage.TotalTokens);
     }
 
     [Fact]
@@ -109,21 +111,23 @@ public sealed class AiMetadataTaskResolverTests
     {
         public List<AiMetadataMatchInput> Requests { get; } = [];
 
-        public Task<AiMetadataMatchCandidate> MatchAsync(
+        public Task<AiMetadataMatchResponse> MatchAsync(
             AiMetadataMatchInput input,
             CancellationToken cancellationToken = default)
         {
             Requests.Add(input);
-            return Task.FromResult(new AiMetadataMatchCandidate(
-                true,
-                72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+            return Task.FromResult(new AiMetadataMatchResponse(
+                new AiMetadataMatchCandidate(
                     true,
-                    2,
-                    4,
-                    null)).ToArray(),
-                null));
+                    72517,
+                    input.Files.Select(file => new AiMetadataFileCandidate(
+                        file.Name,
+                        true,
+                        2,
+                        4,
+                        null)).ToArray(),
+                    null),
+                new AiMetadataProviderUsage("fake-model", 30, 12, 42, 1, 0)));
         }
     }
 

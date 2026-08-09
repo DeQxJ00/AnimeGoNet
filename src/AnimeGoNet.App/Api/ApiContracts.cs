@@ -699,7 +699,13 @@ public sealed record MetadataTaskAiItem(
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("confidence_basis")] string ConfidenceBasis,
     [property: JsonPropertyName("duration_ms")] long? DurationMilliseconds,
-    [property: JsonPropertyName("attempted_at_utc")] DateTimeOffset? AttemptedAtUtc);
+    [property: JsonPropertyName("attempted_at_utc")] DateTimeOffset? AttemptedAtUtc,
+    [property: JsonPropertyName("model")] string? Model,
+    [property: JsonPropertyName("prompt_tokens")] long? PromptTokens,
+    [property: JsonPropertyName("completion_tokens")] long? CompletionTokens,
+    [property: JsonPropertyName("total_tokens")] long? TotalTokens,
+    [property: JsonPropertyName("request_count")] int? RequestCount,
+    [property: JsonPropertyName("tool_call_count")] int? ToolCallCount);
 
 public sealed record MetadataTaskNfoRewriteItem(
     [property: JsonPropertyName("job_id")] string JobId,
@@ -749,7 +755,13 @@ public sealed record MetadataAttemptItemResponse(
     [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("run_started_at_utc")] DateTimeOffset RunStartedAtUtc,
-    [property: JsonPropertyName("run_completed_at_utc")] DateTimeOffset? RunCompletedAtUtc);
+    [property: JsonPropertyName("run_completed_at_utc")] DateTimeOffset? RunCompletedAtUtc,
+    [property: JsonPropertyName("ai_model")] string? AiModel,
+    [property: JsonPropertyName("ai_prompt_tokens")] long? AiPromptTokens,
+    [property: JsonPropertyName("ai_completion_tokens")] long? AiCompletionTokens,
+    [property: JsonPropertyName("ai_total_tokens")] long? AiTotalTokens,
+    [property: JsonPropertyName("ai_request_count")] int? AiRequestCount,
+    [property: JsonPropertyName("ai_tool_call_count")] int? AiToolCallCount);
 
 public sealed record AnimeSeasonListResponse(
     [property: JsonPropertyName("page")] int Page,

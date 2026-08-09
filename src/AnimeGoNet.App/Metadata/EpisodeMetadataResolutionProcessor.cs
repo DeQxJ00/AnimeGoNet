@@ -411,6 +411,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 claim,
                 results,
                 resolved.Failure!,
+                resolved.Usage,
                 started,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -437,7 +438,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     failure.Code,
                     false,
                     ElapsedMilliseconds(started),
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    resolved.Usage).ConfigureAwait(false);
                 AnnotateUnresolvedAiFailure(claim, results, failure.Code);
                 return false;
             }
@@ -480,7 +482,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             null,
             false,
             ElapsedMilliseconds(started),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            resolved.Usage).ConfigureAwait(false);
         for (var index = 0; index < results.Count; index++)
         {
             if (results[index].ResolutionSource == TmdbResolutionSource.AiMetadata
@@ -499,6 +502,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         MetadataEpisodeTaskClaim claim,
         List<MetadataEpisodeFileResolution> results,
         MetadataFailure failure,
+        AiMetadataProviderUsage? aiUsage,
         long started,
         CancellationToken cancellationToken)
     {
@@ -510,7 +514,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 null,
                 failure,
                 ElapsedMilliseconds(started),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                aiUsage).ConfigureAwait(false);
             return true;
         }
 
@@ -523,7 +528,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             failure.Code,
             false,
             ElapsedMilliseconds(started),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            aiUsage).ConfigureAwait(false);
         return false;
     }
 
@@ -554,7 +560,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
         int? priority,
         MetadataFailure failure,
         long durationMilliseconds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AiMetadataProviderUsage? aiUsage = null)
     {
         await RecordAsync(
             claim,
@@ -564,7 +571,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             failure.Code,
             IsRetryable(failure.Kind),
             durationMilliseconds,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            aiUsage).ConfigureAwait(false);
         await resolutions.FailEpisodesAsync(
             claim,
             failure,
@@ -580,7 +588,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
         string? errorCode,
         bool retryable,
         long durationMilliseconds,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        AiMetadataProviderUsage? aiUsage = null) =>
         resolutions.RecordAttemptAsync(
             claim.Resolution,
             new MetadataAttempt(
@@ -591,7 +600,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 errorCode,
                 retryable,
                 claim.Resolution.AttemptNumber,
-                durationMilliseconds),
+                durationMilliseconds,
+                AiUsage: aiUsage),
             _timeProvider.GetUtcNow(),
             cancellationToken);
 

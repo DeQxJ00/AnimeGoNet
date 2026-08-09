@@ -4070,7 +4070,13 @@ public static class ApiEndpoints
                 attempt.DurationMilliseconds,
                 attempt.CreatedAtUtc,
                 attempt.RunStartedAtUtc,
-                attempt.RunCompletedAtUtc)).ToArray()));
+                attempt.RunCompletedAtUtc,
+                attempt.AiUsage?.Model,
+                attempt.AiUsage?.PromptTokens,
+                attempt.AiUsage?.CompletionTokens,
+                attempt.AiUsage?.TotalTokens,
+                attempt.AiUsage?.RequestCount,
+                attempt.AiUsage?.ToolCallCount)).ToArray()));
     }
 
     private static async Task<IResult> MetadataTaskDetail(
@@ -4146,6 +4152,12 @@ public static class ApiEndpoints
                     null,
                     "not_established",
                     null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     null)
                 : new MetadataTaskAiItem(
                     ai.Result,
@@ -4154,7 +4166,13 @@ public static class ApiEndpoints
                     ai.Reason,
                     ai.Result == "matched" ? "tmdb_verified" : "not_established",
                     ai.DurationMilliseconds,
-                    ai.AttemptedAtUtc),
+                    ai.AttemptedAtUtc,
+                    ai.Usage?.Model,
+                    ai.Usage?.PromptTokens,
+                    ai.Usage?.CompletionTokens,
+                    ai.Usage?.TotalTokens,
+                    ai.Usage?.RequestCount,
+                    ai.Usage?.ToolCallCount),
             rewriteJobs.Select(job => new MetadataTaskNfoRewriteItem(
                 job.JobId,
                 job.BangumiSubjectId,

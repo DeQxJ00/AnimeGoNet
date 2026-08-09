@@ -23,6 +23,12 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
 
         Assert.True(result.Matched);
         Assert.Equal(42, result.TmdbId);
+        Assert.Equal("resolved-test-model", result.Usage!.Model);
+        Assert.Equal(30, result.Usage.PromptTokens);
+        Assert.Equal(10, result.Usage.CompletionTokens);
+        Assert.Equal(40, result.Usage.TotalTokens);
+        Assert.Equal(2, result.Usage.RequestCount);
+        Assert.Equal(1, result.Usage.ToolCallCount);
         Assert.Equal(2, handler.AiCalls);
         Assert.Equal(1, handler.McpInitializeCalls);
         Assert.InRange(handler.McpToolsListCalls, 0, 1);
@@ -380,6 +386,12 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                 return Json(HttpStatusCode.OK,
                     """
                     {
+                      "model": "resolved-test-model",
+                      "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 2,
+                        "total_tokens": 12
+                      },
                       "choices": [
                         {
                           "message": {
@@ -405,7 +417,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                 ?? """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
             return Json(
                 HttpStatusCode.OK,
-                "{\"choices\":[{\"message\":{\"content\":"
+                "{\"model\":\"resolved-test-model\",\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":8,\"total_tokens\":28},\"choices\":[{\"message\":{\"content\":"
                 + JsonSerializer.Serialize(modelResult)
                 + "}}]}");
         }

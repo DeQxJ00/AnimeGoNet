@@ -8,6 +8,7 @@ public sealed record AiMetadataTaskResolution(
     ValidatedAiMetadataMatch? Value,
     MetadataFailure? Failure,
     AiPublicationEvidenceResult? Publication,
+    AiMetadataProviderUsage? Usage,
     bool IsApplicable)
 {
     public bool IsSuccess => IsApplicable && Value is not null && Failure is null;
@@ -39,6 +40,7 @@ public sealed class AiMetadataTaskResolver(
                     "ai_video_files_missing",
                     TmdbAccessConfirmed: false),
                 null,
+                null,
                 IsApplicable: false);
         }
 
@@ -47,10 +49,10 @@ public sealed class AiMetadataTaskResolver(
             cancellationToken).ConfigureAwait(false);
         var input = AiMetadataInputBoundary.Create(claim, videos, publication);
 
-        AiMetadataMatchCandidate candidate;
+        AiMetadataMatchResponse response;
         try
         {
-            candidate = await matcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
+            response = await matcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
         }
         catch (AiMetadataMatcherException exception)
         {
@@ -58,12 +60,13 @@ public sealed class AiMetadataTaskResolver(
                 null,
                 new MetadataFailure(exception.Kind, exception.SafeCode, TmdbAccessConfirmed: false),
                 publication,
+                exception.Usage,
                 IsApplicable: true);
         }
 
         var validated = await validator.ValidateAsync(
             input,
-            candidate,
+            response.Candidate,
             expectedSeriesId,
             expectedSeasonNumber,
             cancellationToken).ConfigureAwait(false);
@@ -71,6 +74,7 @@ public sealed class AiMetadataTaskResolver(
             validated.Value,
             validated.Failure,
             publication,
+            response.Usage,
             IsApplicable: true);
     }
 }

@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 39;
+    public const int CurrentVersion = 40;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -45,7 +45,34 @@ public static class DatabaseSchema
         new SchemaMigration(37, "media_organization_progress", MediaOrganizationProgress),
         new SchemaMigration(38, "source_duplicate_notifications", SourceDuplicateNotifications),
         new SchemaMigration(39, "legacy_cache_import_audit", LegacyCacheImportAudit),
+        new SchemaMigration(40, "ai_metadata_usage_audit", AiMetadataUsageAudit),
     ];
+
+    private const string AiMetadataUsageAudit = """
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_model TEXT CHECK (
+            ai_model IS NULL OR length(ai_model) BETWEEN 1 AND 256);
+
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_prompt_tokens INTEGER CHECK (
+            ai_prompt_tokens IS NULL OR ai_prompt_tokens >= 0);
+
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_completion_tokens INTEGER CHECK (
+            ai_completion_tokens IS NULL OR ai_completion_tokens >= 0);
+
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_total_tokens INTEGER CHECK (
+            ai_total_tokens IS NULL OR ai_total_tokens >= 0);
+
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_request_count INTEGER CHECK (
+            ai_request_count IS NULL OR ai_request_count > 0);
+
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_tool_call_count INTEGER CHECK (
+            ai_tool_call_count IS NULL OR ai_tool_call_count >= 0);
+        """;
 
     private const string LegacyCacheImportAudit = """
         CREATE TABLE legacy_cache_imports (

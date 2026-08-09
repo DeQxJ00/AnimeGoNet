@@ -514,15 +514,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
         ArgumentOutOfRangeException.ThrowIfNegative(attempt.DurationMilliseconds);
         ArgumentOutOfRangeException.ThrowIfLessThan(attempt.AttemptNumber, 1);
+        var aiUsage = NormalizeAiUsage(attempt.AiUsage);
         var reason = NormalizeAttemptReason(attempt.Reason ?? attempt.ErrorCode);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO metadata_resolution_attempts (
                 id, run_id, stage, strategy, priority, result, error_code,
-                reason, retryable, attempt_number, duration_ms, created_at_utc)
+                reason, retryable, attempt_number, duration_ms, created_at_utc,
+                ai_model, ai_prompt_tokens, ai_completion_tokens, ai_total_tokens,
+                ai_request_count, ai_tool_call_count)
             SELECT $id, id, $stage, $strategy, $priority, $result, $error_code,
-                   $reason, $retryable, $attempt_number, $duration_ms, $created_at_utc
+                   $reason, $retryable, $attempt_number, $duration_ms, $created_at_utc,
+                   $ai_model, $ai_prompt_tokens, $ai_completion_tokens, $ai_total_tokens,
+                   $ai_request_count, $ai_tool_call_count
             FROM metadata_resolution_runs
             WHERE id = $run_id AND status = 'running' AND lease_token = $lease_token;
             """;
@@ -540,6 +545,17 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$attempt_number", attempt.AttemptNumber);
         command.Parameters.AddWithValue("$duration_ms", attempt.DurationMilliseconds);
         command.Parameters.AddWithValue("$created_at_utc", Format(utcNow));
+        command.Parameters.AddWithValue("$ai_model", (object?)aiUsage?.Model ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ai_prompt_tokens", (object?)aiUsage?.PromptTokens ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ai_completion_tokens", (object?)aiUsage?.CompletionTokens ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ai_total_tokens", (object?)aiUsage?.TotalTokens ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ai_request_count", (object?)aiUsage?.RequestCount ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ai_tool_call_count", (object?)aiUsage?.ToolCallCount ?? DBNull.Value);
         if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
         {
             throw new InvalidOperationException("Metadata resolution lease is no longer active.");
@@ -1850,7 +1866,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                    attempt.stage, attempt.strategy, attempt.priority, attempt.result,
                    attempt.error_code, attempt.reason, attempt.retryable,
                    attempt.attempt_number, attempt.duration_ms, attempt.created_at_utc,
-                   run.started_at_utc, run.completed_at_utc
+                   run.started_at_utc, run.completed_at_utc,
+                   attempt.ai_model, attempt.ai_prompt_tokens,
+                   attempt.ai_completion_tokens, attempt.ai_total_tokens,
+                   attempt.ai_request_count, attempt.ai_tool_call_count
             FROM metadata_resolution_attempts AS attempt
             JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
             WHERE run.task_id = $task_id
@@ -1890,7 +1909,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     : DateTimeOffset.Parse(
                         reader.GetString(15),
                         CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind)));
+                        DateTimeStyles.RoundtripKind),
+                ReadAiUsage(reader, 16)));
         }
 
         return attempts;
@@ -2232,7 +2252,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         {
             command.CommandText = """
                 SELECT attempt.stage, attempt.result, attempt.error_code, attempt.reason,
-                       attempt.duration_ms, attempt.created_at_utc
+                       attempt.duration_ms, attempt.created_at_utc,
+                       attempt.ai_model, attempt.ai_prompt_tokens,
+                       attempt.ai_completion_tokens, attempt.ai_total_tokens,
+                       attempt.ai_request_count, attempt.ai_tool_call_count
                 FROM metadata_resolution_attempts AS attempt
                 JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
                 WHERE run.task_id = $task_id
@@ -2253,7 +2276,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     DateTimeOffset.Parse(
                         reader.GetString(5),
                         CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind));
+                        DateTimeStyles.RoundtripKind),
+                    ReadAiUsage(reader, 6));
             }
         }
 
@@ -2649,6 +2673,50 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
     private static string Format(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static AiMetadataProviderUsage? NormalizeAiUsage(AiMetadataProviderUsage? usage)
+    {
+        if (usage is null || usage.RequestCount <= 0)
+        {
+            return null;
+        }
+
+        var model = usage.Model.Trim();
+        if (model.Length is < 1 or > 256 || model.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "AI model must be between 1 and 256 printable characters.",
+                nameof(usage));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(usage.ToolCallCount);
+        if (usage.PromptTokens is < 0
+            || usage.CompletionTokens is < 0
+            || usage.TotalTokens is < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(usage),
+                "AI token counts cannot be negative.");
+        }
+
+        return usage with { Model = model };
+    }
+
+    private static AiMetadataProviderUsage? ReadAiUsage(SqliteDataReader reader, int ordinal)
+    {
+        if (reader.IsDBNull(ordinal))
+        {
+            return null;
+        }
+
+        return new AiMetadataProviderUsage(
+            reader.GetString(ordinal),
+            reader.IsDBNull(ordinal + 1) ? null : reader.GetInt64(ordinal + 1),
+            reader.IsDBNull(ordinal + 2) ? null : reader.GetInt64(ordinal + 2),
+            reader.IsDBNull(ordinal + 3) ? null : reader.GetInt64(ordinal + 3),
+            reader.GetInt32(ordinal + 4),
+            reader.GetInt32(ordinal + 5));
+    }
 
     private static string? NormalizeAttemptReason(string? value)
     {
