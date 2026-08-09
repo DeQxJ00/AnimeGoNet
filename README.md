@@ -107,3 +107,4 @@ NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
 - [WebUI](docs/WEB_UI.md)
 - [外部 qBittorrent 部署](docs/EXTERNAL_QBITTORRENT.md)
 - [CI / NativeAOT / Docker](docs/CI_CD.md)
+- [首版实现完成审计](docs/IMPLEMENTATION_COMPLETION_AUDIT.md)
