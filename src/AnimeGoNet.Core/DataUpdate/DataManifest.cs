@@ -6,6 +6,7 @@ public enum DataAssetKind
 {
     Subjects,
     Episodes,
+    Relations,
 }
 
 public sealed record DataManifest(
@@ -16,7 +17,10 @@ public sealed record DataManifest(
     DataManifestUpstream Upstream,
     IReadOnlyList<DataManifestAsset> Assets,
     long SubjectCount,
-    long EpisodeCount);
+    long EpisodeCount)
+{
+    public long RelationCount { get; init; }
+}
 
 public sealed record DataManifestUpstream(
     string Repository,

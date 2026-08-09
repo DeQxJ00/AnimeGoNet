@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 41;
+    public const int CurrentVersion = 42;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -50,7 +50,45 @@ public static class DatabaseSchema
             41,
             "tmdb_episode_date_evidence",
             TmdbEpisodeBangumiDateEvidence),
+        new SchemaMigration(
+            42,
+            "bangumi_archive_subject_relations",
+            BangumiArchiveSubjectRelations),
     ];
+
+    private const string BangumiArchiveSubjectRelations = """
+        CREATE TABLE data_update_staging_relations (
+            run_id TEXT NOT NULL REFERENCES data_update_runs(id) ON DELETE CASCADE,
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            related_subject_id INTEGER NOT NULL CHECK (related_subject_id > 0),
+            relation_type INTEGER NOT NULL CHECK (relation_type > 0),
+            relation_order INTEGER NOT NULL CHECK (relation_order >= 0),
+            PRIMARY KEY (run_id, subject_id, related_subject_id, relation_type)
+        ) STRICT;
+
+        CREATE INDEX ix_data_update_staging_relation_subject
+            ON data_update_staging_relations(run_id, subject_id, relation_order);
+
+        CREATE TABLE bangumi_archive_subject_relations (
+            data_version TEXT NOT NULL,
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            related_subject_id INTEGER NOT NULL CHECK (related_subject_id > 0),
+            relation_type INTEGER NOT NULL CHECK (relation_type > 0),
+            relation_order INTEGER NOT NULL CHECK (relation_order >= 0),
+            PRIMARY KEY (
+                data_version, subject_id, related_subject_id, relation_type),
+            FOREIGN KEY (data_version, subject_id)
+                REFERENCES bangumi_archive_subjects(data_version, subject_id)
+                ON DELETE CASCADE,
+            FOREIGN KEY (data_version, related_subject_id)
+                REFERENCES bangumi_archive_subjects(data_version, subject_id)
+                ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX ix_bangumi_archive_relation_subject
+            ON bangumi_archive_subject_relations(
+                data_version, subject_id, relation_order, related_subject_id);
+        """;
 
     private const string TmdbEpisodeBangumiDateEvidence = """
         DROP TRIGGER tr_task_files_episode_evidence_insert;

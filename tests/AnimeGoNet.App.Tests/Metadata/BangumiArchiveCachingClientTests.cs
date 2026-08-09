@@ -32,7 +32,7 @@ public sealed class BangumiArchiveCachingClientTests
     }
 
     [Fact]
-    public async Task CompleteArchiveServesSubjectAndEpisodesButNotRelations()
+    public async Task VersionOneArchiveServesSubjectAndEpisodesButNotRelations()
     {
         await using var fixture = await ArchiveFixture.CreateAsync(
             episodeCount: 1,
@@ -54,6 +54,28 @@ public sealed class BangumiArchiveCachingClientTests
         Assert.Equal(0, upstream.SubjectCalls);
         Assert.Equal(0, upstream.EpisodeCalls);
         Assert.Equal(1, upstream.RelationCalls);
+    }
+
+    [Fact]
+    public async Task VersionTwoArchiveServesRelationsWithoutOnlineRequest()
+    {
+        await using var fixture = await ArchiveFixture.CreateAsync(
+            episodeCount: 1,
+            storedEpisodeCount: 1,
+            schemaVersion: 2,
+            seedRelation: true);
+        var upstream = new RecordingBangumiClient();
+        using var client = new BangumiArchiveCachingClient(
+            fixture.Store,
+            upstream,
+            upstream);
+
+        var relations = await client.GetRelatedSubjectsAsync(51);
+
+        var prequel = Assert.Single(relations);
+        Assert.Equal(52, prequel.Id);
+        Assert.Equal("前传", prequel.Relation);
+        Assert.Equal(0, upstream.RelationCalls);
     }
 
     [Fact]
@@ -192,7 +214,9 @@ public sealed class BangumiArchiveCachingClientTests
 
         public static async Task<ArchiveFixture> CreateAsync(
             int episodeCount,
-            int storedEpisodeCount)
+            int storedEpisodeCount,
+            int schemaVersion = 1,
+            bool seedRelation = false)
         {
             var root = Path.Combine(
                 Path.GetTempPath(),
@@ -202,14 +226,21 @@ public sealed class BangumiArchiveCachingClientTests
             var database = new AnimeGoSqliteDatabase(
                 Path.Combine(root, "animegonet.db"));
             await database.InitializeAsync();
-            await SeedAsync(database, episodeCount, storedEpisodeCount);
+            await SeedAsync(
+                database,
+                episodeCount,
+                storedEpisodeCount,
+                schemaVersion,
+                seedRelation);
             return new ArchiveFixture(root, database);
         }
 
         public static async Task SeedAsync(
             AnimeGoSqliteDatabase database,
             int episodeCount,
-            int storedEpisodeCount)
+            int storedEpisodeCount,
+            int schemaVersion = 1,
+            bool seedRelation = false)
         {
             await using var connection = await database.OpenConnectionAsync();
             await using var command = connection.CreateCommand();
@@ -221,7 +252,7 @@ public sealed class BangumiArchiveCachingClientTests
                     upstream_sha256, subject_count, episode_count, state,
                     installed_at_utc, activated_at_utc)
                 VALUES (
-                    '2026.07.30.1', 1, $now, '0.1.0', $sha,
+                    '2026.07.30.1', $schema_version, $now, '0.1.0', $sha,
                     'https://github.com/bangumi/Archive', 'test', 'test.zip',
                     $sha, 1, 1, 'active', $now, $now);
 
@@ -240,6 +271,7 @@ public sealed class BangumiArchiveCachingClientTests
                 "$now",
                 "2026-07-30T00:00:00.0000000+00:00");
             command.Parameters.AddWithValue("$sha", new string('a', 64));
+            command.Parameters.AddWithValue("$schema_version", schemaVersion);
             command.Parameters.AddWithValue("$episode_count", episodeCount);
             await command.ExecuteNonQueryAsync();
 
@@ -261,6 +293,25 @@ public sealed class BangumiArchiveCachingClientTests
                     index.ToString(
                         System.Globalization.CultureInfo.InvariantCulture));
                 await episode.ExecuteNonQueryAsync();
+            }
+
+            if (seedRelation)
+            {
+                await using var relation = connection.CreateCommand();
+                relation.CommandText = """
+                    INSERT INTO bangumi_archive_subjects (
+                        data_version, subject_id, name, name_cn, air_date,
+                        episode_count)
+                    VALUES (
+                        '2026.07.30.1', 52, 'Archive Prequel', '归档前传',
+                        '2025-01-01', 1);
+
+                    INSERT INTO bangumi_archive_subject_relations (
+                        data_version, subject_id, related_subject_id,
+                        relation_type, relation_order)
+                    VALUES ('2026.07.30.1', 51, 52, 2, 0);
+                    """;
+                await relation.ExecuteNonQueryAsync();
             }
         }
 

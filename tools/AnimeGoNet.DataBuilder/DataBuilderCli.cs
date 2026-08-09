@@ -19,6 +19,7 @@ internal static class DataBuilderCli
         "subjects-per-shard",
         "minimum-subject-count",
         "minimum-episode-count",
+        "minimum-relation-count",
     ];
 
     private const string Usage = """
@@ -35,6 +36,7 @@ internal static class DataBuilderCli
           [--subjects-per-shard <count>]
           [--minimum-subject-count <count>]
           [--minimum-episode-count <count>]
+          [--minimum-relation-count <count>]
           [--upstream-repository <url>]
         """;
 
@@ -75,11 +77,15 @@ internal static class DataBuilderCli
                         "minimum-subject-count"),
                     ParsePositiveInt(
                         values.GetValueOrDefault("minimum-episode-count", "1"),
-                        "minimum-episode-count")));
+                        "minimum-episode-count"),
+                    ParsePositiveInt(
+                        values.GetValueOrDefault("minimum-relation-count", "1"),
+                        "minimum-relation-count")));
             Console.WriteLine(
                 $"Built {result.Manifest.DataVersion}: "
                 + $"{result.Manifest.SubjectCount} subjects, "
                 + $"{result.Manifest.EpisodeCount} episodes, "
+                + $"{result.Manifest.RelationCount} relations, "
                 + $"{result.Manifest.Assets.Count} assets.");
             return 0;
         }

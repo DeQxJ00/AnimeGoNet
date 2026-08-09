@@ -42,7 +42,9 @@ internal sealed class DataPackageTestFixture : IAsyncDisposable
         int keepVersions = 2,
         Version? clientVersion = null,
         string minimumClientVersion = "0.1.0",
-        IReadOnlyList<AdditionalAsset>? additionalAssets = null)
+        IReadOnlyList<AdditionalAsset>? additionalAssets = null,
+        int schemaVersion = 1,
+        string? relations = null)
     {
         var packagePath = Path.Combine(RootPath, version);
         Directory.CreateDirectory(packagePath);
@@ -83,8 +85,25 @@ internal sealed class DataPackageTestFixture : IAsyncDisposable
         var episodeCount = assets
             .Where(asset => asset.Kind == DataAssetKind.Episodes)
             .Sum(asset => asset.RecordCount);
+        if (schemaVersion >= 2)
+        {
+            relations ??= """
+                {"subject_id":52,"related_subject_id":51,"relation_type":2,"order":0}
+
+                """;
+            assets.Add(await WriteAssetAsync(
+                packagePath,
+                DataAssetKind.Relations,
+                $"relations-{version}.jsonl.gz",
+                relations,
+                1,
+                100));
+        }
+        var relationCount = assets
+            .Where(asset => asset.Kind == DataAssetKind.Relations)
+            .Sum(asset => asset.RecordCount);
         var manifest = new DataManifest(
-            1,
+            schemaVersion,
             version,
             new DateTimeOffset(2026, 7, 29, 12, 0, 0, TimeSpan.Zero),
             minimumClientVersion,
@@ -95,7 +114,10 @@ internal sealed class DataPackageTestFixture : IAsyncDisposable
                 new string('a', 64)),
             assets,
             subjectCount,
-            episodeCount);
+            episodeCount)
+        {
+            RelationCount = relationCount,
+        };
         return new DataPackageImportRequest(
             manifest,
             Sha256($"manifest:{version}"),

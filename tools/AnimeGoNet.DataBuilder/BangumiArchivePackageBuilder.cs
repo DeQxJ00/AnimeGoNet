@@ -22,7 +22,8 @@ public sealed record BangumiArchiveBuildOptions(
     string MinimumClientVersion = "0.1.0",
     int SubjectsPerShard = 25_000,
     int MinimumSubjectCount = 1,
-    int MinimumEpisodeCount = 1);
+    int MinimumEpisodeCount = 1,
+    int MinimumRelationCount = 1);
 
 public sealed record BangumiArchiveBuildResult(
     string OutputDirectory,
@@ -36,6 +37,7 @@ public static partial class BangumiArchivePackageBuilder
 {
     private const string SubjectEntryName = "subject.jsonlines";
     private const string EpisodeEntryName = "episode.jsonlines";
+    private const string RelationEntryName = "subject-relations.jsonlines";
     private const int MaximumLineBytes = 8 * 1024 * 1024;
 
     public static async Task<BangumiArchiveBuildResult> BuildAsync(
@@ -91,6 +93,11 @@ public static partial class BangumiArchivePackageBuilder
                 throw new InvalidDataException(
                     $"The Bangumi Archive contains {data.Episodes.Count} normal anime Episodes, below the configured minimum of {options.MinimumEpisodeCount}.");
             }
+            if (data.Relations.Count < options.MinimumRelationCount)
+            {
+                throw new InvalidDataException(
+                    $"The Bangumi Archive contains {data.Relations.Count} anime Subject relations, below the configured minimum of {options.MinimumRelationCount}.");
+            }
             var assets = await WriteAssetsAsync(stagingPath, options, data, cancellationToken)
                 .ConfigureAwait(false);
             var manifest = new DataManifest(
@@ -105,7 +112,10 @@ public static partial class BangumiArchivePackageBuilder
                     options.UpstreamSha256),
                 assets,
                 data.Subjects.Count,
-                data.Episodes.Count);
+                data.Episodes.Count)
+            {
+                RelationCount = data.Relations.Count,
+            };
             var manifestBytes = RenderManifest(manifest);
             _ = DataManifestParser.Parse(manifestBytes);
             var manifestPath = Path.Combine(stagingPath, "manifest.json");
@@ -154,6 +164,7 @@ public static partial class BangumiArchivePackageBuilder
         using var archive = new ZipArchive(file, ZipArchiveMode.Read, leaveOpen: false);
         var subjectEntry = RequireSingleRootEntry(archive, SubjectEntryName);
         var episodeEntry = RequireSingleRootEntry(archive, EpisodeEntryName);
+        var relationEntry = RequireSingleRootEntry(archive, RelationEntryName);
         var subjects = new SortedDictionary<int, NormalizedSubject>();
         await ReadJsonLinesAsync(
             subjectEntry,
@@ -239,7 +250,62 @@ public static partial class BangumiArchivePackageBuilder
         var episodeCounts = episodes
             .GroupBy(episode => episode.SubjectId)
             .ToDictionary(group => group.Key, group => group.Count());
-        return new ArchiveData(subjects.Values.ToArray(), episodes, episodeCounts);
+        var relations = new List<NormalizedRelation>();
+        var relationKeys = new HashSet<(int SubjectId, int RelatedSubjectId, int RelationType)>();
+        await ReadJsonLinesAsync(
+            relationEntry,
+            line =>
+            {
+                using var document = ParseLine(line, "subject relation");
+                var root = document.RootElement;
+                var subjectId = RequiredPositiveInt(root, "subject_id", "subject relation");
+                var relatedSubjectId = RequiredPositiveInt(
+                    root,
+                    "related_subject_id",
+                    "subject relation");
+                if (!subjects.ContainsKey(subjectId)
+                    || !subjects.ContainsKey(relatedSubjectId))
+                {
+                    return;
+                }
+                var relationType = RequiredPositiveInt(
+                    root,
+                    "relation_type",
+                    "subject relation");
+                var order = RequiredNonNegativeInt(root, "order", "subject relation");
+                if (!relationKeys.Add((subjectId, relatedSubjectId, relationType)))
+                {
+                    throw new InvalidDataException(
+                        "The Bangumi Archive contains a duplicate anime Subject relation.");
+                }
+                relations.Add(new NormalizedRelation(
+                    subjectId,
+                    relatedSubjectId,
+                    relationType,
+                    order));
+            },
+            cancellationToken).ConfigureAwait(false);
+        relations.Sort(static (left, right) =>
+        {
+            var subject = left.SubjectId.CompareTo(right.SubjectId);
+            if (subject != 0) return subject;
+            var order = left.Order.CompareTo(right.Order);
+            if (order != 0) return order;
+            var related = left.RelatedSubjectId.CompareTo(right.RelatedSubjectId);
+            return related != 0
+                ? related
+                : left.RelationType.CompareTo(right.RelationType);
+        });
+        if (relations.Count == 0)
+        {
+            throw new InvalidDataException(
+                "The Bangumi Archive contains no retained anime Subject relations.");
+        }
+        return new ArchiveData(
+            subjects.Values.ToArray(),
+            episodes,
+            relations,
+            episodeCounts);
     }
 
     private static async Task<IReadOnlyList<DataManifestAsset>> WriteAssetsAsync(
@@ -250,6 +316,7 @@ public static partial class BangumiArchivePackageBuilder
     {
         var assets = new List<DataManifestAsset>();
         var episodeIndex = 0;
+        var relationIndex = 0;
         for (var start = 0; start < data.Subjects.Count; start += options.SubjectsPerShard)
         {
             var count = Math.Min(options.SubjectsPerShard, data.Subjects.Count - start);
@@ -284,28 +351,62 @@ public static partial class BangumiArchivePackageBuilder
                 episodeIndex++;
             }
             var episodeCountInShard = episodeIndex - episodeStart;
-            if (episodeCountInShard == 0)
+            if (episodeCountInShard > 0)
             {
-                continue;
-            }
-            var episodeSlice = data.Episodes.Skip(episodeStart).Take(episodeCountInShard).ToArray();
-            assets.Add(await WriteAssetAsync(
-                stagingPath,
-                options.AssetBaseUrl,
-                DataAssetKind.Episodes,
-                $"episodes-{suffix}.jsonl.gz",
-                episodeSlice.Length,
-                episodeSlice[0].SubjectId,
-                episodeSlice[^1].SubjectId,
-                async gzip =>
-                {
-                    foreach (var episode in episodeSlice.OrderBy(static episode => episode.Id))
+                var episodeSlice = data.Episodes
+                    .Skip(episodeStart)
+                    .Take(episodeCountInShard)
+                    .ToArray();
+                assets.Add(await WriteAssetAsync(
+                    stagingPath,
+                    options.AssetBaseUrl,
+                    DataAssetKind.Episodes,
+                    $"episodes-{suffix}.jsonl.gz",
+                    episodeSlice.Length,
+                    episodeSlice[0].SubjectId,
+                    episodeSlice[^1].SubjectId,
+                    async gzip =>
                     {
-                        await WriteEpisodeAsync(gzip, episode, cancellationToken)
-                            .ConfigureAwait(false);
-                    }
-                },
-                cancellationToken).ConfigureAwait(false));
+                        foreach (var episode in episodeSlice.OrderBy(static episode => episode.Id))
+                        {
+                            await WriteEpisodeAsync(gzip, episode, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                    },
+                    cancellationToken).ConfigureAwait(false));
+            }
+
+            var relationStart = relationIndex;
+            while (relationIndex < data.Relations.Count
+                && data.Relations[relationIndex].SubjectId <= maximumId)
+            {
+                relationIndex++;
+            }
+            var relationCountInShard = relationIndex - relationStart;
+            if (relationCountInShard > 0)
+            {
+                var relationSlice = data.Relations
+                    .Skip(relationStart)
+                    .Take(relationCountInShard)
+                    .ToArray();
+                assets.Add(await WriteAssetAsync(
+                    stagingPath,
+                    options.AssetBaseUrl,
+                    DataAssetKind.Relations,
+                    $"relations-{suffix}.jsonl.gz",
+                    relationSlice.Length,
+                    relationSlice[0].SubjectId,
+                    relationSlice[^1].SubjectId,
+                    async gzip =>
+                    {
+                        foreach (var relation in relationSlice)
+                        {
+                            await WriteRelationAsync(gzip, relation, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                    },
+                    cancellationToken).ConfigureAwait(false));
+            }
         }
         return assets;
     }
@@ -390,6 +491,25 @@ public static partial class BangumiArchivePackageBuilder
         await WriteLineAsync(output, buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
     }
 
+    private static async Task WriteRelationAsync(
+        Stream output,
+        NormalizedRelation relation,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("subject_id", relation.SubjectId);
+            writer.WriteNumber("related_subject_id", relation.RelatedSubjectId);
+            writer.WriteNumber("relation_type", relation.RelationType);
+            writer.WriteNumber("order", relation.Order);
+            writer.WriteEndObject();
+        }
+        await WriteLineAsync(output, buffer.WrittenMemory, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static async Task WriteLineAsync(
         Stream output,
         ReadOnlyMemory<byte> value,
@@ -419,7 +539,13 @@ public static partial class BangumiArchivePackageBuilder
             foreach (var asset in manifest.Assets)
             {
                 writer.WriteStartObject();
-                writer.WriteString("kind", asset.Kind == DataAssetKind.Subjects ? "subjects" : "episodes");
+                writer.WriteString("kind", asset.Kind switch
+                {
+                    DataAssetKind.Subjects => "subjects",
+                    DataAssetKind.Episodes => "episodes",
+                    DataAssetKind.Relations => "relations",
+                    _ => throw new InvalidOperationException("Unknown data asset kind."),
+                });
                 writer.WriteString("file_name", asset.FileName);
                 writer.WriteString("url", asset.Url.AbsoluteUri);
                 writer.WriteNumber("size_bytes", asset.SizeBytes);
@@ -433,6 +559,7 @@ public static partial class BangumiArchivePackageBuilder
             writer.WriteStartObject("totals");
             writer.WriteNumber("subjects", manifest.SubjectCount);
             writer.WriteNumber("episodes", manifest.EpisodeCount);
+            writer.WriteNumber("relations", manifest.RelationCount);
             writer.WriteEndObject();
             writer.WriteEndObject();
         }
@@ -619,6 +746,17 @@ public static partial class BangumiArchivePackageBuilder
             ? result
             : throw new InvalidDataException($"A Bangumi Archive {kind} ID is invalid.");
 
+    private static int RequiredNonNegativeInt(
+        JsonElement root,
+        string name,
+        string kind) =>
+        root.TryGetProperty(name, out var value)
+        && value.TryGetInt32(out var result)
+        && result >= 0
+            ? result
+            : throw new InvalidDataException(
+                $"A Bangumi Archive {kind} order is invalid.");
+
     private static decimal RequiredPositiveDecimal(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value)
         && value.TryGetDecimal(out var result)
@@ -700,6 +838,8 @@ public static partial class BangumiArchivePackageBuilder
             throw new ArgumentException("Minimum Subject count must be between 1 and 10000000.", nameof(options));
         if (options.MinimumEpisodeCount is < 1 or > 100_000_000)
             throw new ArgumentException("Minimum Episode count must be between 1 and 100000000.", nameof(options));
+        if (options.MinimumRelationCount is < 1 or > 100_000_000)
+            throw new ArgumentException("Minimum relation count must be between 1 and 100000000.", nameof(options));
         if (!IsSafeHttpBaseUrl(options.AssetBaseUrl))
             throw new ArgumentException("The asset base URL is invalid.", nameof(options));
         ValidateText(options.UpstreamRepository, 512, "upstream repository");
@@ -752,8 +892,15 @@ public static partial class BangumiArchivePackageBuilder
         int Sort,
         DateOnly? AirDate);
 
+    private sealed record NormalizedRelation(
+        int SubjectId,
+        int RelatedSubjectId,
+        int RelationType,
+        int Order);
+
     private sealed record ArchiveData(
         IReadOnlyList<NormalizedSubject> Subjects,
         IReadOnlyList<NormalizedEpisode> Episodes,
+        IReadOnlyList<NormalizedRelation> Relations,
         IReadOnlyDictionary<int, int> EpisodeCounts);
 }

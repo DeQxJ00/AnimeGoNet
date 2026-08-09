@@ -25,11 +25,19 @@ public sealed class BangumiArchiveCachingClient(
                 .ConfigureAwait(false);
     }
 
-    public Task<IReadOnlyList<BangumiSubjectRelation>>
+    public async Task<IReadOnlyList<BangumiSubjectRelation>>
         GetRelatedSubjectsAsync(
-            int subjectId,
-            CancellationToken cancellationToken = default) =>
-        subjects.GetRelatedSubjectsAsync(subjectId, cancellationToken);
+        int subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        var cached = await archive
+            .GetRelatedSubjectsAsync(subjectId, cancellationToken)
+            .ConfigureAwait(false);
+        return cached
+            ?? await subjects
+                .GetRelatedSubjectsAsync(subjectId, cancellationToken)
+                .ConfigureAwait(false);
+    }
 
     public async Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
         int subjectId,

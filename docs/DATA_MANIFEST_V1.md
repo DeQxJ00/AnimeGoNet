@@ -1,4 +1,4 @@
-# AnimeGoNetData manifest and JSONL v1
+# AnimeGoNetData manifest and JSONL v1/v2
 
 This document is the wire contract between the independent `AnimeGoNetData`
 publisher and AnimeGoNet clients. The publisher may add optional fields without
@@ -9,7 +9,7 @@ required field requires a new schema major and a new asset name prefix.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "data_version": "2026.07.29.1",
   "generated_at_utc": "2026-07-29T12:00:00.0000000+00:00",
   "minimum_client_version": "0.1.0",
@@ -33,7 +33,8 @@ required field requires a new schema major and a new asset name prefix.
   ],
   "totals": {
     "subjects": 50000,
-    "episodes": 600000
+    "episodes": 600000,
+    "relations": 120000
   }
 }
 ```
@@ -41,7 +42,9 @@ required field requires a new schema major and a new asset name prefix.
 Required invariants:
 
 - UTF-8 JSON, at most 1 MiB, no comments or trailing commas;
-- `schema_version=1`; unknown schema major is rejected before downloading;
+- `schema_version=1` is the legacy Subject/Episode package; `schema_version=2`
+  additionally requires relation assets. Other schema versions are rejected
+  before downloading;
 - `data_version` is a stable lowercase ID (`[a-z0-9._-]`, at most 64 chars);
 - timestamps use the round-trip UTC `O` form with offset `+00:00`;
 - `minimum_client_version` is a numeric .NET-style version;
@@ -50,7 +53,8 @@ Required invariants:
 - asset URLs use HTTP(S), contain no user info or fragment, and are not logged;
 - assets are non-empty and at most 8 GiB each;
 - each asset declares a positive record count and inclusive positive Subject ID
-  range; both `subjects` and `episodes` kinds are required;
+  range; both `subjects` and `episodes` kinds are required, and v2 also
+  requires `relations`;
 - totals exactly equal the sum of asset record counts by kind.
 
 The release is immutable: an existing `data_version`, manifest or named asset
@@ -125,6 +129,29 @@ positive; non-integer values remain data evidence but never become unverified
 TMDB Episode identity. `air_date` is null or ISO `yyyy-MM-dd`. Records are
 strictly ordered by `id` ascending inside each asset.
 
+## Relation JSONL (schema v2)
+
+Each decompressed line preserves one normalized Bangumi Subject relation:
+
+```json
+{
+  "subject_id": 341163,
+  "related_subject_id": 278826,
+  "relation_type": 2,
+  "order": 0
+}
+```
+
+Both IDs are positive and must reference retained `type=2` anime Subjects in
+the same data version. `relation_type` is the positive raw Bangumi relation
+code; code `2` means `前传` for anime and is what P3 backtrace follows. `order`
+is non-negative. Records are unique by
+`subject_id + related_subject_id + relation_type` and strictly ordered by
+`subject_id`, `order`, `related_subject_id`, then `relation_type`. An active v2
+package is authoritative even when a known Subject has no relation rows; an
+active v1 package has no relation evidence, so the application may query the
+configured Bangumi API instead.
+
 ## Determinism and validation
 
 Publisher output is sorted, UTF-8 without BOM, one LF per line, JSON properties
@@ -132,6 +159,6 @@ in the order shown, and gzip metadata is normalized. The same upstream input
 must produce byte-identical assets. Publication requires unique IDs, valid
 ranges, Subject references, exact counts, SHA-256/size checks and configured
 minimum count thresholds. The official daily workflow currently requires at
-least 30,000 retained anime Subjects and 300,000 retained normal anime Episodes;
-the builder applies both thresholds before exposing its atomically renamed
-output directory.
+least 30,000 retained anime Subjects, 300,000 retained normal anime Episodes
+and 10,000 retained anime Subject relations; the builder applies all thresholds
+before exposing its atomically renamed output directory.

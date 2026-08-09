@@ -16,6 +16,7 @@ public sealed class DataManifestParserTests
         Assert.Equal(2, manifest.Assets.Count);
         Assert.Equal(100, manifest.SubjectCount);
         Assert.Equal(1200, manifest.EpisodeCount);
+        Assert.Equal(0, manifest.RelationCount);
         Assert.Equal(DataAssetKind.Subjects, manifest.Assets[0].Kind);
         Assert.Equal("bangumi-subjects-v1-000001-000100.jsonl.gz", manifest.Assets[0].FileName);
         Assert.Equal(1, manifest.Assets[0].SubjectIdMin);
@@ -23,7 +24,7 @@ public sealed class DataManifestParserTests
     }
 
     [Theory]
-    [InlineData("\"schema_version\":1", "\"schema_version\":2", "data_manifest_schema_unsupported")]
+    [InlineData("\"schema_version\":1", "\"schema_version\":3", "data_manifest_schema_unsupported")]
     [InlineData("\"data_version\":\"2026.07.29.1\"", "\"data_version\":\"../latest\"", "data_manifest_version_invalid")]
     [InlineData("\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"", "\"sha256\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"", "data_manifest_sha256_invalid")]
     [InlineData("\"file_name\":\"bangumi-subjects-v1-000001-000100.jsonl.gz\"", "\"file_name\":\"../subjects.jsonl.gz\"", "data_manifest_asset_name_invalid")]
@@ -62,6 +63,55 @@ public sealed class DataManifestParserTests
         Assert.Equal(
             "data_manifest_size_invalid",
             Assert.Throws<DataManifestException>(() => DataManifestParser.Parse(bytes)).Code);
+    }
+
+    [Fact]
+    public void ParsesVersionTwoManifestWithRequiredRelations()
+    {
+        var json = ValidManifest
+            .Replace("\"schema_version\":1", "\"schema_version\":2", StringComparison.Ordinal)
+            .Replace(
+                "\n  ],\n  \"totals\"",
+                """
+                ,
+                    {
+                      "kind":"relations",
+                      "file_name":"bangumi-relations-v2-000001-000100.jsonl.gz",
+                      "url":"https://github.com/example/AnimeGoNetData/releases/download/2026.07.29.1/bangumi-relations-v2-000001-000100.jsonl.gz",
+                      "size_bytes":512,
+                      "sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                      "record_count":12,
+                      "subject_id_min":1,
+                      "subject_id_max":100
+                    }
+                  ],
+                  "totals"
+                """,
+                StringComparison.Ordinal)
+            .Replace(
+                "\"subjects\":100,\"episodes\":1200}",
+                "\"subjects\":100,\"episodes\":1200,\"relations\":12}",
+                StringComparison.Ordinal);
+
+        var manifest = DataManifestParser.Parse(Encoding.UTF8.GetBytes(json));
+
+        Assert.Equal(2, manifest.SchemaVersion);
+        Assert.Equal(12, manifest.RelationCount);
+        Assert.Equal(DataAssetKind.Relations, manifest.Assets[^1].Kind);
+    }
+
+    [Fact]
+    public void VersionTwoWithoutRelationsIsRejected()
+    {
+        var json = ValidManifest.Replace(
+            "\"schema_version\":1",
+            "\"schema_version\":2",
+            StringComparison.Ordinal);
+
+        Assert.Equal(
+            "data_manifest_relation_asset_missing",
+            Assert.Throws<DataManifestException>(() =>
+                DataManifestParser.Parse(Encoding.UTF8.GetBytes(json))).Code);
     }
 
     private const string ValidManifest = """

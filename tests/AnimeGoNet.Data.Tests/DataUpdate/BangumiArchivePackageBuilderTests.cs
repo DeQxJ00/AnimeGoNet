@@ -29,7 +29,8 @@ public sealed class BangumiArchivePackageBuilderTests
 
             Assert.Equal(3, result.Manifest.SubjectCount);
             Assert.Equal(3, result.Manifest.EpisodeCount);
-            Assert.Equal(5, result.Manifest.Assets.Count);
+            Assert.Equal(2, result.Manifest.RelationCount);
+            Assert.Equal(7, result.Manifest.Assets.Count);
             foreach (var asset in result.Manifest.Assets)
             {
                 Assert.True(File.Exists(Path.Combine(output, asset.FileName)));
@@ -44,6 +45,7 @@ public sealed class BangumiArchivePackageBuilderTests
             Assert.Equal(result.Manifest.Assets, parsedManifest.Assets);
             Assert.Equal(result.Manifest.SubjectCount, parsedManifest.SubjectCount);
             Assert.Equal(result.Manifest.EpisodeCount, parsedManifest.EpisodeCount);
+            Assert.Equal(result.Manifest.RelationCount, parsedManifest.RelationCount);
 
             var subjectLines = await ReadAssetsAsync(
                 output,
@@ -51,6 +53,9 @@ public sealed class BangumiArchivePackageBuilderTests
             var episodeLines = await ReadAssetsAsync(
                 output,
                 result.Manifest.Assets.Where(asset => asset.Kind == DataAssetKind.Episodes));
+            var relationLines = await ReadAssetsAsync(
+                output,
+                result.Manifest.Assets.Where(asset => asset.Kind == DataAssetKind.Relations));
             Assert.Equal([2, 3, 4], subjectLines.Select(line => line.GetProperty("id").GetInt32()).ToArray());
             Assert.Equal([20, 21, 30], episodeLines.Select(line => line.GetProperty("id").GetInt32()).ToArray());
             var subjectIds = subjectLines
@@ -64,6 +69,9 @@ public sealed class BangumiArchivePackageBuilderTests
             Assert.Equal(JsonValueKind.Null, episodeLines[1].GetProperty("air_date").ValueKind);
             Assert.Equal(2, subjectLines[0].GetProperty("episode_count").GetInt32());
             Assert.Equal(0, subjectLines[2].GetProperty("episode_count").GetInt32());
+            Assert.Equal([2, 3], relationLines.Select(line => line.GetProperty("subject_id").GetInt32()).ToArray());
+            Assert.Equal([3, 2], relationLines.Select(line => line.GetProperty("related_subject_id").GetInt32()).ToArray());
+            Assert.Equal([3, 2], relationLines.Select(line => line.GetProperty("relation_type").GetInt32()).ToArray());
 
             using (var package = ZipFile.OpenRead(result.OfflinePackagePath))
             {
@@ -111,6 +119,11 @@ public sealed class BangumiArchivePackageBuilderTests
             Assert.Equal(3, imported.EpisodeCount);
             Assert.True(snapshot.HasCompleteEpisodeSet);
             Assert.Equal([1.5m, 2m], snapshot.Episodes.Select(episode => episode.EpisodeNumber).ToArray());
+            var relations = Assert.IsAssignableFrom<IReadOnlyList<AnimeGoNet.Core.Metadata.BangumiSubjectRelation>>(
+                await new BangumiArchiveStore(database.Database).GetRelatedSubjectsAsync(3));
+            var prequel = Assert.Single(relations);
+            Assert.Equal(2, prequel.Id);
+            Assert.Equal("前传", prequel.Relation);
         }
         finally
         {
@@ -287,6 +300,7 @@ public sealed class BangumiArchivePackageBuilderTests
         Assert.Contains("cron: '0 23 * * *'", workflow, StringComparison.Ordinal);
         Assert.Contains("--minimum-subject-count 30000", workflow, StringComparison.Ordinal);
         Assert.Contains("--minimum-episode-count 300000", workflow, StringComparison.Ordinal);
+        Assert.Contains("--minimum-relation-count 10000", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
         Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_DATA_REPOSITORY", workflow, StringComparison.Ordinal);
@@ -325,6 +339,10 @@ public sealed class BangumiArchivePackageBuilderTests
                     archive,
                     "episode.jsonlines",
                     "{\"id\":1,\"type\":0,\"subject_id\":1,\"sort\":1,\"airdate\":null}");
+                await WriteEntryAsync(
+                    archive,
+                    "subject-relations.jsonlines",
+                    "{\"subject_id\":1,\"related_subject_id\":1,\"relation_type\":2,\"order\":0}");
             }
             var output = Path.Combine(root, "package");
             var hash = await Sha256Async(archivePath);
@@ -380,19 +398,26 @@ public sealed class BangumiArchivePackageBuilderTests
             {"id":31,"type":1,"subject_id":3,"sort":1,"airdate":"2024-02-01"}
             {"id":20,"type":0,"subject_id":2,"sort":2,"airdate":"2024-01-08"}
             {"id":30,"type":0,"subject_id":3,"sort":1,"airdate":"2024-02-01"}
+            """,
+            """
+            {"subject_id":3,"related_subject_id":2,"relation_type":2,"order":1}
+            {"subject_id":2,"related_subject_id":3,"relation_type":3,"order":0}
+            {"subject_id":1,"related_subject_id":2,"relation_type":2,"order":0}
             """);
     }
 
     private static async Task<string> WriteArchiveAsync(
         string root,
         string subjects,
-        string episodes)
+        string episodes,
+        string relations = "{\"subject_id\":1,\"related_subject_id\":1,\"relation_type\":2,\"order\":0}")
     {
         var path = Path.Combine(root, "dump-fixture.zip");
         await using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
         using var archive = new ZipArchive(file, ZipArchiveMode.Create, leaveOpen: true);
         await WriteEntryAsync(archive, "subject.jsonlines", subjects);
         await WriteEntryAsync(archive, "episode.jsonlines", episodes);
+        await WriteEntryAsync(archive, "subject-relations.jsonlines", relations);
         await WriteEntryAsync(archive, "person.jsonlines", "{\"id\":1}\n");
         return path;
     }

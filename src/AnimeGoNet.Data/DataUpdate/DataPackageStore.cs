@@ -58,6 +58,7 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
             var runId = Guid.NewGuid().ToString("N");
             long subjectCount = 0;
             long episodeCount = 0;
+            long relationCount = 0;
             await StartRunAsync(
                 runId,
                 "import",
@@ -92,14 +93,19 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
                     {
                         subjectCount = checked(subjectCount + imported);
                     }
-                    else
+                    else if (asset.Kind == DataAssetKind.Episodes)
                     {
                         episodeCount = checked(episodeCount + imported);
+                    }
+                    else
+                    {
+                        relationCount = checked(relationCount + imported);
                     }
                 }
 
                 if (subjectCount != request.Manifest.SubjectCount
-                    || episodeCount != request.Manifest.EpisodeCount)
+                    || episodeCount != request.Manifest.EpisodeCount
+                    || relationCount != request.Manifest.RelationCount)
                 {
                     throw Error(
                         "data_package_total_count_mismatch",
@@ -440,6 +446,26 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
         {
             throw Error("data_manifest_sha256_invalid", "The manifest SHA-256 is invalid.");
         }
+        if (request.Manifest.SchemaVersion is < DataManifestParser.MinimumSupportedSchemaVersion
+            or > DataManifestParser.CurrentSchemaVersion)
+        {
+            throw Error(
+                "data_manifest_schema_unsupported",
+                "The data package schema is not supported.");
+        }
+        var declaredRelations = request.Manifest.Assets
+            .Where(asset => asset.Kind == DataAssetKind.Relations)
+            .Sum(asset => asset.RecordCount);
+        if ((request.Manifest.SchemaVersion == 1
+                && (declaredRelations != 0 || request.Manifest.RelationCount != 0))
+            || (request.Manifest.SchemaVersion >= 2
+                && (declaredRelations <= 0
+                    || declaredRelations != request.Manifest.RelationCount)))
+        {
+            throw Error(
+                "data_manifest_relation_assets_invalid",
+                "The data package relation assets do not match its schema.");
+        }
         if (Version.Parse(request.Manifest.MinimumClientVersion) > request.ClientVersion)
         {
             throw Error(
@@ -536,6 +562,8 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
             await using var writer = new StagingWriter(connection, runId, asset.Kind);
             long count = 0;
             var previousId = 0;
+            (int SubjectId, int Order, int RelatedSubjectId, int RelationType)?
+                previousRelation = null;
             await ReadJsonLinesAsync(
                 gzip,
                 async line =>
@@ -567,7 +595,7 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
                         previousId = subject.Id;
                         await writer.InsertSubjectAsync(subject, cancellationToken).ConfigureAwait(false);
                     }
-                    else
+                    else if (asset.Kind == DataAssetKind.Episodes)
                     {
                         var episode = ParseEpisode(line);
                         if (episode.SubjectId < asset.SubjectIdMin
@@ -585,6 +613,32 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
                         }
                         previousId = episode.Id;
                         await writer.InsertEpisodeAsync(episode, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var relation = ParseRelation(line);
+                        if (relation.SubjectId < asset.SubjectIdMin
+                            || relation.SubjectId > asset.SubjectIdMax)
+                        {
+                            throw Error(
+                                "data_asset_subject_range_invalid",
+                                "A relation source is outside the asset Subject ID range.");
+                        }
+                        var key = (
+                            relation.SubjectId,
+                            relation.Order,
+                            relation.RelatedSubjectId,
+                            relation.RelationType);
+                        if (previousRelation is { } previous
+                            && key.CompareTo(previous) <= 0)
+                        {
+                            throw Error(
+                                "data_asset_order_invalid",
+                                "Relation records are not strictly ordered.");
+                        }
+                        previousRelation = key;
+                        await writer.InsertRelationAsync(relation, cancellationToken)
+                            .ConfigureAwait(false);
                     }
                 },
                 cancellationToken).ConfigureAwait(false);
@@ -723,6 +777,17 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
             RequiredPositiveInt(root, "sort"),
             episode,
             RequiredNullableDate(root, "air_date"));
+    }
+
+    private static RelationRow ParseRelation(ReadOnlyMemory<byte> line)
+    {
+        using var document = ParseRecord(line);
+        var root = document.RootElement;
+        return new RelationRow(
+            RequiredPositiveInt(root, "subject_id"),
+            RequiredPositiveInt(root, "related_subject_id"),
+            RequiredPositiveInt(root, "relation_type"),
+            RequiredNonNegativeInt(root, "order"));
     }
 
     private static JsonDocument ParseRecord(ReadOnlyMemory<byte> line)
@@ -883,6 +948,17 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
                  AND subject.subject_id = episode.subject_id
                 WHERE episode.run_id = $run_id
                   AND subject.subject_id IS NULL
+            ) OR EXISTS (
+                SELECT 1
+                FROM data_update_staging_relations AS relation
+                LEFT JOIN data_update_staging_subjects AS source
+                  ON source.run_id = relation.run_id
+                 AND source.subject_id = relation.subject_id
+                LEFT JOIN data_update_staging_subjects AS target
+                  ON target.run_id = relation.run_id
+                 AND target.subject_id = relation.related_subject_id
+                WHERE relation.run_id = $run_id
+                  AND (source.subject_id IS NULL OR target.subject_id IS NULL)
             );
             """;
         command.Parameters.AddWithValue("$run_id", runId);
@@ -892,7 +968,7 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
         {
             throw Error(
                 "data_package_subject_reference_missing",
-                "An episode references a Subject that is not present in the package.");
+                "An episode or relation references a Subject that is not present in the package.");
         }
     }
 
@@ -1034,6 +1110,14 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
             SELECT $version, episode_id, subject_id, sort_number, episode_number, air_date
             FROM data_update_staging_episodes
             WHERE run_id = $run_id;
+
+            INSERT INTO bangumi_archive_subject_relations (
+                data_version, subject_id, related_subject_id,
+                relation_type, relation_order)
+            SELECT $version, subject_id, related_subject_id,
+                   relation_type, relation_order
+            FROM data_update_staging_relations
+            WHERE run_id = $run_id;
             """;
         command.Parameters.AddWithValue("$version", version);
         command.Parameters.AddWithValue("$run_id", runId);
@@ -1049,6 +1133,7 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
+            DELETE FROM data_update_staging_relations WHERE run_id = $run_id;
             DELETE FROM data_update_staging_episodes WHERE run_id = $run_id;
             DELETE FROM data_update_staging_subjects WHERE run_id = $run_id;
             """;
@@ -1391,6 +1476,12 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
         string Episode,
         string? AirDate);
 
+    private sealed record RelationRow(
+        int SubjectId,
+        int RelatedSubjectId,
+        int RelationType,
+        int Order);
+
     private sealed class StagingWriter : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -1454,6 +1545,37 @@ public sealed class DataPackageStore(AnimeGoSqliteDatabase database) : IDisposab
             command.Parameters.AddWithValue("$sort", row.Sort);
             command.Parameters.AddWithValue("$episode", row.Episode);
             command.Parameters.AddWithValue("$air_date", (object?)row.AirDate ?? DBNull.Value);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await AfterInsertAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public async ValueTask InsertRelationAsync(
+            RelationRow row,
+            CancellationToken cancellationToken)
+        {
+            if (_kind != DataAssetKind.Relations)
+            {
+                throw new InvalidOperationException(
+                    "Relation inserted through a non-relation writer.");
+            }
+            await EnsureTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = _connection.CreateCommand();
+            command.Transaction = _transaction;
+            command.CommandText = """
+                INSERT INTO data_update_staging_relations (
+                    run_id, subject_id, related_subject_id,
+                    relation_type, relation_order)
+                VALUES (
+                    $run_id, $subject_id, $related_subject_id,
+                    $relation_type, $relation_order);
+                """;
+            command.Parameters.AddWithValue("$run_id", _runId);
+            command.Parameters.AddWithValue("$subject_id", row.SubjectId);
+            command.Parameters.AddWithValue(
+                "$related_subject_id",
+                row.RelatedSubjectId);
+            command.Parameters.AddWithValue("$relation_type", row.RelationType);
+            command.Parameters.AddWithValue("$relation_order", row.Order);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             await AfterInsertAsync(cancellationToken).ConfigureAwait(false);
         }

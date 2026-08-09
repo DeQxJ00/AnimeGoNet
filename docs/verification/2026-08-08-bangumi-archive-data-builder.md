@@ -24,7 +24,7 @@ before starting the builder.
 - writes each Episode asset in strict Episode-ID order required by the importer,
   while preserving the separately calculated per-Subject episode ordering;
 - shards Subjects and their Episodes by Subject range, writes LF-only UTF-8
-  JSONL.gz, then records size, count, range and SHA-256 in schema-v1 manifest;
+  JSONL.gz, then records size, count, range and SHA-256 in the versioned manifest;
 - parses its own manifest through the production `DataManifestParser`;
 - creates a strict offline ZIP containing only `manifest.json` and declared
   assets, with a fixed timestamp and byte-identical output for identical input;

@@ -106,4 +106,34 @@ public sealed class BangumiArchiveStoreTests
 
         Assert.False(snapshot.HasCompleteEpisodeSet);
     }
+
+    [Fact]
+    public async Task VersionTwoRelationsAreAuthoritativeIncludingEmptyResults()
+    {
+        await using var fixture = await DataPackageTestFixture.CreateAsync();
+        await fixture.Store.ImportAsync(await fixture.CreateRequestAsync(
+            "2026.07.29.2",
+            schemaVersion: 2));
+        var store = new BangumiArchiveStore(fixture.Database);
+
+        var airRelations = Assert.IsAssignableFrom<IReadOnlyList<AnimeGoNet.Core.Metadata.BangumiSubjectRelation>>(
+            await store.GetRelatedSubjectsAsync(52));
+        var prequel = Assert.Single(airRelations);
+        Assert.Equal(51, prequel.Id);
+        Assert.Equal("CLANNAD", prequel.Name);
+        Assert.Equal("前传", prequel.Relation);
+        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<AnimeGoNet.Core.Metadata.BangumiSubjectRelation>>(
+            await store.GetRelatedSubjectsAsync(51)));
+    }
+
+    [Fact]
+    public async Task VersionOneRelationsAreCacheMissForOnlineFallback()
+    {
+        await using var fixture = await DataPackageTestFixture.CreateAsync();
+        await fixture.Store.ImportAsync(
+            await fixture.CreateRequestAsync("2026.07.29.1"));
+
+        Assert.Null(await new BangumiArchiveStore(fixture.Database)
+            .GetRelatedSubjectsAsync(51));
+    }
 }

@@ -74,6 +74,7 @@ jobs:
             --generated-at-utc '${{ steps.archive.outputs.generated_at }}' \
             --minimum-subject-count 30000 \
             --minimum-episode-count 300000
+            --minimum-relation-count 10000
       - uses: actions/upload-artifact@v4
         with:
           name: animegonet-data-${{ steps.archive.outputs.data_version }}

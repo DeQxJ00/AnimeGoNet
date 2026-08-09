@@ -60,6 +60,82 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
             episodes);
     }
 
+    public async Task<IReadOnlyList<BangumiSubjectRelation>?> GetRelatedSubjectsAsync(
+        int subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        if (subjectId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(subjectId),
+                "Bangumi subject id must be positive.");
+        }
+
+        await using var connection = await database
+            .OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        string? dataVersion;
+        await using (var support = connection.CreateCommand())
+        {
+            support.Transaction = transaction;
+            support.CommandText = """
+                SELECT version.data_version
+                FROM data_update_state AS state
+                JOIN data_update_versions AS version
+                  ON version.data_version = state.active_version
+                JOIN bangumi_archive_subjects AS subject
+                  ON subject.data_version = version.data_version
+                 AND subject.subject_id = $subject_id
+                WHERE state.singleton = 1
+                  AND version.schema_version >= 2;
+                """;
+            support.Parameters.AddWithValue("$subject_id", subjectId);
+            dataVersion = await support.ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false) as string;
+        }
+        if (dataVersion is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var relations = new List<BangumiSubjectRelation>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT relation.related_subject_id, target.name, target.name_cn,
+                       relation.relation_type
+                FROM bangumi_archive_subject_relations AS relation
+                JOIN bangumi_archive_subjects AS target
+                  ON target.data_version = relation.data_version
+                 AND target.subject_id = relation.related_subject_id
+                WHERE relation.data_version = $data_version
+                  AND relation.subject_id = $subject_id
+                ORDER BY relation.relation_order, relation.related_subject_id,
+                         relation.relation_type;
+                """;
+            command.Parameters.AddWithValue("$data_version", dataVersion);
+            command.Parameters.AddWithValue("$subject_id", subjectId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                relations.Add(new BangumiSubjectRelation(
+                    reader.GetInt32(0),
+                    Type: 2,
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                    RelationName(reader.GetInt32(3))));
+            }
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return relations;
+    }
+
     private static async Task<(string DataVersion, BangumiSubject Subject)?>
         ReadSubjectAsync(
             SqliteConnection connection,
@@ -149,4 +225,22 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
             "yyyy-MM-dd",
             CultureInfo.InvariantCulture,
             DateTimeStyles.None);
+
+    private static string RelationName(int relationType) => relationType switch
+    {
+        1 => "改编",
+        2 => "前传",
+        3 => "续集",
+        4 => "总集篇",
+        5 => "全集",
+        6 => "番外篇",
+        7 => "角色出演",
+        8 => "相同世界观",
+        9 => "不同世界观",
+        10 => "不同演绎",
+        11 => "衍生",
+        12 => "主线故事",
+        14 => "联动",
+        _ => "其他",
+    };
 }

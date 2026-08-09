@@ -144,6 +144,53 @@ public sealed class DataPackageStoreTests
     }
 
     [Fact]
+    public async Task VersionTwoImportsRelationsAndClearsRelationStaging()
+    {
+        await using var fixture = await DataPackageTestFixture.CreateAsync();
+        var request = await fixture.CreateRequestAsync(
+            "2026.07.29.2",
+            schemaVersion: 2);
+
+        await fixture.Store.ImportAsync(request);
+
+        await using var connection = await OpenAsync(fixture);
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM bangumi_archive_subject_relations
+                 WHERE data_version = '2026.07.29.2'),
+                (SELECT COUNT(*) FROM data_update_staging_relations);
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1, reader.GetInt32(0));
+        Assert.Equal(0, reader.GetInt32(1));
+    }
+
+    [Theory]
+    [InlineData(99, 51)]
+    [InlineData(52, 99)]
+    public async Task RelationSubjectReferencesMustExistInSameVersion(
+        int subjectId,
+        int relatedSubjectId)
+    {
+        await using var fixture = await DataPackageTestFixture.CreateAsync();
+        var request = await fixture.CreateRequestAsync(
+            "2026.07.29.2",
+            schemaVersion: 2,
+            relations: $$"""
+                {"subject_id":{{subjectId}},"related_subject_id":{{relatedSubjectId}},"relation_type":2,"order":0}
+
+                """);
+
+        var exception = await Assert.ThrowsAsync<DataPackageException>(() =>
+            fixture.Store.ImportAsync(request));
+
+        Assert.Equal("data_package_subject_reference_missing", exception.Code);
+        await AssertStagingEmptyAsync(fixture);
+    }
+
+    [Fact]
     public async Task ChecksumMismatchFailsBeforeDecompression()
     {
         await using var fixture = await DataPackageTestFixture.CreateAsync();
@@ -365,11 +412,13 @@ public sealed class DataPackageStoreTests
         command.CommandText = """
             SELECT
                 (SELECT COUNT(*) FROM data_update_staging_subjects),
-                (SELECT COUNT(*) FROM data_update_staging_episodes);
+                (SELECT COUNT(*) FROM data_update_staging_episodes),
+                (SELECT COUNT(*) FROM data_update_staging_relations);
             """;
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         Assert.Equal(0, reader.GetInt32(0));
         Assert.Equal(0, reader.GetInt32(1));
+        Assert.Equal(0, reader.GetInt32(2));
     }
 }

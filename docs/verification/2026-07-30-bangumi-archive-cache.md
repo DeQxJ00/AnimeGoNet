@@ -18,8 +18,11 @@ Archive。
   长期遮蔽新播 Episode。
 - Archive Episode 是数据生产阶段已清洗的普通 Episode，读取时明确投影为
   `type=0`；小数 Episode 原样保留，不会变成普通整数候选。
-- 关系数据未包含在 Archive schema 中，继续调用在线
-  `/v0/subjects/{bgmid}/subjects`。
+- schema v2 包含经过引用完整性校验的 `subject-relations.jsonlines` 关系。
+  活动 v2 对已知 Subject 的关系结果（包括空列表）具有权威性，P3 可离线读取
+  `relation_type=2` 的“前传”；活动 v1 因没有关系证据，仍调用配置的 Bangumi API。
+- 离线 P3 仅替代 Bangumi 关系/Subject 读取；每个回溯候选最终的 TMDB
+  Series/Season/Episode 验证仍访问配置的 TMDB API，不能把关系数据当成 TMDB 命中。
 - 活动版本切换和 rollback 每次读取都重新解析 SQLite 指针，无进程级陈旧缓存，
   不需要重启。
 - 只有主程序创建的真实 Bangumi 客户端被包装；测试或显式注入的客户端保持原

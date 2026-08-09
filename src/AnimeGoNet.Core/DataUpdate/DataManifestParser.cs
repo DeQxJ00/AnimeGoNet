@@ -6,7 +6,8 @@ namespace AnimeGoNet.Core.DataUpdate;
 
 public static partial class DataManifestParser
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
+    public const int MinimumSupportedSchemaVersion = 1;
     public const int MaximumManifestBytes = 1024 * 1024;
     public const long MaximumAssetBytes = 8L * 1024 * 1024 * 1024;
     public const int MaximumAssets = 4096;
@@ -46,7 +47,7 @@ public static partial class DataManifestParser
     {
         RequireObject(root);
         var schemaVersion = RequiredInt32(root, "schema_version");
-        if (schemaVersion != CurrentSchemaVersion)
+        if (schemaVersion is < MinimumSupportedSchemaVersion or > CurrentSchemaVersion)
         {
             throw Error("data_manifest_schema_unsupported", "Data manifest schema is not supported.");
         }
@@ -80,6 +81,7 @@ public static partial class DataManifestParser
         var fileNames = new HashSet<string>(StringComparer.Ordinal);
         long subjectCount = 0;
         long episodeCount = 0;
+        long relationCount = 0;
         foreach (var element in assetsElement.EnumerateArray())
         {
             RequireObject(element);
@@ -88,6 +90,7 @@ public static partial class DataManifestParser
             {
                 "subjects" => DataAssetKind.Subjects,
                 "episodes" => DataAssetKind.Episodes,
+                "relations" when schemaVersion >= 2 => DataAssetKind.Relations,
                 _ => throw Error("data_manifest_asset_kind_invalid", "Data asset kind is invalid."),
             };
             var fileName = RequiredString(element, "file_name", 256);
@@ -120,9 +123,13 @@ public static partial class DataManifestParser
             {
                 subjectCount = checked(subjectCount + recordCount);
             }
-            else
+            else if (kind == DataAssetKind.Episodes)
             {
                 episodeCount = checked(episodeCount + recordCount);
+            }
+            else
+            {
+                relationCount = checked(relationCount + recordCount);
             }
         }
 
@@ -130,11 +137,24 @@ public static partial class DataManifestParser
         {
             throw Error("data_manifest_asset_kind_missing", "Both subject and episode assets are required.");
         }
+        if (schemaVersion >= 2 && relationCount == 0)
+        {
+            throw Error(
+                "data_manifest_relation_asset_missing",
+                "Schema v2 requires at least one relation asset.");
+        }
         var totals = RequiredProperty(root, "totals", JsonValueKind.Object);
         if (RequiredInt64(totals, "subjects") != subjectCount
             || RequiredInt64(totals, "episodes") != episodeCount)
         {
             throw Error("data_manifest_totals_mismatch", "Data manifest totals do not match assets.");
+        }
+        if (schemaVersion >= 2
+            && RequiredInt64(totals, "relations") != relationCount)
+        {
+            throw Error(
+                "data_manifest_totals_mismatch",
+                "Data manifest totals do not match assets.");
         }
 
         return new DataManifest(
@@ -145,7 +165,10 @@ public static partial class DataManifestParser
             upstream,
             assets,
             subjectCount,
-            episodeCount);
+            episodeCount)
+        {
+            RelationCount = relationCount,
+        };
     }
 
     private static JsonElement RequiredProperty(
