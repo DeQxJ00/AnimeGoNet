@@ -11,6 +11,7 @@ public sealed class DockerQbittorrentIntegrationContractTests
     {
         var root = RepositoryRoot();
         var dockerfile = await File.ReadAllTextAsync(Path.Combine(root, "Dockerfile.animegonet"));
+        var dockerignore = await File.ReadAllTextAsync(Path.Combine(root, ".dockerignore"));
         var compose = await File.ReadAllTextAsync(Path.Combine(root, "docker-compose.animegonet.yml"));
         var smoke = await File.ReadAllTextAsync(Path.Combine(root, "eng", "smoke-container.sh"));
         var workflow = await File.ReadAllTextAsync(Path.Combine(
@@ -28,6 +29,7 @@ public sealed class DockerQbittorrentIntegrationContractTests
             "COPY docs/TMDB_AI_MATCH_PROMPT.md docs/TMDB_AI_MATCH_PROMPT.md",
             dockerfile,
             StringComparison.Ordinal);
+        Assert.Contains("!tests/AnimeGoNet.ContainerE2EFixture/**", dockerignore, StringComparison.Ordinal);
         Assert.Contains("user: \"${PUID:-1000}:${PGID:-1000}\"", compose, StringComparison.Ordinal);
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
         Assert.Contains("- /tmp", compose, StringComparison.Ordinal);
