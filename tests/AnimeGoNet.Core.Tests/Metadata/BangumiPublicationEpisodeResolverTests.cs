@@ -22,7 +22,7 @@ public sealed class BangumiPublicationEpisodeResolverTests
     }
 
     [Fact]
-    public void EqualDistancePrefersEpisodeNotLaterThanPublication()
+    public void FutureEpisodeIsExcludedEvenWhenEquallyClose()
     {
         BangumiEpisode[] episodes =
         [
@@ -38,7 +38,15 @@ public sealed class BangumiPublicationEpisodeResolverTests
     }
 
     [Fact]
-    public void ExcludesSpecialFractionalMissingAndUnreasonableEpisodes()
+    public void FutureEpisodeIsNeverSelected()
+    {
+        Assert.Null(BangumiPublicationEpisodeResolver.SelectClosest(
+            [new BangumiEpisode(1, 0, 4, new DateOnly(2026, 7, 27))],
+            new DateTimeOffset(2026, 7, 26, 12, 0, 0, TimeSpan.FromHours(8))));
+    }
+
+    [Fact]
+    public void ExcludesSpecialFractionalAndMissingButHasNoTorrentDelayWindow()
     {
         BangumiEpisode[] episodes =
         [
@@ -48,9 +56,11 @@ public sealed class BangumiPublicationEpisodeResolverTests
             new(4, 0, 9, new DateOnly(2026, 5, 1)),
         ];
 
-        Assert.Null(BangumiPublicationEpisodeResolver.SelectClosest(
-            episodes,
-            new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.FromHours(8))));
+        Assert.Equal(
+            9,
+            BangumiPublicationEpisodeResolver.SelectClosest(
+                episodes,
+                new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.FromHours(8))));
     }
 
     [Fact]

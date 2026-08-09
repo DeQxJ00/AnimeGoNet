@@ -240,8 +240,11 @@ advanced:
 确定性流程已确认 Series/Season 后，先执行普通 Episode 校验：
 
 1. 在已确认的 TMDB Season 中读取完整 Episode 列表。P4/P3 的日期候选只用于选定季度，成功前必须再请求官方 `/tv/{series}/season/{season}` endpoint；该响应的完整普通 Episode snapshot 与季度投影在同一事务保存。待补全 TMDB 的人工恢复同样使用已验证 Season 响应保存 snapshot，不能用 `episode_count` 自行生成不存在的 Episode。
-2. 若与 `SourceEpisodeNumber` 同号的 TMDB Episode 存在，且 Bgm/文件名标题、首播日期没有冲突，则直接采用该 TMDB Episode。
-3. 同号不存在或存在冲突时，使用内部取得的 Bgm Episode 标题/日期在同一 TMDB Season 内做确定性匹配；这些详情不发送给 AI。
+2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，优先用单集首播日期确定对应关系。来源集号同时匹配 Bangumi 普通 Episode 的局部 `ep` 与全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 只允许 `±1` 个日历日的时区误差，并且必须得到唯一最近候选；日期缺失、超过范围或并列无法消歧时都不猜测。候选随后仍须通过 TMDB Episode endpoint 验证 Series/Season/Episode 身份。
+3. Torrent `published_at` 不属于上述 `±1` 天校验，不作为确定性 EP 通过/拒绝条件，也不用于替代 Bangumi 单集首播日期。它仅在 Mikan 的统一 AI 输入中保留为辅助参数。
+4. 日期映射成功时使用 `tmdb_episode_bangumi_date` 记录策略。它可以把来源 EP 6 映射到 TMDB EP 56，也可以用 Bangumi `sort=45` 映射 TMDB S02E21，因此不能先因 TMDB 中存在同号来源 EP 就直接接受。
+5. 非 Mikan、没有 `bgmid`、无法取得唯一 Bangumi Episode，或日期证据不能可靠消歧时，才检查与 `SourceEpisodeNumber` 同号的 TMDB Episode；不存在标题/日期冲突时可采用并记录 `tmdb_episode_number`。
+6. 仍无法确定时进入同一个任务级 AI 元数据流程（仅在开关开启且此前未调用时）；AI 结果必须再次验证完整 TMDB Series/Season/Episode。AI 未启用、已尝试或验证失败时进入已确认季度的 `Other`，不得把来源集号伪装成 TMDB EP。
 4. 仍有文件无法对应、`ai_use_metadata_match=true` 且该任务此前没有尝试过 AI 时，使用任务总标题和完整候选视频列表发起同一任务级 AI 请求。
 5. AI 必须返回与已确认值相同的 `tmdb_id` 和 `season_number`，且目标 Episode 必须存在；AI 试图更换 Series/Season 时拒绝。
 6. 开关关闭、该任务已尝试 AI、AI 失败或 TMDB 二次验证失败时进入 `EpisodeUnmatched`，不得退回来源 EP；普通季度已确认时按 `Other` 规则整理，季度未知时不移动。
@@ -257,7 +260,7 @@ passkey、announce、info-hash、暂存字节、route snapshot、Cookie、Author
 会在输入 record 新增字段时失败，统一导入 E2E 另从 SQLite 读取实际 URL fingerprint，
 验证 URL、passkey 和 fingerprint 均不出现在 matcher 输入或最终 Prompt。
 
-Mikan RSS 可在统一 AI Prompt 中增加单文件发布日期优先分支。配置开关开启后，主程序仍只在 Torrent 实际文件条目数恰好为1、`bgmid` 和合法内部 `pubDate` 同时存在且没有命中更高优先级人工 Episode Offset 时尝试计算；Torrent单文件模式和根目录下仅一个文件均满足，目录节点不计数，但字幕、图片及已标记为 ignored/duplicate 的实际文件条目都计数。`pubDate` 无时区时按 Mikan SourceProfile 默认 `Asia/Shanghai` 解析。主程序从该 Subject 的普通正整数 Episode 中找到播出日期最接近且相差不超过31日者并写入 `bgm_episode_candidate`；同距优先不晚于发布日期，再按集号/ID稳定排序。查询失败、候选为空或超出窗口时最终门禁保持 false。门禁为 true 时，Prompt 直接把该候选与文件名解析EP用于定向查询TMDB。两个来源集号都不能复制为TMDB Episode Number，最终结果仍须TMDB验证；优先分支失败时继续原通用AI流程。
+Mikan RSS 可在统一 AI Prompt 中增加单文件发布日期提示。配置开关开启后，主程序仍只在 Torrent 实际文件条目数恰好为1、`bgmid` 和合法内部 `pubDate` 同时存在且没有命中更高优先级人工 Episode Offset 时尝试计算；Torrent单文件模式和根目录下仅一个文件均满足，目录节点不计数，但字幕、图片及已标记为 ignored/duplicate 的实际文件条目都计数。`pubDate` 无时区时按 Mikan SourceProfile 默认 `Asia/Shanghai` 解析。主程序可从在该发布时间之前已经播出的 Bangumi 普通正整数 Episode 中选取最近项，写入 `bgm_episode_candidate` 供 AI 参考，但不设置 Torrent 发布延迟的通过/拒绝窗口，也不以该候选直接确认 TMDB 集号。查询失败或候选为空时最终门禁保持 false，继续原通用 AI 流程；门禁为 true 时，Prompt 也只能把该候选和文件名集号当作辅助证据，最终 Series、Season、Episode 仍须 TMDB 验证。
 
 AI 和确定性匹配均不接受 Season 0。Series 和大于0的普通季度已经确认、但 Episode 无法确认时，不用来源集号冒充 TMDB Episode；该文件保留原名进入 `<TmdbSeriesName>/Sxx/Other/`，并保存未匹配原因。季度也无法确认时保留在下载目录，等待重试或人工处理。多文件任务中的其他已验证文件可以正常落盘。
 

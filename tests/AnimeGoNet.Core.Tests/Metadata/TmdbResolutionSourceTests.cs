@@ -16,6 +16,7 @@ public sealed class TmdbResolutionSourceTests
         { TmdbResolutionSource.TrustedMikanOffset, "trusted_mikan_offset" },
         { TmdbResolutionSource.ManualMikanOffset, "manual_mikan_offset" },
         { TmdbResolutionSource.TmdbEpisodeNumber, "tmdb_episode_number" },
+        { TmdbResolutionSource.TmdbEpisodeBangumiDate, "tmdb_episode_bangumi_date" },
         { TmdbResolutionSource.SubtitleAssociation, "subtitle_association" },
     };
 

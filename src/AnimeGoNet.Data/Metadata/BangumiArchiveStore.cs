@@ -110,7 +110,7 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT episode_id, episode_number, air_date
+            SELECT episode_id, episode_number, air_date, sort_number
             FROM bangumi_archive_episodes
             WHERE data_version = $data_version
               AND subject_id = $subject_id
@@ -133,7 +133,11 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
                     CultureInfo.InvariantCulture),
                 reader.IsDBNull(2)
                     ? null
-                    : ParseDate(reader.GetString(2))));
+                    : ParseDate(reader.GetString(2)),
+                decimal.Parse(
+                    reader.GetString(3),
+                    NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture)));
         }
 
         return episodes;

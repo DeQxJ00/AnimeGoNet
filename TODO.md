@@ -21,7 +21,7 @@
 - [x] 确认确定性季度失败策略：Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；AI 匹配是独立开关且默认 `false`，不占确定性优先级编号。
 - [x] 确认 AI 季度与 Episode 是同一任务级流程：一个开关、一个 Prompt、每个任务最多一次语义调用；确定性季度已成功但 EP 无法对应时，只有该任务从未尝试 AI 才能首次触发，默认 `false`。
 - [x] 确认 AI 不依赖具体输入站点；请求使用下载任务总标题、候选视频的相对文件名/字节容量，以及可空 `bgmid`/`anidbid`/`imdbid`，单文件和多文件使用同一基础契约。
-- [x] 确认 Mikan `pubDate` 优先查找仅在Torrent实际文件条目数恰好为1且有有效bgmid/pubDate时由固定Prompt启用；单文件模式和根目录下仅一个文件均满足，Bangumi最近EP不能直接决定TMDB集号。
+- [x] 确认 Mikan `pubDate` 仅作为统一 AI 的可选参数；可选 Bangumi 最近 EP 提示不能直接决定 TMDB 集号，Torrent 发布日期不设置通过/拒绝窗口。确定性日期校验只比较 Bangumi/TMDB 单集首播日期并允许 ±1 日。
 - [x] 确认非空元数据 ID 与当前任务标题和 Torrent 文件组存在作品级绑定，但跨站标题、季度拆分和 Episode 编号不要求一致，仅作辅助证据；具体 EP 仍须独立匹配并经 TMDB 验证。
 - [x] 确认 AI 工具顺序：本地 TMDB MCP始终启用，Bangumi MCP仅有 `bgmid` 时启用，AniDB映射仅有 `anidbid` 时启用，`imdbid` 通过 TMDB external ID 查询；MCP不足后才允许 Web Search。
 - [x] 确认 TMDB 匹配成功后，动画目录名、季度号和集号全部采用经 TMDB API 验证的值；来源名称/集号只保留用于审计。
@@ -110,7 +110,7 @@
 - [x] 实现 AnimeGoNet 新增的 `TMDBFailBacktrace` / `tmdb_fail_backtrace`（默认 `false`）：P3 需要 `bgmid`，并按每个 Bangumi 前作的日文名、中文名和开播日期重新联合搜索，可恢复不同 TMDB Series；多层、同层稳定排序、缺日期继续、visited 防环、成功早停和错误后继续低优先级策略均已覆盖。受控 loopback 同时验证 Bangumi 503 与 TMDB 429 重试、二级前作、完整 Series/Season endpoint 和请求次数。
 - [x] 实现统一 `ai_use_metadata_match`（默认 `false`）：一个共享解析器按下载任务发送总标题、候选视频相对文件名/字节容量及可空作品级 `bgmid`/`anidbid`/`imdbid`，一次返回整个文件列表的 TMDB Series/Season/Episode 映射；不得以跨站标题不一致否定任务绑定，也不得直接复制来源 EP。
 - [x] 季度与 Episode 阶段共用同一 AI 尝试门禁和 `ai_metadata` 审计；确定性季度成功后普通 EP 匹配失败可首次触发，季度阶段成功或失败尝试过 AI 后均禁止 Episode 阶段再次调用；历史 `ai_season`/`ai_episode` 记录仍能阻止重复调用。
-- [x] 实现 Mikan 单文件发布日期 Prompt 门禁和显式开关：保留完整 `pubDate`，无偏移时按 SourceProfile 时区解析；仅在实际 Torrent 文件条目数为 1、bgmid/日期有效且主程序成功计算 `bgm_episode_candidate` 时启用，日期候选失败安全回通用统一 AI 流程。
+- [x] 实现 Mikan 单文件发布日期 Prompt 提示和显式开关：保留完整 `pubDate`，无偏移时按 SourceProfile 时区解析；`published_at` 只在 Mikan AI 输入出现且不设日期拒绝窗口，可选 `bgm_episode_candidate` 失败时安全回通用统一 AI 流程。
 - [x] 同步 AI 测试程序：增加可编辑开关和手工 `bgm_episode_candidate`、只读有效门禁；覆盖两种单文件Torrent、实际多文件禁用、无bgmid/日期/候选禁用和优先分支失败回退。
 - [x] 使用固定 JSON 请求/响应 DTO 调用 OpenAI-compatible API；输入/输出结构、文件身份和结果完整性先校验，模型候选再由 TMDB Series/Season/Episode API 二次验证。
 - [x] 实现 AOT-safe 本地 Streamable HTTP MCP 客户端和 function-calling 工具循环；BGM/TMDB 工具使用命名空间，覆盖 JSON/SSE、session、工具 schema 缓存、超时、取消、响应上限和失败隔离。
@@ -238,6 +238,8 @@
 - [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
 
 ## P10 — 组合与发布
+
+- [>] 用 `测试数据.csv` 的 29 条真实 Mikan 输入执行可续跑的完整链路审计：隔离 qB、Mikan/TMDB/Bangumi 反代、统一导入、规则筛选、TMDB 映射、真实下载、move 整理和 AI 用量均写入不含凭据/URL 的逐次报告。第 2–3 行已完成真实下载与整理并 2/2 命中预期 `65942/S01/E056,E067`，AI 0 次/0 token；TMDB 连续季度编号冲突已由 Bangumi 播出日期映射修正。其余 27 条完成前保持进行中。
 
 - [x] 完成 Host DI 和 CLI 行为：固定上游 `cmd/animego` 的 `config/debug/web/backup` 四个开关与对应 `ANIMEGO_*` 环境别名均已审计；兼容 Go 单短横线及现代双横线，裸 bool 等价 true，非法值在创建运行目录前失败；debug 同时放开宿主与滚动文件 Debug 日志，`web=false` 使用无监听 `IServer` 保留后台 worker，`-h/-help/--help` 不启动宿主。五 RID NativeAOT workflow 验证 help 和 headless 零 TCP 监听。
 - [~] Docker NativeAOT 镜像功能已生成：双架构 Dockerfile、Buildx CI 和容器 smoke 均已建立；按用户要求 Docker 构建/运行标记为未验证，后续自行实跑。

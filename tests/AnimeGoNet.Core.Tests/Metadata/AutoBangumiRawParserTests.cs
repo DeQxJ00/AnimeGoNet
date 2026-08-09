@@ -65,6 +65,29 @@ public sealed class AutoBangumiRawParserTests
         Assert.Equal("accepted", result.Reason);
     }
 
+    [Fact]
+    public void CandidatePolicyAcceptsExplicitPositiveSeasonEpisodeExtension()
+    {
+        var result = FileEpisodeCandidateResolver.Resolve(
+            "mikan",
+            "[Nix-Raws] Youjo Senki S02E04 [1080p].mkv");
+
+        Assert.True(result.IsCandidate);
+        Assert.Equal(4, result.Episode);
+        Assert.Equal("accepted_season_episode_extension", result.Reason);
+    }
+
+    [Fact]
+    public void CandidatePolicyAcceptsSeasonMarkerFollowedBySeparatedEpisode()
+    {
+        var result = FileEpisodeCandidateResolver.Resolve(
+            "mikan",
+            "[Skymoon-Raws] Tensei Shitara Slime Datta Ken S02 - 22 [1080p].mp4");
+
+        Assert.True(result.IsCandidate);
+        Assert.Equal(22, result.Episode);
+    }
+
     [Theory]
     [InlineData("u2", "[Group] Show [04][1080p]", "source_not_mikan")]
     [InlineData("mikan", "Show [2024][1080p]", "year_like_episode")]

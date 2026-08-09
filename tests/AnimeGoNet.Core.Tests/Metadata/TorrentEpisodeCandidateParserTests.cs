@@ -12,6 +12,7 @@ public sealed class TorrentEpisodeCandidateParserTests
     [InlineData("Show E13.ass", 13)]
     [InlineData("Show 第14話.mkv", 14)]
     [InlineData("Show【15 END】.mkv", 15)]
+    [InlineData("Show S02E04.mkv", 4)]
     public void UpstreamCompatibleIntegerPatternsReturnNormalCandidate(string path, int expected)
     {
         var result = TorrentEpisodeCandidateParser.Parse(path);

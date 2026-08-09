@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 40,
+    [int]$ExpectedSchemaVersion = 41,
 
     [switch]$LegacyYamlUpgrade
 )
@@ -17,6 +17,7 @@ $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'
 $env:background_workers_enabled = 'false'
+$env:mikan_base_url = 'http://127.0.0.1:1/'
 $nativeCredential = 'native-aot-private-cookie'
 $env:ANIMEGO_MIKAN_COOKIE = $nativeCredential
 $legacyYamlHash = $null
@@ -163,13 +164,13 @@ try {
         -ContentType 'application/json' `
         -Body $legacyPutPayload `
         -TimeoutSec 5
-    $ingestPayload = '{"source":"mikan","data":[{"torrent":"https://tracker.invalid/passkey/smoke.torrent","info":{"title":"NativeAOT smoke","mikanid":3951,"bgmid":547888}}]}'
+    $ingestPayload = '{"source":"mikan","data":[{"torrent":"https://127.0.0.1/passkey/smoke.torrent","info":{"title":"NativeAOT smoke","mikanid":3951,"bgmid":547888}}]}'
     $ingestParameters = @{
         Uri = "$baseUrl/api/v1/ingest"
         Method = 'Post'
         ContentType = 'application/json'
         Body = $ingestPayload
-        TimeoutSec = 5
+        TimeoutSec = 30
     }
     $ingest = Invoke-RestMethod @ingestParameters
     $openApiResponse = Invoke-WebRequest `
@@ -298,8 +299,13 @@ try {
         throw 'NativeAOT source credential redaction smoke failed.'
     }
 
-    if (($ingest.accepted_count -ne 0) -or ($ingest.rejected_count -ne 1) -or (-not $ingest.items[0].errors[0].Contains('HostNotAllowed'))) {
-        throw 'NativeAOT secure ingest rejection smoke failed.'
+    if (($ingest.accepted_count -ne 0) -or ($ingest.rejected_count -ne 1) -or (-not $ingest.items[0].errors[0].Contains('NetworkFailure'))) {
+        $safeIngestError = if ($null -eq $ingest.items[0].errors[0]) {
+            '<missing>'
+        } else {
+            [string]$ingest.items[0].errors[0]
+        }
+        throw "NativeAOT secure ingest rejection smoke failed: accepted=$($ingest.accepted_count), rejected=$($ingest.rejected_count), error=$safeIngestError"
     }
 
     if ($index.StatusCode -ne 200 `

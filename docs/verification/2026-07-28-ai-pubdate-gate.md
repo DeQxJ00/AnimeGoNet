@@ -9,7 +9,7 @@
 3. 启用的同 `mikanid` 人工规则中的 `bgmid` 高于任务来源值；
 4. 仅在配置开启、adapter=mikan、实际文件数=1、`bgmid` 和内部时间均有效时查询 Bangumi；
 5. 从 Bangumi 普通正整数 Episode 中选择与来源本地日期最近者，同距优先不晚于发布时间，再按集号/ID稳定排序；
-6. 最近日期超过31个日历日、无候选或 Bangumi 查询失败时，清空日期字段并继续通用 AI；
+6. 本次验证时使用的 31 日 Torrent 发布窗口已被后续业务确认废止；现行实现不以 Torrent 日期差拒绝候选，Mikan `published_at` 只作为 AI 参数；
 7. 人工 Series/Season 仍先于季度 AI，人工 EP offset 非空时仍抑制后置 EP-AI；
 8. AI 结果仍须逐级重读并验证 TMDB Series/Season/Episode。
 
@@ -25,7 +25,7 @@
 
 ## 验收证据
 
-- Core：普通正整数过滤、同日、同距偏向过去、稳定 tie-break、31日窗口、小数/特别篇排除。
+- Core：普通正整数过滤、只选已播条目、稳定 tie-break、小数/特别篇排除。原 31 日窗口已于 2026-08-09 按业务确认删除；`±1` 日只适用于 Bangumi EP `airdate` 与 TMDB EP `air_date` 的确定性映射。
 - App HTTP：官方 Episode page 映射、跨页 offset、User-Agent、非法分页安全失败。
 - Data：季度与 EP claim 均带 adapter/时间/实际文件数；`ignored` 文件仍计入实际 Torrent 文件数。
 - App gate：非 Mikan、多文件、缺 bgmid、缺时间、配置关闭均零 Bangumi 请求；网络失败安全降级。

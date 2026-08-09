@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 40;
+    public const int CurrentVersion = 41;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -46,7 +46,85 @@ public static class DatabaseSchema
         new SchemaMigration(38, "source_duplicate_notifications", SourceDuplicateNotifications),
         new SchemaMigration(39, "legacy_cache_import_audit", LegacyCacheImportAudit),
         new SchemaMigration(40, "ai_metadata_usage_audit", AiMetadataUsageAudit),
+        new SchemaMigration(
+            41,
+            "tmdb_episode_date_evidence",
+            TmdbEpisodeBangumiDateEvidence),
     ];
+
+    private const string TmdbEpisodeBangumiDateEvidence = """
+        DROP TRIGGER tr_task_files_episode_evidence_insert;
+        DROP TRIGGER tr_task_files_episode_evidence_update;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_insert
+        BEFORE INSERT ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'tmdb_episode_bangumi_date',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_update
+        BEFORE UPDATE OF
+            episode_resolution_source, episode_resolution_run_id,
+            episode_resolution_attempt_id
+        ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'tmdb_episode_bangumi_date',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+        """;
 
     private const string AiMetadataUsageAudit = """
         ALTER TABLE metadata_resolution_attempts

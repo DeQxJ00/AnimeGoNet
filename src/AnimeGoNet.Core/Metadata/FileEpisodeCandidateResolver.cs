@@ -43,6 +43,49 @@ public static partial class FileEpisodeCandidateResolver
             return new FileEpisodeCandidateResolution(null, "compatibility_parser_timeout", null);
         }
 
+        var seasonEpisodeCandidates = SeasonEpisodeMarker()
+            .Matches(basename)
+            .Select(match => int.Parse(
+                match.Groups[2].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture))
+            .ToHashSet();
+        if (seasonEpisodeCandidates.Count > 0)
+        {
+            var explicitEpisode = seasonEpisodeCandidates.Count == 1
+                ? seasonEpisodeCandidates.Single()
+                : 0;
+            var otherMarkers = UpstreamIntegerMarker()
+                .Matches(basename)
+                .SelectMany(marker => marker.Groups.Cast<Group>().Skip(1))
+                .Where(group => group.Success)
+                .Select(group => int.TryParse(
+                    group.Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var value)
+                        ? value
+                        : 0)
+                .Where(value => value > 0)
+                .ToHashSet();
+            if (explicitEpisode <= 0
+                || explicitEpisode is >= 1900 and <= 2100
+                || explicitEpisode is 720 or 1080 or 2160 or 4320
+                || NonFeatureToken().IsMatch(basename)
+                || otherMarkers.Any(value => value != explicitEpisode))
+            {
+                return new FileEpisodeCandidateResolution(
+                    null,
+                    "ambiguous_episode_markers",
+                    parsed);
+            }
+
+            return new FileEpisodeCandidateResolution(
+                explicitEpisode,
+                "accepted_season_episode_extension",
+                parsed);
+        }
+
         if (parsed.Episode <= 0)
         {
             return new FileEpisodeCandidateResolution(null, "upstream_episode_not_parsed", parsed);
@@ -99,4 +142,9 @@ public static partial class FileEpisodeCandidateResolver
         @" -? (\d+)|\[(\d+)\]|\[(\d+).?[vV]\d{1}\]|[第](\d+)[话話集]|\[(\d+).?END\]",
         RegexOptions.CultureInvariant)]
     private static partial Regex UpstreamIntegerMarker();
+
+    [GeneratedRegex(
+        @"\b[Ss](0*[1-9]\d*)[Ee](\d{1,4})\b",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex SeasonEpisodeMarker();
 }

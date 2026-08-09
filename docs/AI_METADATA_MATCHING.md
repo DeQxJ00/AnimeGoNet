@@ -71,8 +71,8 @@ ai:
 - `size_bytes` 是非负整数，只作为辅助线索。
 - `bgmid`、`anidbid` 只接受正整数或 `null`；`imdbid` 只接受规范 IMDb Title ID 字符串或 `null`；三者都为空时仍须正常匹配。
 - `torrent_file_count` 是解析 `.torrent` 后得到的实际文件条目数，必须大于0；单文件模式和“根目录下只有一个文件”都记为1。
-- `published_at` 只接受带偏移的 ISO 8601 时间或 `null`。Mikan 原始 `pubDate` 没有偏移时按 Mikan SourceProfile 的时区解析，默认 `Asia/Shanghai`，再规范为带偏移值；原始字符串另存审计，不原样交给模型。
-- `bgm_episode_candidate` 是主程序用 `published_at` 与 `bgmid` 对应 Subject 的普通 Episode 播出时间比较后得到的最近正整数集号；特别篇和附加条目不参与，查询失败或无法消歧时为 `null`。
+- `published_at` 只在 Mikan 来源中出现，接受带偏移的 ISO 8601 时间或 `null`。Mikan 原始 `pubDate` 没有偏移时按 Mikan SourceProfile 的时区解析，默认 `Asia/Shanghai`，再规范为带偏移值；原始字符串另存审计，不原样交给模型。该值是辅助参数，不是 Bangumi/TMDB 单集日期校验条件。
+- `bgm_episode_candidate` 是主程序可选提供的普通 Bangumi Episode 提示；特别篇和附加条目不参与，查询失败时为 `null`。它不能作为程序或模型接受/拒绝 TMDB Episode 的硬门禁。
 - 配置项 `ai.use_bangumi_pubdate_first` 是用户开关；请求中的 `use_bangumi_pubdate_first` 是程序计算的最终门禁：仅 `开关开启 && is_mikan && torrent_file_count == 1 && bgmid != null && published_at != null && bgm_episode_candidate != null && BGM查询成功` 时为 `true`。API调用方不能伪造最终门禁。
 - 非空 ID 表示调用方已经确认其与当前任务标题及文件组存在作品级关联；不得因为跨站标题字面不同而丢弃该上下文。
 - 该关联不证明具体 TMDB Series/Season/Episode，也不证明来源 Episode 与 TMDB Episode 同号。Bangumi/AniDB 的标题、别名、日期、集数和映射结果全部只是候选证据，最终结果仍须由 TMDB 数据验证。
@@ -103,12 +103,12 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 该分支由主程序预计算 Bangumi 日期候选、固定 Prompt 执行 TMDB 定向验证。主程序不预计算 TMDB 候选：
 
 1. 开关开启且基础条件满足后，主程序通过 Bangumi 客户端读取 `bgmid` 对应 Subject 的 Episode 列表。
-2. 只考虑有合法播出日期且集号为正整数的普通正片，排除小数集、特别篇、OP/ED、PV 和其他附加条目；以 `published_at` 的来源本地日历日期寻找最近者，同日优先，距离相同时优先不晚于发布时间的条目，再按集号和 Episode ID 稳定排序。最大合理偏差为 31 个日历日，超出不产生候选。结果写入 `bgm_episode_candidate`。
-3. 任一步失败、候选为空或日期明显不合理时，最终门禁为 false，Prompt 完全删除日期优先字段和指令，继续通用 AI 匹配。
+2. 只考虑有合法播出日期且集号为正整数的普通正片，排除小数集、特别篇、OP/ED、PV 和其他附加条目；未来 Episode 不参与。以 `published_at` 的来源本地日历日期寻找最近的已播条目并按集号和 Episode ID 稳定排序，不设置 Torrent 发布延迟窗口。结果仅作为 `bgm_episode_candidate` 提示。
+3. 任一步失败或候选为空时，最终门禁为 false，但 Mikan 的 `published_at` 参数仍可进入统一 AI 请求；继续通用 AI 匹配，不因 Torrent 日期失败。
 4. 门禁为 true 时，模型使用原始 `files[].name` 和 `bgm_episode_candidate` 定向查询 TMDB TV Series、普通 Season 和 Episode；任何来源集号都不得直接复制成 TMDB Episode Number。
 5. TMDB 定向验证失败时继续原通用 AI 匹配流程，不把它当成整个任务失败；最终仍必须通过 TMDB MCP和主程序二次验证。
 
-`use_bangumi_pubdate_first=false` 时不得把 `published_at` 或 `bgm_episode_candidate` 的日期优先区块发送给模型。即使 `bgmid` 非空，Bangumi MCP仍可按原通用流程提供作品标题、别名等上下文。人工规则和 Episode Offset 始终优先，命中时不调用 AI。
+`use_bangumi_pubdate_first=false` 时不发送 `bgm_episode_candidate` 的日期优先指令，但 Mikan 的 `published_at` 仍作为非约束参数发送；非 Mikan 来源始终为 `null`。即使 `bgmid` 非空，Bangumi MCP仍可按原通用流程提供作品标题、别名等上下文。人工规则和 Episode Offset 始终优先，命中时不调用 AI。
 
 主程序可按 `bgmid` 和数据版本缓存 Bangumi 普通 Episode 列表，但缓存必须遵守更新策略，不能导致新播 Episode 永久不可见。模型侧不再为日期候选重复调用 Bangumi 工具。
 

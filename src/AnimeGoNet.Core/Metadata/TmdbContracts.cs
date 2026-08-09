@@ -60,7 +60,8 @@ public sealed record BangumiEpisode(
     int Id,
     int Type,
     decimal? EpisodeNumber,
-    DateOnly? AirDate);
+    DateOnly? AirDate,
+    decimal? SortNumber = null);
 
 public sealed record TmdbCanonicalEpisode(
     TmdbSeries Series,

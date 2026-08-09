@@ -16,6 +16,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
     MikanTrustedOffsetStore trustedOffsets,
     DuplicateHitNotifier duplicateNotifier,
     AnimeGoOptions options,
+    IBangumiSubjectClient bangumiSubjects,
+    IBangumiEpisodeClient? bangumiEpisodes = null,
     TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -58,6 +60,102 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 ? episode
                 : null)).ToArray());
         var subtitleIds = associations.Select(association => association.SubtitleFileId).ToHashSet(StringComparer.Ordinal);
+        EpisodeDateContext? episodeDateContext = null;
+        if (manualOffset is null
+            && !claim.HasMultipleSeasons
+            && !claim.EpisodeResolvedByTrustedOffset
+            && string.Equals(
+                claim.Resolution.SourceAdapter,
+                "mikan",
+                StringComparison.OrdinalIgnoreCase)
+            && claim.Resolution.BangumiSubjectId is > 0
+            && bangumiEpisodes is not null
+            && claim.Files.Any(file => int.TryParse(
+                file.FileEpisodeCandidate,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var candidate) && candidate > 0))
+        {
+            var started = _timeProvider.GetTimestamp();
+            try
+            {
+                var bangumiValues = await bangumiEpisodes.GetEpisodesAsync(
+                    claim.Resolution.BangumiSubjectId.Value,
+                    cancellationToken).ConfigureAwait(false);
+                var sourceCandidates = claim.Files
+                    .Select(file => int.TryParse(
+                        file.FileEpisodeCandidate,
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var candidate)
+                            ? candidate
+                            : 0)
+                    .Where(candidate => candidate > 0)
+                    .Distinct()
+                    .ToArray();
+                if (sourceCandidates.Any(candidate =>
+                        !HasBangumiEpisodeIdentity(bangumiValues, candidate)))
+                {
+                    var relations = await bangumiSubjects.GetRelatedSubjectsAsync(
+                        claim.Resolution.BangumiSubjectId.Value,
+                        cancellationToken).ConfigureAwait(false);
+                    foreach (var sequel in relations
+                                 .Where(value => value.Type == 2
+                                     && string.Equals(
+                                         value.Relation,
+                                         "续集",
+                                         StringComparison.Ordinal))
+                                 .OrderBy(value => value.Id)
+                                 .Take(8))
+                    {
+                        var sequelEpisodes = await bangumiEpisodes.GetEpisodesAsync(
+                            sequel.Id,
+                            cancellationToken).ConfigureAwait(false);
+                        bangumiValues = bangumiValues
+                            .Concat(sequelEpisodes)
+                            .GroupBy(value => value.Id)
+                            .Select(group => group.First())
+                            .ToArray();
+                    }
+                }
+                var tmdbSeason = await tmdb.GetSeasonAsync(
+                    claim.TmdbSeriesId,
+                    claim.TmdbSeasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+                episodeDateContext = new EpisodeDateContext(
+                    bangumiValues,
+                    tmdbSeason?.Episodes ?? []);
+            }
+            catch (BangumiClientException exception)
+            {
+                await RecordFailureAndStopAsync(
+                    claim,
+                    "tmdb_episode_bangumi_date",
+                    null,
+                    new MetadataFailure(
+                        exception.Kind,
+                        exception.SafeCode,
+                        TmdbAccessConfirmed: false),
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch (TmdbClientException exception)
+            {
+                await RecordFailureAndStopAsync(
+                    claim,
+                    "tmdb_episode_bangumi_date",
+                    null,
+                    new MetadataFailure(
+                        exception.Kind,
+                        exception.SafeCode,
+                        exception.TmdbAccessConfirmed),
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+        }
+
         var results = new List<MetadataEpisodeFileResolution>(claim.Files.Count);
         foreach (var file in claim.Files.Where(file => !subtitleIds.Contains(file.FileId)))
         {
@@ -81,7 +179,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 continue;
             }
 
-            var strategy = manualOffset is not null
+            string strategy = manualOffset is not null
                 ? "manual_mikan_offset"
                 : claim.EpisodeResolvedByTrustedOffset
                     ? "trusted_mikan_offset"
@@ -91,17 +189,20 @@ public sealed class EpisodeMetadataResolutionProcessor(
             int? priority = manualOffset is null
                 ? null
                 : ManualMetadataResolutionProcessor.ManualOverridePriority;
+            int? parsedSourceEpisode = int.TryParse(
+                file.FileEpisodeCandidate,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var sourceEpisodeValue)
+                && sourceEpisodeValue > 0
+                    ? sourceEpisodeValue
+                    : null;
             int targetEpisode;
             if (manualOffset is null && file.PreResolvedEpisodeNumber is > 0)
             {
                 targetEpisode = file.PreResolvedEpisodeNumber.Value;
             }
-            else if (!int.TryParse(
-                    file.FileEpisodeCandidate,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var sourceEpisode)
-                || sourceEpisode <= 0)
+            else if (parsedSourceEpisode is null)
             {
                 var reason = OtherReason(file);
                 await RecordAsync(
@@ -114,7 +215,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             }
             else
             {
-                targetEpisode = sourceEpisode + (manualOffset ?? 0);
+                targetEpisode = parsedSourceEpisode.Value + (manualOffset ?? 0);
             }
 
             if (targetEpisode <= 0)
@@ -131,6 +232,42 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     0,
                     cancellationToken).ConfigureAwait(false);
                 return true;
+            }
+
+            if (manualOffset is null
+                && file.PreResolvedEpisodeNumber is null
+                && episodeDateContext is not null
+                && parsedSourceEpisode is > 0)
+            {
+                var dateMatch = BangumiTmdbEpisodeDateResolver.Resolve(
+                    episodeDateContext.BangumiEpisodes,
+                    episodeDateContext.TmdbEpisodes,
+                    parsedSourceEpisode.Value);
+                if (dateMatch.IsApplicable)
+                {
+                    strategy = "tmdb_episode_bangumi_date";
+                    if (!dateMatch.IsSuccess)
+                    {
+                        var reason = dateMatch.FailureCode!;
+                        await RecordAsync(
+                            claim,
+                            strategy,
+                            null,
+                            "other",
+                            reason,
+                            retryable: false,
+                            0,
+                            cancellationToken).ConfigureAwait(false);
+                        results.Add(new MetadataEpisodeFileResolution(
+                            file.FileId,
+                            null,
+                            "other",
+                            reason));
+                        continue;
+                    }
+
+                    targetEpisode = dateMatch.Episode!.EpisodeNumber;
+                }
             }
 
             if (claim.EpisodeResolvedByTrustedOffset)
@@ -313,6 +450,17 @@ public sealed class EpisodeMetadataResolutionProcessor(
         await LearnTrustedOffsetAsync(claim, results, cancellationToken).ConfigureAwait(false);
         return true;
     }
+
+    private sealed record EpisodeDateContext(
+        IReadOnlyList<BangumiEpisode> BangumiEpisodes,
+        IReadOnlyList<TmdbEpisode> TmdbEpisodes);
+
+    private static bool HasBangumiEpisodeIdentity(
+        IReadOnlyList<BangumiEpisode> episodes,
+        int sourceEpisode) =>
+        episodes.Any(value => value.Type == 0
+            && (value.EpisodeNumber == sourceEpisode
+                || value.SortNumber == sourceEpisode));
 
     private async Task LearnTrustedOffsetAsync(
         MetadataEpisodeTaskClaim claim,

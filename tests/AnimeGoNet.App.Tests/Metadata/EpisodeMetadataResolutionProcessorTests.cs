@@ -59,6 +59,97 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task MikanBangumiAirDateOverridesConflictingSameNumberTmdbEpisode()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                100,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2024, 10, 2),
+                2,
+                Episodes:
+                [
+                    new TmdbEpisode(6, 72517, 2, 6, "Old episode", new DateOnly(2016, 5, 9)),
+                    new TmdbEpisode(56, 72517, 2, 56, "Current episode", new DateOnly(2024, 11, 6)),
+                ]),
+            EpisodeFactory = number => number == 56
+                ? new TmdbEpisode(56, 72517, 2, 56, "Current episode", new DateOnly(2024, 11, 6))
+                : null,
+        };
+        var bangumi = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(42599806, 0, 6, new DateOnly(2024, 11, 6)),
+        ]);
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(app, ("Show EP06.mkv", "6", "6"));
+        await SetTrustedPublicationEvidenceAsync(app, taskId);
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(56, file.EpisodeNumber);
+        Assert.Equal("tmdb_episode_bangumi_date", file.ResolutionSource);
+        Assert.Equal([56], tmdb.EpisodeRequests);
+        Assert.Equal([547888], bangumi.SubjectIds);
+    }
+
+    [Fact]
+    public async Task MikanDirectSequelGlobalSortMapsByEpisodeAirDate()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                200,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2021, 1, 12),
+                1,
+                Episodes:
+                [new TmdbEpisode(21, 72517, 2, 21, "Episode 21", new DateOnly(2021, 8, 31))]),
+            EpisodeFactory = number => number == 21
+                ? new TmdbEpisode(21, 72517, 2, 21, "Episode 21", new DateOnly(2021, 8, 31))
+                : null,
+        };
+        var episodes = new FakeBangumiEpisodeClient(
+            new Dictionary<int, IReadOnlyList<BangumiEpisode>>
+            {
+                [547888] = [new BangumiEpisode(12, 0, 12, new DateOnly(2021, 3, 30), 36)],
+                [302523] = [new BangumiEpisode(9, 0, 9, new DateOnly(2021, 8, 31), 45)],
+            });
+        var subjects = new FakeBangumiSubjectClient(
+            new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>
+            {
+                [547888] = [new BangumiSubjectRelation(302523, 2, "Part 2", "第二部分", "续集")],
+            });
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            bangumiEpisodeClient: episodes,
+            bangumiSubjectClient: subjects);
+        var taskId = await PrepareFilesAsync(app, ("Show - 45.mkv", "45", "45"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(21, file.EpisodeNumber);
+        Assert.Equal("tmdb_episode_bangumi_date", file.ResolutionSource);
+        Assert.Equal([547888, 302523], episodes.SubjectIds);
+    }
+
+    [Fact]
     public async Task CompletedEpisodeIsSkippedWithoutSuppressingAnotherEpisode()
     {
         var tmdb = new FakeTmdbClient
@@ -555,7 +646,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         int? episodeOffset,
         IAiMetadataMatcher? aiMatcher = null,
         bool enableEpisodeAi = false,
-        IBangumiEpisodeClient? bangumiEpisodeClient = null)
+        IBangumiEpisodeClient? bangumiEpisodeClient = null,
+        IBangumiSubjectClient? bangumiSubjectClient = null)
     {
         var app = await RunningApp.StartAsync(
             configure: options => options with
@@ -566,7 +658,9 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 },
             },
             tmdbClient: tmdb,
-            bangumiEpisodeClient: bangumiEpisodeClient,
+            bangumiSubjectClient: bangumiSubjectClient ?? new FakeBangumiSubjectClient(
+                Array.Empty<BangumiSubjectRelation>()),
+            bangumiEpisodeClient: bangumiEpisodeClient ?? new FakeBangumiEpisodeClient([]),
             aiMetadataMatcher: aiMatcher);
         await app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>().SaveAsync(
             new MikanWorkMetadataRuleUpdate(3951, 547888, 72517, 2, episodeOffset),
@@ -885,6 +979,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
 
     private sealed class FakeTmdbClient : ITmdbClient
     {
+        public TmdbSeason SeasonValue { get; init; } = Season;
+
         public Func<int, TmdbEpisode?> EpisodeFactory { get; init; } = _ => null;
 
         public TmdbClientException? EpisodeFailure { get; init; }
@@ -898,10 +994,10 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             Task.FromResult<TmdbSeries?>(Series);
 
         public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(int seriesId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeriesDetails?>(new TmdbSeriesDetails(Series, [Season]));
+            Task.FromResult<TmdbSeriesDetails?>(new TmdbSeriesDetails(Series, [SeasonValue]));
 
         public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeason?>(Season);
+            Task.FromResult<TmdbSeason?>(SeasonValue);
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,
@@ -941,9 +1037,18 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         }
     }
 
-    private sealed class FakeBangumiEpisodeClient(
-        IReadOnlyList<BangumiEpisode> episodes) : IBangumiEpisodeClient
+    private sealed class FakeBangumiEpisodeClient : IBangumiEpisodeClient
     {
+        private readonly IReadOnlyList<BangumiEpisode>? _episodes;
+        private readonly IReadOnlyDictionary<int, IReadOnlyList<BangumiEpisode>>? _episodesBySubject;
+
+        public FakeBangumiEpisodeClient(IReadOnlyList<BangumiEpisode> episodes) =>
+            _episodes = episodes;
+
+        public FakeBangumiEpisodeClient(
+            IReadOnlyDictionary<int, IReadOnlyList<BangumiEpisode>> episodesBySubject) =>
+            _episodesBySubject = episodesBySubject;
+
         public List<int> SubjectIds { get; } = [];
 
         public Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
@@ -951,7 +1056,32 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             CancellationToken cancellationToken = default)
         {
             SubjectIds.Add(subjectId);
-            return Task.FromResult(episodes);
+            return Task.FromResult(_episodesBySubject is null
+                ? _episodes ?? []
+                : _episodesBySubject.GetValueOrDefault(subjectId) ?? []);
         }
+    }
+
+    private sealed class FakeBangumiSubjectClient(
+        IReadOnlyDictionary<int, IReadOnlyList<BangumiSubjectRelation>> relations)
+        : IBangumiSubjectClient
+    {
+        public FakeBangumiSubjectClient(IReadOnlyList<BangumiSubjectRelation> relations)
+            : this(new Dictionary<int, IReadOnlyList<BangumiSubjectRelation>>
+            {
+                [547888] = relations,
+            })
+        {
+        }
+
+        public Task<BangumiSubject?> GetSubjectAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<BangumiSubject?>(null);
+
+        public Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(relations.GetValueOrDefault(subjectId) ?? []);
     }
 }

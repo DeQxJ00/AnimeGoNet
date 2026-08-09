@@ -86,7 +86,7 @@ public static partial class TorrentEpisodeCandidateParser
     private static partial Regex FractionalEpisode();
 
     [GeneratedRegex(
-        @"\[(\d{1,4})(?:\s*[vV]\d+|\s*END)?\]|第(\d{1,4})[话話集]|\b[Ee][Pp]?(\d{1,4})\b|\s-\s(\d{1,4})(?=\s|$)",
+        @"\b[Ss]0*[1-9]\d*[Ee](\d{1,4})\b|\[(\d{1,4})(?:\s*[vV]\d+|\s*END)?\]|第(\d{1,4})[话話集]|\b[Ee][Pp]?(\d{1,4})\b|\s-\s(\d{1,4})(?=\s|$)",
         RegexOptions.CultureInvariant)]
     private static partial Regex NormalEpisode();
 }

@@ -144,7 +144,8 @@ public sealed class BangumiSubjectClient : IBangumiSubjectClient, IBangumiEpisod
                 value.Id,
                 value.Type,
                 value.EpisodeNumber,
-                ParseOptionalDate(value.AirDate))));
+                ParseOptionalDate(value.AirDate),
+                value.SortNumber)));
 
             var nextOffset = offset + data.Length;
             if (nextOffset >= page.Total)

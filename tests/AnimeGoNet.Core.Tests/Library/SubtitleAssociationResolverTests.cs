@@ -34,6 +34,22 @@ public sealed class SubtitleAssociationResolverTests
     }
 
     [Fact]
+    public void UniqueVideoInDirectoryAssociatesDifferentlyNumberedLanguageSubtitles()
+    {
+        var results = SubtitleAssociationResolver.Resolve(
+        [
+            new TorrentMediaFile("video", "Release/Show S02 - 22.mp4", 22),
+            new TorrentMediaFile("annotation", "Release/[繁體中文 (Annotation)] Show ep 46.ass", null),
+            new TorrentMediaFile("traditional", "Release/[繁體中文] Show ep 46.ass", null),
+        ]);
+
+        Assert.Collection(
+            results,
+            item => Assert.Equal(("video", ".繁體中文.Annotation.ass", null), (item.VideoFileId, item.RenameSuffix, item.UnmatchedReason)),
+            item => Assert.Equal(("video", ".繁體中文.ass", null), (item.VideoFileId, item.RenameSuffix, item.UnmatchedReason)));
+    }
+
+    [Fact]
     public void AmbiguousEpisodeDoesNotGuess()
     {
         var association = Assert.Single(SubtitleAssociationResolver.Resolve(

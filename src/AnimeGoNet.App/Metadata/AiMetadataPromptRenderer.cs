@@ -7,7 +7,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v9";
+    public const string PromptVersion = "tmdb-ai-match-v10";
 
     public static string LoadAndRender(AiMetadataMatchInput input)
     {
@@ -61,9 +61,7 @@ public static class AiMetadataPromptRenderer
             .Replace("{{OPTIONAL_IMDB_ID_JSON}}", OptionalString(input.ImdbTitleId), StringComparison.Ordinal)
             .Replace("{{TORRENT_FILE_COUNT_JSON}}", Number(input.TorrentFileCount), StringComparison.Ordinal)
             .Replace("{{OPTIONAL_PUBLISHED_AT_JSON}}", OptionalString(
-                input.UseBangumiPubDateFirst
-                    ? input.PublishedAt?.ToString("O", System.Globalization.CultureInfo.InvariantCulture)
-                    : null),
+                input.PublishedAt?.ToString("O", System.Globalization.CultureInfo.InvariantCulture)),
                 StringComparison.Ordinal)
             .Replace("{{OPTIONAL_BGM_EPISODE_CANDIDATE_JSON}}",
                 OptionalNumber(input.UseBangumiPubDateFirst

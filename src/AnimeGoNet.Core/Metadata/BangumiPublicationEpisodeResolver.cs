@@ -2,15 +2,11 @@ namespace AnimeGoNet.Core.Metadata;
 
 public static class BangumiPublicationEpisodeResolver
 {
-    public const int MaximumDistanceDays = 31;
-
     public static int? SelectClosest(
         IReadOnlyList<BangumiEpisode> episodes,
-        DateTimeOffset publishedAt,
-        int maximumDistanceDays = MaximumDistanceDays)
+        DateTimeOffset publishedAt)
     {
         ArgumentNullException.ThrowIfNull(episodes);
-        ArgumentOutOfRangeException.ThrowIfNegative(maximumDistanceDays);
 
         var publishedDate = DateOnly.FromDateTime(publishedAt.DateTime);
         var candidates = episodes
@@ -26,9 +22,9 @@ public static class BangumiPublicationEpisodeResolver
                 decimal.ToInt32(episode.EpisodeNumber!.Value),
                 episode.AirDate!.Value,
                 Math.Abs(episode.AirDate.Value.DayNumber - publishedDate.DayNumber)))
-            .Where(candidate => candidate.DistanceDays <= maximumDistanceDays)
+            .Where(candidate =>
+                candidate.AirDate <= publishedDate)
             .OrderBy(candidate => candidate.DistanceDays)
-            .ThenBy(candidate => candidate.AirDate > publishedDate ? 1 : 0)
             .ThenBy(candidate => candidate.EpisodeNumber)
             .ThenBy(candidate => candidate.Id)
             .ToArray();

@@ -22,35 +22,42 @@ public sealed class AiPublicationEvidenceResolver(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
+        var publishedAt = string.Equals(
+                claim.SourceAdapter,
+                "mikan",
+                StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(claim.SourcePublishedAtRaw)
+                ? claim.SourcePublishedAt
+                : null;
         if (!options.UseBangumiPubDateFirst)
         {
-            return Disabled(shouldAudit: false, "ai_pubdate_disabled");
+            return Disabled(publishedAt, shouldAudit: false, "ai_pubdate_disabled");
         }
 
         if (!string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase))
         {
-            return Disabled(shouldAudit: true, "ai_pubdate_source_not_mikan");
+            return Disabled(null, shouldAudit: true, "ai_pubdate_source_not_mikan");
         }
 
         if (claim.TorrentFileCount != 1)
         {
-            return Disabled(shouldAudit: true, "ai_pubdate_torrent_file_count_not_one");
+            return Disabled(publishedAt, shouldAudit: true, "ai_pubdate_torrent_file_count_not_one");
         }
 
         if (claim.BangumiSubjectId is null)
         {
-            return Disabled(shouldAudit: true, "ai_pubdate_bgmid_missing");
+            return Disabled(publishedAt, shouldAudit: true, "ai_pubdate_bgmid_missing");
         }
 
         if (string.IsNullOrWhiteSpace(claim.SourcePublishedAtRaw)
             || claim.SourcePublishedAt is null)
         {
-            return Disabled(shouldAudit: true, "ai_pubdate_published_at_missing");
+            return Disabled(null, shouldAudit: true, "ai_pubdate_published_at_missing");
         }
 
         if (bangumi is null)
         {
-            return Disabled(shouldAudit: true, "ai_pubdate_client_unavailable");
+            return Disabled(publishedAt, shouldAudit: true, "ai_pubdate_client_unavailable");
         }
 
         IReadOnlyList<BangumiEpisode> episodes;
@@ -63,7 +70,7 @@ public sealed class AiPublicationEvidenceResolver(
         catch (BangumiClientException exception)
         {
             return new AiPublicationEvidenceResult(
-                null,
+                publishedAt,
                 null,
                 false,
                 true,
@@ -78,7 +85,7 @@ public sealed class AiPublicationEvidenceResolver(
         if (candidate is null)
         {
             return new AiPublicationEvidenceResult(
-                null,
+                publishedAt,
                 null,
                 false,
                 true,
@@ -97,9 +104,12 @@ public sealed class AiPublicationEvidenceResolver(
             false);
     }
 
-    private static AiPublicationEvidenceResult Disabled(bool shouldAudit, string code) =>
+    private static AiPublicationEvidenceResult Disabled(
+        DateTimeOffset? publishedAt,
+        bool shouldAudit,
+        string code) =>
         new(
-            null,
+            publishedAt,
             null,
             false,
             shouldAudit,

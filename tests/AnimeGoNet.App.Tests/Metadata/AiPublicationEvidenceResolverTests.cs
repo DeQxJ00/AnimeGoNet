@@ -56,7 +56,9 @@ public sealed class AiPublicationEvidenceResolverTests
         var result = await resolver.ResolveAsync(claim);
 
         Assert.False(result.UseBangumiPubDateFirst);
-        Assert.Null(result.PublishedAt);
+        Assert.Equal(
+            sourceAdapter == "mikan" && hasPublication ? PublishedAt : null,
+            result.PublishedAt);
         Assert.Null(result.BangumiEpisodeCandidate);
         Assert.Equal(expectedCode, result.ErrorCode);
         Assert.Empty(bangumi.SubjectIds);
@@ -91,6 +93,7 @@ public sealed class AiPublicationEvidenceResolverTests
 
         Assert.False(result.UseBangumiPubDateFirst);
         Assert.False(result.ShouldAudit);
+        Assert.Equal(PublishedAt, result.PublishedAt);
         Assert.Empty(bangumi.SubjectIds);
     }
 

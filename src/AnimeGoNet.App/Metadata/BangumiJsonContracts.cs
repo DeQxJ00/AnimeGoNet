@@ -27,7 +27,8 @@ internal sealed record BangumiEpisodeDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("type")] int Type,
     [property: JsonPropertyName("ep")] decimal? EpisodeNumber,
-    [property: JsonPropertyName("airdate")] string? AirDate);
+    [property: JsonPropertyName("airdate")] string? AirDate,
+    [property: JsonPropertyName("sort")] decimal? SortNumber);
 
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]
 [JsonSerializable(typeof(BangumiSubjectDto))]

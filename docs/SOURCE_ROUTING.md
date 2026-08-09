@@ -166,7 +166,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - 三种 ID 非空时均已与任务标题/Torrent/文件组建立作品级绑定，但只作辅助证据，不证明具体 TMDB Season/Episode。
 - `imdbid` 使用 TMDB MCP 的 external ID/find 能力取得候选；候选仍须验证为 TMDB TV Series，并逐级验证 Season/Episode。
 - 跨站标题、季度拆分和 Episode 编号不要求相同。
-- `use_bangumi_pubdate_first` 是最终门禁，不是外部调用方可直接开启的标志。只有配置开关开启、SourceProfile adapter 为 Mikan、全部 Torrent 实际文件条目数恰好为1、内部 RSS `bgmid/pubDate` 有效且主程序成功算出31日窗口内最近普通正整数EP并写入 `bgm_episode_candidate` 时为真；否则为假并从 Prompt 裁掉整个优先区块。统一导入使用不含发布时间证据的独立 API DTO，内部证据属性也禁止 JSON 绑定。
+- `use_bangumi_pubdate_first` 是可选提示门禁，不是外部调用方可直接开启的标志。配置开启且 Mikan 单文件任务能算出普通 Bangumi Episode 提示时为真；它不改变最终 TMDB 验证标准。Mikan `published_at` 可独立作为 AI 辅助参数保留，不设置发布延迟窗口；非 Mikan 与公开统一导入不携带该参数。
 - 只有 `source_type=mikan` 时，后端才在本地为文件计算可空 `file_episode_candidate`；该字段和 `episode_offset` 都不进入 AI Prompt/请求/响应。主程序在逐文件 TMDB 验证后本地计算统一偏移。`mikanid/groupid` 仅供主程序在 AI 调用前查询本地可信缓存，不发送给模型；缓存命中记录必须同时给出有效 `tmdb_id`、普通 `season` 和偏移，由主程序直接计算目标 EP，详见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
 - 输入源、下载器凭据、Cookie、站点 token、宿主路径和 profile 内部配置不得发送给模型。
 

@@ -58,6 +58,19 @@ public static class SubtitleAssociationResolver
                 continue;
             }
 
+
+            var sameDirectory = videos
+                .Where(video => SameDirectory(subtitle.RelativePath, video.RelativePath))
+                .ToArray();
+            if (sameDirectory.Length == 1)
+            {
+                results.Add(Bound(
+                    subtitle,
+                    sameDirectory[0],
+                    DescriptiveSuffix(subtitle.RelativePath)));
+                continue;
+            }
+
             var sameEpisode = subtitle.SourceEpisode is > 0
                 ? videos.Where(video => video.SourceEpisode == subtitle.SourceEpisode).ToArray()
                 : [];
@@ -99,6 +112,33 @@ public static class SubtitleAssociationResolver
         }
 
         return null;
+    }
+
+    private static string DescriptiveSuffix(string subtitlePath)
+    {
+        var stem = Path.GetFileNameWithoutExtension(Normalize(subtitlePath)).Trim();
+        if (stem.StartsWith('['))
+        {
+            var closingBracket = stem.IndexOf(']');
+            if (closingBracket > 1)
+            {
+                stem = stem[1..closingBracket];
+            }
+        }
+
+        var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+        var label = string.Concat(stem.Select(character =>
+            invalid.Contains(character) || char.IsWhiteSpace(character) || character is '(' or ')'
+                ? '.'
+                : character)).Trim('.');
+        while (label.Contains("..", StringComparison.Ordinal))
+        {
+            label = label.Replace("..", ".", StringComparison.Ordinal);
+        }
+
+        return label.Length == 0
+            ? string.Empty
+            : $".{label}";
     }
 
     private static bool SameDirectory(string left, string right) =>

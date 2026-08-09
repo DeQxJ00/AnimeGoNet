@@ -34,7 +34,9 @@ public sealed class AiMetadataPromptRendererTests
         Assert.Contains("\"torrent_file_count\": 1", rendered, StringComparison.Ordinal);
         Assert.Contains("\"use_bangumi_pubdate_first\": true", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v9", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Contains("允许正负 1 个日历日", rendered, StringComparison.Ordinal);
+        Assert.Contains("published_at", rendered, StringComparison.Ordinal);
+        Assert.Equal("tmdb-ai-match-v10", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]
@@ -48,7 +50,7 @@ public sealed class AiMetadataPromptRendererTests
     }
 
     [Fact]
-    public void DisabledPubdateGateRemovesDateEvidenceFromPrompt()
+    public void DisabledPubdateGateKeepsMikanPublicationAsNonBindingAiContext()
     {
         var input = new AiMetadataMatchInput(
             "Task",
@@ -65,8 +67,7 @@ public sealed class AiMetadataPromptRendererTests
 
         var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
 
-        Assert.Contains("\"published_at\": null", rendered, StringComparison.Ordinal);
+        Assert.Contains("\"published_at\": \"2026-07-26T20:30:00.0000000+08:00\"", rendered, StringComparison.Ordinal);
         Assert.Contains("\"bgm_episode_candidate\": null", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("2026-07-26T20:30", rendered, StringComparison.Ordinal);
     }
 }
