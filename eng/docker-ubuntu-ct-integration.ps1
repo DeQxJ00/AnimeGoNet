@@ -35,8 +35,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'pscp source upload failed.' }
     Invoke-Remote 'extract' "set -eu; tar -xf '$remoteRoot/source.tar' -C '$remoteRoot'; rm -f '$remoteRoot/source.tar'"
     Invoke-Remote 'build-native-aot-image' "set -eu; cd '$remoteRoot'; docker build --pull --build-arg TARGETARCH=amd64 -f Dockerfile.animegonet -t '$image' ."
-    Invoke-Remote 'container-api-sqlite-paths' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 ./eng/smoke-container.sh '$image'"
-    Invoke-Remote 'compose-qbittorrent-chain' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 ANIMEGONET_FULL_CHAIN_WEBUI=0 ./eng/smoke-qbittorrent-compose.sh '$image'"
+    Invoke-Remote 'container-api-sqlite-paths' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 bash ./eng/smoke-container.sh '$image'"
+    Invoke-Remote 'compose-qbittorrent-chain' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 ANIMEGONET_FULL_CHAIN_WEBUI=0 bash ./eng/smoke-qbittorrent-compose.sh '$image'"
 }
 finally {
     if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
