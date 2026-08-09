@@ -1444,6 +1444,7 @@ public static class ApiEndpoints
                     ai.TmdbMcpUrl.AbsoluteUri,
                     ai.BangumiMcpUrl.AbsoluteUri),
                 options.Metadata.TmdbFailureUseBangumi,
+                options.Metadata.WriteBangumiIdWhenTmdbMatched,
                 options.Metadata.MikanTrustedOffsetCacheEnabled),
             new TorrentFetchConfigurationResponse(
                 fetch.Timeout.TotalSeconds,
@@ -1507,6 +1508,7 @@ public static class ApiEndpoints
             ai.UseMetadataMatch,
             ai.HttpTimeout.TotalSeconds,
             desired.Metadata.TmdbFailureUseBangumi,
+            desired.Metadata.WriteBangumiIdWhenTmdbMatched,
             desired.Metadata.MikanTrustedOffsetCacheEnabled,
             fetch.Timeout.TotalSeconds,
             fetch.MaxResponseBytes,
@@ -1739,6 +1741,10 @@ public static class ApiEndpoints
             "tmdb_failure_use_bangumi",
             current.Metadata.TmdbFailureUseBangumi,
             candidate.Metadata.TmdbFailureUseBangumi);
+        AddBool(
+            "write_bangumi_id_when_tmdb_matched",
+            current.Metadata.WriteBangumiIdWhenTmdbMatched,
+            candidate.Metadata.WriteBangumiIdWhenTmdbMatched);
         AddBool(
             "mikan_trusted_offset_cache_enabled",
             current.Metadata.MikanTrustedOffsetCacheEnabled,
@@ -2079,7 +2085,9 @@ public static class ApiEndpoints
             AiModelOverridden: true,
             AiModel: aiModel,
             AiTmdbMcpUrl: aiTmdbMcpUrl,
-            AiBangumiMcpUrl: aiBangumiMcpUrl);
+            AiBangumiMcpUrl: aiBangumiMcpUrl,
+            WriteBangumiIdWhenTmdbMatched:
+                request.WriteBangumiIdWhenTmdbMatched);
     }
 
     private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate)

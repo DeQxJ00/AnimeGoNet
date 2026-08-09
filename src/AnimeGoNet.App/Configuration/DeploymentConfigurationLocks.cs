@@ -56,6 +56,9 @@ public sealed class DeploymentConfigurationLocks
         new("ai_bangumi_mcp_url", ["ai_bangumi_mcp_url", "metadata:ai:bangumi_mcp_url"]),
         new("ai_http_timeout_seconds", ["ai_timeout_second", "metadata:ai:timeout_seconds"]),
         new("tmdb_failure_use_bangumi", ["tmdb_fail_use_bangumi", "metadata:tmdb_failure_use_bangumi"]),
+        new(
+            "write_bangumi_id_when_tmdb_matched",
+            ["write_bangumi_id_when_tmdb_matched", "metadata:write_bangumi_id_when_tmdb_matched"]),
         new("mikan_trusted_offset_cache_enabled", ["mikan_trusted_offset_cache_enabled", "metadata:mikan_trusted_offset_cache_enabled"]),
         new("torrent_http_timeout_seconds", ["torrent_http_timeout_seconds", "torrent_fetch:timeout_seconds"]),
         new("torrent_max_response_bytes", ["torrent_max_response_bytes", "torrent_fetch:max_response_bytes"]),
@@ -330,6 +333,10 @@ public sealed class DeploymentConfigurationLocks
                     "tmdb_failure_use_bangumi",
                     current.TmdbFailureUseBangumi,
                     candidate.TmdbFailureUseBangumi),
+                WriteBangumiIdWhenTmdbMatched = Preserve(
+                    "write_bangumi_id_when_tmdb_matched",
+                    current.WriteBangumiIdWhenTmdbMatched,
+                    candidate.WriteBangumiIdWhenTmdbMatched),
                 MikanTrustedOffsetCacheEnabled = Preserve(
                     "mikan_trusted_offset_cache_enabled",
                     current.MikanTrustedOffsetCacheEnabled,
@@ -559,6 +566,10 @@ public sealed class DeploymentConfigurationLocks
         var tmdbFailureUseBangumi = IsLocked("tmdb_failure_use_bangumi")
             ? deployment.Metadata.TmdbFailureUseBangumi
             : candidate.Metadata.TmdbFailureUseBangumi;
+        var writeBangumiIdWhenTmdbMatched = IsLocked(
+            "write_bangumi_id_when_tmdb_matched")
+            ? deployment.Metadata.WriteBangumiIdWhenTmdbMatched
+            : candidate.Metadata.WriteBangumiIdWhenTmdbMatched;
         var mikanTrustedOffsetCacheEnabled = IsLocked(
             "mikan_trusted_offset_cache_enabled")
             ? deployment.Metadata.MikanTrustedOffsetCacheEnabled
@@ -638,6 +649,7 @@ public sealed class DeploymentConfigurationLocks
                 SeasonFailure = seasonFailure,
                 Ai = ai,
                 TmdbFailureUseBangumi = tmdbFailureUseBangumi,
+                WriteBangumiIdWhenTmdbMatched = writeBangumiIdWhenTmdbMatched,
                 MikanTrustedOffsetCacheEnabled = mikanTrustedOffsetCacheEnabled,
             },
             TorrentFetch = torrentFetch,
@@ -756,6 +768,10 @@ public sealed class DeploymentConfigurationLocks
             "tmdb_failure_use_bangumi",
             deployment.Metadata.TmdbFailureUseBangumi,
             candidate.Metadata.TmdbFailureUseBangumi);
+        AddIfChanged(
+            "write_bangumi_id_when_tmdb_matched",
+            deployment.Metadata.WriteBangumiIdWhenTmdbMatched,
+            candidate.Metadata.WriteBangumiIdWhenTmdbMatched);
         AddIfChanged(
             "mikan_trusted_offset_cache_enabled",
             deployment.Metadata.MikanTrustedOffsetCacheEnabled,

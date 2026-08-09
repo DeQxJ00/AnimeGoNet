@@ -60,6 +60,7 @@ public sealed class ConfigurationApiTests
                         UseMetadataMatch = true,
                     },
                     TmdbFailureUseBangumi = true,
+                    WriteBangumiIdWhenTmdbMatched = true,
                     MikanTrustedOffsetCacheEnabled = true,
                 },
                 TorrentFetch = options.TorrentFetch with
@@ -140,6 +141,9 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             "http://bgm.mcp.local/mcp",
             metadata.GetProperty("ai").GetProperty("bangumi_mcp_url").GetString());
+        Assert.True(metadata.GetProperty("write_bangumi_id_when_tmdb_matched").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("editable")
+            .GetProperty("write_bangumi_id_when_tmdb_matched").GetBoolean());
         Assert.Equal(
             123456,
             json.RootElement.GetProperty("torrent_fetch").GetProperty("max_response_bytes").GetInt64());

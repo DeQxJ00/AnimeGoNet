@@ -2218,6 +2218,11 @@ function metadataConfigurationCard(config) {
                 + "TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；"
                 + "不输出有效 tmdbid（内部仍按现有逻辑写 0）",
         ],
+        [
+            "TMDB 成功时写 Bangumi ID",
+            `${enabledLabel(config.metadata.write_bangumi_id_when_tmdb_matched)} · `
+                + "默认关闭；关闭时仅 tmdbid=0 的 Bangumi 完全兜底写入 bangumiid",
+        ],
     ]);
     card.append(seasonFailurePriority(config.metadata));
     return card;
@@ -2453,6 +2458,7 @@ function openConfigurationEditor() {
     setConfigurationValue("#configuration-ai-bangumi-mcp-url", editable.ai_bangumi_mcp_url);
     setConfigurationChecked("#configuration-ai-metadata", editable.ai_use_metadata_match);
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
+    setConfigurationChecked("#configuration-write-bangumi-with-tmdb", editable.write_bangumi_id_when_tmdb_matched);
     setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
     setConfigurationValue("#configuration-ai-timeout", editable.ai_http_timeout_seconds);
     setConfigurationValue("#configuration-torrent-timeout", editable.torrent_http_timeout_seconds);
@@ -2501,6 +2507,7 @@ const configurationFieldLabels = {
     ai_use_metadata_match: "AI 元数据匹配",
     ai_http_timeout_seconds: "AI 超时（秒）",
     tmdb_failure_use_bangumi: "Bangumi 完全兜底",
+    write_bangumi_id_when_tmdb_matched: "TMDB 成功时写 Bangumi ID",
     mikan_trusted_offset_cache_enabled: "可信 offset 缓存",
     torrent_http_timeout_seconds: "Torrent HTTP 超时（秒）",
     torrent_max_response_bytes: "Torrent 最大响应（bytes）",
@@ -2553,6 +2560,7 @@ function configurationRequest() {
         ai_use_metadata_match: element("#configuration-ai-metadata").checked,
         ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
         tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
+        write_bangumi_id_when_tmdb_matched: element("#configuration-write-bangumi-with-tmdb").checked,
         mikan_trusted_offset_cache_enabled: element("#configuration-offset-cache").checked,
         torrent_http_timeout_seconds: element("#configuration-torrent-timeout").valueAsNumber,
         torrent_max_response_bytes: element("#configuration-torrent-bytes").valueAsNumber,

@@ -304,6 +304,7 @@ public sealed class ApplicationOverrideStoreTests
                     UseFirstSeason = false,
                 },
                 TmdbFailureUseBangumi = true,
+                WriteBangumiIdWhenTmdbMatched = true,
                 MikanTrustedOffsetCacheEnabled = false,
             },
             TorrentFetch = defaults.TorrentFetch with
@@ -321,6 +322,7 @@ public sealed class ApplicationOverrideStoreTests
             "season_failure_use_title_season",
             "season_failure_use_first_season",
             "tmdb_failure_use_bangumi",
+            "write_bangumi_id_when_tmdb_matched",
             "mikan_trusted_offset_cache_enabled",
             "torrent_http_timeout_seconds",
             "torrent_max_response_bytes",
@@ -339,6 +341,9 @@ public sealed class ApplicationOverrideStoreTests
         Assert.Equal(
             deployment.Metadata.TmdbFailureUseBangumi,
             applied.Metadata.TmdbFailureUseBangumi);
+        Assert.Equal(
+            deployment.Metadata.WriteBangumiIdWhenTmdbMatched,
+            applied.Metadata.WriteBangumiIdWhenTmdbMatched);
         Assert.Equal(
             deployment.Metadata.MikanTrustedOffsetCacheEnabled,
             applied.Metadata.MikanTrustedOffsetCacheEnabled);
@@ -381,5 +386,6 @@ public sealed class ApplicationOverrideStoreTests
         DataUpdateHttpTimeoutSeconds: 45,
         OutboundProxyUrlOverridden: true,
         OutboundProxyUrl: "http://127.0.0.1:7890/",
-        OutboundProxyHosts: ["tmdb.test.invalid", "*.mikanime.tv"]);
+        OutboundProxyHosts: ["tmdb.test.invalid", "*.mikanime.tv"],
+        WriteBangumiIdWhenTmdbMatched: true);
 }

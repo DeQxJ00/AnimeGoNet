@@ -183,6 +183,7 @@
 - [x] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示：逐文件原始相对路径、来源 EP、本地文件候选与最终 TMDB 身份分别持久化并在任务详情并列显示；完成时写来源 alias，RSS 批次保存早期命中证据。AI 结果必须逐级通过 TMDB API 验证，未验证值不得参与路径、数据库键或 NFO。
 - [x] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工/可信 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；除 fake qB 外，本机 TestSpace 已从隔离 SQLite 的合成“已验证 Episode”边界继续执行真实 qB 逐文件 priority/恢复/下载、字幕语言后缀 move、单一 completion 和安全 cleanup。真实 TMDB 网络由受控 loopback/fake 验证，容器同链另行标记未验证。
 - [x] 增加 `tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败沿用失败流程，不继续下载/刮削且不生成 NFO。
+- [x] NFO 默认仅在 `tmdbid=0` 的 Bangumi 完全兜底写 `bangumiid`；新增默认关闭的 `write_bangumi_id_when_tmdb_matched` YAML/API/WebUI 选项，显式开启才在 TMDB 成功时写入，并提示共享 TMDB 根目录的覆盖风险。
 - [x] 开关开启后，仅在权威 TMDB 成功访问且最终为确定性 Series 无匹配、已有有效 Bangumi Subject ID 时继续；季度固定本地 `S01`，不依赖 P2/P1，不输出有效 TMDB ID，动画根目录 `tvshow.nfo` 写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - [x] 验证已取得 TMDB Series、仅季度匹配失败时仍走原季度 fallback，不误入 Bangumi 完全失败兜底；网络/认证/配置/协议/输入失败均禁止兜底。
 - [x] 通过状态机、文件策略和合法小文件 E2E：显式本机集成动态生成 BitTorrent v1/128 KiB payload，以随机 `127.0.0.1` web seed 完成真实 qB `paused→priority 1→resume→download`、SQLite `downloaded`、Mikan `move`、NFO/sidecar/completion、`organizing_cleanup→organized` 和 `deleteFiles=false` 精确清理；源/目标字节完全一致，三次连续实跑通过，默认 solution/CI 仍不接触 TestSpace。

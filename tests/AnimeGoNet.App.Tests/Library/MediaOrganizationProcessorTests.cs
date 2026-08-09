@@ -45,7 +45,7 @@ public sealed class MediaOrganizationProcessorTests
         Assert.True(File.Exists(episodeSidecar));
         var document = XDocument.Load(nfo);
         Assert.Equal("100", document.Root?.Element("tmdbid")?.Value);
-        Assert.Equal("547888", document.Root?.Element("bangumiid")?.Value);
+        Assert.Null(document.Root?.Element("bangumiid"));
         using (var sidecar = JsonDocument.Parse(await File.ReadAllTextAsync(episodeSidecar)))
         {
             Assert.Equal(1, sidecar.RootElement.GetProperty("season").GetInt32());

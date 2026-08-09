@@ -147,12 +147,12 @@ advanced:
 
 | TMDB 结果 | Bgm ID | 兜底季度 | 开关 | 结果 |
 |---|---:|---:|---:|---|
-| 成功 | 有效 | 有效 | 任意 | 使用 TMDB 名称/Season/Episode 继续；`tvshow.nfo` 写真实 `tmdbid` + `bangumiid` |
+| 成功 | 有效 | 有效 | 任意 | 使用 TMDB 名称/Season/Episode 继续；`tvshow.nfo` 默认只写真实 `tmdbid`，仅在 `write_bangumi_id_when_tmdb_matched=true` 时同时写 `bangumiid` |
 | 确定性完全无匹配（`SemanticNoMatch`） | 有效 | 固定 `S01` | `true` | 使用 Bangumi 兜底继续；`tvshow.nfo` 写 `tmdbid=0` + `bangumiid` |
 | 网络/服务/认证/配置/协议失败 | 有效 | 不适用 | `true` | 禁止兜底；进入重试或配置/人工修复，不下载、不生成 NFO |
 | 完全失败 | 有效 | 不适用 | `false` | 原失败流程；不下载、不刮削、不生成 NFO |
 | 完全失败 | 缺失 | 任意 | `true` | 无法兜底；失败/待确认，不生成 NFO |
-| TMDB ID 有效、仅季度失败 | 有效 | fallback 后有效 | 任意 | 不属于完全失败；正常继续并写真实 `tmdbid` + `bangumiid` |
+| TMDB ID 有效、仅季度失败 | 有效 | fallback 后有效 | 任意 | 不属于完全失败；正常继续并写真实 `tmdbid`；是否附加 `bangumiid` 仍由显式开关决定 |
 
 本节的 `tmdbid`、`bangumiid` 都指 NFO XML 标签内容。内部 SQLite 分别保存来源值、TMDB 规范值、失败原因和待修复状态，不用 NFO 的 `0` 代替内部身份信息。
 
@@ -160,16 +160,17 @@ advanced:
 
 ## 4. NFO 文件和内容
 
-ID 写入动画剧集根目录的 `tvshow.nfo`，与 AnimeGo `develop` 保持一致；不写入季度目录的 `season.nfo`。
+ID 写入动画剧集根目录的 `tvshow.nfo`；不写入季度目录的 `season.nfo`。AnimeGoNet 默认只在 Bangumi 完全兜底时写 `bangumiid`，避免多个 bgmid 映射到同一 TMDB Series 根目录时被后续任务覆盖。该默认值是按项目当前业务语义对 AnimeGo `develop` 无条件写入行为的明确调整。
 
 TMDB 成功：
 
 ```xml
 <tvshow>
   <tmdbid>72517</tmdbid>
-  <bangumiid>371546</bangumiid>
 </tvshow>
 ```
+
+显式开启 `metadata.write_bangumi_id_when_tmdb_matched` 后，TMDB 成功的 NFO 才额外写 `<bangumiid>`。WebUI 会提示同一 TMDB Series 目录被不同 bgmid 共用时的覆盖风险。
 
 TMDB 完全失败且业务兜底成功：
 

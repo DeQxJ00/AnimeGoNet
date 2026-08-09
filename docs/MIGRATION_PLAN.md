@@ -226,10 +226,10 @@ docs/
 - SQLite schema v37 为每个 download job 增加持久化媒体整理阶段与单位进度。重命名规划、媒体/字幕传输、NFO、目录索引、下载器清理逐阶段上报；失败重试保留可审计阶段，已完成文件 operation 可续算，清理租约恢复不得重新执行文件工作。
 - SQLite schema v38 为每个 SourceProfile 增加默认开启的重复命中通知开关。RSS 使用批次 profile 快照，统一导入写入不可变任务路由快照；关闭只抑制脱敏日志/WebSocket 事件，不得改变全局完成记录、逐文件去重或下载门禁。
 - SQLite schema v39 增加旧 Go cache JSON 的内容指纹迁移审计；报告不保存或展示原始 key/value，重复包不覆盖新缓存。
-- 正常取得 TMDB ID 时，在动画根目录 `tvshow.nfo` 写真实 `<tmdbid>` 和对应 `<bangumiid>`。
+- 正常取得 TMDB ID 时，在动画根目录 `tvshow.nfo` 默认只写真实 `<tmdbid>`；仅在 `write_bangumi_id_when_tmdb_matched` 显式开启时附加对应 `<bangumiid>`。
 - TMDB 完全失败兜底开启、权威TMDB访问成功并确定无匹配、Bangumi Subject ID有效且季度已确定时，继续下载/刮削，并在 `tvshow.nfo` 固定写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
 - 兜底关闭或兜底前置条件不满足时不继续下载/刮削，也不生成失败 NFO；不得只写 `tmdbid=0`。
-- TMDB 后续补全成功时原子更新 `tvshow.nfo`，用真实 TMDB ID 替换 0，并恢复正常的 TMDB+Bgm 标签组合。
+- TMDB 后续补全成功时原子更新 `tvshow.nfo`，用真实 TMDB ID 替换 0；默认同时移除兜底 `bangumiid`，显式开关开启时才保留。
 
 提交：
 

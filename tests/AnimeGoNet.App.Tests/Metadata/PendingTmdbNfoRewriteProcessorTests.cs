@@ -18,7 +18,7 @@ public sealed class PendingTmdbNfoRewriteProcessorTests
         var content = await File.ReadAllTextAsync(target);
         Assert.Contains("<title>Canonical Anime</title>", content, StringComparison.Ordinal);
         Assert.Contains("<tmdbid>700</tmdbid>", content, StringComparison.Ordinal);
-        Assert.Contains("<bangumiid>547888</bangumiid>", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<bangumiid>", content, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(fixture.SaveRoot, "Canonical Anime")));
         Assert.Equal(PendingTmdbNfoRewriteResult.NoWork, await fixture.Processor.RunOnceAsync());
         Assert.Equal("completed", await fixture.ReadStateAsync());

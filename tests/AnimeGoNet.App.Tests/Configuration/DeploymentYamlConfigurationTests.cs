@@ -279,6 +279,7 @@ public sealed class DeploymentYamlConfigurationTests
                     use_title_season: true
                     use_first_season: true
                   tmdb_failure_use_bangumi: true
+                  write_bangumi_id_when_tmdb_matched: true
                   mikan_trusted_offset_cache_enabled: true
                   ai:
                     provider: openai_compatible
@@ -363,6 +364,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.True(options.Metadata.SeasonFailure.UseTitleSeason);
             Assert.True(options.Metadata.SeasonFailure.UseFirstSeason);
             Assert.True(options.Metadata.TmdbFailureUseBangumi);
+            Assert.True(options.Metadata.WriteBangumiIdWhenTmdbMatched);
             Assert.True(options.Metadata.MikanTrustedOffsetCacheEnabled);
             Assert.True(options.Metadata.Ai.UseMetadataMatch);
             Assert.Equal(TimeSpan.FromSeconds(601), options.Metadata.Ai.HttpTimeout);

@@ -811,6 +811,13 @@ public static class AnimeGoApplication
                         "metadata:tmdb_failure_use_bangumi"),
                     defaults.Metadata.TmdbFailureUseBangumi,
                     "tmdb_fail_use_bangumi"),
+                WriteBangumiIdWhenTmdbMatched = ParseOptionalBool(
+                    FirstConfigurationValue(
+                        configuration,
+                        "write_bangumi_id_when_tmdb_matched",
+                        "metadata:write_bangumi_id_when_tmdb_matched"),
+                    defaults.Metadata.WriteBangumiIdWhenTmdbMatched,
+                    "write_bangumi_id_when_tmdb_matched"),
                 MikanTrustedOffsetCacheEnabled = ParseOptionalBool(
                     FirstConfigurationValue(
                         configuration,

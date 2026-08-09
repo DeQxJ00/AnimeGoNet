@@ -239,6 +239,8 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("ai_use_episode_match")] bool AiUseEpisodeMatch,
     [property: JsonPropertyName("ai_http_timeout_seconds")] double AiHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
+    [property: JsonPropertyName("write_bangumi_id_when_tmdb_matched")]
+    bool WriteBangumiIdWhenTmdbMatched,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
     [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
@@ -286,6 +288,8 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("ai_use_episode_match")] bool? AiUseEpisodeMatch,
     [property: JsonPropertyName("ai_http_timeout_seconds")] double AiHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
+    [property: JsonPropertyName("write_bangumi_id_when_tmdb_matched")]
+    bool WriteBangumiIdWhenTmdbMatched,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
     [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
@@ -351,6 +355,8 @@ public sealed record MetadataConfigurationResponse(
     [property: JsonPropertyName("season_failure")] SeasonFailureConfigurationResponse SeasonFailure,
     [property: JsonPropertyName("ai")] AiConfigurationResponse Ai,
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
+    [property: JsonPropertyName("write_bangumi_id_when_tmdb_matched")]
+    bool WriteBangumiIdWhenTmdbMatched,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled);
 
 public sealed record MikanConfigurationResponse(

@@ -219,6 +219,7 @@ metadata:
     use_title_season: false
     use_first_season: false
   tmdb_failure_use_bangumi: false
+  write_bangumi_id_when_tmdb_matched: false
   mikan_trusted_offset_cache_enabled: false
   ai:
     provider: openai_compatible

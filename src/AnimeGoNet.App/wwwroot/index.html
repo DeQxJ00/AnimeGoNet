@@ -962,6 +962,10 @@
             <input id="configuration-bangumi-fallback" type="checkbox">
             <span><strong>Bangumi 完全兜底（一般不启用这个）</strong><small>TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；不输出有效 tmdbid（内部仍按现有逻辑写 0）</small></span>
           </label>
+          <label class="configuration-guided-option">
+            <input id="configuration-write-bangumi-with-tmdb" type="checkbox">
+            <span><strong>TMDB 成功时也写 Bangumi ID</strong><small>默认关闭。关闭时仅 tmdbid=0 的 Bangumi 完全兜底写入 bangumiid；开启后正常 TMDB 作品也写入。多个 bgmid 共用同一 TMDB 作品目录时，后续任务可能覆盖根目录 NFO 中的 bangumiid。</small></span>
+          </label>
           <label><input id="configuration-offset-cache" type="checkbox">可信 offset 缓存</label>
         </fieldset>
         <label>AI 超时（秒）<input id="configuration-ai-timeout" type="number" min="1" max="86400" required></label>

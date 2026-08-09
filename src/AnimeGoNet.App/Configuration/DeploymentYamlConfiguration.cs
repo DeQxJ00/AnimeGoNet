@@ -657,6 +657,7 @@ internal static class DeploymentYamlConfiguration
                 use_title_season: {{Boolean(values, "metadata:season_failure:use_title_season", false)}}
                 use_first_season: {{Boolean(values, "metadata:season_failure:use_first_season", false)}}
               tmdb_failure_use_bangumi: {{Boolean(values, "metadata:tmdb_failure_use_bangumi", false)}}
+              write_bangumi_id_when_tmdb_matched: {{Boolean(values, "metadata:write_bangumi_id_when_tmdb_matched", false)}}
               mikan_trusted_offset_cache_enabled: {{Boolean(values, "metadata:mikan_trusted_offset_cache_enabled", false)}}
               ai:
                 provider: openai_compatible
@@ -868,6 +869,7 @@ internal static class DeploymentYamlConfiguration
                 use_title_season: false
                 use_first_season: false
               tmdb_failure_use_bangumi: false
+              write_bangumi_id_when_tmdb_matched: false
               mikan_trusted_offset_cache_enabled: false
               ai:
                 provider: openai_compatible

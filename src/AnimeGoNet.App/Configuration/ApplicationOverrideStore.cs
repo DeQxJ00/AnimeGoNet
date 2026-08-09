@@ -55,7 +55,8 @@ public sealed record ApplicationOverrideEntry(
     bool? AiModelOverridden = null,
     string? AiModel = null,
     string? AiTmdbMcpUrl = null,
-    string? AiBangumiMcpUrl = null);
+    string? AiBangumiMcpUrl = null,
+    bool? WriteBangumiIdWhenTmdbMatched = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -369,6 +370,11 @@ public sealed class ApplicationOverrideStore : IDisposable
                     "tmdb_failure_use_bangumi")
                     ? options.Metadata.TmdbFailureUseBangumi
                     : settings.TmdbFailureUseBangumi,
+                WriteBangumiIdWhenTmdbMatched = inheritedFields.Contains(
+                    "write_bangumi_id_when_tmdb_matched")
+                    ? options.Metadata.WriteBangumiIdWhenTmdbMatched
+                    : settings.WriteBangumiIdWhenTmdbMatched
+                    ?? options.Metadata.WriteBangumiIdWhenTmdbMatched,
                 MikanTrustedOffsetCacheEnabled = inheritedFields.Contains(
                     "mikan_trusted_offset_cache_enabled")
                     ? options.Metadata.MikanTrustedOffsetCacheEnabled

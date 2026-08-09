@@ -5,8 +5,11 @@ using AnimeGoNet.Core.Library;
 
 namespace AnimeGoNet.App.Library;
 
-public sealed class TvShowNfoWriter
+public sealed class TvShowNfoWriter(AnimeGoOptions? options = null)
 {
+    private readonly bool _writeBangumiIdWhenTmdbMatched =
+        options?.Metadata.WriteBangumiIdWhenTmdbMatched ?? false;
+
     public async Task WriteAsync(
         string saveRoot,
         string canonicalSeriesName,
@@ -57,6 +60,7 @@ public sealed class TvShowNfoWriter
 
         var title = SecurityElement.Escape(canonicalSeriesName) ?? string.Empty;
         var bangumi = bangumiSubjectId is > 0
+            && (tmdbSeriesId == 0 || _writeBangumiIdWhenTmdbMatched)
             ? $"  <bangumiid>{bangumiSubjectId.Value}</bangumiid>\n"
             : string.Empty;
         var content = $"""
