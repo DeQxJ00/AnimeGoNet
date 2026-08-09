@@ -1049,12 +1049,18 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   margin: 0;
 }
 
+.live-log-filters { display: grid; grid-template-columns: minmax(240px,2fr) minmax(190px,1fr) minmax(120px,.55fr) auto auto; gap: 10px; align-items: end; margin: 14px 0 8px; }
+.live-log-filters label { display: grid; gap: 6px; color: #8da2c9; font-size: .72rem; }
+.live-log-filters input:not([type="checkbox"]) { min-width: 0; width: 100%; border: 1px solid #344260; border-radius: 9px; padding: 9px 10px; color: #edf2ff; background: #0c1220; font: inherit; }
+.live-log-filters label.live-log-switch { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 4px; color: #cbd7ec; white-space: nowrap; }
+.live-log-switch input { accent-color: #59d3a5; }
+
 #live-log-status[data-state="connected"] { color: #79ddb6; }
 #live-log-status[data-state="paused"] { color: #f3c86b; }
 #live-log-status[data-state="error"] { color: #ff938a; }
 
 .live-log-stream {
-  height: min(24rem, 55vh);
+  height: min(38rem, 68vh);
   overflow: auto;
   padding: .8rem;
   border: 1px solid #344260;
@@ -1066,15 +1072,30 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 }
 
 .live-log-entry {
-  padding: .18rem .35rem;
+  border-bottom: 1px solid rgba(74,91,124,.28);
   border-left: .2rem solid transparent;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .live-log-entry:nth-child(even) {
   background: rgba(255,255,255,.025);
 }
+
+.live-log-entry > summary { position: relative; display: grid; grid-template-columns: 105px 88px minmax(170px,.9fr) 72px minmax(280px,2fr); gap: 10px; align-items: baseline; padding: 8px 10px; cursor: pointer; list-style: none; }
+.live-log-entry > summary::-webkit-details-marker { display: none; }
+.live-log-entry > summary::before { content: "›"; position: absolute; margin-left: -9px; color: #657797; transition: transform .12s ease; }
+.live-log-entry[open] > summary::before { transform: rotate(90deg); }
+.live-log-entry time, .live-log-entry strong, .live-log-entry span { min-width: 0; overflow-wrap: anywhere; }
+.live-log-entry time { color: #91a0bb; font-size: .72rem; }
+.live-log-entry strong { font-size: .68rem; letter-spacing: .04em; }
+.live-log-category { color: #a8bad8; }
+.live-log-event { color: #7890b6; }
+.live-log-message { color: inherit; }
+.live-log-detail { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0; padding: 4px 12px 12px; }
+.live-log-detail div { min-width: 0; padding: 8px 10px; border: 1px solid #26344c; border-radius: 8px; background: rgba(13,20,34,.86); }
+.live-log-detail div:nth-last-child(-n+2) { grid-column: 1 / -1; }
+.live-log-detail dt { color: #7486a4; font: .64rem/1.35 Inter,ui-sans-serif,system-ui,sans-serif; }
+.live-log-detail dd { margin: 4px 0 0; color: #d7dfed; font: .72rem/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.live-log-stream.nowrap .live-log-message, .live-log-stream.nowrap .live-log-detail dd { white-space: pre; overflow-wrap: normal; }
 
 .live-log-entry.trace { color: #8290a8; }
 .live-log-entry.debug { color: #a9b6ca; }
@@ -1095,6 +1116,13 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .cache-browser-actions { justify-content: flex-start; }
   .live-log-heading { align-items: flex-start; }
   .live-log-actions { justify-content: flex-start; }
+  .live-log-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .live-log-filters .wide { grid-column: 1 / -1; }
+  .live-log-entry > summary { grid-template-columns: 92px 76px minmax(0,1fr); }
+  .live-log-entry > summary .live-log-event { display: none; }
+  .live-log-entry > summary .live-log-message { grid-column: 1 / -1; }
+  .live-log-detail { grid-template-columns: 1fr; }
+  .live-log-detail div, .live-log-detail div:nth-last-child(-n+2) { grid-column: 1; }
 }
 
 @media (max-width: 620px) {
@@ -1128,6 +1156,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .live-log-actions > button {
     flex: 1 1 auto;
   }
+  .live-log-filters { grid-template-columns: 1fr; }
+  .live-log-filters .wide { grid-column: 1; }
   .library-pagination,
   .metadata-pagination,
   .download-pagination { flex-wrap: wrap; }

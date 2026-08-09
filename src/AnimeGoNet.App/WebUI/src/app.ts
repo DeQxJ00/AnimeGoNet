@@ -4,6 +4,13 @@ import {
   renderRegionMessage,
   setRegionState,
 } from "./ui-state.js";
+import {
+  filterLiveLogEntries,
+  parseLiveLogEntry,
+  type LiveLogFilter,
+  type LiveLogLevel,
+  type ParsedLiveLogEntry,
+} from "./log-view.js";
 
 interface RuntimeStatus {
   database_schema_version: number;
@@ -194,20 +201,6 @@ interface CacheBrowserDeleteResponse {
   bucket_id: string;
   entry_id: string;
   deleted: boolean;
-}
-
-type LiveLogLevel =
-  | "trace"
-  | "debug"
-  | "information"
-  | "warning"
-  | "error"
-  | "critical"
-  | "unknown";
-
-interface LiveLogEntry {
-  level: LiveLogLevel;
-  text: string;
 }
 
 interface LiveLogFrameHeader {
@@ -1296,22 +1289,13 @@ let cacheReadOnly = false;
 let cacheRequestSequence = 0;
 const cachePageSize = 25;
 const maximumRenderedLogs = 500;
-const liveLogLevelOrder: Record<LiveLogLevel, number> = {
-  trace: 0,
-  debug: 1,
-  information: 2,
-  warning: 3,
-  error: 4,
-  critical: 5,
-  unknown: 2,
-};
 let liveLogSocket: WebSocket | null = null;
 let liveLogReconnectTimer: number | null = null;
 let liveLogReconnectAttempt = 0;
 let liveLogShouldReconnect = true;
 let liveLogPaused = false;
 let liveLogControlPending = false;
-let liveLogEntries: LiveLogEntry[] = [];
+let liveLogEntries: ParsedLiveLogEntry[] = [];
 
 type WorkspaceId =
   | "overview"
@@ -2486,44 +2470,96 @@ function setLiveLogStatus(message: string, state: string): void {
   target.dataset.state = state;
 }
 
-function parseLiveLogLevel(line: string): LiveLogLevel {
-  const marker = line.match(/\[(TRC|DBG|INF|WRN|ERR|CRT)\]/)?.[1];
-  switch (marker) {
-    case "TRC": return "trace";
-    case "DBG": return "debug";
-    case "INF": return "information";
-    case "WRN": return "warning";
-    case "ERR": return "error";
-    case "CRT": return "critical";
-    default: return "unknown";
-  }
+function liveLogFilter(): LiveLogFilter {
+  const minimum = element<HTMLSelectElement>("#live-log-level").value;
+  return {
+    minimumLevel: minimum === "all" ? "all" : minimum as LiveLogLevel,
+    query: element<HTMLInputElement>("#live-log-search").value,
+    category: element<HTMLInputElement>("#live-log-category").value,
+    eventId: element<HTMLInputElement>("#live-log-event-id").value,
+  };
+}
+
+function visibleLiveLogEntries(): ParsedLiveLogEntry[] {
+  return filterLiveLogEntries(liveLogEntries, liveLogFilter());
+}
+
+function liveLogTime(timestamp: string | null): string {
+  if (!timestamp) return "时间未知";
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime())
+    ? timestamp
+    : parsed.toLocaleTimeString("zh-CN", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3,
+      });
+}
+
+function liveLogDetail(label: string, value: string): HTMLDivElement {
+  const row = document.createElement("div");
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const description = document.createElement("dd");
+  description.textContent = value;
+  row.append(term, description);
+  return row;
 }
 
 function renderLiveLogs(): void {
-  const minimum = element<HTMLSelectElement>("#live-log-level").value;
-  const minimumOrder = minimum === "all"
-    ? -1
-    : liveLogLevelOrder[minimum as LiveLogLevel] ?? 2;
-  const visible = liveLogEntries.filter(
-    entry => liveLogLevelOrder[entry.level] >= minimumOrder,
-  );
+  const visible = visibleLiveLogEntries();
   const stream = element<HTMLElement>("#live-log-stream");
+  stream.classList.toggle(
+    "nowrap",
+    !element<HTMLInputElement>("#live-log-wrap").checked,
+  );
   if (visible.length === 0) {
     stream.replaceChildren(Object.assign(document.createElement("p"), {
       className: "muted empty",
       textContent: liveLogEntries.length === 0
         ? "等待日志…"
-        : "当前级别过滤下没有日志。",
+        : "当前组合筛选下没有日志。",
     }));
   } else {
     const nodes = visible.map(entry => {
-      const line = document.createElement("div");
+      const line = document.createElement("details");
       line.className = `live-log-entry ${entry.level}`;
-      line.textContent = entry.text;
+      const summary = document.createElement("summary");
+      const time = document.createElement("time");
+      time.textContent = liveLogTime(entry.timestamp);
+      if (entry.timestamp) time.dateTime = entry.timestamp;
+      const level = document.createElement("strong");
+      level.textContent = entry.level.toUpperCase();
+      const category = document.createElement("span");
+      category.className = "live-log-category";
+      category.textContent = entry.category;
+      const eventId = document.createElement("span");
+      eventId.className = "live-log-event";
+      eventId.textContent = entry.eventId === null ? "—" : `#${entry.eventId}`;
+      const message = document.createElement("span");
+      message.className = "live-log-message";
+      message.textContent = entry.message;
+      summary.append(time, level, category, eventId, message);
+      const details = document.createElement("dl");
+      details.className = "live-log-detail";
+      details.append(
+        liveLogDetail("UTC 时间", entry.timestamp ?? "未知"),
+        liveLogDetail("级别", entry.level),
+        liveLogDetail("类别", entry.category),
+        liveLogDetail("Event ID", entry.eventId === null ? "无" : String(entry.eventId)),
+        liveLogDetail("消息", entry.message),
+      );
+      if (entry.exception) details.append(liveLogDetail("异常", entry.exception));
+      details.append(liveLogDetail("脱敏原文", entry.text));
+      line.append(summary, details);
       return line;
     });
     stream.replaceChildren(...nodes);
-    stream.scrollTop = stream.scrollHeight;
+    if (element<HTMLInputElement>("#live-log-auto-scroll").checked) {
+      stream.scrollTop = stream.scrollHeight;
+    }
   }
   element<HTMLElement>("#live-log-count").textContent =
     `本页 ${liveLogEntries.length} / ${maximumRenderedLogs} 条`
@@ -2533,13 +2569,27 @@ function renderLiveLogs(): void {
 function appendLiveLogs(lines: string[]): void {
   const entries = lines
     .filter(line => line.length > 0)
-    .map(line => ({ level: parseLiveLogLevel(line), text: line }));
+    .map(parseLiveLogEntry);
   if (entries.length === 0) return;
   liveLogEntries.push(...entries);
   if (liveLogEntries.length > maximumRenderedLogs) {
     liveLogEntries.splice(0, liveLogEntries.length - maximumRenderedLogs);
   }
   renderLiveLogs();
+}
+
+async function copyVisibleLiveLogs(): Promise<void> {
+  const visible = visibleLiveLogEntries();
+  if (visible.length === 0) {
+    setLiveLogStatus("当前没有可复制的日志", "empty");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(visible.map(entry => entry.text).join("\n"));
+    setLiveLogStatus(`已复制 ${visible.length} 条脱敏日志`, "connected");
+  } catch {
+    setLiveLogStatus("浏览器拒绝剪贴板访问，请使用系统选择复制", "error");
+  }
 }
 
 function updateLiveLogPauseButton(): void {
@@ -7717,6 +7767,21 @@ element<HTMLSelectElement>("#live-log-level").addEventListener(
   "change",
   renderLiveLogs,
 );
+for (const selector of [
+  "#live-log-search",
+  "#live-log-category",
+  "#live-log-event-id",
+]) {
+  element<HTMLInputElement>(selector).addEventListener("input", renderLiveLogs);
+}
+element<HTMLInputElement>("#live-log-auto-scroll").addEventListener(
+  "change",
+  renderLiveLogs,
+);
+element<HTMLInputElement>("#live-log-wrap").addEventListener(
+  "change",
+  renderLiveLogs,
+);
 element<HTMLButtonElement>("#live-log-reconnect").addEventListener(
   "click",
   () => connectLiveLogs(true),
@@ -7724,6 +7789,10 @@ element<HTMLButtonElement>("#live-log-reconnect").addEventListener(
 element<HTMLButtonElement>("#live-log-pause").addEventListener(
   "click",
   toggleLiveLogPause,
+);
+element<HTMLButtonElement>("#live-log-copy").addEventListener(
+  "click",
+  () => void copyVisibleLiveLogs(),
 );
 element<HTMLButtonElement>("#live-log-clear").addEventListener("click", () => {
   liveLogEntries = [];

@@ -40,7 +40,8 @@ public sealed class WebSocketLogApiTests
             "liveLogPaused ? \"resume\" : \"pause\"",
             script,
             StringComparison.Ordinal);
-        Assert.Contains("""line.textContent = entry.text""", script, StringComparison.Ordinal);
+        Assert.Contains("message.textContent = entry.message", script, StringComparison.Ordinal);
+        Assert.Contains("description.textContent = value", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             """stream.innerHTML""",
             script,

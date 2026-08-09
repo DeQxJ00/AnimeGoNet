@@ -180,8 +180,12 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
   中已有的旧 hash 放入 upgrade query，不回显、不记录、不写入本地存储。
 - pause/resume 是逐浏览器连接状态，不会暂停其他管理员。暂停后服务端保存最新
   1000 条，溢出丢弃最旧；恢复时按一个兼容 log 帧补发。
-- 浏览器只保存最新 500 条并可选择 Trace、Debug、Information、Warning、
-  Error 或 Critical 最低级别。过滤只改变显示，不改变服务端采集。
+- 浏览器只保存最新 500 条，并从兼容文本行解析 UTC 时间、Trace～Critical 级别、
+  category、Event ID、消息与异常；无法识别的旧行仍以 `unknown` 显示，不虚构字段。
+  可按最低级别、关键词、类别和 Event ID 组合筛选；筛选只改变显示，不改变服务端采集。
+- 单条日志使用可展开详情展示解析字段与脱敏原文；自动滚动和长行换行可独立关闭。
+  “复制筛选结果”只复制当前可见的服务端脱敏文本，剪贴板被浏览器拒绝时不降级到
+  未脱敏来源。所有渲染继续只使用 `textContent`。
 - 所有日志行通过 `textContent` 创建 DOM，绝不解释成 HTML。服务端先规范化
   换行，并脱敏 URL path/query、Bearer、Cookie、Authorization、password、
   passkey、api key、access key 和 token；异常只输出类型与脱敏后的 message。

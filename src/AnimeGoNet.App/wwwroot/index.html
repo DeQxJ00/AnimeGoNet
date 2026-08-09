@@ -289,14 +289,28 @@
           </label>
           <button id="live-log-reconnect" type="button" class="secondary-button">重新连接</button>
           <button id="live-log-pause" type="button" class="secondary-button" disabled>暂停</button>
+          <button id="live-log-copy" type="button" class="secondary-button">复制筛选结果</button>
           <button id="live-log-clear" type="button" class="secondary-button">清空本页</button>
         </div>
       </div>
+      <form id="live-log-filters" class="live-log-filters" aria-label="详细日志筛选">
+        <label class="wide">关键词
+          <input id="live-log-search" type="search" maxlength="200" placeholder="任务标题、阶段、错误码或消息">
+        </label>
+        <label>类别
+          <input id="live-log-category" type="search" maxlength="200" placeholder="AnimeGoNet.App.Metadata">
+        </label>
+        <label>Event ID
+          <input id="live-log-event-id" type="number" min="0" step="1" placeholder="例如 4301">
+        </label>
+        <label class="live-log-switch"><input id="live-log-auto-scroll" type="checkbox" checked>自动滚动</label>
+        <label class="live-log-switch"><input id="live-log-wrap" type="checkbox" checked>长行换行</label>
+      </form>
       <div class="live-log-meta">
         <p id="live-log-status" class="muted" role="status">正在连接日志流…</p>
         <span id="live-log-count" class="muted">本页 0 / 500 条</span>
       </div>
-      <p class="muted">服务端先执行密钥与 URL 脱敏；暂停时每个连接独立缓存最新 1000 条，恢复后一次补发。清空只影响当前页面。</p>
+      <p class="muted">服务端先执行密钥与 URL 脱敏；单条可展开查看 UTC 时间、类别、Event ID、消息、异常与脱敏原文。暂停时每个连接独立缓存最新 1000 条，恢复后一次补发。清空只影响当前页面。</p>
       <div id="live-log-stream" class="live-log-stream" role="log" aria-label="实时日志输出">
         <p class="muted empty">等待日志…</p>
       </div>
