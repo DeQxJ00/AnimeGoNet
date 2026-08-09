@@ -3,6 +3,7 @@ param(
     [string]$RemoteHost = 'root@192.168.1.164',
     [string]$PlinkPath = 'C:\Program Files\PuTTY\plink.exe',
     [string]$PscpPath = 'C:\Program Files\PuTTY\pscp.exe',
+    [string]$QbittorrentImage = 'lscr.io/linuxserver/qbittorrent:5.1.4',
     [string]$ReportRoot = 'E:\WorkSpaceAI\AnimeGoNet\TestSpace\animegonet_data\docker-ubuntu-ct'
 )
 
@@ -36,7 +37,7 @@ try {
     Invoke-Remote 'extract' "set -eu; tar -xf '$remoteRoot/source.tar' -C '$remoteRoot'; rm -f '$remoteRoot/source.tar'"
     Invoke-Remote 'build-native-aot-image' "set -eu; cd '$remoteRoot'; docker build --pull --build-arg TARGETARCH=amd64 -f Dockerfile.animegonet -t '$image' ."
     Invoke-Remote 'container-api-sqlite-paths' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 bash ./eng/smoke-container.sh '$image'"
-    Invoke-Remote 'compose-qbittorrent-chain' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 ANIMEGONET_FULL_CHAIN_WEBUI=0 bash ./eng/smoke-qbittorrent-compose.sh '$image'"
+    Invoke-Remote 'compose-qbittorrent-chain' "set -eu; cd '$remoteRoot'; GITHUB_RUN_ID='$runId' GITHUB_RUN_ATTEMPT=1 QBITTORRENT_IMAGE='$QbittorrentImage' ANIMEGONET_FULL_CHAIN_WEBUI=0 bash ./eng/smoke-qbittorrent-compose.sh '$image'"
 }
 finally {
     if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
@@ -49,6 +50,7 @@ finally {
         completed_at_utc = [DateTimeOffset]::UtcNow
         remote_host = $RemoteHost
         expected_environment = 'Ubuntu 24.04 x86_64'
+        qbittorrent_image = $QbittorrentImage
         source_commit = (& git -C $repository rev-parse HEAD).Trim()
         stages = $stages
         cleanup_exit_code = $cleanupExitCode

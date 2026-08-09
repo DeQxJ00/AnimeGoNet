@@ -11,6 +11,8 @@ public sealed class IntegrationHarnessContractTests
         Assert.Contains("/var/tmp/animegonet-docker-audit-", script, StringComparison.Ordinal);
         Assert.Contains("Ubuntu 24.04", script, StringComparison.Ordinal);
         Assert.Contains("--build-arg TARGETARCH=amd64", script, StringComparison.Ordinal);
+        Assert.Contains("lscr.io/linuxserver/qbittorrent:5.1.4", script, StringComparison.Ordinal);
+        Assert.Contains("QBITTORRENT_IMAGE='$QbittorrentImage'", script, StringComparison.Ordinal);
         Assert.Contains("bash ./eng/smoke-container.sh", script, StringComparison.Ordinal);
         Assert.Contains("bash ./eng/smoke-qbittorrent-compose.sh", script, StringComparison.Ordinal);
         Assert.DoesNotContain("docker system prune", script, StringComparison.OrdinalIgnoreCase);
