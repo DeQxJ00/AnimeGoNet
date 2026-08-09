@@ -23,7 +23,10 @@
 
 - Focused parser tests: 10/10 passed.
 - Focused Data builder/import/archive tests: 38/38 passed.
-- Focused application cache tests: 6/6 passed.
+- Focused application cache tests: 7/7 passed.
+- P3 integration fixture: active v2 relation and predecessor Subject were read
+  with zero online Bangumi calls while the configured online client always
+  failed; the resolver then validated TMDB Series 5200 / Season 1 successfully.
 - Release build: 0 warnings, 0 errors.
 - Full suite: 1520/1520 passed (Core 385, Data 217, App 866, plugin projects 52).
 - win-x64 NativeAOT publish completed without trim/AOT warnings; first-start

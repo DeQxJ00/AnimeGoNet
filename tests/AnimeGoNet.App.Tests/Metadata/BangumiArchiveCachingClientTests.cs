@@ -79,6 +79,35 @@ public sealed class BangumiArchiveCachingClientTests
     }
 
     [Fact]
+    public async Task P3UsesVersionTwoRelationsWhenOnlineBangumiIsUnavailable()
+    {
+        await using var fixture = await ArchiveFixture.CreateAsync(
+            episodeCount: 1,
+            storedEpisodeCount: 1,
+            schemaVersion: 2,
+            seedRelation: true);
+        var unavailable = new UnavailableBangumiClient();
+        using var cached = new BangumiArchiveCachingClient(
+            fixture.Store,
+            unavailable,
+            unavailable);
+        var tmdb = new BacktraceTmdbClient();
+        var resolver = new BangumiSeasonBacktraceResolver(
+            cached,
+            new TmdbSeriesSeasonResolver(new TmdbSeriesResolver(tmdb), tmdb));
+
+        var result = await resolver.ResolveAsync(51);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(5200, result.Details!.Series.Id);
+        Assert.Equal(1, result.Season!.SeasonNumber);
+        Assert.Equal(2, result.VisitedSubjectCount);
+        Assert.Equal(["Archive Prequel"], tmdb.SearchTitles);
+        Assert.Equal(0, unavailable.SubjectCalls);
+        Assert.Equal(0, unavailable.RelationCalls);
+    }
+
+    [Fact]
     public async Task MissingSubjectFallsBackToOnlineClients()
     {
         await using var fixture = await ArchiveFixture.CreateAsync(
@@ -198,6 +227,116 @@ public sealed class BangumiArchiveCachingClientTests
                     new DateOnly(2026, 7, 30)),
             ]);
         }
+    }
+
+    private sealed class UnavailableBangumiClient
+        : IBangumiSubjectClient, IBangumiEpisodeClient
+    {
+        public int SubjectCalls { get; private set; }
+
+        public int RelationCalls { get; private set; }
+
+        public Task<BangumiSubject?> GetSubjectAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            _ = subjectId;
+            cancellationToken.ThrowIfCancellationRequested();
+            SubjectCalls++;
+            return Task.FromException<BangumiSubject?>(Unavailable());
+        }
+
+        public Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            _ = subjectId;
+            cancellationToken.ThrowIfCancellationRequested();
+            RelationCalls++;
+            return Task.FromException<IReadOnlyList<BangumiSubjectRelation>>(Unavailable());
+        }
+
+        public Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            _ = subjectId;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromException<IReadOnlyList<BangumiEpisode>>(Unavailable());
+        }
+
+        private static BangumiClientException Unavailable() => new(
+            MetadataFailureKind.Network,
+            "bangumi_offline_fixture");
+    }
+
+    private sealed class BacktraceTmdbClient : ITmdbClient
+    {
+        private static readonly TmdbSeries Series = new(
+            5200,
+            "Archive Prequel",
+            "Archive Prequel",
+            new DateOnly(2025, 1, 1));
+
+        private static readonly TmdbSeason Season = new(
+            520001,
+            5200,
+            1,
+            "Season 1",
+            new DateOnly(2025, 1, 1),
+            12);
+
+        public List<string> SearchTitles { get; } = [];
+
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SearchTitles.Add(title);
+            return Task.FromResult<IReadOnlyList<TmdbSeries>>(
+                string.Equals(title, Series.Name, StringComparison.Ordinal)
+                    ? [Series]
+                    : []);
+        }
+
+        public Task<TmdbSeries?> GetSeriesAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<TmdbSeries?>(seriesId == Series.Id ? Series : null);
+        }
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<TmdbSeriesDetails?>(
+                seriesId == Series.Id
+                    ? new TmdbSeriesDetails(Series, [Season])
+                    : null);
+        }
+
+        public Task<TmdbSeason?> GetSeasonAsync(
+            int seriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<TmdbSeason?>(
+                seriesId == Series.Id && seasonNumber == Season.SeasonNumber
+                    ? Season
+                    : null);
+        }
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(
+            int seriesId,
+            int seasonNumber,
+            int episodeNumber,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class ArchiveFixture : IAsyncDisposable
