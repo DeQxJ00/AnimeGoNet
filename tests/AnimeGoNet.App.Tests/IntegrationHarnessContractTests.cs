@@ -10,6 +10,7 @@ public sealed class IntegrationHarnessContractTests
         Assert.Contains("git -C $repository archive", script, StringComparison.Ordinal);
         Assert.Contains("/var/tmp/animegonet-docker-audit-", script, StringComparison.Ordinal);
         Assert.Contains("Ubuntu 24.04", script, StringComparison.Ordinal);
+        Assert.Contains("--build-arg TARGETARCH=amd64", script, StringComparison.Ordinal);
         Assert.Contains("smoke-container.sh", script, StringComparison.Ordinal);
         Assert.Contains("smoke-qbittorrent-compose.sh", script, StringComparison.Ordinal);
         Assert.DoesNotContain("docker system prune", script, StringComparison.OrdinalIgnoreCase);
