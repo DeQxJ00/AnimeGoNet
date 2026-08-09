@@ -6,7 +6,8 @@ namespace AnimeGoNet.App.Torrents;
 public sealed class TorrentSourcePolicy(
     string sourceProfileId,
     IReadOnlyList<string> allowedHosts,
-    string? mikanIdentityCookie = null)
+    string? mikanIdentityCookie = null,
+    IReadOnlyList<string>? trustedPrivateHosts = null)
 {
     public string SourceProfileId { get; } = sourceProfileId;
 
@@ -14,11 +15,14 @@ public sealed class TorrentSourcePolicy(
 
     internal string? MikanIdentityCookie { get; } = mikanIdentityCookie;
 
+    internal IReadOnlyList<string> TrustedPrivateHosts { get; } = trustedPrivateHosts ?? [];
+
     public bool CredentialsConfigured => MikanIdentityCookie is not null;
 
     public override string ToString() =>
         $"TorrentSourcePolicy {{ SourceProfileId = {SourceProfileId}, "
         + $"AllowedHostCount = {AllowedHosts.Count}, "
+        + $"TrustedPrivateHostCount = {TrustedPrivateHosts.Count}, "
         + $"CredentialsConfigured = {CredentialsConfigured} }}";
 }
 

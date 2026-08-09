@@ -67,7 +67,7 @@ Provider 内的兼容别名。因此更高层的 `--data_path`、
 并返回 `command_line_arguments`、统一的 `controlling_keys` 以及
 `environment` / `command_line` / `environment_and_command_line` 来源。命令行只
 投影参数名，不投影 `=` 后的 URL 或 secret。当前全部可编辑字段均参与部署锁：
-TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时、Bangumi 完全兜底、
+Mikan 地址、TMDB API/图片地址、TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时、Bangumi 完全兜底、
 可信 offset 缓存、Torrent HTTP/容量/redirect/staging 以及数据更新设置。锁定值
 在读取 `application.private.json` 后重新应用；保存其他字段不会把部署值固化到
 私有文件。
@@ -125,7 +125,7 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 ```
 
 兼容的扁平变量包括 `data_path`、`download_path`、`save_path`、
-`tmdb_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、`tmdb_cache_hour`、
+`mikan_base_url`、`tmdb_base_url`、`tmdb_image_base_url`、`tmdb_proxy_url`、`tmdb_api_key`、`tmdb_cache_hour`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`bangumi_proxy_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
@@ -190,8 +190,11 @@ sources:
     duplicate_notification_enabled: true
 
 metadata:
+  mikan:
+    base_url: https://mikanani.me/
   tmdb:
     base_url: https://api.themoviedb.org/
+    image_base_url: https://image.tmdb.org/t/p/
     proxy_url: ''
     api_key: ''
     read_access_token: ''
@@ -239,6 +242,17 @@ data_update:
   keep_versions: 2
   timeout_seconds: 300
 ```
+
+`metadata.mikan.base_url` 必须是以 `/` 结尾、无路径前缀的 HTTP(S) origin；程序把
+RSS、作品页和带 passkey 的 Torrent URL 的 scheme/host/port 替换为该 origin，同时
+原样保留 path/query。配置为内网反向代理（例如 `http://mikan.local/`）时，只信任该
+明确 host 可以解析到私网地址；其它允许 host、redirect 和 Torrent 地址仍执行原有
+SSRF 公网地址门禁。
+
+`metadata.tmdb.image_base_url` 必须是以 `/` 结尾的 HTTP(S) base。官方默认值包含
+`/t/p/`；若反向代理根目录保持 TMDB 图片路径结构，应写成
+`http://image.tmdb.local/t/p/`。Mikan、TMDB API、TMDB 图片和 Bangumi API 四个
+地址都能在 WebUI 应用配置中修改，保存后需重启生效。
 
 `downloaders` 和 `sources` 是按 ID 命名的 mapping。不同来源通过
 `downloader_id` 绑定不同 qBittorrent 实例。所有下载器 `download_path` 必须位于

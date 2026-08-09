@@ -67,6 +67,7 @@ public static class AnimeGoDefaults
             },
             Metadata = new MetadataMatchingOptions
             {
+                Mikan = new MikanClientOptions(),
                 Tmdb = new TmdbClientOptions(),
                 Bangumi = new BangumiClientOptions(),
                 SeasonFailure = new SeasonFailureOptions(),

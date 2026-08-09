@@ -2135,7 +2135,9 @@ function syncConfigurationSecretInputs() {
         token.value = "";
 }
 const configurationLockSelectors = {
+    mikan_base_url: ["#configuration-mikan-url"],
     tmdb_base_url: ["#configuration-tmdb-url"],
+    tmdb_image_base_url: ["#configuration-tmdb-image-url"],
     tmdb_proxy_url: ["#configuration-tmdb-proxy"],
     tmdb_language: ["#configuration-tmdb-language"],
     tmdb_http_timeout_seconds: ["#configuration-tmdb-timeout"],
@@ -2193,7 +2195,9 @@ function openConfigurationEditor() {
         return;
     clearConfigurationPreview();
     const editable = currentConfiguration.editable;
+    setConfigurationValue("#configuration-mikan-url", editable.mikan_base_url);
     setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
+    setConfigurationValue("#configuration-tmdb-image-url", editable.tmdb_image_base_url);
     setConfigurationValue("#configuration-tmdb-proxy", editable.tmdb_proxy_url ?? "");
     setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
     setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
@@ -2239,7 +2243,9 @@ function openConfigurationEditor() {
     configurationDialog.showModal();
 }
 const configurationFieldLabels = {
+    mikan_base_url: "Mikan 地址",
     tmdb_base_url: "TMDB API 地址",
+    tmdb_image_base_url: "TMDB 图片地址",
     tmdb_proxy_url: "TMDB 代理",
     tmdb_language: "TMDB 语言",
     tmdb_http_timeout_seconds: "TMDB 超时（秒）",
@@ -2278,7 +2284,9 @@ function configurationRequest() {
         throw new Error("配置尚未载入");
     }
     return {
+        mikan_base_url: element("#configuration-mikan-url").value,
         tmdb_base_url: element("#configuration-tmdb-url").value,
+        tmdb_image_base_url: element("#configuration-tmdb-image-url").value,
         tmdb_proxy_url: element("#configuration-tmdb-proxy").value || null,
         tmdb_language: element("#configuration-tmdb-language").value,
         tmdb_http_timeout_seconds: element("#configuration-tmdb-timeout").valueAsNumber,

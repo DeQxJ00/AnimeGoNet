@@ -18,9 +18,14 @@ public sealed class ConfigurationApiTests
             {
                 Metadata = options.Metadata with
                 {
+                    Mikan = new MikanClientOptions
+                    {
+                        BaseUrl = new Uri("http://mikan.local/"),
+                    },
                     Tmdb = options.Metadata.Tmdb with
                     {
                         BaseUrl = new Uri("https://metadata.test.invalid/tmdb/"),
+                        ImageBaseUrl = new Uri("http://image.tmdb.local/t/p/"),
                         ProxyUrl = new Uri("http://127.0.0.1:7890/"),
                         ApiKey = "tmdb-api-secret",
                         ReadAccessToken = "tmdb-bearer-secret",
@@ -80,11 +85,17 @@ public sealed class ConfigurationApiTests
         Assert.True(deployment.GetProperty("access_key_configured").GetBoolean());
         Assert.True(deployment.GetProperty("paths_restart_required").GetBoolean());
         var metadata = json.RootElement.GetProperty("metadata");
+        Assert.Equal(
+            "http://mikan.local/",
+            metadata.GetProperty("mikan").GetProperty("base_url").GetString());
         var tmdb = metadata.GetProperty("tmdb");
         Assert.Equal("ja-JP", tmdb.GetProperty("language").GetString());
         Assert.Equal(
             "https://metadata.test.invalid/tmdb/",
             tmdb.GetProperty("base_url").GetString());
+        Assert.Equal(
+            "http://image.tmdb.local/t/p/",
+            tmdb.GetProperty("image_base_url").GetString());
         Assert.Equal("http://127.0.0.1:7890/", tmdb.GetProperty("proxy_url").GetString());
         Assert.True(tmdb.GetProperty("api_key_configured").GetBoolean());
         Assert.True(tmdb.GetProperty("read_access_token_configured").GetBoolean());
@@ -154,6 +165,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-mikan-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-tmdb-image-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-proxy\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-retry-count\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-retry-delay\"", html, StringComparison.Ordinal);
@@ -186,6 +199,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("Bangumi 完全兜底（一般不启用这个）", html, StringComparison.Ordinal);
         Assert.Contains("季度固定 S01；需要 bgmid；不输出有效 tmdbid", html, StringComparison.Ordinal);
         Assert.Contains("bangumi_proxy_url", script, StringComparison.Ordinal);
+        Assert.Contains("mikan_base_url", script, StringComparison.Ordinal);
+        Assert.Contains("tmdb_image_base_url", script, StringComparison.Ordinal);
         Assert.Contains("seasonFailurePriority", script, StringComparison.Ordinal);
         Assert.Contains(
             "一个任务、一个提示词，统一返回并验证 TMDB Series、Season 和全部文件的 Episode",

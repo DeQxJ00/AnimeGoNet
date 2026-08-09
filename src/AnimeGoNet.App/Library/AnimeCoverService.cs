@@ -21,7 +21,6 @@ public sealed class AnimeCoverService(
 {
     private const long MaximumPosterBytes = 5 * 1024 * 1024;
     private const string PosterSize = "w500";
-    private static readonly Uri ImageBaseUrl = new("https://image.tmdb.org/t/p/");
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> CacheGates =
         new(StringComparer.Ordinal);
     private static readonly byte[] Placeholder = Encoding.UTF8.GetBytes(
@@ -66,7 +65,12 @@ public sealed class AnimeCoverService(
         var cacheDirectory = Path.Combine(layout.CachePath, "covers");
         Directory.CreateDirectory(cacheDirectory);
         var cacheKey = Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes(PosterSize + "\n" + poster.PosterPath)));
+            Encoding.UTF8.GetBytes(
+                options.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri
+                + "\n"
+                + PosterSize
+                + "\n"
+                + poster.PosterPath)));
         var cachePath = Path.Combine(cacheDirectory, cacheKey + ".bin");
         var gate = CacheGates.GetOrAdd(cacheKey, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -163,7 +167,7 @@ public sealed class AnimeCoverService(
         return null;
     }
 
-    private static bool TryCreatePosterUri(string posterPath, out Uri? uri)
+    private bool TryCreatePosterUri(string posterPath, out Uri? uri)
     {
         uri = null;
         if (posterPath.Length is 0 or > 256
@@ -176,9 +180,10 @@ public sealed class AnimeCoverService(
             return false;
         }
 
-        uri = new Uri(ImageBaseUrl, PosterSize + "/" + posterPath.TrimStart('/'));
-        return uri.Scheme == Uri.UriSchemeHttps
-            && string.Equals(uri.Host, ImageBaseUrl.Host, StringComparison.OrdinalIgnoreCase);
+        var imageBaseUrl = options.Metadata.Tmdb.ImageBaseUrl;
+        uri = new Uri(imageBaseUrl, PosterSize + "/" + posterPath.TrimStart('/'));
+        return uri.Scheme is "http" or "https"
+            && string.Equals(uri.Host, imageBaseUrl.Host, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? DetectContentType(ReadOnlySpan<byte> content)

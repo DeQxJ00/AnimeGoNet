@@ -208,7 +208,9 @@ public sealed record ConfigurationMigrationDiagnosticResponse(
     [property: JsonPropertyName("blocks_downloads")] bool BlocksDownloads);
 
 public sealed record EditableConfigurationResponse(
+    [property: JsonPropertyName("mikan_base_url")] string MikanBaseUrl,
     [property: JsonPropertyName("tmdb_base_url")] string TmdbBaseUrl,
+    [property: JsonPropertyName("tmdb_image_base_url")] string TmdbImageBaseUrl,
     [property: JsonPropertyName("tmdb_proxy_url")] string? TmdbProxyUrl,
     [property: JsonPropertyName("tmdb_language")] string TmdbLanguage,
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
@@ -253,7 +255,9 @@ public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("controlling_keys")] IReadOnlyList<string> ControllingKeys);
 
 public sealed record ConfigurationUpdateRequest(
+    [property: JsonPropertyName("mikan_base_url")] string? MikanBaseUrl,
     [property: JsonPropertyName("tmdb_base_url")] string? TmdbBaseUrl,
+    [property: JsonPropertyName("tmdb_image_base_url")] string? TmdbImageBaseUrl,
     [property: JsonPropertyName("tmdb_proxy_url")] string? TmdbProxyUrl,
     [property: JsonPropertyName("tmdb_language")] string? TmdbLanguage,
     [property: JsonPropertyName("tmdb_http_timeout_seconds")] double TmdbHttpTimeoutSeconds,
@@ -329,6 +333,7 @@ public sealed record DataUpdateConfigurationResponse(
     [property: JsonPropertyName("hot_reload_supported")] bool HotReloadSupported);
 
 public sealed record MetadataConfigurationResponse(
+    [property: JsonPropertyName("mikan")] MikanConfigurationResponse Mikan,
     [property: JsonPropertyName("tmdb")] TmdbConfigurationResponse Tmdb,
     [property: JsonPropertyName("bangumi")] BangumiConfigurationResponse Bangumi,
     [property: JsonPropertyName("season_failure")] SeasonFailureConfigurationResponse SeasonFailure,
@@ -336,8 +341,12 @@ public sealed record MetadataConfigurationResponse(
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled);
 
+public sealed record MikanConfigurationResponse(
+    [property: JsonPropertyName("base_url")] string BaseUrl);
+
 public sealed record TmdbConfigurationResponse(
     [property: JsonPropertyName("base_url")] string BaseUrl,
+    [property: JsonPropertyName("image_base_url")] string ImageBaseUrl,
     [property: JsonPropertyName("proxy_url")] string? ProxyUrl,
     [property: JsonPropertyName("language")] string Language,
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,

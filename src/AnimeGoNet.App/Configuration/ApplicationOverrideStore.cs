@@ -46,7 +46,9 @@ public sealed record ApplicationOverrideEntry(
     double? TmdbRetryDelaySeconds = null,
     int? BangumiRetryCount = null,
     double? BangumiRetryDelaySeconds = null,
-    double? TmdbCacheHours = null);
+    double? TmdbCacheHours = null,
+    string? MikanBaseUrl = null,
+    string? TmdbImageBaseUrl = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -181,6 +183,10 @@ public sealed class ApplicationOverrideStore : IDisposable
 
         var inheritedFields = settings.InheritedFields?
             .ToHashSet(StringComparer.Ordinal) ?? [];
+        var mikanBaseUrl = inheritedFields.Contains("mikan_base_url")
+            || settings.MikanBaseUrl is null
+            ? options.Metadata.Mikan.BaseUrl
+            : ParseRequiredUri(settings.MikanBaseUrl, "Mikan base URL");
         var tmdbBaseUrl = options.Metadata.Tmdb.BaseUrl;
         if (!inheritedFields.Contains("tmdb_base_url")
             && !Uri.TryCreate(settings.TmdbBaseUrl, UriKind.Absolute, out tmdbBaseUrl))
@@ -192,6 +198,10 @@ public sealed class ApplicationOverrideStore : IDisposable
             : settings.TmdbProxyUrlOverridden == true
             ? ParseOptionalUri(settings.TmdbProxyUrl, "TMDB proxy URL")
             : options.Metadata.Tmdb.ProxyUrl;
+        var tmdbImageBaseUrl = inheritedFields.Contains("tmdb_image_base_url")
+            || settings.TmdbImageBaseUrl is null
+            ? options.Metadata.Tmdb.ImageBaseUrl
+            : ParseRequiredUri(settings.TmdbImageBaseUrl, "TMDB image base URL");
         var bangumiBaseUrl = inheritedFields.Contains("bangumi_base_url")
             || settings.BangumiBaseUrl is null
             ? options.Metadata.Bangumi.BaseUrl
@@ -232,9 +242,14 @@ public sealed class ApplicationOverrideStore : IDisposable
         {
             Metadata = options.Metadata with
             {
+                Mikan = options.Metadata.Mikan with
+                {
+                    BaseUrl = mikanBaseUrl,
+                },
                 Tmdb = options.Metadata.Tmdb with
                 {
                     BaseUrl = tmdbBaseUrl,
+                    ImageBaseUrl = tmdbImageBaseUrl,
                     ProxyUrl = tmdbProxyUrl,
                     Language = inheritedFields.Contains("tmdb_language")
                         ? options.Metadata.Tmdb.Language

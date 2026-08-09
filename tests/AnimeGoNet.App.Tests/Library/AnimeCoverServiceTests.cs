@@ -45,6 +45,34 @@ public sealed class AnimeCoverServiceTests
     }
 
     [Fact]
+    public async Task UsesConfiguredTmdbImageReverseProxyBase()
+    {
+        var transport = new RecordingPosterTransport();
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Tmdb = options.Metadata.Tmdb with
+                    {
+                        ImageBaseUrl = new Uri("http://image.tmdb.local/t/p/"),
+                    },
+                },
+            },
+            tmdbPosterTransport: transport);
+        await SeedAsync(app);
+
+        var asset = await app.App.Services
+            .GetRequiredService<AnimeCoverService>()
+            .GetAsync(100, 1);
+
+        Assert.NotNull(asset);
+        Assert.Equal(
+            "http://image.tmdb.local/t/p/w500/season.jpg",
+            Assert.Single(transport.Requests).AbsoluteUri);
+    }
+
+    [Fact]
     public async Task UsesSeriesFallbackAndLocalPlaceholderWithoutInventingRemotePaths()
     {
         var transport = new RecordingPosterTransport();

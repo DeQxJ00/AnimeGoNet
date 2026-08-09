@@ -100,17 +100,38 @@ public sealed class UnifiedIngestProcessor(
         }
 
         var normalized = validation.Item! with { Source = profile.Id };
+        var torrentRequestUrl = string.Equals(
+                profile.Adapter,
+                "mikan",
+                StringComparison.OrdinalIgnoreCase)
+            ? MikanEndpointRewriter.Rewrite(normalized.TorrentUrl, options.Metadata.Mikan)
+            : normalized.TorrentUrl;
+        var allowedHosts = profile.AllowedTorrentHosts
+            .Append(torrentRequestUrl.IdnHost)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var trustedPrivateHosts = string.Equals(
+                profile.Adapter,
+                "mikan",
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                torrentRequestUrl.IdnHost,
+                options.Metadata.Mikan.BaseUrl.IdnHost,
+                StringComparison.OrdinalIgnoreCase)
+                ? new[] { torrentRequestUrl.IdnHost }
+                : [];
 
         StagedTorrent? staged = null;
         var ownershipTransferred = false;
         try
         {
             staged = await staging.StageAsync(
-                normalized.TorrentUrl,
+                torrentRequestUrl,
                 new TorrentSourcePolicy(
                     profile.Id,
-                    profile.AllowedTorrentHosts,
-                    profile.MikanIdentityCookie),
+                    allowedHosts,
+                    profile.MikanIdentityCookie,
+                    trustedPrivateHosts),
                 cancellationToken).ConfigureAwait(false);
             var expires = DateTimeOffset.UtcNow + options.TorrentFetch.StagingTtl;
             var task = winnerLease is null

@@ -38,6 +38,12 @@ public sealed class DeploymentYamlConfigurationTests
                 snapshot.Values["sources:mikan:mikan_identity_cookie"]);
             Assert.Equal("false", snapshot.Values["metadata:ai:use_metadata_match"]);
             Assert.Equal("600", snapshot.Values["metadata:ai:timeout_seconds"]);
+            Assert.Equal(
+                defaults.Metadata.Mikan.BaseUrl.AbsoluteUri,
+                snapshot.Values["metadata:mikan:base_url"]);
+            Assert.Equal(
+                defaults.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri,
+                snapshot.Values["metadata:tmdb:image_base_url"]);
 
             var text = await File.ReadAllTextAsync(path);
             Assert.StartsWith("# AnimeGoNet 部署配置", text, StringComparison.Ordinal);
@@ -245,8 +251,11 @@ public sealed class DeploymentYamlConfigurationTests
                     duplicate_notification_enabled: false
                     mikan_identity_cookie: '.AspNetCore.Identity.Application=yaml-private-cookie'
                 metadata:
+                  mikan:
+                    base_url: http://mikan.local/
                   tmdb:
                     base_url: https://tmdb.example.invalid/api/
+                    image_base_url: http://image.tmdb.local/t/p/
                     proxy_url: http://127.0.0.1:17890/
                     api_key: yaml-key
                     read_access_token: ''
@@ -326,7 +335,11 @@ public sealed class DeploymentYamlConfigurationTests
                 source.ToString(),
                 StringComparison.Ordinal);
 
+            Assert.Equal(new Uri("http://mikan.local/"), options.Metadata.Mikan.BaseUrl);
             Assert.Equal(new Uri("https://tmdb.example.invalid/api/"), options.Metadata.Tmdb.BaseUrl);
+            Assert.Equal(
+                new Uri("http://image.tmdb.local/t/p/"),
+                options.Metadata.Tmdb.ImageBaseUrl);
             Assert.Equal(new Uri("http://127.0.0.1:17890/"), options.Metadata.Tmdb.ProxyUrl);
             Assert.Equal("yaml-key", options.Metadata.Tmdb.ApiKey);
             Assert.Equal("en-US", options.Metadata.Tmdb.Language);

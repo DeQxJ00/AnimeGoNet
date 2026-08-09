@@ -643,8 +643,11 @@ internal static class DeploymentYamlConfiguration
                 mikan_identity_cookie: {{Scalar(Configured(values, "sources:mikan:mikan_identity_cookie", string.Empty))}}
 
             metadata:
+              mikan:
+                base_url: {{Scalar(Configured(values, "metadata:mikan:base_url", defaults.Metadata.Mikan.BaseUrl.AbsoluteUri))}}
               tmdb:
                 base_url: {{Scalar(Configured(values, "metadata:tmdb:base_url", defaults.Metadata.Tmdb.BaseUrl.AbsoluteUri))}}
+                image_base_url: {{Scalar(Configured(values, "metadata:tmdb:image_base_url", defaults.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri))}}
                 proxy_url: {{Scalar(Configured(values, "metadata:tmdb:proxy_url", string.Empty))}}
                 api_key: {{Scalar(Configured(values, "metadata:tmdb:api_key", string.Empty))}}
                 read_access_token: ''
@@ -848,8 +851,11 @@ internal static class DeploymentYamlConfiguration
                 mikan_identity_cookie: ''
 
             metadata:
+              mikan:
+                base_url: {{Scalar(options.Metadata.Mikan.BaseUrl.AbsoluteUri)}}
               tmdb:
                 base_url: https://api.themoviedb.org/
+                image_base_url: https://image.tmdb.org/t/p/
                 proxy_url: ''
                 api_key: ''
                 read_access_token: ''

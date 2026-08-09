@@ -1,5 +1,7 @@
 using System.Net;
+using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Sources;
 
@@ -8,7 +10,8 @@ namespace AnimeGoNet.App.Feeds;
 public sealed class ProfileBoundRssFeedHttpClient(
     SourceProfileStore profiles,
     ITorrentDnsResolver dnsResolver,
-    ITorrentHttpTransport transport) : ISourceProfileRssFeedHttpClient
+    ITorrentHttpTransport transport,
+    AnimeGoOptions options) : ISourceProfileRssFeedHttpClient
 {
     private const int MaximumRedirects = 5;
 
@@ -38,10 +41,27 @@ public sealed class ProfileBoundRssFeedHttpClient(
                 "rss_source_profile_invalid",
                 "RSS source profile must use the Mikan adapter.");
         }
-        var current = uri;
+        Uri current;
+        try
+        {
+            current = MikanEndpointRewriter.Rewrite(uri, options.Metadata.Mikan);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new RssFeedException(
+                "rss_url_invalid",
+                "RSS URL must be an absolute HTTP(S) URL without userinfo or fragment.",
+                exception);
+        }
+
+        var initial = current;
+        var allowedHosts = profile.AllowedTorrentHosts
+            .Append(initial.IdnHost)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         for (var redirects = 0; redirects <= MaximumRedirects; redirects++)
         {
-            Validate(current, profile.AllowedTorrentHosts);
+            Validate(current, allowedHosts);
             IReadOnlyList<IPAddress> addresses;
             try
             {
@@ -56,7 +76,13 @@ public sealed class ProfileBoundRssFeedHttpClient(
                 throw new RssFeedException("rss_request_failed", "RSS host resolution failed.", exception);
             }
 
-            if (addresses.Count == 0 || addresses.Any(address => !TorrentNetworkPolicy.IsPublicAddress(address)))
+            var trustedPrivateHost = string.Equals(
+                current.IdnHost,
+                options.Metadata.Mikan.BaseUrl.IdnHost,
+                StringComparison.OrdinalIgnoreCase);
+            if (addresses.Count == 0
+                || (!trustedPrivateHost
+                    && addresses.Any(address => !TorrentNetworkPolicy.IsPublicAddress(address))))
             {
                 throw new RssFeedException("rss_address_not_allowed", "RSS host resolved to a prohibited address.");
             }
@@ -66,7 +92,7 @@ public sealed class ProfileBoundRssFeedHttpClient(
             {
                 var requestOptions = string.Equals(
                         current.IdnHost,
-                        uri.IdnHost,
+                        initial.IdnHost,
                         StringComparison.OrdinalIgnoreCase)
                     ? new TorrentHttpRequestOptions(
                         profile.MikanIdentityCookie)
@@ -98,7 +124,7 @@ public sealed class ProfileBoundRssFeedHttpClient(
                 current = response.RedirectLocation.IsAbsoluteUri
                     ? response.RedirectLocation
                     : new Uri(current, response.RedirectLocation);
-                if (uri.Scheme == Uri.UriSchemeHttps && current.Scheme != Uri.UriSchemeHttps)
+                if (initial.Scheme == Uri.UriSchemeHttps && current.Scheme != Uri.UriSchemeHttps)
                 {
                     throw new RssFeedException("rss_redirect_rejected", "RSS redirect attempted to downgrade HTTPS.");
                 }

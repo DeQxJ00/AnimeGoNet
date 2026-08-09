@@ -1382,6 +1382,7 @@ public static class ApiEndpoints
         long appliedConfigurationRevision,
         LegacyDownloaderMigrationState legacyMigration)
     {
+        var mikan = options.Metadata.Mikan;
         var tmdb = options.Metadata.Tmdb;
         var bangumi = options.Metadata.Bangumi;
         var season = options.Metadata.SeasonFailure;
@@ -1404,8 +1405,11 @@ public static class ApiEndpoints
                 runtime.AccessKeyConfigured,
                 PathsRestartRequired: true),
             new MetadataConfigurationResponse(
+                new MikanConfigurationResponse(
+                    mikan.BaseUrl.AbsoluteUri),
                 new TmdbConfigurationResponse(
                     tmdb.BaseUrl.AbsoluteUri,
+                    tmdb.ImageBaseUrl.AbsoluteUri,
                     tmdb.ProxyUrl?.AbsoluteUri,
                     tmdb.Language,
                     tmdb.HttpTimeout.TotalSeconds,
@@ -1462,6 +1466,7 @@ public static class ApiEndpoints
         ApplicationOverrideEntry? settings,
         DeploymentConfigurationLocks locks)
     {
+        var mikan = desired.Metadata.Mikan;
         var tmdb = desired.Metadata.Tmdb;
         var bangumi = desired.Metadata.Bangumi;
         var season = desired.Metadata.SeasonFailure;
@@ -1469,7 +1474,9 @@ public static class ApiEndpoints
         var fetch = desired.TorrentFetch;
         var dataUpdate = desired.DataUpdate;
         return new EditableConfigurationResponse(
+            mikan.BaseUrl.AbsoluteUri,
             tmdb.BaseUrl.AbsoluteUri,
+            tmdb.ImageBaseUrl.AbsoluteUri,
             tmdb.ProxyUrl?.AbsoluteUri,
             tmdb.Language,
             tmdb.HttpTimeout.TotalSeconds,
@@ -1539,6 +1546,8 @@ public static class ApiEndpoints
         var requestedSettings = CreateApplicationOverride(
             request,
             current.Settings,
+            deployment.Metadata.Mikan.BaseUrl.AbsoluteUri,
+            deployment.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri,
             deployment.Metadata.Tmdb.CacheTtl.TotalHours,
             DateTimeOffset.UtcNow);
         var requestedCandidate = ApplicationOverrideStore.Apply(
@@ -1595,6 +1604,8 @@ public static class ApiEndpoints
     {
         var changes = new List<ConfigurationChangeResponse>();
         var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var beforeMikan = current.Metadata.Mikan;
+        var afterMikan = candidate.Metadata.Mikan;
         var beforeTmdb = current.Metadata.Tmdb;
         var afterTmdb = candidate.Metadata.Tmdb;
         var beforeBangumi = current.Metadata.Bangumi;
@@ -1608,7 +1619,12 @@ public static class ApiEndpoints
         var beforeDataUpdate = current.DataUpdate;
         var afterDataUpdate = candidate.DataUpdate;
 
+        Add("mikan_base_url", beforeMikan.BaseUrl.AbsoluteUri, afterMikan.BaseUrl.AbsoluteUri);
         Add("tmdb_base_url", beforeTmdb.BaseUrl.AbsoluteUri, afterTmdb.BaseUrl.AbsoluteUri);
+        Add(
+            "tmdb_image_base_url",
+            beforeTmdb.ImageBaseUrl.AbsoluteUri,
+            afterTmdb.ImageBaseUrl.AbsoluteUri);
         Add("tmdb_proxy_url", beforeTmdb.ProxyUrl?.AbsoluteUri, afterTmdb.ProxyUrl?.AbsoluteUri);
         Add("tmdb_language", beforeTmdb.Language, afterTmdb.Language);
         AddSeconds(
@@ -1811,16 +1827,30 @@ public static class ApiEndpoints
     private static ApplicationOverrideEntry CreateApplicationOverride(
         ConfigurationUpdateRequest request,
         ApplicationOverrideEntry? current,
+        string deploymentMikanBaseUrl,
+        string deploymentTmdbImageBaseUrl,
         double deploymentTmdbCacheHours,
         DateTimeOffset utcNow)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(request.ExpectedConfigurationRevision);
+        var mikanBaseUrl = request.MikanBaseUrl?.Trim()
+            ?? current?.MikanBaseUrl
+            ?? deploymentMikanBaseUrl;
         var baseUrl = request.TmdbBaseUrl?.Trim()
             ?? throw new ArgumentException("tmdb_base_url is required.");
+        var tmdbImageBaseUrl = request.TmdbImageBaseUrl?.Trim()
+            ?? current?.TmdbImageBaseUrl
+            ?? deploymentTmdbImageBaseUrl;
         var language = request.TmdbLanguage?.Trim()
             ?? throw new ArgumentException("tmdb_language is required.");
         var bangumiBaseUrl = request.BangumiBaseUrl?.Trim()
             ?? throw new ArgumentException("bangumi_base_url is required.");
+        if (mikanBaseUrl.Length is < 1 or > 2048
+            || !Uri.TryCreate(mikanBaseUrl, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException(
+                "mikan_base_url must contain an absolute URL of at most 2048 characters.");
+        }
         if (baseUrl.Length is < 1 or > 2048)
         {
             throw new ArgumentException("tmdb_base_url must contain 1 to 2048 characters.");
@@ -1829,6 +1859,12 @@ public static class ApiEndpoints
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out _))
         {
             throw new ArgumentException("tmdb_base_url must be an absolute URL.");
+        }
+        if (tmdbImageBaseUrl.Length is < 1 or > 2048
+            || !Uri.TryCreate(tmdbImageBaseUrl, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException(
+                "tmdb_image_base_url must contain an absolute URL of at most 2048 characters.");
         }
         var tmdbProxyUrl = NormalizeOptionalUrl(request.TmdbProxyUrl, "tmdb_proxy_url");
 
@@ -1968,7 +2004,9 @@ public static class ApiEndpoints
                 ?? current?.BangumiRetryCount,
             BangumiRetryDelaySeconds: request.BangumiRetryDelaySeconds
                 ?? current?.BangumiRetryDelaySeconds,
-            TmdbCacheHours: tmdbCacheHours);
+            TmdbCacheHours: tmdbCacheHours,
+            MikanBaseUrl: mikanBaseUrl,
+            TmdbImageBaseUrl: tmdbImageBaseUrl);
     }
 
     private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate) =>

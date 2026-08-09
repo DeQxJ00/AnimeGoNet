@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Feeds;
@@ -15,6 +16,7 @@ public sealed class ProfileBoundRssCredentialTests
         const string secret = "rss-private-cookie";
         var transport = new CredentialRedirectTransport();
         await using var app = await RunningApp.StartAsync(
+            configure: WithMikanTestOrigin,
             rssDnsResolver: new PublicDnsResolver(),
             rssHttpTransport: transport);
         using var create = await app.Client.PostAsync(
@@ -67,6 +69,18 @@ public sealed class ProfileBoundRssCredentialTests
             JsonSerializer.Serialize(value),
             Encoding.UTF8,
             "application/json");
+
+    private static AnimeGoOptions WithMikanTestOrigin(AnimeGoOptions options) =>
+        options with
+        {
+            Metadata = options.Metadata with
+            {
+                Mikan = new MikanClientOptions
+                {
+                    BaseUrl = new Uri("https://mikan.example/"),
+                },
+            },
+        };
 
     private sealed class PublicDnsResolver : ITorrentDnsResolver
     {

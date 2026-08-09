@@ -33,7 +33,10 @@ public sealed class TorrentStagingService(
             for (var redirectCount = 0; ; redirectCount++)
             {
                 ValidateUrl(current, sourcePolicy);
-                var addresses = await ResolveAndValidateAsync(current.IdnHost, timeout.Token).ConfigureAwait(false);
+                var addresses = await ResolveAndValidateAsync(
+                    current.IdnHost,
+                    sourcePolicy,
+                    timeout.Token).ConfigureAwait(false);
                 var requestOptions = string.Equals(
                         current.IdnHost,
                         secretUrl.IdnHost,
@@ -172,7 +175,10 @@ public sealed class TorrentStagingService(
             FileOptions.Asynchronous | FileOptions.SequentialScan);
     }
 
-    private async Task<IReadOnlyList<IPAddress>> ResolveAndValidateAsync(string host, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<IPAddress>> ResolveAndValidateAsync(
+        string host,
+        TorrentSourcePolicy sourcePolicy,
+        CancellationToken cancellationToken)
     {
         IReadOnlyList<IPAddress> addresses;
         try
@@ -189,7 +195,11 @@ public sealed class TorrentStagingService(
             throw Failure(TorrentStagingFailureCode.NetworkFailure, "Torrent host resolution failed.");
         }
 
-        if (addresses.Count == 0 || addresses.Any(address => !TorrentNetworkPolicy.IsPublicAddress(address)))
+        var trustedPrivateHost = sourcePolicy.TrustedPrivateHosts.Any(candidate =>
+            string.Equals(candidate, host, StringComparison.OrdinalIgnoreCase));
+        if (addresses.Count == 0
+            || (!trustedPrivateHost
+                && addresses.Any(address => !TorrentNetworkPolicy.IsPublicAddress(address))))
         {
             throw Failure(TorrentStagingFailureCode.AddressNotAllowed, "Torrent host resolved to a prohibited address.");
         }

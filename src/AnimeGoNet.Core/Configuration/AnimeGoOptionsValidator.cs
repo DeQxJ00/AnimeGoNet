@@ -225,9 +225,20 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AniDB mapping URL template is fixed and cannot be overridden.");
         }
 
+        if (!IsMetadataApiBaseUrl(options.Metadata.Mikan.BaseUrl)
+            || options.Metadata.Mikan.BaseUrl.AbsolutePath != "/")
+        {
+            errors.Add("Mikan base URL must be an absolute HTTP(S) origin ending in '/' without credentials, query or fragment.");
+        }
+
         if (!IsMetadataApiBaseUrl(options.Metadata.Tmdb.BaseUrl))
         {
             errors.Add("TMDB base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
+        }
+
+        if (!IsMetadataApiBaseUrl(options.Metadata.Tmdb.ImageBaseUrl))
+        {
+            errors.Add("TMDB image base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
         }
 
         if (options.Metadata.Tmdb.ProxyUrl is not null

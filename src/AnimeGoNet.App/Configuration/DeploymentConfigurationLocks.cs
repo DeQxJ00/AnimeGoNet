@@ -26,7 +26,9 @@ public sealed class DeploymentConfigurationLocks
 {
     private static readonly LockDefinition[] Definitions =
     [
+        new("mikan_base_url", ["mikan_base_url", "metadata:mikan:base_url"]),
         new("tmdb_base_url", ["tmdb_base_url", "metadata:tmdb:base_url"]),
+        new("tmdb_image_base_url", ["tmdb_image_base_url", "metadata:tmdb:image_base_url"]),
         new("tmdb_proxy_url", ["tmdb_proxy_url", "ANIMEGO_PROXY_URL", "metadata:tmdb:proxy_url"]),
         new("tmdb_language", ["tmdb_language", "metadata:tmdb:language"]),
         new("tmdb_http_timeout_seconds", ["tmdb_timeout_second", "metadata:tmdb:timeout_seconds"]),
@@ -188,10 +190,18 @@ public sealed class DeploymentConfigurationLocks
         {
             candidate = candidate with
             {
+                MikanBaseUrl = Preserve(
+                    "mikan_base_url",
+                    current.MikanBaseUrl,
+                    candidate.MikanBaseUrl),
                 TmdbBaseUrl = Preserve(
                     "tmdb_base_url",
                     current.TmdbBaseUrl,
                     candidate.TmdbBaseUrl),
+                TmdbImageBaseUrl = Preserve(
+                    "tmdb_image_base_url",
+                    current.TmdbImageBaseUrl,
+                    candidate.TmdbImageBaseUrl),
                 TmdbProxyUrlOverridden = Preserve(
                     "tmdb_proxy_url",
                     current.TmdbProxyUrlOverridden,
@@ -372,10 +382,20 @@ public sealed class DeploymentConfigurationLocks
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(candidate);
 
+        var mikan = candidate.Metadata.Mikan;
+        if (IsLocked("mikan_base_url"))
+        {
+            mikan = mikan with { BaseUrl = deployment.Metadata.Mikan.BaseUrl };
+        }
+
         var tmdb = candidate.Metadata.Tmdb;
         if (IsLocked("tmdb_base_url"))
         {
             tmdb = tmdb with { BaseUrl = deployment.Metadata.Tmdb.BaseUrl };
+        }
+        if (IsLocked("tmdb_image_base_url"))
+        {
+            tmdb = tmdb with { ImageBaseUrl = deployment.Metadata.Tmdb.ImageBaseUrl };
         }
         if (IsLocked("tmdb_proxy_url"))
         {
@@ -562,6 +582,7 @@ public sealed class DeploymentConfigurationLocks
         {
             Metadata = candidate.Metadata with
             {
+                Mikan = mikan,
                 Tmdb = tmdb,
                 Bangumi = bangumi,
                 SeasonFailure = seasonFailure,
@@ -582,9 +603,17 @@ public sealed class DeploymentConfigurationLocks
         ArgumentNullException.ThrowIfNull(candidate);
         var changed = new List<string>();
         AddIfChanged(
+            "mikan_base_url",
+            deployment.Metadata.Mikan.BaseUrl,
+            candidate.Metadata.Mikan.BaseUrl);
+        AddIfChanged(
             "tmdb_base_url",
             deployment.Metadata.Tmdb.BaseUrl,
             candidate.Metadata.Tmdb.BaseUrl);
+        AddIfChanged(
+            "tmdb_image_base_url",
+            deployment.Metadata.Tmdb.ImageBaseUrl,
+            candidate.Metadata.Tmdb.ImageBaseUrl);
         AddIfChanged(
             "tmdb_proxy_url",
             deployment.Metadata.Tmdb.ProxyUrl,

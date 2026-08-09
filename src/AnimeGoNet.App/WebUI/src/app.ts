@@ -236,8 +236,12 @@ interface RuntimeConfiguration {
     paths_restart_required: boolean;
   };
   metadata: {
+    mikan: {
+      base_url: string;
+    };
     tmdb: {
       base_url: string;
+      image_base_url: string;
       proxy_url: string | null;
       language: string;
       http_timeout_seconds: number;
@@ -286,7 +290,9 @@ interface RuntimeConfiguration {
     hot_reload_supported: boolean;
   };
   editable: {
+    mikan_base_url: string;
     tmdb_base_url: string;
+    tmdb_image_base_url: string;
     tmdb_proxy_url: string | null;
     tmdb_language: string;
     tmdb_http_timeout_seconds: number;
@@ -340,7 +346,9 @@ interface ConfigurationMigrationDiagnostic {
 }
 
 interface ConfigurationUpdatePayload {
+  mikan_base_url: string;
   tmdb_base_url: string;
+  tmdb_image_base_url: string;
   tmdb_proxy_url: string | null;
   tmdb_language: string;
   tmdb_http_timeout_seconds: number;
@@ -3567,7 +3575,9 @@ function syncConfigurationSecretInputs(): void {
 }
 
 const configurationLockSelectors: Record<string, string[]> = {
+  mikan_base_url: ["#configuration-mikan-url"],
   tmdb_base_url: ["#configuration-tmdb-url"],
+  tmdb_image_base_url: ["#configuration-tmdb-image-url"],
   tmdb_proxy_url: ["#configuration-tmdb-proxy"],
   tmdb_language: ["#configuration-tmdb-language"],
   tmdb_http_timeout_seconds: ["#configuration-tmdb-timeout"],
@@ -3629,7 +3639,12 @@ function openConfigurationEditor(): void {
   if (!currentConfiguration) return;
   clearConfigurationPreview();
   const editable = currentConfiguration.editable;
+  setConfigurationValue("#configuration-mikan-url", editable.mikan_base_url);
   setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
+  setConfigurationValue(
+    "#configuration-tmdb-image-url",
+    editable.tmdb_image_base_url,
+  );
   setConfigurationValue("#configuration-tmdb-proxy", editable.tmdb_proxy_url ?? "");
   setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
   setConfigurationValue("#configuration-tmdb-timeout", editable.tmdb_http_timeout_seconds);
@@ -3709,7 +3724,9 @@ function openConfigurationEditor(): void {
 }
 
 const configurationFieldLabels: Record<string, string> = {
+  mikan_base_url: "Mikan 地址",
   tmdb_base_url: "TMDB API 地址",
+  tmdb_image_base_url: "TMDB 图片地址",
   tmdb_proxy_url: "TMDB 代理",
   tmdb_language: "TMDB 语言",
   tmdb_http_timeout_seconds: "TMDB 超时（秒）",
@@ -3749,7 +3766,11 @@ function configurationRequest(): ConfigurationUpdatePayload {
     throw new Error("配置尚未载入");
   }
   return {
+    mikan_base_url:
+      element<HTMLInputElement>("#configuration-mikan-url").value,
     tmdb_base_url: element<HTMLInputElement>("#configuration-tmdb-url").value,
+    tmdb_image_base_url:
+      element<HTMLInputElement>("#configuration-tmdb-image-url").value,
     tmdb_proxy_url:
       element<HTMLInputElement>("#configuration-tmdb-proxy").value || null,
     tmdb_language: element<HTMLInputElement>("#configuration-tmdb-language").value,

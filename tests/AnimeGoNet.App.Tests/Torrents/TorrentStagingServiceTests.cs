@@ -159,6 +159,45 @@ public sealed class TorrentStagingServiceTests
     }
 
     [Fact]
+    public async Task ExplicitTrustedPrivateHostAllowsConfiguredReverseProxyOnly()
+    {
+        await using var fixture = new StagingFixture();
+        var privateAddress = IPAddress.Parse("192.168.1.170");
+        var transport = new FakeTransport(_ => Response(HttpStatusCode.OK, ValidTorrent()));
+        var service = fixture.CreateService(new FakeDnsResolver(privateAddress), transport);
+
+        await using var staged = await service.StageAsync(
+            new Uri("http://mikan.local/Download/private/file.torrent"),
+            new TorrentSourcePolicy(
+                "mikan-private-proxy",
+                ["mikan.local"],
+                trustedPrivateHosts: ["mikan.local"]));
+
+        Assert.Equal(privateAddress, Assert.Single(transport.Addresses));
+        Assert.True(File.Exists(staged.FilePath));
+    }
+
+    [Fact]
+    public async Task TrustedPrivateHostDoesNotPermitAnotherAllowedPrivateHost()
+    {
+        await using var fixture = new StagingFixture();
+        var transport = new FakeTransport(_ => Response(HttpStatusCode.OK, ValidTorrent()));
+        var service = fixture.CreateService(
+            new FakeDnsResolver(IPAddress.Parse("192.168.1.170")),
+            transport);
+
+        var exception = await Assert.ThrowsAsync<TorrentStagingException>(() => service.StageAsync(
+            new Uri("http://other.local/file.torrent"),
+            new TorrentSourcePolicy(
+                "mikan-private-proxy",
+                ["mikan.local", "other.local"],
+                trustedPrivateHosts: ["mikan.local"])));
+
+        Assert.Equal(TorrentStagingFailureCode.AddressNotAllowed, exception.Code);
+        Assert.Equal(0, transport.CallCount);
+    }
+
+    [Fact]
     public async Task EnforcesStreamingLimitAndNeverLeaksSecretUrlInException()
     {
         await using var fixture = new StagingFixture();

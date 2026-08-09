@@ -94,7 +94,8 @@
 
 ## P4 — HTTP、Feed、Torrent
 
-- [x] 移植代理、超时、重试、Host redirect、Cookie/API key：TMDB/Bangumi 支持独立 API 地址、HTTP(S)/SOCKS5 代理、逐次超时、0～10 次可配置额外重试与 0～300 秒间隔；只重试连接/超时/429/5xx，每次重建请求，404/认证/协议失败不重试，调用方取消立即终止。TMDB API key/Bearer、Bangumi User-Agent 与 Mikan SourceProfile 级 `.AspNetCore.Identity.Application` Cookie 均已覆盖；Cookie 仅发往原始 Host，跨 Host redirect 必定剥离，API/WebUI 只显示配置状态、不回显值。
+- [x] 移植代理、超时、重试、Host redirect、Cookie/API key：TMDB/Bangumi 支持独立 API 地址、HTTP(S)/SOCKS5 代理、逐次超时、0～10 次可配置额外重试与 0～300 秒间隔；Mikan、TMDB API、TMDB 图片和 Bangumi API 地址均可由 YAML/API/WebUI 修改，Mikan 反代改写保留私密 path/query 且只信任明确配置 host 的私网解析。只重试连接/超时/429/5xx，每次重建请求，404/认证/协议失败不重试，调用方取消立即终止。TMDB API key/Bearer、Bangumi User-Agent 与 Mikan SourceProfile 级 `.AspNetCore.Identity.Application` Cookie 均已覆盖；Cookie 仅发往原始 Host，跨 Host redirect 必定剥离，API/WebUI 只显示配置状态、不回显值。
+- [ ] 增加按域名选择的全局代理：代理地址与 host pattern 可配置，支持精确域名和 `*.example.com`；专用 TMDB/Bangumi 代理优先，全局代理只作用于命中域名，未命中保持直连；覆盖 Mikan、封面、AI/MCP 等运行时 HTTP 出站并保留 Torrent SSRF 门禁。
 - [x] 移植 RSS 文件/URL/raw parse：已实现 5 MiB 上限、禁用 DTD/外部实体、首个 enclosure、无 enclosure 跳过、非法 length 归零、Mikan `pubDate` 日期兼容和稳定错误码；URL/文件读取边界可注入测试，尚未暴露为公网抓取 API。
 - [x] 实现 Bencode/torrent/magnet/info-hash：严格 v1 Bencode、原始 info 字节 SHA-1、单/多文件清单、padding/路径/数量/总量校验已完成；magnet 现按上游支持首个 `urn:btih` 的 40 位 hex/32 位 Base32、首个 dn 和 tracker 计数，并保证返回/异常不保留 URI、tracker 或 passkey。
 - [x] 通过本地 fixture HTTP、RSS、torrent parity tests：RSS raw/file/注入式 HTTP、缺字段、损坏 XML、DTD、错误脱敏、mikanid、两条 magnet 及上游固定提交四个真实 `.torrent` 的 info-hash/名称/总量/17 个文件 parity 已通过；真实 loopback socket server 另验证 chunked RSS、原始请求 path/query、Host/User-Agent、禁止自动 redirect、固定已校验 IP 连接与流式响应。生产 SSRF 策略仍拒绝 loopback/private 地址。

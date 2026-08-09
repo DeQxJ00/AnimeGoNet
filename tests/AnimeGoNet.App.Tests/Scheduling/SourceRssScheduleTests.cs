@@ -5,6 +5,7 @@ using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Sources;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,6 +22,7 @@ public sealed class SourceRssScheduleTests
             "https://mikan.example/rss?token=schedule-private-passkey";
         var transport = new StaticFeedTransport(HttpStatusCode.OK);
         await using var app = await RunningApp.StartAsync(
+            configure: WithMikanTestOrigin,
             rssDnsResolver: new PublicDnsResolver(),
             rssHttpTransport: transport);
         await CreateScheduledSourceAsync(app, secretUrl);
@@ -60,6 +62,7 @@ public sealed class SourceRssScheduleTests
             "https://mikan.example/rss?token=failure-private-passkey";
         var transport = new StaticFeedTransport(HttpStatusCode.InternalServerError);
         await using var app = await RunningApp.StartAsync(
+            configure: WithMikanTestOrigin,
             rssDnsResolver: new PublicDnsResolver(),
             rssHttpTransport: transport);
         await CreateScheduledSourceAsync(app, secretUrl);
@@ -193,6 +196,18 @@ public sealed class SourceRssScheduleTests
             .GetRequiredService<SourceRssScheduleManager>()
             .Get("mikan-scheduled"));
     }
+
+    private static AnimeGoOptions WithMikanTestOrigin(AnimeGoOptions options) =>
+        options with
+        {
+            Metadata = options.Metadata with
+            {
+                Mikan = new MikanClientOptions
+                {
+                    BaseUrl = new Uri("https://mikan.example/"),
+                },
+            },
+        };
 
     private static ScheduledContext Context(long revision) =>
         new(

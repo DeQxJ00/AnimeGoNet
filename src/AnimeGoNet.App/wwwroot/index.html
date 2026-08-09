@@ -847,7 +847,9 @@
       <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；AnimeGoNetData 更新策略与 Cron 即时生效，其他修改仍需重启。</p>
       <p id="configuration-lock-summary" class="configuration-lock-summary muted" aria-live="polite">正在读取部署环境锁定状态…</p>
       <div class="configuration-form-grid">
+        <label class="wide">Mikan 地址<input id="configuration-mikan-url" type="url" required placeholder="https://mikanime.tv/"></label>
         <label class="wide">TMDB API 地址<input id="configuration-tmdb-url" type="url" required placeholder="https://api.themoviedb.org/"></label>
+        <label class="wide">TMDB 图片地址<input id="configuration-tmdb-image-url" type="url" required placeholder="https://image.tmdb.org/t/p/"></label>
         <label class="wide">TMDB 代理（可选）<input id="configuration-tmdb-proxy" type="url" placeholder="http://127.0.0.1:7890/ 或 socks5://127.0.0.1:1080/"></label>
         <label>TMDB 语言<input id="configuration-tmdb-language" required maxlength="32"></label>
         <label>TMDB 超时（秒）<input id="configuration-tmdb-timeout" type="number" min="1" max="86400" required></label>

@@ -87,6 +87,8 @@ public sealed record QbittorrentInstanceOptions
 
 public sealed record MetadataMatchingOptions
 {
+    public required MikanClientOptions Mikan { get; init; }
+
     public required TmdbClientOptions Tmdb { get; init; }
 
     public required BangumiClientOptions Bangumi { get; init; }
@@ -100,9 +102,16 @@ public sealed record MetadataMatchingOptions
     public bool MikanTrustedOffsetCacheEnabled { get; init; }
 }
 
+public sealed record MikanClientOptions
+{
+    public Uri BaseUrl { get; init; } = new("https://mikanani.me/");
+}
+
 public sealed record TmdbClientOptions
 {
     public Uri BaseUrl { get; init; } = new("https://api.themoviedb.org/");
+
+    public Uri ImageBaseUrl { get; init; } = new("https://image.tmdb.org/t/p/");
 
     public Uri? ProxyUrl { get; init; }
 

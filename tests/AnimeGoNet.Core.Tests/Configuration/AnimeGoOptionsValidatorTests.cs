@@ -147,6 +147,7 @@ public sealed class AnimeGoOptionsValidatorTests
                 Tmdb = defaults.Metadata.Tmdb with
                 {
                     BaseUrl = new Uri("ftp://tmdb.invalid/"),
+                    ImageBaseUrl = new Uri("https://image.invalid/no-trailing-slash"),
                     ProxyUrl = new Uri("https://user:secret@proxy.invalid/"),
                     HttpTimeout = TimeSpan.Zero,
                     RetryCount = 11,
@@ -168,6 +169,7 @@ public sealed class AnimeGoOptionsValidatorTests
         var errors = AnimeGoOptionsValidator.Validate(options);
 
         Assert.Contains(errors, error => error.Contains("TMDB base URL", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TMDB image base URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB proxy URL", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB HTTP timeout", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("TMDB retry count", StringComparison.Ordinal));
@@ -179,6 +181,26 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Contains(errors, error => error.Contains("Bangumi HTTP timeout", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi retry count", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Bangumi retry delay", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RejectsMikanBaseThatIsNotAnOrigin()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Mikan = new MikanClientOptions
+                {
+                    BaseUrl = new Uri("http://mikan.local/prefix/"),
+                },
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("Mikan base URL", StringComparison.Ordinal));
     }
 
     [Fact]

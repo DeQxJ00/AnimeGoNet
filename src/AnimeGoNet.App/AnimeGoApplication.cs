@@ -393,7 +393,7 @@ public static class AnimeGoApplication
         rssDnsResolver ??= new SystemTorrentDnsResolver();
         rssHttpTransport ??= new PinnedTorrentHttpTransport();
         builder.Services.AddSingleton<IRssFeedHttpClient>(new ProfileBoundRssFeedHttpClient(
-            sourceProfiles, rssDnsResolver, rssHttpTransport));
+            sourceProfiles, rssDnsResolver, rssHttpTransport, options));
         builder.Services.AddSingleton<RssFeedReader>();
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
         builder.Services.AddSingleton<PluginScheduleCoordinator>();
@@ -598,6 +598,15 @@ public static class AnimeGoApplication
             Web = web,
             Metadata = defaults.Metadata with
             {
+                Mikan = defaults.Metadata.Mikan with
+                {
+                    BaseUrl = ParseOptionalAbsoluteUri(
+                        FirstConfigurationValue(
+                            configuration,
+                            "mikan_base_url",
+                            "metadata:mikan:base_url"),
+                        "mikan_base_url") ?? defaults.Metadata.Mikan.BaseUrl,
+                },
                 Tmdb = defaults.Metadata.Tmdb with
                 {
                     BaseUrl = ParseOptionalAbsoluteUri(
@@ -606,6 +615,12 @@ public static class AnimeGoApplication
                             "tmdb_base_url",
                             "metadata:tmdb:base_url"),
                         "tmdb_base_url") ?? defaults.Metadata.Tmdb.BaseUrl,
+                    ImageBaseUrl = ParseOptionalAbsoluteUri(
+                        FirstConfigurationValue(
+                            configuration,
+                            "tmdb_image_base_url",
+                            "metadata:tmdb:image_base_url"),
+                        "tmdb_image_base_url") ?? defaults.Metadata.Tmdb.ImageBaseUrl,
                     ProxyUrl = ParseOptionalAbsoluteUri(
                         FirstPresentConfigurationValue(
                             configuration,
