@@ -39,7 +39,14 @@
 fork/exec ...\*.test: %1 is not a valid Win32 application.
 ```
 
-局部覆盖为 `GOOS=windows GOARCH=amd64 CGO_ENABLED=0` 后，首次并行全量运行仅 `third_party/qbapi` 出现一次无诊断编译失败，单独重跑通过；串行全量复核中该包通过，但 `internal/pkg/request` 因本机策略禁止绑定上游硬编码的 `127.0.0.1:8080` 而失败。其余包通过或按上游门禁跳过。完整命令和白名单见 [`baseline/UPSTREAM_TESTS_WINDOWS.md`](baseline/UPSTREAM_TESTS_WINDOWS.md)。仍需在固定 Linux CI/容器保存机器可读基线。上游本来就失败或跳过的案例不计为移植回归，但必须登记。
+局部覆盖为 `GOOS=windows GOARCH=amd64 CGO_ENABLED=0` 后，首次并行全量运行仅 `third_party/qbapi` 出现一次无诊断编译失败，单独重跑通过；串行全量复核中该包通过，但 `internal/pkg/request` 因本机策略禁止绑定上游硬编码的 `127.0.0.1:8080` 而失败。其余包通过或按上游门禁跳过。完整命令和白名单见 [`baseline/UPSTREAM_TESTS_WINDOWS.md`](baseline/UPSTREAM_TESTS_WINDOWS.md)。上游本来就失败或跳过的案例不计为移植回归，但必须登记。
+
+固定 Linux 基线采集已生成独立 workflow：`golang:1.22.10-bookworm` 容器只 checkout
+`c7475dfc55a374cd0dd08821bf17125dab1e3145`，使用
+`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...`
+串行运行，并无论成功失败上传原始 JSON Lines、stderr、稳定摘要和 SHA-256。报告不连接
+用户 qBittorrent，也不读取 TestSpace 或任何凭据。按项目所有者要求，容器 job 当前只视为
+已生成、未验证；首次实际 runner 结果由部署者后续验收。
 
 ## 兼容定义
 

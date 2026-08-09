@@ -43,7 +43,7 @@
 - [x] 确认 Mikan RSS 同集优选的黑白名单是前置资格过滤，单候选也执行；只有资格过滤后同一 `mikanid+来源EP` 仍有多个候选时才运行可配置优先级组。
 - [x] 确认默认 Mikan SourceProfile 使用 `move`：下载完成后移动到媒体库、不继续做种；Web可改其他策略且只影响新任务。
 - [ ] 确认 U2/TTG 默认文件策略是否使用候选 `link` 以长期做种；四种模式和上游完成回调的隐式删除偏差已记录。
-- [ ] 在 Linux Go 容器跑上游测试并保存基线报告。
+- [>] Linux Go 容器基线 job 已生成：固定 `golang:1.22.10-bookworm` 与上游 `c7475df`，以 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...` 串行采集 `events.jsonl`、stderr、稳定 summary 和 SHA-256，失败也上传 30 天 artifact；按用户要求容器执行标记为未验证，等待后续自行实跑。
 - [x] 生成上游 fixture SHA-256 清单和 OpenAPI 快照。
 
 ## P1 — .NET 10 / NativeAOT 工程骨架
