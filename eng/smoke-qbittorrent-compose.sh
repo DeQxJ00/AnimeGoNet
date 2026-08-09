@@ -159,26 +159,6 @@ configure_qbittorrent() {
 
   rm -f -- "$cookie_jar"
   login "$base_url" "$runtime_password" "$cookie_jar"
-  authenticated_post \
-    "$base_url" \
-    "$cookie_jar" \
-    "/api/v2/app/shutdown" \
-    --request POST >/dev/null
-  sleep 1
-
-  compose restart "$service" >/dev/null
-  rm -f -- "$cookie_jar"
-  for attempt in $(seq 1 80); do
-    if login "$base_url" "$runtime_password" "$cookie_jar" 2>/dev/null; then
-      break
-    fi
-    if [[ "$attempt" == 80 ]]; then
-      compose logs --no-color "$service"
-      echo "qBittorrent persistent credential reconnect failed for $service" >&2
-      exit 1
-    fi
-    sleep 0.25
-  done
 
   local version=""
   local api_version=""
