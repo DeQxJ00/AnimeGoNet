@@ -159,7 +159,12 @@ configure_qbittorrent() {
 
   rm -f -- "$cookie_jar"
   login "$base_url" "$runtime_password" "$cookie_jar"
-  sleep 3
+  authenticated_post \
+    "$base_url" \
+    "$cookie_jar" \
+    "/api/v2/app/shutdown" \
+    --request POST >/dev/null
+  sleep 1
 
   compose restart "$service" >/dev/null
   rm -f -- "$cookie_jar"
