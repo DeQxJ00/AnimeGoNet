@@ -85,6 +85,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "/configuration")]
     [InlineData("/app.js", "text/javascript", "externalSourceAdapters")]
     [InlineData("/app.js", "text/javascript", "插件包不可用")]
+    [InlineData("/app.js", "text/javascript", "当前不可用")]
     [InlineData("/", "text/html", "external-plugin-list")]
     [InlineData("/", "text/html", "href=\"#main-content\"")]
     [InlineData("/", "text/html", "data-ui-state=\"loading\"")]
@@ -129,5 +130,16 @@ public sealed class StaticWebUiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(mediaType, response.Content.Headers.ContentType?.MediaType);
         Assert.Contains(marker, content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DisabledRuntimeCapabilityIsNotPresentedAsUnimplemented()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        var script = await app.Client.GetStringAsync("/app.js");
+
+        Assert.Contains("enabled ? \"已启用\" : \"当前不可用\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("enabled ? \"已启用\" : \"待实现\"", script, StringComparison.Ordinal);
     }
 }

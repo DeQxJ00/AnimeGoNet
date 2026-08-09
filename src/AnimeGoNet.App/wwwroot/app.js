@@ -643,7 +643,7 @@ async function loadStatus() {
             const title = document.createElement("strong");
             title.textContent = name.replaceAll("_", " ");
             const state = document.createElement("span");
-            state.textContent = enabled ? "已启用" : "待实现";
+            state.textContent = enabled ? "已启用" : "当前不可用";
             item.append(title, state);
             return item;
         });
