@@ -48,6 +48,23 @@ public sealed class DeploymentConfigurationLocksTests
     }
 
     [Fact]
+    public void AiProviderAndMcpFieldsHaveIndependentDeploymentLocks()
+    {
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+        [
+            "ai_base_url",
+            "ai_api_key",
+            "ai_model",
+            "ai_tmdb_mcp_url",
+            "ai_bangumi_mcp_url",
+        ]);
+
+        Assert.Equal(
+            ["ai_api_key", "ai_bangumi_mcp_url", "ai_base_url", "ai_model", "ai_tmdb_mcp_url"],
+            locks.Items.Select(item => item.Field).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void CanonicalTmdbCacheLockReappliesDeploymentTtl()
     {
         var deployment = AnimeGoDefaults.CreateDocker();

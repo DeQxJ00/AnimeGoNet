@@ -1497,6 +1497,11 @@ public static class ApiEndpoints
             season.Backtrace,
             season.UseTitleSeason,
             season.UseFirstSeason,
+            ai.BaseUrl?.AbsoluteUri,
+            ai.Model,
+            SecretState(settings?.AiApiKeyOverridden == true, settings?.AiApiKey),
+            ai.TmdbMcpUrl.AbsoluteUri,
+            ai.BangumiMcpUrl.AbsoluteUri,
             ai.UseMetadataMatch,
             ai.UseMetadataMatch,
             ai.UseMetadataMatch,
@@ -1543,6 +1548,11 @@ public static class ApiEndpoints
             throw new ArgumentException(
                 "tmdb_read_access_token and clear_tmdb_read_access_token cannot both be set.");
         }
+        if (request.ClearAiApiKey && !string.IsNullOrWhiteSpace(request.AiApiKey))
+        {
+            throw new ArgumentException(
+                "ai_api_key and clear_ai_api_key cannot both be set.");
+        }
 
         var requestedSettings = CreateApplicationOverride(
             request,
@@ -1570,6 +1580,11 @@ public static class ApiEndpoints
                 || !string.IsNullOrWhiteSpace(request.TmdbReadAccessToken)))
         {
             changedLockedFields.Add("tmdb_read_access_token");
+        }
+        if (locks.IsLocked("ai_api_key")
+            && (request.ClearAiApiKey || !string.IsNullOrWhiteSpace(request.AiApiKey)))
+        {
+            changedLockedFields.Add("ai_api_key");
         }
         if (changedLockedFields.Count > 0)
         {
@@ -1689,6 +1704,29 @@ public static class ApiEndpoints
             "season_failure_use_first_season",
             beforeSeason.UseFirstSeason,
             afterSeason.UseFirstSeason);
+        Add("ai_base_url", beforeAi.BaseUrl?.AbsoluteUri, afterAi.BaseUrl?.AbsoluteUri);
+        Add("ai_model", beforeAi.Model, afterAi.Model);
+        if (request.ClearAiApiKey || !string.IsNullOrWhiteSpace(request.AiApiKey))
+        {
+            Add(
+                "ai_api_key",
+                SecretState(
+                    currentSettings?.AiApiKeyOverridden == true,
+                    currentSettings?.AiApiKey),
+                SecretState(
+                    candidateSettings.AiApiKeyOverridden == true,
+                    candidateSettings.AiApiKey),
+                sensitive: true,
+                force: true);
+        }
+        Add(
+            "ai_tmdb_mcp_url",
+            beforeAi.TmdbMcpUrl.AbsoluteUri,
+            afterAi.TmdbMcpUrl.AbsoluteUri);
+        Add(
+            "ai_bangumi_mcp_url",
+            beforeAi.BangumiMcpUrl.AbsoluteUri,
+            afterAi.BangumiMcpUrl.AbsoluteUri);
         AddBool(
             "ai_use_metadata_match",
             beforeAi.UseMetadataMatch,
@@ -1883,6 +1921,24 @@ public static class ApiEndpoints
             request.OutboundProxyHosts
                 ?? current?.OutboundProxyHosts
                 ?? []);
+        var aiBaseUrl = NormalizeOptionalUrl(request.AiBaseUrl, "ai_base_url");
+        var aiModel = string.IsNullOrWhiteSpace(request.AiModel)
+            ? null
+            : request.AiModel.Trim();
+        if (aiModel is { Length: > 256 })
+        {
+            throw new ArgumentException("ai_model must contain at most 256 characters.");
+        }
+        var aiTmdbMcpUrl = NormalizeRequiredUrl(
+            request.AiTmdbMcpUrl
+                ?? current?.AiTmdbMcpUrl
+                ?? new AiMatchingOptions().TmdbMcpUrl.AbsoluteUri,
+            "ai_tmdb_mcp_url");
+        var aiBangumiMcpUrl = NormalizeRequiredUrl(
+            request.AiBangumiMcpUrl
+                ?? current?.AiBangumiMcpUrl
+                ?? new AiMatchingOptions().BangumiMcpUrl.AbsoluteUri,
+            "ai_bangumi_mcp_url");
 
         if (language.Length is < 1 or > 32)
         {
@@ -1956,12 +2012,16 @@ public static class ApiEndpoints
         var readToken = NormalizeSecret(
             request.TmdbReadAccessToken,
             "tmdb_read_access_token");
+        var aiApiKey = NormalizeSecret(request.AiApiKey, "ai_api_key");
         var apiKeyOverridden = request.ClearTmdbApiKey
             || apiKey is not null
             || current?.TmdbApiKeyOverridden == true;
         var readTokenOverridden = request.ClearTmdbReadAccessToken
             || readToken is not null
             || current?.TmdbReadAccessTokenOverridden == true;
+        var aiApiKeyOverridden = request.ClearAiApiKey
+            || aiApiKey is not null
+            || current?.AiApiKeyOverridden == true;
         var aiUseMetadataMatch = request.AiUseMetadataMatch
             ?? (request.AiUseSeasonMatch.GetValueOrDefault()
                 || request.AiUseEpisodeMatch.GetValueOrDefault());
@@ -2011,7 +2071,15 @@ public static class ApiEndpoints
             TmdbImageBaseUrl: tmdbImageBaseUrl,
             OutboundProxyUrlOverridden: true,
             OutboundProxyUrl: outboundProxyUrl,
-            OutboundProxyHosts: outboundProxyHosts);
+            OutboundProxyHosts: outboundProxyHosts,
+            AiBaseUrlOverridden: true,
+            AiBaseUrl: aiBaseUrl,
+            AiApiKeyOverridden: aiApiKeyOverridden,
+            AiApiKey: request.ClearAiApiKey ? null : aiApiKey ?? current?.AiApiKey,
+            AiModelOverridden: true,
+            AiModel: aiModel,
+            AiTmdbMcpUrl: aiTmdbMcpUrl,
+            AiBangumiMcpUrl: aiBangumiMcpUrl);
     }
 
     private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate)
@@ -2088,6 +2156,10 @@ public static class ApiEndpoints
         }
         return normalized;
     }
+
+    private static string NormalizeRequiredUrl(string? value, string name) =>
+        NormalizeOptionalUrl(value, name)
+        ?? throw new ArgumentException($"{name} is required.");
 
     private static string[] NormalizeHostPatterns(IEnumerable<string> values)
     {

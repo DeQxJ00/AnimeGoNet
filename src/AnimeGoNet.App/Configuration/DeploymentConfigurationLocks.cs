@@ -49,6 +49,11 @@ public sealed class DeploymentConfigurationLocks
         new(
             "ai_use_metadata_match",
             ["ai_use_metadata_match", "ai_use_season_match", "ai_use_episode_match", "metadata:ai:use_metadata_match"]),
+        new("ai_base_url", ["ai_base_url", "metadata:ai:base_url"]),
+        new("ai_api_key", ["ai_api_key", "metadata:ai:api_key"]),
+        new("ai_model", ["ai_model", "metadata:ai:model"]),
+        new("ai_tmdb_mcp_url", ["ai_tmdb_mcp_url", "metadata:ai:tmdb_mcp_url"]),
+        new("ai_bangumi_mcp_url", ["ai_bangumi_mcp_url", "metadata:ai:bangumi_mcp_url"]),
         new("ai_http_timeout_seconds", ["ai_timeout_second", "metadata:ai:timeout_seconds"]),
         new("tmdb_failure_use_bangumi", ["tmdb_fail_use_bangumi", "metadata:tmdb_failure_use_bangumi"]),
         new("mikan_trusted_offset_cache_enabled", ["mikan_trusted_offset_cache_enabled", "metadata:mikan_trusted_offset_cache_enabled"]),
@@ -294,6 +299,29 @@ public sealed class DeploymentConfigurationLocks
                     "ai_use_metadata_match",
                     current.AiUseMetadataMatch,
                     candidate.AiUseMetadataMatch),
+                AiBaseUrlOverridden = Preserve(
+                    "ai_base_url",
+                    current.AiBaseUrlOverridden,
+                    candidate.AiBaseUrlOverridden),
+                AiBaseUrl = Preserve("ai_base_url", current.AiBaseUrl, candidate.AiBaseUrl),
+                AiApiKeyOverridden = Preserve(
+                    "ai_api_key",
+                    current.AiApiKeyOverridden,
+                    candidate.AiApiKeyOverridden),
+                AiApiKey = Preserve("ai_api_key", current.AiApiKey, candidate.AiApiKey),
+                AiModelOverridden = Preserve(
+                    "ai_model",
+                    current.AiModelOverridden,
+                    candidate.AiModelOverridden),
+                AiModel = Preserve("ai_model", current.AiModel, candidate.AiModel),
+                AiTmdbMcpUrl = Preserve(
+                    "ai_tmdb_mcp_url",
+                    current.AiTmdbMcpUrl,
+                    candidate.AiTmdbMcpUrl),
+                AiBangumiMcpUrl = Preserve(
+                    "ai_bangumi_mcp_url",
+                    current.AiBangumiMcpUrl,
+                    candidate.AiBangumiMcpUrl),
                 AiHttpTimeoutSeconds = Preserve(
                     "ai_http_timeout_seconds",
                     current.AiHttpTimeoutSeconds,
@@ -496,6 +524,26 @@ public sealed class DeploymentConfigurationLocks
         }
 
         var ai = candidate.Metadata.Ai;
+        if (IsLocked("ai_base_url"))
+        {
+            ai = ai with { BaseUrl = deployment.Metadata.Ai.BaseUrl };
+        }
+        if (IsLocked("ai_api_key"))
+        {
+            ai = ai with { ApiKey = deployment.Metadata.Ai.ApiKey };
+        }
+        if (IsLocked("ai_model"))
+        {
+            ai = ai with { Model = deployment.Metadata.Ai.Model };
+        }
+        if (IsLocked("ai_tmdb_mcp_url"))
+        {
+            ai = ai with { TmdbMcpUrl = deployment.Metadata.Ai.TmdbMcpUrl };
+        }
+        if (IsLocked("ai_bangumi_mcp_url"))
+        {
+            ai = ai with { BangumiMcpUrl = deployment.Metadata.Ai.BangumiMcpUrl };
+        }
         if (IsLocked("ai_use_metadata_match"))
         {
             ai = ai with
@@ -676,6 +724,26 @@ public sealed class DeploymentConfigurationLocks
             "season_failure_use_first_season",
             deployment.Metadata.SeasonFailure.UseFirstSeason,
             candidate.Metadata.SeasonFailure.UseFirstSeason);
+        AddIfChanged(
+            "ai_base_url",
+            deployment.Metadata.Ai.BaseUrl,
+            candidate.Metadata.Ai.BaseUrl);
+        AddIfChanged(
+            "ai_api_key",
+            deployment.Metadata.Ai.ApiKey,
+            candidate.Metadata.Ai.ApiKey);
+        AddIfChanged(
+            "ai_model",
+            deployment.Metadata.Ai.Model,
+            candidate.Metadata.Ai.Model);
+        AddIfChanged(
+            "ai_tmdb_mcp_url",
+            deployment.Metadata.Ai.TmdbMcpUrl,
+            candidate.Metadata.Ai.TmdbMcpUrl);
+        AddIfChanged(
+            "ai_bangumi_mcp_url",
+            deployment.Metadata.Ai.BangumiMcpUrl,
+            candidate.Metadata.Ai.BangumiMcpUrl);
         AddIfChanged(
             "ai_use_metadata_match",
             deployment.Metadata.Ai.UseMetadataMatch,

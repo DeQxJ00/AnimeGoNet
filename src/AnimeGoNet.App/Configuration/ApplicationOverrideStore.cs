@@ -47,7 +47,15 @@ public sealed record ApplicationOverrideEntry(
     string? TmdbImageBaseUrl = null,
     bool? OutboundProxyUrlOverridden = null,
     string? OutboundProxyUrl = null,
-    IReadOnlyList<string>? OutboundProxyHosts = null);
+    IReadOnlyList<string>? OutboundProxyHosts = null,
+    bool? AiBaseUrlOverridden = null,
+    string? AiBaseUrl = null,
+    bool? AiApiKeyOverridden = null,
+    string? AiApiKey = null,
+    bool? AiModelOverridden = null,
+    string? AiModel = null,
+    string? AiTmdbMcpUrl = null,
+    string? AiBangumiMcpUrl = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -329,6 +337,26 @@ public sealed class ApplicationOverrideStore : IDisposable
                 },
                 Ai = options.Metadata.Ai with
                 {
+                    BaseUrl = !inheritedFields.Contains("ai_base_url")
+                        && settings.AiBaseUrlOverridden == true
+                        ? ParseOptionalUri(settings.AiBaseUrl, "AI base URL")
+                        : options.Metadata.Ai.BaseUrl,
+                    ApiKey = !inheritedFields.Contains("ai_api_key")
+                        && settings.AiApiKeyOverridden == true
+                        ? settings.AiApiKey
+                        : options.Metadata.Ai.ApiKey,
+                    Model = !inheritedFields.Contains("ai_model")
+                        && settings.AiModelOverridden == true
+                        ? settings.AiModel
+                        : options.Metadata.Ai.Model,
+                    TmdbMcpUrl = !inheritedFields.Contains("ai_tmdb_mcp_url")
+                        && settings.AiTmdbMcpUrl is not null
+                        ? ParseRequiredUri(settings.AiTmdbMcpUrl, "AI TMDB MCP URL")
+                        : options.Metadata.Ai.TmdbMcpUrl,
+                    BangumiMcpUrl = !inheritedFields.Contains("ai_bangumi_mcp_url")
+                        && settings.AiBangumiMcpUrl is not null
+                        ? ParseRequiredUri(settings.AiBangumiMcpUrl, "AI Bangumi MCP URL")
+                        : options.Metadata.Ai.BangumiMcpUrl,
                     UseMetadataMatch = inheritedFields.Contains("ai_use_metadata_match")
                         ? options.Metadata.Ai.UseMetadataMatch
                         : settings.AiUseMetadataMatch

@@ -128,6 +128,7 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `mikan_base_url`、`tmdb_base_url`、`tmdb_image_base_url`、`tmdb_api_key`、`tmdb_cache_hour`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`outbound_proxy_url`、
 `outbound_proxy_hosts`、`ANIMEGO_OUTBOUND_PROXY_URL`、`ANIMEGO_OUTBOUND_PROXY_HOSTS`、
+`ai_base_url`、`ai_api_key`、`ai_model`、`ai_tmdb_mcp_url`、`ai_bangumi_mcp_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
 `ANIMEGO_WEB_HOST`、

@@ -2258,6 +2258,11 @@ async function loadConfiguration() {
             ]),
             metadataConfigurationCard(config),
             configurationCard("AI、偏移与 Torrent", [
+                ["OpenAI API", config.metadata.ai.base_url ?? "未配置"],
+                ["模型", config.metadata.ai.model ?? "未配置"],
+                ["API Key", config.metadata.ai.api_key_configured ? "已配置（值已隐藏）" : "未配置"],
+                ["TMDB MCP", config.metadata.ai.tmdb_mcp_url],
+                ["Bangumi MCP", config.metadata.ai.bangumi_mcp_url],
                 [
                     "AI 匹配",
                     `任务级 ${enabledLabel(config.metadata.ai.use_metadata_match)} · 单提示词 · `
@@ -2325,18 +2330,25 @@ function setConfigurationChecked(id, value) {
 function syncConfigurationSecretInputs() {
     const clearKey = element("#configuration-tmdb-key-clear").checked;
     const clearToken = element("#configuration-tmdb-token-clear").checked;
+    const clearAiKey = element("#configuration-ai-key-clear").checked;
     const key = element("#configuration-tmdb-key");
     const token = element("#configuration-tmdb-token");
+    const aiKey = element("#configuration-ai-key");
     const keyLocked = activeConfigurationLockedFields.has("tmdb_api_key");
     const tokenLocked = activeConfigurationLockedFields.has("tmdb_read_access_token");
+    const aiKeyLocked = activeConfigurationLockedFields.has("ai_api_key");
     key.disabled = keyLocked || clearKey;
     token.disabled = tokenLocked || clearToken;
+    aiKey.disabled = aiKeyLocked || clearAiKey;
     element("#configuration-tmdb-key-clear").disabled = keyLocked;
     element("#configuration-tmdb-token-clear").disabled = tokenLocked;
+    element("#configuration-ai-key-clear").disabled = aiKeyLocked;
     if (clearKey)
         key.value = "";
     if (clearToken)
         token.value = "";
+    if (clearAiKey)
+        aiKey.value = "";
 }
 const configurationLockSelectors = {
     outbound_proxy_url: ["#configuration-outbound-proxy-url"],
@@ -2355,6 +2367,11 @@ const configurationLockSelectors = {
     bangumi_http_timeout_seconds: ["#configuration-bangumi-timeout"],
     bangumi_retry_count: ["#configuration-bangumi-retry-count"],
     bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
+    ai_base_url: ["#configuration-ai-base-url"],
+    ai_model: ["#configuration-ai-model"],
+    ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
+    ai_tmdb_mcp_url: ["#configuration-ai-tmdb-mcp-url"],
+    ai_bangumi_mcp_url: ["#configuration-ai-bangumi-mcp-url"],
     ai_use_metadata_match: ["#configuration-ai-metadata"],
     ai_http_timeout_seconds: ["#configuration-ai-timeout"],
     data_update_enabled: ["#configuration-data-update-enabled"],
@@ -2426,6 +2443,14 @@ function openConfigurationEditor() {
     setConfigurationChecked("#configuration-fail-backtrace", editable.season_failure_backtrace);
     setConfigurationChecked("#configuration-fail-title", editable.season_failure_use_title_season);
     setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
+    setConfigurationValue("#configuration-ai-base-url", editable.ai_base_url ?? "");
+    setConfigurationValue("#configuration-ai-model", editable.ai_model ?? "");
+    setConfigurationValue("#configuration-ai-key", "");
+    setConfigurationChecked("#configuration-ai-key-clear", false);
+    element("#configuration-ai-key-state").textContent =
+        configurationSecretLabel(editable.ai_api_key_state);
+    setConfigurationValue("#configuration-ai-tmdb-mcp-url", editable.ai_tmdb_mcp_url);
+    setConfigurationValue("#configuration-ai-bangumi-mcp-url", editable.ai_bangumi_mcp_url);
     setConfigurationChecked("#configuration-ai-metadata", editable.ai_use_metadata_match);
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
     setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
@@ -2468,6 +2493,11 @@ const configurationFieldLabels = {
     season_failure_backtrace: "TMDBFailBacktrace",
     season_failure_use_title_season: "TMDBFailUseTitleSeason",
     season_failure_use_first_season: "TMDBFailUseFirstSeason",
+    ai_base_url: "OpenAI-compatible API 地址",
+    ai_model: "AI 模型",
+    ai_api_key: "AI API Key",
+    ai_tmdb_mcp_url: "TMDB MCP 地址",
+    ai_bangumi_mcp_url: "Bangumi MCP 地址",
     ai_use_metadata_match: "AI 元数据匹配",
     ai_http_timeout_seconds: "AI 超时（秒）",
     tmdb_failure_use_bangumi: "Bangumi 完全兜底",
@@ -2514,6 +2544,12 @@ function configurationRequest() {
         season_failure_backtrace: element("#configuration-fail-backtrace").checked,
         season_failure_use_title_season: element("#configuration-fail-title").checked,
         season_failure_use_first_season: element("#configuration-fail-first").checked,
+        ai_base_url: element("#configuration-ai-base-url").value || null,
+        ai_model: element("#configuration-ai-model").value || null,
+        ai_api_key: element("#configuration-ai-key").value || null,
+        clear_ai_api_key: element("#configuration-ai-key-clear").checked,
+        ai_tmdb_mcp_url: element("#configuration-ai-tmdb-mcp-url").value,
+        ai_bangumi_mcp_url: element("#configuration-ai-bangumi-mcp-url").value,
         ai_use_metadata_match: element("#configuration-ai-metadata").checked,
         ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
         tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
@@ -5821,9 +5857,11 @@ configurationDialog.addEventListener("close", () => {
     clearConfigurationPreview();
     element("#configuration-tmdb-key").value = "";
     element("#configuration-tmdb-token").value = "";
+    element("#configuration-ai-key").value = "";
 });
 element("#configuration-tmdb-key-clear").addEventListener("change", syncConfigurationSecretInputs);
 element("#configuration-tmdb-token-clear").addEventListener("change", syncConfigurationSecretInputs);
+element("#configuration-ai-key-clear").addEventListener("change", syncConfigurationSecretInputs);
 element("#rss-save").addEventListener("click", () => void saveRssRules());
 element("#rss-rule-rollback").addEventListener("click", () => void rollbackRssRules());
 element("#rss-add-whitelist").addEventListener("click", () => {

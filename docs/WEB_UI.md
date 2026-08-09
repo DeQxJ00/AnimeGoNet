@@ -113,6 +113,8 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进入同一个配置编辑器。Mikan 内网反向代理只对明确配置的 host 放宽私网 DNS 门禁，不会把其它 Torrent host 一并设为可信；TMDB 图片 Base URL 保留 `/t/p/` 等路径前缀。
 
+“AI 与 MCP”分区可修改 OpenAI-compatible Base URL、模型、AI API Key、TMDB MCP 和 Bangumi MCP 地址。AI API Key 只显示 `继承/已配置/已清除` 状态：留空保留，勾选后明确清除，配置响应和保存前差异都不回显明文。上述五项都进入部署字段锁，环境变量或命令行已控制时 WebUI 只读且服务端拒绝改写。
+
 该接口只返回 `api_key_configured`、`read_access_token_configured` 和 `access_key_configured` 布尔值，绝不返回凭据内容；仍受统一 API 鉴权保护。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，密钥输入为空表示保留，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 
 配置保存采用两个明确步骤。表单提交先调用 `POST /api/v1/config/preview`，服务端使用与实际 PUT 相同的字段锁、规范化和强类型校验，返回字段级 `before/after/effect/sensitive` 投影但不写文件。页面把 `hot_reload` 标为“即时生效”、`restart` 标为“重启生效”；敏感字段无论服务端返回什么都只按 `继承部署配置/已配置（值已隐藏）/已明确清除` 三态渲染。只有预览存在差异时才启用“确认保存并备份”，表单任一输入变化都会使旧预览和待提交对象失效。

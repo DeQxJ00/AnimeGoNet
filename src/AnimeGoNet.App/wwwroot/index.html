@@ -943,8 +943,21 @@
             </li>
           </ol>
         </fieldset>
+        <fieldset class="wide configuration-data-update-editor">
+          <legend>AI 与 MCP</legend>
+          <p class="configuration-data-update-caption">OpenAI-compatible 请求使用 Base URL 下的 <code>v1/chat/completions</code>；API Key 只保存到私有配置且不会回显。两个 MCP 由 AnimeGoNet 本地连接，模型不会直接访问 MCP 地址。</p>
+          <div class="configuration-data-update-grid">
+            <label class="wide">OpenAI-compatible Base URL（可选）<input id="configuration-ai-base-url" type="url" maxlength="2048" placeholder="http://openai.local/"></label>
+            <label>模型<input id="configuration-ai-model" maxlength="256" placeholder="gpt-5.4-mini"></label>
+            <label>新 AI API Key<input id="configuration-ai-key" type="password" autocomplete="new-password"></label>
+            <label class="configuration-clear"><input id="configuration-ai-key-clear" type="checkbox">明确清除 AI API Key</label>
+            <p id="configuration-ai-key-state" class="configuration-secret-state wide"></p>
+            <label class="wide">TMDB MCP 地址<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
+            <label class="wide">Bangumi MCP 地址<input id="configuration-ai-bangumi-mcp-url" type="url" maxlength="2048" required placeholder="http://bgm.mcp.local/mcp"></label>
+          </div>
+        </fieldset>
         <fieldset class="wide">
-          <legend>AI 与兜底</legend>
+          <legend>匹配与兜底</legend>
           <label class="configuration-guided-option">
             <input id="configuration-bangumi-fallback" type="checkbox">
             <span><strong>Bangumi 完全兜底（一般不启用这个）</strong><small>TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；不输出有效 tmdbid（内部仍按现有逻辑写 0）</small></span>

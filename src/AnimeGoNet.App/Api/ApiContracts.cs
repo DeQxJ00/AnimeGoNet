@@ -229,6 +229,11 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("season_failure_backtrace")] bool SeasonFailureBacktrace,
     [property: JsonPropertyName("season_failure_use_title_season")] bool SeasonFailureUseTitleSeason,
     [property: JsonPropertyName("season_failure_use_first_season")] bool SeasonFailureUseFirstSeason,
+    [property: JsonPropertyName("ai_base_url")] string? AiBaseUrl,
+    [property: JsonPropertyName("ai_model")] string? AiModel,
+    [property: JsonPropertyName("ai_api_key_state")] string AiApiKeyState,
+    [property: JsonPropertyName("ai_tmdb_mcp_url")] string AiTmdbMcpUrl,
+    [property: JsonPropertyName("ai_bangumi_mcp_url")] string AiBangumiMcpUrl,
     [property: JsonPropertyName("ai_use_metadata_match")] bool AiUseMetadataMatch,
     [property: JsonPropertyName("ai_use_season_match")] bool AiUseSeasonMatch,
     [property: JsonPropertyName("ai_use_episode_match")] bool AiUseEpisodeMatch,
@@ -295,7 +300,13 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("data_update_http_timeout_seconds")] double DataUpdateHttpTimeoutSeconds,
     [property: JsonPropertyName("expected_configuration_revision")] long ExpectedConfigurationRevision,
     [property: JsonPropertyName("outbound_proxy_url")] string? OutboundProxyUrl = null,
-    [property: JsonPropertyName("outbound_proxy_hosts")] IReadOnlyList<string>? OutboundProxyHosts = null);
+    [property: JsonPropertyName("outbound_proxy_hosts")] IReadOnlyList<string>? OutboundProxyHosts = null,
+    [property: JsonPropertyName("ai_base_url")] string? AiBaseUrl = null,
+    [property: JsonPropertyName("ai_model")] string? AiModel = null,
+    [property: JsonPropertyName("ai_api_key")] string? AiApiKey = null,
+    [property: JsonPropertyName("clear_ai_api_key")] bool ClearAiApiKey = false,
+    [property: JsonPropertyName("ai_tmdb_mcp_url")] string? AiTmdbMcpUrl = null,
+    [property: JsonPropertyName("ai_bangumi_mcp_url")] string? AiBangumiMcpUrl = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,

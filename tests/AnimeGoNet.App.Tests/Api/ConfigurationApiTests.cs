@@ -138,6 +138,9 @@ public sealed class ConfigurationApiTests
             "http://tmdb.mcp.local/mcp",
             metadata.GetProperty("ai").GetProperty("tmdb_mcp_url").GetString());
         Assert.Equal(
+            "http://bgm.mcp.local/mcp",
+            metadata.GetProperty("ai").GetProperty("bangumi_mcp_url").GetString());
+        Assert.Equal(
             123456,
             json.RootElement.GetProperty("torrent_fetch").GetProperty("max_response_bytes").GetInt64());
         var dataUpdate = json.RootElement.GetProperty("data_update");
@@ -193,6 +196,12 @@ public sealed class ConfigurationApiTests
         Assert.Contains("data-priority=\"2\"", html, StringComparison.Ordinal);
         Assert.Contains("data-priority=\"1\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-metadata\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-base-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-model\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-key\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-key-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-tmdb-mcp-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-bangumi-mcp-url\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"configuration-ai-season\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"configuration-ai-episode\"", html, StringComparison.Ordinal);
         Assert.Contains("一个任务只使用一个提示词", html, StringComparison.Ordinal);
@@ -520,6 +529,11 @@ public sealed class ConfigurationApiTests
                 expectedRevision: 0,
                 apiKey: "new-api-secret",
                 readToken: "new-read-secret",
+                aiBaseUrl: "http://openai.test.invalid/",
+                aiModel: "test-live-model",
+                aiApiKey: "new-ai-secret",
+                aiTmdbMcpUrl: "http://tmdb-mcp.test.invalid/mcp",
+                aiBangumiMcpUrl: "http://bgm-mcp.test.invalid/mcp",
                 outboundProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
                 outboundHosts: ["api.themoviedb.org", "api.bgm.tv"]));
@@ -531,6 +545,7 @@ public sealed class ConfigurationApiTests
         Assert.True(firstJson.RootElement.GetProperty("restart_required").GetBoolean());
         Assert.DoesNotContain("new-api-secret", firstText, StringComparison.Ordinal);
         Assert.DoesNotContain("new-read-secret", firstText, StringComparison.Ordinal);
+        Assert.DoesNotContain("new-ai-secret", firstText, StringComparison.Ordinal);
 
         using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var current = JsonDocument.Parse(await currentResponse.Content.ReadAsStreamAsync()))
@@ -546,12 +561,26 @@ public sealed class ConfigurationApiTests
             Assert.Equal(
                 "configured",
                 editable.GetProperty("tmdb_read_access_token_state").GetString());
+            Assert.Equal("http://openai.test.invalid/", editable.GetProperty("ai_base_url").GetString());
+            Assert.Equal("test-live-model", editable.GetProperty("ai_model").GetString());
+            Assert.Equal("configured", editable.GetProperty("ai_api_key_state").GetString());
+            Assert.Equal(
+                "http://tmdb-mcp.test.invalid/mcp",
+                editable.GetProperty("ai_tmdb_mcp_url").GetString());
+            Assert.Equal(
+                "http://bgm-mcp.test.invalid/mcp",
+                editable.GetProperty("ai_bangumi_mcp_url").GetString());
         }
 
         var store = app.App.Services.GetRequiredService<ApplicationOverrideStore>();
         var saved = await store.LoadAsync();
         Assert.Equal("new-api-secret", saved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", saved.Settings?.TmdbReadAccessToken);
+        Assert.Equal("http://openai.test.invalid/", saved.Settings?.AiBaseUrl);
+        Assert.Equal("test-live-model", saved.Settings?.AiModel);
+        Assert.Equal("new-ai-secret", saved.Settings?.AiApiKey);
+        Assert.Equal("http://tmdb-mcp.test.invalid/mcp", saved.Settings?.AiTmdbMcpUrl);
+        Assert.Equal("http://bgm-mcp.test.invalid/mcp", saved.Settings?.AiBangumiMcpUrl);
         Assert.Equal("http://127.0.0.1:7890/", saved.Settings?.OutboundProxyUrl);
         Assert.Equal(
             ["api.themoviedb.org", "api.bgm.tv"],
@@ -570,6 +599,10 @@ public sealed class ConfigurationApiTests
             Payload(
                 expectedRevision: 1,
                 aiMetadata: true,
+                aiBaseUrl: "http://openai.test.invalid/",
+                aiModel: "test-live-model",
+                aiTmdbMcpUrl: "http://tmdb-mcp.test.invalid/mcp",
+                aiBangumiMcpUrl: "http://bgm-mcp.test.invalid/mcp",
                 outboundProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
                 outboundHosts: ["api.themoviedb.org", "api.bgm.tv"]));
@@ -577,6 +610,7 @@ public sealed class ConfigurationApiTests
         var preserved = await store.LoadAsync();
         Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", preserved.Settings?.TmdbReadAccessToken);
+        Assert.Equal("new-ai-secret", preserved.Settings?.AiApiKey);
         Assert.True(preserved.Settings?.AiUseMetadataMatch);
         using (var desiredResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var desired = JsonDocument.Parse(await desiredResponse.Content.ReadAsStreamAsync()))
@@ -594,6 +628,11 @@ public sealed class ConfigurationApiTests
             Payload(
                 expectedRevision: 2,
                 clearApiKey: true,
+                clearAiApiKey: true,
+                aiBaseUrl: "http://openai.test.invalid/",
+                aiModel: "test-live-model",
+                aiTmdbMcpUrl: "http://tmdb-mcp.test.invalid/mcp",
+                aiBangumiMcpUrl: "http://bgm-mcp.test.invalid/mcp",
                 outboundProxy: "http://127.0.0.1:7890/",
                 bangumiBase: "https://metadata.test.invalid/bangumi/",
                 outboundHosts: ["api.themoviedb.org", "api.bgm.tv"]));
@@ -602,6 +641,8 @@ public sealed class ConfigurationApiTests
         Assert.True(cleared.Settings?.TmdbApiKeyOverridden);
         Assert.Null(cleared.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", cleared.Settings?.TmdbReadAccessToken);
+        Assert.True(cleared.Settings?.AiApiKeyOverridden);
+        Assert.Null(cleared.Settings?.AiApiKey);
         using (var clearedResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var clearedJson = JsonDocument.Parse(await clearedResponse.Content.ReadAsStreamAsync()))
         {
@@ -609,6 +650,10 @@ public sealed class ConfigurationApiTests
                 "cleared",
                 clearedJson.RootElement.GetProperty("editable")
                     .GetProperty("tmdb_api_key_state").GetString());
+            Assert.Equal(
+                "cleared",
+                clearedJson.RootElement.GetProperty("editable")
+                    .GetProperty("ai_api_key_state").GetString());
         }
 
         using var conflict = await app.Client.PutAsync(
@@ -969,6 +1014,12 @@ public sealed class ConfigurationApiTests
         string? outboundProxy = null,
         string[]? outboundHosts = null,
         string bangumiBase = "https://api.bgm.tv/",
+        string? aiBaseUrl = null,
+        string? aiModel = null,
+        string? aiApiKey = null,
+        bool clearAiApiKey = false,
+        string aiTmdbMcpUrl = "http://tmdb.mcp.local/mcp",
+        string aiBangumiMcpUrl = "http://bgm.mcp.local/mcp",
         int tmdbRetryCount = 3,
         double tmdbRetryDelaySeconds = 5,
         int bangumiRetryCount = 3,
@@ -992,6 +1043,12 @@ public sealed class ConfigurationApiTests
             bangumi_http_timeout_seconds = 30,
             bangumi_retry_count = bangumiRetryCount,
             bangumi_retry_delay_seconds = bangumiRetryDelaySeconds,
+            ai_base_url = aiBaseUrl,
+            ai_model = aiModel,
+            ai_api_key = aiApiKey,
+            clear_ai_api_key = clearAiApiKey,
+            ai_tmdb_mcp_url = aiTmdbMcpUrl,
+            ai_bangumi_mcp_url = aiBangumiMcpUrl,
             season_failure_skip = false,
             season_failure_backtrace = true,
             season_failure_use_title_season = true,
