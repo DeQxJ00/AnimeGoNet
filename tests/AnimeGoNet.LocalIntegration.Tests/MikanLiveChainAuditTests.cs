@@ -7,8 +7,10 @@ using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Data.Downloads;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.AspNetCore.Builder;
@@ -48,18 +50,37 @@ public sealed class MikanLiveChainAuditTests
             Required("ANIMEGONET_MIKAN_REAL_DOWNLOAD"),
             "1",
             StringComparison.Ordinal);
+        var syntheticPayload = string.Equals(
+            Required("ANIMEGONET_MIKAN_SYNTHETIC_PAYLOAD"),
+            "1",
+            StringComparison.Ordinal);
+        Assert.False(realDownload && syntheticPayload, "Real and synthetic payload modes are mutually exclusive.");
+        var payloadMode = realDownload
+            ? "real_download"
+            : syntheticPayload ? "synthetic_file" : "metadata_only";
         var downloadTimeout = TimeSpan.FromMinutes(int.Parse(
             Required("ANIMEGONET_MIKAN_DOWNLOAD_TIMEOUT_MINUTES"),
+            CultureInfo.InvariantCulture));
+        var zeroProgressSkip = TimeSpan.FromMinutes(int.Parse(
+            Required("ANIMEGONET_MIKAN_ZERO_PROGRESS_SKIP_MINUTES"),
             CultureInfo.InvariantCulture));
         Directory.CreateDirectory(auditRoot);
         var runId = Guid.NewGuid().ToString("N");
         var runRoot = Path.Combine(auditRoot, $"run-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{runId[..8]}");
         var dataPath = Path.Combine(runRoot, "data");
         Directory.CreateDirectory(dataPath);
+        var downloadPath = syntheticPayload
+            ? Path.Combine(runRoot, "synthetic-download")
+            : Path.GetFullPath(Required("ANIMEGONET_QBIT_DOWNLOAD_PATH"));
+        var savePath = syntheticPayload
+            ? Path.Combine(runRoot, "synthetic-media")
+            : Path.GetFullPath(Required("ANIMEGONET_QBIT_SAVE_PATH"));
+        Directory.CreateDirectory(downloadPath);
+        Directory.CreateDirectory(savePath);
         var reportPath = Path.Combine(runRoot, "mikan-live-audit.json");
         var category = $"animegonet-mikan-audit-{runId}";
         var tag = $"animegonet-mikan-audit-{runId}";
-        var options = CreateOptions(dataPath, category, tag);
+        var options = CreateOptions(dataPath, downloadPath, savePath, category, tag);
         var qbit = options.Downloaders["bt"];
         using var adminHttp = CreateQbittorrentHttpClient(qbit);
         using var registry = new QbittorrentClientRegistry(options);
@@ -96,6 +117,7 @@ public sealed class MikanLiveChainAuditTests
             var snapshots = app.Services.GetRequiredService<DownloadSnapshotSynchronizer>();
             var organizer = app.Services.GetRequiredService<MediaOrganizationProcessor>();
             var database = app.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+            var downloadJobs = app.Services.GetRequiredService<DownloadJobStore>();
 
             foreach (var testCase in cases)
             {
@@ -174,27 +196,65 @@ public sealed class MikanLiveChainAuditTests
                         && expectedEpisodes.SequenceEqual(actualEpisodes);
                     var downloadResult = "metadata_only";
                     IReadOnlyList<string> mediaRelativePaths = [];
-                    if (passed && realDownload)
+                    if (passed && (realDownload || syntheticPayload))
                     {
                         var preparation = await preparations.RunOnceAsync();
                         downloadResult = preparation.ToString();
                         if (preparation == DownloadPreparationResult.Completed)
                         {
-                            await WaitForDownloadAsync(
-                                admin,
-                                snapshots,
-                                infoHash!,
-                                downloadTimeout);
-                            downloadResult = "preparation=Completed;organization=" + await CompleteOrganizationAsync(
-                                organizer,
-                                resolutions,
-                                taskId!);
+                            if (syntheticPayload)
+                            {
+                                await admin.PauseAsync([infoHash!]);
+                                await MaterializeSyntheticPayloadAsync(options.Paths.DownloadPath, detail.Files);
+                                var totalBytes = detail.Files
+                                    .Where(IsWantedPayloadFile)
+                                    .Sum(file => file.SizeBytes);
+                                await downloadJobs.ApplyInstanceSnapshotAsync(
+                                    "bt",
+                                    [new DownloadTaskSnapshot(
+                                        infoHash!,
+                                        testCase.Title,
+                                        DownloadTaskState.Complete,
+                                        1,
+                                        totalBytes,
+                                        totalBytes,
+                                        0,
+                                        0)],
+                                    DateTimeOffset.UtcNow);
+                                downloadResult = "preparation=Completed;payload=SyntheticFile;organization="
+                                    + await CompleteOrganizationAsync(organizer, resolutions, taskId!);
+                            }
+                            else
+                            {
+                                var downloadWait = await WaitForDownloadAsync(
+                                    admin,
+                                    snapshots,
+                                    infoHash!,
+                                    downloadTimeout,
+                                    zeroProgressSkip);
+                                if (downloadWait == DownloadWaitResult.SkippedZeroProgress)
+                                {
+                                    downloadResult = "preparation=Completed;download=SkippedZeroProgress";
+                                }
+                                else
+                                {
+                                    downloadResult = "preparation=Completed;payload=RealDownload;organization="
+                                        + await CompleteOrganizationAsync(organizer, resolutions, taskId!);
+                                }
+                            }
                         }
 
                         mediaRelativePaths = await ReadMediaRelativePathsAsync(
                             database,
                             taskId!,
                             options.Paths.SavePath);
+                        if (syntheticPayload)
+                        {
+                            passed = passed && (downloadResult.EndsWith(
+                                "organization=CleanupCompleted",
+                                StringComparison.Ordinal)
+                                || string.Equals(downloadResult, "SkippedDuplicate", StringComparison.Ordinal));
+                        }
                     }
 
                     outcomes.Add(new AuditCaseOutcome(
@@ -227,6 +287,7 @@ public sealed class MikanLiveChainAuditTests
                         attempts.Any(value => value.Strategy == "ai_metadata"),
                         SumUsage(attempts),
                         realDownload,
+                        payloadMode,
                         downloadResult,
                         mediaRelativePaths,
                         passed,
@@ -284,11 +345,14 @@ public sealed class MikanLiveChainAuditTests
             + string.Join(" | ", failures.Select(value => $"row {value.RowNumber}: {value.FailureCode}")));
     }
 
-    private static AnimeGoOptions CreateOptions(string dataPath, string category, string tag)
+    private static AnimeGoOptions CreateOptions(
+        string dataPath,
+        string downloadPath,
+        string savePath,
+        string category,
+        string tag)
     {
         var defaults = AnimeGoDefaults.CreateNative(dataPath);
-        var downloadPath = Path.GetFullPath(Required("ANIMEGONET_QBIT_DOWNLOAD_PATH"));
-        var savePath = Path.GetFullPath(Required("ANIMEGONET_QBIT_SAVE_PATH"));
         var mikanBase = AbsoluteBaseUrl("ANIMEGONET_MIKAN_BASE_URL");
         var tmdbBase = AbsoluteBaseUrl("ANIMEGONET_TMDB_BASE_URL");
         var bangumiBase = AbsoluteBaseUrl("ANIMEGONET_BANGUMI_BASE_URL");
@@ -421,13 +485,25 @@ public sealed class MikanLiveChainAuditTests
         }
     }
 
-    private static async Task WaitForDownloadAsync(
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(0.009999, true)]
+    [InlineData(0.01, false)]
+    [InlineData(0.5, false)]
+    public void IntegerZeroPercentRuleIsDeterministic(
+        double progress,
+        bool expected) =>
+        Assert.Equal(expected, IsIntegerZeroPercent(progress));
+
+    private static async Task<DownloadWaitResult> WaitForDownloadAsync(
         QbittorrentClient client,
         DownloadSnapshotSynchronizer snapshots,
         string infoHash,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        TimeSpan zeroProgressSkip)
     {
-        var deadline = DateTimeOffset.UtcNow + timeout;
+        var startedAt = DateTimeOffset.UtcNow;
+        var deadline = startedAt + timeout;
         while (DateTimeOffset.UtcNow < deadline)
         {
             await client.ConnectAsync();
@@ -436,7 +512,14 @@ public sealed class MikanLiveChainAuditTests
             await snapshots.SyncOnceAsync();
             if (task is not null && task.Progress >= 1)
             {
-                return;
+                return DownloadWaitResult.Completed;
+            }
+
+            if (task is not null
+                && DateTimeOffset.UtcNow - startedAt >= zeroProgressSkip
+                && IsIntegerZeroPercent(task.Progress))
+            {
+                return DownloadWaitResult.SkippedZeroProgress;
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -444,6 +527,92 @@ public sealed class MikanLiveChainAuditTests
 
         throw new TimeoutException("The real Mikan payload did not finish before the configured audit timeout.");
     }
+
+    private static bool IsIntegerZeroPercent(double progress) =>
+        progress >= 0 && progress < 0.01;
+
+    [Fact]
+    public async Task SyntheticPayloadMaterializationIsBoundedAndPreservesDeclaredLength()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-synthetic-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var files = new MetadataTaskFileDetailProjection[]
+            {
+                SyntheticFile("show/episode.mkv", 4096, "episode"),
+                SyntheticFile("show/ignored.txt", 17, "ignored"),
+            };
+
+            await MaterializeSyntheticPayloadAsync(root, files);
+
+            Assert.Equal(4096, new FileInfo(Path.Combine(root, "show", "episode.mkv")).Length);
+            Assert.False(File.Exists(Path.Combine(root, "show", "ignored.txt")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SyntheticPayloadMaterializationRejectsTraversal()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-synthetic-" + Guid.NewGuid().ToString("N"));
+        var files = new[] { SyntheticFile("../outside.mkv", 1, "episode") };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            MaterializeSyntheticPayloadAsync(root, files));
+        Assert.False(File.Exists(Path.Combine(root, "..", "outside.mkv")));
+    }
+
+    private static MetadataTaskFileDetailProjection SyntheticFile(
+        string path,
+        long size,
+        string disposition) => new(
+            path, size, null, null, disposition, null, 1, "Series", 1, "Season 1", 1, "Episode 1");
+
+    private static async Task MaterializeSyntheticPayloadAsync(
+        string downloadRoot,
+        IReadOnlyList<MetadataTaskFileDetailProjection> files)
+    {
+        var fullRoot = Path.GetFullPath(downloadRoot);
+        Directory.CreateDirectory(fullRoot);
+        foreach (var file in files.Where(IsWantedPayloadFile))
+        {
+            if (file.SizeBytes < 0)
+            {
+                throw new InvalidOperationException("Synthetic payload size cannot be negative.");
+            }
+
+            var relative = file.RelativePath
+                .Replace('/', Path.DirectorySeparatorChar)
+                .Replace('\\', Path.DirectorySeparatorChar);
+            var target = Path.GetFullPath(Path.Combine(fullRoot, relative));
+            var boundary = fullRoot.EndsWith(Path.DirectorySeparatorChar)
+                ? fullRoot
+                : fullRoot + Path.DirectorySeparatorChar;
+            if (!target.StartsWith(boundary, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Synthetic payload path escaped the isolated download root.");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await using var stream = new FileStream(
+                target,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 1,
+                FileOptions.Asynchronous);
+            stream.SetLength(file.SizeBytes);
+        }
+    }
+
+    private static bool IsWantedPayloadFile(MetadataTaskFileDetailProjection file) =>
+        file.Disposition is not ("duplicate" or "ignored" or "pending");
 
     private static async Task<string> CompleteOrganizationAsync(
         MediaOrganizationProcessor organizer,
@@ -576,7 +745,7 @@ public sealed class MikanLiveChainAuditTests
         var report = new AuditReport(
             runId,
             DateTimeOffset.UtcNow,
-            "real Mikan metadata, isolated qB dispatch, Bangumi/TMDB/optional AI, and per-case real-download audit",
+            "real Mikan metadata, isolated qB dispatch, Bangumi/TMDB/optional AI, and explicit payload-mode audit",
             outcomes.Count,
             outcomes.Count(value => value.Passed),
             outcomes.Count(value => !value.Passed),
@@ -790,6 +959,7 @@ public sealed class MikanLiveChainAuditTests
         bool AiUsed,
         AiMetadataProviderUsage? AiUsage,
         bool RealDownloadEnabled,
+        string PayloadMode,
         string DownloadResult,
         IReadOnlyList<string> MediaRelativePaths,
         bool Passed,
@@ -822,6 +992,7 @@ public sealed class MikanLiveChainAuditTests
                 false,
                 null,
                 false,
+                "metadata_only",
                 "not_started",
                 [],
                 false,
@@ -850,4 +1021,10 @@ public sealed class MikanLiveChainAuditTests
         int AttemptNumber,
         long DurationMilliseconds,
         AiMetadataProviderUsage? AiUsage);
+
+    private enum DownloadWaitResult
+    {
+        Completed,
+        SkippedZeroProgress,
+    }
 }

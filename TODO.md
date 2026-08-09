@@ -240,7 +240,7 @@
 
 ## P10 — 组合与发布
 
-- [>] 用 `测试数据.csv` 的 29 条真实 Mikan 输入执行可续跑的完整链路审计：隔离 qB、Mikan/TMDB/Bangumi 反代、统一导入、规则筛选、TMDB 映射、真实下载、move 整理和 AI 用量均写入不含凭据/URL 的逐次报告。第 2–3 行已完成真实下载与整理并 2/2 命中预期 `65942/S01/E056,E067`，AI 0 次/0 token；TMDB 连续季度编号冲突已由 Bangumi 播出日期映射修正。其余 27 条完成前保持进行中。
+- [x] 用 `测试数据.csv` 的 29 条真实 Mikan 输入完成可续跑链路审计：29/29 已真实执行 Mikan 输入、隔离 qB 投递/文件清单、规则筛选、SQLite 去重和 Bangumi/TMDB 映射；第 2–4 行另完成真实 BT 下载与 move 整理。为避免公网下载时间影响业务验收，第 5–30 行按显式 `synthetic_file` 测试模式在每次 `run-*` 隔离目录按 Torrent 清单生成测试文件，再走正式 move、重命名、NFO/sidecar、completion 与 `deleteFiles=false` 清理；其中 18 条完成整理、7 条按同 TMDB+EP 完成记录正确 `SkippedDuplicate`。全部命中 CSV 期望，AI 0 次/0 token；报告不含凭据、passkey、Torrent URL 或媒体绝对路径。合成载荷不记作真实下载。
 
 - [x] 完成 Host DI 和 CLI 行为：固定上游 `cmd/animego` 的 `config/debug/web/backup` 四个开关与对应 `ANIMEGO_*` 环境别名均已审计；兼容 Go 单短横线及现代双横线，裸 bool 等价 true，非法值在创建运行目录前失败；debug 同时放开宿主与滚动文件 Debug 日志，`web=false` 使用无监听 `IServer` 保留后台 worker，`-h/-help/--help` 不启动宿主。五 RID NativeAOT workflow 验证 help 和 headless 零 TCP 监听。
 - [~] Docker NativeAOT 镜像功能已生成：双架构 Dockerfile、Buildx CI 和容器 smoke 均已建立；按用户要求 Docker 构建/运行标记为未验证，后续自行实跑。

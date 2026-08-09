@@ -98,7 +98,9 @@ public sealed class LocalIntegrationScriptTests
         Assert.Contains("ANIMEGONET_AI_API_KEY", script, StringComparison.Ordinal);
         Assert.Contains("mikan-live-audit", script, StringComparison.Ordinal);
         Assert.Contains("[switch]$RealDownload", script, StringComparison.Ordinal);
+        Assert.Contains("[switch]$SyntheticPayload", script, StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_MIKAN_REAL_DOWNLOAD", script, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_MIKAN_SYNTHETIC_PAYLOAD", script, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("123456", script, StringComparison.Ordinal);
         Assert.Contains("WaitForPausedTaskAsync", test, StringComparison.Ordinal);
@@ -109,6 +111,8 @@ public sealed class LocalIntegrationScriptTests
         Assert.Contains("DownloadPreparationProcessor", test, StringComparison.Ordinal);
         Assert.Contains("MediaOrganizationProcessor", test, StringComparison.Ordinal);
         Assert.Contains("WaitForDownloadAsync", test, StringComparison.Ordinal);
+        Assert.Contains("MaterializeSyntheticPayloadAsync", test, StringComparison.Ordinal);
+        Assert.Contains("payload=SyntheticFile", test, StringComparison.Ordinal);
         Assert.Contains("ReadMediaRelativePathsAsync", test, StringComparison.Ordinal);
         Assert.Contains("Path.GetRelativePath", test, StringComparison.Ordinal);
         Assert.DoesNotContain("exception.Message", test, StringComparison.Ordinal);

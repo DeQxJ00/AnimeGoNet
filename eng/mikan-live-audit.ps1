@@ -11,8 +11,11 @@ param(
     [string]$TmdbMcpUrl = 'http://tmdb.mcp.local/mcp',
     [string]$BangumiMcpUrl = 'http://bgm.mcp.local/mcp',
     [switch]$RealDownload,
+    [switch]$SyntheticPayload,
     [ValidateRange(1, 1440)]
     [int]$DownloadTimeoutMinutes = 180,
+    [ValidateRange(1, 60)]
+    [int]$ZeroProgressSkipMinutes = 5,
     [ValidateRange(2, 30)]
     [int]$StartRow = 2,
     [ValidateRange(1, 29)]
@@ -20,6 +23,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($RealDownload -and $SyntheticPayload) {
+    throw '-RealDownload and -SyntheticPayload are mutually exclusive.'
+}
 $sandbox = [IO.Path]::GetFullPath($SandboxRoot)
 $csv = [IO.Path]::GetFullPath($CaseCsv)
 $downloadPath = Join-Path $sandbox 'download_temp'
@@ -58,7 +64,10 @@ $values = @{
     ANIMEGONET_TMDB_MCP_URL = $TmdbMcpUrl
     ANIMEGONET_BANGUMI_MCP_URL = $BangumiMcpUrl
     ANIMEGONET_MIKAN_REAL_DOWNLOAD = $(if ($RealDownload) { '1' } else { '0' })
+    ANIMEGONET_MIKAN_SYNTHETIC_PAYLOAD = $(if ($SyntheticPayload) { '1' } else { '0' })
     ANIMEGONET_MIKAN_DOWNLOAD_TIMEOUT_MINUTES = $DownloadTimeoutMinutes.ToString(
+        [Globalization.CultureInfo]::InvariantCulture)
+    ANIMEGONET_MIKAN_ZERO_PROGRESS_SKIP_MINUTES = $ZeroProgressSkipMinutes.ToString(
         [Globalization.CultureInfo]::InvariantCulture)
     ANIMEGONET_MIKAN_AUDIT_START_ROW = $StartRow.ToString(
         [Globalization.CultureInfo]::InvariantCulture)
@@ -81,7 +90,8 @@ try {
         throw "Mikan live audit failed with exit code $LASTEXITCODE. Inspect the newest report below $auditOutput."
     }
 
-    Write-Output "Mikan live audit passed. real_download=$($RealDownload.IsPresent); reports: $auditOutput"
+    $payloadMode = if ($RealDownload) { 'real_download' } elseif ($SyntheticPayload) { 'synthetic_file' } else { 'metadata_only' }
+    Write-Output "Mikan live audit passed. payload_mode=$payloadMode; reports: $auditOutput"
 }
 finally {
     foreach ($entry in $values.GetEnumerator()) {

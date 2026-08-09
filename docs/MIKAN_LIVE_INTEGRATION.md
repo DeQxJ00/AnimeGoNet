@@ -35,12 +35,32 @@ $env:ANIMEGONET_AI_API_KEY = '<test-key>'
 .\eng\mikan-live-audit.ps1 -RealDownload -StartRow 2 -MaxCases 29 -DownloadTimeoutMinutes 180
 ```
 
+批量验证完整整理链路时，推荐使用合成载荷模式。它仍真实执行 Mikan Torrent 获取、
+规则筛选、SQLite 去重、qB 投递和文件清单校验、Bangumi/TMDB/可选 AI 匹配；下载准备
+完成后不等待公网 BT，而是在本次 `run-*` 下的隔离下载目录按 Torrent 清单创建相同
+长度的测试文件，再执行正式 move、重命名、NFO/sidecar、completion 和 qB 清理流程：
+
+```powershell
+.\eng\mikan-live-audit.ps1 -SyntheticPayload -StartRow 2 -MaxCases 29
+```
+
+`-SyntheticPayload` 与 `-RealDownload` 互斥。合成文件和整理结果都位于本次审计目录，
+不会写入共享 `download_temp` 或 `jellyfin_data`。报告使用
+`payload_mode=synthetic_file` 和 `payload=SyntheticFile` 明确标记，不计作真实 BT 下载。
+
+真实下载默认应用 `-ZeroProgressSkipMinutes 5`：任务进入 qB 下载阶段后，若满
+5 分钟仍低于 1%（即整数百分比仍显示 0%），该行记录
+`download=SkippedZeroProgress`，随后以 `deleteFiles=false` 精确移除本次任务并继续
+下一行。只要达到 1% 就继续按 `DownloadTimeoutMinutes` 等待；该跳过只表示元数据
+预期已通过、真实载荷不可验收，不能算作真实下载完成。可显式修改等待分钟数，但
+不能关闭总下载超时。
+
 可用 `StartRow`/`MaxCases` 分批续跑。默认地址是本地反向代理，可通过脚本的 `MikanBaseUrl`、`TmdbBaseUrl`、`BangumiBaseUrl`、`AiBaseUrl`、`TmdbMcpUrl`、`BangumiMcpUrl` 参数替换；应用本身对应地址同样可在配置/WebUI修改。
 
 ## 报告与验收
 
 每次运行会增量写入 `mikan-live-audit.json`。每条记录包括 CSV 行号、标题、URL 单向指纹、筛选/投递/Series/Season/Episode 的完整 attempt 顺序、最终映射、qB hash、下载与整理状态、AI 是否调用、模型及 token/HTTP/tool-call 用量。报告不含 Torrent URL、passkey、Cookie、API key、qB 用户名/密码或媒体绝对路径。
 
-验收要求：CSV 预期 TMDB Series/Season/Episode 与实际逐文件结果一致；真实下载模式还必须完成 qB 下载、下载准备、move、NFO/sidecar、completion 和 qB `deleteFiles=false` 清理。AI 为可选且任务级最多一次，若调用必须在报告中有用量。
+验收要求：CSV 预期 TMDB Series/Season/Episode 与实际逐文件结果一致；合成载荷模式必须完成 qB 文件清单校验、下载准备、测试文件创建、move、NFO/sidecar、completion 和 qB `deleteFiles=false` 清理；真实下载模式在此基础上还必须完成真正的 BT 下载。`SyntheticFile` 和 `SkippedZeroProgress` 均不计入真实下载完成数，报告汇总时必须单列。AI 为可选且任务级最多一次，若调用必须在报告中有用量。
 
 异常中止后，只能按本次唯一 audit category/tag 精确删除测试任务，并保持 `deleteFiles=false`；不得按 tracker、标题片段或全部任务批量清理。下载块与已经整理的媒体由测试人员确认后手工处置。
