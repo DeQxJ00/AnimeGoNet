@@ -1,0 +1,24 @@
+namespace AnimeGoNet.App.Tests;
+
+public sealed class IntegrationHarnessContractTests
+{
+    [Fact]
+    public void UbuntuCtHarnessIsIsolatedAndDoesNotPruneSharedDockerState()
+    {
+        var script = ReadRepositoryFile("eng", "docker-ubuntu-ct-integration.ps1");
+        Assert.Contains("-batch", script, StringComparison.Ordinal);
+        Assert.Contains("git -C $repository archive", script, StringComparison.Ordinal);
+        Assert.Contains("/var/tmp/animegonet-docker-audit-", script, StringComparison.Ordinal);
+        Assert.Contains("Ubuntu 24.04", script, StringComparison.Ordinal);
+        Assert.Contains("smoke-container.sh", script, StringComparison.Ordinal);
+        Assert.Contains("smoke-qbittorrent-compose.sh", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker system prune", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("password", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ReadRepositoryFile(params string[] segments)
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        return File.ReadAllText(Path.Combine([root, .. segments]));
+    }
+}
