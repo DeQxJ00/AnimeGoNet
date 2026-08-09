@@ -20,6 +20,7 @@ RUN case "$TARGETARCH" in \
     && dotnet restore src/AnimeGoNet.App/AnimeGoNet.App.csproj --runtime "$rid" -p:PublishAot=true
 
 COPY src/ src/
+COPY docs/TMDB_AI_MATCH_PROMPT.md docs/TMDB_AI_MATCH_PROMPT.md
 RUN case "$TARGETARCH" in \
       amd64) rid=linux-x64 ;; \
       arm64) rid=linux-arm64 ;; \

@@ -24,6 +24,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
             "COPY src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj src/AnimeGo.Plugin.Abstractions/",
             dockerfile,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "COPY docs/TMDB_AI_MATCH_PROMPT.md docs/TMDB_AI_MATCH_PROMPT.md",
+            dockerfile,
+            StringComparison.Ordinal);
         Assert.Contains("user: \"${PUID:-1000}:${PGID:-1000}\"", compose, StringComparison.Ordinal);
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
         Assert.Contains("- /tmp", compose, StringComparison.Ordinal);
