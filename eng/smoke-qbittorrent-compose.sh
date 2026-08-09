@@ -156,6 +156,9 @@ configure_qbittorrent() {
     "/api/v2/app/setPreferences" \
     --data-urlencode "json=$preferences" >/dev/null
 
+  rm -f -- "$cookie_jar"
+  login "$base_url" "$temporary_password" "$cookie_jar"
+
   local version=""
   local api_version=""
   local preferences_after=""
