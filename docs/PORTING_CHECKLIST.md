@@ -34,7 +34,7 @@
 | `anisource/bangumi` | Bangumi Subject/Episode/关系 | 保留 | 已验证 | Subject/关系及 Episode v0 source-generated DTO、User-Agent、分页/容量上限、身份/日期校验、安全失败分类、前传稳定遍历、普通 EP 日期候选、逐次超时和安全可取消重试已通过；活动 AnimeGoNet Data 版本的 SQLite Subject/完整 Episode 快照优先读取，缺失/不完整/零集未知回退在线 API，版本激活与回滚无需重启 |
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 已验证 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度/90天日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选、逐次超时和安全可取消重试及自动 Series/Season/Episode worker tests 已通过；实际 `TmdbClient` 随机 loopback 证明 `name` 全部清理轮次→`name_cn`→每响应全部合格 Series 的完整验证早停；SQLite `bolt/themoviedb` 成功响应缓存按 Base URL/语言/operation 分区，14 天默认 TTL、旧 `themoviedb_cache_hour` 迁移、WebUI 配置/锁/精确删除、无凭据/搜索词泄漏、到期/损坏/身份伪造回源及 NativeAOT source-generated JSON 已验证 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 已验证 | 官方 `aux/latest.json`/ZIP SHA 门禁、AOT-compatible DataBuilder 的动画/正片筛选、文本/日期/小数 EP 规范化、Subject 范围分片、确定性 JSONL.gz/manifest/离线 ZIP、原子输出、唯一/引用完整性、生产数量下限及真实 SQLite 导入已验证；版本化下载/导入、保留/回滚和活动版本 read-through 完整串联，Actions 每日/手动构建但不自动发布到主程序仓库 |
-| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 进行中 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全Torrent staging及后台 qB dispatch 已验证；RSS 请求级 SourceProfile revision/双开关/下载器路由并发快照已验证；双 qB 容器连接、共享路径与 Mikan→bt/U2/TTG→pt 预览门禁已进入 CI，真实统一导入分别落入两实例的 container E2E 待实现 |
+| 外部 Mikan/U2/TTG 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 未验证 | 统一校验、版本化 SourceProfile 路由、逐项结果、legacy contract、安全 Torrent staging 及后台 qB dispatch 已由非 Docker 测试验证；双 qB Compose 已生成实际统一导入门禁：Mikan→bt、U2→pt，核对 hash/category/tag/暂停状态/保存路径、反向实例不存在和精确清理；按用户要求容器执行未验证，TTG 与 U2 共享同一可配置 pt 路由且保留 route-preview 覆盖 |
 
 ## 解析、规则与元数据编排
 
@@ -69,7 +69,7 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 已验证 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio/addTags、元数据后置动态 tag、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 及本机真实下载/整理闭环通过；隔离双容器 smoke 已生成但未验证 |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 已验证 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio/addTags、元数据后置动态 tag、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 及本机真实下载/整理闭环通过；隔离双容器真实统一投递 smoke 已生成但按用户要求未验证 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 已验证 | `ANIMEGO_CLIENT`、显式旧配置路径和 `data_path/animego.yaml` 只读检测；`UnsupportedDownloaderType`/不可读旧配置 fail-closed，workers/registry/ingest/控制/连接探测均阻断，Web 可进入修复；AOT/API tests |
 | `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 已验证 | SQLite schema v10 的 media organization 租约、按 Torrent 路径稳定执行的逐文件 operation、跨盘校验复制、目标冲突保全、部分完成后 pending-only 恢复、独立 cleanup 重试与完成记录事务门禁已由后台 worker 串联；schema v33 另持久化不可变做种目标、单调累计秒数、完成门禁与审计。本机真实 qB 单/多文件闭环通过；容器全链未验证 |
 | `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 已验证 | qB 快照同步驱动持久化 waiting/seeding/completed，link/link_delete 先发布媒体后等待做种门禁，wait_move 等门禁完成；上游完成 callback 的 `DeleteFile:true` 已明确替换为独立 `deleteFiles=false` cleanup，覆盖失败释放、新租约、实例 circuit 打开、健康探测恢复、媒体/completion 保全及成功清理；容器状态转换未验证 |

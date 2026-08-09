@@ -1,5 +1,9 @@
 # 双 qBittorrent 隔离 Compose 门禁（2026-07-30）
 
+> 状态更新（2026-08-09）：本文记录最初生成范围。实际统一导入到双实例的后续门禁见
+> `2026-08-09-dual-qbittorrent-unified-ingest-delivery.md`。按项目所有者要求，当前所有
+> Docker 执行均记为未验证，不把 workflow 接线表述为运行成功。
+
 ## 已实现
 
 - 新增专用 `docker-compose.qbittorrent-integration.yml`，同时定义 `bt`、`pt` 和
@@ -28,9 +32,8 @@
 - `win-x64` .NET 10 NativeAOT publish 成功；published-binary smoke 通过 `/ping`、
   schema v30、SQLite、WebSocket、静态 WebUI、安全 ingest 拒绝和 qB capability。
 
-本机没有 Docker CLI，因此没有声称在本机执行真实容器。实际 Web API 生命周期
-由 GitHub Actions 的 Ubuntu Docker runner 运行；首次 runner 结果是把 TODO
-P7-162 从“已接入门禁”提升为“已外部验收”的必要证据。
+本机没有执行 Docker，因此没有声称真实容器已通过。GitHub Actions 的 Ubuntu Docker
+runner 已接线为后续执行位置；实际 runner 结果仍由项目所有者自行验收。
 
 ## 安全边界
 

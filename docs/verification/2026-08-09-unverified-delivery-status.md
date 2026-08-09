@@ -22,6 +22,7 @@ The following generated gates are now explicitly `[~]`:
 
 - pinned upstream Go Linux container baseline;
 - isolated qBittorrent container Web API lifecycle;
+- dual-qBittorrent unified-ingest dispatch and exact cleanup;
 - amd64/arm64 NativeAOT Docker build and runtime smoke;
 - non-root/read-only/health/SIGTERM container hardening;
 - shared `/download` Compose mapping and external qB path probe;
@@ -29,19 +30,20 @@ The following generated gates are now explicitly `[~]`:
 
 Mikan, the local feed-to-download pipeline, move organization, multifile dedup,
 per-file TMDB Episode processing and TypeScript/WebUI are marked complete based
-on their existing non-Docker evidence. The still-missing dual-container unified
-task flow, non-Windows RID execution, external-plugin container flow and full
-JIT/AOT/Docker E2E remain ordinary unfinished items; they were not relabeled.
+on their existing non-Docker evidence. The dual-container unified task driver is
+now generated and separately marked unverified. Non-Windows RID execution,
+external-plugin container flow and full JIT/AOT/Docker E2E remain ordinary
+unfinished items; they were not relabeled.
 
 ## Automated evidence
 
-`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact seven
+`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact eight
 `[~]` rows, required `未验证` wording, completed local modules, checklist status
 and the existence of every referenced workflow, Dockerfile, Compose file and
 smoke script. It also rejects the stale checklist phrase that implied Docker
 runner acceptance was still part of implementation completion.
 
-The focused Release suite passed 3/3 and the complete solution passed
-1459/1459 with zero failures and zero skips. `git diff --check` and the
-whitespace formatter restricted to the new C# contract test passed. No Docker
-or remote runner command is executed by this status-only increment.
+The focused Release delivery suite passed 7/7 and the complete solution passed
+1460/1460 with zero failures and zero skips. `git diff --check` and the
+formatter restricted to the changed C# contract tests passed. No Docker or
+remote runner command was executed.

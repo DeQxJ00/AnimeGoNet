@@ -146,7 +146,7 @@
 - [x] 实现 `AnimeGo.PluginTool`：AOT-safe `validate/run/pack` CLI 复用主程序 manifest、配置 schema、进程协议和六类结果校验；严格 fixture UTF-8/JSON/operation/config 边界、包树权限/链接/容量审计、内容摘要、确定性 ZIP 与原子覆盖已完成。专用 fake 测试覆盖退出码、脱敏、生命周期、健康失败、临时/显式 data path、变更竞态和可重复打包；五 RID template workflow 使用原生工具对生成的 NativeAOT filter 执行真实 validate→run→pack。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
 - [x] 移植 ordered filter manager：按显式配置或目录顺序逐级传递 accepted items，插件错误/无效索引立即终止，拒绝项不会进入后续 filter；空显式链等价于跳过过滤。
-- [x] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约、winner→统一 staging、真实本机 qB 下载、SQLite snapshot、TMDB 已验证边界、move/NFO/sidecar/completion 和安全 cleanup 已串联；Docker 双实例全链生成/验收仍由独立未完成项跟踪，不回退本机闭环状态。
+- [x] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约、winner→统一 staging、真实本机 qB 下载、SQLite snapshot、TMDB 已验证边界、move/NFO/sidecar/completion 和安全 cleanup 已串联；Docker 双实例统一导入门禁由独立未验证项跟踪，不回退本机闭环状态。
 - [x] 通过上游所有插件/parser/filter fixture，以及外部 C# 插件协议故障注入测试：固定 `develop@c7475df` 的 59 个 plugin/feed/filter/parser/Python fixture 与 Go 测试入口逐文件归类为 ported/replaced/removed/documentation，机器测试锁定精确清单、SHA-256、证据目标和无遗漏；5 个真实 RSS fixture 逐字段/失败码通过，filter fixture 的 13 个输入、4 个 NC-Raws、9 个有效 1080p 及 inline regex 单候选结果由编译期 C# 直接复现。Python 运行时及任意 Python 扩展仍明确移除；外部 C# 协议 fake/真实进程已覆盖成功生命周期、业务错误、严格响应、超限、超时、取消、崩溃、脏 stdout、stderr、并发、健康失败、关闭期限与 manifest 竞态，六类 adapter 已覆盖配置合并、禁用、业务错误、未知/重复字段、索引完整性、URL 指纹和路径逃逸。
 
 ## P7 — 首版 qBittorrent 下载客户端
@@ -161,7 +161,7 @@
 - [x] 实现下载器路径可见性与硬链接能力探测：仅在显式 API/WebUI 操作时向实例 `download_path` 和全局 `save_path` 写入同名随机临时文件，验证后尽力清理；缺目录、权限、跨文件系统/挂载和平台不支持均返回稳定脱敏错误码，Windows/Linux/macOS 使用 AOT-safe 原生调用。
 - [x] 建立隔离 Docker Compose 下载环境：专用 Compose 只绑定随机回环端口，使用临时 data/download/qB profile 根目录、非 root AnimeGoNet、只读根文件系统和退出清理；不复用 TestSpace 或生产卷。
 - [~] qBittorrent 真实容器 smoke 已接入 Docker CI：从首启日志读取临时密码后设置隔离测试密码，逐实例覆盖登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete，并使用仅含 `127.0.0.1:9` tracker 的 5 字节 fixture、唯一 category/tag 和整项目清理。本机 TestSpace 已用动态 128 KiB payload + 随机 loopback web seed 完成统一导入→真实 priority/resume/download→SQLite snapshot→move/NFO/sidecar/completion→`deleteFiles=false` cleanup，连续三轮通过并清空任务/文件；Docker smoke 按用户要求标记为未验证，后续自行实跑。
-- [>] 双实例容器已同时连接并通过各自路径/硬链接探测；CI route-preview 验证 Mikan→bt、U2/TTG→pt，既有并发快照测试验证绑定修改不改写已创建任务。本机单实例已验证真实统一导入进入绑定 bt、保持暂停、捕获路径快照并彻底清理；统一任务分别进入两个容器的全链仍待 Docker runner 验收。
+- [~] 双实例容器统一导入门禁已生成但未验证：隔离 BusyBox 仅提供两个不同 info-hash 的无私有内容 Torrent，AnimeGoNet 后台 worker 通过 `/api/v1/ingest` 将 `mikan-ci` 实际投递到 `bt`、将 `u2-ci` 实际投递到 `pt`；脚本检查 staged 响应不泄露 URL、目标实例 hash/category/tag/暂停状态/保存路径、另一实例不存在同 hash，并精确删除任务/文件/tag/category。Compose 仍保留连接、路径/硬链接探测和 U2/TTG route-preview；按用户要求 Docker 执行标记为未验证，后续自行实跑。
 - [x] 旧 YAML/环境变量出现 Transmission 时读取并生成 `UnsupportedDownloaderType`：按 `ANIMEGO_CLIENT`→显式 `ANIMEGO_CONFIG`/`--config`→`data_path/animego.yaml` 检测，只读取 `setting.client.client` 且不回显凭据；诊断未解除时强制关闭 workers、替换为空下载器 registry、拒绝导入/恢复/连接与路径测试，Web/API 保持可用并显示修复原因，绝不静默转成 qB。
 
 ## P8 — 下载、重命名、刮削

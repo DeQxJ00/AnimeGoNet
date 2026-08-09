@@ -1,4 +1,19 @@
 services:
+  torrent-fixture:
+    image: busybox:1.37
+    user: "65534:65534"
+    read_only: true
+    command: ["httpd", "-f", "-p", "8088", "-h", "/fixtures"]
+    volumes:
+      - ${ANIMEGONET_INTEGRATION_ROOT:?ANIMEGONET_INTEGRATION_ROOT is required}/fixtures:/fixtures:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      animegonet-integration:
+        ipv4_address: 11.22.33.44
+        aliases:
+          - torrent-fixture.invalid
+
   qbittorrent-bt:
     image: ${QBITTORRENT_IMAGE:-lscr.io/linuxserver/qbittorrent:latest}
     environment:
@@ -46,13 +61,15 @@ services:
       data_path: /data
       download_path: /download/incomplete
       save_path: /download/anime
-      background_workers_enabled: "false"
+      background_workers_enabled: "true"
     volumes:
       - ${ANIMEGONET_INTEGRATION_ROOT}/animegonet/data:/data
       - ${ANIMEGONET_INTEGRATION_ROOT}/download:/download
     ports:
       - "127.0.0.1::7991"
     depends_on:
+      torrent-fixture:
+        condition: service_started
       qbittorrent-bt:
         condition: service_started
       qbittorrent-pt:
@@ -65,3 +82,6 @@ services:
 networks:
   animegonet-integration:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 11.22.33.0/24

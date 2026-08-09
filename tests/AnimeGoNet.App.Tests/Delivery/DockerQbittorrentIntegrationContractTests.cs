@@ -1,4 +1,6 @@
 using System.Text;
+using System.Security.Cryptography;
+using AnimeGoNet.App.Torrents;
 
 namespace AnimeGoNet.App.Tests.Delivery;
 
@@ -54,6 +56,14 @@ public sealed class DockerQbittorrentIntegrationContractTests
 
         Assert.Contains("qbittorrent-bt:", compose, StringComparison.Ordinal);
         Assert.Contains("qbittorrent-pt:", compose, StringComparison.Ordinal);
+        Assert.Contains("torrent-fixture:", compose, StringComparison.Ordinal);
+        Assert.Contains("image: busybox:1.37", compose, StringComparison.Ordinal);
+        Assert.Contains("user: \"65534:65534\"", compose, StringComparison.Ordinal);
+        Assert.Contains("ipv4_address: 11.22.33.44", compose, StringComparison.Ordinal);
+        Assert.Contains("- torrent-fixture.invalid", compose, StringComparison.Ordinal);
+        Assert.Contains("- subnet: 11.22.33.0/24", compose, StringComparison.Ordinal);
+        Assert.True(TorrentNetworkPolicy.IsPublicAddress(System.Net.IPAddress.Parse("11.22.33.44")));
+        Assert.False(TorrentNetworkPolicy.IsPublicAddress(System.Net.IPAddress.Parse("172.20.0.44")));
         Assert.Contains("127.0.0.1::8080", compose, StringComparison.Ordinal);
         Assert.Contains("127.0.0.1::7991", compose, StringComparison.Ordinal);
         Assert.Contains("${ANIMEGONET_INTEGRATION_ROOT:?", compose, StringComparison.Ordinal);
@@ -79,11 +89,18 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("/api/v2/torrents/delete", smoke, StringComparison.Ordinal);
         Assert.Contains("deleteFiles=true", smoke, StringComparison.Ordinal);
         Assert.Contains("bcff48bafa9434c0062a4c2a45ed885f26701721", smoke, StringComparison.Ordinal);
+        Assert.Contains("9356dbb012e7d8a6999badefacfc74dd1d00593e", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v1/downloaders/$instance/test", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v1/downloaders/$instance/path-probe", smoke, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/ingest", smoke, StringComparison.Ordinal);
+        Assert.Contains("\"source\":\"mikan-ci\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("\"source\":\"u2-ci\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("wait_for_routed_task", smoke, StringComparison.Ordinal);
+        Assert.Contains("other_connection", smoke, StringComparison.Ordinal);
+        Assert.Contains("cleanup_routed_task", smoke, StringComparison.Ordinal);
         Assert.Contains("\"downloader_id\":\"pt\"", smoke, StringComparison.Ordinal);
         Assert.Contains("\"downloader_id\"] == \"bt\"", smoke, StringComparison.Ordinal);
-        Assert.Contains("background_workers_enabled: \"false\"", compose, StringComparison.Ordinal);
+        Assert.Contains("background_workers_enabled: \"true\"", compose, StringComparison.Ordinal);
         Assert.Contains("./eng/smoke-qbittorrent-compose.sh animegonet:ci", workflow, StringComparison.Ordinal);
 
         Assert.DoesNotContain("passkey", compose, StringComparison.OrdinalIgnoreCase);
@@ -105,8 +122,44 @@ public sealed class DockerQbittorrentIntegrationContractTests
             "d6:lengthi5e4:name17:animegonet-ci.bin12:piece lengthi16384e" +
             "6:pieces20:aaaaaaaaaaaaaaaaaaaaee",
             torrent);
+        Assert.Equal("bcff48bafa9434c0062a4c2a45ed885f26701721", InfoHash(bytes));
         Assert.DoesNotContain("https://", torrent, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("passkey", torrent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PtFixtureHasASeparateStableInfoHashAndNoPrivateTracker()
+    {
+        var root = RepositoryRoot();
+        var encoded = await File.ReadAllTextAsync(
+            Path.Combine(root, "tests", "fixtures", "animegonet-ci-pt.torrent.b64"));
+        var bytes = Convert.FromBase64String(encoded.Trim());
+        var torrent = Encoding.ASCII.GetString(bytes);
+
+        Assert.Equal(
+            "d8:announce27:http://127.0.0.1:9/announce4:info" +
+            "d6:lengthi7e4:name20:animegonet-ci-pt.bin12:piece lengthi16384e" +
+            "6:pieces20:bbbbbbbbbbbbbbbbbbbbee",
+            torrent);
+        Assert.Equal("9356dbb012e7d8a6999badefacfc74dd1d00593e", InfoHash(bytes));
+        Assert.DoesNotContain("https://", torrent, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("passkey", torrent, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(
+            await File.ReadAllTextAsync(
+                Path.Combine(root, "tests", "fixtures", "animegonet-ci.torrent.b64")),
+            encoded);
+    }
+
+    private static string InfoHash(byte[] torrent)
+    {
+        var marker = Encoding.ASCII.GetBytes("4:info");
+        var markerIndex = torrent.AsSpan().IndexOf(marker);
+        Assert.True(markerIndex >= 0);
+        var infoStart = markerIndex + marker.Length;
+        var infoDictionary = torrent.AsSpan(infoStart, torrent.Length - infoStart - 1);
+#pragma warning disable CA5350 // BitTorrent v1 mandates SHA-1 over the original bencoded info bytes.
+        return Convert.ToHexStringLower(SHA1.HashData(infoDictionary));
+#pragma warning restore CA5350
     }
 
     private static string RepositoryRoot() =>

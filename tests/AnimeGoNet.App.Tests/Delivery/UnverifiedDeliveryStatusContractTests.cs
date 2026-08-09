@@ -14,11 +14,12 @@ public sealed class UnverifiedDeliveryStatusContractTests
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(7, unverified.Length);
+        Assert.Equal(8, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
         AssertUnverified(unverified, "Linux Go 容器基线 job");
         AssertUnverified(unverified, "qBittorrent 真实容器 smoke");
+        AssertUnverified(unverified, "双实例容器统一导入门禁");
         AssertUnverified(unverified, "Docker NativeAOT 镜像功能");
         AssertUnverified(unverified, "非 root、PUID/PGID");
         AssertUnverified(unverified, "官方 Compose");
@@ -44,7 +45,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
         Assert.Contains("| Go Dockerfile | NativeAOT runtime image | 替换 | 未验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| Go release workflows | .NET 10 build/test | 替换 | 未验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 已验证 |", checklist, StringComparison.Ordinal);
-        Assert.Contains("隔离双容器 smoke 已生成但未验证", checklist, StringComparison.Ordinal);
+        Assert.Contains("隔离双容器真实统一投递 smoke 已生成但按用户要求未验证", checklist, StringComparison.Ordinal);
         Assert.DoesNotContain("Docker runner 实跑待验收", checklist, StringComparison.Ordinal);
     }
 
