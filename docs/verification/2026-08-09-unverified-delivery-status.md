@@ -1,0 +1,47 @@
+# Generated but unverified delivery status — 2026-08-09
+
+## Owner-approved boundary
+
+The project owner explicitly allows Docker functionality to remain unexecuted
+as long as all intended delivery files are generated for later self-testing.
+This is not permission to report unexecuted behavior as passed.
+
+`TODO.md` therefore adds a separate `[~]` state. It means “the feature or gate
+is generated, but execution is unverified by owner instruction.” It is neither
+`[x]` nor an implementation-in-progress marker. Every `[~]` row must name the
+unverified scope.
+
+The porting checklist uses the matching `未验证` status for generated Docker or
+remote workflow surfaces. Product modules that already passed unit,
+integration, NativeAOT or isolated local qB verification remain `已验证`, while
+their container execution is called out separately as unverified.
+
+## Reconciled status
+
+The following generated gates are now explicitly `[~]`:
+
+- pinned upstream Go Linux container baseline;
+- isolated qBittorrent container Web API lifecycle;
+- amd64/arm64 NativeAOT Docker build and runtime smoke;
+- non-root/read-only/health/SIGTERM container hardening;
+- shared `/download` Compose mapping and external qB path probe;
+- release-container Playwright WebUI E2E.
+
+Mikan, the local feed-to-download pipeline, move organization, multifile dedup,
+per-file TMDB Episode processing and TypeScript/WebUI are marked complete based
+on their existing non-Docker evidence. The still-missing dual-container unified
+task flow, non-Windows RID execution, external-plugin container flow and full
+JIT/AOT/Docker E2E remain ordinary unfinished items; they were not relabeled.
+
+## Automated evidence
+
+`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact seven
+`[~]` rows, required `未验证` wording, completed local modules, checklist status
+and the existence of every referenced workflow, Dockerfile, Compose file and
+smoke script. It also rejects the stale checklist phrase that implied Docker
+runner acceptance was still part of implementation completion.
+
+The focused Release suite passed 3/3 and the complete solution passed
+1459/1459 with zero failures and zero skips. `git diff --check` and the
+whitespace formatter restricted to the new C# contract test passed. No Docker
+or remote runner command is executed by this status-only increment.

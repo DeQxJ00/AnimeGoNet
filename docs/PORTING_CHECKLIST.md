@@ -2,7 +2,7 @@
 
 本清单把 `wetor/AnimeGo@c7475dfc55a374cd0dd08821bf17125dab1e3145` 的可观察业务面映射到 AnimeGoNet 模块。状态只在对应测试证据通过后更新；`保留` 表示要求行为等价，`替换` 表示用户已确认的实现替换，`例外` 表示明确不移植。
 
-状态：`基线` 已盘点、`待实现` 尚无 .NET 实现、`进行中` 已有未完成实现、`已验证` 验收通过、`例外` 经确认排除。
+状态：`基线` 已盘点、`待实现` 尚无 .NET 实现、`进行中` 已有未完成实现、`已验证` 验收通过、`未验证` 表示功能/门禁已生成但按用户要求未执行 Docker/远端实跑且不声称成功、`例外` 经确认排除。
 
 ## 入口、配置与基础设施
 
@@ -69,15 +69,15 @@
 
 | 上游路径/行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 进行中 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio/addTags、元数据后置动态 tag、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 登录/list/路径 smoke 已通过；隔离双容器 login/version/path/reconnect/add/list/files/filePrio/start/stop/delete 已进入 Docker CI，首次 runner 结果待验收 |
+| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 已验证 | Cookie会话、命名实例、paused add、SourceProfile category/static tags/seedingTimeLimit 不可变快照、同hash接管再暂停、确认接收、AOT-safe file list/filePrio/addTags、元数据后置动态 tag、逐文件去重后恢复、全重复安全移除、download job、租约恢复、按实例单在途轮询/熔断和离线 stale 快照已验证；portable v5.2.3 及本机真实下载/整理闭环通过；隔离双容器 smoke 已生成但未验证 |
 | `internal/client/transmission` | Unsupported diagnostic only | 例外 | 已验证 | `ANIMEGO_CLIENT`、显式旧配置路径和 `data_path/animego.yaml` 只读检测；`UnsupportedDownloaderType`/不可读旧配置 fail-closed，workers/registry/ingest/控制/连接探测均阻断，Web 可进入修复；AOT/API tests |
-| `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 进行中 | SQLite schema v10 的 media organization 租约、按 Torrent 路径稳定执行的逐文件 operation、跨盘校验复制、目标冲突保全、部分完成后 pending-only 恢复、独立 cleanup 重试与完成记录事务门禁已由后台 worker 串联；schema v33 另持久化不可变做种目标、单调累计秒数、完成门禁与审计。qB 状态/paused preparation/不可变路径/实例故障恢复 tests 已通过；真实容器全链待验收 |
-| `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 进行中 | qB 快照同步驱动持久化 waiting/seeding/completed，link/link_delete 先发布媒体后等待做种门禁，wait_move 等门禁完成；上游完成 callback 的 `DeleteFile:true` 已明确替换为独立 `deleteFiles=false` cleanup，覆盖失败释放、新租约、实例 circuit 打开、健康探测恢复、媒体/completion 保全及成功清理；真实容器状态转换待验收 |
+| `internal/animego/downloader` | 持久化任务状态机 | 保留+扩展 | 已验证 | SQLite schema v10 的 media organization 租约、按 Torrent 路径稳定执行的逐文件 operation、跨盘校验复制、目标冲突保全、部分完成后 pending-only 恢复、独立 cleanup 重试与完成记录事务门禁已由后台 worker 串联；schema v33 另持久化不可变做种目标、单调累计秒数、完成门禁与审计。本机真实 qB 单/多文件闭环通过；容器全链未验证 |
+| `clientnotifier` | 下载/做种/完成事件编排 | 保留 | 已验证 | qB 快照同步驱动持久化 waiting/seeding/completed，link/link_delete 先发布媒体后等待做种门禁，wait_move 等门禁完成；上游完成 callback 的 `DeleteFile:true` 已明确替换为独立 `deleteFiles=false` cleanup，覆盖失败释放、新租约、实例 circuit 打开、健康探测恢复、媒体/completion 保全及成功清理；容器状态转换未验证 |
 | `renamer` 与 rename Python | C# 整理器 | 替换 | 已验证 | 编译期 `anime-library` C# rename 插件完整替换 Python；TMDB 规范 EP、已确认季度 Other、字幕多语言后缀、原子 NFO/三层 sidecar、四种文件策略及 SQLite organization/cleanup 租约均由持久化 worker 串联；冲突/部分完成/重启恢复与固定 qB `deleteFiles=false` 已用真实临时文件 + fake qB tests 验证 |
-| `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 进行中 | 四策略已接入不可变 route snapshot：link/link_delete 的 NativeAOT 硬链接、做种门控、安全源文件删除，move/wait_move 的安全移动、逐文件/NFO/completion/cleanup 持久化与临时真实 FS tests 已通过；跨容器同 inode 与跨卷失败 E2E 待实现 |
+| `link/link_delete/move/wait_move` | 跨平台文件策略 | 保留 | 已验证 | 四策略已接入不可变 route snapshot：link/link_delete 的 NativeAOT 硬链接、做种门控、安全源文件删除，move/wait_move 的安全移动、逐文件/NFO/completion/cleanup 持久化与临时真实 FS tests 已通过；本机真实 move 闭环通过，跨容器同 inode/跨卷 E2E 未验证 |
 | Mikan 默认整理 | `move` | 扩展默认 | 已验证 | 默认profile、paused preparation、真实临时文件 move/NFO/completion 与 fake-qB deleteFiles=false cleanup flow tests |
 | 字幕整理 | EP 绑定、重命名、保留语言后缀 | 扩展 | 已验证 | 同stem/唯一来源EP、歧义Other、多语言/default/forced/SDH、ass/srt/idx/sub、单TMDB请求/claim/completion及真实临时文件move tests |
-| Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 进行中 | 容器配置、Compose 共享卷和 CI smoke 已建立；Docker runner 实跑待验收 |
+| Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 未验证 | 容器配置、Compose 共享卷和 CI smoke 已生成；按用户要求不执行 Docker，后续自行实跑 |
 
 ## 调度、HTTP API 与 WebUI
 
@@ -93,17 +93,17 @@
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 已验证 | 非 upgrade 兼容响应、直接/旧 hash 鉴权、旧帧 envelope、逐连接 pause/resume/terminate、1000 条缓存、异常命令、敏感字段脱敏、WebUI 和 win-x64 NativeAOT upgrade/control smoke 已通过 |
-| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 进行中 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配、TMDB 权威季度 CRUD 及四类删除 API 已实现；官方 .NET 10 AOT-safe OpenAPI 覆盖全部当前路由和 12 个上游 operation，确定性与不泄密测试及原生进程 smoke 已通过；完整管理 UI 与发布镜像总体验收待实现 |
-| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 进行中 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；TypeScript 7 strict ES module、同源安全的共享类型化 JSON client、确定性产物 CI，以及真实 DOM 状态/可访问性单测已建立；主列表统一 loading/empty/error/ready 语义，提供 skip link、全局焦点、reduced-motion、移动/桌面无横向溢出布局；运行配置、手动导入、下载/元数据、待补全 TMDB、Mikan 规则、SourceProfile、下载器、作品库、opaque 缓存浏览/精确删除及实时日志页面均使用安全 DOM API；发布镜像 Playwright E2E 与剩余管理 UI 待实现 |
+| 新管理 API | sources/downloaders/rules/anime/delete/status | 扩展 | 已验证 | status、统一 ingest、现代 RSS ingest、downloads、metadata task、SourceProfile CRUD/引用保护/category/tags/做种/路由预览、下载器脱敏投影/凭据只写/连接与路径测试、Mikan 人工作品规则影响/显式重匹配、TMDB 权威季度 CRUD 及四类删除 API 已实现；官方 .NET 10 AOT-safe OpenAPI 覆盖全部当前路由和 12 个上游 operation，确定性与不泄密测试、原生进程 smoke 和本机发布 UI 浏览器验收已通过；Docker 发布镜像未验证 |
+| `internal/web/static` | 静态 TypeScript/HTML/CSS WebUI | 替换+扩展 | 已验证 | HTML/CSS/JS Kestrel tests + AOT smoke 已通过；TypeScript 7 strict ES module、同源安全的共享类型化 JSON client、确定性产物 CI，以及真实 DOM 状态/可访问性单测已建立；运行配置、手动导入、下载/元数据、待补全 TMDB、Mikan 规则、SourceProfile、下载器、作品库、opaque 缓存浏览/精确删除及实时日志页面均使用安全 DOM API；本机发布 NativeAOT Chromium 2/2 通过，Docker 镜像 E2E 已生成但未验证 |
 
 ## 构建、发布与平台
 
 | 上游行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| Go release workflows | .NET 10 build/test | 替换 | 进行中 | Windows/Linux/macOS Actions 已建立且 YAML 通过解析；另生成固定 Go 1.22.10 Linux 容器的上游串行 `go test -json` 基线 job，锁定提交、原始事件/stderr/summary/SHA-256 且失败也上传；容器与远端运行按用户要求标记为未验证 |
+| Go release workflows | .NET 10 build/test | 替换 | 未验证 | Windows/Linux/macOS Actions 已生成且 YAML 通过解析；另生成固定 Go 1.22.10 Linux 容器的上游串行 `go test -json` 基线 job，锁定提交、原始事件/stderr/summary/SHA-256 且失败也上传；容器与远端运行按用户要求标记为未验证 |
 | 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 进行中 | 五 RID NativeAOT 矩阵已建立；每个 RID 在上传前从实际产物和精确 NuGet graph 生成逐文件 `SHA256SUMS`、CycloneDX 1.5 SBOM 与第三方许可证清单，确定性/哈希/脱敏测试已通过；win-x64 本机 publish/smoke 已通过，其他 RID 仍待远端实跑验收 |
 | MIPS/386/macOS x64 | 不在首版 RID | 例外 | 例外 | 文档化 |
-| Go Dockerfile | NativeAOT runtime image | 替换 | 进行中 | amd64/arm64 Buildx 与容器 smoke 已建立；本机无 Docker，待 CI 实跑 |
+| Go Dockerfile | NativeAOT runtime image | 替换 | 未验证 | amd64/arm64 Buildx 与容器 smoke 已生成；按用户要求不执行 Docker，后续自行实跑 |
 | 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 已验证 | win-x64 published binary 静态 WebUI smoke |
 | 用户迁移、插件与运维手册 | 可执行操作文档 | 新增 | 已验证 | 新安装/旧 YAML/旧 Bolt/媒体 sidecar 的隔离迁移和完整回滚，外部 C# 插件 validate/run/pack、安装/升级/reset/卸载，以及状态、停机备份、SQLite quick_check、升级恢复、四类删除和故障处置均已文档化；README 入口、相对链接、关键安全边界与 Docker 未验证状态由契约测试锁定 |
 
