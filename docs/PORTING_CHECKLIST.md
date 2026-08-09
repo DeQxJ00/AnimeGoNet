@@ -105,6 +105,7 @@
 | MIPS/386/macOS x64 | 不在首版 RID | 例外 | 例外 | 文档化 |
 | Go Dockerfile | NativeAOT runtime image | 替换 | 进行中 | amd64/arm64 Buildx 与容器 smoke 已建立；本机无 Docker，待 CI 实跑 |
 | 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 已验证 | win-x64 published binary 静态 WebUI smoke |
+| 用户迁移、插件与运维手册 | 可执行操作文档 | 新增 | 已验证 | 新安装/旧 YAML/旧 Bolt/媒体 sidecar 的隔离迁移和完整回滚，外部 C# 插件 validate/run/pack、安装/升级/reset/卸载，以及状态、停机备份、SQLite quick_check、升级恢复、四类删除和故障处置均已文档化；README 入口、相对链接、关键安全边界与 Docker 未验证状态由契约测试锁定 |
 
 ## 提交门禁
 

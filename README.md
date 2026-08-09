@@ -94,6 +94,9 @@ NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
 
 ## 主要文档
 
+- [用户迁移手册](docs/USER_MIGRATION.md)
+- [运维、备份与恢复](docs/OPERATIONS.md)
+- [外部 C# 插件安装与回滚](docs/PLUGIN_OPERATIONS.md)
 - [架构与 NativeAOT 边界](docs/ARCHITECTURE.md)
 - [统一输入与来源路由](docs/SOURCE_ROUTING.md)
 - [TMDB/Bangumi/AI 元数据流程](docs/METADATA_RESOLUTION.md)
