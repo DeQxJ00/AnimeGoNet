@@ -55,7 +55,9 @@ jobs:
         run: ./eng/smoke-container.sh animegonet:ci
       - name: Smoke release-container WebUI in Chromium
         run: ./eng/smoke-webui-container.sh animegonet:ci
-      - name: Smoke dual qBittorrent unified ingest and external plugin isolation
+      - name: Smoke full-chain qBittorrent, metadata, WebUI and external plugin isolation
+        env:
+          ANIMEGONET_FULL_CHAIN_WEBUI: "1"
         run: ./eng/smoke-qbittorrent-compose.sh animegonet:ci
       - uses: actions/upload-artifact@v7
         if: always()

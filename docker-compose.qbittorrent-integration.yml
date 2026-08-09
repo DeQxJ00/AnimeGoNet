@@ -14,6 +14,22 @@ services:
         aliases:
           - torrent-fixture.invalid
 
+  container-e2e-fixture:
+    image: ${ANIMEGONET_CONTAINER_E2E_FIXTURE_IMAGE:?ANIMEGONET_CONTAINER_E2E_FIXTURE_IMAGE is required}
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      ANIMEGONET_FIXTURE_PUBLIC_BASE_URL: http://container-e2e-fixture.invalid:8089/
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      animegonet-integration:
+        ipv4_address: 11.22.33.45
+        aliases:
+          - container-e2e-fixture.invalid
+
   qbittorrent-bt:
     image: ${QBITTORRENT_IMAGE:-lscr.io/linuxserver/qbittorrent:latest}
     environment:
@@ -62,6 +78,13 @@ services:
       download_path: /download/incomplete
       save_path: /download/anime
       background_workers_enabled: "true"
+      tmdb_base_url: http://container-e2e-fixture.invalid:8089/tmdb/
+      tmdb_api_key: container-e2e-tmdb-key
+      tmdb_retry_count: "0"
+      tmdb_retry_wait_second: "0"
+      bangumi_base_url: http://container-e2e-fixture.invalid:8089/bangumi/
+      bangumi_retry_count: "0"
+      bangumi_retry_wait_second: "0"
     volumes:
       - ${ANIMEGONET_INTEGRATION_ROOT}/animegonet/data:/data
       - ${ANIMEGONET_INTEGRATION_ROOT}/animegonet/data/plugins/com.animegonet.container-source:/data/plugins/com.animegonet.container-source:ro
@@ -70,6 +93,8 @@ services:
       - "127.0.0.1::7991"
     depends_on:
       torrent-fixture:
+        condition: service_started
+      container-e2e-fixture:
         condition: service_started
       qbittorrent-bt:
         condition: service_started

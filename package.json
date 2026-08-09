@@ -10,6 +10,7 @@
     "web:check": "tsc --project tsconfig.json --noEmit",
     "web:test": "npm run web:build && node --test tests/web/*.test.mjs",
     "web:e2e": "playwright test --config playwright.config.mjs tests/web-e2e/release-container.spec.mjs",
+    "web:e2e:full-chain": "playwright test --config playwright.config.mjs tests/web-e2e/full-chain-container.spec.mjs",
     "helper:e2e": "playwright test --config playwright.config.mjs tests/web-e2e/animegohelper-compat.spec.mjs"
   },
   "devDependencies": {

@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+
+ARG TARGETARCH
+WORKDIR /src
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends clang zlib1g-dev libstdc++-12-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY global.json Directory.Build.props Directory.Packages.props NuGet.config ./
+COPY tests/AnimeGoNet.ContainerE2EFixture/AnimeGoNet.ContainerE2EFixture.csproj tests/AnimeGoNet.ContainerE2EFixture/
+RUN case "$TARGETARCH" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet restore tests/AnimeGoNet.ContainerE2EFixture/AnimeGoNet.ContainerE2EFixture.csproj \
+      --runtime "$rid" -p:PublishAot=true
+
+COPY tests/AnimeGoNet.ContainerE2EFixture/ tests/AnimeGoNet.ContainerE2EFixture/
+RUN case "$TARGETARCH" in \
+      amd64) rid=linux-x64 ;; \
+      arm64) rid=linux-arm64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && dotnet publish tests/AnimeGoNet.ContainerE2EFixture/AnimeGoNet.ContainerE2EFixture.csproj \
+      --configuration Release \
+      --runtime "$rid" \
+      --self-contained true \
+      --no-restore \
+      --output /out \
+      -p:PublishAot=true \
+      -p:ContinuousIntegrationBuild=true
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
+WORKDIR /app
+COPY --from=build --chown=65534:65534 /out/ ./
+ENV ASPNETCORE_URLS=http://+:8089 \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    ANIMEGONET_FIXTURE_PUBLIC_BASE_URL=http://container-e2e-fixture.invalid:8089/
+USER 65534:65534
+EXPOSE 8089
+ENTRYPOINT ["/app/AnimeGoNet.ContainerE2EFixture"]

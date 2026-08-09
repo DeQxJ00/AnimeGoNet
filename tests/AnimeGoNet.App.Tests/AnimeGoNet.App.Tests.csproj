@@ -11,6 +11,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../src/AnimeGoNet.App/AnimeGoNet.App.csproj" />
+    <ProjectReference Include="../AnimeGoNet.ContainerE2EFixture/AnimeGoNet.ContainerE2EFixture.csproj"
+                      ReferenceOutputAssembly="false" />
     <ProjectReference Include="../AnimeGoNet.PluginProtocol.Fixture/AnimeGoNet.PluginProtocol.Fixture.csproj"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
@@ -20,5 +22,12 @@
     </ItemGroup>
     <Copy SourceFiles="@(PluginProtocolFixtureFiles)"
           DestinationFolder="$(OutDir)plugin-protocol-fixture" />
+  </Target>
+  <Target Name="CopyContainerE2EFixture" AfterTargets="Build">
+    <ItemGroup>
+      <ContainerE2EFixtureFiles Include="../AnimeGoNet.ContainerE2EFixture/bin/$(Configuration)/net10.0/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ContainerE2EFixtureFiles)"
+          DestinationFolder="$(OutDir)container-e2e-fixture" />
   </Target>
 </Project>

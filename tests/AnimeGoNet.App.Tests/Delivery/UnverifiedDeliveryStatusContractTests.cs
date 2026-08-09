@@ -14,7 +14,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(9, unverified.Length);
+        Assert.Equal(10, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
         AssertUnverified(unverified, "Linux Go 容器基线 job");
@@ -26,6 +26,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
         AssertUnverified(unverified, "client.download_path");
         AssertUnverified(unverified, "外部 C# 插件目录挂载");
         AssertUnverified(unverified, "发布镜像 Web UI Playwright E2E");
+        AssertUnverified(unverified, "全链路 JIT/AOT/Docker E2E");
 
         AssertCompleted(todo, "移植 Mikan：");
         AssertCompleted(todo, "移植 feed → filter → parse → download pipeline");
@@ -46,7 +47,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
         Assert.Contains("| Go Dockerfile | NativeAOT runtime image | 替换 | 未验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| Go release workflows | .NET 10 build/test | 替换 | 未验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 已验证 |", checklist, StringComparison.Ordinal);
-        Assert.Contains("隔离双容器真实统一投递 smoke 已生成但按用户要求未验证", checklist, StringComparison.Ordinal);
+        Assert.Contains("合法 WebSeed 下载→Bangumi/TMDB→move/NFO/sidecar→API/WebUI→qB 清理的全链门禁", checklist, StringComparison.Ordinal);
         Assert.DoesNotContain("Docker runner 实跑待验收", checklist, StringComparison.Ordinal);
     }
 
@@ -59,6 +60,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
             ".github/workflows/upstream-go-baseline.yml",
             ".github/workflows/animegonet-docker.yml",
             "Dockerfile.animegonet",
+            "Dockerfile.container-e2e-fixture",
             "Dockerfile.external-plugin-fixture",
             "docker-compose.animegonet.yml",
             "docker-compose.external-qbittorrent.yml",

@@ -19,6 +19,7 @@
     <Project Path="tests/AnimeGo.Plugin.Sdk.Tests/AnimeGo.Plugin.Sdk.Tests.csproj" />
     <Project Path="tests/AnimeGo.Plugin.Abstractions.Tests/AnimeGo.Plugin.Abstractions.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.App.Tests/AnimeGoNet.App.Tests.csproj" />
+    <Project Path="tests/AnimeGoNet.ContainerE2EFixture/AnimeGoNet.ContainerE2EFixture.csproj" />
     <Project Path="tests/AnimeGoNet.ContainerPluginFixture/AnimeGoNet.ContainerPluginFixture.csproj" />
     <Project Path="tests/AnimeGoNet.Core.Tests/AnimeGoNet.Core.Tests.csproj" />
     <Project Path="tests/AnimeGoNet.Data.Tests/AnimeGoNet.Data.Tests.csproj" />

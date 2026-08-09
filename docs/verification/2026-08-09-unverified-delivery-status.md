@@ -28,25 +28,30 @@ The following generated gates are now explicitly `[~]`:
 - shared `/download` Compose mapping;
 - external qB path probe;
 - external NativeAOT C# plugin read-only mount, non-root execution and disable fallback;
-- release-container Playwright WebUI E2E.
+- release-container Playwright WebUI E2E;
+- full-chain unified ingest, legal qB WebSeed download, metadata, move organization,
+  sidecars, API/WebUI projection and qB cleanup container E2E.
 
 Mikan, the local feed-to-download pipeline, move organization, multifile dedup,
 per-file TMDB Episode processing and TypeScript/WebUI are marked complete based
 on their existing non-Docker evidence. The dual-container unified task driver is
-now generated and separately marked unverified. Non-Windows RID execution,
-full JIT/AOT/Docker E2E remain ordinary unfinished items; they were not
-relabeled. The external-plugin container driver is now generated and separately
-marked unverified.
+now generated and separately marked unverified. Non-Windows RID execution
+remains an ordinary unfinished item. The full-chain container driver is now
+generated and separately marked unverified; its fixture has a real local JIT
+process test, but neither its AOT image nor Compose path was executed. The
+external-plugin container driver is likewise generated and separately marked
+unverified.
 
 ## Automated evidence
 
-`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact nine
+`UnverifiedDeliveryStatusContractTests` locks the status legend, the exact ten
 `[~]` rows, required `未验证` wording, completed local modules, checklist status
 and the existence of every referenced workflow, Dockerfile, Compose file and
 smoke script. It also rejects the stale checklist phrase that implied Docker
 runner acceptance was still part of implementation completion.
 
-The focused Release delivery suite passed 10/10 and the complete solution passed
-1463/1463 with zero failures and zero skips. `git diff --check` and the
-formatter restricted to the changed C# contract tests passed. No Docker or
-remote runner command was executed.
+The focused Release delivery/fixture suite passed 14/14 and the complete
+solution passed 1467/1467 with zero skips. Formatting, `git diff --check`, Bash
+syntax, YAML parsing and Node syntax passed. No Docker or remote runner command
+was executed. Detailed evidence is recorded in
+`docs/verification/2026-08-09-full-chain-container-e2e-delivery.md`.

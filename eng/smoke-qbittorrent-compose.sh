@@ -12,6 +12,7 @@ access_key="animegonet-compose-smoke"
 runtime_password="animegonet-ci-password"
 test_uid="$(id -u)"
 test_gid="$(id -g)"
+container_e2e_fixture_image="animegonet-container-e2e-fixture:${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
 
 if [[ "$test_uid" == "0" ]]; then
   test_uid=10001
@@ -23,6 +24,7 @@ export ANIMEGONET_INTEGRATION_ROOT="$integration_root"
 export ANIMEGONET_ACCESS_KEY="$access_key"
 export ANIMEGONET_UID="$test_uid"
 export ANIMEGONET_GID="$test_gid"
+export ANIMEGONET_CONTAINER_E2E_FIXTURE_IMAGE="$container_e2e_fixture_image"
 
 compose() {
   docker compose \
@@ -33,6 +35,7 @@ compose() {
 
 cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker image rm --force "$container_e2e_fixture_image" >/dev/null 2>&1 || true
   rm -rf -- "$integration_root"
 }
 trap cleanup EXIT
@@ -53,6 +56,11 @@ fi
 base64 --decode "$fixture_base64" >"$integration_root/animegonet-ci.torrent"
 base64 --decode "$fixture_base64" >"$integration_root/fixtures/animegonet-ci.torrent"
 base64 --decode "$fixture_pt_base64" >"$integration_root/fixtures/animegonet-ci-pt.torrent"
+docker build \
+  --file "$repository_root/Dockerfile.container-e2e-fixture" \
+  --build-arg TARGETARCH=amd64 \
+  --tag "$container_e2e_fixture_image" \
+  "$repository_root"
 "$repository_root/eng/export-external-plugin-fixture.sh" \
   "$integration_root/animegonet/data/plugins" amd64
 
@@ -314,7 +322,7 @@ sys.exit(0 if state.startswith(("stopped", "paused")) else 1)
   python3 -c 'import json,sys; assert json.load(sys.stdin)==[]' <<<"$tasks"
 }
 
-compose up --detach torrent-fixture qbittorrent-bt qbittorrent-pt >/dev/null
+compose up --detach torrent-fixture container-e2e-fixture qbittorrent-bt qbittorrent-pt >/dev/null
 for attempt in $(seq 1 40); do
   if compose exec --no-TTY torrent-fixture \
     wget --quiet --output-document=/dev/null \
@@ -324,6 +332,19 @@ for attempt in $(seq 1 40); do
   if [[ "$attempt" == 40 ]]; then
     compose logs --no-color torrent-fixture
     echo "The isolated Torrent fixture service did not become ready" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+for attempt in $(seq 1 80); do
+  if compose exec --no-TTY torrent-fixture \
+    wget --quiet --output-document=/dev/null \
+    http://container-e2e-fixture.invalid:8089/ready; then
+    break
+  fi
+  if [[ "$attempt" == 80 ]]; then
+    compose logs --no-color container-e2e-fixture
+    echo "The deterministic full-chain fixture did not become ready" >&2
     exit 1
   fi
   sleep 0.1
@@ -687,6 +708,170 @@ cleanup_routed_task() {
     --data-urlencode "categories=$category" >/dev/null
 }
 
+fixture_get() {
+  local endpoint="$1"
+  compose exec --no-TTY torrent-fixture \
+    wget --quiet --output-document=- \
+    "http://container-e2e-fixture.invalid:8089$endpoint"
+}
+
+exercise_full_chain_e2e() {
+  local profile="container-e2e-ci"
+  local category="animegonet-ci-full-chain"
+  local tag="animegonet-ci-full-chain"
+  local ready=""
+  local expected_hash=""
+  local expected_name=""
+  local expected_size=""
+  local expected_sha256=""
+  local created=""
+  local ingest=""
+  local downloads=""
+  local task_id=""
+  local job_id=""
+  local detail=""
+  local library=""
+  local fixture_state=""
+  local target="$integration_root/download/anime/AnimeGoNet Container E2E/S01/E001.mkv"
+
+  ready="$(fixture_get /ready)"
+  IFS='|' read -r expected_hash expected_name expected_size expected_sha256 < <(
+    python3 -c '
+import json
+import sys
+value = json.load(sys.stdin)
+print("|".join((value["info_hash"], value["file_name"], str(value["size_bytes"]), value["payload_sha256"])))
+' <<<"$ready"
+  )
+  [[ -n "$expected_hash" && "$expected_size" == "131072" ]]
+
+  prepare_route_identity "$bt_connection" bt "$category" "$tag"
+  created="$(animegonet_post "/api/v1/sources" \
+    '{"id":"container-e2e-ci","display_name":"Container full-chain E2E","adapter":"mikan","downloader_id":"bt","file_strategy":"move","allowed_torrent_hosts":["container-e2e-fixture.invalid"],"category":"animegonet-ci-full-chain","tags":["animegonet-ci-full-chain"],"seeding_time_minutes":0,"rss_filter_enabled":true,"rss_priority_enabled":true,"enabled":true}')"
+  python3 -c '
+import json
+import sys
+result = json.load(sys.stdin)
+assert result["id"] == "container-e2e-ci"
+assert result["adapter"] == "mikan"
+assert result["downloader_id"] == "bt"
+assert result["file_strategy"] == "move"
+' <<<"$created"
+
+  ingest="$(animegonet_post "/api/v1/ingest" \
+    '{"source":"container-e2e-ci","data":[{"torrent":"http://container-e2e-fixture.invalid:8089/animegonet-container-e2e.torrent","info":{"title":"AnimeGoNet Container E2E S01E01","source_item_id":"container-e2e-episode-1","source_work_id":"9901","mikanid":9901,"bgmid":990001}}]}')"
+  assert_unified_ingest_response "$ingest" "$profile" bt "$expected_hash"
+  task_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["ingest_id"])' <<<"$ingest")"
+
+  for attempt in $(seq 1 360); do
+    downloads="$(animegonet_get "/api/v1/downloads?page=1&page_size=100&search=AnimeGoNet%20Container%20E2E")"
+    job_id="$(python3 -c '
+import json
+import sys
+task_id = sys.argv[1]
+items = [item for item in json.load(sys.stdin)["items"] if item["task_id"] == task_id]
+print(items[0]["job_id"] if len(items) == 1 and items[0]["business_status"] == "organized" else "")
+' "$task_id" <<<"$downloads")"
+    [[ -n "$job_id" ]] && break
+    if [[ "$attempt" == 360 ]]; then
+      compose logs --no-color animegonet || true
+      authenticated_get "${bt_connection%%|*}" "${bt_connection#*|}" \
+        "/api/v2/torrents/info?hashes=$expected_hash" || true
+      animegonet_get "/api/v1/metadata/tasks/$task_id" || true
+      fixture_get /__state || true
+      echo "Full-chain task $task_id did not reach organized within 180 seconds" >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+
+  python3 -c '
+import json
+import sys
+task_id, job_id, expected_hash, expected_size = sys.argv[1:]
+item = next(item for item in json.load(sys.stdin)["items"] if item["task_id"] == task_id)
+assert item["job_id"] == job_id
+assert item["source"] == "container-e2e-ci"
+assert item["downloader_id"] == "bt"
+assert item["info_hash"] == expected_hash
+assert item["business_status"] == "organized"
+assert item["progress"] == 1
+assert item["total_bytes"] == int(expected_size)
+' "$task_id" "$job_id" "$expected_hash" "$expected_size" <<<"$downloads"
+
+  detail="$(animegonet_get "/api/v1/metadata/tasks/$task_id")"
+  python3 -c '
+import json
+import sys
+task_id = sys.argv[1]
+value = json.load(sys.stdin)
+summary = value["summary"]
+assert summary["task_id"] == task_id
+assert summary["status"] == "organized"
+assert summary["tmdb_series_id"] == 990001
+assert summary["tmdb_season_number"] == 1
+assert summary["series_strategy"] == "tmdb_title"
+assert summary["season_strategy"] == "tmdb_air_date"
+assert summary["episode_strategy"] == "tmdb_episode_number"
+assert summary["episode_file_count"] == 1
+file = value["files"][0]
+assert file["source_name"] == "AnimeGoNet.Container.E2E.S01E01.mkv"
+assert file["disposition"] == "episode"
+assert file["tmdb_series_id"] == 990001
+assert file["tmdb_season_number"] == 1
+assert file["tmdb_episode_number"] == 1
+' "$task_id" <<<"$detail"
+
+  library="$(animegonet_get "/api/v1/library/seasons?page=1&page_size=12&sort=last_updated&direction=desc")"
+  python3 -c '
+import json
+import sys
+items = [item for item in json.load(sys.stdin)["items"]
+         if item["tmdb_series_id"] == 990001 and item["tmdb_season_number"] == 1]
+assert len(items) == 1
+item = items[0]
+assert item["display_name"] == "AnimeGoNet Container E2E"
+assert item["episode_downloaded"] == 1
+assert item["episode_total"] == 1
+' <<<"$library"
+
+  test -f "$target"
+  test "$(wc -c <"$target" | tr -d ' ')" == "$expected_size"
+  test "$(sha256sum "$target" | awk '{print $1}')" == "$expected_sha256"
+  test -f "$integration_root/download/anime/AnimeGoNet Container E2E/tvshow.nfo"
+  test -f "$integration_root/download/anime/AnimeGoNet Container E2E/anime.a_json"
+  test -f "$integration_root/download/anime/AnimeGoNet Container E2E/S01/anime.s_json"
+  test -f "$integration_root/download/anime/AnimeGoNet Container E2E/S01/E001.e_json"
+
+  fixture_state="$(fixture_get /__state)"
+  python3 -c '
+import json
+import sys
+value = json.load(sys.stdin)
+for key in ("torrent_requests", "payload_requests", "tmdb_search_requests",
+            "tmdb_series_requests", "tmdb_season_requests", "tmdb_episode_requests",
+            "bangumi_subject_requests"):
+    assert value[key] >= 1, (key, value[key])
+assert value["tmdb_credential_failures"] == 0
+' <<<"$fixture_state"
+
+  for connection in "$bt_connection" "$pt_connection"; do
+    local base_url="${connection%%|*}"
+    local cookie_jar="${connection#*|}"
+    local tasks=""
+    tasks="$(authenticated_get "$base_url" "$cookie_jar" "/api/v2/torrents/info?hashes=$expected_hash")"
+    python3 -c 'import json,sys; assert json.load(sys.stdin) == []' <<<"$tasks"
+  done
+  authenticated_post "${bt_connection%%|*}" "${bt_connection#*|}" \
+    "/api/v2/torrents/deleteTags" --data-urlencode "tags=$tag" >/dev/null
+  authenticated_post "${bt_connection%%|*}" "${bt_connection#*|}" \
+    "/api/v2/torrents/removeCategories" --data-urlencode "categories=$category" >/dev/null
+
+  export ANIMEGONET_FULL_CHAIN_TASK_ID="$task_id"
+  export ANIMEGONET_FULL_CHAIN_TITLE="AnimeGoNet Container E2E"
+  export ANIMEGONET_FULL_CHAIN_TMDB_SERIES_ID="990001"
+}
+
 exercise_external_plugin
 
 for instance in bt pt; do
@@ -805,6 +990,7 @@ wait_for_routed_task \
 
 cleanup_routed_task "$bt_connection" "$bt_hash" "$bt_category" "$bt_tag"
 cleanup_routed_task "$pt_connection" "$pt_hash" "$pt_category" "$pt_tag"
+exercise_full_chain_e2e
 
 for connection in "$bt_connection" "$pt_connection"; do
   base_url="${connection%%|*}"
@@ -814,3 +1000,9 @@ for connection in "$bt_connection" "$pt_connection"; do
     python3 -c 'import json,sys; assert json.load(sys.stdin) == []' <<<"$tasks"
   done
 done
+
+if [[ "${ANIMEGONET_FULL_CHAIN_WEBUI:-0}" == "1" ]]; then
+  export ANIMEGONET_WEBUI_BASE_URL="$animegonet_url"
+  export ANIMEGONET_WEBUI_ACCESS_KEY="$access_key"
+  npm run web:e2e:full-chain
+fi

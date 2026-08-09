@@ -248,7 +248,7 @@
 - [ ] 发布并实机验证 `win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` AOT artifacts。
 - [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
 - [x] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；win-x64 原生二进制完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt 以只读 Go schema-v1 JSON 导出后由 .NET schema v39 单事务导入；跨平台 CI 的组合 smoke 在同一隔离目录验证 3 条旧 sidecar 索引、六个 bucket、过期跳过、重复导入和重启保留。
-- [ ] 完成全链路 JIT/AOT/Docker E2E。
+- [~] 全链路 JIT/AOT/Docker E2E 门禁已生成但未验证：确定性合法 Torrent/WebSeed 与 Bangumi/TMDB fixture、统一导入、Mikan move、SQLite 去重、双 qB 路由、真实下载、Series/Season/Episode 验证、整理/NFO/三层 sidecar、作品库/下载/元数据 API、静态 WebUI Playwright 和精确 qB 清理已串入专用 Compose/CI；fixture 的本机 JIT 进程行为与生成文件契约已验证，按用户要求 Docker/AOT 容器执行留待自行实跑。
 - [~] 发布镜像 Web UI Playwright E2E 已生成：固定 Playwright 1.62.0/Chromium，覆盖 NativeAOT 状态、Access-Key 双边界、主要异步区域、WebSocket、TMDB fallback 可视顺序、键盘跳转、移动端无横向溢出和零 console error；本机 NativeAOT 2/2 已通过，Docker 镜像脚本与 CI 门禁按用户要求标记为未验证。
 - [x] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker/外部 qB 路径和本机隔离验收之外，已补齐用户迁移、外部 C# 插件安装/升级/回滚、日常状态检查、停机备份/恢复、SQLite 校验、版本回退和故障处理手册；README 统一入口与文档链接/安全边界契约测试已通过。Docker 功能文件按用户要求保留并明确标记为未验证。
 - [ ] 标记第一个可用预发布版本。
