@@ -14,6 +14,9 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("id=\"app-sidebar\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"workspace-tabs\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"sidebar-toggle\"", html, StringComparison.Ordinal);
+        Assert.Contains(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"Mikan 手动设置\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Mikan 自动化", html + script, StringComparison.Ordinal);
         foreach (var workspace in new[]
         {
             "overview",

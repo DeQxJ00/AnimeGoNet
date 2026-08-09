@@ -1366,7 +1366,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     ],
   },
   mikan: {
-    title: "Mikan 自动化",
+    title: "Mikan 手动设置",
     description: "统一导入、人工覆盖、候选优选和五级过滤。",
     defaultSubview: "ingest",
     tabs: [
