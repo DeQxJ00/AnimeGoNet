@@ -73,6 +73,151 @@ let liveLogShouldReconnect = true;
 let liveLogPaused = false;
 let liveLogControlPending = false;
 let liveLogEntries = [];
+const workspaceDefinitions = {
+    overview: {
+        title: "总览",
+        description: "运行状态、模块能力和常用管理入口。",
+        defaultSubview: "status",
+        tabs: [
+            { id: "status", label: "运行状态" },
+            { id: "shortcuts", label: "管理入口" },
+        ],
+    },
+    library: {
+        title: "动画库",
+        description: "以 TMDB 为准查看作品、季度、EP 进度和待补全项目。",
+        defaultSubview: "seasons",
+        tabs: [
+            { id: "seasons", label: "作品与季度" },
+            { id: "pending", label: "待补全 TMDB" },
+        ],
+    },
+    tasks: {
+        title: "任务中心",
+        description: "查看下载、匹配、整理、失败原因和实时诊断。",
+        defaultSubview: "downloads",
+        tabs: [
+            { id: "downloads", label: "下载任务" },
+            { id: "metadata", label: "匹配与整理" },
+            { id: "logs", label: "详细日志" },
+        ],
+    },
+    mikan: {
+        title: "Mikan 自动化",
+        description: "统一导入、人工覆盖、候选优选和五级过滤。",
+        defaultSubview: "ingest",
+        tabs: [
+            { id: "ingest", label: "导入任务" },
+            { id: "manual-rules", label: "人工规则" },
+            { id: "offsets", label: "可信 Offset" },
+            { id: "candidate-rules", label: "候选规则" },
+            { id: "legacy-filter", label: "五级过滤" },
+        ],
+    },
+    connections: {
+        title: "连接与配置",
+        description: "管理应用上游、输入源、下载器和外部插件。",
+        defaultSubview: "application",
+        tabs: [
+            { id: "application", label: "应用配置" },
+            { id: "sources", label: "输入源" },
+            { id: "downloaders", label: "下载器" },
+            { id: "plugins", label: "外部插件" },
+        ],
+    },
+    system: {
+        title: "系统",
+        description: "维护数据版本、缓存和后台基础设施。",
+        defaultSubview: "updates",
+        tabs: [
+            { id: "updates", label: "数据更新" },
+            { id: "cache", label: "缓存管理" },
+        ],
+    },
+};
+function isWorkspaceId(value) {
+    return Object.hasOwn(workspaceDefinitions, value);
+}
+function workspaceFromHash() {
+    const [rawWorkspace = "", rawSubview = ""] = window.location.hash
+        .replace(/^#\/?/, "")
+        .split("/", 2);
+    const workspace = isWorkspaceId(rawWorkspace) ? rawWorkspace : "overview";
+    const definition = workspaceDefinitions[workspace];
+    const subview = definition.tabs.some(tab => tab.id === rawSubview)
+        ? rawSubview
+        : definition.defaultSubview;
+    return { workspace, subview };
+}
+function closeMobileSidebar() {
+    const sidebar = element("#app-sidebar");
+    const toggle = element("#sidebar-toggle");
+    sidebar.classList.remove("open");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "打开菜单");
+}
+function selectWorkspace(workspace, subview, updateHash = true) {
+    const definition = workspaceDefinitions[workspace];
+    const selectedSubview = definition.tabs.some(tab => tab.id === subview)
+        ? subview
+        : definition.defaultSubview;
+    document.querySelectorAll("#main-content > section[data-workspace]")
+        .forEach(section => {
+        section.hidden = section.dataset.workspace !== workspace
+            || section.dataset.subview !== selectedSubview;
+    });
+    document.querySelectorAll("[data-workspace-target]")
+        .forEach(button => {
+        const selected = button.dataset.workspaceTarget === workspace;
+        if (selected)
+            button.setAttribute("aria-current", "page");
+        else
+            button.removeAttribute("aria-current");
+    });
+    element("#workspace-title").textContent = definition.title;
+    element("#workspace-description").textContent = definition.description;
+    const tabs = element("#workspace-tabs");
+    tabs.replaceChildren(...definition.tabs.map(tab => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = tab.label;
+        button.dataset.subviewTarget = tab.id;
+        if (tab.id === selectedSubview)
+            button.setAttribute("aria-current", "page");
+        button.addEventListener("click", () => selectWorkspace(workspace, tab.id));
+        return button;
+    }));
+    document.title = `${definition.title} · AnimeGoNet`;
+    if (updateHash) {
+        const nextHash = `#/${workspace}/${selectedSubview}`;
+        if (window.location.hash !== nextHash)
+            history.pushState(null, "", nextHash);
+    }
+    closeMobileSidebar();
+    window.scrollTo({ top: 0, behavior: "auto" });
+}
+function initializeWorkspaceNavigation() {
+    document.querySelectorAll("[data-workspace-target]")
+        .forEach(button => button.addEventListener("click", () => {
+        const requested = button.dataset.workspaceTarget ?? "";
+        if (isWorkspaceId(requested)) {
+            selectWorkspace(requested, workspaceDefinitions[requested].defaultSubview);
+        }
+    }));
+    element("#sidebar-toggle").addEventListener("click", () => {
+        const sidebar = element("#app-sidebar");
+        const toggle = element("#sidebar-toggle");
+        const open = sidebar.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        toggle.setAttribute("aria-label", open ? "关闭菜单" : "打开菜单");
+    });
+    window.addEventListener("hashchange", () => {
+        const target = workspaceFromHash();
+        selectWorkspace(target.workspace, target.subview, false);
+    });
+    const initial = workspaceFromHash();
+    selectWorkspace(initial.workspace, initial.subview, true);
+}
 const statusLabels = {
     received: "已接收",
     staged: "种子已暂存",
@@ -5718,6 +5863,7 @@ window.addEventListener("beforeunload", () => {
     }
     disconnectCurrentLiveLogSocket();
 });
+initializeWorkspaceNavigation();
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();

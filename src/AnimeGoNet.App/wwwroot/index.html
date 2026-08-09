@@ -9,16 +9,44 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
-  <header class="topbar">
-    <div>
-      <p class="eyebrow">Anime library automation</p>
-      <h1>AnimeGoNet</h1>
-    </div>
-    <span id="health" class="badge pending" role="status" aria-live="polite" aria-atomic="true">连接中</span>
-  </header>
+  <div class="app-shell">
+    <aside id="app-sidebar" class="app-sidebar" aria-label="一级菜单">
+      <div class="sidebar-brand">
+        <span class="sidebar-mark" aria-hidden="true">AG</span>
+        <div><strong>AnimeGoNet</strong><small>本地控制台</small></div>
+      </div>
+      <nav class="primary-navigation">
+        <button type="button" data-workspace-target="overview" aria-current="page"><span aria-hidden="true">⌂</span>总览</button>
+        <button type="button" data-workspace-target="library"><span aria-hidden="true">▣</span>动画库</button>
+        <button type="button" data-workspace-target="tasks"><span aria-hidden="true">↻</span>任务中心</button>
+        <button type="button" data-workspace-target="mikan"><span aria-hidden="true">◇</span>Mikan 自动化</button>
+        <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>连接与配置</button>
+        <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统</button>
+      </nav>
+      <p class="sidebar-footnote">所有页面共用同一套脱敏 API 与 revision 控制。</p>
+    </aside>
+
+    <div class="app-content">
+      <header class="topbar">
+        <button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-controls="app-sidebar" aria-expanded="false" aria-label="打开菜单">☰</button>
+        <div>
+          <p class="eyebrow">Anime library automation</p>
+          <h1>AnimeGoNet</h1>
+        </div>
+        <span id="health" class="badge pending" role="status" aria-live="polite" aria-atomic="true">连接中</span>
+      </header>
+
+      <section class="workspace-heading" aria-labelledby="workspace-title">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <h2 id="workspace-title">总览</h2>
+          <p id="workspace-description" class="muted">运行状态、模块能力和常用入口。</p>
+        </div>
+        <nav id="workspace-tabs" class="secondary-navigation" aria-label="二级菜单"></nav>
+      </section>
 
   <main id="main-content" tabindex="-1">
-    <section class="hero" aria-labelledby="hero-title">
+    <section class="hero" aria-labelledby="hero-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
       <div>
         <p class="eyebrow">主程序迁移状态</p>
         <h2 id="hero-title">从统一导入到媒体库，每一步都可追踪。</h2>
@@ -37,7 +65,7 @@
       </dl>
     </section>
 
-    <section aria-labelledby="modules-title">
+    <section id="module-status" aria-labelledby="modules-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Control plane</p>
@@ -49,7 +77,7 @@
       </div>
     </section>
 
-    <section id="external-plugins" aria-labelledby="external-plugins-title">
+    <section id="external-plugins" aria-labelledby="external-plugins-title" data-workspace="connections" data-subview="plugins" data-nav-label="外部插件">
       <div class="section-heading external-plugin-heading">
         <div>
           <p class="eyebrow">Out-of-process C# extensions</p>
@@ -63,7 +91,7 @@
       </div>
     </section>
 
-    <section id="anime-library" aria-labelledby="anime-library-title">
+    <section id="anime-library" aria-labelledby="anime-library-title" data-workspace="library" data-subview="seasons" data-nav-label="作品与季度">
       <div class="section-heading library-heading">
         <div>
           <p class="eyebrow">TMDB canonical library</p>
@@ -144,7 +172,7 @@
       </article>
     </section>
 
-    <section aria-labelledby="configuration-title">
+    <section id="runtime-configuration" aria-labelledby="configuration-title" data-workspace="connections" data-subview="application" data-nav-label="应用配置">
       <div class="section-heading configuration-heading">
         <div>
           <p class="eyebrow">Effective configuration</p>
@@ -160,7 +188,7 @@
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
     </section>
 
-    <section id="data-update" aria-labelledby="data-update-title">
+    <section id="data-update" aria-labelledby="data-update-title" data-workspace="system" data-subview="updates" data-nav-label="数据更新">
       <div class="section-heading data-update-heading">
         <div>
           <p class="eyebrow">AnimeGoNetData</p>
@@ -203,7 +231,7 @@
       </div>
     </section>
 
-    <section id="cache-browser" aria-labelledby="cache-browser-title">
+    <section id="cache-browser" aria-labelledby="cache-browser-title" data-workspace="system" data-subview="cache" data-nav-label="缓存管理">
       <div class="section-heading cache-browser-heading">
         <div>
           <p class="eyebrow">Safe SQLite cache view</p>
@@ -241,7 +269,7 @@
       </div>
     </section>
 
-    <section id="live-logs" aria-labelledby="live-logs-title">
+    <section id="live-logs" aria-labelledby="live-logs-title" data-workspace="tasks" data-subview="logs" data-nav-label="详细日志">
       <div class="section-heading live-log-heading">
         <div>
           <p class="eyebrow">Realtime diagnostics</p>
@@ -274,7 +302,7 @@
       </div>
     </section>
 
-    <section aria-labelledby="metadata-title">
+    <section id="metadata-tasks-workspace" aria-labelledby="metadata-title" data-workspace="tasks" data-subview="metadata" data-nav-label="匹配与整理">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Metadata pipeline</p>
@@ -359,7 +387,7 @@
       </nav>
     </section>
 
-    <section aria-labelledby="pending-tmdb-title">
+    <section id="pending-tmdb" aria-labelledby="pending-tmdb-title" data-workspace="library" data-subview="pending" data-nav-label="待补全 TMDB">
       <div class="section-heading pending-tmdb-heading">
         <div>
           <p class="eyebrow">Bangumi fallback</p>
@@ -373,7 +401,7 @@
       </div>
     </section>
 
-    <section aria-labelledby="downloads-title">
+    <section id="download-tasks-workspace" aria-labelledby="downloads-title" data-workspace="tasks" data-subview="downloads" data-nav-label="下载任务">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Live projection</p>
@@ -440,7 +468,7 @@
       </nav>
     </section>
 
-    <section aria-labelledby="downloaders-title">
+    <section id="downloaders" aria-labelledby="downloaders-title" data-workspace="connections" data-subview="downloaders" data-nav-label="下载器">
       <div class="section-heading downloader-heading">
         <div>
           <p class="eyebrow">qBittorrent instances</p>
@@ -457,7 +485,7 @@
       </div>
     </section>
 
-    <section aria-labelledby="sources-title">
+    <section id="sources" aria-labelledby="sources-title" data-workspace="connections" data-subview="sources" data-nav-label="输入源">
       <div class="section-heading source-heading">
         <div>
           <p class="eyebrow">Input routing</p>
@@ -552,7 +580,7 @@
       </div>
     </section>
 
-    <section id="manual-submit" aria-labelledby="manual-submit-title">
+    <section id="manual-submit" aria-labelledby="manual-submit-title" data-workspace="mikan" data-subview="ingest" data-nav-label="导入任务">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Unified input</p>
@@ -624,7 +652,7 @@
       </div>
     </section>
 
-    <section id="mikan-work-rule" aria-labelledby="mikan-work-rule-title">
+    <section id="mikan-work-rule" aria-labelledby="mikan-work-rule-title" data-workspace="mikan" data-subview="manual-rules" data-nav-label="人工规则">
       <div class="section-heading mikan-work-rule-heading">
         <div>
           <p class="eyebrow">Highest-priority metadata override</p>
@@ -685,7 +713,7 @@
       </div>
     </section>
 
-    <section aria-labelledby="trusted-offsets-title">
+    <section id="trusted-offset-workspace" aria-labelledby="trusted-offsets-title" data-workspace="mikan" data-subview="offsets" data-nav-label="可信 Offset">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Mikan metadata cache</p>
@@ -699,7 +727,7 @@
       </div>
     </section>
 
-    <section aria-labelledby="rss-rules-title">
+    <section id="rss-rules" aria-labelledby="rss-rules-title" data-workspace="mikan" data-subview="candidate-rules" data-nav-label="候选规则">
       <div class="section-heading rss-heading">
         <div>
           <p class="eyebrow">Mikan RSS</p>
@@ -749,7 +777,7 @@
       </section>
     </section>
 
-    <section aria-labelledby="legacy-filter-title">
+    <section id="legacy-filter" aria-labelledby="legacy-filter-title" data-workspace="mikan" data-subview="legacy-filter" data-nav-label="五级过滤">
       <div class="section-heading rss-heading">
         <div>
           <p class="eyebrow">Legacy-compatible Mikan filter</p>
@@ -825,7 +853,7 @@
       </div>
     </section>
 
-    <section class="grid panels" aria-label="管理入口">
+    <section id="management-shortcuts" class="grid panels" aria-label="管理入口" data-workspace="overview" data-subview="shortcuts" data-nav-label="管理入口">
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>脱敏运行视图已接入</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
       <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>管理与预览已接入</span></article>
@@ -834,6 +862,8 @@
       <article><h3>任务</h3><p>下载、匹配、整理和删除审计。</p><span>下载状态已接入</span></article>
     </section>
   </main>
+    </div>
+  </div>
 
   <dialog id="configuration-dialog" aria-labelledby="configuration-dialog-title">
     <form id="configuration-form" class="configuration-form">

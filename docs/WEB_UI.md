@@ -158,7 +158,19 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 
 “编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前先显示脱敏字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
 
-## 12. 实时日志
+## 12. 一级/二级导航
+
+静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
+“总览、动画库、任务中心、Mikan 自动化、连接与配置、系统”；每个工作区在内容头部
+提供二级标签。URL hash 采用 `#/一级/二级`，可收藏并支持浏览器前进/后退，不会把
+Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域，既有轮询、WebSocket、
+表单 revision 和对话框仍复用同一份状态，不创建第二套业务请求。
+
+宽屏左栏保持 sticky；小于 900px 时收成显式菜单按钮控制的抽屉，按钮维护
+`aria-expanded`，一级和二级当前项均使用 `aria-current=page`。二级菜单允许横向滚动，
+主内容继续保留 skip link 和焦点边界。
+
+## 13. 实时日志
 
 首页通过同源 `/websocket/log` 接收服务端已脱敏日志。协议保留上游
 `{"type":"log","count":N}\n\n<line>...` 帧，因此旧客户端仍可消费；新增
@@ -176,7 +188,7 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 - 非预期断开使用 1～30 秒指数退避自动重连；“重新连接”按钮立即重建连接。
   页面重连时会恢复原暂停意图；关闭页面会取消重连并关闭 socket。
 
-## 13. 外部 C# 插件运行状态
+## 14. 外部 C# 插件运行状态
 
 首页“外部插件”区直接消费 `GET /api/v1/status.external_plugins`。每个有效包显示
 安全的 ID、名称、类型、版本、当前 RID 与声明能力，并将运行状态明确区分为未启动、
@@ -201,7 +213,7 @@ plugin-data。
 静默改成 Mikan/U2/TTG。服务端创建时从实际 `PluginCatalog` 验证 adapter，路由预览走
 同一个强类型 adapter；默认禁用的外部包会安全返回不可用，不启动进程或产生任务。
 
-## 14. TypeScript 工程与 API client
+## 15. TypeScript 工程与 API client
 
 WebUI 使用 TypeScript 7 strict 编译为浏览器原生 ES module，不引入 React、Vue、
 Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共享边界：调用点声明
@@ -247,7 +259,7 @@ TMDB、下载器、来源、可信 offset、模块和外部插件均使用该边
 模块，检查唯一 ID、section/dialog/控件可访问名称、非正 tabindex、初始异步状态和
 不可信消息不会解释为 HTML；CI 同时校验 `ui-state.js` 是确定性提交产物。
 
-## 15. 缓存浏览与精确删除
+## 16. 缓存浏览与精确删除
 
 “缓存浏览”只展示 SQLite `cache_buckets/cache_entries` 的安全管理投影。用户可在
 `bolt` 与只读 `bolt_sub` 之间切换、选择 opaque bucket、分页查看 opaque key、JSON
