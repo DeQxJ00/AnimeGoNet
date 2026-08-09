@@ -147,7 +147,7 @@
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
 - [x] 移植 ordered filter manager：按显式配置或目录顺序逐级传递 accepted items，插件错误/无效索引立即终止，拒绝项不会进入后续 filter；空显式链等价于跳过过滤。
 - [>] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约和 winner→统一 staging 已串联；download worker 到最终整理的真实 qB/container 全链验收仍待实现。
-- [>] 通过上游所有插件/parser/filter fixture，以及外部 C# 插件协议故障注入测试：外部协议 fake/真实进程已覆盖成功生命周期、业务错误、严格响应、超限、超时、取消、崩溃、脏 stdout、stderr、并发、健康失败、关闭期限与 manifest 竞态；六类 adapter 已覆盖配置合并、禁用、业务错误、未知/重复字段、索引完整性、URL 指纹和路径逃逸；上游剩余 fixture 全量 parity 仍待完成。
+- [x] 通过上游所有插件/parser/filter fixture，以及外部 C# 插件协议故障注入测试：固定 `develop@c7475df` 的 59 个 plugin/feed/filter/parser/Python fixture 与 Go 测试入口逐文件归类为 ported/replaced/removed/documentation，机器测试锁定精确清单、SHA-256、证据目标和无遗漏；5 个真实 RSS fixture 逐字段/失败码通过，filter fixture 的 13 个输入、4 个 NC-Raws、9 个有效 1080p 及 inline regex 单候选结果由编译期 C# 直接复现。Python 运行时及任意 Python 扩展仍明确移除；外部 C# 协议 fake/真实进程已覆盖成功生命周期、业务错误、严格响应、超限、超时、取消、崩溃、脏 stdout、stderr、并发、健康失败、关闭期限与 manifest 竞态，六类 adapter 已覆盖配置合并、禁用、业务错误、未知/重复字段、索引完整性、URL 指纹和路径逃逸。
 
 ## P7 — 首版 qBittorrent 下载客户端
 

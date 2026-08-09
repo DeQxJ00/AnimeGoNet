@@ -1,0 +1,61 @@
+# AnimeGo develop@c7475dfc55a374cd0dd08821bf17125dab1e3145
+# upstream_file|disposition|targets separated by semicolon|reason
+assets/plugin/README.md|documentation|docs/PORTING_CHECKLIST.md|Legacy Python plugin catalog is replaced by compile-time C# built-ins and the external C# protocol.
+assets/plugin/feed/README.md|documentation|docs/PORTING_CHECKLIST.md|Legacy feed plugin instructions are represented by the C# source and schedule contracts.
+assets/plugin/feed/builtin_mikan_rss.py|replaced|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs;tests/AnimeGoNet.App.Tests/Plugins/BuiltInApplicationPluginsTests.cs|Compile-time Mikan RSS reader and scheduled ingest replace Python execution.
+assets/plugin/feed/mikan_rss_demo.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs;docs/PORTING_CHECKLIST.md|Arbitrary Python feed plugins are intentionally unsupported; the typed C# feed adapter is the extension boundary.
+assets/plugin/filter/Auto_Bangumi/LICENSE|documentation|docs/PORTING_CHECKLIST.md|The upstream implementation is not vendored; only independently written golden parity tests are retained.
+assets/plugin/filter/Auto_Bangumi/__init__.py|removed|tests/AnimeGoNet.Core.Tests/Metadata/AutoBangumiRawParserTests.cs;docs/PORTING_CHECKLIST.md|Python package loading is intentionally removed.
+assets/plugin/filter/Auto_Bangumi/raw_parser.py|replaced|tests/AnimeGoNet.Core.Tests/Metadata/AutoBangumiRawParserTests.cs|Compile-time AutoBangumiRawParser is locked to all upstream golden fields.
+assets/plugin/filter/README.md|documentation|docs/PORTING_CHECKLIST.md|Legacy Python filter instructions are superseded by ordered C# rules and typed external plugins.
+assets/plugin/filter/default.py|replaced|tests/AnimeGoNet.Core.Tests/Rules/LegacyMikanFilterEngineTests.cs|The default pass-through behavior is implemented by the compile-time legacy-compatible filter engine.
+assets/plugin/filter/mikan_tool.py|replaced|tests/AnimeGoNet.Core.Tests/Rules/LegacyMikanFilterEngineTests.cs;tests/AnimeGoNet.Core.Tests/Rules/LegacyMikanFilterCodecTests.cs|Mikan ordered filter semantics are implemented without a Python runtime.
+assets/plugin/filter/pydemo.py|replaced|tests/AnimeGoNet.Core.Tests/Rules/UpstreamFilterFixtureParityTests.cs;tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs|Its parser and 1080p selection behavior is reproduced in compile-time C#; the typed C# adapter is the extension boundary.
+assets/plugin/filter/testdata.json|ported|tests/AnimeGoNet.Core.Tests/Metadata/AutoBangumiRawParserTests.cs|The complete upstream parser output surface is represented by C# golden cases.
+assets/plugin/parser/builtin_parser.py|replaced|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs;tests/AnimeGoNet.Core.Tests/Feeds/MikanRssEpisodeParserTests.cs|Compile-time title parsing replaces Python execution.
+assets/plugin/rename/README.md|documentation|docs/PORTING_CHECKLIST.md|Legacy rename documentation is superseded by the deterministic media organization contract.
+assets/plugin/rename/builtin_rename.py|replaced|tests/AnimeGoNet.Core.Tests/Library/MediaPathPlannerTests.cs;tests/AnimeGoNet.Core.Tests/Library/SubtitleAssociationResolverTests.cs|Deterministic C# path planning and subtitle association replace Python rename logic.
+assets/plugin/rename/default.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs;docs/PORTING_CHECKLIST.md|Arbitrary Python rename plugins are replaced by the typed external C# rename adapter.
+assets/plugin/rename/testdata.json|ported|tests/AnimeGoNet.Core.Tests/Library/MediaPathPlannerTests.cs|Rename input shapes are covered by deterministic media path fixtures.
+assets/plugin/schedule/README.md|documentation|docs/PORTING_CHECKLIST.md|Legacy schedule instructions are superseded by typed built-in schedules.
+assets/plugin/schedule/refresh.py|replaced|tests/AnimeGoNet.App.Tests/Plugins/BuiltInApplicationPluginsTests.cs;tests/AnimeGoNet.App.Tests/Scheduling/PluginScheduleCoordinatorTests.cs|Compile-time refresh scheduling replaces Python execution.
+internal/animego/feed/plugin_test.go|ported|tests/AnimeGoNet.App.Tests/Plugins/BuiltInApplicationPluginsTests.cs;tests/AnimeGoNet.App.Tests/Scheduling/SourceRssScheduleTests.cs|Built-in Mikan feed registration and scheduling are covered in C#.
+internal/animego/feed/rss_test.go|ported|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs|Every checked-in upstream RSS fixture is executed directly by the C# parser.
+internal/animego/filter/filter_test.go|replaced|tests/AnimeGoNet.Core.Tests/Rules/LegacyMikanFilterEngineTests.cs|Ordered filter execution and empty/error outcomes are implemented in C#.
+internal/animego/filter/plugin_test.go|replaced|tests/AnimeGoNet.Core.Tests/Rules/LegacyMikanFilterEngineTests.cs;tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs|Built-in behavior is compiled into C# and arbitrary Python execution is intentionally replaced by the typed protocol.
+internal/animego/parser/parser_mock_test.go|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Network-independent parser boundary cases are covered by deterministic C# fixtures.
+internal/animego/parser/parser_test.go|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs;tests/AnimeGoNet.Core.Tests/Metadata/AutoBangumiRawParserTests.cs|Upstream Episode/title success and failure paths are represented by C# parser goldens.
+internal/animego/parser/plugin_test.go|replaced|tests/AnimeGoNet.Core.Tests/Metadata/AutoBangumiRawParserTests.cs|The built-in Python parser entry point is replaced by compile-time C#.
+internal/animego/parser/utils_test.go|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Episode utility cases are covered by the C# candidate parser.
+test/testdata/feed/2822_370.xml|ported|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs|Real Mikan Bangumi RSS identity and enclosure parsing fixture.
+test/testdata/feed/Mikan.json|ported|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs|All expected RSS fields are compared item by item.
+test/testdata/feed/Mikan.xml|ported|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs|Real Mikan RSS input is parsed directly from the pinned repository.
+test/testdata/feed/err_parse_feed.xml|ported|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs|Malformed RSS maps to the stable rss_parse_failed code.
+test/testdata/feed/skip_and_err_length.xml|ported|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs|Missing enclosure is skipped and invalid length becomes zero.
+test/testdata/filter/Mikan.xml|ported|tests/AnimeGoNet.Core.Tests/Rules/UpstreamFilterFixtureParityTests.cs|The exact shared Mikan feed produces the upstream 13/4/9 result counts without Python.
+test/testdata/filter/default.py|replaced|tests/AnimeGoNet.Core.Tests/Rules/UpstreamFilterFixtureParityTests.cs|Default pass-through behavior is compiled into C# and retains all 13 fixture items.
+test/testdata/filter/default_err.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginProcessSessionTests.cs;docs/PORTING_CHECKLIST.md|Python exceptions are not executed; typed external plugin business and process failures are covered instead.
+test/testdata/filter/filter.py|replaced|tests/AnimeGoNet.Core.Tests/Rules/UpstreamFilterFixtureParityTests.cs;tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs|The NC-Raws selection result is reproduced by the compile-time parser; arbitrary extensions use the typed C# adapter.
+test/testdata/filter/test_re.py|replaced|tests/AnimeGoNet.Core.Tests/Rules/UpstreamFilterFixtureParityTests.cs|The upstream inline regex fixture retains exactly the same candidate.
+test/testdata/parser/155942|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned parser response fixture is mapped to deterministic parser cases.
+test/testdata/parser/220150|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned parser response fixture is mapped to deterministic parser cases.
+test/testdata/parser/2922|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned parser response fixture is mapped to deterministic parser cases.
+test/testdata/parser/3015|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned parser response fixture is mapped to deterministic parser cases.
+test/testdata/parser/366165|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned parser response fixture is mapped to deterministic parser cases.
+test/testdata/parser/411247|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned parser response fixture is mapped to deterministic parser cases.
+test/testdata/parser/51ecf2415af99521d07595178685587e16edd926|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned Mikan page fixture is covered by parser boundary cases.
+test/testdata/parser/51ecf2415af99521d07595178685587e16edd926.torrent|ported|tests/AnimeGoNet.Core.Tests/Torrents/TorrentUpstreamParityTests.cs|Pinned Torrent bytes are parsed and verified directly.
+test/testdata/parser/ac5d8d6fcc4d83cb18f18c209b66afd8e1edba86|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Pinned Mikan page fixture is covered by parser boundary cases.
+test/testdata/parser/ac5d8d6fcc4d83cb18f18c209b66afd8e1edba86.torrent|ported|tests/AnimeGoNet.Core.Tests/Torrents/TorrentUpstreamParityTests.cs|Pinned Torrent bytes are parsed and verified directly.
+test/testdata/parser/err_anisource_parse|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Invalid anime-source parsing remains a fail-closed C# boundary.
+test/testdata/parser/ポケットモンスター|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Japanese title fixture is represented by the parser golden set.
+test/testdata/parser/便利屋斎藤さん、異世界に行く|ported|tests/AnimeGoNet.Core.Tests/Metadata/TorrentEpisodeCandidateParserTests.cs|Japanese title fixture is represented by the parser golden set.
+test/testdata/python/Mikan.xml|removed|tests/AnimeGoNet.Core.Tests/Feeds/RssFeedUpstreamParityTests.cs;docs/PORTING_CHECKLIST.md|The XML remains covered by native C# parsing; Python execution is removed.
+test/testdata/python/a6f48155e7648a945e9bf85949c6cf8d8eb7ad61|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs;docs/PORTING_CHECKLIST.md|Python HTTP fixture is not executed; typed C# plugin inputs replace it.
+test/testdata/python/config.json|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginConfigurationValidatorTests.cs;docs/PORTING_CHECKLIST.md|Python configuration injection is removed in favor of typed C# plugin manifests.
+test/testdata/python/config.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginConfigurationValidatorTests.cs;docs/PORTING_CHECKLIST.md|Python configuration scripts are intentionally unsupported.
+test/testdata/python/json.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginProcessSessionTests.cs;docs/PORTING_CHECKLIST.md|Python module import behavior is outside the supported runtime.
+test/testdata/python/mikan.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginAdaptersTests.cs;docs/PORTING_CHECKLIST.md|Python Mikan helper execution is replaced by native source and feed adapters.
+test/testdata/python/test.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginProcessSessionTests.cs;docs/PORTING_CHECKLIST.md|Generic Python execution is intentionally unavailable.
+test/testdata/python/test_log.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginStderrForwarderTests.cs;docs/PORTING_CHECKLIST.md|Typed child-process stderr forwarding replaces Python log capture.
+test/testdata/python/var.py|removed|tests/AnimeGoNet.App.Tests/Plugins/ExternalPluginProcessSessionTests.cs;docs/PORTING_CHECKLIST.md|Python variable injection is intentionally unsupported.
