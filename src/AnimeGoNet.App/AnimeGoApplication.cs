@@ -390,8 +390,10 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanRssIngestProcessor>();
         rssDnsResolver ??= new SystemTorrentDnsResolver();
         rssHttpTransport ??= new PinnedTorrentHttpTransport(options.OutboundProxy);
-        builder.Services.AddSingleton<IRssFeedHttpClient>(new ProfileBoundRssFeedHttpClient(
-            sourceProfiles, rssDnsResolver, rssHttpTransport, options));
+        var profileRssClient = new ProfileBoundRssFeedHttpClient(
+            sourceProfiles, rssDnsResolver, rssHttpTransport, options);
+        builder.Services.AddSingleton<IRssFeedHttpClient>(profileRssClient);
+        builder.Services.AddSingleton<ISourceProfileRssFeedHttpClient>(profileRssClient);
         builder.Services.AddSingleton<RssFeedReader>();
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
         builder.Services.AddSingleton<PluginScheduleCoordinator>();
@@ -487,6 +489,7 @@ public static class AnimeGoApplication
             ownsReferenceHttpClient: true);
         builder.Services.AddSingleton(aiMetadataMatcher);
         builder.Services.AddSingleton<AiMetadataResultValidator>();
+        builder.Services.AddSingleton<MikanAiTestImportService>();
         builder.Services.AddSingleton<AiMetadataTaskResolver>();
         builder.Services.AddSingleton<DuplicateHitNotifier>();
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();

@@ -8,8 +8,22 @@ namespace AnimeGoNet.App.Metadata;
 public static class AiMetadataPromptRenderer
 {
     public const string PromptVersion = "tmdb-ai-match-v11";
+    public const int MaximumTemplateLength = 128 * 1024;
 
     public static string LoadAndRender(AiMetadataMatchInput input)
+    {
+        var template = input.PromptTemplateOverride ?? LoadTemplate();
+        if (template.Length > MaximumTemplateLength)
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.InvalidInput,
+                "ai_prompt_template_too_large");
+        }
+
+        return Render(template, input);
+    }
+
+    public static string LoadTemplate()
     {
         var path = Path.Combine(
             AppContext.BaseDirectory,
@@ -22,7 +36,7 @@ public static class AiMetadataPromptRenderer
                 "ai_prompt_missing");
         }
 
-        return Render(ExtractSingleTextCodeBlock(File.ReadAllText(path, Encoding.UTF8)), input);
+        return ExtractSingleTextCodeBlock(File.ReadAllText(path, Encoding.UTF8));
     }
 
     public static string ExtractSingleTextCodeBlock(string markdown)

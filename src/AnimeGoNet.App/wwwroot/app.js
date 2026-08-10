@@ -65,6 +65,8 @@ let liveLogShouldReconnect = true;
 let liveLogPaused = false;
 let liveLogControlPending = false;
 let liveLogEntries = [];
+let aiTestDefaultPrompt = null;
+const aiTestPromptDraftKey = "animegonet.ai-test-prompt.v1";
 const workspaceDefinitions = {
     overview: {
         title: "总览",
@@ -5700,6 +5702,99 @@ function optionalPositiveInteger(selector) {
     const raw = element(selector).value.trim();
     return raw === "" ? null : Number(raw);
 }
+function toLocalDateTimeValue(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()))
+        return "";
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+        + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+function readAiPromptDraft(version) {
+    try {
+        const raw = localStorage.getItem(aiTestPromptDraftKey);
+        if (!raw)
+            return null;
+        const value = JSON.parse(raw);
+        return value.version === version && typeof value.template === "string"
+            ? value.template
+            : null;
+    }
+    catch {
+        return null;
+    }
+}
+function saveAiPromptDraft() {
+    if (!aiTestDefaultPrompt)
+        return;
+    try {
+        localStorage.setItem(aiTestPromptDraftKey, JSON.stringify({
+            version: aiTestDefaultPrompt.prompt_version,
+            template: element("#ai-test-prompt-template").value,
+        }));
+    }
+    catch {
+        // Browser storage is optional; the current in-memory edit remains usable.
+    }
+}
+async function loadAiTestPrompt() {
+    const editor = element("#ai-test-prompt-template");
+    const status = element("#ai-test-prompt-status");
+    try {
+        const prompt = await api.get("/api/v1/ai-test/prompt");
+        aiTestDefaultPrompt = prompt;
+        editor.maxLength = prompt.maximum_length;
+        editor.value = readAiPromptDraft(prompt.prompt_version) ?? prompt.template;
+        editor.disabled = false;
+        status.textContent = `当前 ${prompt.prompt_version}；上限 ${prompt.maximum_length} 字符。编辑内容只用于测试请求。`;
+    }
+    catch (error) {
+        editor.disabled = true;
+        status.textContent = `Prompt 读取失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+function resetAiTestPrompt() {
+    if (!aiTestDefaultPrompt)
+        return;
+    const editor = element("#ai-test-prompt-template");
+    editor.value = aiTestDefaultPrompt.template;
+    try {
+        localStorage.removeItem(aiTestPromptDraftKey);
+    }
+    catch {
+    }
+    element("#ai-test-prompt-status").textContent =
+        `已恢复 ${aiTestDefaultPrompt.prompt_version} 程序默认；尚未运行。`;
+}
+async function importAiTestMikanEpisode() {
+    const button = element("#ai-test-mikan-import");
+    const status = element("#ai-test-mikan-status");
+    const episodeUrl = element("#ai-test-mikan-url").value.trim();
+    button.disabled = true;
+    status.textContent = "正在读取 Mikan 页面、RSS、作品关联和 Torrent…";
+    try {
+        const imported = await api.post("/api/v1/ai-test/mikan-import", { episode_url: episodeUrl });
+        element("#ai-test-title").value = imported.title;
+        element("#ai-test-files").value = imported.files
+            .map(file => `${file.name} | ${file.size_bytes}`)
+            .join("\n");
+        element("#ai-test-bgmid").value =
+            imported.bgmid == null ? "" : String(imported.bgmid);
+        element("#ai-test-file-count").value =
+            String(imported.torrent_file_count);
+        element("#ai-test-published-at").value =
+            imported.published_at ? toLocalDateTimeValue(imported.published_at) : "";
+        status.textContent = `解析完成：mikanid=${imported.mikanid}，groupid=${imported.groupid}，`
+            + `bgmid=${imported.bgmid ?? "未找到"}，视频 ${imported.files.length} / Torrent 文件 ${imported.torrent_file_count}。`
+            + "已填入表单，尚未运行 AI。";
+    }
+    catch (error) {
+        status.textContent = `Mikan 解析失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
+    }
+}
 function parseAiTestFiles() {
     return element("#ai-test-files").value
         .split(/\r?\n/)
@@ -5780,6 +5875,7 @@ async function runAiMetadataTest(event) {
             use_bangumi_pubdate_first: element("#ai-test-use-bgm-pubdate").checked,
             expected_tmdbid: optionalPositiveInteger("#ai-test-expected-tmdbid"),
             expected_season: optionalPositiveInteger("#ai-test-expected-season"),
+            prompt_template: element("#ai-test-prompt-template").value || null,
         });
         renderAiTestResult(result);
         message.textContent = result.succeeded
@@ -5807,6 +5903,9 @@ function fillAiMetadataTestExample() {
 element("#rss-reload").addEventListener("click", () => void loadRssRules());
 element("#ai-test-form").addEventListener("submit", event => void runAiMetadataTest(event));
 element("#ai-test-fill-example").addEventListener("click", fillAiMetadataTestExample);
+element("#ai-test-mikan-import").addEventListener("click", () => void importAiTestMikanEpisode());
+element("#ai-test-prompt-reset").addEventListener("click", resetAiTestPrompt);
+element("#ai-test-prompt-template").addEventListener("input", saveAiPromptDraft);
 element("#library-sort").value = libraryState.sort;
 element("#library-direction").value = libraryState.direction;
 element("#library-page-size").value = String(libraryState.page_size);
@@ -6101,6 +6200,7 @@ window.addEventListener("beforeunload", () => {
     disconnectCurrentLiveLogSocket();
 });
 initializeWorkspaceNavigation();
+void loadAiTestPrompt();
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();

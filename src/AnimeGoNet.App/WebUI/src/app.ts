@@ -1320,6 +1320,8 @@ let liveLogShouldReconnect = true;
 let liveLogPaused = false;
 let liveLogControlPending = false;
 let liveLogEntries: ParsedLiveLogEntry[] = [];
+let aiTestDefaultPrompt: AiMetadataTestPrompt | null = null;
+const aiTestPromptDraftKey = "animegonet.ai-test-prompt.v1";
 
 type WorkspaceId =
   | "overview"
@@ -1372,6 +1374,23 @@ interface AiMetadataTestRequest {
   use_bangumi_pubdate_first: boolean;
   expected_tmdbid: number | null;
   expected_season: number | null;
+  prompt_template: string | null;
+}
+
+interface AiMetadataTestPrompt {
+  prompt_version: string;
+  template: string;
+  maximum_length: number;
+}
+
+interface AiMetadataTestMikanImport {
+  title: string;
+  mikanid: number;
+  groupid: number;
+  bgmid: number | null;
+  published_at: string | null;
+  torrent_file_count: number;
+  files: Array<{ name: string; size_bytes: number }>;
 }
 
 interface WorkspaceDefinition {
@@ -7518,6 +7537,98 @@ function optionalPositiveInteger(selector: string): number | null {
   return raw === "" ? null : Number(raw);
 }
 
+function toLocalDateTimeValue(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number: number): string => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function readAiPromptDraft(version: string): string | null {
+  try {
+    const raw = localStorage.getItem(aiTestPromptDraftKey);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as { version?: unknown; template?: unknown };
+    return value.version === version && typeof value.template === "string"
+      ? value.template
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAiPromptDraft(): void {
+  if (!aiTestDefaultPrompt) return;
+  try {
+    localStorage.setItem(aiTestPromptDraftKey, JSON.stringify({
+      version: aiTestDefaultPrompt.prompt_version,
+      template: element<HTMLTextAreaElement>("#ai-test-prompt-template").value,
+    }));
+  } catch {
+    // Browser storage is optional; the current in-memory edit remains usable.
+  }
+}
+
+async function loadAiTestPrompt(): Promise<void> {
+  const editor = element<HTMLTextAreaElement>("#ai-test-prompt-template");
+  const status = element<HTMLElement>("#ai-test-prompt-status");
+  try {
+    const prompt = await api.get<AiMetadataTestPrompt>("/api/v1/ai-test/prompt");
+    aiTestDefaultPrompt = prompt;
+    editor.maxLength = prompt.maximum_length;
+    editor.value = readAiPromptDraft(prompt.prompt_version) ?? prompt.template;
+    editor.disabled = false;
+    status.textContent = `当前 ${prompt.prompt_version}；上限 ${prompt.maximum_length} 字符。编辑内容只用于测试请求。`;
+  } catch (error) {
+    editor.disabled = true;
+    status.textContent = `Prompt 读取失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+function resetAiTestPrompt(): void {
+  if (!aiTestDefaultPrompt) return;
+  const editor = element<HTMLTextAreaElement>("#ai-test-prompt-template");
+  editor.value = aiTestDefaultPrompt.template;
+  try {
+    localStorage.removeItem(aiTestPromptDraftKey);
+  } catch {
+  }
+  element<HTMLElement>("#ai-test-prompt-status").textContent =
+    `已恢复 ${aiTestDefaultPrompt.prompt_version} 程序默认；尚未运行。`;
+}
+
+async function importAiTestMikanEpisode(): Promise<void> {
+  const button = element<HTMLButtonElement>("#ai-test-mikan-import");
+  const status = element<HTMLElement>("#ai-test-mikan-status");
+  const episodeUrl = element<HTMLInputElement>("#ai-test-mikan-url").value.trim();
+  button.disabled = true;
+  status.textContent = "正在读取 Mikan 页面、RSS、作品关联和 Torrent…";
+  try {
+    const imported = await api.post<
+      AiMetadataTestMikanImport,
+      { episode_url: string }
+    >("/api/v1/ai-test/mikan-import", { episode_url: episodeUrl });
+    element<HTMLTextAreaElement>("#ai-test-title").value = imported.title;
+    element<HTMLTextAreaElement>("#ai-test-files").value = imported.files
+      .map(file => `${file.name} | ${file.size_bytes}`)
+      .join("\n");
+    element<HTMLInputElement>("#ai-test-bgmid").value =
+      imported.bgmid == null ? "" : String(imported.bgmid);
+    element<HTMLInputElement>("#ai-test-file-count").value =
+      String(imported.torrent_file_count);
+    element<HTMLInputElement>("#ai-test-published-at").value =
+      imported.published_at ? toLocalDateTimeValue(imported.published_at) : "";
+    status.textContent = `解析完成：mikanid=${imported.mikanid}，groupid=${imported.groupid}，`
+      + `bgmid=${imported.bgmid ?? "未找到"}，视频 ${imported.files.length} / Torrent 文件 ${imported.torrent_file_count}。`
+      + "已填入表单，尚未运行 AI。";
+  } catch (error) {
+    status.textContent = `Mikan 解析失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function parseAiTestFiles(): Array<{ name: string; size_bytes: number }> {
   return element<HTMLTextAreaElement>("#ai-test-files").value
     .split(/\r?\n/)
@@ -7614,6 +7725,8 @@ async function runAiMetadataTest(event: SubmitEvent): Promise<void> {
         element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked,
       expected_tmdbid: optionalPositiveInteger("#ai-test-expected-tmdbid"),
       expected_season: optionalPositiveInteger("#ai-test-expected-season"),
+      prompt_template:
+        element<HTMLTextAreaElement>("#ai-test-prompt-template").value || null,
       },
     );
     renderAiTestResult(result);
@@ -7647,6 +7760,18 @@ element<HTMLFormElement>("#ai-test-form").addEventListener(
 element<HTMLButtonElement>("#ai-test-fill-example").addEventListener(
   "click",
   fillAiMetadataTestExample,
+);
+element<HTMLButtonElement>("#ai-test-mikan-import").addEventListener(
+  "click",
+  () => void importAiTestMikanEpisode(),
+);
+element<HTMLButtonElement>("#ai-test-prompt-reset").addEventListener(
+  "click",
+  resetAiTestPrompt,
+);
+element<HTMLTextAreaElement>("#ai-test-prompt-template").addEventListener(
+  "input",
+  saveAiPromptDraft,
 );
 element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
@@ -8092,6 +8217,7 @@ window.addEventListener("beforeunload", () => {
 });
 
 initializeWorkspaceNavigation();
+void loadAiTestPrompt();
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();

@@ -105,7 +105,29 @@ public sealed record AiMetadataTestRequest(
     [property: JsonPropertyName("bgm_episode_candidate")] int? BangumiEpisodeCandidate,
     [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
     [property: JsonPropertyName("expected_tmdbid")] int? ExpectedTmdbId,
-    [property: JsonPropertyName("expected_season")] int? ExpectedSeason);
+    [property: JsonPropertyName("expected_season")] int? ExpectedSeason,
+    [property: JsonPropertyName("prompt_template")] string? PromptTemplate);
+
+public sealed record AiMetadataTestPromptResponse(
+    [property: JsonPropertyName("prompt_version")] string PromptVersion,
+    [property: JsonPropertyName("template")] string Template,
+    [property: JsonPropertyName("maximum_length")] int MaximumLength);
+
+public sealed record AiMetadataTestMikanImportRequest(
+    [property: JsonPropertyName("episode_url")] string? EpisodeUrl);
+
+public sealed record AiMetadataTestMikanImportResponse(
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("published_at")] DateTimeOffset? PublishedAt,
+    [property: JsonPropertyName("torrent_file_count")] int TorrentFileCount,
+    [property: JsonPropertyName("files")] IReadOnlyList<AiMetadataTestFileResponse> Files);
+
+public sealed record AiMetadataTestFileResponse(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes);
 
 public sealed record AiMetadataTestTraceItem(
     [property: JsonPropertyName("sequence")] int Sequence,

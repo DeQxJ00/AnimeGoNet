@@ -73,4 +73,38 @@ public sealed class AiMetadataPromptRendererTests
         Assert.Contains("\"published_at\": \"2026-07-26T20:30:00.0000000+08:00\"", rendered, StringComparison.Ordinal);
         Assert.Contains("\"bgm_episode_candidate\": null", rendered, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RequestLocalTemplateOverrideIsRenderedWithoutChangingDefaultTemplate()
+    {
+        var input = new AiMetadataMatchInput(
+            "Custom title",
+            [new AiMetadataFileInput("01.mkv", 1)],
+            null, null, null, 1, null, null, false)
+        {
+            PromptTemplateOverride = "TEST {{SOURCE_TITLE_JSON}} {{FILES_JSON}}",
+        };
+
+        var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
+
+        Assert.StartsWith("TEST \"Custom title\"", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("TEST", AiMetadataPromptRenderer.LoadTemplate(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RequestLocalTemplateOverrideHasBoundedSize()
+    {
+        var input = new AiMetadataMatchInput(
+            "Title",
+            [new AiMetadataFileInput("01.mkv", 1)],
+            null, null, null, 1, null, null, false)
+        {
+            PromptTemplateOverride = new string('x', AiMetadataPromptRenderer.MaximumTemplateLength + 1),
+        };
+
+        var exception = Assert.Throws<AiMetadataMatcherException>(() =>
+            AiMetadataPromptRenderer.LoadAndRender(input));
+
+        Assert.Equal("ai_prompt_template_too_large", exception.SafeCode);
+    }
 }

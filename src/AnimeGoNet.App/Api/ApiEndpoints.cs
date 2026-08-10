@@ -47,6 +47,8 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapGet("/api/v1/ai-test/prompt", GetAiMetadataTestPrompt);
+        app.MapPost("/api/v1/ai-test/mikan-import", ImportAiMetadataTestMikanEpisode);
         app.MapPost("/api/v1/ai-test/run", RunAiMetadataTest);
         app.MapGet("/api/v1/plugins", ExternalPluginConfigurations);
         app.MapPut(
@@ -178,6 +180,7 @@ public static class ApiEndpoints
             || request.ExpectedTmdbId is <= 0
             || request.ExpectedSeason is < 0
             || request.ImdbTitleId?.Length > 32
+            || request.PromptTemplate?.Length > AiMetadataPromptRenderer.MaximumTemplateLength
             || (request.UseBangumiPubDateFirst
                 && (torrentFileCount != 1
                     || request.BangumiSubjectId is null
@@ -198,8 +201,21 @@ public static class ApiEndpoints
             torrentFileCount,
             request.PublishedAt,
             request.BangumiEpisodeCandidate,
-            request.UseBangumiPubDateFirst);
-        var prompt = AiMetadataPromptRenderer.LoadAndRender(input);
+            request.UseBangumiPubDateFirst)
+        {
+            PromptTemplateOverride = string.IsNullOrWhiteSpace(request.PromptTemplate)
+                ? null
+                : request.PromptTemplate,
+        };
+        string prompt;
+        try
+        {
+            prompt = AiMetadataPromptRenderer.LoadAndRender(input);
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.SafeCode, "Prompt template is invalid."));
+        }
         var timer = Stopwatch.StartNew();
         try
         {
@@ -255,6 +271,47 @@ public static class ApiEndpoints
                     "matcher_failed",
                     exception.SafeCode,
                     timer.ElapsedMilliseconds)]));
+        }
+    }
+
+    private static Ok<AiMetadataTestPromptResponse> GetAiMetadataTestPrompt() =>
+        TypedResults.Ok(new AiMetadataTestPromptResponse(
+            AiMetadataPromptRenderer.PromptVersion,
+            AiMetadataPromptRenderer.LoadTemplate(),
+            AiMetadataPromptRenderer.MaximumTemplateLength));
+
+    private static async Task<IResult> ImportAiMetadataTestMikanEpisode(
+        AiMetadataTestMikanImportRequest request,
+        MikanAiTestImportService importer,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.EpisodeUrl)
+            || request.EpisodeUrl.Length > 2048)
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_test_mikan_episode_url_invalid",
+                "Mikan Episode URL is required."));
+        }
+
+        try
+        {
+            var result = await importer.ImportAsync(
+                request.EpisodeUrl,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new AiMetadataTestMikanImportResponse(
+                result.Title,
+                result.MikanId,
+                result.GroupId,
+                result.BangumiSubjectId,
+                result.PublishedAt,
+                result.TorrentFileCount,
+                result.VideoFiles.Select(file => new AiMetadataTestFileResponse(
+                    file.Name,
+                    file.SizeBytes)).ToArray()));
+        }
+        catch (MikanAiTestImportException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.Code, exception.Message));
         }
     }
 

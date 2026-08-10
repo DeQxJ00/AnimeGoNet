@@ -880,6 +880,11 @@
       <form id="ai-test-form" class="ai-test-layout">
         <article class="ai-test-input configuration-card">
           <h3>测试输入</h3>
+          <div class="ai-test-import">
+            <label>Mikan Episode URL<input id="ai-test-mikan-url" type="url" maxlength="2048" placeholder="https://mikanime.tv/Home/Episode/..."></label>
+            <button id="ai-test-mikan-import" type="button" class="secondary-button">解析 Mikan 并读取 Torrent</button>
+            <p id="ai-test-mikan-status" class="muted" aria-live="polite">只读取页面、对应字幕组 RSS、作品页和 Torrent；不会导入任务或启动 AI。</p>
+          </div>
           <div class="ai-test-fields">
             <label class="wide">任务 title<textarea id="ai-test-title" rows="3" maxlength="1000" required placeholder="[字幕组] 动画标题 - 06"></textarea></label>
             <label class="wide">Torrent 文件（每行：文件名 | bytes）<textarea id="ai-test-files" rows="7" required placeholder="Anime - 06.mkv | 734003200"></textarea></label>
@@ -887,7 +892,7 @@
             <label>anidbid（可选）<input id="ai-test-anidbid" type="number" min="1"></label>
             <label>imdbid（可选）<input id="ai-test-imdbid" maxlength="32" placeholder="tt1234567"></label>
             <label>Torrent 文件总数<input id="ai-test-file-count" type="number" min="1" placeholder="默认等于上方行数"></label>
-            <label>发布时间（仅作为 AI 参数）<input id="ai-test-published-at" type="datetime-local"></label>
+            <label>发布时间（仅作为 AI 参数）<input id="ai-test-published-at" type="datetime-local" step="1"></label>
             <label>Bangumi EP 候选<input id="ai-test-bgm-episode" type="number" min="1"></label>
             <label>期望 tmdbid（可选）<input id="ai-test-expected-tmdbid" type="number" min="1"></label>
             <label>期望 Season（可选）<input id="ai-test-expected-season" type="number" min="0"></label>
@@ -906,11 +911,19 @@
           </div>
         </article>
       </form>
+      <article class="ai-test-prompt-editor configuration-card">
+        <div class="section-heading">
+          <div><h3>测试 Prompt 编辑</h3><p class="muted">仅覆盖本次 AI 测试，不保存为生产 Prompt；刷新后只恢复同版本的浏览器本地草稿。</p></div>
+          <button id="ai-test-prompt-reset" type="button" class="secondary-button">恢复程序默认</button>
+        </div>
+        <textarea id="ai-test-prompt-template" rows="24" spellcheck="false" disabled aria-label="AI 测试 Prompt 模板"></textarea>
+        <p id="ai-test-prompt-status" class="muted" aria-live="polite">正在读取当前生产 Prompt…</p>
+      </article>
       <div class="ai-test-results">
         <details open><summary>阶段日志</summary><div id="ai-test-trace" class="ai-test-trace"><p class="muted">暂无日志。</p></div></details>
         <details><summary>模型原始输出</summary><pre id="ai-test-raw-output">暂无输出。</pre></details>
         <details><summary>解析结果与 TMDB 验证</summary><pre id="ai-test-parsed-output">暂无结果。</pre></details>
-        <details><summary>本次实际 Prompt（只读）</summary><pre id="ai-test-rendered-prompt">运行后显示。</pre></details>
+        <details><summary>本次渲染后的实际 Prompt（只读）</summary><pre id="ai-test-rendered-prompt">运行后显示。</pre></details>
       </div>
     </section>
 

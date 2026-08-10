@@ -50,6 +50,10 @@ WebUI 的“测试工具 / AI 元数据测试”调用 `POST /api/v1/ai-test/run
 
 该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。响应分开返回 Prompt 版本与本次渲染内容、模型最终原始 JSON、解析候选、TMDB 验证结论、累计 Token/请求/工具次数、总耗时和阶段日志。工具日志保留工具名与最多 2048 字符的参数、输出字节数，不保存 MCP 正文；AI API Key 始终来自服务端私有配置，测试请求和响应都没有密钥字段。
 
+`GET /api/v1/ai-test/prompt` 返回当前程序内置模板及长度上限。WebUI 可编辑测试请求的 `prompt_template`，编辑内容只覆盖本次测试并可按相同 Prompt 版本保存在浏览器草稿；恢复默认不会改写仓库文档、部署配置或正式匹配行为。服务端仍执行占位符解析、长度限制和最终 TMDB 验证。
+
+`POST /api/v1/ai-test/mikan-import` 接受受支持的 `/Home/Episode/<40-hex-id>` URL。服务端使用配置的 Mikan Base URL、全局选择性代理、SourceProfile Host/Cookie 与现有 DNS/重定向防护读取 Episode 页面，再按 `mikanid+groupid` 请求 RSS 并以 Episode path 精确定位唯一 item，从作品页取得可空 `bgmid`，最后通过正式 Torrent staging 校验文件。响应只返回 title、mikanid/groupid、bgmid、规范发布时间、文件总数和视频文件名/容量，不返回 Torrent URL、Cookie 或 passkey；WebUI 只填表，不自动运行 AI。
+
 ## 3. 最小请求契约
 
 ```json

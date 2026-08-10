@@ -11,7 +11,10 @@ public sealed record AiMetadataMatchInput(
     int TorrentFileCount,
     DateTimeOffset? PublishedAt,
     int? BangumiEpisodeCandidate,
-    bool UseBangumiPubDateFirst);
+    bool UseBangumiPubDateFirst)
+{
+    public string? PromptTemplateOverride { get; init; }
+}
 
 public sealed record AiMetadataFileInput(
     string Name,
