@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
@@ -76,17 +77,21 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         }
 
         var usage = new UsageAccumulator(options.Model);
+        var trace = new List<AiMetadataTraceEvent>();
+        var sequence = 0;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(options.HttpTimeout);
         try
         {
             var prompt = AiMetadataPromptRenderer.LoadAndRender(input);
+            trace.Add(new(++sequence, "prompt_rendered", AiMetadataPromptRenderer.PromptVersion));
             var registry = new AiMetadataToolRegistry(
                 httpClient,
                 options,
                 input,
                 referenceHttpClient);
             await registry.InitializeAsync(timeout.Token).ConfigureAwait(false);
+            trace.Add(new(++sequence, "tools_initialized", $"tools={registry.Tools.Count}"));
             var messages = new List<ChatMessageState>
             {
                 new("user", prompt, null, null),
@@ -94,12 +99,19 @@ public sealed class OpenAiCompatibleMetadataMatcher(
 
             for (var round = 0; round <= MaxToolRounds; round++)
             {
+                var requestTimer = Stopwatch.StartNew();
                 var responseJson = await SendWithRetryAsync(
                     BuildRequestJson(messages, registry.Tools),
                     usage,
                     timeout.Token).ConfigureAwait(false);
+                requestTimer.Stop();
                 var parsed = ParseResponse(responseJson);
                 usage.Add(parsed.Model, parsed.Usage, parsed.ToolCalls.Count);
+                trace.Add(new(
+                    ++sequence,
+                    "model_response",
+                    $"round={round + 1}; tool_calls={parsed.ToolCalls.Count}; content={(string.IsNullOrWhiteSpace(parsed.Content) ? "empty" : "present")}",
+                    requestTimer.ElapsedMilliseconds));
                 if (parsed.ToolCalls.Count == 0)
                 {
                     if (string.IsNullOrWhiteSpace(parsed.Content))
@@ -111,7 +123,11 @@ public sealed class OpenAiCompatibleMetadataMatcher(
 
                     return new AiMetadataMatchResponse(
                         ParseCandidate(parsed.Content),
-                        usage.Snapshot());
+                        usage.Snapshot())
+                    {
+                        RawOutput = parsed.Content,
+                        Trace = trace.ToArray(),
+                    };
                 }
 
                 messages.Add(new ChatMessageState(
@@ -121,10 +137,17 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                     parsed.ToolCalls));
                 foreach (var call in parsed.ToolCalls)
                 {
+                    var toolTimer = Stopwatch.StartNew();
                     var output = await registry.CallAsync(
                         call.Name,
                         call.ArgumentsJson,
                         timeout.Token).ConfigureAwait(false);
+                    toolTimer.Stop();
+                    trace.Add(new(
+                        ++sequence,
+                        "tool_call",
+                        $"{call.Name}; arguments={TruncateForTrace(call.ArgumentsJson)}; output_bytes={Encoding.UTF8.GetByteCount(output)}",
+                        toolTimer.ElapsedMilliseconds));
                     messages.Add(new ChatMessageState(
                         "tool",
                         output,
@@ -183,6 +206,12 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 exception,
                 usage.Snapshot());
         }
+    }
+
+    private static string TruncateForTrace(string value)
+    {
+        const int limit = 2048;
+        return value.Length <= limit ? value : string.Concat(value.AsSpan(0, limit), "…");
     }
 
     public static AiMetadataMatchCandidate ParseCandidate(string json)

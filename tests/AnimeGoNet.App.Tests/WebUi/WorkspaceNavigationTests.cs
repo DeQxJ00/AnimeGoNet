@@ -24,6 +24,7 @@ public sealed class WorkspaceNavigationTests
             "tasks",
             "mikan",
             "connections",
+            "tools",
             "system",
         })
         {

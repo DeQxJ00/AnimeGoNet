@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
@@ -16,6 +17,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Plugins;
 using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
@@ -45,6 +47,7 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapPost("/api/v1/ai-test/run", RunAiMetadataTest);
         app.MapGet("/api/v1/plugins", ExternalPluginConfigurations);
         app.MapPut(
             "/api/v1/plugins/{pluginId}/configuration",
@@ -151,6 +154,139 @@ public static class ApiEndpoints
             200,
             "pong",
             new PingData(version, DateTimeOffset.UtcNow.ToUnixTimeSeconds())));
+    }
+
+    private static async Task<IResult> RunAiMetadataTest(
+        AiMetadataTestRequest request,
+        IAiMetadataMatcher matcher,
+        AiMetadataResultValidator validator,
+        CancellationToken cancellationToken)
+    {
+        var title = request.Title?.Trim();
+        var files = request.Files;
+        var torrentFileCount = request.TorrentFileCount ?? files?.Count ?? 0;
+        if (string.IsNullOrWhiteSpace(title)
+            || title.Length > 1000
+            || files is null
+            || files.Count is < 1 or > 200
+            || files.Any(file => string.IsNullOrWhiteSpace(file.Name)
+                || file.Name.Length > 1000
+                || file.SizeBytes < 0)
+            || torrentFileCount < files.Count
+            || request.BangumiSubjectId is <= 0
+            || request.AniDbAnimeId is <= 0
+            || request.ExpectedTmdbId is <= 0
+            || request.ExpectedSeason is < 0
+            || request.ImdbTitleId?.Length > 32
+            || (request.UseBangumiPubDateFirst
+                && (torrentFileCount != 1
+                    || request.BangumiSubjectId is null
+                    || request.PublishedAt is null
+                    || request.BangumiEpisodeCandidate is null)))
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_test_input_invalid",
+                "Title, file list, identifiers or expected TMDB values are invalid."));
+        }
+
+        var input = new AiMetadataMatchInput(
+            title,
+            files.Select(file => new AiMetadataFileInput(file.Name!.Trim(), file.SizeBytes)).ToArray(),
+            request.BangumiSubjectId,
+            request.AniDbAnimeId,
+            string.IsNullOrWhiteSpace(request.ImdbTitleId) ? null : request.ImdbTitleId.Trim(),
+            torrentFileCount,
+            request.PublishedAt,
+            request.BangumiEpisodeCandidate,
+            request.UseBangumiPubDateFirst);
+        var prompt = AiMetadataPromptRenderer.LoadAndRender(input);
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            var match = await matcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
+            var validation = await validator.ValidateAsync(
+                input,
+                match.Candidate,
+                request.ExpectedTmdbId,
+                request.ExpectedSeason,
+                cancellationToken).ConfigureAwait(false);
+            timer.Stop();
+            var trace = match.Trace.Select(item => new AiMetadataTestTraceItem(
+                item.Sequence,
+                item.Stage,
+                item.Detail,
+                item.DurationMilliseconds)).ToList();
+            trace.Add(new AiMetadataTestTraceItem(
+                trace.Count + 1,
+                "tmdb_validation",
+                validation.IsSuccess
+                    ? "candidate verified against TMDB"
+                    : $"failed: {validation.Failure?.Code ?? "unknown"}",
+                null));
+            return TypedResults.Ok(new AiMetadataTestResponse(
+                validation.IsSuccess,
+                AiMetadataPromptRenderer.PromptVersion,
+                prompt,
+                match.RawOutput,
+                match.Candidate,
+                ToAiTestValidation(validation),
+                ToAiTestUsage(match.Usage),
+                timer.ElapsedMilliseconds,
+                validation.Failure?.Kind.ToString().ToLowerInvariant(),
+                validation.Failure?.Code,
+                trace));
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            timer.Stop();
+            return TypedResults.Ok(new AiMetadataTestResponse(
+                false,
+                AiMetadataPromptRenderer.PromptVersion,
+                prompt,
+                null,
+                null,
+                null,
+                ToAiTestUsage(exception.Usage),
+                timer.ElapsedMilliseconds,
+                exception.Kind.ToString().ToLowerInvariant(),
+                exception.SafeCode,
+                [new AiMetadataTestTraceItem(
+                    1,
+                    "matcher_failed",
+                    exception.SafeCode,
+                    timer.ElapsedMilliseconds)]));
+        }
+    }
+
+    private static AiMetadataTestUsageResponse? ToAiTestUsage(AiMetadataProviderUsage? usage) =>
+        usage is null
+            ? null
+            : new AiMetadataTestUsageResponse(
+                usage.Model,
+                usage.PromptTokens,
+                usage.CompletionTokens,
+                usage.TotalTokens,
+                usage.RequestCount,
+                usage.ToolCallCount);
+
+    private static AiMetadataTestValidationResponse ToAiTestValidation(
+        AiMetadataValidationResult validation)
+    {
+        var value = validation.Value;
+        var failure = validation.Failure;
+        return new AiMetadataTestValidationResponse(
+            validation.IsSuccess,
+            value?.Series.Id,
+            value?.Series.Name,
+            failure?.Kind.ToString().ToLowerInvariant(),
+            failure?.Code,
+            failure?.TmdbAccessConfirmed,
+            value?.Files.Select(file => new AiMetadataTestValidatedFile(
+                file.Input.Name,
+                file.Season.SeasonNumber,
+                file.Episode?.EpisodeNumber,
+                file.Episode?.Name,
+                file.OtherReason)).ToArray() ?? []);
     }
 
     private static Ok<LegacyApiResponse<string>> Sha256(

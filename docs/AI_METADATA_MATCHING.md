@@ -44,6 +44,12 @@ ai:
 
 旧部署键 `ai_use_season_match` 和 `ai_use_episode_match` 仅用于升级读取：未设置规范键时，任一旧键为 `true` 都会启用统一流程；显式 `ai_use_metadata_match` 的值优先。配置 API 仍回显两个旧字段且值与规范字段相同，供旧客户端平滑迁移；WebUI 和新写入只使用 `ai_use_metadata_match`。
 
+## 主程序内置 AI 测试
+
+WebUI 的“测试工具 / AI 元数据测试”调用 `POST /api/v1/ai-test/run`，复用正式任务相同的固定 Prompt、模型配置、MCP 工具注册和 `AiMetadataResultValidator`。测试请求只包含任务标题、Torrent 文件名/容量及可选作品级参考；可额外填写期望 `tmdbid`/Season，让最终验证明确拒绝模型改换作品或季度。
+
+该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。响应分开返回 Prompt 版本与本次渲染内容、模型最终原始 JSON、解析候选、TMDB 验证结论、累计 Token/请求/工具次数、总耗时和阶段日志。工具日志保留工具名与最多 2048 字符的参数、输出字节数，不保存 MCP 正文；AI API Key 始终来自服务端私有配置，测试请求和响应都没有密钥字段。
+
 ## 3. 最小请求契约
 
 ```json

@@ -12,6 +12,7 @@ internal static class ApiOpenApi
     private static readonly string[] DocumentTags =
     [
         "compatibility",
+        "ai-test",
         "config",
         "cache",
         "data-update",

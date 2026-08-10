@@ -117,6 +117,14 @@ const workspaceDefinitions = {
             { id: "plugins", label: "外部插件" },
         ],
     },
+    tools: {
+        title: "测试工具",
+        description: "以只读方式验证生产 Prompt、AI 工具调用与 TMDB 最终校验。",
+        defaultSubview: "ai-metadata",
+        tabs: [
+            { id: "ai-metadata", label: "AI 元数据测试" },
+        ],
+    },
     system: {
         title: "系统",
         description: "维护数据版本、缓存和后台基础设施。",
@@ -5688,7 +5696,117 @@ async function updateLegacyFilterSwitch() {
         toggle.disabled = false;
     }
 }
+function optionalPositiveInteger(selector) {
+    const raw = element(selector).value.trim();
+    return raw === "" ? null : Number(raw);
+}
+function parseAiTestFiles() {
+    return element("#ai-test-files").value
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map((line, index) => {
+        const separator = line.lastIndexOf("|");
+        if (separator < 1)
+            throw new Error(`文件第 ${index + 1} 行缺少“| bytes”`);
+        const name = line.slice(0, separator).trim();
+        const size = Number(line.slice(separator + 1).trim());
+        if (!name || !Number.isSafeInteger(size) || size < 0) {
+            throw new Error(`文件第 ${index + 1} 行的名称或 bytes 无效`);
+        }
+        return { name, size_bytes: size };
+    });
+}
+function aiTestSummaryItem(label, value) {
+    const container = document.createElement("div");
+    const term = document.createElement("span");
+    const content = document.createElement("strong");
+    term.textContent = label;
+    content.textContent = value;
+    container.append(term, content);
+    return container;
+}
+function renderAiTestResult(result) {
+    const summary = element("#ai-test-summary");
+    const usage = result.usage;
+    summary.replaceChildren(aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"), aiTestSummaryItem("模型", usage?.model ?? "—"), aiTestSummaryItem("总耗时", `${result.duration_ms} ms`), aiTestSummaryItem("请求 / 工具", `${usage?.request_count ?? 0} / ${usage?.tool_call_count ?? 0}`), aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")), aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")), aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")), aiTestSummaryItem("错误", result.error_code ?? "—"));
+    summary.dataset.uiState = result.succeeded ? "ready" : "error";
+    const badge = element("#ai-test-prompt-version");
+    badge.textContent = result.prompt_version;
+    badge.className = `badge ${result.succeeded ? "ok" : "error"}`;
+    element("#ai-test-raw-output").textContent =
+        result.raw_output ?? "模型未返回可解析的最终内容。";
+    element("#ai-test-parsed-output").textContent = JSON.stringify({
+        candidate: result.candidate,
+        validation: result.validation,
+        error_kind: result.error_kind,
+        error_code: result.error_code,
+    }, null, 2);
+    element("#ai-test-rendered-prompt").textContent = result.rendered_prompt;
+    const trace = element("#ai-test-trace");
+    trace.replaceChildren(...result.trace.map(item => {
+        const row = document.createElement("div");
+        row.className = "ai-test-trace-row";
+        const head = document.createElement("strong");
+        head.textContent = `${item.sequence}. ${item.stage}`;
+        const detail = document.createElement("code");
+        detail.textContent = item.detail;
+        const duration = document.createElement("span");
+        duration.textContent = item.duration_ms == null ? "" : `${item.duration_ms} ms`;
+        row.append(head, detail, duration);
+        return row;
+    }));
+}
+async function runAiMetadataTest(event) {
+    event.preventDefault();
+    const button = element("#ai-test-run");
+    const message = element("#ai-test-message");
+    button.disabled = true;
+    message.textContent = "正在调用生产 AI 匹配链；可能需要数分钟…";
+    try {
+        const files = parseAiTestFiles();
+        if (files.length === 0)
+            throw new Error("至少需要一个 Torrent 文件");
+        const publishedAt = element("#ai-test-published-at").value;
+        const result = await api.post("/api/v1/ai-test/run", {
+            title: element("#ai-test-title").value,
+            files,
+            bgmid: optionalPositiveInteger("#ai-test-bgmid"),
+            anidbid: optionalPositiveInteger("#ai-test-anidbid"),
+            imdbid: element("#ai-test-imdbid").value.trim() || null,
+            torrent_file_count: optionalPositiveInteger("#ai-test-file-count") ?? files.length,
+            published_at: publishedAt ? new Date(publishedAt).toISOString() : null,
+            bgm_episode_candidate: optionalPositiveInteger("#ai-test-bgm-episode"),
+            use_bangumi_pubdate_first: element("#ai-test-use-bgm-pubdate").checked,
+            expected_tmdbid: optionalPositiveInteger("#ai-test-expected-tmdbid"),
+            expected_season: optionalPositiveInteger("#ai-test-expected-season"),
+        });
+        renderAiTestResult(result);
+        message.textContent = result.succeeded
+            ? "测试完成：模型候选已通过 TMDB 最终验证。"
+            : `测试完成但未通过：${result.error_code ?? "unknown"}`;
+    }
+    catch (error) {
+        message.textContent = `测试失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
+    }
+}
+function fillAiMetadataTestExample() {
+    element("#ai-test-title").value =
+        "[黒ネズミたち] 说出这边交给我你们先走以后十年过去成了传说。 / Kokoore - 06 (CR 1920x1080 AVC AAC MKV)";
+    element("#ai-test-files").value =
+        "Kokoore - 06.mkv | 734003200";
+    element("#ai-test-bgmid").value = "590786";
+    element("#ai-test-file-count").value = "1";
+    element("#ai-test-bgm-episode").value = "6";
+    element("#ai-test-published-at").value = "2026-08-10T12:00";
+    element("#ai-test-use-bgm-pubdate").checked = true;
+}
 element("#rss-reload").addEventListener("click", () => void loadRssRules());
+element("#ai-test-form").addEventListener("submit", event => void runAiMetadataTest(event));
+element("#ai-test-fill-example").addEventListener("click", fillAiMetadataTestExample);
 element("#library-sort").value = libraryState.sort;
 element("#library-direction").value = libraryState.direction;
 element("#library-page-size").value = String(libraryState.page_size);

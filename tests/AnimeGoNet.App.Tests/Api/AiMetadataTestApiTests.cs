@@ -1,0 +1,146 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using AnimeGoNet.Core.Metadata;
+
+namespace AnimeGoNet.App.Tests.Api;
+
+public sealed class AiMetadataTestApiTests
+{
+    [Fact]
+    public async Task RunsProductionMatcherAndTmdbValidatorWithoutPersistingTask()
+    {
+        var matcher = new CapturingMatcher();
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: matcher,
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "[Group] Example - 06",
+            files = new[] { new { name = "Example - 06.mkv", size_bytes = 700_000_000 } },
+            bgmid = 123,
+            torrent_file_count = 1,
+            bgm_episode_candidate = 6,
+            use_bangumi_pubdate_first = true,
+            published_at = "2026-02-06T12:00:00+08:00",
+            expected_tmdbid = 42,
+            expected_season = 1,
+        });
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(json.GetProperty("succeeded").GetBoolean());
+        Assert.Equal("tmdb-ai-match-v11", json.GetProperty("prompt_version").GetString());
+        Assert.Contains("[Group] Example - 06", json.GetProperty("rendered_prompt").GetString(), StringComparison.Ordinal);
+        Assert.Equal("{\"matched\":true}", json.GetProperty("raw_output").GetString());
+        Assert.Equal(42, json.GetProperty("validation").GetProperty("tmdbid").GetInt32());
+        Assert.Equal(6, json.GetProperty("validation").GetProperty("files")[0].GetProperty("episode").GetInt32());
+        Assert.Equal(11, json.GetProperty("usage").GetProperty("total_tokens").GetInt64());
+        Assert.Equal("tmdb_validation", json.GetProperty("trace")[1].GetProperty("stage").GetString());
+        Assert.Equal(123, matcher.LastInput?.BangumiSubjectId);
+
+        using var tasks = await app.Client.GetAsync("/api/v1/metadata/tasks");
+        var taskJson = await tasks.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, taskJson.GetProperty("total_items").GetInt32());
+    }
+
+    [Fact]
+    public async Task RejectsMalformedFileRowsBeforeCallingMatcher()
+    {
+        var matcher = new CapturingMatcher();
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: matcher,
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "Example",
+            files = new[] { new { name = "", size_bytes = -1 } },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(matcher.LastInput);
+    }
+
+    [Fact]
+    public async Task ReportsSafeMatcherFailureAndUsageAsDiagnosticResult()
+    {
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: new FailingMatcher(),
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "Example",
+            files = new[] { new { name = "Example.mkv", size_bytes = 1 } },
+        });
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(json.GetProperty("succeeded").GetBoolean());
+        Assert.Equal("ai_http_timeout", json.GetProperty("error_code").GetString());
+        Assert.Equal(1, json.GetProperty("usage").GetProperty("request_count").GetInt32());
+        Assert.Equal("matcher_failed", json.GetProperty("trace")[0].GetProperty("stage").GetString());
+    }
+
+    private sealed class CapturingMatcher : IAiMetadataMatcher
+    {
+        public AiMetadataMatchInput? LastInput { get; private set; }
+
+        public Task<AiMetadataMatchResponse> MatchAsync(
+            AiMetadataMatchInput input,
+            CancellationToken cancellationToken = default)
+        {
+            LastInput = input;
+            return Task.FromResult(new AiMetadataMatchResponse(
+                new AiMetadataMatchCandidate(
+                    true,
+                    42,
+                    [new AiMetadataFileCandidate(input.Files[0].Name, true, 1, 6, null)],
+                    null),
+                new AiMetadataProviderUsage("test-model", 7, 4, 11, 1, 0))
+            {
+                RawOutput = "{\"matched\":true}",
+                Trace = [new AiMetadataTraceEvent(1, "model_response", "round=1", 5)],
+            });
+        }
+    }
+
+    private sealed class FailingMatcher : IAiMetadataMatcher
+    {
+        public Task<AiMetadataMatchResponse> MatchAsync(
+            AiMetadataMatchInput input,
+            CancellationToken cancellationToken = default) =>
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.Network,
+                "ai_http_timeout",
+                usage: new AiMetadataProviderUsage("test-model", 3, null, 3, 1, 0));
+    }
+
+    private sealed class ValidTmdbClient : ITmdbClient
+    {
+        private static readonly TmdbSeries Series = new(42, "Example", "Example", new DateOnly(2026, 1, 1));
+
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(string title, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TmdbSeries>>([Series]);
+
+        public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeries?>(seriesId == 42 ? Series : null);
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(int seriesId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeriesDetails?>(seriesId == 42
+                ? new TmdbSeriesDetails(Series, [Season()])
+                : null);
+
+        public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeason?>(seriesId == 42 && seasonNumber == 1 ? Season() : null);
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(int seriesId, int seasonNumber, int episodeNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbEpisode?>(seriesId == 42 && seasonNumber == 1 && episodeNumber == 6
+                ? new TmdbEpisode(4206, 42, 1, 6, "Episode 6", new DateOnly(2026, 2, 6))
+                : null);
+
+        private static TmdbSeason Season() => new(421, 42, 1, "Season 1", new DateOnly(2026, 1, 1), 12);
+    }
+}

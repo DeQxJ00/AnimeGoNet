@@ -35,6 +35,10 @@ public sealed record AiMetadataMatchResponse(
     AiMetadataMatchCandidate Candidate,
     AiMetadataProviderUsage? Usage)
 {
+    public string? RawOutput { get; init; }
+
+    public IReadOnlyList<AiMetadataTraceEvent> Trace { get; init; } = [];
+
     public bool? Matched => Candidate.Matched;
 
     public int? TmdbId => Candidate.TmdbId;
@@ -46,6 +50,12 @@ public sealed record AiMetadataMatchResponse(
     public static implicit operator AiMetadataMatchCandidate(AiMetadataMatchResponse response) =>
         response.Candidate;
 }
+
+public sealed record AiMetadataTraceEvent(
+    int Sequence,
+    string Stage,
+    string Detail,
+    long? DurationMilliseconds = null);
 
 public sealed record AiMetadataFileCandidate(
     string? Name,

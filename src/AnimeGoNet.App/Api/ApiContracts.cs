@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AnimeGoNet.Core.Sources;
+using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Api;
 
@@ -88,6 +89,66 @@ public sealed record CacheBrowserDeleteResponse(
     [property: JsonPropertyName("deleted")] bool Deleted);
 
 public sealed record PingData(string Version, long Time);
+
+public sealed record AiMetadataTestFileRequest(
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes);
+
+public sealed record AiMetadataTestRequest(
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("files")] IReadOnlyList<AiMetadataTestFileRequest>? Files,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("anidbid")] int? AniDbAnimeId,
+    [property: JsonPropertyName("imdbid")] string? ImdbTitleId,
+    [property: JsonPropertyName("torrent_file_count")] int? TorrentFileCount,
+    [property: JsonPropertyName("published_at")] DateTimeOffset? PublishedAt,
+    [property: JsonPropertyName("bgm_episode_candidate")] int? BangumiEpisodeCandidate,
+    [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
+    [property: JsonPropertyName("expected_tmdbid")] int? ExpectedTmdbId,
+    [property: JsonPropertyName("expected_season")] int? ExpectedSeason);
+
+public sealed record AiMetadataTestTraceItem(
+    [property: JsonPropertyName("sequence")] int Sequence,
+    [property: JsonPropertyName("stage")] string Stage,
+    [property: JsonPropertyName("detail")] string Detail,
+    [property: JsonPropertyName("duration_ms")] long? DurationMilliseconds);
+
+public sealed record AiMetadataTestValidatedFile(
+    [property: JsonPropertyName("input_name")] string InputName,
+    [property: JsonPropertyName("season")] int Season,
+    [property: JsonPropertyName("episode")] int? Episode,
+    [property: JsonPropertyName("episode_name")] string? EpisodeName,
+    [property: JsonPropertyName("other_reason")] string? OtherReason);
+
+public sealed record AiMetadataTestValidationResponse(
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("tmdbid")] int? TmdbId,
+    [property: JsonPropertyName("series_name")] string? SeriesName,
+    [property: JsonPropertyName("failure_kind")] string? FailureKind,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("tmdb_access_confirmed")] bool? TmdbAccessConfirmed,
+    [property: JsonPropertyName("files")] IReadOnlyList<AiMetadataTestValidatedFile> Files);
+
+public sealed record AiMetadataTestUsageResponse(
+    [property: JsonPropertyName("model")] string Model,
+    [property: JsonPropertyName("prompt_tokens")] long? PromptTokens,
+    [property: JsonPropertyName("completion_tokens")] long? CompletionTokens,
+    [property: JsonPropertyName("total_tokens")] long? TotalTokens,
+    [property: JsonPropertyName("request_count")] int RequestCount,
+    [property: JsonPropertyName("tool_call_count")] int ToolCallCount);
+
+public sealed record AiMetadataTestResponse(
+    [property: JsonPropertyName("succeeded")] bool Succeeded,
+    [property: JsonPropertyName("prompt_version")] string PromptVersion,
+    [property: JsonPropertyName("rendered_prompt")] string RenderedPrompt,
+    [property: JsonPropertyName("raw_output")] string? RawOutput,
+    [property: JsonPropertyName("candidate")] AiMetadataMatchCandidate? Candidate,
+    [property: JsonPropertyName("validation")] AiMetadataTestValidationResponse? Validation,
+    [property: JsonPropertyName("usage")] AiMetadataTestUsageResponse? Usage,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("error_kind")] string? ErrorKind,
+    [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("trace")] IReadOnlyList<AiMetadataTestTraceItem> Trace);
 
 public sealed record RuntimeStatus(
     [property: JsonPropertyName("version")] string Version,
