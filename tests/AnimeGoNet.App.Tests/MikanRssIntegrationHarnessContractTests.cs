@@ -7,6 +7,9 @@ public sealed class MikanRssIntegrationHarnessContractTests
     {
         var script = ReadRepositoryFile("eng", "mikan-rss-live-audit.ps1");
         Assert.Contains("ANIMEGONET_MIKAN_RSS_URL", script, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_TMDB_API_KEY", script, StringComparison.Ordinal);
+        Assert.Contains("ANIMEGONET_MIKAN_RSS_METADATA", script, StringComparison.Ordinal);
+        Assert.Contains("[switch]$SkipMetadata", script, StringComparison.Ordinal);
         Assert.Contains("'Process'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("token=", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("MyBangumi?", script, StringComparison.OrdinalIgnoreCase);
