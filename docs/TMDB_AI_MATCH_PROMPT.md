@@ -1,6 +1,6 @@
 # TMDB AI 固定 Prompt
 
-Prompt version：`tmdb-ai-match-v10`
+Prompt version：`tmdb-ai-match-v11`
 
 所有 AI 元数据匹配只使用这一份任务级提示词，不存在独立的季度或 EP 提示词。调用方提供下载任务总标题、视频文件列表，可空的 `bgmid`、`anidbid`、`imdbid`，以及由程序在模型外计算的 Mikan 单文件发布日期候选和最终门禁；`name` 可以是下载任务内部的相对文件名，但不能是宿主机绝对路径，容量统一使用整数 `size_bytes`。文件名 EP 候选和 `episode_offset` 都不属于 AI 请求或响应，由主程序在逐文件 TMDB Episode 验证后本地处理。非空元数据 ID 已由调用方绑定到这一个下载任务的标题和 Torrent 文件组，但只表示作品级上下文关联，不表示跨站标题、季度或 Episode 编号相同。不发送来源/下载器配置、Bangumi详情、已确认的 TMDB 信息或任何密钥。
 
@@ -29,7 +29,7 @@ Prompt version：`tmdb-ai-match-v10`
 6. 不匹配 TMDB Season 0 或 Specials。Menu、特别篇、OVA、Summary、PV、CM、NCOP、NCED、Logo 等非正片文件返回 matched=false、episode=null；如果能可靠确认它随下载任务所属的普通季度，必须返回大于0的 season，供主程序放入该季度的 Other 文件夹。
 7. 综合使用总标题、全部文件名、连续集关系、单集标题、首播日期、发布日期提示和文件容量判断。
 8. size_bytes 和发布日期候选都只能作为辅助线索，不能单独证明匹配结果。
-9. 优先使用单集首播日期判断 Bangumi Episode 与 TMDB Episode 的对应关系：只比较普通正片 Episode，Bangumi `airdate` 与 TMDB `air_date` 允许正负 1 个日历日的时区误差；必须在已确认的 TMDB Series 和普通 Season 中得到唯一 Episode，超过 ±1 天、日期缺失或多个候选并列都不能据此确认。`published_at` 是 Torrent 发布时刻，不属于这项 ±1 天校验，也不能替代单集首播日期。
+9. 优先使用单集首播日期判断对应关系，允许正负 1 天的时区误差。
 10. 输入文件列表可能不是按集数排序，不能按数组位置分配 Episode。必须解析每个文件名，输出时再保持与输入相同的顺序；每个 name 必须原样出现一次。
 11. 无法可靠确认 Episode 的文件返回 matched=false、episode=null，并写明原因；如果普通季度也无法确认则 season=null，不能猜测。
 12. 顶层 matched 表示整个任务是否已经得到明确的落盘方案，不表示每个文件都是 TMDB Episode。Series 已确认，并且每个文件要么匹配了 Season/Episode，要么已经确认普通季度而可以进入该季度 Other 时，顶层 matched=true。只要存在 season=null、Series 未确认或映射冲突，顶层 matched=false。

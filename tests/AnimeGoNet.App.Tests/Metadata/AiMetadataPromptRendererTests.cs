@@ -34,9 +34,12 @@ public sealed class AiMetadataPromptRendererTests
         Assert.Contains("\"torrent_file_count\": 1", rendered, StringComparison.Ordinal);
         Assert.Contains("\"use_bangumi_pubdate_first\": true", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", rendered, StringComparison.Ordinal);
-        Assert.Contains("允许正负 1 个日历日", rendered, StringComparison.Ordinal);
+        Assert.Contains(
+            "9. 优先使用单集首播日期判断对应关系，允许正负 1 天的时区误差。",
+            rendered,
+            StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v10", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v11", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]
