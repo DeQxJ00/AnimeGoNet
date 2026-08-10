@@ -176,6 +176,10 @@ public sealed record AiMatchingOptions
 
     public AiApiMode ApiMode { get; init; } = AiApiMode.ChatCompletions;
 
+    public string? ReasoningEffort { get; init; }
+
+    public bool WebSearchEnabled { get; init; }
+
     public bool UseMetadataMatch { get; init; }
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(600);

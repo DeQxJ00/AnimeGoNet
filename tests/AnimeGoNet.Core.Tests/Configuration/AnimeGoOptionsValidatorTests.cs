@@ -488,6 +488,42 @@ public sealed class AnimeGoOptionsValidatorTests
         Assert.Empty(AnimeGoOptionsValidator.Validate(valid));
     }
 
+    [Fact]
+    public void ValidatesAiReasoningAndWebSearchMode()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var invalid = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Ai = defaults.Metadata.Ai with
+                {
+                    ReasoningEffort = "ultra",
+                    WebSearchEnabled = true,
+                    ApiMode = AiApiMode.ChatCompletions,
+                },
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(invalid);
+
+        Assert.Contains(errors, error => error.Contains("reasoning effort", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("web search requires Responses", StringComparison.Ordinal));
+
+        var valid = invalid with
+        {
+            Metadata = invalid.Metadata with
+            {
+                Ai = invalid.Metadata.Ai with
+                {
+                    ReasoningEffort = "medium",
+                    ApiMode = AiApiMode.Responses,
+                },
+            },
+        };
+        Assert.Empty(AnimeGoOptionsValidator.Validate(valid));
+    }
+
     [Theory]
     [InlineData("/download/incomplete", "/download/incomplete/bt", true)]
     [InlineData("/download/incomplete", "/download/incomplete-other", false)]

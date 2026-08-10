@@ -58,6 +58,13 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 "ai_provider_not_configured");
         }
 
+        if (options.WebSearchEnabled && options.ApiMode != AiApiMode.Responses)
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.Configuration,
+                "ai_web_search_requires_responses");
+        }
+
         if (AiMetadataResultValidator.ValidateStructure(
             input,
             new AiMetadataMatchCandidate(
@@ -96,17 +103,49 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             {
                 string? previousResponseId = null;
                 IReadOnlyList<ResponsesFunctionOutput>? pendingOutputs = null;
+                var statelessItems = new List<ResponsesStatelessItem>();
+                var useStatelessContinuation = false;
                 for (var round = 0; round <= MaxToolRounds; round++)
                 {
                     var requestTimer = Stopwatch.StartNew();
-                    var responseJson = await SendWithRetryAsync(
-                        BuildResponsesRequestJson(
+                    var requestJson = useStatelessContinuation && pendingOutputs is not null
+                        ? BuildResponsesStatelessContinuationJson(
+                            prompt,
+                            registry.Tools,
+                            statelessItems,
+                            pendingOutputs)
+                        : BuildResponsesRequestJson(
                             prompt,
                             registry.Tools,
                             previousResponseId,
-                            pendingOutputs),
-                        usage,
-                        timeout.Token).ConfigureAwait(false);
+                            pendingOutputs);
+                    string responseJson;
+                    try
+                    {
+                        responseJson = await SendWithRetryAsync(
+                            requestJson,
+                            usage,
+                            timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (AiHttpStatusException exception) when (
+                        !useStatelessContinuation
+                        && pendingOutputs is not null
+                        && IsMissingResponsesToolCall(exception.RawResponse))
+                    {
+                        useStatelessContinuation = true;
+                        trace.Add(new(
+                            ++sequence,
+                            "responses_stateless_retry",
+                            "stateful continuation rejected; replaying prompt, function calls and function outputs"));
+                        responseJson = await SendWithRetryAsync(
+                            BuildResponsesStatelessContinuationJson(
+                                prompt,
+                                registry.Tools,
+                                statelessItems,
+                                pendingOutputs),
+                            usage,
+                            timeout.Token).ConfigureAwait(false);
+                    }
                     requestTimer.Stop();
                     var parsed = ParseResponsesResponse(responseJson);
                     usage.Add(parsed.Model, parsed.Usage, parsed.ToolCalls.Count);
@@ -133,14 +172,20 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                         };
                     }
 
-                    if (string.IsNullOrWhiteSpace(parsed.ResponseId))
+                    if (!useStatelessContinuation
+                        && string.IsNullOrWhiteSpace(parsed.ResponseId))
                     {
                         throw new AiMetadataMatcherException(
                             MetadataFailureKind.Protocol,
                             "ai_responses_id_missing");
                     }
 
-                    previousResponseId = parsed.ResponseId;
+                    previousResponseId = parsed.ResponseId ?? previousResponseId;
+                    if (pendingOutputs is not null)
+                    {
+                        statelessItems.AddRange(pendingOutputs.Select(ResponsesStatelessItem.FromOutput));
+                    }
+                    statelessItems.AddRange(parsed.ToolCalls.Select(ResponsesStatelessItem.FromCall));
                     var outputs = new List<ResponsesFunctionOutput>(parsed.ToolCalls.Count);
                     foreach (var call in parsed.ToolCalls)
                     {
@@ -233,6 +278,15 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             throw new AiMetadataMatcherException(
                 MetadataFailureKind.Protocol,
                 "ai_tool_round_limit_exceeded");
+        }
+        catch (AiHttpStatusException exception)
+        {
+            var classified = StatusException(exception.StatusCode, exception.RawResponse);
+            throw new AiMetadataMatcherException(
+                classified.Kind,
+                classified.SafeCode,
+                exception,
+                usage.Snapshot());
         }
         catch (AiMetadataMatcherException exception) when (exception.Usage is null)
         {
@@ -366,7 +420,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                     continue;
                 }
 
-                throw StatusException(response.StatusCode);
+                throw new AiHttpStatusException(response.StatusCode, raw);
             }
             catch (HttpRequestException) when (attempt < options.RetryCount)
             {
@@ -389,7 +443,9 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         statusCode == HttpStatusCode.TooManyRequests
         || (int)statusCode >= 500;
 
-    private static AiMetadataMatcherException StatusException(HttpStatusCode statusCode) =>
+    private static AiMetadataMatcherException StatusException(
+        HttpStatusCode statusCode,
+        string? rawResponse = null) =>
         statusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
             ? new AiMetadataMatcherException(
                 MetadataFailureKind.Authentication,
@@ -402,7 +458,14 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                     ? "ai_rate_limited"
                     : (int)statusCode >= 500
                         ? "ai_remote_service_error"
+                        : statusCode == HttpStatusCode.BadRequest
+                            && rawResponse is not null
+                            && IsMissingResponsesToolCall(rawResponse)
+                            ? "ai_responses_continuation_rejected"
                         : "ai_http_rejected");
+
+    private static bool IsMissingResponsesToolCall(string rawResponse) =>
+        rawResponse.Contains("No tool call found", StringComparison.OrdinalIgnoreCase);
 
     private static Task DelayRetryAsync(int attempt, CancellationToken cancellationToken) =>
         Task.Delay(TimeSpan.FromMilliseconds(250 * (1 << Math.Min(attempt, 4))), cancellationToken);
@@ -445,6 +508,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             }
 
             writer.WriteEndArray();
+            WriteReasoning(writer);
             writer.WritePropertyName("response_format");
             writer.WriteStartObject();
             writer.WriteString("type", "json_object");
@@ -490,7 +554,8 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 writer.WriteEndArray();
             }
 
-            if (tools.Count > 0)
+            WriteReasoning(writer);
+            if (tools.Count > 0 || options.WebSearchEnabled)
             {
                 writer.WritePropertyName("tools");
                 writer.WriteStartArray();
@@ -505,6 +570,12 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                     schema.RootElement.WriteTo(writer);
                     writer.WriteEndObject();
                 }
+                if (options.WebSearchEnabled)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "web_search_preview");
+                    writer.WriteEndObject();
+                }
                 writer.WriteEndArray();
             }
 
@@ -512,6 +583,75 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         }
 
         return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private string BuildResponsesStatelessContinuationJson(
+        string prompt,
+        IReadOnlyList<AiFunctionTool> tools,
+        IReadOnlyList<ResponsesStatelessItem> items,
+        IReadOnlyList<ResponsesFunctionOutput> outputs)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("model", options.Model);
+            writer.WritePropertyName("input");
+            writer.WriteStartArray();
+            writer.WriteStartObject();
+            writer.WriteString("role", "user");
+            writer.WriteString("content", prompt);
+            writer.WriteEndObject();
+            foreach (var item in items)
+            {
+                item.WriteTo(writer);
+            }
+            foreach (var output in outputs)
+            {
+                ResponsesStatelessItem.FromOutput(output).WriteTo(writer);
+            }
+            writer.WriteEndArray();
+            WriteReasoning(writer);
+            if (tools.Count > 0 || options.WebSearchEnabled)
+            {
+                writer.WritePropertyName("tools");
+                writer.WriteStartArray();
+                foreach (var tool in tools)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "function");
+                    writer.WriteString("name", tool.Name);
+                    writer.WriteString("description", tool.Description);
+                    writer.WritePropertyName("parameters");
+                    using var schema = JsonDocument.Parse(tool.ParametersJson);
+                    schema.RootElement.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+                if (options.WebSearchEnabled)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "web_search_preview");
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private void WriteReasoning(Utf8JsonWriter writer)
+    {
+        if (options.ReasoningEffort is null)
+        {
+            return;
+        }
+
+        writer.WritePropertyName("reasoning");
+        writer.WriteStartObject();
+        writer.WriteString("effort", options.ReasoningEffort);
+        writer.WriteEndObject();
     }
 
     private static void WriteMessage(Utf8JsonWriter writer, ChatMessageState message)
@@ -616,7 +756,11 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             usage = new ParsedUsage(
                 ReadNonNegativeInt64(usageElement, "prompt_tokens"),
                 ReadNonNegativeInt64(usageElement, "completion_tokens"),
-                ReadNonNegativeInt64(usageElement, "total_tokens"));
+                ReadNonNegativeInt64(usageElement, "total_tokens"),
+                ReadNestedNonNegativeInt64(
+                    usageElement,
+                    "completion_tokens_details",
+                    "reasoning_tokens"));
         }
 
         return new ParsedChatResponse(content, calls, model, usage);
@@ -697,7 +841,11 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             usage = new ParsedUsage(
                 ReadNonNegativeInt64(usageElement, "input_tokens"),
                 ReadNonNegativeInt64(usageElement, "output_tokens"),
-                ReadNonNegativeInt64(usageElement, "total_tokens"));
+                ReadNonNegativeInt64(usageElement, "total_tokens"),
+                ReadNestedNonNegativeInt64(
+                    usageElement,
+                    "output_tokens_details",
+                    "reasoning_tokens"));
         }
 
         return new ParsedResponsesResponse(
@@ -720,6 +868,15 @@ public sealed class OpenAiCompatibleMetadataMatcher(
 
         return parsed;
     }
+
+    private static long? ReadNestedNonNegativeInt64(
+        JsonElement parent,
+        string objectPropertyName,
+        string valuePropertyName) =>
+        parent.TryGetProperty(objectPropertyName, out var nested)
+        && nested.ValueKind == JsonValueKind.Object
+            ? ReadNonNegativeInt64(nested, valuePropertyName)
+            : null;
 
     private sealed record ChatMessageState(
         string Role,
@@ -749,10 +906,51 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         string CallId,
         string Output);
 
+    private sealed record ResponsesStatelessItem(
+        string Type,
+        string CallId,
+        string? Name,
+        string? ArgumentsJson,
+        string? Output)
+    {
+        public static ResponsesStatelessItem FromCall(AiFunctionCall call) =>
+            new("function_call", call.Id, call.Name, call.ArgumentsJson, null);
+
+        public static ResponsesStatelessItem FromOutput(ResponsesFunctionOutput output) =>
+            new("function_call_output", output.CallId, null, null, output.Output);
+
+        public void WriteTo(Utf8JsonWriter writer)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", Type);
+            writer.WriteString("call_id", CallId);
+            if (Type == "function_call")
+            {
+                writer.WriteString("name", Name);
+                writer.WriteString("arguments", ArgumentsJson);
+            }
+            else
+            {
+                writer.WriteString("output", Output);
+            }
+            writer.WriteEndObject();
+        }
+    }
+
     private sealed record ParsedUsage(
         long? PromptTokens,
         long? CompletionTokens,
-        long? TotalTokens);
+        long? TotalTokens,
+        long? ReasoningTokens);
+
+    private sealed class AiHttpStatusException(
+        HttpStatusCode statusCode,
+        string rawResponse) : Exception
+    {
+        public HttpStatusCode StatusCode { get; } = statusCode;
+
+        public string RawResponse { get; } = rawResponse;
+    }
 
     private sealed class UsageAccumulator(string configuredModel)
     {
@@ -760,6 +958,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         private long? _promptTokens;
         private long? _completionTokens;
         private long? _totalTokens;
+        private long? _reasoningTokens;
         private int _requestCount;
         private int _toolCallCount;
 
@@ -775,6 +974,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             _promptTokens = AddNullable(_promptTokens, usage?.PromptTokens);
             _completionTokens = AddNullable(_completionTokens, usage?.CompletionTokens);
             _totalTokens = AddNullable(_totalTokens, usage?.TotalTokens);
+            _reasoningTokens = AddNullable(_reasoningTokens, usage?.ReasoningTokens);
             _toolCallCount = checked(_toolCallCount + toolCallCount);
         }
 
@@ -784,7 +984,8 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             _completionTokens,
             _totalTokens,
             _requestCount,
-            _toolCallCount);
+            _toolCallCount,
+            _reasoningTokens);
 
         private static long? AddNullable(long? current, long? value) =>
             value is null ? current : checked((current ?? 0) + value.Value);

@@ -908,6 +908,8 @@
               <div class="ai-test-fields">
                 <label>API 模式<select id="ai-test-api-mode" aria-label="AI 测试 API 模式"><option value="">继承主程序（Chat Completions）</option><option value="responses">Responses</option><option value="chat-completions">Chat Completions</option></select></label>
                 <label>模型<input id="ai-test-model" maxlength="200" placeholder="例如 gpt-5.4-mini"></label>
+                <label>Reasoning<select id="ai-test-reasoning-effort" aria-label="AI 测试推理强度"><option value="">继承主程序</option><option value="none">none（不发送）</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select></label>
+                <label>Web Search<select id="ai-test-web-search" aria-label="AI 测试 Web Search"><option value="">继承主程序</option><option value="false">关闭</option><option value="true">开启（仅 Responses）</option></select></label>
                 <label class="wide">OpenAI-compatible API 地址<input id="ai-test-base-url" type="url" maxlength="2048" placeholder="例如 http://openai.local/"></label>
                 <label class="wide">临时 API Key（不保存、不回显）<input id="ai-test-api-key" type="password" maxlength="16384" autocomplete="off" placeholder="留空继承主程序密钥"></label>
                 <label>HTTP 超时（秒）<input id="ai-test-timeout" type="number" min="1" max="3600" placeholder="默认继承，通常 600"></label>
@@ -916,7 +918,7 @@
                 <label class="wide">TMDB MCP 地址<input id="ai-test-tmdb-mcp-url" type="url" maxlength="2048" placeholder="留空继承主程序配置"></label>
                 <label class="wide">Bangumi MCP 地址<input id="ai-test-bgm-mcp-url" type="url" maxlength="2048" placeholder="留空继承主程序配置"></label>
               </div>
-              <p class="muted">该代理不改变上方 Mikan URL 导入；Mikan 导入继续使用主程序的全局域名代理规则。</p>
+              <p class="muted">Reasoning 与 Web Search 采用已验证 AI Tester 的请求格式；Web Search 只允许 Responses。该代理不改变上方 Mikan URL 导入；Mikan 导入继续使用主程序的全局域名代理规则。</p>
             </details>
           </div>
           <div class="configuration-actions">

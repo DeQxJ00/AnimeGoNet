@@ -233,6 +233,17 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AI retry count must be between 0 and 10.");
         }
 
+        if (ai.ReasoningEffort is not null
+            && ai.ReasoningEffort is not ("low" or "medium" or "high"))
+        {
+            errors.Add("AI reasoning effort must be low, medium or high when configured.");
+        }
+
+        if (ai.WebSearchEnabled && ai.ApiMode != AiApiMode.Responses)
+        {
+            errors.Add("AI web search requires Responses API mode.");
+        }
+
         if (!IsHttpEndpoint(ai.TmdbMcpUrl))
         {
             errors.Add("TMDB MCP URL must be an absolute HTTP(S) URL without credentials.");

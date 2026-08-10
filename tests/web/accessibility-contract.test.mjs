@@ -91,3 +91,25 @@ test("metadata detail visibly separates source evidence from TMDB authority", as
   assert.match(app, /source_work_id_fingerprint/);
   assert.match(css, /\.metadata-source-evidence\s*\{/);
 });
+
+test("AI test page exposes verified Responses compatibility controls and usage", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  const reasoning = document.querySelector("#ai-test-reasoning-effort");
+  const webSearch = document.querySelector("#ai-test-web-search");
+  assert.ok(reasoning);
+  assert.ok(webSearch);
+  assert.deepEqual(
+    [...reasoning.querySelectorAll("option")].map(option => option.value),
+    ["", "none", "low", "medium", "high"],
+  );
+  assert.deepEqual(
+    [...webSearch.querySelectorAll("option")].map(option => option.value),
+    ["", "false", "true"],
+  );
+  assert.match(app, /reasoning_effort:/);
+  assert.match(app, /web_search_enabled:/);
+  assert.match(app, /reasoning_tokens/);
+});

@@ -185,6 +185,9 @@ public static class ApiEndpoints
             || request.AiApiKey?.Length > 16_384
             || request.AiModel?.Length > 200
             || !IsOptionalAiApiMode(request.ApiMode)
+            || !IsOptionalReasoningEffort(request.ReasoningEffort)
+            || (request.WebSearchEnabled == true
+                && ParseAiApiMode(request.ApiMode) == AiApiMode.ChatCompletions)
             || request.AiHttpTimeoutSeconds is < 1 or > 3600
             || request.AiRetryCount is < 0 or > 10
             || !IsOptionalHttpUrl(request.AiBaseUrl)
@@ -324,6 +327,8 @@ public static class ApiEndpoints
             && !HasValue(request.AiApiKey)
             && !HasValue(request.AiModel)
             && !HasValue(request.ApiMode)
+            && !HasValue(request.ReasoningEffort)
+            && request.WebSearchEnabled is null
             && request.AiHttpTimeoutSeconds is null
             && request.AiRetryCount is null
             && !HasValue(request.HttpProxyUrl)
@@ -340,6 +345,8 @@ public static class ApiEndpoints
             ApiKey = HasValue(request.AiApiKey) ? request.AiApiKey!.Trim() : current.ApiKey,
             Model = HasValue(request.AiModel) ? request.AiModel!.Trim() : current.Model,
             ApiMode = ParseAiApiMode(request.ApiMode) ?? current.ApiMode,
+            ReasoningEffort = ParseReasoningEffort(request.ReasoningEffort, current.ReasoningEffort),
+            WebSearchEnabled = request.WebSearchEnabled ?? current.WebSearchEnabled,
             HttpTimeout = request.AiHttpTimeoutSeconds is { } timeout
                 ? TimeSpan.FromSeconds(timeout)
                 : current.HttpTimeout,
@@ -390,6 +397,21 @@ public static class ApiEndpoints
 
     private static string FormatAiApiMode(AiApiMode value) =>
         value == AiApiMode.Responses ? "responses" : "chat-completions";
+
+    private static bool IsOptionalReasoningEffort(string? value) =>
+        !HasValue(value)
+        || value!.Trim().ToLowerInvariant() is "none" or "low" or "medium" or "high";
+
+    private static string? ParseReasoningEffort(string? value, string? inherited)
+    {
+        if (!HasValue(value))
+        {
+            return inherited;
+        }
+
+        var normalized = value!.Trim().ToLowerInvariant();
+        return normalized == "none" ? null : normalized;
+    }
 
     private static bool IsOptionalHttpUrl(string? value) =>
         !HasValue(value) || ParseOptionalHttpUrl(value) is not null;
@@ -451,7 +473,8 @@ public static class ApiEndpoints
                 usage.CompletionTokens,
                 usage.TotalTokens,
                 usage.RequestCount,
-                usage.ToolCallCount);
+                usage.ToolCallCount,
+                usage.ReasoningTokens);
 
     private static AiMetadataTestValidationResponse ToAiTestValidation(
         AiMetadataValidationResult validation)

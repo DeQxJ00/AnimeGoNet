@@ -70,7 +70,8 @@ public sealed record AiMetadataProviderUsage(
     long? CompletionTokens,
     long? TotalTokens,
     int RequestCount,
-    int ToolCallCount);
+    int ToolCallCount,
+    long? ReasoningTokens = null);
 
 public sealed record AiMetadataMatchResponse(
     AiMetadataMatchCandidate Candidate,

@@ -114,6 +114,8 @@ public sealed record AiMetadataTestRequest(
     [property: JsonPropertyName("ai_api_key")] string? AiApiKey,
     [property: JsonPropertyName("ai_model")] string? AiModel,
     [property: JsonPropertyName("api_mode")] string? ApiMode,
+    [property: JsonPropertyName("reasoning_effort")] string? ReasoningEffort,
+    [property: JsonPropertyName("web_search_enabled")] bool? WebSearchEnabled,
     [property: JsonPropertyName("ai_http_timeout_seconds")] int? AiHttpTimeoutSeconds,
     [property: JsonPropertyName("ai_retry_count")] int? AiRetryCount,
     [property: JsonPropertyName("http_proxy_url")] string? HttpProxyUrl,
@@ -169,7 +171,8 @@ public sealed record AiMetadataTestUsageResponse(
     [property: JsonPropertyName("completion_tokens")] long? CompletionTokens,
     [property: JsonPropertyName("total_tokens")] long? TotalTokens,
     [property: JsonPropertyName("request_count")] int RequestCount,
-    [property: JsonPropertyName("tool_call_count")] int ToolCallCount);
+    [property: JsonPropertyName("tool_call_count")] int ToolCallCount,
+    [property: JsonPropertyName("reasoning_tokens")] long? ReasoningTokens);
 
 public sealed record AiMetadataTestFeatureResponse(
     [property: JsonPropertyName("tmdb_mcp")] bool TmdbMcp,

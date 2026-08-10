@@ -1339,6 +1339,7 @@ interface AiMetadataTestUsage {
   total_tokens: number | null;
   request_count: number;
   tool_call_count: number;
+  reasoning_tokens: number | null;
 }
 
 interface AiMetadataTestTrace {
@@ -1390,6 +1391,8 @@ interface AiMetadataTestRequest {
   ai_api_key: string | null;
   ai_model: string | null;
   api_mode: string | null;
+  reasoning_effort: string | null;
+  web_search_enabled: boolean | null;
   ai_http_timeout_seconds: number | null;
   ai_retry_count: number | null;
   http_proxy_url: string | null;
@@ -7695,6 +7698,7 @@ function renderAiTestResult(result: AiMetadataTestResult): void {
     ),
     aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")),
     aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")),
+    aiTestSummaryItem("推理 Token", String(usage?.reasoning_tokens ?? "—")),
     aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")),
     aiTestSummaryItem(
       "实际启用",
@@ -7770,6 +7774,12 @@ async function runAiMetadataTest(event: SubmitEvent): Promise<void> {
       ai_api_key: element<HTMLInputElement>("#ai-test-api-key").value.trim() || null,
       ai_model: element<HTMLInputElement>("#ai-test-model").value.trim() || null,
       api_mode: element<HTMLSelectElement>("#ai-test-api-mode").value || null,
+      reasoning_effort:
+        element<HTMLSelectElement>("#ai-test-reasoning-effort").value || null,
+      web_search_enabled: (() => {
+        const value = element<HTMLSelectElement>("#ai-test-web-search").value;
+        return value === "" ? null : value === "true";
+      })(),
       ai_http_timeout_seconds: optionalPositiveInteger("#ai-test-timeout"),
       ai_retry_count: optionalNonNegativeInteger("#ai-test-retries"),
       http_proxy_url: element<HTMLInputElement>("#ai-test-http-proxy").value.trim() || null,

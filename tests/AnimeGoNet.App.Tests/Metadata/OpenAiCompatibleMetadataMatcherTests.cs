@@ -37,6 +37,88 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     }
 
     [Fact]
+    public async Task ResponsesToolOutputFallsBackToStatelessContinuation()
+    {
+        var handler = new FakeAiAndMcpHandler
+        {
+            RejectStatefulResponsesContinuationOnce = true,
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { ApiMode = AiApiMode.Responses });
+
+        var result = await matcher.MatchAsync(Input());
+
+        Assert.True(result.Matched);
+        Assert.Equal(3, handler.AiCalls);
+        Assert.Contains(result.Trace, item => item.Stage == "responses_stateless_retry");
+        Assert.Contains("\"role\":\"user\"", handler.AiBodies[2], StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"function_call\"", handler.AiBodies[2], StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"function_call_output\"", handler.AiBodies[2], StringComparison.Ordinal);
+        Assert.DoesNotContain("previous_response_id", handler.AiBodies[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RejectedResponsesFallbackUsesSpecificSafeClassification()
+    {
+        var handler = new FakeAiAndMcpHandler
+        {
+            RejectAllResponsesContinuations = true,
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { ApiMode = AiApiMode.Responses });
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("ai_responses_continuation_rejected", exception.SafeCode);
+        Assert.DoesNotContain("call-1", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(3, handler.AiCalls);
+    }
+
+    [Fact]
+    public async Task ResponsesRequestIncludesReasoningAndWebSearchAndParsesReasoningUsage()
+    {
+        var handler = new FakeAiAndMcpHandler();
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with
+            {
+                ApiMode = AiApiMode.Responses,
+                ReasoningEffort = "medium",
+                WebSearchEnabled = true,
+            });
+
+        var result = await matcher.MatchAsync(Input());
+
+        Assert.Contains("\"reasoning\":{\"effort\":\"medium\"}", handler.AiBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"web_search_preview\"", handler.AiBodies[0], StringComparison.Ordinal);
+        Assert.Equal(3, result.Usage!.ReasoningTokens);
+    }
+
+    [Fact]
+    public async Task ChatCompletionsRejectsHostedWebSearchBeforeNetworkAccess()
+    {
+        var handler = new FakeAiAndMcpHandler();
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { WebSearchEnabled = true });
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Configuration, exception.Kind);
+        Assert.Equal("ai_web_search_requires_responses", exception.SafeCode);
+        Assert.Empty(handler.RequestHosts);
+    }
+
+    [Fact]
     public async Task ExecutesNamespacedTmdbMcpToolLoopAndParsesCandidate()
     {
         var handler = new FakeAiAndMcpHandler();
@@ -352,6 +434,10 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
 
         public bool RejectAiAuthentication { get; init; }
 
+        public bool RejectStatefulResponsesContinuationOnce { get; init; }
+
+        public bool RejectAllResponsesContinuations { get; init; }
+
         public string? RawAiResponse { get; init; }
 
         public string? FinalModelResult { get; init; }
@@ -470,7 +556,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                     {
                       "id":"resp-1",
                       "model":"resolved-test-model",
-                      "usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12},
+                      "usage":{"input_tokens":10,"output_tokens":2,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":12},
                       "output":[{
                         "type":"function_call",
                         "call_id":"call-1",
@@ -481,10 +567,26 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                     """);
             }
 
+            if (RejectStatefulResponsesContinuationOnce
+                && _aiSequence == 2
+                && AiBodies[^1].Contains("previous_response_id", StringComparison.Ordinal))
+            {
+                return Json(
+                    HttpStatusCode.BadRequest,
+                    """{"error":{"message":"No tool call found for function call output with call_id call-1.","type":"invalid_request_error"}}""");
+            }
+
+            if (RejectAllResponsesContinuations && _aiSequence >= 2)
+            {
+                return Json(
+                    HttpStatusCode.BadRequest,
+                    """{"error":{"message":"No tool call found for function call output with call_id call-1.","type":"invalid_request_error"}}""");
+            }
+
             var modelResult = FinalModelResult
                 ?? """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
             return Json(HttpStatusCode.OK,
-                "{\"id\":\"resp-2\",\"model\":\"resolved-test-model\",\"usage\":{\"input_tokens\":20,\"output_tokens\":8,\"total_tokens\":28},\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":"
+                "{\"id\":\"resp-2\",\"model\":\"resolved-test-model\",\"usage\":{\"input_tokens\":20,\"output_tokens\":8,\"output_tokens_details\":{\"reasoning_tokens\":2},\"total_tokens\":28},\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":"
                 + JsonSerializer.Serialize(modelResult)
                 + "}]}]}");
         }

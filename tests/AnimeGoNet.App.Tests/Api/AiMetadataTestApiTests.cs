@@ -145,6 +145,7 @@ public sealed class AiMetadataTestApiTests
         Assert.Equal(42, json.GetProperty("validation").GetProperty("tmdbid").GetInt32());
         Assert.Equal(6, json.GetProperty("validation").GetProperty("files")[0].GetProperty("episode").GetInt32());
         Assert.Equal(11, json.GetProperty("usage").GetProperty("total_tokens").GetInt64());
+        Assert.Equal(2, json.GetProperty("usage").GetProperty("reasoning_tokens").GetInt64());
         Assert.Equal("tmdb_validation", json.GetProperty("trace")[1].GetProperty("stage").GetString());
         Assert.Equal(123, matcher.LastInput?.BangumiSubjectId);
 
@@ -214,6 +215,32 @@ public sealed class AiMetadataTestApiTests
         Assert.Null(matcher.LastInput);
     }
 
+    [Theory]
+    [InlineData("ultra", "responses", null)]
+    [InlineData("medium", "chat-completions", true)]
+    public async Task RejectsInvalidReasoningOrWebSearchModeBeforeCallingMatcher(
+        string reasoningEffort,
+        string apiMode,
+        bool? webSearchEnabled)
+    {
+        var matcher = new CapturingMatcher();
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: matcher,
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "Example",
+            files = new[] { new { name = "Example.mkv", size_bytes = 1 } },
+            api_mode = apiMode,
+            reasoning_effort = reasoningEffort,
+            web_search_enabled = webSearchEnabled,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(matcher.LastInput);
+    }
+
     [Fact]
     public async Task ReportsSafeMatcherFailureAndUsageAsDiagnosticResult()
     {
@@ -250,7 +277,7 @@ public sealed class AiMetadataTestApiTests
                     42,
                     [new AiMetadataFileCandidate(input.Files[0].Name, true, 1, 6, null)],
                     null),
-                new AiMetadataProviderUsage("test-model", 7, 4, 11, 1, 0))
+                new AiMetadataProviderUsage("test-model", 7, 4, 11, 1, 0, 2))
             {
                 RawOutput = "{\"matched\":true}",
                 Trace = [new AiMetadataTraceEvent(1, "model_response", "round=1", 5)],
