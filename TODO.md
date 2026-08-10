@@ -128,7 +128,7 @@
 - [x] 为完整失败保存 `failure_kind`、`tmdb_access_confirmed`、`bangumi_fallback_eligible/denial_reason`：SQLite Run 持久化、最终门禁、列表/详情 API 与 WebUI 决策说明均已串联；只有权威 `SemanticNoMatch + access_confirmed` 可进入兜底，Network/RemoteService/Authentication/Configuration/Protocol/InvalidInput/Ambiguous 全部经过处理器测试证明拒绝且不创建 `tmdbid=0`。
 - [x] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；SQLite 重启后可按任务查询，版本化 API 与任务卡片策略时间线均已接入。
 - [x] 为统一 AI 元数据尝试持久化可审计用量：schema v40 在实际承载 AI 调用的单条 attempt 保存 provider 返回模型、累计 prompt/completion/total token、HTTP 请求数与工具调用数；多轮 MCP function-calling 累加且 429 重试计入请求数，任务详情/时间线 API 与 WebUI 可见，API key、Prompt、工具正文和来源 URL 不入用量表。
-- [x] 主程序加入只读 AI 测试链：`POST /api/v1/ai-test/run` 与 WebUI“测试工具 / AI 元数据测试”复用生产 Prompt、OpenAI-compatible matcher、MCP 工具和 TMDB 二次验证；显示最终原始输出、解析/验证、请求与工具阶段日志、Token 和耗时。支持测试请求级 Prompt 编辑/同版本浏览器草稿，以及从任意受支持 Mikan Episode URL 安全读取页面、精确 RSS item、bgmid 和 Torrent 文件后填表；二者都不创建下载/元数据任务、不写动画库，测试页只使用服务端私有 AI 配置且不接收或回显 API Key/Torrent URL。
+- [x] 主程序加入只读 AI 测试链：`POST /api/v1/ai-test/run` 与 WebUI“测试工具 / AI 元数据测试”复用生产 Prompt、OpenAI-compatible matcher、MCP 工具和 TMDB 二次验证；显示最终原始输出、解析/验证、请求与工具阶段日志、Token、耗时及实际启用部分。支持测试请求级 Prompt 编辑/同版本浏览器草稿，并按开关与输入 ID 裁剪 TMDB/Bangumi/AniDB/IMDb/Mikan 日期条件区块且同步限制实际工具注册；模型地址、模型名、临时 Key、超时、重试、MCP 地址和 HTTP 代理可仅覆盖本次测试，Key 不保存、不回显、不写日志。也可从任意受支持 Mikan Episode URL 安全读取页面、精确 RSS item、bgmid 和 Torrent 文件后填表。上述操作都不创建下载/元数据任务、不写动画库；Mikan URL 导入继续服从主程序全局域名代理规则。
 - [x] 通过 fixture parity 和受控 live smoke：纯函数/DTO/fake 覆盖标题清理、相似度、全部候选、季度日期、Bangumi Episode 与失败分类；两个随机 loopback Kestrel fixture 分别验证 name/name_cn 多轮搜索和 P3 跨两级回溯重试，不访问真实 TMDB/Bangumi 或测试密钥。
 
 ## P6 — 插件与业务流水线

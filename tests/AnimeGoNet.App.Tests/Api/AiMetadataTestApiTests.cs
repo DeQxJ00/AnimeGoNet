@@ -21,7 +21,7 @@ public sealed class AiMetadataTestApiTests
             tmdbClient: new ValidTmdbClient());
 
         var prompt = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/prompt");
-        Assert.Equal("tmdb-ai-match-v11", prompt.GetProperty("prompt_version").GetString());
+        Assert.Equal("tmdb-ai-match-v12", prompt.GetProperty("prompt_version").GetString());
         Assert.Contains("{{SOURCE_TITLE_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
 
         const string custom = "CUSTOM TEST {{SOURCE_TITLE_JSON}} {{FILES_JSON}}";
@@ -69,6 +69,37 @@ public sealed class AiMetadataTestApiTests
     }
 
     [Fact]
+    public async Task AppliesConditionalPromptAndReportsOnlyEffectiveFeatures()
+    {
+        var matcher = new CapturingMatcher();
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: matcher,
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "Example",
+            files = new[] { new { name = "Example.mkv", size_bytes = 1 } },
+            bgmid = 123,
+            anidbid = 456,
+            imdbid = "tt1234567",
+            enable_tmdb_mcp = false,
+            enable_bangumi_mcp = false,
+            enable_anidb_lookup = false,
+        });
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var features = json.GetProperty("effective_features");
+        Assert.False(features.GetProperty("tmdb_mcp").GetBoolean());
+        Assert.False(features.GetProperty("bangumi_mcp").GetBoolean());
+        Assert.False(features.GetProperty("anidb_lookup").GetBoolean());
+        Assert.False(features.GetProperty("imdb_lookup").GetBoolean());
+        Assert.DoesNotContain("\"bgmid\"", json.GetProperty("rendered_prompt").GetString(), StringComparison.Ordinal);
+        Assert.False(matcher.LastInput!.PromptFeaturesOverride!.TmdbMcp);
+    }
+
+    [Fact]
     public async Task RejectsMikanImportFromUnconfiguredPrivateHost()
     {
         await using var app = await RunningApp.StartAsync();
@@ -107,7 +138,7 @@ public sealed class AiMetadataTestApiTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(json.GetProperty("succeeded").GetBoolean());
-        Assert.Equal("tmdb-ai-match-v11", json.GetProperty("prompt_version").GetString());
+        Assert.Equal("tmdb-ai-match-v12", json.GetProperty("prompt_version").GetString());
         Assert.Contains("[Group] Example - 06", json.GetProperty("rendered_prompt").GetString(), StringComparison.Ordinal);
         Assert.Equal("{\"matched\":true}", json.GetProperty("raw_output").GetString());
         Assert.Equal(42, json.GetProperty("validation").GetProperty("tmdbid").GetInt32());
@@ -133,6 +164,30 @@ public sealed class AiMetadataTestApiTests
         {
             title = "Example",
             files = new[] { new { name = "", size_bytes = -1 } },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(matcher.LastInput);
+    }
+
+    [Theory]
+    [InlineData("file:///etc/passwd", null)]
+    [InlineData(null, "socks5://127.0.0.1:1080")]
+    public async Task RejectsUnsupportedTestModelOrProxyUrls(
+        string? aiBaseUrl,
+        string? proxyUrl)
+    {
+        var matcher = new CapturingMatcher();
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: matcher,
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "Example",
+            files = new[] { new { name = "Example.mkv", size_bytes = 1 } },
+            ai_base_url = aiBaseUrl,
+            http_proxy_url = proxyUrl,
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

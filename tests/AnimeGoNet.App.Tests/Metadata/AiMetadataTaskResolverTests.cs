@@ -71,11 +71,16 @@ public sealed class AiMetadataTaskResolverTests
                 "PublishedAt",
                 "BangumiEpisodeCandidate",
                 "UseBangumiPubDateFirst",
+                "PromptTemplateOverride",
+                "PromptFeaturesOverride",
             ],
             typeof(AiMetadataMatchInput).GetProperties().Select(property => property.Name));
         Assert.Equal(
             ["Name", "SizeBytes"],
             typeof(AiMetadataFileInput).GetProperties().Select(property => property.Name));
+        Assert.Equal(
+            ["TmdbMcp", "BangumiMcp", "AniDbLookup", "BangumiPubDateFirst", "ImdbLookup"],
+            typeof(AiMetadataPromptFeatures).GetProperties().Select(property => property.Name));
     }
 
     [Fact]

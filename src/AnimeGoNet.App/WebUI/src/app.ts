@@ -1359,6 +1359,13 @@ interface AiMetadataTestResult {
   duration_ms: number;
   error_kind: string | null;
   error_code: string | null;
+  effective_features: {
+    tmdb_mcp: boolean;
+    bangumi_mcp: boolean;
+    anidb_lookup: boolean;
+    imdb_lookup: boolean;
+    bangumi_pubdate_first: boolean;
+  };
   trace: AiMetadataTestTrace[];
 }
 
@@ -1375,6 +1382,17 @@ interface AiMetadataTestRequest {
   expected_tmdbid: number | null;
   expected_season: number | null;
   prompt_template: string | null;
+  enable_tmdb_mcp: boolean;
+  enable_bangumi_mcp: boolean;
+  enable_anidb_lookup: boolean;
+  ai_base_url: string | null;
+  ai_api_key: string | null;
+  ai_model: string | null;
+  ai_http_timeout_seconds: number | null;
+  ai_retry_count: number | null;
+  http_proxy_url: string | null;
+  tmdb_mcp_url: string | null;
+  bangumi_mcp_url: string | null;
 }
 
 interface AiMetadataTestPrompt {
@@ -7537,6 +7555,11 @@ function optionalPositiveInteger(selector: string): number | null {
   return raw === "" ? null : Number(raw);
 }
 
+function optionalNonNegativeInteger(selector: string): number | null {
+  const raw = element<HTMLInputElement>(selector).value.trim();
+  return raw === "" ? null : Number(raw);
+}
+
 function toLocalDateTimeValue(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -7670,6 +7693,13 @@ function renderAiTestResult(result: AiMetadataTestResult): void {
     aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")),
     aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")),
     aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")),
+    aiTestSummaryItem(
+      "实际启用",
+      Object.entries(result.effective_features)
+        .filter(([, enabled]) => enabled)
+        .map(([name]) => name)
+        .join(", ") || "无",
+    ),
     aiTestSummaryItem("错误", result.error_code ?? "—"),
   );
   summary.dataset.uiState = result.succeeded ? "ready" : "error";
@@ -7727,6 +7757,20 @@ async function runAiMetadataTest(event: SubmitEvent): Promise<void> {
       expected_season: optionalPositiveInteger("#ai-test-expected-season"),
       prompt_template:
         element<HTMLTextAreaElement>("#ai-test-prompt-template").value || null,
+      enable_tmdb_mcp:
+        element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked,
+      enable_bangumi_mcp:
+        element<HTMLInputElement>("#ai-test-enable-bgm-mcp").checked,
+      enable_anidb_lookup:
+        element<HTMLInputElement>("#ai-test-enable-anidb").checked,
+      ai_base_url: element<HTMLInputElement>("#ai-test-base-url").value.trim() || null,
+      ai_api_key: element<HTMLInputElement>("#ai-test-api-key").value.trim() || null,
+      ai_model: element<HTMLInputElement>("#ai-test-model").value.trim() || null,
+      ai_http_timeout_seconds: optionalPositiveInteger("#ai-test-timeout"),
+      ai_retry_count: optionalNonNegativeInteger("#ai-test-retries"),
+      http_proxy_url: element<HTMLInputElement>("#ai-test-http-proxy").value.trim() || null,
+      tmdb_mcp_url: element<HTMLInputElement>("#ai-test-tmdb-mcp-url").value.trim() || null,
+      bangumi_mcp_url: element<HTMLInputElement>("#ai-test-bgm-mcp-url").value.trim() || null,
       },
     );
     renderAiTestResult(result);
@@ -7750,6 +7794,9 @@ function fillAiMetadataTestExample(): void {
   element<HTMLInputElement>("#ai-test-bgm-episode").value = "6";
   element<HTMLInputElement>("#ai-test-published-at").value = "2026-08-10T12:00";
   element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked = true;
+  element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked = true;
+  element<HTMLInputElement>("#ai-test-enable-bgm-mcp").checked = true;
+  element<HTMLInputElement>("#ai-test-enable-anidb").checked = true;
 }
 
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());

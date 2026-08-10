@@ -5702,6 +5702,10 @@ function optionalPositiveInteger(selector) {
     const raw = element(selector).value.trim();
     return raw === "" ? null : Number(raw);
 }
+function optionalNonNegativeInteger(selector) {
+    const raw = element(selector).value.trim();
+    return raw === "" ? null : Number(raw);
+}
 function toLocalDateTimeValue(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime()))
@@ -5824,7 +5828,10 @@ function aiTestSummaryItem(label, value) {
 function renderAiTestResult(result) {
     const summary = element("#ai-test-summary");
     const usage = result.usage;
-    summary.replaceChildren(aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"), aiTestSummaryItem("模型", usage?.model ?? "—"), aiTestSummaryItem("总耗时", `${result.duration_ms} ms`), aiTestSummaryItem("请求 / 工具", `${usage?.request_count ?? 0} / ${usage?.tool_call_count ?? 0}`), aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")), aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")), aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")), aiTestSummaryItem("错误", result.error_code ?? "—"));
+    summary.replaceChildren(aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"), aiTestSummaryItem("模型", usage?.model ?? "—"), aiTestSummaryItem("总耗时", `${result.duration_ms} ms`), aiTestSummaryItem("请求 / 工具", `${usage?.request_count ?? 0} / ${usage?.tool_call_count ?? 0}`), aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")), aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")), aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")), aiTestSummaryItem("实际启用", Object.entries(result.effective_features)
+        .filter(([, enabled]) => enabled)
+        .map(([name]) => name)
+        .join(", ") || "无"), aiTestSummaryItem("错误", result.error_code ?? "—"));
     summary.dataset.uiState = result.succeeded ? "ready" : "error";
     const badge = element("#ai-test-prompt-version");
     badge.textContent = result.prompt_version;
@@ -5876,6 +5883,17 @@ async function runAiMetadataTest(event) {
             expected_tmdbid: optionalPositiveInteger("#ai-test-expected-tmdbid"),
             expected_season: optionalPositiveInteger("#ai-test-expected-season"),
             prompt_template: element("#ai-test-prompt-template").value || null,
+            enable_tmdb_mcp: element("#ai-test-enable-tmdb-mcp").checked,
+            enable_bangumi_mcp: element("#ai-test-enable-bgm-mcp").checked,
+            enable_anidb_lookup: element("#ai-test-enable-anidb").checked,
+            ai_base_url: element("#ai-test-base-url").value.trim() || null,
+            ai_api_key: element("#ai-test-api-key").value.trim() || null,
+            ai_model: element("#ai-test-model").value.trim() || null,
+            ai_http_timeout_seconds: optionalPositiveInteger("#ai-test-timeout"),
+            ai_retry_count: optionalNonNegativeInteger("#ai-test-retries"),
+            http_proxy_url: element("#ai-test-http-proxy").value.trim() || null,
+            tmdb_mcp_url: element("#ai-test-tmdb-mcp-url").value.trim() || null,
+            bangumi_mcp_url: element("#ai-test-bgm-mcp-url").value.trim() || null,
         });
         renderAiTestResult(result);
         message.textContent = result.succeeded
@@ -5899,6 +5917,9 @@ function fillAiMetadataTestExample() {
     element("#ai-test-bgm-episode").value = "6";
     element("#ai-test-published-at").value = "2026-08-10T12:00";
     element("#ai-test-use-bgm-pubdate").checked = true;
+    element("#ai-test-enable-tmdb-mcp").checked = true;
+    element("#ai-test-enable-bgm-mcp").checked = true;
+    element("#ai-test-enable-anidb").checked = true;
 }
 element("#rss-reload").addEventListener("click", () => void loadRssRules());
 element("#ai-test-form").addEventListener("submit", event => void runAiMetadataTest(event));

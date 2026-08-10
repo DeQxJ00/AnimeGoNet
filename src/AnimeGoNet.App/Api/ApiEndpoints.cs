@@ -161,6 +161,7 @@ public static class ApiEndpoints
     private static async Task<IResult> RunAiMetadataTest(
         AiMetadataTestRequest request,
         IAiMetadataMatcher matcher,
+        AnimeGoOptions applicationOptions,
         AiMetadataResultValidator validator,
         CancellationToken cancellationToken)
     {
@@ -181,6 +182,14 @@ public static class ApiEndpoints
             || request.ExpectedSeason is < 0
             || request.ImdbTitleId?.Length > 32
             || request.PromptTemplate?.Length > AiMetadataPromptRenderer.MaximumTemplateLength
+            || request.AiApiKey?.Length > 16_384
+            || request.AiModel?.Length > 200
+            || request.AiHttpTimeoutSeconds is < 1 or > 3600
+            || request.AiRetryCount is < 0 or > 10
+            || !IsOptionalHttpUrl(request.AiBaseUrl)
+            || !IsOptionalHttpUrl(request.HttpProxyUrl)
+            || !IsOptionalHttpUrl(request.TmdbMcpUrl)
+            || !IsOptionalHttpUrl(request.BangumiMcpUrl)
             || (request.UseBangumiPubDateFirst
                 && (torrentFileCount != 1
                     || request.BangumiSubjectId is null
@@ -206,7 +215,16 @@ public static class ApiEndpoints
             PromptTemplateOverride = string.IsNullOrWhiteSpace(request.PromptTemplate)
                 ? null
                 : request.PromptTemplate,
+            PromptFeaturesOverride = new AiMetadataPromptFeatures(
+                request.EnableTmdbMcp ?? true,
+                request.EnableBangumiMcp ?? true,
+                request.EnableAniDbLookup ?? true,
+                request.UseBangumiPubDateFirst)
+            {
+                ImdbLookup = true,
+            },
         };
+        var effectiveFeatures = ToAiTestFeatures(AiMetadataPromptFeatures.Resolve(input));
         string prompt;
         try
         {
@@ -217,9 +235,11 @@ public static class ApiEndpoints
             return TypedResults.BadRequest(Error(exception.SafeCode, "Prompt template is invalid."));
         }
         var timer = Stopwatch.StartNew();
+        using var requestMatcher = CreateAiTestMatcher(request, applicationOptions);
+        var effectiveMatcher = requestMatcher ?? matcher;
         try
         {
-            var match = await matcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
+            var match = await effectiveMatcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
             var validation = await validator.ValidateAsync(
                 input,
                 match.Candidate,
@@ -250,6 +270,7 @@ public static class ApiEndpoints
                 timer.ElapsedMilliseconds,
                 validation.Failure?.Kind.ToString().ToLowerInvariant(),
                 validation.Failure?.Code,
+                effectiveFeatures,
                 trace));
         }
         catch (AiMetadataMatcherException exception)
@@ -266,6 +287,7 @@ public static class ApiEndpoints
                 timer.ElapsedMilliseconds,
                 exception.Kind.ToString().ToLowerInvariant(),
                 exception.SafeCode,
+                effectiveFeatures,
                 [new AiMetadataTestTraceItem(
                     1,
                     "matcher_failed",
@@ -279,6 +301,89 @@ public static class ApiEndpoints
             AiMetadataPromptRenderer.PromptVersion,
             AiMetadataPromptRenderer.LoadTemplate(),
             AiMetadataPromptRenderer.MaximumTemplateLength));
+
+    private static AiMetadataTestFeatureResponse ToAiTestFeatures(
+        AiMetadataPromptFeatures features) =>
+        new(
+            features.TmdbMcp,
+            features.BangumiMcp,
+            features.AniDbLookup,
+            features.ImdbLookup,
+            features.BangumiPubDateFirst);
+
+    private static OpenAiCompatibleMetadataMatcher? CreateAiTestMatcher(
+        AiMetadataTestRequest request,
+        AnimeGoOptions applicationOptions)
+    {
+        if (!HasValue(request.AiBaseUrl)
+            && !HasValue(request.AiApiKey)
+            && !HasValue(request.AiModel)
+            && request.AiHttpTimeoutSeconds is null
+            && request.AiRetryCount is null
+            && !HasValue(request.HttpProxyUrl)
+            && !HasValue(request.TmdbMcpUrl)
+            && !HasValue(request.BangumiMcpUrl))
+        {
+            return null;
+        }
+
+        var current = applicationOptions.Metadata.Ai;
+        var aiOptions = current with
+        {
+            BaseUrl = ParseOptionalHttpUrl(request.AiBaseUrl) ?? current.BaseUrl,
+            ApiKey = HasValue(request.AiApiKey) ? request.AiApiKey!.Trim() : current.ApiKey,
+            Model = HasValue(request.AiModel) ? request.AiModel!.Trim() : current.Model,
+            HttpTimeout = request.AiHttpTimeoutSeconds is { } timeout
+                ? TimeSpan.FromSeconds(timeout)
+                : current.HttpTimeout,
+            RetryCount = request.AiRetryCount ?? current.RetryCount,
+            TmdbMcpUrl = ParseOptionalHttpUrl(request.TmdbMcpUrl) ?? current.TmdbMcpUrl,
+            BangumiMcpUrl = ParseOptionalHttpUrl(request.BangumiMcpUrl) ?? current.BangumiMcpUrl,
+        };
+        var proxy = ParseOptionalHttpUrl(request.HttpProxyUrl);
+        HttpClient CreateClient()
+        {
+            if (proxy is null)
+            {
+                return AnimeGoNet.App.Networking.OutboundHttpClientFactory.Create(
+                    applicationOptions.OutboundProxy);
+            }
+
+            return new HttpClient(new HttpClientHandler
+            {
+                UseProxy = true,
+                Proxy = new System.Net.WebProxy(proxy),
+            })
+            {
+                Timeout = Timeout.InfiniteTimeSpan,
+            };
+        }
+
+        return new OpenAiCompatibleMetadataMatcher(
+            CreateClient(),
+            aiOptions,
+            ownsHttpClient: true,
+            referenceHttpClient: CreateClient(),
+            ownsReferenceHttpClient: true);
+    }
+
+    private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value);
+
+    private static bool IsOptionalHttpUrl(string? value) =>
+        !HasValue(value) || ParseOptionalHttpUrl(value) is not null;
+
+    private static Uri? ParseOptionalHttpUrl(string? value)
+    {
+        if (!HasValue(value))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(value!.Trim(), UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? uri
+            : null;
+    }
 
     private static async Task<IResult> ImportAiMetadataTestMikanEpisode(
         AiMetadataTestMikanImportRequest request,

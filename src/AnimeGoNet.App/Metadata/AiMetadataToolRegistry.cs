@@ -21,6 +21,7 @@ internal sealed class AiMetadataToolRegistry(
     private const int MaxToolArgumentsChars = 32_768;
     private const int MaxToolResponseBytes = 20_000;
     private readonly List<AiFunctionTool> _tools = [];
+    private readonly AiMetadataPromptFeatures _features = AiMetadataPromptFeatures.Resolve(input);
     private McpEndpointClient? _tmdb;
     private McpEndpointClient? _bangumi;
 
@@ -28,24 +29,27 @@ internal sealed class AiMetadataToolRegistry(
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        try
+        if (_features.TmdbMcp)
         {
-            _tmdb = new McpEndpointClient("tmdb", options.TmdbMcpUrl, httpClient);
-            _tools.AddRange(await _tmdb.InitializeAsync(cancellationToken).ConfigureAwait(false));
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception) when (IsTransportOrProtocol(exception))
-        {
-            throw new AiMetadataMatcherException(
-                MetadataFailureKind.RemoteService,
-                "ai_tmdb_mcp_unavailable",
-                exception);
+            try
+            {
+                _tmdb = new McpEndpointClient("tmdb", options.TmdbMcpUrl, httpClient);
+                _tools.AddRange(await _tmdb.InitializeAsync(cancellationToken).ConfigureAwait(false));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsTransportOrProtocol(exception))
+            {
+                throw new AiMetadataMatcherException(
+                    MetadataFailureKind.RemoteService,
+                    "ai_tmdb_mcp_unavailable",
+                    exception);
+            }
         }
 
-        if (input.BangumiSubjectId is not null)
+        if (_features.BangumiMcp)
         {
             try
             {
@@ -62,15 +66,15 @@ internal sealed class AiMetadataToolRegistry(
             }
         }
 
-        if (input.AniDbAnimeId is not null)
+        if (_features.AniDbLookup)
         {
             _tools.Add(new AiFunctionTool(
                 "lookup_anidb_tmdbtv",
-                "Look up a reference TMDB TV Series ID for the current fixed AniDB ID. Takes no arguments. The result is only a candidate and must be verified with TMDB MCP.",
+                "Look up a reference TMDB TV Series ID for the current fixed AniDB ID. Takes no arguments. The result is only a candidate and must pass final TMDB validation.",
                 """{"type":"object","properties":{},"additionalProperties":false}"""));
         }
 
-        if (input.ImdbTitleId is not null)
+        if (_features.ImdbLookup)
         {
             _tools.Add(new AiFunctionTool(
                 "lookup_imdb_tmdb_tv",
@@ -91,7 +95,9 @@ internal sealed class AiMetadataToolRegistry(
 
         try
         {
-            if (name.StartsWith("tmdb__", StringComparison.Ordinal) && _tmdb is not null)
+            if (_features.TmdbMcp
+                && name.StartsWith("tmdb__", StringComparison.Ordinal)
+                && _tmdb is not null)
             {
                 var rawName = name["tmdb__".Length..];
                 if (rawName == "invoke-api-endpoint"
@@ -106,7 +112,9 @@ internal sealed class AiMetadataToolRegistry(
                     cancellationToken).ConfigureAwait(false);
             }
 
-            if (name.StartsWith("bgm__", StringComparison.Ordinal) && _bangumi is not null)
+            if (_features.BangumiMcp
+                && name.StartsWith("bgm__", StringComparison.Ordinal)
+                && _bangumi is not null)
             {
                 return await _bangumi.CallAsync(
                     name["bgm__".Length..],
@@ -114,13 +122,13 @@ internal sealed class AiMetadataToolRegistry(
                     cancellationToken).ConfigureAwait(false);
             }
 
-            if (name == "lookup_anidb_tmdbtv" && input.AniDbAnimeId is not null)
+            if (name == "lookup_anidb_tmdbtv" && _features.AniDbLookup)
             {
                 return await LookupAniDbAsync(cancellationToken).ConfigureAwait(false);
             }
 
             if (name == "lookup_imdb_tmdb_tv"
-                && input.ImdbTitleId is not null
+                && _features.ImdbLookup
                 && _tmdb is not null)
             {
                 return await LookupImdbAsync(cancellationToken).ConfigureAwait(false);
@@ -181,7 +189,7 @@ internal sealed class AiMetadataToolRegistry(
                 return """{"tmdbtv":null,"reason":"tmdbtv empty or invalid"}""";
             }
 
-            return $$"""{"tmdbtv":{{tmdbId}},"note":"reference only; verify with TMDB MCP"}""";
+            return $$"""{"tmdbtv":{{tmdbId}},"note":"reference only; final TMDB validation required"}""";
         }
         catch (JsonException)
         {

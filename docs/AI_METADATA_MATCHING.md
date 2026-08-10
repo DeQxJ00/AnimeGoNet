@@ -48,6 +48,10 @@ ai:
 
 WebUI 的“测试工具 / AI 元数据测试”调用 `POST /api/v1/ai-test/run`，复用正式任务相同的固定 Prompt、模型配置、MCP 工具注册和 `AiMetadataResultValidator`。测试请求只包含任务标题、Torrent 文件名/容量及可选作品级参考；可额外填写期望 `tmdbid`/Season，让最终验证明确拒绝模型改换作品或季度。
 
+测试页可分别启用 TMDB MCP、Bangumi MCP、AniDB 映射和 Mikan/Bangumi 日期优先部分。最终有效状态由后端按“开关 + 当前输入”计算：Bangumi 还需要 `bgmid`，AniDB 还需要 `anidbid`，IMDb 随 `imdbid` 且仅在 TMDB MCP 启用时自动生效，日期优先独立于 Bangumi MCP 开关但仍必须通过既有单文件门禁。固定 Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块；被关闭或不适用的字段与说明不会发送给模型，对应工具也不会初始化或注册。无论测试时是否向模型开放 TMDB MCP，模型返回后仍执行主程序的 TMDB 最终验证。
+
+“本次模型与网络覆盖”可临时替换 OpenAI-compatible API 地址、模型、API Key、HTTP 超时、重试次数、TMDB/Bangumi MCP 地址和一个用于模型/MCP/AniDB请求的 HTTP(S) 代理。留空即继承主程序配置；临时 Key 只存在于当前 HTTPS/本机请求和内存中，不写配置、不回显、不进入 Prompt/阶段日志。当前主程序匹配器实际使用 Chat Completions，测试页明确只显示这一种有效模式；独立 Tester 的 Responses、reasoning effort、内置 web search 在主程序实现对应协议前不显示为可用开关。Mikan URL 导入仍使用主程序全局“域名匹配代理”配置，不受测试专用代理影响。
+
 该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。响应分开返回 Prompt 版本与本次渲染内容、模型最终原始 JSON、解析候选、TMDB 验证结论、累计 Token/请求/工具次数、总耗时和阶段日志。工具日志保留工具名与最多 2048 字符的参数、输出字节数，不保存 MCP 正文；AI API Key 始终来自服务端私有配置，测试请求和响应都没有密钥字段。
 
 `GET /api/v1/ai-test/prompt` 返回当前程序内置模板及长度上限。WebUI 可编辑测试请求的 `prompt_template`，编辑内容只覆盖本次测试并可按相同 Prompt 版本保存在浏览器草稿；恢复默认不会改写仓库文档、部署配置或正式匹配行为。服务端仍执行占位符解析、长度限制和最终 TMDB 验证。

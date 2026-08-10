@@ -7,7 +7,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v11";
+    public const string PromptVersion = "tmdb-ai-match-v12";
     public const int MaximumTemplateLength = 128 * 1024;
 
     public static string LoadAndRender(AiMetadataMatchInput input)
@@ -67,7 +67,8 @@ public static class AiMetadataPromptRenderer
 
     public static string Render(string template, AiMetadataMatchInput input)
     {
-        var rendered = template
+        var features = AiMetadataPromptFeatures.Resolve(input);
+        var rendered = ApplyConditionalSections(template, features)
             .Replace("{{SOURCE_TITLE_JSON}}", JsonString(input.Title), StringComparison.Ordinal)
             .Replace("{{FILES_JSON}}", RenderFiles(input.Files), StringComparison.Ordinal)
             .Replace("{{OPTIONAL_BGM_ID_JSON}}", OptionalNumber(input.BangumiSubjectId), StringComparison.Ordinal)
@@ -93,6 +94,54 @@ public static class AiMetadataPromptRenderer
         }
 
         return rendered;
+    }
+
+    private static string ApplyConditionalSections(
+        string template,
+        AiMetadataPromptFeatures features)
+    {
+        var rendered = ApplyConditionalSection(template, "TMDB_MCP", features.TmdbMcp);
+        rendered = ApplyConditionalSection(rendered, "BGM_MCP", features.BangumiMcp);
+        rendered = ApplyConditionalSection(rendered, "ANIDB_LOOKUP", features.AniDbLookup);
+        rendered = ApplyConditionalSection(rendered, "IMDB_LOOKUP", features.ImdbLookup);
+        return ApplyConditionalSection(
+            rendered,
+            "BANGUMI_PUBDATE_FIRST",
+            features.BangumiPubDateFirst);
+    }
+
+    private static string ApplyConditionalSection(
+        string template,
+        string name,
+        bool include)
+    {
+        var opening = "{{#" + name + "}}";
+        var closing = "{{/" + name + "}}";
+        var start = template.IndexOf(opening, StringComparison.Ordinal);
+        while (start >= 0)
+        {
+            var contentStart = start + opening.Length;
+            var end = template.IndexOf(closing, contentStart, StringComparison.Ordinal);
+            if (end < 0)
+            {
+                throw new AiMetadataMatcherException(
+                    MetadataFailureKind.Configuration,
+                    "ai_prompt_conditional_invalid");
+            }
+
+            var content = include ? template[contentStart..end] : string.Empty;
+            template = template[..start] + content + template[(end + closing.Length)..];
+            start = template.IndexOf(opening, StringComparison.Ordinal);
+        }
+
+        if (template.Contains(closing, StringComparison.Ordinal))
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.Configuration,
+                "ai_prompt_conditional_invalid");
+        }
+
+        return template;
     }
 
     private static string RenderFiles(IReadOnlyList<AiMetadataFileInput> files)

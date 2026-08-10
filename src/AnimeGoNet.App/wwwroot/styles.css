@@ -93,6 +93,11 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .ai-test-import input { width: 100%; margin-top: 6px; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; font: inherit; }
 .ai-test-import p { grid-column: 1 / -1; margin: 0; font-size: .74rem; }
 .ai-test-checkbox { display: flex; align-items: center; gap: 8px; }
+.ai-test-feature-switches { border: 1px solid #344260; border-radius: 10px; padding: 10px 12px 12px; display: grid; gap: 9px; }
+.ai-test-feature-switches legend { color: #c8d5f0; padding: 0 6px; font-size: .8rem; }
+.ai-test-call-settings { border: 1px solid #344260; border-radius: 10px; padding: 10px 12px; }
+.ai-test-call-settings summary { color: #c8d5f0; cursor: pointer; font-size: .82rem; }
+.ai-test-call-settings[open] summary { margin-bottom: 12px; }
 .ai-test-summary-grid { display: grid; gap: 8px; }
 .ai-test-summary-grid > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 11px; border-radius: 9px; background: rgba(5,8,16,.5); }
 .ai-test-summary-grid span { color: #8da2c9; font-size: .72rem; }

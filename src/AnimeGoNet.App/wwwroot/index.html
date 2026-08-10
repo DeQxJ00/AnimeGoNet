@@ -896,7 +896,28 @@
             <label>Bangumi EP 候选<input id="ai-test-bgm-episode" type="number" min="1"></label>
             <label>期望 tmdbid（可选）<input id="ai-test-expected-tmdbid" type="number" min="1"></label>
             <label>期望 Season（可选）<input id="ai-test-expected-season" type="number" min="0"></label>
-            <label class="wide ai-test-checkbox"><input id="ai-test-use-bgm-pubdate" type="checkbox">优先把 Bangumi 单集日期证据交给 AI</label>
+            <fieldset class="wide ai-test-feature-switches">
+              <legend>本次启用的 Prompt 部分与工具</legend>
+              <label class="ai-test-checkbox"><input id="ai-test-enable-tmdb-mcp" type="checkbox" checked>TMDB MCP（最终 TMDB 验证仍始终执行）</label>
+              <label class="ai-test-checkbox"><input id="ai-test-enable-bgm-mcp" type="checkbox" checked>Bangumi MCP（还需要填写 bgmid）</label>
+              <label class="ai-test-checkbox"><input id="ai-test-enable-anidb" type="checkbox" checked>AniDB 映射（还需要填写 anidbid）</label>
+              <label class="ai-test-checkbox"><input id="ai-test-use-bgm-pubdate" type="checkbox">Mikan/Bangumi 日期优先部分（还需要 bgmid、发布时间、EP 候选且仅一个文件）</label>
+            </fieldset>
+            <details class="wide ai-test-call-settings">
+              <summary>本次模型与网络覆盖（留空使用主程序配置）</summary>
+              <div class="ai-test-fields">
+                <label>API 模式<input value="Chat Completions" readonly aria-label="AI 测试 API 模式"></label>
+                <label>模型<input id="ai-test-model" maxlength="200" placeholder="例如 gpt-5.4-mini"></label>
+                <label class="wide">OpenAI-compatible API 地址<input id="ai-test-base-url" type="url" maxlength="2048" placeholder="例如 http://openai.local/"></label>
+                <label class="wide">临时 API Key（不保存、不回显）<input id="ai-test-api-key" type="password" maxlength="16384" autocomplete="off" placeholder="留空继承主程序密钥"></label>
+                <label>HTTP 超时（秒）<input id="ai-test-timeout" type="number" min="1" max="3600" placeholder="默认继承，通常 600"></label>
+                <label>重试次数<input id="ai-test-retries" type="number" min="0" max="10" placeholder="默认继承"></label>
+                <label class="wide">测试专用 HTTP 代理<input id="ai-test-http-proxy" type="url" maxlength="2048" placeholder="http://127.0.0.1:7890；应用于模型、MCP 与 AniDB"></label>
+                <label class="wide">TMDB MCP 地址<input id="ai-test-tmdb-mcp-url" type="url" maxlength="2048" placeholder="留空继承主程序配置"></label>
+                <label class="wide">Bangumi MCP 地址<input id="ai-test-bgm-mcp-url" type="url" maxlength="2048" placeholder="留空继承主程序配置"></label>
+              </div>
+              <p class="muted">该代理不改变上方 Mikan URL 导入；Mikan 导入继续使用主程序的全局域名代理规则。</p>
+            </details>
           </div>
           <div class="configuration-actions">
             <button id="ai-test-run" type="submit" class="primary-button">运行 AI 测试</button>
@@ -913,7 +934,7 @@
       </form>
       <article class="ai-test-prompt-editor configuration-card">
         <div class="section-heading">
-          <div><h3>测试 Prompt 编辑</h3><p class="muted">仅覆盖本次 AI 测试，不保存为生产 Prompt；刷新后只恢复同版本的浏览器本地草稿。</p></div>
+          <div><h3>测试 Prompt 编辑</h3><p class="muted">仅覆盖本次 AI 测试，不保存为生产 Prompt；可用 {{#TMDB_MCP}}…{{/TMDB_MCP}} 等条件块，后端按上方开关和输入裁剪。</p></div>
           <button id="ai-test-prompt-reset" type="button" class="secondary-button">恢复程序默认</button>
         </div>
         <textarea id="ai-test-prompt-template" rows="24" spellcheck="false" disabled aria-label="AI 测试 Prompt 模板"></textarea>

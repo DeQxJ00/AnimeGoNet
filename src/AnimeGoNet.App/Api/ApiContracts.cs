@@ -106,7 +106,18 @@ public sealed record AiMetadataTestRequest(
     [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
     [property: JsonPropertyName("expected_tmdbid")] int? ExpectedTmdbId,
     [property: JsonPropertyName("expected_season")] int? ExpectedSeason,
-    [property: JsonPropertyName("prompt_template")] string? PromptTemplate);
+    [property: JsonPropertyName("prompt_template")] string? PromptTemplate,
+    [property: JsonPropertyName("enable_tmdb_mcp")] bool? EnableTmdbMcp,
+    [property: JsonPropertyName("enable_bangumi_mcp")] bool? EnableBangumiMcp,
+    [property: JsonPropertyName("enable_anidb_lookup")] bool? EnableAniDbLookup,
+    [property: JsonPropertyName("ai_base_url")] string? AiBaseUrl,
+    [property: JsonPropertyName("ai_api_key")] string? AiApiKey,
+    [property: JsonPropertyName("ai_model")] string? AiModel,
+    [property: JsonPropertyName("ai_http_timeout_seconds")] int? AiHttpTimeoutSeconds,
+    [property: JsonPropertyName("ai_retry_count")] int? AiRetryCount,
+    [property: JsonPropertyName("http_proxy_url")] string? HttpProxyUrl,
+    [property: JsonPropertyName("tmdb_mcp_url")] string? TmdbMcpUrl,
+    [property: JsonPropertyName("bangumi_mcp_url")] string? BangumiMcpUrl);
 
 public sealed record AiMetadataTestPromptResponse(
     [property: JsonPropertyName("prompt_version")] string PromptVersion,
@@ -159,6 +170,13 @@ public sealed record AiMetadataTestUsageResponse(
     [property: JsonPropertyName("request_count")] int RequestCount,
     [property: JsonPropertyName("tool_call_count")] int ToolCallCount);
 
+public sealed record AiMetadataTestFeatureResponse(
+    [property: JsonPropertyName("tmdb_mcp")] bool TmdbMcp,
+    [property: JsonPropertyName("bangumi_mcp")] bool BangumiMcp,
+    [property: JsonPropertyName("anidb_lookup")] bool AniDbLookup,
+    [property: JsonPropertyName("imdb_lookup")] bool ImdbLookup,
+    [property: JsonPropertyName("bangumi_pubdate_first")] bool BangumiPubDateFirst);
+
 public sealed record AiMetadataTestResponse(
     [property: JsonPropertyName("succeeded")] bool Succeeded,
     [property: JsonPropertyName("prompt_version")] string PromptVersion,
@@ -170,6 +188,7 @@ public sealed record AiMetadataTestResponse(
     [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
     [property: JsonPropertyName("error_kind")] string? ErrorKind,
     [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("effective_features")] AiMetadataTestFeatureResponse EffectiveFeatures,
     [property: JsonPropertyName("trace")] IReadOnlyList<AiMetadataTestTraceItem> Trace);
 
 public sealed record RuntimeStatus(

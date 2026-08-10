@@ -39,7 +39,7 @@ public sealed class AiMetadataPromptRendererTests
             rendered,
             StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v11", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v12", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]
@@ -71,7 +71,90 @@ public sealed class AiMetadataPromptRendererTests
         var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
 
         Assert.Contains("\"published_at\": \"2026-07-26T20:30:00.0000000+08:00\"", rendered, StringComparison.Ordinal);
-        Assert.Contains("\"bgm_episode_candidate\": null", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("bgm_episode_candidate", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("use_bangumi_pubdate_first", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DisabledFeaturesRemovePromptSectionsAndInapplicableFields()
+    {
+        var input = new AiMetadataMatchInput(
+            "Task",
+            [new AiMetadataFileInput("01.mkv", 1)],
+            BangumiSubjectId: 100,
+            AniDbAnimeId: 200,
+            ImdbTitleId: "tt1234567",
+            TorrentFileCount: 1,
+            PublishedAt: null,
+            BangumiEpisodeCandidate: null,
+            UseBangumiPubDateFirst: false)
+        {
+            PromptFeaturesOverride = new(false, false, false, false)
+            {
+                ImdbLookup = true,
+            },
+        };
+
+        var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
+
+        Assert.DoesNotContain("\"bgmid\"", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"anidbid\"", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"imdbid\"", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("TMDB MCP 始终", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bangumi MCP", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("AniDB映射", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("lookup_imdb_tmdb_tv", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MissingReferenceIdMakesRequestedFeatureIneffective()
+    {
+        var input = new AiMetadataMatchInput(
+            "Task",
+            [new AiMetadataFileInput("01.mkv", 1)],
+            null, null, null, 1, null, null, false)
+        {
+            PromptFeaturesOverride = new(true, true, true, true)
+            {
+                ImdbLookup = true,
+            },
+        };
+
+        var features = AiMetadataPromptFeatures.Resolve(input);
+        var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
+
+        Assert.True(features.TmdbMcp);
+        Assert.False(features.BangumiMcp);
+        Assert.False(features.AniDbLookup);
+        Assert.False(features.ImdbLookup);
+        Assert.False(features.BangumiPubDateFirst);
+        Assert.DoesNotContain("\"bgmid\"", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PubdateSectionCanRunWithoutGivingTheModelBangumiMcp()
+    {
+        var input = new AiMetadataMatchInput(
+            "Task",
+            [new AiMetadataFileInput("01.mkv", 1)],
+            100, null, null, 1,
+            DateTimeOffset.Parse(
+                "2026-08-10T12:00:00+08:00",
+                System.Globalization.CultureInfo.InvariantCulture),
+            1,
+            true)
+        {
+            PromptFeaturesOverride = new(true, false, false, true),
+        };
+
+        var features = AiMetadataPromptFeatures.Resolve(input);
+        var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
+
+        Assert.False(features.BangumiMcp);
+        Assert.True(features.BangumiPubDateFirst);
+        Assert.DoesNotContain("\"bgmid\"", rendered, StringComparison.Ordinal);
+        Assert.Contains("\"bgm_episode_candidate\": 1", rendered, StringComparison.Ordinal);
     }
 
     [Fact]

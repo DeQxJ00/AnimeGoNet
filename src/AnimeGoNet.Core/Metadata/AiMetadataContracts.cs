@@ -14,6 +14,44 @@ public sealed record AiMetadataMatchInput(
     bool UseBangumiPubDateFirst)
 {
     public string? PromptTemplateOverride { get; init; }
+
+    public AiMetadataPromptFeatures? PromptFeaturesOverride { get; init; }
+}
+
+public sealed record AiMetadataPromptFeatures(
+    bool TmdbMcp,
+    bool BangumiMcp,
+    bool AniDbLookup,
+    bool BangumiPubDateFirst)
+{
+    public bool ImdbLookup { get; init; }
+
+    public static AiMetadataPromptFeatures Resolve(AiMetadataMatchInput input)
+    {
+        var requested = input.PromptFeaturesOverride
+            ?? new AiMetadataPromptFeatures(
+                true,
+                input.BangumiSubjectId is not null,
+                input.AniDbAnimeId is not null,
+                input.UseBangumiPubDateFirst)
+            {
+                ImdbLookup = input.ImdbTitleId is not null,
+            };
+
+        var tmdb = requested.TmdbMcp;
+        var bangumi = requested.BangumiMcp && input.BangumiSubjectId is not null;
+        return requested with
+        {
+            TmdbMcp = tmdb,
+            BangumiMcp = bangumi,
+            AniDbLookup = requested.AniDbLookup && input.AniDbAnimeId is not null,
+            BangumiPubDateFirst = requested.BangumiPubDateFirst
+                && input.UseBangumiPubDateFirst,
+            ImdbLookup = requested.ImdbLookup
+                && input.ImdbTitleId is not null
+                && tmdb,
+        };
+    }
 }
 
 public sealed record AiMetadataFileInput(

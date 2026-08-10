@@ -10,6 +10,41 @@ namespace AnimeGoNet.App.Tests.Metadata;
 public sealed class AiMetadataToolRegistryTests
 {
     [Fact]
+    public async Task DisabledPromptFeaturesDoNotInitializeOrExposeTheirTools()
+    {
+        var handler = new ReferenceToolHandler();
+        using var client = new HttpClient(handler);
+        var input = Input() with
+        {
+            BangumiSubjectId = 123,
+            AniDbAnimeId = 456,
+            ImdbTitleId = "tt1234567",
+            PromptFeaturesOverride = new(false, false, false, false)
+            {
+                ImdbLookup = true,
+            },
+        };
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions(),
+            input);
+
+        await registry.InitializeAsync(CancellationToken.None);
+
+        Assert.Empty(registry.Tools);
+        Assert.Empty(handler.MappingUris);
+        Assert.Empty(handler.InvokeArguments);
+        Assert.Contains(
+            "tool_not_available",
+            await registry.CallAsync("lookup_anidb_tmdbtv", "{}", CancellationToken.None),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tool_not_available",
+            await registry.CallAsync("lookup_imdb_tmdb_tv", "{}", CancellationToken.None),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FixedReferenceToolsIgnoreModelIdentifiersAndFilterMovieResults()
     {
         var handler = new ReferenceToolHandler();
