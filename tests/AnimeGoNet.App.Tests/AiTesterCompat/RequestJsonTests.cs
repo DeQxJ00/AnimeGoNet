@@ -80,6 +80,56 @@ public sealed class RequestJsonTests
     }
 
     [Fact]
+    public async Task FinalResponsesRequestOmitsMikanPubDateWhenPrioritySwitchIsDisabled()
+    {
+        var config = new TesterConfig("https://example.test", "key", "model-x", ApiMode.Responses, "medium", false, 30, null);
+        var input = new MatchRequestInput(
+            "Title",
+            [new MatchFileInput("E04.mkv", 1)],
+            123,
+            null,
+            "2023-01-24T21:02:56.558766",
+            1,
+            false,
+            4,
+            true);
+        string template = PromptTemplate.LoadFromMarkdown(PromptTemplate.FindDefaultMarkdownPath());
+        string prompt = PromptTemplate.Render(template, input, PromptFeatures.From(config, input)).Text;
+        using var client = new HttpClient(new StubHandler(HttpStatusCode.OK, "{}"));
+        var api = new OpenAiCompatibleClient(client, config);
+
+        using HttpRequestMessage request = api.CreateRequest(prompt);
+        using JsonDocument document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        string finalInput = document.RootElement.GetProperty("input").GetString()!;
+
+        Assert.DoesNotContain("\"mikan_pub_date\"", finalInput);
+        Assert.DoesNotContain("{{MIKAN_PUB_DATE_JSON}}", finalInput);
+        Assert.Contains("\"request_identity\"", finalInput);
+    }
+
+    [Fact]
+    public void RenderedPromptOmitsMikanPubDateWhenPriorityGateDoesNotPass()
+    {
+        var config = new TesterConfig("https://example.test", "key", "model-x", ApiMode.Responses, "medium", false, 30, null);
+        var input = new MatchRequestInput(
+            "Title",
+            [new MatchFileInput("E04.mkv", 1)],
+            123,
+            null,
+            "2023-01-24T21:02:56.558766",
+            2,
+            true,
+            4,
+            true);
+        string template = PromptTemplate.LoadFromMarkdown(PromptTemplate.FindDefaultMarkdownPath());
+
+        string prompt = PromptTemplate.Render(template, input, PromptFeatures.From(config, input)).Text;
+
+        Assert.DoesNotContain("\"mikan_pub_date\"", prompt);
+        Assert.Contains("\"request_identity\"", prompt);
+    }
+
+    [Fact]
     public async Task ResponsesRequestSendsLocalToolsBeforeWebSearchFallback()
     {
         var config = new TesterConfig("https://example.test", "key", "model-x", ApiMode.Responses, "medium", true, 30, null, "http://bgm.test/mcp", "http://tmdb.test/mcp");

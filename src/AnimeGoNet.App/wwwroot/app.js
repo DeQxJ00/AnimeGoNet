@@ -5935,6 +5935,7 @@ const aiTesterPersistedFields = [
 ];
 function buildAiTesterRunRequest() {
     JSON.parse(element("#ai-test-files-json").value);
+    const useBangumiPubDateFirst = element("#ai-test-use-bgm-pubdate").checked;
     return {
         base_url: element("#ai-test-base-url").value.trim(),
         api_key: element("#ai-test-api-key").value,
@@ -5949,9 +5950,11 @@ function buildAiTesterRunRequest() {
         files_json: element("#ai-test-files-json").value,
         bgmid: element("#ai-test-bgmid").value.trim(),
         anidbid: element("#ai-test-anidbid").value.trim(),
-        mikan_pub_date: element("#ai-test-published-at").value.trim(),
+        ...(useBangumiPubDateFirst
+            ? { mikan_pub_date: element("#ai-test-published-at").value.trim() }
+            : {}),
         bgm_episode_candidate: element("#ai-test-bgm-episode").value.trim(),
-        use_bangumi_pubdate_first: element("#ai-test-use-bgm-pubdate").checked,
+        use_bangumi_pubdate_first: useBangumiPubDateFirst,
         torrent_import_id: element("#ai-test-torrent-import-id").value,
         is_mikan_rss_source: element("#ai-test-is-mikan-source").checked,
         bgm_mcp_url: element("#ai-test-bgm-mcp-url").value.trim(),

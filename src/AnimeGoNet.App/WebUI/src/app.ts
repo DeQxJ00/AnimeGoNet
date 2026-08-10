@@ -1413,7 +1413,7 @@ interface AiTesterRunRequest {
   files_json: string;
   bgmid: string;
   anidbid: string;
-  mikan_pub_date: string;
+  mikan_pub_date?: string;
   bgm_episode_candidate: string;
   use_bangumi_pubdate_first: boolean;
   torrent_import_id: string;
@@ -7873,6 +7873,7 @@ const aiTesterPersistedFields = [
 
 function buildAiTesterRunRequest(): AiTesterRunRequest {
   JSON.parse(element<HTMLTextAreaElement>("#ai-test-files-json").value);
+  const useBangumiPubDateFirst = element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked;
   return {
     base_url: element<HTMLInputElement>("#ai-test-base-url").value.trim(),
     api_key: element<HTMLInputElement>("#ai-test-api-key").value,
@@ -7887,9 +7888,11 @@ function buildAiTesterRunRequest(): AiTesterRunRequest {
     files_json: element<HTMLTextAreaElement>("#ai-test-files-json").value,
     bgmid: element<HTMLInputElement>("#ai-test-bgmid").value.trim(),
     anidbid: element<HTMLInputElement>("#ai-test-anidbid").value.trim(),
-    mikan_pub_date: element<HTMLInputElement>("#ai-test-published-at").value.trim(),
+    ...(useBangumiPubDateFirst
+      ? { mikan_pub_date: element<HTMLInputElement>("#ai-test-published-at").value.trim() }
+      : {}),
     bgm_episode_candidate: element<HTMLInputElement>("#ai-test-bgm-episode").value.trim(),
-    use_bangumi_pubdate_first: element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked,
+    use_bangumi_pubdate_first: useBangumiPubDateFirst,
     torrent_import_id: element<HTMLInputElement>("#ai-test-torrent-import-id").value,
     is_mikan_rss_source: element<HTMLInputElement>("#ai-test-is-mikan-source").checked,
     bgm_mcp_url: element<HTMLInputElement>("#ai-test-bgm-mcp-url").value.trim(),

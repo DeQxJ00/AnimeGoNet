@@ -122,7 +122,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 4. 门禁为 true 时，模型使用原始 `files[].name` 和 `bgm_episode_candidate` 定向查询 TMDB TV Series、普通 Season 和 Episode；任何来源集号都不得直接复制成 TMDB Episode Number。
 5. TMDB 定向验证失败时继续原通用 AI 匹配流程，不把它当成整个任务失败；最终仍必须通过 TMDB MCP和主程序二次验证。
 
-`use_bangumi_pubdate_first=false` 时不发送 `bgm_episode_candidate` 的日期优先指令，但 Mikan 的 `published_at` 仍作为非约束参数发送；非 Mikan 来源始终为 `null`。即使 `bgmid` 非空，Bangumi MCP仍可按原通用流程提供作品标题、别名等上下文。人工规则和 Episode Offset 始终优先，命中时不调用 AI。
+生产流程中 `use_bangumi_pubdate_first=false` 时不发送 `bgm_episode_candidate` 的日期优先指令，但 Mikan 的 `published_at` 仍作为非约束参数发送；非 Mikan 来源始终为 `null`。内置 Tester 使用独立字段名 `mikan_pub_date`：Tester 开关关闭或运行时门禁未通过时，该字段以及对应日期优先条件字段从 Prompt JSON 整段省略，不使用 `null` 占位；WebUI 关闭开关时，发往 Tester API 的请求也不包含 `mikan_pub_date` 属性。即使 `bgmid` 非空，Bangumi MCP仍可按原通用流程提供作品标题、别名等上下文。人工规则和 Episode Offset 始终优先，命中时不调用 AI。
 
 主程序可按 `bgmid` 和数据版本缓存 Bangumi 普通 Episode 列表，但缓存必须遵守更新策略，不能导致新播 Episode 永久不可见。模型侧不再为日期候选重复调用 Bangumi 工具。
 

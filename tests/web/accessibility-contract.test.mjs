@@ -110,3 +110,11 @@ test("AI test page exposes verified Responses compatibility controls and usage",
   assert.match(app, /web_search_enabled:/);
   assert.match(app, /reasoning_tokens/);
 });
+
+test("AI test request omits Mikan pubDate when Bangumi date priority is disabled", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /const useBangumiPubDateFirst = .*#ai-test-use-bgm-pubdate.*\.checked;/);
+  assert.match(app, /\.\.\.\(useBangumiPubDateFirst\s*\? \{ mikan_pub_date:/);
+  assert.match(app, /use_bangumi_pubdate_first: useBangumiPubDateFirst/);
+});
