@@ -10,4 +10,4 @@ $env:ANIMEGONET_MIKAN_RSS_URL = '<private RSS URL>'
 Remove-Item Env:ANIMEGONET_MIKAN_RSS_URL
 ```
 
-报告写入 `TestSpace/animegonet_data/mikan-rss-live-audit/`。报告包含标题、发布时间、EP 解析、筛选决定和规则组轨迹；URL 只保留不可逆 SHA-256 指纹，查询串、token、Torrent URL 均不输出。
+报告写入 `TestSpace/animegonet_data/mikan-rss-live-audit/`。报告包含标题、发布时间、本地标题季度提示、EP 解析、筛选决定和规则组轨迹；URL 只保留不可逆 SHA-256 指纹，查询串、token、Torrent URL 均不输出。`title_season_hint` 只是未验证的本地标题提示；该无副作用 RSS 测试不执行 Bangumi/TMDB 匹配，因此 `canonical_tmdb_season` 固定为空，不能将 Winner 解释为已完成季度匹配。

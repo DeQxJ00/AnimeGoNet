@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.Core.Feeds;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Rules;
 
 namespace AnimeGoNet.LocalIntegration.Tests;
@@ -43,20 +44,7 @@ public sealed class MikanRssLiveAuditTests
             winner_count = plan.Winners.Count,
             effects = "none",
             ai_used = false,
-            items = plan.Items.Select((item, index) => new
-            {
-                index = index + 1,
-                title = item.FeedItem.Title,
-                published_date = item.FeedItem.PublishedDate,
-                content_type = item.FeedItem.ContentType,
-                declared_length = item.FeedItem.Length,
-                item_fingerprint = Fingerprint(string.Concat(item.FeedItem.MikanUrl, "\n", item.FeedItem.TorrentUrl)),
-                parsed_episode_kind = item.Candidate.SourceEpisodeKind,
-                parsed_episode = item.Candidate.SourceEpisode,
-                decision = item.Decision.Kind.ToString(),
-                reason = item.Decision.Reason,
-                evaluated_priority_groups = item.Decision.EvaluatedPriorityGroups,
-            }),
+            items = plan.Items.Select((item, index) => ToReportItem(item, index)),
         };
         await File.WriteAllTextAsync(
             reportPath,
@@ -71,6 +59,29 @@ public sealed class MikanRssLiveAuditTests
 
     private static string Fingerprint(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static object ToReportItem(MikanRssPlannedItem item, int index)
+    {
+        var raw = AutoBangumiRawParser.Parse(item.FeedItem.Title);
+        return new
+        {
+            index = index + 1,
+            title = item.FeedItem.Title,
+            published_date = item.FeedItem.PublishedDate,
+            content_type = item.FeedItem.ContentType,
+            declared_length = item.FeedItem.Length,
+            item_fingerprint = Fingerprint(string.Concat(item.FeedItem.MikanUrl, "\n", item.FeedItem.TorrentUrl)),
+            title_season_hint = raw.Season > 0 ? raw.Season : (int?)null,
+            title_season_raw = string.IsNullOrWhiteSpace(raw.SeasonRaw) ? null : raw.SeasonRaw,
+            canonical_tmdb_season = (int?)null,
+            season_state = raw.Season > 0 ? "title_hint_unverified" : "unknown_not_resolved",
+            parsed_episode_kind = item.Candidate.SourceEpisodeKind,
+            parsed_episode = item.Candidate.SourceEpisode,
+            decision = item.Decision.Kind.ToString(),
+            reason = item.Decision.Reason,
+            evaluated_priority_groups = item.Decision.EvaluatedPriorityGroups,
+        };
+    }
 
     private static string Required(string name) =>
         Environment.GetEnvironmentVariable(name)
