@@ -92,6 +92,80 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 referenceHttpClient);
             await registry.InitializeAsync(timeout.Token).ConfigureAwait(false);
             trace.Add(new(++sequence, "tools_initialized", $"tools={registry.Tools.Count}"));
+            if (options.ApiMode == AiApiMode.Responses)
+            {
+                string? previousResponseId = null;
+                IReadOnlyList<ResponsesFunctionOutput>? pendingOutputs = null;
+                for (var round = 0; round <= MaxToolRounds; round++)
+                {
+                    var requestTimer = Stopwatch.StartNew();
+                    var responseJson = await SendWithRetryAsync(
+                        BuildResponsesRequestJson(
+                            prompt,
+                            registry.Tools,
+                            previousResponseId,
+                            pendingOutputs),
+                        usage,
+                        timeout.Token).ConfigureAwait(false);
+                    requestTimer.Stop();
+                    var parsed = ParseResponsesResponse(responseJson);
+                    usage.Add(parsed.Model, parsed.Usage, parsed.ToolCalls.Count);
+                    trace.Add(new(
+                        ++sequence,
+                        "model_response",
+                        $"api=responses; round={round + 1}; tool_calls={parsed.ToolCalls.Count}; content={(string.IsNullOrWhiteSpace(parsed.Content) ? "empty" : "present")}",
+                        requestTimer.ElapsedMilliseconds));
+                    if (parsed.ToolCalls.Count == 0)
+                    {
+                        if (string.IsNullOrWhiteSpace(parsed.Content))
+                        {
+                            throw new AiMetadataMatcherException(
+                                MetadataFailureKind.Protocol,
+                                "ai_response_content_missing");
+                        }
+
+                        return new AiMetadataMatchResponse(
+                            ParseCandidate(parsed.Content),
+                            usage.Snapshot())
+                        {
+                            RawOutput = parsed.Content,
+                            Trace = trace.ToArray(),
+                        };
+                    }
+
+                    if (string.IsNullOrWhiteSpace(parsed.ResponseId))
+                    {
+                        throw new AiMetadataMatcherException(
+                            MetadataFailureKind.Protocol,
+                            "ai_responses_id_missing");
+                    }
+
+                    previousResponseId = parsed.ResponseId;
+                    var outputs = new List<ResponsesFunctionOutput>(parsed.ToolCalls.Count);
+                    foreach (var call in parsed.ToolCalls)
+                    {
+                        var toolTimer = Stopwatch.StartNew();
+                        var output = await registry.CallAsync(
+                            call.Name,
+                            call.ArgumentsJson,
+                            timeout.Token).ConfigureAwait(false);
+                        toolTimer.Stop();
+                        trace.Add(new(
+                            ++sequence,
+                            "tool_call",
+                            $"{call.Name}; arguments={TruncateForTrace(call.ArgumentsJson)}; output_bytes={Encoding.UTF8.GetByteCount(output)}",
+                            toolTimer.ElapsedMilliseconds));
+                        outputs.Add(new(call.Id, output));
+                    }
+
+                    pendingOutputs = outputs;
+                }
+
+                throw new AiMetadataMatcherException(
+                    MetadataFailureKind.Protocol,
+                    "ai_tool_round_limit_exceeded");
+            }
+
             var messages = new List<ChatMessageState>
             {
                 new("user", prompt, null, null),
@@ -261,7 +335,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                BuildEndpoint(options.BaseUrl!));
+                BuildEndpoint(options.BaseUrl!, options.ApiMode));
             if (!string.IsNullOrWhiteSpace(options.ApiKey))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue(
@@ -301,12 +375,14 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         }
     }
 
-    private static Uri BuildEndpoint(Uri baseUrl)
+    private static Uri BuildEndpoint(Uri baseUrl, AiApiMode mode)
     {
         var absolute = baseUrl.AbsoluteUri.EndsWith('/')
             ? baseUrl
             : new Uri(baseUrl.AbsoluteUri + "/", UriKind.Absolute);
-        return new Uri(absolute, "v1/chat/completions");
+        return new Uri(
+            absolute,
+            mode == AiApiMode.Responses ? "v1/responses" : "v1/chat/completions");
     }
 
     private static bool IsRetryable(HttpStatusCode statusCode) =>
@@ -373,6 +449,65 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             writer.WriteStartObject();
             writer.WriteString("type", "json_object");
             writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private string BuildResponsesRequestJson(
+        string prompt,
+        IReadOnlyList<AiFunctionTool> tools,
+        string? previousResponseId,
+        IReadOnlyList<ResponsesFunctionOutput>? outputs)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("model", options.Model);
+            if (previousResponseId is not null)
+            {
+                writer.WriteString("previous_response_id", previousResponseId);
+            }
+
+            writer.WritePropertyName("input");
+            if (outputs is null)
+            {
+                writer.WriteStringValue(prompt);
+            }
+            else
+            {
+                writer.WriteStartArray();
+                foreach (var output in outputs)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "function_call_output");
+                    writer.WriteString("call_id", output.CallId);
+                    writer.WriteString("output", output.Output);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+
+            if (tools.Count > 0)
+            {
+                writer.WritePropertyName("tools");
+                writer.WriteStartArray();
+                foreach (var tool in tools)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "function");
+                    writer.WriteString("name", tool.Name);
+                    writer.WriteString("description", tool.Description);
+                    writer.WritePropertyName("parameters");
+                    using var schema = JsonDocument.Parse(tool.ParametersJson);
+                    schema.RootElement.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+
             writer.WriteEndObject();
         }
 
@@ -487,6 +622,92 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         return new ParsedChatResponse(content, calls, model, usage);
     }
 
+    private static ParsedResponsesResponse ParseResponsesResponse(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("output", out var output)
+            || output.ValueKind != JsonValueKind.Array)
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.Protocol,
+                "ai_responses_response_invalid");
+        }
+
+        var calls = new List<AiFunctionCall>();
+        string? content = root.TryGetProperty("output_text", out var directText)
+            && directText.ValueKind == JsonValueKind.String
+                ? directText.GetString()
+                : null;
+        foreach (var item in output.EnumerateArray())
+        {
+            if (item.TryGetProperty("type", out var type)
+                && type.ValueKind == JsonValueKind.String
+                && type.GetString() == "function_call")
+            {
+                if (!item.TryGetProperty("call_id", out var callId)
+                    || !item.TryGetProperty("name", out var name)
+                    || !item.TryGetProperty("arguments", out var arguments)
+                    || callId.ValueKind != JsonValueKind.String
+                    || name.ValueKind != JsonValueKind.String
+                    || arguments.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(callId.GetString())
+                    || string.IsNullOrWhiteSpace(name.GetString()))
+                {
+                    throw new AiMetadataMatcherException(
+                        MetadataFailureKind.Protocol,
+                        "ai_tool_call_invalid");
+                }
+
+                calls.Add(new(
+                    callId.GetString()!,
+                    name.GetString()!,
+                    arguments.GetString()!));
+                continue;
+            }
+
+            if (content is null
+                && item.TryGetProperty("content", out var parts)
+                && parts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("text", out var text)
+                        && text.ValueKind == JsonValueKind.String)
+                    {
+                        content = text.GetString();
+                        break;
+                    }
+                }
+            }
+        }
+
+        var responseId = root.TryGetProperty("id", out var id)
+            && id.ValueKind == JsonValueKind.String
+                ? id.GetString()
+                : null;
+        var model = root.TryGetProperty("model", out var modelElement)
+            && modelElement.ValueKind == JsonValueKind.String
+                ? modelElement.GetString()
+                : null;
+        ParsedUsage? usage = null;
+        if (root.TryGetProperty("usage", out var usageElement)
+            && usageElement.ValueKind == JsonValueKind.Object)
+        {
+            usage = new ParsedUsage(
+                ReadNonNegativeInt64(usageElement, "input_tokens"),
+                ReadNonNegativeInt64(usageElement, "output_tokens"),
+                ReadNonNegativeInt64(usageElement, "total_tokens"));
+        }
+
+        return new ParsedResponsesResponse(
+            responseId,
+            content,
+            calls,
+            model,
+            usage);
+    }
+
     private static long? ReadNonNegativeInt64(JsonElement parent, string propertyName)
     {
         if (!parent.TryGetProperty(propertyName, out var value)
@@ -516,6 +737,17 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         IReadOnlyList<AiFunctionCall> ToolCalls,
         string? Model,
         ParsedUsage? Usage);
+
+    private sealed record ParsedResponsesResponse(
+        string? ResponseId,
+        string? Content,
+        IReadOnlyList<AiFunctionCall> ToolCalls,
+        string? Model,
+        ParsedUsage? Usage);
+
+    private sealed record ResponsesFunctionOutput(
+        string CallId,
+        string Output);
 
     private sealed record ParsedUsage(
         long? PromptTokens,

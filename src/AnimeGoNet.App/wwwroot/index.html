@@ -906,7 +906,7 @@
             <details class="wide ai-test-call-settings">
               <summary>本次模型与网络覆盖（留空使用主程序配置）</summary>
               <div class="ai-test-fields">
-                <label>API 模式<input value="Chat Completions" readonly aria-label="AI 测试 API 模式"></label>
+                <label>API 模式<select id="ai-test-api-mode" aria-label="AI 测试 API 模式"><option value="">继承主程序（Chat Completions）</option><option value="responses">Responses</option><option value="chat-completions">Chat Completions</option></select></label>
                 <label>模型<input id="ai-test-model" maxlength="200" placeholder="例如 gpt-5.4-mini"></label>
                 <label class="wide">OpenAI-compatible API 地址<input id="ai-test-base-url" type="url" maxlength="2048" placeholder="例如 http://openai.local/"></label>
                 <label class="wide">临时 API Key（不保存、不回显）<input id="ai-test-api-key" type="password" maxlength="16384" autocomplete="off" placeholder="留空继承主程序密钥"></label>

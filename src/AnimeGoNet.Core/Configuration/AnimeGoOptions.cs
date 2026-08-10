@@ -174,6 +174,8 @@ public sealed record AiMatchingOptions
 
     public string? Model { get; init; }
 
+    public AiApiMode ApiMode { get; init; } = AiApiMode.ChatCompletions;
+
     public bool UseMetadataMatch { get; init; }
 
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(600);
@@ -188,6 +190,12 @@ public sealed record AiMatchingOptions
 
     public string AniDbMappingUrlTemplate { get; init; } =
         FixedAniDbMappingUrlTemplate;
+}
+
+public enum AiApiMode
+{
+    ChatCompletions = 1,
+    Responses = 2,
 }
 
 public sealed record SourceProfileSeed

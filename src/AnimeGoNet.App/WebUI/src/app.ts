@@ -1351,6 +1351,7 @@ interface AiMetadataTestTrace {
 interface AiMetadataTestResult {
   succeeded: boolean;
   prompt_version: string;
+  api_mode: string;
   rendered_prompt: string;
   raw_output: string | null;
   candidate: unknown;
@@ -1388,6 +1389,7 @@ interface AiMetadataTestRequest {
   ai_base_url: string | null;
   ai_api_key: string | null;
   ai_model: string | null;
+  api_mode: string | null;
   ai_http_timeout_seconds: number | null;
   ai_retry_count: number | null;
   http_proxy_url: string | null;
@@ -7685,6 +7687,7 @@ function renderAiTestResult(result: AiMetadataTestResult): void {
   summary.replaceChildren(
     aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"),
     aiTestSummaryItem("模型", usage?.model ?? "—"),
+    aiTestSummaryItem("API 模式", result.api_mode),
     aiTestSummaryItem("总耗时", `${result.duration_ms} ms`),
     aiTestSummaryItem(
       "请求 / 工具",
@@ -7766,6 +7769,7 @@ async function runAiMetadataTest(event: SubmitEvent): Promise<void> {
       ai_base_url: element<HTMLInputElement>("#ai-test-base-url").value.trim() || null,
       ai_api_key: element<HTMLInputElement>("#ai-test-api-key").value.trim() || null,
       ai_model: element<HTMLInputElement>("#ai-test-model").value.trim() || null,
+      api_mode: element<HTMLSelectElement>("#ai-test-api-mode").value || null,
       ai_http_timeout_seconds: optionalPositiveInteger("#ai-test-timeout"),
       ai_retry_count: optionalNonNegativeInteger("#ai-test-retries"),
       http_proxy_url: element<HTMLInputElement>("#ai-test-http-proxy").value.trim() || null,

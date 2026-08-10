@@ -139,6 +139,7 @@ public sealed class AiMetadataTestApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(json.GetProperty("succeeded").GetBoolean());
         Assert.Equal("tmdb-ai-match-v12", json.GetProperty("prompt_version").GetString());
+        Assert.Equal("chat-completions", json.GetProperty("api_mode").GetString());
         Assert.Contains("[Group] Example - 06", json.GetProperty("rendered_prompt").GetString(), StringComparison.Ordinal);
         Assert.Equal("{\"matched\":true}", json.GetProperty("raw_output").GetString());
         Assert.Equal(42, json.GetProperty("validation").GetProperty("tmdbid").GetInt32());
@@ -188,6 +189,25 @@ public sealed class AiMetadataTestApiTests
             files = new[] { new { name = "Example.mkv", size_bytes = 1 } },
             ai_base_url = aiBaseUrl,
             http_proxy_url = proxyUrl,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(matcher.LastInput);
+    }
+
+    [Fact]
+    public async Task RejectsUnknownAiApiModeBeforeCallingMatcher()
+    {
+        var matcher = new CapturingMatcher();
+        await using var app = await RunningApp.StartAsync(
+            aiMetadataMatcher: matcher,
+            tmdbClient: new ValidTmdbClient());
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/run", new
+        {
+            title = "Example",
+            files = new[] { new { name = "Example.mkv", size_bytes = 1 } },
+            api_mode = "legacy-completions",
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

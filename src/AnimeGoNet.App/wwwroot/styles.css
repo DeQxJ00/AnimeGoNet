@@ -86,7 +86,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .ai-test-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .ai-test-fields label { color: #8da2c9; font-size: .75rem; }
 .ai-test-fields .wide { grid-column: 1 / -1; }
-.ai-test-fields input:not([type="checkbox"]), .ai-test-fields textarea { width: 100%; margin-top: 6px; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; font: inherit; }
+.ai-test-fields input:not([type="checkbox"]), .ai-test-fields textarea, .ai-test-fields select { width: 100%; margin-top: 6px; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; font: inherit; }
 .ai-test-fields textarea { resize: vertical; line-height: 1.5; }
 .ai-test-import { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: end; margin-bottom: 16px; padding: 13px; border: 1px solid #344260; border-radius: 12px; background: rgba(5,8,16,.35); }
 .ai-test-import label { color: #8da2c9; font-size: .75rem; }

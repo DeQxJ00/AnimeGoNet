@@ -113,6 +113,7 @@ public sealed record AiMetadataTestRequest(
     [property: JsonPropertyName("ai_base_url")] string? AiBaseUrl,
     [property: JsonPropertyName("ai_api_key")] string? AiApiKey,
     [property: JsonPropertyName("ai_model")] string? AiModel,
+    [property: JsonPropertyName("api_mode")] string? ApiMode,
     [property: JsonPropertyName("ai_http_timeout_seconds")] int? AiHttpTimeoutSeconds,
     [property: JsonPropertyName("ai_retry_count")] int? AiRetryCount,
     [property: JsonPropertyName("http_proxy_url")] string? HttpProxyUrl,
@@ -180,6 +181,7 @@ public sealed record AiMetadataTestFeatureResponse(
 public sealed record AiMetadataTestResponse(
     [property: JsonPropertyName("succeeded")] bool Succeeded,
     [property: JsonPropertyName("prompt_version")] string PromptVersion,
+    [property: JsonPropertyName("api_mode")] string ApiMode,
     [property: JsonPropertyName("rendered_prompt")] string RenderedPrompt,
     [property: JsonPropertyName("raw_output")] string? RawOutput,
     [property: JsonPropertyName("candidate")] AiMetadataMatchCandidate? Candidate,

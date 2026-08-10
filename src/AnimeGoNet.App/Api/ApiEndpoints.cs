@@ -184,6 +184,7 @@ public static class ApiEndpoints
             || request.PromptTemplate?.Length > AiMetadataPromptRenderer.MaximumTemplateLength
             || request.AiApiKey?.Length > 16_384
             || request.AiModel?.Length > 200
+            || !IsOptionalAiApiMode(request.ApiMode)
             || request.AiHttpTimeoutSeconds is < 1 or > 3600
             || request.AiRetryCount is < 0 or > 10
             || !IsOptionalHttpUrl(request.AiBaseUrl)
@@ -235,6 +236,8 @@ public static class ApiEndpoints
             return TypedResults.BadRequest(Error(exception.SafeCode, "Prompt template is invalid."));
         }
         var timer = Stopwatch.StartNew();
+        var effectiveApiMode = ParseAiApiMode(request.ApiMode)
+            ?? applicationOptions.Metadata.Ai.ApiMode;
         using var requestMatcher = CreateAiTestMatcher(request, applicationOptions);
         var effectiveMatcher = requestMatcher ?? matcher;
         try
@@ -262,6 +265,7 @@ public static class ApiEndpoints
             return TypedResults.Ok(new AiMetadataTestResponse(
                 validation.IsSuccess,
                 AiMetadataPromptRenderer.PromptVersion,
+                FormatAiApiMode(effectiveApiMode),
                 prompt,
                 match.RawOutput,
                 match.Candidate,
@@ -279,6 +283,7 @@ public static class ApiEndpoints
             return TypedResults.Ok(new AiMetadataTestResponse(
                 false,
                 AiMetadataPromptRenderer.PromptVersion,
+                FormatAiApiMode(effectiveApiMode),
                 prompt,
                 null,
                 null,
@@ -318,6 +323,7 @@ public static class ApiEndpoints
         if (!HasValue(request.AiBaseUrl)
             && !HasValue(request.AiApiKey)
             && !HasValue(request.AiModel)
+            && !HasValue(request.ApiMode)
             && request.AiHttpTimeoutSeconds is null
             && request.AiRetryCount is null
             && !HasValue(request.HttpProxyUrl)
@@ -333,6 +339,7 @@ public static class ApiEndpoints
             BaseUrl = ParseOptionalHttpUrl(request.AiBaseUrl) ?? current.BaseUrl,
             ApiKey = HasValue(request.AiApiKey) ? request.AiApiKey!.Trim() : current.ApiKey,
             Model = HasValue(request.AiModel) ? request.AiModel!.Trim() : current.Model,
+            ApiMode = ParseAiApiMode(request.ApiMode) ?? current.ApiMode,
             HttpTimeout = request.AiHttpTimeoutSeconds is { } timeout
                 ? TimeSpan.FromSeconds(timeout)
                 : current.HttpTimeout,
@@ -368,6 +375,21 @@ public static class ApiEndpoints
     }
 
     private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value);
+
+    private static bool IsOptionalAiApiMode(string? value) =>
+        !HasValue(value) || ParseAiApiMode(value) is not null;
+
+    private static AiApiMode? ParseAiApiMode(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "responses" => AiApiMode.Responses,
+            "chat-completions" => AiApiMode.ChatCompletions,
+            null or "" => null,
+            _ => null,
+        };
+
+    private static string FormatAiApiMode(AiApiMode value) =>
+        value == AiApiMode.Responses ? "responses" : "chat-completions";
 
     private static bool IsOptionalHttpUrl(string? value) =>
         !HasValue(value) || ParseOptionalHttpUrl(value) is not null;

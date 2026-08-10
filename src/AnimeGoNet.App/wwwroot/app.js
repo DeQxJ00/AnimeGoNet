@@ -5828,7 +5828,7 @@ function aiTestSummaryItem(label, value) {
 function renderAiTestResult(result) {
     const summary = element("#ai-test-summary");
     const usage = result.usage;
-    summary.replaceChildren(aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"), aiTestSummaryItem("模型", usage?.model ?? "—"), aiTestSummaryItem("总耗时", `${result.duration_ms} ms`), aiTestSummaryItem("请求 / 工具", `${usage?.request_count ?? 0} / ${usage?.tool_call_count ?? 0}`), aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")), aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")), aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")), aiTestSummaryItem("实际启用", Object.entries(result.effective_features)
+    summary.replaceChildren(aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"), aiTestSummaryItem("模型", usage?.model ?? "—"), aiTestSummaryItem("API 模式", result.api_mode), aiTestSummaryItem("总耗时", `${result.duration_ms} ms`), aiTestSummaryItem("请求 / 工具", `${usage?.request_count ?? 0} / ${usage?.tool_call_count ?? 0}`), aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")), aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")), aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")), aiTestSummaryItem("实际启用", Object.entries(result.effective_features)
         .filter(([, enabled]) => enabled)
         .map(([name]) => name)
         .join(", ") || "无"), aiTestSummaryItem("错误", result.error_code ?? "—"));
@@ -5889,6 +5889,7 @@ async function runAiMetadataTest(event) {
             ai_base_url: element("#ai-test-base-url").value.trim() || null,
             ai_api_key: element("#ai-test-api-key").value.trim() || null,
             ai_model: element("#ai-test-model").value.trim() || null,
+            api_mode: element("#ai-test-api-mode").value || null,
             ai_http_timeout_seconds: optionalPositiveInteger("#ai-test-timeout"),
             ai_retry_count: optionalNonNegativeInteger("#ai-test-retries"),
             http_proxy_url: element("#ai-test-http-proxy").value.trim() || null,

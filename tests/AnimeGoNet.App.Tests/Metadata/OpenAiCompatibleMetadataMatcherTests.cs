@@ -10,6 +10,33 @@ namespace AnimeGoNet.App.Tests.Metadata;
 public sealed class OpenAiCompatibleMetadataMatcherTests
 {
     [Fact]
+    public async Task ExecutesResponsesApiToolLoopAndParsesUsage()
+    {
+        var handler = new FakeAiAndMcpHandler();
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { ApiMode = AiApiMode.Responses });
+
+        var result = await matcher.MatchAsync(Input());
+
+        Assert.True(result.Matched);
+        Assert.Equal(42, result.TmdbId);
+        Assert.Equal(30, result.Usage!.PromptTokens);
+        Assert.Equal(10, result.Usage.CompletionTokens);
+        Assert.Equal(40, result.Usage.TotalTokens);
+        Assert.Equal(2, result.Usage.RequestCount);
+        Assert.Equal(1, result.Usage.ToolCallCount);
+        Assert.Contains(
+            handler.AiBodies,
+            body => body.Contains("\"type\":\"function\",\"name\":\"tmdb__list-api-endpoints\"", StringComparison.Ordinal));
+        Assert.Contains(
+            handler.AiBodies,
+            body => body.Contains("\"previous_response_id\":\"resp-1\"", StringComparison.Ordinal)
+                && body.Contains("\"type\":\"function_call_output\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ExecutesNamespacedTmdbMcpToolLoopAndParsesCandidate()
     {
         var handler = new FakeAiAndMcpHandler();
@@ -342,6 +369,12 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             RequestHosts.Add(request.RequestUri!.Host);
             if (request.RequestUri.Host == "ai.test.invalid")
             {
+                if (request.RequestUri.AbsolutePath.EndsWith(
+                    "/v1/responses",
+                    StringComparison.Ordinal))
+                {
+                    return await HandleResponsesAsync(request, cancellationToken);
+                }
                 return await HandleAiAsync(request, cancellationToken);
             }
 
@@ -420,6 +453,40 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                 "{\"model\":\"resolved-test-model\",\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":8,\"total_tokens\":28},\"choices\":[{\"message\":{\"content\":"
                 + JsonSerializer.Serialize(modelResult)
                 + "}}]}");
+        }
+
+        private async Task<HttpResponseMessage> HandleResponsesAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            AiCalls++;
+            AuthorizationValues.Add(request.Headers.Authorization?.ToString());
+            AiBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            _aiSequence++;
+            if (_aiSequence == 1)
+            {
+                return Json(HttpStatusCode.OK,
+                    """
+                    {
+                      "id":"resp-1",
+                      "model":"resolved-test-model",
+                      "usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12},
+                      "output":[{
+                        "type":"function_call",
+                        "call_id":"call-1",
+                        "name":"tmdb__list-api-endpoints",
+                        "arguments":"{}"
+                      }]
+                    }
+                    """);
+            }
+
+            var modelResult = FinalModelResult
+                ?? """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
+            return Json(HttpStatusCode.OK,
+                "{\"id\":\"resp-2\",\"model\":\"resolved-test-model\",\"usage\":{\"input_tokens\":20,\"output_tokens\":8,\"total_tokens\":28},\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":"
+                + JsonSerializer.Serialize(modelResult)
+                + "}]}]}");
         }
 
         private async Task<HttpResponseMessage> HandleMcpAsync(

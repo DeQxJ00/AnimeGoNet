@@ -101,6 +101,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "enable_bangumi_mcp")]
     [InlineData("/", "text/html", "ai-test-http-proxy")]
     [InlineData("/app.js", "text/javascript", "ai_http_timeout_seconds")]
+    [InlineData("/", "text/html", "ai-test-api-mode")]
+    [InlineData("/", "text/html", "chat-completions")]
     [InlineData("/styles.css", "text/css", ".ai-test-trace-row")]
     [InlineData("/styles.css", "text/css", ".external-plugin-card")]
     [InlineData("/styles.css", "text/css", ".external-plugin-form")]
