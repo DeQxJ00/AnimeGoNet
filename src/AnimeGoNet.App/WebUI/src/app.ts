@@ -1332,72 +1332,99 @@ type WorkspaceId =
   | "tools"
   | "system";
 
-interface AiMetadataTestUsage {
-  model: string;
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  total_tokens: number | null;
-  request_count: number;
-  tool_call_count: number;
+interface AiTesterUsage {
+  input_tokens: number | null;
+  output_tokens: number | null;
   reasoning_tokens: number | null;
+  total_tokens: number | null;
 }
 
-interface AiMetadataTestTrace {
-  sequence: number;
-  stage: string;
-  detail: string;
-  duration_ms: number | null;
+interface AiTesterToolTimelineEntry {
+  source: string;
+  name: string;
+  phase: string;
+  elapsed_milliseconds: number;
+  success: boolean;
+  message: string | null;
+  request_content: string | null;
+  response_content: string | null;
 }
 
-interface AiMetadataTestResult {
-  succeeded: boolean;
-  prompt_version: string;
-  api_mode: string;
+interface AiTesterApiRequestEntry {
+  step: number;
+  endpoint: string;
+  content: string;
+}
+
+interface AiTesterProgress {
+  type: string;
+  step: number;
+  message: string;
+  usage: AiTesterUsage | null;
+  tool: AiTesterToolTimelineEntry | null;
+  content: string | null;
+  endpoint: string | null;
+}
+
+interface AiTesterRunResult {
+  success: boolean;
+  status_code: number;
+  raw_response: string;
+  model_json: string | null;
+  usage: AiTesterUsage;
+  elapsed_milliseconds: number;
+  error_message: string | null;
+  result_json_valid: boolean;
+  result_json_error: string | null;
+  request_identity: string | null;
+  tool_timeline: AiTesterToolTimelineEntry[] | null;
+  pub_date_priority: {
+    use_bangumi_pub_date_first: boolean;
+    torrent_file_count: number | null;
+    bgm_episode_candidate: number | null;
+    normalized_pub_date: string | null;
+    reason: string;
+  } | null;
   rendered_prompt: string;
-  raw_output: string | null;
-  candidate: unknown;
-  validation: unknown;
-  usage: AiMetadataTestUsage | null;
-  duration_ms: number;
-  error_kind: string | null;
-  error_code: string | null;
-  effective_features: {
-    tmdb_mcp: boolean;
-    bangumi_mcp: boolean;
-    anidb_lookup: boolean;
-    imdb_lookup: boolean;
-    bangumi_pubdate_first: boolean;
-  };
-  trace: AiMetadataTestTrace[];
+  ai_api_requests: AiTesterApiRequestEntry[] | null;
+  local_episode_offset: unknown;
+  file_episode_candidates: Array<{ name: string; file_episode_candidate: number | null }> | null;
+  production_validation: unknown;
 }
 
-interface AiMetadataTestRequest {
-  title: string;
-  files: Array<{ name: string; size_bytes: number }>;
-  bgmid: number | null;
-  anidbid: number | null;
-  imdbid: string | null;
-  torrent_file_count: number;
-  published_at: string | null;
-  bgm_episode_candidate: number | null;
-  use_bangumi_pubdate_first: boolean;
-  expected_tmdbid: number | null;
-  expected_season: number | null;
+interface AiTesterStreamEnvelope {
+  type: "progress" | "result" | "stopped" | "error";
+  progress: AiTesterProgress | null;
+  result: AiTesterRunResult | null;
+  error: string | null;
+}
+
+interface AiTesterRunRequest {
+  base_url: string;
+  api_key: string;
+  model: string;
+  mode: string;
+  reasoning_effort: string;
+  web_search_enabled: boolean;
+  timeout_seconds: number;
+  proxy_url: string;
   prompt_template: string | null;
+  title: string;
+  files_json: string;
+  bgmid: string;
+  anidbid: string;
+  mikan_pub_date: string;
+  bgm_episode_candidate: string;
+  use_bangumi_pubdate_first: boolean;
+  torrent_import_id: string;
+  is_mikan_rss_source: boolean;
+  bgm_mcp_url: string;
+  tmdb_mcp_url: string;
+  enable_bgm_mcp: boolean;
   enable_tmdb_mcp: boolean;
-  enable_bangumi_mcp: boolean;
   enable_anidb_lookup: boolean;
-  ai_base_url: string | null;
-  ai_api_key: string | null;
-  ai_model: string | null;
-  api_mode: string | null;
-  reasoning_effort: string | null;
-  web_search_enabled: boolean | null;
-  ai_http_timeout_seconds: number | null;
-  ai_retry_count: number | null;
-  http_proxy_url: string | null;
-  tmdb_mcp_url: string | null;
-  bangumi_mcp_url: string | null;
+  anidb_mapping_url_template: string;
+  run_id: string;
 }
 
 interface AiMetadataTestPrompt {
@@ -1407,13 +1434,38 @@ interface AiMetadataTestPrompt {
 }
 
 interface AiMetadataTestMikanImport {
-  title: string;
-  mikanid: number;
-  groupid: number;
+  success: boolean;
+  title: string | null;
+  mikan_id: number | null;
+  group_id: number | null;
   bgmid: number | null;
-  published_at: string | null;
-  torrent_file_count: number;
-  files: Array<{ name: string; size_bytes: number }>;
+  mikan_pub_date: string | null;
+  torrent_url: string | null;
+  files: Array<{ name: string; size_bytes: number; file_episode_candidate: number | null }> | null;
+  import_id: string | null;
+  torrent_file_count: number | null;
+  file_episode_candidates: Array<{ name: string; file_episode_candidate: number | null }> | null;
+  error_message: string | null;
+}
+
+interface AiTesterBootstrap {
+  defaults: {
+    base_url: string;
+    model: string;
+    mode: number;
+    reasoning_effort: string | null;
+    web_search_enabled: boolean;
+    timeout_seconds: number;
+    proxy_url: string | null;
+    bgm_mcp_url: string;
+    tmdb_mcp_url: string;
+    enable_bgm_mcp: boolean;
+    enable_tmdb_mcp: boolean;
+    enable_anidb_lookup: boolean;
+    ani_db_mapping_url_template: string;
+    is_mikan_rss_source: boolean;
+  };
+  prompt_template: string;
 }
 
 interface WorkspaceDefinition {
@@ -7565,14 +7617,6 @@ function optionalNonNegativeInteger(selector: string): number | null {
   return raw === "" ? null : Number(raw);
 }
 
-function toLocalDateTimeValue(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (number: number): string => String(number).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
 function readAiPromptDraft(version: string): string | null {
   try {
     const raw = localStorage.getItem(aiTestPromptDraftKey);
@@ -7602,12 +7646,34 @@ async function loadAiTestPrompt(): Promise<void> {
   const editor = element<HTMLTextAreaElement>("#ai-test-prompt-template");
   const status = element<HTMLElement>("#ai-test-prompt-status");
   try {
-    const prompt = await api.get<AiMetadataTestPrompt>("/api/v1/ai-test/prompt");
+    const [prompt, bootstrap] = await Promise.all([
+      api.get<AiMetadataTestPrompt>("/api/v1/ai-test/prompt"),
+      api.get<AiTesterBootstrap>("/api/v1/ai-test/bootstrap"),
+    ]);
     aiTestDefaultPrompt = prompt;
     editor.maxLength = prompt.maximum_length;
     editor.value = readAiPromptDraft(prompt.prompt_version) ?? prompt.template;
     editor.disabled = false;
-    status.textContent = `当前 ${prompt.prompt_version}；上限 ${prompt.maximum_length} 字符。编辑内容只用于测试请求。`;
+    const defaults = bootstrap.defaults;
+    element<HTMLInputElement>("#ai-test-base-url").value = defaults.base_url;
+    element<HTMLInputElement>("#ai-test-model").value = defaults.model;
+    element<HTMLSelectElement>("#ai-test-api-mode").value = defaults.mode === 0
+      ? "responses"
+      : "chat-completions";
+    element<HTMLSelectElement>("#ai-test-reasoning-effort").value = defaults.reasoning_effort ?? "none";
+    element<HTMLInputElement>("#ai-test-timeout").value = String(defaults.timeout_seconds);
+    element<HTMLInputElement>("#ai-test-http-proxy").value = defaults.proxy_url ?? "";
+    element<HTMLInputElement>("#ai-test-tmdb-mcp-url").value = defaults.tmdb_mcp_url;
+    element<HTMLInputElement>("#ai-test-bgm-mcp-url").value = defaults.bgm_mcp_url;
+    element<HTMLInputElement>("#ai-test-anidb-template").value = defaults.ani_db_mapping_url_template;
+    element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked = defaults.enable_tmdb_mcp;
+    element<HTMLInputElement>("#ai-test-enable-bgm-mcp").checked = defaults.enable_bgm_mcp;
+    element<HTMLInputElement>("#ai-test-enable-anidb").checked = defaults.enable_anidb_lookup;
+    element<HTMLInputElement>("#ai-test-web-search").checked = defaults.web_search_enabled;
+    element<HTMLInputElement>("#ai-test-is-mikan-source").checked = defaults.is_mikan_rss_source;
+    restoreAiTesterForm();
+    updateAiTesterSourceStates();
+    status.textContent = `当前 ${prompt.prompt_version}；协议、续轮和工具执行来自已验证 Tester。`;
   } catch (error) {
     editor.disabled = true;
     status.textContent = `Prompt 读取失败：${errorMessage(error, "未知错误")}`;
@@ -7633,23 +7699,33 @@ async function importAiTestMikanEpisode(): Promise<void> {
   button.disabled = true;
   status.textContent = "正在读取 Mikan 页面、RSS、作品关联和 Torrent…";
   try {
-    const imported = await api.post<
-      AiMetadataTestMikanImport,
-      { episode_url: string }
-    >("/api/v1/ai-test/mikan-import", { episode_url: episodeUrl });
-    element<HTMLTextAreaElement>("#ai-test-title").value = imported.title;
-    element<HTMLTextAreaElement>("#ai-test-files").value = imported.files
-      .map(file => `${file.name} | ${file.size_bytes}`)
-      .join("\n");
+    const imported = await aiTesterPost<AiMetadataTestMikanImport>(
+      "/api/v1/ai-test/mikan-import",
+      { episode_url: episodeUrl, proxy_url: null },
+    );
+    if (!imported.success || !imported.files) throw new Error(imported.error_message ?? "Mikan import failed");
+    element<HTMLTextAreaElement>("#ai-test-title").value = imported.title ?? "";
+    element<HTMLTextAreaElement>("#ai-test-files-json").value = JSON.stringify(
+      imported.files.map(file => ({ name: file.name, size_bytes: file.size_bytes })),
+      null,
+      2,
+    );
     element<HTMLInputElement>("#ai-test-bgmid").value =
       imported.bgmid == null ? "" : String(imported.bgmid);
     element<HTMLInputElement>("#ai-test-file-count").value =
-      String(imported.torrent_file_count);
+      String(imported.torrent_file_count ?? "unavailable");
     element<HTMLInputElement>("#ai-test-published-at").value =
-      imported.published_at ? toLocalDateTimeValue(imported.published_at) : "";
-    status.textContent = `解析完成：mikanid=${imported.mikanid}，groupid=${imported.groupid}，`
-      + `bgmid=${imported.bgmid ?? "未找到"}，视频 ${imported.files.length} / Torrent 文件 ${imported.torrent_file_count}。`
-      + "已填入表单，尚未运行 AI。";
+      imported.mikan_pub_date ?? "";
+    element<HTMLInputElement>("#ai-test-torrent-import-id").value = imported.import_id ?? "";
+    element<HTMLInputElement>("#ai-test-mikan-scope").value =
+      `${imported.mikan_id ?? "?"} / ${imported.group_id ?? "?"}`;
+    element<HTMLInputElement>("#ai-test-is-mikan-source").checked = true;
+    renderAiTestFileCandidates(imported.file_episode_candidates);
+    status.textContent = `解析完成：mikanid=${imported.mikan_id ?? "未找到"}，groupid=${imported.group_id ?? "未找到"}，`
+      + `bgmid=${imported.bgmid ?? "未找到"}，视频 ${imported.files.length} / Torrent 文件 ${imported.torrent_file_count ?? "?"}。`
+      + "Torrent URL 已脱敏，尚未运行 AI。";
+    persistAiTesterForm();
+    updateAiTesterSourceStates();
   } catch (error) {
     status.textContent = `Mikan 解析失败：${errorMessage(error, "未知错误")}`;
   } finally {
@@ -7657,21 +7733,27 @@ async function importAiTestMikanEpisode(): Promise<void> {
   }
 }
 
-function parseAiTestFiles(): Array<{ name: string; size_bytes: number }> {
-  return element<HTMLTextAreaElement>("#ai-test-files").value
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const separator = line.lastIndexOf("|");
-      if (separator < 1) throw new Error(`文件第 ${index + 1} 行缺少“| bytes”`);
-      const name = line.slice(0, separator).trim();
-      const size = Number(line.slice(separator + 1).trim());
-      if (!name || !Number.isSafeInteger(size) || size < 0) {
-        throw new Error(`文件第 ${index + 1} 行的名称或 bytes 无效`);
-      }
-      return { name, size_bytes: size };
-    });
+async function importAiTestTorrent(file: File): Promise<void> {
+  const dataBase64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Torrent 文件读取失败"));
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
+    reader.readAsDataURL(file);
+  });
+  const imported = await aiTesterPost<{
+    success: boolean;
+    files: Array<{ name: string; size_bytes: number }> | null;
+    error_message: string | null;
+    import_id: string | null;
+    torrent_file_count: number | null;
+    file_episode_candidates: Array<{ name: string; file_episode_candidate: number | null }> | null;
+  }>("/api/v1/ai-test/torrent-import", { data_base64: dataBase64 });
+  if (!imported.success || !imported.files) throw new Error(imported.error_message ?? "Torrent import failed");
+  element<HTMLTextAreaElement>("#ai-test-files-json").value = JSON.stringify(imported.files, null, 2);
+  element<HTMLInputElement>("#ai-test-torrent-import-id").value = imported.import_id ?? "";
+  element<HTMLInputElement>("#ai-test-file-count").value = String(imported.torrent_file_count ?? "unavailable");
+  renderAiTestFileCandidates(imported.file_episode_candidates);
+  persistAiTesterForm();
 }
 
 function aiTestSummaryItem(label: string, value: string): HTMLDivElement {
@@ -7684,133 +7766,338 @@ function aiTestSummaryItem(label: string, value: string): HTMLDivElement {
   return container;
 }
 
-function renderAiTestResult(result: AiMetadataTestResult): void {
+function renderAiTestResult(result: AiTesterRunResult): void {
   const summary = element<HTMLElement>("#ai-test-summary");
   const usage = result.usage;
-  summary.replaceChildren(
-    aiTestSummaryItem("最终结论", result.succeeded ? "TMDB 验证通过" : "未通过"),
-    aiTestSummaryItem("模型", usage?.model ?? "—"),
-    aiTestSummaryItem("API 模式", result.api_mode),
-    aiTestSummaryItem("总耗时", `${result.duration_ms} ms`),
-    aiTestSummaryItem(
-      "请求 / 工具",
-      `${usage?.request_count ?? 0} / ${usage?.tool_call_count ?? 0}`,
-    ),
-    aiTestSummaryItem("输入 Token", String(usage?.prompt_tokens ?? "—")),
-    aiTestSummaryItem("输出 Token", String(usage?.completion_tokens ?? "—")),
-    aiTestSummaryItem("推理 Token", String(usage?.reasoning_tokens ?? "—")),
-    aiTestSummaryItem("总 Token", String(usage?.total_tokens ?? "—")),
-    aiTestSummaryItem(
-      "实际启用",
-      Object.entries(result.effective_features)
-        .filter(([, enabled]) => enabled)
-        .map(([name]) => name)
-        .join(", ") || "无",
-    ),
-    aiTestSummaryItem("错误", result.error_code ?? "—"),
+  const calls = (result.tool_timeline ?? []).filter(item =>
+    (item.phase === "call" || item.phase === "cache-hit")
+      && (item.name.includes("__") || item.name === "lookup_anidb_tmdbtv"),
   );
-  summary.dataset.uiState = result.succeeded ? "ready" : "error";
+  const production = result.production_validation as { success?: boolean; failure_code?: string | null } | null;
+  summary.replaceChildren(
+    aiTestSummaryItem("HTTP", result.status_code ? String(result.status_code) : "unavailable"),
+    aiTestSummaryItem("Tester 请求", result.success ? "成功" : "失败"),
+    aiTestSummaryItem("Result JSON", result.result_json_valid ? "有效" : "无效"),
+    aiTestSummaryItem("主程序 TMDB 验证", production?.success ? "通过" : production?.failure_code ?? "未执行/未通过"),
+    aiTestSummaryItem("耗时", `${result.elapsed_milliseconds} ms`),
+    aiTestSummaryItem("请求 / 工具", `${result.ai_api_requests?.length ?? 0} / ${calls.length}`),
+    aiTestSummaryItem("Input Tokens", String(usage.input_tokens ?? "—")),
+    aiTestSummaryItem("Output Tokens", String(usage.output_tokens ?? "—")),
+    aiTestSummaryItem("Reasoning Tokens", String(usage.reasoning_tokens ?? "—")),
+    aiTestSummaryItem("Total Tokens", String(usage.total_tokens ?? "—")),
+    aiTestSummaryItem("Request Identity", result.request_identity ?? "—"),
+    aiTestSummaryItem("错误", result.error_message ?? result.result_json_error ?? "—"),
+  );
+  summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
   const badge = element<HTMLElement>("#ai-test-prompt-version");
-  badge.textContent = result.prompt_version;
-  badge.className = `badge ${result.succeeded ? "ok" : "error"}`;
+  badge.textContent = "tmdb-ai-match-v8-tester";
+  badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
   element<HTMLElement>("#ai-test-raw-output").textContent =
-    result.raw_output ?? "模型未返回可解析的最终内容。";
+    result.raw_response || "模型未返回响应。";
   element<HTMLElement>("#ai-test-parsed-output").textContent = JSON.stringify({
-    candidate: result.candidate,
-    validation: result.validation,
-    error_kind: result.error_kind,
-    error_code: result.error_code,
+    model_json: parseJsonOrText(result.model_json),
+    result_json_valid: result.result_json_valid,
+    result_json_error: result.result_json_error,
+    production_validation: result.production_validation,
+    pub_date_priority: result.pub_date_priority,
+    file_episode_candidates: result.file_episode_candidates,
   }, null, 2);
   element<HTMLElement>("#ai-test-rendered-prompt").textContent = result.rendered_prompt;
-  const trace = element<HTMLElement>("#ai-test-trace");
-  trace.replaceChildren(...result.trace.map(item => {
-    const row = document.createElement("div");
-    row.className = "ai-test-trace-row";
-    const head = document.createElement("strong");
-    head.textContent = `${item.sequence}. ${item.stage}`;
-    const detail = document.createElement("code");
-    detail.textContent = item.detail;
-    const duration = document.createElement("span");
-    duration.textContent = item.duration_ms == null ? "" : `${item.duration_ms} ms`;
-    row.append(head, detail, duration);
-    return row;
-  }));
+  element<HTMLElement>("#ai-test-local-offset").textContent = JSON.stringify(result.local_episode_offset, null, 2);
+  renderAiTesterApiRequests(result.ai_api_requests ?? []);
+  renderAiTesterTools(result.tool_timeline ?? []);
+  if (result.pub_date_priority) {
+    element<HTMLInputElement>("#ai-test-pubdate-effective").value = String(result.pub_date_priority.use_bangumi_pub_date_first);
+    element<HTMLInputElement>("#ai-test-pubdate-reason").value = result.pub_date_priority.reason;
+  }
 }
 
 async function runAiMetadataTest(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const button = element<HTMLButtonElement>("#ai-test-run");
+  const stop = element<HTMLButtonElement>("#ai-test-stop");
   const message = element<HTMLElement>("#ai-test-message");
   button.disabled = true;
-  message.textContent = "正在调用生产 AI 匹配链；可能需要数分钟…";
+  stop.disabled = false;
+  resetAiTesterLiveOutput();
+  message.textContent = "正在执行已验证 Tester 流程；进度会实时显示…";
   try {
-    const files = parseAiTestFiles();
-    if (files.length === 0) throw new Error("至少需要一个 Torrent 文件");
-    const publishedAt = element<HTMLInputElement>("#ai-test-published-at").value;
-    const result = await api.post<AiMetadataTestResult, AiMetadataTestRequest>(
-      "/api/v1/ai-test/run",
-      {
-      title: element<HTMLTextAreaElement>("#ai-test-title").value,
-      files,
-      bgmid: optionalPositiveInteger("#ai-test-bgmid"),
-      anidbid: optionalPositiveInteger("#ai-test-anidbid"),
-      imdbid: element<HTMLInputElement>("#ai-test-imdbid").value.trim() || null,
-      torrent_file_count: optionalPositiveInteger("#ai-test-file-count") ?? files.length,
-      published_at: publishedAt ? new Date(publishedAt).toISOString() : null,
-      bgm_episode_candidate: optionalPositiveInteger("#ai-test-bgm-episode"),
-      use_bangumi_pubdate_first:
-        element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked,
-      expected_tmdbid: optionalPositiveInteger("#ai-test-expected-tmdbid"),
-      expected_season: optionalPositiveInteger("#ai-test-expected-season"),
-      prompt_template:
-        element<HTMLTextAreaElement>("#ai-test-prompt-template").value || null,
-      enable_tmdb_mcp:
-        element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked,
-      enable_bangumi_mcp:
-        element<HTMLInputElement>("#ai-test-enable-bgm-mcp").checked,
-      enable_anidb_lookup:
-        element<HTMLInputElement>("#ai-test-enable-anidb").checked,
-      ai_base_url: element<HTMLInputElement>("#ai-test-base-url").value.trim() || null,
-      ai_api_key: element<HTMLInputElement>("#ai-test-api-key").value.trim() || null,
-      ai_model: element<HTMLInputElement>("#ai-test-model").value.trim() || null,
-      api_mode: element<HTMLSelectElement>("#ai-test-api-mode").value || null,
-      reasoning_effort:
-        element<HTMLSelectElement>("#ai-test-reasoning-effort").value || null,
-      web_search_enabled: (() => {
-        const value = element<HTMLSelectElement>("#ai-test-web-search").value;
-        return value === "" ? null : value === "true";
-      })(),
-      ai_http_timeout_seconds: optionalPositiveInteger("#ai-test-timeout"),
-      ai_retry_count: optionalNonNegativeInteger("#ai-test-retries"),
-      http_proxy_url: element<HTMLInputElement>("#ai-test-http-proxy").value.trim() || null,
-      tmdb_mcp_url: element<HTMLInputElement>("#ai-test-tmdb-mcp-url").value.trim() || null,
-      bangumi_mcp_url: element<HTMLInputElement>("#ai-test-bgm-mcp-url").value.trim() || null,
-      },
-    );
-    renderAiTestResult(result);
-    message.textContent = result.succeeded
-      ? "测试完成：模型候选已通过 TMDB 最终验证。"
-      : `测试完成但未通过：${result.error_code ?? "unknown"}`;
+    const request = buildAiTesterRunRequest();
+    activeAiTesterRunId = request.run_id;
+    persistAiTesterForm();
+    const result = await runAiTesterStream(request);
+    if (result) {
+      renderAiTestResult(result);
+      message.textContent = result.success
+        ? `测试完成：Tester JSON ${result.result_json_valid ? "有效" : "无效"}。`
+        : `测试完成但 API 失败：${result.error_message ?? "unknown"}`;
+    }
   } catch (error) {
     message.textContent = `测试失败：${errorMessage(error, "未知错误")}`;
   } finally {
+    activeAiTesterRunId = null;
     button.disabled = false;
+    stop.disabled = true;
   }
 }
 
 function fillAiMetadataTestExample(): void {
   element<HTMLTextAreaElement>("#ai-test-title").value =
     "[黒ネズミたち] 说出这边交给我你们先走以后十年过去成了传说。 / Kokoore - 06 (CR 1920x1080 AVC AAC MKV)";
-  element<HTMLTextAreaElement>("#ai-test-files").value =
-    "Kokoore - 06.mkv | 734003200";
+  element<HTMLTextAreaElement>("#ai-test-files-json").value = JSON.stringify([
+    { name: "Kokoore - 06.mkv", size_bytes: 734003200 },
+  ], null, 2);
   element<HTMLInputElement>("#ai-test-bgmid").value = "590786";
-  element<HTMLInputElement>("#ai-test-file-count").value = "1";
   element<HTMLInputElement>("#ai-test-bgm-episode").value = "6";
-  element<HTMLInputElement>("#ai-test-published-at").value = "2026-08-10T12:00";
+  element<HTMLInputElement>("#ai-test-published-at").value = "2026-08-10T12:00:00";
   element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked = true;
+  element<HTMLInputElement>("#ai-test-is-mikan-source").checked = true;
   element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked = true;
   element<HTMLInputElement>("#ai-test-enable-bgm-mcp").checked = true;
   element<HTMLInputElement>("#ai-test-enable-anidb").checked = true;
+  updateAiTesterSourceStates();
+}
+
+let activeAiTesterRunId: string | null = null;
+const aiTesterFormStorageKey = "animegonet.aiTester.form.v2";
+const aiTesterPersistedFields = [
+  "ai-test-base-url", "ai-test-model", "ai-test-timeout", "ai-test-http-proxy",
+  "ai-test-enable-tmdb-mcp", "ai-test-enable-bgm-mcp", "ai-test-tmdb-mcp-url",
+  "ai-test-bgm-mcp-url", "ai-test-use-bgm-pubdate", "ai-test-enable-anidb",
+  "ai-test-anidb-template", "ai-test-api-mode", "ai-test-reasoning-effort",
+  "ai-test-title", "ai-test-bgmid", "ai-test-anidbid", "ai-test-mikan-url",
+  "ai-test-published-at", "ai-test-bgm-episode", "ai-test-is-mikan-source",
+  "ai-test-torrent-import-id", "ai-test-file-count", "ai-test-files-json",
+  "ai-test-file-candidates", "ai-test-web-search",
+];
+
+function buildAiTesterRunRequest(): AiTesterRunRequest {
+  JSON.parse(element<HTMLTextAreaElement>("#ai-test-files-json").value);
+  return {
+    base_url: element<HTMLInputElement>("#ai-test-base-url").value.trim(),
+    api_key: element<HTMLInputElement>("#ai-test-api-key").value,
+    model: element<HTMLInputElement>("#ai-test-model").value.trim(),
+    mode: element<HTMLSelectElement>("#ai-test-api-mode").value,
+    reasoning_effort: element<HTMLSelectElement>("#ai-test-reasoning-effort").value,
+    web_search_enabled: element<HTMLInputElement>("#ai-test-web-search").checked,
+    timeout_seconds: Number(element<HTMLInputElement>("#ai-test-timeout").value),
+    proxy_url: element<HTMLInputElement>("#ai-test-http-proxy").value.trim(),
+    prompt_template: element<HTMLTextAreaElement>("#ai-test-prompt-template").value || null,
+    title: element<HTMLTextAreaElement>("#ai-test-title").value,
+    files_json: element<HTMLTextAreaElement>("#ai-test-files-json").value,
+    bgmid: element<HTMLInputElement>("#ai-test-bgmid").value.trim(),
+    anidbid: element<HTMLInputElement>("#ai-test-anidbid").value.trim(),
+    mikan_pub_date: element<HTMLInputElement>("#ai-test-published-at").value.trim(),
+    bgm_episode_candidate: element<HTMLInputElement>("#ai-test-bgm-episode").value.trim(),
+    use_bangumi_pubdate_first: element<HTMLInputElement>("#ai-test-use-bgm-pubdate").checked,
+    torrent_import_id: element<HTMLInputElement>("#ai-test-torrent-import-id").value,
+    is_mikan_rss_source: element<HTMLInputElement>("#ai-test-is-mikan-source").checked,
+    bgm_mcp_url: element<HTMLInputElement>("#ai-test-bgm-mcp-url").value.trim(),
+    tmdb_mcp_url: element<HTMLInputElement>("#ai-test-tmdb-mcp-url").value.trim(),
+    enable_bgm_mcp: element<HTMLInputElement>("#ai-test-enable-bgm-mcp").checked,
+    enable_tmdb_mcp: element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked,
+    enable_anidb_lookup: element<HTMLInputElement>("#ai-test-enable-anidb").checked,
+    anidb_mapping_url_template: element<HTMLInputElement>("#ai-test-anidb-template").value.trim(),
+    run_id: crypto.randomUUID(),
+  };
+}
+
+async function runAiTesterStream(request: AiTesterRunRequest): Promise<AiTesterRunResult | null> {
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set("Content-Type", "application/json");
+  const response = await fetch("/api/v1/ai-test/run-stream", {
+    method: "POST",
+    headers: requestHeaders,
+    body: JSON.stringify(request),
+  });
+  if (!response.body) throw new Error(`HTTP ${response.status}: empty stream`);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let finalResult: AiTesterRunResult | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value, { stream: !done });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const envelope = JSON.parse(line) as AiTesterStreamEnvelope;
+      if (envelope.type === "progress" && envelope.progress) renderAiTesterProgress(envelope.progress);
+      if (envelope.type === "result" && envelope.result) finalResult = envelope.result;
+      if (envelope.type === "stopped") throw new Error(envelope.error ?? "Execution stopped by user.");
+      if (envelope.type === "error") throw new Error(envelope.error ?? "Tester stream failed.");
+    }
+    if (done) break;
+  }
+  return finalResult;
+}
+
+async function stopAiMetadataTest(): Promise<void> {
+  if (!activeAiTesterRunId) return;
+  await aiTesterPost<{ stopped: boolean; message: string }>("/api/v1/ai-test/stop", {
+    run_id: activeAiTesterRunId,
+  });
+  element<HTMLElement>("#ai-test-message").textContent = "已发送停止请求。";
+}
+
+async function aiTesterPost<T>(path: string, body: unknown): Promise<T> {
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set("Content-Type", "application/json");
+  const response = await fetch(path, { method: "POST", headers: requestHeaders, body: JSON.stringify(body) });
+  const value = await response.json() as T & { error_message?: string | null; message?: string | null };
+  if (!response.ok) throw new Error(value.error_message ?? value.message ?? `HTTP ${response.status}`);
+  return value;
+}
+
+function renderAiTesterProgress(progress: AiTesterProgress): void {
+  const log = element<HTMLElement>("#ai-test-execution-log");
+  if (log.querySelector(".muted")) log.replaceChildren();
+  const row = document.createElement("div");
+  row.className = "ai-test-log-entry";
+  const time = document.createElement("span");
+  time.className = "ai-test-log-time";
+  time.textContent = new Date().toLocaleTimeString();
+  const message = document.createElement("span");
+  message.textContent = `[${progress.type}] ${progress.message}`;
+  row.append(time, message);
+  log.append(row);
+  log.scrollTop = log.scrollHeight;
+  if (progress.type === "model-start" && progress.content) {
+    appendAiTesterApiRequest({ step: progress.step, endpoint: progress.endpoint ?? "unavailable", content: progress.content });
+  }
+  if (progress.type === "tool-complete" && progress.tool) appendAiTesterTool(progress.tool);
+}
+
+function renderAiTesterApiRequests(items: AiTesterApiRequestEntry[]): void {
+  const target = element<HTMLElement>("#ai-test-api-requests");
+  target.replaceChildren();
+  items.forEach(appendAiTesterApiRequest);
+  if (!items.length) setAiTesterEmpty(target, "暂无请求。");
+}
+
+function appendAiTesterApiRequest(item: AiTesterApiRequestEntry): void {
+  const target = element<HTMLElement>("#ai-test-api-requests");
+  if (target.querySelector(".muted")) target.replaceChildren();
+  const card = document.createElement("div");
+  card.className = "ai-test-audit-card";
+  const header = document.createElement("header");
+  const index = document.createElement("span");
+  index.textContent = `#${item.step}`;
+  const title = document.createElement("strong");
+  title.textContent = "AI API request";
+  const endpoint = document.createElement("span");
+  endpoint.textContent = item.endpoint;
+  header.append(index, title, endpoint);
+  const pre = document.createElement("pre");
+  pre.textContent = prettyJson(item.content);
+  card.append(header, pre);
+  target.append(card);
+}
+
+function renderAiTesterTools(items: AiTesterToolTimelineEntry[]): void {
+  const target = element<HTMLElement>("#ai-test-tool-order");
+  target.replaceChildren();
+  const calls = items.filter(item => item.phase === "call" || item.phase === "cache-hit");
+  calls.forEach(appendAiTesterTool);
+  if (!calls.length) setAiTesterEmpty(target, "暂无工具调用。");
+}
+
+function appendAiTesterTool(item: AiTesterToolTimelineEntry): void {
+  const target = element<HTMLElement>("#ai-test-tool-order");
+  if (target.querySelector(".muted")) target.replaceChildren();
+  const card = document.createElement("div");
+  card.className = "ai-test-audit-card";
+  const header = document.createElement("header");
+  const source = document.createElement("span");
+  source.textContent = item.source;
+  const name = document.createElement("strong");
+  name.textContent = item.name;
+  const result = document.createElement("span");
+  result.textContent = `${item.elapsed_milliseconds} ms · ${item.success ? "成功" : "失败"}`;
+  header.append(source, name, result);
+  card.append(header);
+  for (const [label, content] of [["请求 Content", item.request_content], ["返回 Content", item.response_content]] as const) {
+    const section = document.createElement("div");
+    section.className = "ai-test-tool-payload";
+    const strong = document.createElement("strong");
+    strong.textContent = label;
+    const pre = document.createElement("pre");
+    pre.textContent = prettyJson(content ?? "unavailable");
+    section.append(strong, pre);
+    card.append(section);
+  }
+  target.append(card);
+}
+
+function renderAiTestFileCandidates(items: Array<{ name: string; file_episode_candidate: number | null }> | null): void {
+  element<HTMLTextAreaElement>("#ai-test-file-candidates").value = items
+    ? JSON.stringify(items, null, 2)
+    : "unavailable";
+  element<HTMLInputElement>("#ai-test-candidate-status").value = items
+    ? `${items.filter(item => item.file_episode_candidate != null).length} / ${items.length}`
+    : "unavailable";
+}
+
+function parseJsonOrText(value: string | null): unknown {
+  if (!value) return null;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function prettyJson(value: string): string {
+  try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
+}
+
+function resetAiTesterLiveOutput(): void {
+  setAiTesterEmpty(element<HTMLElement>("#ai-test-execution-log"), "等待第一条进度…");
+  setAiTesterEmpty(element<HTMLElement>("#ai-test-api-requests"), "暂无请求。");
+  setAiTesterEmpty(element<HTMLElement>("#ai-test-tool-order"), "暂无工具调用。");
+}
+
+function setAiTesterEmpty(target: HTMLElement, message: string): void {
+  const empty = document.createElement("p");
+  empty.className = "muted";
+  empty.textContent = message;
+  target.replaceChildren(empty);
+}
+
+function persistAiTesterForm(): void {
+  const data: Record<string, string | boolean> = {};
+  for (const id of aiTesterPersistedFields) {
+    const field = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+    if (!field) continue;
+    data[id] = field instanceof HTMLInputElement && field.type === "checkbox" ? field.checked : field.value;
+  }
+  localStorage.setItem(aiTesterFormStorageKey, JSON.stringify(data));
+}
+
+function restoreAiTesterForm(): void {
+  try {
+    const data = JSON.parse(localStorage.getItem(aiTesterFormStorageKey) ?? "{}") as Record<string, unknown>;
+    for (const id of aiTesterPersistedFields) {
+      const field = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+      const value = data[id];
+      if (!field || value == null) continue;
+      if (field instanceof HTMLInputElement && field.type === "checkbox" && typeof value === "boolean") field.checked = value;
+      else if (typeof value === "string") field.value = value;
+    }
+  } catch {
+  }
+}
+
+function updateAiTesterSourceStates(): void {
+  const mikan = element<HTMLInputElement>("#ai-test-is-mikan-source").checked;
+  const anidb = element<HTMLInputElement>("#ai-test-anidbid").value.trim();
+  const tmdbEnabled = element<HTMLInputElement>("#ai-test-enable-tmdb-mcp").checked;
+  const tmdbState = element<HTMLElement>("#ai-test-tmdb-state");
+  tmdbState.textContent = tmdbEnabled ? "TMDB MCP 已启用" : "TMDB MCP 已关闭";
+  tmdbState.className = `badge ${tmdbEnabled ? "ok" : "error"}`;
+  const mikanState = element<HTMLElement>("#ai-test-mikan-state");
+  mikanState.textContent = mikan ? "Mikan RSS 来源" : "未启用来源";
+  mikanState.className = `badge ${mikan ? "ok" : "pending"}`;
+  const u2State = element<HTMLElement>("#ai-test-u2-state");
+  u2State.textContent = anidb ? `AniDB ${anidb}` : "未填写 ID";
+  u2State.className = `badge ${anidb ? "ok" : "pending"}`;
 }
 
 element<HTMLButtonElement>("#rss-reload").addEventListener("click", () => void loadRssRules());
@@ -7826,6 +8113,20 @@ element<HTMLButtonElement>("#ai-test-mikan-import").addEventListener(
   "click",
   () => void importAiTestMikanEpisode(),
 );
+element<HTMLInputElement>("#ai-test-torrent-file").addEventListener("change", event => {
+  const file = (event.currentTarget as HTMLInputElement).files?.[0];
+  if (!file) return;
+  element<HTMLElement>("#ai-test-message").textContent = "正在解析 Torrent…";
+  void importAiTestTorrent(file).then(() => {
+    element<HTMLElement>("#ai-test-message").textContent = "Torrent 已解析并建立可信 import_id。";
+  }).catch(error => {
+    element<HTMLElement>("#ai-test-message").textContent = `Torrent 解析失败：${errorMessage(error, "未知错误")}`;
+  });
+});
+element<HTMLButtonElement>("#ai-test-stop").addEventListener(
+  "click",
+  () => void stopAiMetadataTest(),
+);
 element<HTMLButtonElement>("#ai-test-prompt-reset").addEventListener(
   "click",
   resetAiTestPrompt,
@@ -7834,6 +8135,11 @@ element<HTMLTextAreaElement>("#ai-test-prompt-template").addEventListener(
   "input",
   saveAiPromptDraft,
 );
+element<HTMLFormElement>("#ai-test-form").addEventListener("input", event => {
+  const target = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  if (target.id !== "ai-test-api-key") persistAiTesterForm();
+  updateAiTesterSourceStates();
+});
 element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
 element<HTMLSelectElement>("#library-page-size").value = String(libraryState.page_size);

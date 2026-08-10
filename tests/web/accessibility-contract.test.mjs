@@ -103,12 +103,9 @@ test("AI test page exposes verified Responses compatibility controls and usage",
   assert.ok(webSearch);
   assert.deepEqual(
     [...reasoning.querySelectorAll("option")].map(option => option.value),
-    ["", "none", "low", "medium", "high"],
+    ["medium", "low", "high", "none"],
   );
-  assert.deepEqual(
-    [...webSearch.querySelectorAll("option")].map(option => option.value),
-    ["", "false", "true"],
-  );
+  assert.equal(webSearch.getAttribute("type"), "checkbox");
   assert.match(app, /reasoning_effort:/);
   assert.match(app, /web_search_enabled:/);
   assert.match(app, /reasoning_tokens/);

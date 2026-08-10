@@ -46,17 +46,17 @@ ai:
 
 ## 主程序内置 AI 测试
 
-WebUI 的“测试工具 / AI 元数据测试”调用 `POST /api/v1/ai-test/run`，复用正式任务相同的固定 Prompt、模型配置、MCP 工具注册和 `AiMetadataResultValidator`。测试请求只包含任务标题、Torrent 文件名/容量及可选作品级参考；可额外填写期望 `tmdbid`/Season，让最终验证明确拒绝模型改换作品或季度。
+WebUI 的“测试工具 / AI 元数据测试”以已验证独立 Tester 为行为基准，内置相同请求/响应 DTO、Prompt 条件区块、OpenAI Responses/Chat Completions 请求格式、工具注册/缓存、最多 8 轮工具调用、Responses stateful→stateless 续轮、用量累计、结果结构校验、Mikan pubDate 门禁和本地 EP offset 计算。页面样式接入主程序侧栏，但协议和交互不再由主程序简化。
 
-测试页可分别启用 TMDB MCP、Bangumi MCP、AniDB 映射和 Mikan/Bangumi 日期优先部分。最终有效状态由后端按“开关 + 当前输入”计算：Bangumi 还需要 `bgmid`，AniDB 还需要 `anidbid`，IMDb 随 `imdbid` 且仅在 TMDB MCP 启用时自动生效，日期优先独立于 Bangumi MCP 开关但仍必须通过既有单文件门禁。固定 Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块；被关闭或不适用的字段与说明不会发送给模型，对应工具也不会初始化或注册。无论测试时是否向模型开放 TMDB MCP，模型返回后仍执行主程序的 TMDB 最终验证。
+测试页分为公共区域、Mikan/BGM、U2/AniDB、高级 Prompt 和结果审计区。固定 Tester Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块；被关闭或不适用的字段与说明不会发送给模型，对应工具也不会注册。Tester 原结构校验结论保持不变，随后额外显示主程序 `AiMetadataResultValidator` 的 TMDB Series/普通 Season/真实 Episode 二次验证，二者不能混为一个状态。
 
-“本次模型与网络覆盖”可临时替换 OpenAI-compatible API 地址、模型、API Key、API 模式、reasoning effort、Web Search、HTTP 超时、重试次数、TMDB/Bangumi MCP 地址和一个用于模型/MCP/AniDB请求的 HTTP(S) 代理。API 模式可选 `Responses` 或 `Chat Completions`；Responses 首先使用 `previous_response_id + function_call_output` 续接本地工具调用。兼容服务若返回 `No tool call found`，程序自动切换为已验证 Tester 的无状态续轮：重放原 Prompt、历次 `function_call` 和对应 `function_call_output`，并在阶段日志写入 `responses_stateless_retry`。两种模式共用同一 Prompt、工具轮数、用量累计与最终 TMDB 验证；reasoning effort 可留空/none/low/medium/high，Web Search 只允许 Responses，并在本地 function tools 之后追加 `web_search_preview`。输入、输出、推理和总 Token 分别累计显示。留空即继承主程序配置；临时 Key 只存在于当前 HTTPS/本机请求和内存中，不写配置、不回显、不进入 Prompt/阶段日志。Mikan URL 导入仍使用主程序全局“域名匹配代理”配置，不受测试专用代理影响。
+模型连接字段与原 Tester 一致：Base URL、API Key、Model、Responses/Chat Completions、reasoning effort、Responses Web Search、600 秒默认超时、单次测试 HTTP 代理、TMDB/BGM MCP 地址和 AniDB URL 模板。API Key 只存在于当前请求和内存，不进入浏览器持久化、Prompt、执行日志或响应。Mikan URL 导入继续使用主程序全局“域名匹配代理”，不使用该测试代理。
 
-该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。响应分开返回 Prompt 版本与本次渲染内容、模型最终原始 JSON、解析候选、TMDB 验证结论、累计 Token/请求/工具次数、总耗时和阶段日志。工具日志保留工具名与最多 2048 字符的参数、输出字节数，不保存 MCP 正文；AI API Key 始终来自服务端私有配置，测试请求和响应都没有密钥字段。
+该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。`run-stream` 逐行返回 `progress/result/stopped/error`；结果包含原始 Provider 响应、提取后的模型 JSON、结构校验、`request_identity`、累计 Token、每轮脱敏 AI 请求、工具顺序与脱敏 Request/Response Content、本地 offset 及主程序 TMDB 二次验证。密钥、Authorization、Cookie、passkey 和宿主机路径不得出现在审计内容。
 
-`GET /api/v1/ai-test/prompt` 返回当前程序内置模板及长度上限。WebUI 可编辑测试请求的 `prompt_template`，编辑内容只覆盖本次测试并可按相同 Prompt 版本保存在浏览器草稿；恢复默认不会改写仓库文档、部署配置或正式匹配行为。服务端仍执行占位符解析、长度限制和最终 TMDB 验证。
+`GET /api/v1/ai-test/prompt` 返回 `tmdb-ai-match-v8-tester` 兼容模板及长度上限；它只属于诊断工具，不替换正式业务的生产 Prompt。WebUI 可编辑 `prompt_template` 并按版本保存浏览器草稿；恢复默认不会改写部署配置或正式匹配行为。
 
-`POST /api/v1/ai-test/mikan-import` 接受受支持的 `/Home/Episode/<40-hex-id>` URL。服务端使用配置的 Mikan Base URL、全局选择性代理、SourceProfile Host/Cookie 与现有 DNS/重定向防护读取 Episode 页面，再按 `mikanid+groupid` 请求 RSS 并以 Episode path 精确定位唯一 item，从作品页取得可空 `bgmid`，最后通过正式 Torrent staging 校验文件。响应只返回 title、mikanid/groupid、bgmid、规范发布时间、文件总数和视频文件名/容量，不返回 Torrent URL、Cookie 或 passkey；WebUI 只填表，不自动运行 AI。
+`POST /api/v1/ai-test/torrent-import` 接收 Torrent base64，后端解析实际文件数并签发 4 小时有效、最多 256 条的 `import_id`；运行请求不能直接声明可信 `torrent_file_count`。`POST /api/v1/ai-test/mikan-import` 使用现有 Mikan DNS/重定向/Host/Cookie/Torrent staging 安全链，并签发同类 `import_id`。响应不返回 Torrent URL、Cookie 或 passkey；WebUI 只填表，不自动运行 AI。
 
 ## 3. 最小请求契约
 

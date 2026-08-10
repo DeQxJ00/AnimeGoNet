@@ -871,83 +871,97 @@
     <section id="ai-metadata-test" data-workspace="tools" data-subview="ai-metadata" data-nav-label="AI 元数据测试">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Read-only production pipeline</p>
+          <p class="eyebrow">Validated tester compatibility</p>
           <h2>AI 元数据测试</h2>
-          <p class="muted">调用主程序当前配置的 OpenAI-compatible 模型、MCP 工具与 TMDB 验证器；不会创建任务、下载 Torrent 或写入动画库。</p>
+          <p class="muted">执行逻辑与已验证 Tester 逐项一致；仅页面样式接入主程序。不会创建下载任务或写入动画库，最终结果另行显示主程序 TMDB 二次验证。</p>
         </div>
-        <span id="ai-test-prompt-version" class="badge pending">等待测试</span>
+        <span id="ai-test-prompt-version" class="badge pending">tmdb-ai-match-v8-tester</span>
       </div>
-      <form id="ai-test-form" class="ai-test-layout">
-        <article class="ai-test-input configuration-card">
-          <h3>测试输入</h3>
-          <div class="ai-test-import">
-            <label>Mikan Episode URL<input id="ai-test-mikan-url" type="url" maxlength="2048" placeholder="https://mikanime.tv/Home/Episode/..."></label>
-            <button id="ai-test-mikan-import" type="button" class="secondary-button">解析 Mikan 并读取 Torrent</button>
-            <p id="ai-test-mikan-status" class="muted" aria-live="polite">只读取页面、对应字幕组 RSS、作品页和 Torrent；不会导入任务或启动 AI。</p>
-          </div>
-          <div class="ai-test-fields">
-            <label class="wide">任务 title<textarea id="ai-test-title" rows="3" maxlength="1000" required placeholder="[字幕组] 动画标题 - 06"></textarea></label>
-            <label class="wide">Torrent 文件（每行：文件名 | bytes）<textarea id="ai-test-files" rows="7" required placeholder="Anime - 06.mkv | 734003200"></textarea></label>
-            <label>bgmid（可选）<input id="ai-test-bgmid" type="number" min="1"></label>
-            <label>anidbid（可选）<input id="ai-test-anidbid" type="number" min="1"></label>
-            <label>imdbid（可选）<input id="ai-test-imdbid" maxlength="32" placeholder="tt1234567"></label>
-            <label>Torrent 文件总数<input id="ai-test-file-count" type="number" min="1" placeholder="默认等于上方行数"></label>
-            <label>发布时间（仅作为 AI 参数）<input id="ai-test-published-at" type="datetime-local" step="1"></label>
-            <label>Bangumi EP 候选<input id="ai-test-bgm-episode" type="number" min="1"></label>
-            <label>期望 tmdbid（可选）<input id="ai-test-expected-tmdbid" type="number" min="1"></label>
-            <label>期望 Season（可选）<input id="ai-test-expected-season" type="number" min="0"></label>
-            <fieldset class="wide ai-test-feature-switches">
-              <legend>本次启用的 Prompt 部分与工具</legend>
-              <label class="ai-test-checkbox"><input id="ai-test-enable-tmdb-mcp" type="checkbox" checked>TMDB MCP（最终 TMDB 验证仍始终执行）</label>
-              <label class="ai-test-checkbox"><input id="ai-test-enable-bgm-mcp" type="checkbox" checked>Bangumi MCP（还需要填写 bgmid）</label>
-              <label class="ai-test-checkbox"><input id="ai-test-enable-anidb" type="checkbox" checked>AniDB 映射（还需要填写 anidbid）</label>
-              <label class="ai-test-checkbox"><input id="ai-test-use-bgm-pubdate" type="checkbox">Mikan/Bangumi 日期优先部分（还需要 bgmid、发布时间、EP 候选且仅一个文件）</label>
-            </fieldset>
-            <details class="wide ai-test-call-settings">
-              <summary>本次模型与网络覆盖（留空使用主程序配置）</summary>
-              <div class="ai-test-fields">
-                <label>API 模式<select id="ai-test-api-mode" aria-label="AI 测试 API 模式"><option value="">继承主程序（Chat Completions）</option><option value="responses">Responses</option><option value="chat-completions">Chat Completions</option></select></label>
-                <label>模型<input id="ai-test-model" maxlength="200" placeholder="例如 gpt-5.4-mini"></label>
-                <label>Reasoning<select id="ai-test-reasoning-effort" aria-label="AI 测试推理强度"><option value="">继承主程序</option><option value="none">none（不发送）</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select></label>
-                <label>Web Search<select id="ai-test-web-search" aria-label="AI 测试 Web Search"><option value="">继承主程序</option><option value="false">关闭</option><option value="true">开启（仅 Responses）</option></select></label>
-                <label class="wide">OpenAI-compatible API 地址<input id="ai-test-base-url" type="url" maxlength="2048" placeholder="例如 http://openai.local/"></label>
-                <label class="wide">临时 API Key（不保存、不回显）<input id="ai-test-api-key" type="password" maxlength="16384" autocomplete="off" placeholder="留空继承主程序密钥"></label>
-                <label>HTTP 超时（秒）<input id="ai-test-timeout" type="number" min="1" max="3600" placeholder="默认继承，通常 600"></label>
-                <label>重试次数<input id="ai-test-retries" type="number" min="0" max="10" placeholder="默认继承"></label>
-                <label class="wide">测试专用 HTTP 代理<input id="ai-test-http-proxy" type="url" maxlength="2048" placeholder="http://127.0.0.1:7890；应用于模型、MCP 与 AniDB"></label>
-                <label class="wide">TMDB MCP 地址<input id="ai-test-tmdb-mcp-url" type="url" maxlength="2048" placeholder="留空继承主程序配置"></label>
-                <label class="wide">Bangumi MCP 地址<input id="ai-test-bgm-mcp-url" type="url" maxlength="2048" placeholder="留空继承主程序配置"></label>
-              </div>
-              <p class="muted">Reasoning 与 Web Search 采用已验证 AI Tester 的请求格式；Web Search 只允许 Responses。该代理不改变上方 Mikan URL 导入；Mikan 导入继续使用主程序的全局域名代理规则。</p>
-            </details>
-          </div>
-          <div class="configuration-actions">
-            <button id="ai-test-run" type="submit" class="primary-button">运行 AI 测试</button>
+      <form id="ai-test-form" class="ai-test-workbench">
+        <div class="ai-test-input-stack">
+          <article class="configuration-card ai-test-region" data-testid="common-input-region">
+            <div class="section-heading"><div><h3>公共区域</h3><p class="muted">Torrent 文件、任务标题、模型连接和 TMDB MCP。</p></div><span id="ai-test-tmdb-state" class="badge pending">TMDB MCP</span></div>
+            <div class="ai-test-fields">
+              <label class="wide">任务 Title<textarea id="ai-test-title" rows="3" required placeholder="下载任务总标题"></textarea></label>
+              <label class="wide">Torrent 文件<input id="ai-test-torrent-file" type="file" accept=".torrent"></label>
+              <input id="ai-test-torrent-import-id" type="hidden">
+              <label>Torrent 文件总数<input id="ai-test-file-count" readonly value="unavailable"></label>
+              <label>本地 EP 候选状态<input id="ai-test-candidate-status" readonly value="unavailable"></label>
+              <label class="wide">Files JSON<textarea id="ai-test-files-json" rows="8" required spellcheck="false">[
+  { "name": "01.mkv", "size_bytes": 1234567890 }
+]</textarea></label>
+              <h4 class="wide ai-test-subheading">模型连接与验证</h4>
+              <label class="wide">Base URL<input id="ai-test-base-url" type="url" required placeholder="http://openai.local/"></label>
+              <label class="wide">API Key（不保存、不回显）<input id="ai-test-api-key" type="password" required autocomplete="off"></label>
+              <label>Model<input id="ai-test-model" required placeholder="gpt-5.4-mini"></label>
+              <label>Timeout Seconds<input id="ai-test-timeout" type="number" min="1" value="600" required></label>
+              <label>Mode<select id="ai-test-api-mode"><option value="responses">Responses</option><option value="chat-completions">Chat Completions</option></select></label>
+              <label>Reasoning<select id="ai-test-reasoning-effort"><option value="medium">medium</option><option value="low">low</option><option value="high">high</option><option value="none">none</option></select></label>
+              <label class="wide">Proxy URL<input id="ai-test-http-proxy" type="url" placeholder="留空则本次测试直连"></label>
+              <label class="wide ai-test-checkbox"><input id="ai-test-enable-tmdb-mcp" type="checkbox" checked>Enable TMDB MCP</label>
+              <label class="wide">TMDB MCP URL<input id="ai-test-tmdb-mcp-url" type="url" required></label>
+              <label class="wide ai-test-checkbox"><input id="ai-test-web-search" type="checkbox">Web Search fallback（仅 Responses）</label>
+            </div>
+          </article>
+
+          <article class="configuration-card ai-test-region" data-testid="mikan-input-region">
+            <div class="section-heading"><div><h3>Mikan / BGM</h3><p class="muted">Mikan 导入、BGM 作品上下文与单文件 pubDate 门禁。</p></div><span id="ai-test-mikan-state" class="badge pending">未启用来源</span></div>
+            <div class="ai-test-import">
+              <label>Mikan Episode 页面 URL<input id="ai-test-mikan-url" type="url" placeholder="https://mikanime.tv/Home/Episode/..."></label>
+              <button id="ai-test-mikan-import" type="button" class="secondary-button">解析并下载种子</button>
+              <p id="ai-test-mikan-status" class="muted" aria-live="polite">只填入测试表单，不自动运行 AI；带 passkey 的 Torrent URL 不回显。</p>
+            </div>
+            <div class="ai-test-fields">
+              <label>解析到的 mikanid / groupid<input id="ai-test-mikan-scope" readonly value="unavailable"></label>
+              <label class="ai-test-checkbox"><input id="ai-test-is-mikan-source" type="checkbox">Mikan RSS 来源</label>
+              <label>BGM ID<input id="ai-test-bgmid" type="number" min="1"></label>
+              <label class="ai-test-checkbox"><input id="ai-test-enable-bgm-mcp" type="checkbox" checked>Enable BGM MCP</label>
+              <label class="wide">BGM MCP URL<input id="ai-test-bgm-mcp-url" type="url" required></label>
+              <label>Mikan pubDate<input id="ai-test-published-at" placeholder="2023-01-24T21:02:56.558766"></label>
+              <label>bgm_episode_candidate<input id="ai-test-bgm-episode" type="number" min="1"></label>
+              <label class="wide ai-test-checkbox"><input id="ai-test-use-bgm-pubdate" type="checkbox" checked>优先使用 BGM pubDate 候选</label>
+              <label>pubDate 优先状态<input id="ai-test-pubdate-effective" readonly value="false"></label>
+              <label>未触发原因<input id="ai-test-pubdate-reason" readonly value="未导入 torrent"></label>
+              <label class="wide">本地 file_episode_candidate（不发送给 AI）<textarea id="ai-test-file-candidates" rows="5" readonly>unavailable</textarea></label>
+            </div>
+          </article>
+
+          <article class="configuration-card ai-test-region" data-testid="u2-input-region">
+            <div class="section-heading"><div><h3>U2 / AniDB</h3><p class="muted">AniDB ID 只提供作品级候选，最终仍须 TMDB 验证。</p></div><span id="ai-test-u2-state" class="badge pending">未填写 ID</span></div>
+            <div class="ai-test-fields">
+              <label>AniDB ID<input id="ai-test-anidbid" type="number" min="1"></label>
+              <label class="ai-test-checkbox"><input id="ai-test-enable-anidb" type="checkbox" checked>Enable AniDB Lookup</label>
+              <label class="wide">AniDB Mapping URL Template<input id="ai-test-anidb-template" type="url" required></label>
+            </div>
+          </article>
+
+          <article class="configuration-card ai-test-region" data-testid="advanced-input-region">
+            <div class="section-heading"><div><h3>高级 / Prompt</h3><p id="ai-test-prompt-status" class="muted">正在读取已验证 Prompt…</p></div><button id="ai-test-prompt-reset" type="button" class="secondary-button">恢复默认</button></div>
+            <textarea id="ai-test-prompt-template" class="ai-test-prompt" rows="24" spellcheck="false" disabled aria-label="AI Tester Prompt 模板"></textarea>
+          </article>
+
+          <div class="configuration-actions ai-test-run-actions">
+            <button id="ai-test-run" type="submit" class="primary-button">Run Test</button>
+            <button id="ai-test-stop" type="button" class="danger-button" disabled>Stop</button>
             <button id="ai-test-fill-example" type="button" class="secondary-button">填入示例</button>
           </div>
           <p id="ai-test-message" class="delete-message" aria-live="polite"></p>
-        </article>
-        <article class="ai-test-summary configuration-card">
-          <h3>结论与用量</h3>
-          <div id="ai-test-summary" class="ai-test-summary-grid">
-            <p class="muted">运行后显示模型候选、TMDB 验证结论、耗时和 Token。</p>
-          </div>
-        </article>
-      </form>
-      <article class="ai-test-prompt-editor configuration-card">
-        <div class="section-heading">
-          <div><h3>测试 Prompt 编辑</h3><p class="muted">仅覆盖本次 AI 测试，不保存为生产 Prompt；可用 {{#TMDB_MCP}}…{{/TMDB_MCP}} 等条件块，后端按上方开关和输入裁剪。</p></div>
-          <button id="ai-test-prompt-reset" type="button" class="secondary-button">恢复程序默认</button>
         </div>
-        <textarea id="ai-test-prompt-template" rows="24" spellcheck="false" disabled aria-label="AI 测试 Prompt 模板"></textarea>
-        <p id="ai-test-prompt-status" class="muted" aria-live="polite">正在读取当前生产 Prompt…</p>
-      </article>
-      <div class="ai-test-results">
-        <details open><summary>阶段日志</summary><div id="ai-test-trace" class="ai-test-trace"><p class="muted">暂无日志。</p></div></details>
-        <details><summary>模型原始输出</summary><pre id="ai-test-raw-output">暂无输出。</pre></details>
-        <details><summary>解析结果与 TMDB 验证</summary><pre id="ai-test-parsed-output">暂无结果。</pre></details>
-        <details><summary>本次渲染后的实际 Prompt（只读）</summary><pre id="ai-test-rendered-prompt">运行后显示。</pre></details>
-      </div>
+
+        <aside class="ai-test-output-stack">
+          <article class="configuration-card ai-test-summary">
+            <h3>结论与用量</h3>
+            <div id="ai-test-summary" class="ai-test-summary-grid"><p class="muted">运行后显示 HTTP、Token、JSON 校验和主程序 TMDB 二次验证。</p></div>
+          </article>
+          <article class="configuration-card ai-test-live-log"><h3>实时执行日志</h3><div id="ai-test-execution-log" class="ai-test-execution-log" aria-live="polite"><p class="muted">暂无日志。</p></div></article>
+          <details class="ai-test-inspection" open><summary>发送给 AI API 的请求</summary><div id="ai-test-api-requests" class="ai-test-inspection-body"><p class="muted">暂无请求。</p></div></details>
+          <details class="ai-test-inspection" open><summary>工具调用顺序与完整 Content</summary><div id="ai-test-tool-order" class="ai-test-inspection-body"><p class="muted">暂无工具调用。</p></div></details>
+          <details class="ai-test-inspection"><summary>本地计算 EP 偏移（不属于 AI JSON）</summary><pre id="ai-test-local-offset">unavailable</pre></details>
+          <details class="ai-test-inspection" open><summary>Parsed JSON / 主程序验证</summary><pre id="ai-test-parsed-output">暂无结果。</pre></details>
+          <details class="ai-test-inspection"><summary>Raw Response</summary><pre id="ai-test-raw-output">暂无输出。</pre></details>
+          <details class="ai-test-inspection"><summary>发送给 AI 的 Prompt</summary><pre id="ai-test-rendered-prompt">运行后显示。</pre></details>
+        </aside>
+      </form>
     </section>
 
     <section id="management-shortcuts" class="grid panels" aria-label="管理入口" data-workspace="overview" data-subview="shortcuts" data-nav-label="管理入口">

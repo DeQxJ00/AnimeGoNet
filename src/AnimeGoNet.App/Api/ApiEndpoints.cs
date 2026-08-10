@@ -48,8 +48,7 @@ public static class ApiEndpoints
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
         app.MapGet("/api/v1/ai-test/prompt", GetAiMetadataTestPrompt);
-        app.MapPost("/api/v1/ai-test/mikan-import", ImportAiMetadataTestMikanEpisode);
-        app.MapPost("/api/v1/ai-test/run", RunAiMetadataTest);
+        AiTesterApiEndpoints.Map(app);
         app.MapGet("/api/v1/plugins", ExternalPluginConfigurations);
         app.MapPut(
             "/api/v1/plugins/{pluginId}/configuration",
@@ -272,7 +271,7 @@ public static class ApiEndpoints
                 prompt,
                 match.RawOutput,
                 match.Candidate,
-                ToAiTestValidation(validation),
+                ToAiTestValidationResponse(validation),
                 ToAiTestUsage(match.Usage),
                 timer.ElapsedMilliseconds,
                 validation.Failure?.Kind.ToString().ToLowerInvariant(),
@@ -306,8 +305,9 @@ public static class ApiEndpoints
 
     private static Ok<AiMetadataTestPromptResponse> GetAiMetadataTestPrompt() =>
         TypedResults.Ok(new AiMetadataTestPromptResponse(
-            AiMetadataPromptRenderer.PromptVersion,
-            AiMetadataPromptRenderer.LoadTemplate(),
+            "tmdb-ai-match-v8-tester",
+            AnimeGoNet.App.AiTesterCompat.PromptTemplate.LoadFromMarkdown(
+                AnimeGoNet.App.AiTesterCompat.PromptTemplate.FindDefaultMarkdownPath()),
             AiMetadataPromptRenderer.MaximumTemplateLength));
 
     private static AiMetadataTestFeatureResponse ToAiTestFeatures(
@@ -476,7 +476,7 @@ public static class ApiEndpoints
                 usage.ToolCallCount,
                 usage.ReasoningTokens);
 
-    private static AiMetadataTestValidationResponse ToAiTestValidation(
+    internal static AiMetadataTestValidationResponse ToAiTestValidationResponse(
         AiMetadataValidationResult validation)
     {
         var value = validation.Value;

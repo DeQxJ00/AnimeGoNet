@@ -490,6 +490,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(aiMetadataMatcher);
         builder.Services.AddSingleton<AiMetadataResultValidator>();
         builder.Services.AddSingleton<MikanAiTestImportService>();
+        builder.Services.AddSingleton<AnimeGoNet.App.AiTesterCompat.AiTesterCoordinator>();
         builder.Services.AddSingleton<AiMetadataTaskResolver>();
         builder.Services.AddSingleton<DuplicateHitNotifier>();
         builder.Services.AddSingleton<ManualMetadataResolutionProcessor>();

@@ -31,5 +31,9 @@
              Link="docs/TMDB_AI_MATCH_PROMPT.md"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../docs/TMDB_AI_MATCH_PROMPT_TESTER.md"
+             Link="docs/TMDB_AI_MATCH_PROMPT_TESTER.md"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
