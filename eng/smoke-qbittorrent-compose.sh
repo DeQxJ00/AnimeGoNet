@@ -32,6 +32,10 @@ compose() {
     "$@"
 }
 
+stage() {
+  printf 'AnimeGoNet qB smoke stage: %s\n' "$1" >&2
+}
+
 cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm --force "$container_e2e_fixture_image" >/dev/null 2>&1 || true
@@ -52,6 +56,7 @@ if [[ "$(id -u)" == "0" ]]; then
   chown -R "$test_uid:$test_gid" "$integration_root"
 fi
 
+stage "build deterministic fixtures"
 base64 --decode "$fixture_base64" >"$integration_root/animegonet-ci.torrent"
 base64 --decode "$fixture_base64" >"$integration_root/fixtures/animegonet-ci.torrent"
 base64 --decode "$fixture_pt_base64" >"$integration_root/fixtures/animegonet-ci-pt.torrent"
@@ -327,6 +332,7 @@ sys.exit(0 if state.startswith(("stopped", "paused")) else 1)
   python3 -c 'import json,sys; assert json.load(sys.stdin)==[]' <<<"$tasks"
 }
 
+stage "start fixtures and qBittorrent instances"
 compose up --detach torrent-fixture container-e2e-fixture qbittorrent-bt qbittorrent-pt >/dev/null
 for attempt in $(seq 1 40); do
   if compose exec --no-TTY torrent-fixture \
@@ -358,6 +364,7 @@ bt_connection="$(configure_qbittorrent qbittorrent-bt bt)"
 pt_connection="$(configure_qbittorrent qbittorrent-pt pt)"
 bt_password="${bt_connection##*|}"
 pt_password="${pt_connection##*|}"
+stage "exercise isolated qBittorrent lifecycle"
 exercise_fixture bt "$bt_connection"
 exercise_fixture pt "$pt_connection"
 
@@ -393,6 +400,7 @@ if [[ "$(id -u)" == "0" ]]; then
   chown "$test_uid:$test_gid" "$integration_root/animegonet/data/config/downloaders.private.json"
 fi
 
+stage "start AnimeGoNet NativeAOT container"
 compose up --detach animegonet >/dev/null
 animegonet_port="$(service_port animegonet 7991)"
 animegonet_url="http://127.0.0.1:$animegonet_port"
@@ -611,20 +619,20 @@ import json
 import sys
 source_profile, downloader, expected_hash = sys.argv[1:]
 result = json.load(sys.stdin)
-assert result["source"] == source_profile
-assert result["accepted_count"] == 1
-assert result["rejected_count"] == 0
-assert len(result["items"]) == 1
+assert result["source"] == source_profile, result
+assert result["accepted_count"] == 1, result
+assert result["rejected_count"] == 0, result
+assert len(result["items"]) == 1, result
 item = result["items"][0]
-assert item["status"] == "staged"
-assert item["ingest_id"]
-assert item["source_profile_id"] == source_profile
-assert item["source_profile_revision"] >= 1
-assert item["downloader_id"] == downloader
-assert item["info_hash"] == expected_hash
-assert item["file_count"] == 1
-assert len(item["torrent_url_fingerprint"]) == 64
-assert item["errors"] == []
+assert item["status"] == "staged", item
+assert item["ingest_id"], item
+assert item["source_profile_id"] == source_profile, item
+assert item["source_profile_revision"] >= 1, item
+assert item["downloader_id"] == downloader, item
+assert item["info_hash"] == expected_hash, item
+assert item["file_count"] == 1, item
+assert len(item["torrent_url_fingerprint"]) == 64, item
+assert item["errors"] == [], item
 ' "$source_profile" "$downloader" "$expected_hash" <<<"$response"
 
   if [[ "$response" == *"torrent-fixture.invalid"* || "$response" == *"http://"* ]]; then
@@ -896,8 +904,10 @@ assert value["tmdb_credential_failures"] == 0
   export ANIMEGONET_FULL_CHAIN_TMDB_SERIES_ID="990001"
 }
 
+stage "exercise external C# plugin"
 exercise_external_plugin
 
+stage "verify downloader connections and shared paths"
 for instance in bt pt; do
   connection_test="$(animegonet_post "/api/v1/downloaders/$instance/test")"
   python3 -c '
@@ -905,10 +915,10 @@ import json
 import sys
 instance = sys.argv[1]
 result = json.load(sys.stdin)
-assert result["id"] == instance
-assert result["connected"] is True
-assert result["task_count"] == 0
-assert result["client_default_save_path"].rstrip("/") == f"/download/incomplete/{instance}"
+assert result["id"] == instance, result
+assert result["connected"] is True, result
+assert result["task_count"] == 0, result
+assert result["client_default_save_path"].rstrip("/") == f"/download/incomplete/{instance}", result
 ' "$instance" <<<"$connection_test"
 
   path_probe="$(animegonet_post "/api/v1/downloaders/$instance/path-probe")"
@@ -917,14 +927,15 @@ import json
 import sys
 instance = sys.argv[1]
 result = json.load(sys.stdin)
-assert result["id"] == instance
-assert result["success"] is True
-assert result["hard_link_supported"] is True
-assert result["download_path"].rstrip("/") == f"/download/incomplete/{instance}"
-assert result["save_path"].rstrip("/") == "/download/anime"
+assert result["id"] == instance, result
+assert result["success"] is True, result
+assert result["hard_link_supported"] is True, result
+assert result["download_path"].rstrip("/") == f"/download/incomplete/{instance}", result
+assert result["save_path"].rstrip("/") == "/download/anime", result
 ' "$instance" <<<"$path_probe"
 done
 
+stage "create source routes and previews"
 for source in u2 ttg; do
   create_body="$(
     printf '{"id":"%s-ci","display_name":"%s CI","adapter":"%s","downloader_id":"pt","file_strategy":"link","allowed_torrent_hosts":["%s.invalid","torrent-fixture.invalid"],"category":"animegonet-ci-route-pt","tags":["animegonet-ci-route-pt"],"seeding_time_minutes":0,"rss_filter_enabled":true,"rss_priority_enabled":true,"enabled":true}' \
@@ -936,8 +947,8 @@ import json
 import sys
 source = sys.argv[1]
 result = json.load(sys.stdin)
-assert result["id"] == f"{source}-ci"
-assert result["downloader_id"] == "pt"
+assert result["id"] == f"{source}-ci", result
+assert result["downloader_id"] == "pt", result
 ' "$source" <<<"$created"
 
   preview_body='{"title":"AnimeGoNet CI route","source_work_id":"animegonet-ci"}'
@@ -947,11 +958,11 @@ import json
 import sys
 source = sys.argv[1]
 result = json.load(sys.stdin)
-assert result["valid"] is True
-assert result["source_profile_id"] == f"{source}-ci"
-assert result["downloader_id"] == "pt"
-assert result["download_path"].rstrip("/") == "/download/incomplete/pt"
-assert result["save_path"].rstrip("/") == "/download/anime"
+assert result["valid"] is True, result
+assert result["source_profile_id"] == f"{source}-ci", result
+assert result["downloader_id"] == "pt", result
+assert result["download_path"].rstrip("/") == "/download/incomplete/pt", result
+assert result["save_path"].rstrip("/") == "/download/anime", result
 ' "$source" <<<"$preview"
 done
 
@@ -961,10 +972,10 @@ python3 -c '
 import json
 import sys
 result = json.load(sys.stdin)
-assert result["id"] == "mikan-ci"
-assert result["adapter"] == "mikan"
-assert result["downloader_id"] == "bt"
-assert result["file_strategy"] == "move"
+assert result["id"] == "mikan-ci", result
+assert result["adapter"] == "mikan", result
+assert result["downloader_id"] == "bt", result
+assert result["file_strategy"] == "move", result
 ' <<<"$mikan_created"
 
 mikan_preview="$(
@@ -976,11 +987,11 @@ python3 -c '
 import json
 import sys
 result = json.load(sys.stdin)
-assert result["valid"] is True
-assert result["source_profile_id"] == "mikan"
-assert result["downloader_id"] == "bt"
-assert result["download_path"].rstrip("/") == "/download/incomplete/bt"
-assert result["save_path"].rstrip("/") == "/download/anime"
+assert result["valid"] is True, result
+assert result["source_profile_id"] == "mikan", result
+assert result["downloader_id"] == "bt", result
+assert result["download_path"].rstrip("/") == "/download/incomplete/bt", result
+assert result["save_path"].rstrip("/") == "/download/anime", result
 ' <<<"$mikan_preview"
 
 bt_category="animegonet-ci-route-bt"
@@ -990,21 +1001,25 @@ pt_tag="animegonet-ci-route-pt"
 bt_hash="bcff48bafa9434c0062a4c2a45ed885f26701721"
 pt_hash="9356dbb012e7d8a6999badefacfc74dd1d00593e"
 
+stage "prepare dual-instance route identities"
 prepare_route_identity "$bt_connection" bt "$bt_category" "$bt_tag"
 prepare_route_identity "$pt_connection" pt "$pt_category" "$pt_tag"
 
+stage "ingest Mikan route into bt instance"
 mikan_ingest="$(
   animegonet_post "/api/v1/ingest" \
     '{"source":"mikan-ci","data":[{"torrent":"http://torrent-fixture.invalid:8088/animegonet-ci.torrent","info":{"title":"AnimeGoNet CI Mikan S01E01","source_item_id":"mikan-ci-episode-1","source_work_id":"3951","mikanid":3951,"bgmid":547888}}]}'
 )"
 assert_unified_ingest_response "$mikan_ingest" mikan-ci bt "$bt_hash"
 
+stage "ingest U2 route into pt instance"
 u2_ingest="$(
   animegonet_post "/api/v1/ingest" \
     '{"source":"u2-ci","data":[{"torrent":"http://torrent-fixture.invalid:8088/animegonet-ci-pt.torrent","info":{"title":"AnimeGoNet CI U2 S01E02","source_item_id":"u2-ci-episode-2","source_work_id":"u2-ci-work"}}]}'
 )"
 assert_unified_ingest_response "$u2_ingest" u2-ci pt "$pt_hash"
 
+stage "verify isolated dual-instance dispatch"
 wait_for_routed_task \
   "$bt_connection" "$pt_connection" bt "$bt_hash" "$bt_category" "$bt_tag" \
   animegonet-ci.bin 5
@@ -1014,6 +1029,7 @@ wait_for_routed_task \
 
 cleanup_routed_task "$bt_connection" "$bt_hash" "$bt_category" "$bt_tag"
 cleanup_routed_task "$pt_connection" "$pt_hash" "$pt_category" "$pt_tag"
+stage "exercise download, TMDB, organization, and library full chain"
 exercise_full_chain_e2e
 
 for connection in "$bt_connection" "$pt_connection"; do
