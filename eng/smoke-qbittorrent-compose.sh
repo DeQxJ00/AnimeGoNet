@@ -444,14 +444,14 @@ import json
 import sys
 plugin_id = sys.argv[1]
 external = json.load(sys.stdin)["external_plugins"]
-assert external["errors"] == []
+assert external["errors"] == [], external["errors"]
 package = next(item for item in external["packages"] if item["id"] == plugin_id)
 runtime = next(item for item in external["runtimes"] if item["id"] == plugin_id)
-assert package["type"] == "source"
-assert package["rid"] == "linux-x64"
-assert package["configured"] is False
-assert package["enabled"] is False
-assert runtime["state"] == "stopped"
+assert package["type"] == "source", package
+assert package["rid"] == "linux-x64", package
+assert package["configured"] is False, package
+assert package["enabled"] is False, package
+assert runtime["state"] == "stopped", runtime
 ' "$plugin_id" <<<"$status"
 
   enabled="$(animegonet_put "/api/v1/plugins/$plugin_id/configuration" \
