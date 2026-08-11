@@ -43,6 +43,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - name: Assert native runner OS and architecture
+        shell: pwsh
+        run: ./eng/assert-native-runner.ps1 -RuntimeIdentifier "${{ matrix.rid }}"
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json

@@ -24,6 +24,12 @@ fixture 不复制进 AnimeGoNet Git 历史。
 | `linux-arm64` | `ubuntu-24.04-arm` | `AnimeGoNet.App` |
 | `osx-arm64` | `macos-15` | `AnimeGoNet.App` |
 
+每个矩阵任务在安装 SDK 之前先运行 `eng/assert-native-runner.ps1`，直接读取当前进程的
+实际 OS 与 `OSArchitecture`，并要求与 RID 完全一致。runner 标签即使将来被重映射，
+错误架构也会在 restore/publish 和 artifact 上传之前失败。2026-08-11 已对照 GitHub
+官方 hosted/partner runner 清单复核 `windows-11-arm`、`ubuntu-24.04-arm` 和
+`macos-15`；实际跨架构运行结果仍以对应 Actions job 为准。
+
 `eng/smoke-native.ps1` 使用随机本地端口和独立临时目录，验证 `/ping`、受保护状态 API、SQLite schema、NativeAOT 标识、静态 WebUI、`data_path/logs/animego.log` 非空，以及 `/websocket/log` 的原生 upgrade 和 pause 控制帧。五 RID 还以 `-LegacyYamlUpgrade` 再启动一次同一原生二进制，验证旧 1.6.1 YAML 原字节备份、规范 1.7.1 替换、旧动态 tag 模板进入专用 `dynamic_tag_template` 且不误入静态 tags；两种模式结束时均回收进程和临时目录。
 
 `eng/smoke-native-metadata.ps1` 在同一五 RID 矩阵中再次使用实际发布二进制：先关闭 workers 完成首次建库，再由 `AnimeGoNet.NativeMetadataSmokeFixture` 通过正式 Data Store 写入唯一的已下载单文件任务；随后打开 workers，并把 AI、TMDB MCP 与 TMDB API 全部固定到随机 `127.0.0.1` fixture。门禁要求一次任务级 AI 调用完成两轮对话和 MCP 工具调用，经 TMDB Series/Season/Episode 逐级验证后在 SQLite 与公开任务 API 中得到 `S02E07`、`ai_metadata` 和 `tmdb_verified`。qB 实例在该 smoke 中显式禁用；临时数据库、日志、fixture 进程和两个原生进程无论成功失败都回收，不读取用户 TestSpace 或真实凭据。
