@@ -998,7 +998,15 @@ bt_category="animegonet-ci-route-bt"
 pt_category="animegonet-ci-route-pt"
 bt_tag="animegonet-ci-route-bt"
 pt_tag="animegonet-ci-route-pt"
-bt_hash="bcff48bafa9434c0062a4c2a45ed885f26701721"
+route_fixture_ready="$(fixture_get /ready)"
+IFS='|' read -r bt_hash bt_name bt_size < <(
+  python3 -c '
+import json
+import sys
+value = json.load(sys.stdin)
+print("|".join((value["info_hash"], value["file_name"], str(value["size_bytes"]))))
+' <<<"$route_fixture_ready"
+)
 pt_hash="9356dbb012e7d8a6999badefacfc74dd1d00593e"
 
 stage "prepare dual-instance route identities"
@@ -1008,7 +1016,7 @@ prepare_route_identity "$pt_connection" pt "$pt_category" "$pt_tag"
 stage "ingest Mikan route into bt instance"
 mikan_ingest="$(
   animegonet_post "/api/v1/ingest" \
-    '{"source":"mikan-ci","data":[{"torrent":"http://torrent-fixture.invalid:8088/animegonet-ci.torrent","info":{"title":"AnimeGoNet CI Mikan S01E01","source_item_id":"mikan-ci-episode-1","source_work_id":"3951","mikanid":3951,"bgmid":547888}}]}'
+    '{"source":"mikan-ci","data":[{"torrent":"http://container-e2e-fixture.invalid:8089/animegonet-container-e2e.torrent","info":{"title":"AnimeGoNet CI Mikan S01E01","source_item_id":"mikan-ci-episode-1","source_work_id":"3951","mikanid":3951,"bgmid":547888}}]}'
 )"
 assert_unified_ingest_response "$mikan_ingest" mikan-ci bt "$bt_hash"
 
@@ -1022,7 +1030,7 @@ assert_unified_ingest_response "$u2_ingest" u2-ci pt "$pt_hash"
 stage "verify isolated dual-instance dispatch"
 wait_for_routed_task \
   "$bt_connection" "$pt_connection" bt "$bt_hash" "$bt_category" "$bt_tag" \
-  animegonet-ci.bin 5
+  "$bt_name" "$bt_size"
 wait_for_routed_task \
   "$pt_connection" "$bt_connection" pt "$pt_hash" "$pt_category" "$pt_tag" \
   animegonet-ci-pt.bin 7

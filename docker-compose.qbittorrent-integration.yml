@@ -78,6 +78,7 @@ services:
       download_path: /download/incomplete
       save_path: /download/anime
       background_workers_enabled: "true"
+      mikan_base_url: http://container-e2e-fixture.invalid:8089/
       tmdb_base_url: http://container-e2e-fixture.invalid:8089/tmdb/
       tmdb_api_key: container-e2e-tmdb-key
       tmdb_retry_count: "0"

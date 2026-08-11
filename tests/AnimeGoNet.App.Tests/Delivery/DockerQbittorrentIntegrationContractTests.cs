@@ -129,6 +129,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("\"downloader_id\":\"pt\"", smoke, StringComparison.Ordinal);
         Assert.Contains("\"downloader_id\"] == \"bt\"", smoke, StringComparison.Ordinal);
         Assert.Contains("background_workers_enabled: \"true\"", compose, StringComparison.Ordinal);
+        Assert.Contains(
+            "mikan_base_url: http://container-e2e-fixture.invalid:8089/",
+            compose,
+            StringComparison.Ordinal);
         Assert.Contains("./eng/smoke-qbittorrent-compose.sh animegonet:ci", workflow, StringComparison.Ordinal);
 
         Assert.DoesNotContain("passkey", compose, StringComparison.OrdinalIgnoreCase);
