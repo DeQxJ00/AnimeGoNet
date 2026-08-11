@@ -57,6 +57,7 @@ public sealed class FullChainContainerDeliveryContractTests
         Assert.Contains("reset_animegonet_state_for_full_chain", smoke, StringComparison.Ordinal);
         Assert.Contains("compose stop --timeout 10 animegonet", smoke, StringComparison.Ordinal);
         Assert.Contains("animegonet.db-wal", smoke, StringComparison.Ordinal);
+        Assert.Contains("animegonet_port=\"$(service_port animegonet 7991)\"", smoke, StringComparison.Ordinal);
         Assert.Contains("\"source\":\"container-e2e-ci\"", smoke, StringComparison.Ordinal);
         Assert.Contains("/animegonet-container-e2e.torrent", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v1/ingest", smoke, StringComparison.Ordinal);

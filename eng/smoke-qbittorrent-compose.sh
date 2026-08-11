@@ -758,12 +758,15 @@ reset_animegonet_state_for_full_chain() {
     "$integration_root/animegonet/data/animegonet.db-shm" \
     "$integration_root/animegonet/data/animegonet.db-wal"
   compose start animegonet >/dev/null
+  animegonet_port="$(service_port animegonet 7991)"
+  animegonet_url="http://127.0.0.1:$animegonet_port"
   for attempt in $(seq 1 80); do
     if curl --fail --silent "$animegonet_url/ping" >/dev/null; then
       return
     fi
     if [[ "$attempt" == 80 ]]; then
       compose logs --no-color --tail 300 animegonet
+      curl --show-error "$animegonet_url/ping" || true
       echo "AnimeGoNet did not restart after the isolated full-chain state reset" >&2
       exit 1
     fi
