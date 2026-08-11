@@ -1,6 +1,6 @@
 # AnimeGoNet TODO
 
-状态约定：`[ ]` 未开始，`[>]` 进行中，`[x]` 已完成，`[~]` 功能/门禁已生成但按用户要求未执行验证（不是实现完成或运行成功），`[!]` 阻塞。只有验证矩阵对应项通过后才能勾选完成并提交；`[~]` 必须逐项写明未验证范围。
+状态约定：`[ ]` 未开始，`[>]` 进行中，`[x]` 已完成，`[~]` 功能/门禁已生成但尚未完成全部验证（不是实现完成或运行成功），`[!]` 阻塞。只有验证矩阵对应项通过后才能勾选完成并提交；`[~]` 必须逐项写明未验证范围。
 
 ## P0 — 决策与基线
 
@@ -163,8 +163,8 @@
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；qB 专用脚本用 FQN 过滤只启动 `QbittorrentSandboxTests`，不会串跑同项目的 TMDB live 测试；默认 CI 不启动该实例，也未创建 Torrent。
 - [x] 实现下载器路径可见性与硬链接能力探测：仅在显式 API/WebUI 操作时向实例 `download_path` 和全局 `save_path` 写入同名随机临时文件，验证后尽力清理；缺目录、权限、跨文件系统/挂载和平台不支持均返回稳定脱敏错误码，Windows/Linux/macOS 使用 AOT-safe 原生调用。
 - [x] 建立隔离 Docker Compose 下载环境：专用 Compose 只绑定随机回环端口，使用临时 data/download/qB profile 根目录、非 root AnimeGoNet、只读根文件系统和退出清理；不复用 TestSpace 或生产卷。
-- [~] qBittorrent 真实容器 smoke 已接入 Docker CI：从首启日志读取临时密码后设置隔离测试密码，逐实例覆盖登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete，并使用仅含 `127.0.0.1:9` tracker 的 5 字节 fixture、唯一 category/tag 和整项目清理。本机 TestSpace 已用动态 128 KiB payload + 随机 loopback web seed 完成统一导入→真实 priority/resume/download→SQLite snapshot→move/NFO/sidecar/completion→`deleteFiles=false` cleanup，连续三轮通过并清空任务/文件；Docker smoke 按用户要求标记为未验证，后续自行实跑。
-- [~] 双实例容器统一导入门禁已生成但未验证：隔离 BusyBox 仅提供两个不同 info-hash 的无私有内容 Torrent，AnimeGoNet 后台 worker 通过 `/api/v1/ingest` 将 `mikan-ci` 实际投递到 `bt`、将 `u2-ci` 实际投递到 `pt`；脚本检查 staged 响应不泄露 URL、目标实例 hash/category/tag/暂停状态/保存路径、另一实例不存在同 hash，并精确删除任务/文件/tag/category。Compose 仍保留连接、路径/硬链接探测和 U2/TTG route-preview；按用户要求 Docker 执行标记为未验证，后续自行实跑。
+- [x] qBittorrent 真实容器 smoke 已接入 Docker CI 并在 Ubuntu 24.04 x86_64 CT 实跑通过：从首启日志读取临时密码后设置隔离测试密码，逐实例覆盖登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete；合法 128 KiB WebSeed 完成统一导入→真实下载→SQLite→move/NFO/sidecar/completion→`deleteFiles=false` cleanup，唯一 category/tag/hash、容器、镜像和临时目录均精确清理。
+- [x] 双实例容器统一导入门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：隔离 fixture 提供不同 info-hash，AnimeGoNet 后台 worker 通过 `/api/v1/ingest` 将 `mikan-ci` 实际投递到 `bt`、将测试用 U2 route 骨架实际投递到 `pt`；staged 响应不泄露 URL，目标实例 hash/category/tag/暂停状态/保存路径正确，另一实例不存在同 hash，测试任务/文件/tag/category 已精确删除。U2/TTG 首版业务仍暂缓。
 - [x] 旧 YAML/环境变量出现 Transmission 时读取并生成 `UnsupportedDownloaderType`：按 `ANIMEGO_CLIENT`→显式 `ANIMEGO_CONFIG`/`--config`→`data_path/animego.yaml` 检测，只读取 `setting.client.client` 且不回显凭据；诊断未解除时强制关闭 workers、替换为空下载器 registry、拒绝导入/恢复/连接与路径测试，Web/API 保持可用并显示修复原因，绝不静默转成 qB。
 
 ## P8 — 下载、重命名、刮削
@@ -193,7 +193,7 @@
 
 - [x] 实现六字段 Cron 调度、StartRun 和 NextTime：支持秒级六字段、`?`、list/range/step、英文月份/星期与标准 descriptor，DOM/DOW 沿用 Cron OR 语义；时区/DST、启动立即执行、三次重试、并发任务、热增删唤醒、稳定快照和取消退出均由可控时钟测试覆盖，宿主仅在后台 worker 开启时运行 coordinator。
 - [x] 实现 Bangumi/数据库/feed/plugin tasks：旧 Bangumi cache 下载由版本化 AnimeGoNetData 检查/下载/导入调度替代；目录数据库刷新、数据更新和逐 SourceProfile Mikan RSS feed 均由编译期内置 schedule plugin 执行。RSS 调度只携带来源 ID/revision，运行时从 SQLite 取得只写 URL；失败重试、审计、热增删、重启中断恢复和后台禁用门禁已覆盖，无 Python task 或反射发现。
-- [~] 优雅退出和取消传播实现及门禁已生成但跨平台未验证：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT 宿主停止与 win-x64 NativeAOT 停止后句柄清理已验证；Linux/macOS NativeAOT `SIGTERM` 已加入五 RID smoke，待 CI 实机结果。
+- [~] 优雅退出和取消传播实现及门禁已生成但跨平台未验证：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT、win-x64 NativeAOT 及 Ubuntu CT linux-x64 NativeAOT 的 SIGTERM 零退出和句柄/SQLite 保留已验证；linux-arm64、macOS arm64 待原生 CI 实机结果。
 - [x] 移植上游 HTTP API：计划原称“10 个”，权威 OpenAPI 实际列出 11 个 REST operation + 1 个 WebSocket operation；契约测试逐项比对基线，12/12 均有 AnimeGoNet 路由。最后缺失的 `/api/config` 已实现 `all/default/comment/raw` GET、`all/raw` PUT、legacy envelope/参数错误/Access-Key、写前强类型校验、可选不可覆盖备份和同目录原子替换；更新仅在重启后应用。
 - [x] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，`/api/rss` 与现代 `/api/v1/rss/ingest` 均已接入来源规则、统一 staging 与后台 qB dispatch。
 - [x] 将 passkey Torrent URL 和 `.torrent` announce 视为 secret：profile host白名单及不可变路由快照、逐跳redirect/DNS校验、校验IP固定连接、限时限量、严格Bencode/info-hash、请求期受限 staging、崩溃过期清理、qB确认接收后删除均已实现；AI 使用显式白名单数据边界，输入类型无 URL/fingerprint/announce/暂存字节/route/Cookie/凭据字段，统一导入 E2E 验证实际 URL、passkey 与 SQLite fingerprint 均不可达 matcher 和最终 Prompt。
@@ -244,21 +244,21 @@
 - [x] 用 `测试数据.csv` 的 29 条真实 Mikan 输入完成可续跑链路审计：29/29 已真实执行 Mikan 输入、隔离 qB 投递/文件清单、规则筛选、SQLite 去重和 Bangumi/TMDB 映射；第 2–4 行另完成真实 BT 下载与 move 整理。为避免公网下载时间影响业务验收，第 5–30 行按显式 `synthetic_file` 测试模式在每次 `run-*` 隔离目录按 Torrent 清单生成测试文件，再走正式 move、重命名、NFO/sidecar、completion 与 `deleteFiles=false` 清理；其中 18 条完成整理、7 条按同 TMDB+EP 完成记录正确 `SkippedDuplicate`。全部命中 CSV 期望，AI 0 次/0 token；报告不含凭据、passkey、Torrent URL 或媒体绝对路径。合成载荷不记作真实下载。
 
 - [x] 完成 Host DI 和 CLI 行为：固定上游 `cmd/animego` 的 `config/debug/web/backup` 四个开关与对应 `ANIMEGO_*` 环境别名均已审计；兼容 Go 单短横线及现代双横线，裸 bool 等价 true，非法值在创建运行目录前失败；debug 同时放开宿主与滚动文件 Debug 日志，`web=false` 使用无监听 `IServer` 保留后台 worker，`-h/-help/--help` 不启动宿主。五 RID NativeAOT workflow 验证 help 和 headless 零 TCP 监听。
-- [~] Docker NativeAOT 镜像功能已生成：双架构 Dockerfile、Buildx CI 和容器 smoke 均已建立；按用户要求 Docker 构建/运行标记为未验证，后续自行实跑。
-- [~] 非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统门禁已生成：smoke 强制任意非 root UID/GID、只读 rootfs、`/tmp` noexec tmpfs 与 no-new-privileges，并检查 `/data`/`/download`/`/tmp` 可写、healthcheck、7 秒 SIGTERM 零退出和 SQLite 保留；Compose 声明有契约测试，Docker runner 按用户要求未验证。
+- [~] Docker NativeAOT 双架构功能已生成但 arm64 未验证：双架构 Dockerfile、Buildx CI 和容器 smoke 均已建立；Ubuntu 24.04 x86_64 CT 已真实构建并运行 linux-x64 镜像，linux-arm64 构建/运行仍待原生或 Buildx runner 结果。
+- [x] 非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：smoke 强制任意非 root UID/GID、只读 rootfs、`/tmp` noexec tmpfs 与 no-new-privileges，并确认 `/data`/`/download`/`/tmp` 可写、healthcheck、7 秒 SIGTERM 零退出和 SQLite 保留。
 - [x] 添加连接外部下载器和内置 Compose 下载器的部署示例：规范 YAML、环境变量、本机 TestSpace、官方双 qB Compose 均已记录；外部/远程双 qB 示例只启动 AnimeGoNet，强制地址和凭据由未跟踪环境变量传入，明确两端同一共享存储必须映射成相同 `/download`，并记录连接测试、硬链接路径探测、显式 Torrent 验收和清理边界。
 - [x] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
 - [x] 提供写有上述绝对路径的 Docker 容器配置；Compose 卷与配置逐项一致，不依赖隐藏路径修正。
-- [~] 官方 Compose 已将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`，配置和 smoke 断言已生成；真实容器路径验证按用户要求未验证。
-- [~] 外部下载器 `client.download_path` 路径转换与错误诊断已生成：主程序提供 qB 默认保存路径读取和显式路径/硬链接能力探测，临时目录成功/缺失 fixture 已通过；真实外部容器的跨容器映射按用户要求未验证。
-- [~] Linux x64/arm64 NativeAOT 构建、原生 smoke 与 artifact 门禁已生成但远端未验证：分别使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 原生 runner；不以 Windows 交叉编译或 Docker 结果代替实机证据。
-- [~] 外部 C# 插件目录挂载、非 root 启动和禁用回退门禁已生成但未验证：专用 NativeAOT source fixture 直接引用官方 SDK，amd64/arm64 Dockerfile 生成精确 RID 包；导出器拒绝覆盖现有目录和符号链接并固定只读/执行权限，Compose 将包子目录 `:ro` 覆盖挂载而保留 `plugin-data` 可写。统一导入实际启动插件，插件记录有效 UID、主动确认包目录不可写；随后 API 禁用并证明不再执行。平台/RID、入口权限、逐包隔离、退避/自动禁用/reset 的非 Docker 测试继续有效；按用户要求 Docker/Linux 进程执行标记为未验证。
-- [~] 五 RID NativeAOT artifact 发布链已生成但远端未验证：`win-x64` 本机 publish/smoke 已通过；`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` 必须等待各自原生 GitHub runner 结果，不声称已发布成功。
+- [x] 官方 Compose 已将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`；Ubuntu 24.04 x86_64 CT 已真实验证 `/data`、`/download/incomplete/{bt|pt}`、`/download/anime` 的共享映射、写入和整理结果。
+- [x] 外部下载器 `client.download_path` 路径转换与错误诊断已验证：主程序读取 qB 默认保存路径并执行显式路径/硬链接能力探测；Ubuntu CT 双 qB 外部容器的 `/download` 跨容器映射与完整下载/整理通过。
+- [~] Linux x64/arm64 NativeAOT 构建、原生 smoke 与 artifact 门禁已生成但 arm64 未验证：Ubuntu 24.04 x86_64 CT 已实际构建并运行 linux-x64 NativeAOT 镜像、API/SQLite/WebUI/SIGTERM smoke；`ubuntu-24.04-arm` 的 linux-arm64 原生 runner 结果仍待验收，不以 x64 结果代替。
+- [x] 外部 C# 插件目录挂载、非 root 启动和禁用回退门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：专用 linux-x64 NativeAOT source fixture 直接引用官方 SDK，包子目录只读且 `plugin-data` 可写；统一导入实际启动插件并记录非 root UID、确认包不可写，API 禁用后证明不再执行。其他 RID 由统一跨架构发布项继续跟踪。
+- [~] 五 RID NativeAOT artifact 发布链已生成但远端未验证完整：`win-x64` 本机 publish/smoke 与 Ubuntu CT linux-x64 NativeAOT 运行已通过；`win-arm64`、`linux-arm64`、`osx-arm64` 必须等待各自原生 GitHub runner，五份 artifact 尚未整体发布成功。
 - [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
 - [x] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；win-x64 原生二进制完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt 以只读 Go schema-v1 JSON 导出后由 .NET schema v39 单事务导入；跨平台 CI 的组合 smoke 在同一隔离目录验证 3 条旧 sidecar 索引、六个 bucket、过期跳过、重复导入和重启保留。
-- [~] 全链路 JIT/AOT/Docker E2E 门禁已生成但未验证：确定性合法 Torrent/WebSeed 与 Bangumi/TMDB fixture、统一导入、Mikan move、SQLite 去重、双 qB 路由、真实下载、Series/Season/Episode 验证、整理/NFO/三层 sidecar、作品库/下载/元数据 API、静态 WebUI Playwright 和精确 qB 清理已串入专用 Compose/CI；fixture 的本机 JIT 进程行为与生成文件契约已验证，按用户要求 Docker/AOT 容器执行留待自行实跑。
-- [~] 发布镜像 Web UI Playwright E2E 已生成：固定 Playwright 1.62.0/Chromium，覆盖 NativeAOT 状态、Access-Key 双边界、主要异步区域、WebSocket、TMDB fallback 可视顺序、键盘跳转、移动端无横向溢出和零 console error；本机 NativeAOT 2/2 已通过，Docker 镜像脚本与 CI 门禁按用户要求标记为未验证。
-- [x] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker/外部 qB 路径和本机隔离验收之外，已补齐用户迁移、外部 C# 插件安装/升级/回滚、日常状态检查、停机备份/恢复、SQLite 校验、版本回退和故障处理手册；README 统一入口与文档链接/安全边界契约测试已通过。Docker 功能文件按用户要求保留并明确标记为未验证。
+- [x] 全链路 JIT/AOT/Docker E2E 已在 Ubuntu 24.04 x86_64 CT 实跑通过：确定性合法 Torrent/WebSeed、Bangumi/TMDB fixture、统一导入、Mikan move、SQLite 去重、双 qB 路由、真实下载、Series/Season/Episode 验证、整理/NFO/三层 sidecar、作品库/下载/元数据 API、静态 WebUI Playwright 和精确 qB 清理均完成；Episode 以 Bangumi 日期证据匹配并最终验证 TMDB，AI 未调用。
+- [x] 发布镜像 Web UI Playwright E2E 已验证：固定 Playwright 1.62.0/Chromium，本机 win-x64 NativeAOT 2/2 通过；Ubuntu CT 在无宿主 Node 的条件下由官方 Playwright 容器对同一 linux-x64 NativeAOT 完整链路结果执行 1/1 页面断言并通过，无 console/page error。
+- [x] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker/外部 qB 路径和本机隔离验收之外，已补齐用户迁移、外部 C# 插件安装/升级/回滚、日常状态检查、停机备份/恢复、SQLite 校验、版本回退和故障处理手册；README 统一入口与文档链接/安全边界契约测试已通过。Ubuntu CT linux-x64 Docker 验证已记录，linux-arm64 与外部发布边界继续明确标记为未验证。
 - [~] 首个可用预发布自动化已生成但远端未验证：仅 `vMAJOR.MINOR.PATCH-SUFFIX` 标签在五 RID 全部成功后才下载完整 artifacts、逐 RID 验证并确定性打包，随后以 `--verify-tag --prerelease --latest=false` 创建不可覆盖的 GitHub Prerelease；实际标签推送与远端 Release 待仓库所有者执行/验收。
 
 ## P11 — AnimeGoNetData

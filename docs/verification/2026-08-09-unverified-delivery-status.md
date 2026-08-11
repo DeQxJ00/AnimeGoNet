@@ -1,5 +1,9 @@
 # Generated but unverified delivery status — 2026-08-09
 
+> 历史状态说明：本文锁定 2026-08-09 的未执行范围。2026-08-11 已完成 linux-x64
+> NativeAOT Docker、双 qB、完整链路、外部插件与发布 WebUI 验收，剩余门禁以
+> `TODO.md` 和 `2026-08-11-ubuntu-ct-docker-validation.md` 为准。
+
 ## Owner-approved boundary
 
 The project owner explicitly allows Docker functionality to remain unexecuted

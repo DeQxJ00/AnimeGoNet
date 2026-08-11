@@ -99,10 +99,14 @@ Docker；Docker workflow 才执行这项门禁。
 
 ## 验证状态
 
-2026-07-30 本机可验证全部 YAML 解析、两个容器 smoke shell 脚本语法、
-隔离编排契约测试、全量 .NET 测试和 win-x64 NativeAOT published-binary smoke。
-本机没有 Docker CLI，因此双 qB 实际容器调用、其余四个 RID 和双架构镜像仍由
-GitHub Actions 运行并提供最终外部证据。
+2026-08-11 已在 Ubuntu 24.04 x86_64 CT 真实构建并运行 linux-x64 NativeAOT 镜像，
+通过非 root/只读根文件系统/healthcheck/SQLite/共享路径/SIGTERM、双 qB 统一导入、
+合法 WebSeed 下载、Bangumi/TMDB、move/NFO/sidecar、外部 C# 插件及发布镜像
+Playwright WebUI 门禁。脱敏报告和明确边界见
+`docs/verification/2026-08-11-ubuntu-ct-docker-validation.md`。
+
+这份 CT 证据不替代 linux-arm64 Docker/原生 runner、win-arm64、osx-arm64 或实际
+GitHub Prerelease。双架构镜像仍要等 arm64 原生/Buildx 结果后才能整体标记完成。
 
 ## 参考版本
 

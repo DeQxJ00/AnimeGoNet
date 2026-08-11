@@ -11,3 +11,19 @@
 ```powershell
 & .\eng\docker-ubuntu-ct-integration.ps1
 ```
+
+加入 `-FullChainWebUi` 会在完整链路成功后运行发布镜像 WebUI 的 Chromium 验收：
+
+```powershell
+& .\eng\docker-ubuntu-ct-integration.ps1 -FullChainWebUi
+```
+
+CT 没有 Node/npm 时，脚本使用固定的官方
+`mcr.microsoft.com/playwright:v1.62.0-noble` 容器，在 host network 上执行仓库的
+Playwright 测试。源码只读挂载，`node_modules`、测试产物和 `/tmp` 都位于临时 tmpfs；
+若该 Playwright 镜像不是测试前已有，退出时会精确删除。脚本在完整链路前重置本次
+`mktemp` 根内的三个 AnimeGoNet SQLite 文件，并在容器重启后重新读取随机宿主端口，
+不会删除正式数据或用户 TestSpace 数据。
+
+2026-08-11 的 Ubuntu x86_64 实跑结果见
+`docs/verification/2026-08-11-ubuntu-ct-docker-validation.md`。

@@ -1,5 +1,9 @@
 # Full-chain container E2E delivery — 2026-08-09
 
+> 历史状态说明：本文记录 2026-08-09 仅生成门禁时的边界。该门禁已于
+> 2026-08-11 在 Ubuntu 24.04 x86_64 CT 实跑通过；当前证据见
+> `2026-08-11-ubuntu-ct-docker-validation.md`。
+
 ## Scope and status
 
 The full-chain Docker gate is generated and intentionally **unverified**. The

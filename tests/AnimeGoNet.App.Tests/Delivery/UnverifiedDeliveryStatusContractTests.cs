@@ -8,26 +8,18 @@ public sealed class UnverifiedDeliveryStatusContractTests
         var root = RepositoryRoot();
         var todo = File.ReadAllText(Path.Combine(root, "TODO.md"));
 
-        Assert.Contains("`[~]` 功能/门禁已生成但按用户要求未执行验证", todo, StringComparison.Ordinal);
+        Assert.Contains("`[~]` 功能/门禁已生成但尚未完成全部验证", todo, StringComparison.Ordinal);
         var unverified = todo
             .Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(15, unverified.Length);
+        Assert.Equal(7, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
         AssertUnverified(unverified, "Linux Go 容器基线 job");
-        AssertUnverified(unverified, "qBittorrent 真实容器 smoke");
-        AssertUnverified(unverified, "双实例容器统一导入门禁");
-        AssertUnverified(unverified, "Docker NativeAOT 镜像功能");
-        AssertUnverified(unverified, "非 root、PUID/PGID");
-        AssertUnverified(unverified, "官方 Compose");
-        AssertUnverified(unverified, "client.download_path");
-        AssertUnverified(unverified, "外部 C# 插件目录挂载");
-        AssertUnverified(unverified, "发布镜像 Web UI Playwright E2E");
-        AssertUnverified(unverified, "全链路 JIT/AOT/Docker E2E");
         AssertUnverified(unverified, "优雅退出和取消传播");
+        AssertUnverified(unverified, "Docker NativeAOT 双架构功能");
         AssertUnverified(unverified, "Linux x64/arm64 NativeAOT");
         AssertUnverified(unverified, "五 RID NativeAOT artifact");
         AssertUnverified(unverified, "首个可用预发布自动化");
@@ -42,18 +34,19 @@ public sealed class UnverifiedDeliveryStatusContractTests
     }
 
     [Fact]
-    public void PortingChecklistUsesUnverifiedStatusWithoutClaimingDockerSuccess()
+    public void PortingChecklistDistinguishesVerifiedX64DockerFromPendingArchitectures()
     {
         var root = RepositoryRoot();
         var checklist = File.ReadAllText(Path.Combine(root, "docs", "PORTING_CHECKLIST.md"));
 
         Assert.Contains("`未验证` 表示功能/门禁已生成", checklist, StringComparison.Ordinal);
-        Assert.Contains("| Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 未验证 |", checklist, StringComparison.Ordinal);
+        Assert.Contains("| Docker 路径映射 | `/data`、`/download/incomplete`、`/download/anime` | 扩展 | 已验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| Go Dockerfile | NativeAOT runtime image | 替换 | 未验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| Go release workflows | .NET 10 build/test | 替换 | 未验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("| `internal/client/qbittorrent` | 多命名 qBittorrent adapter | 保留+扩展 | 已验证 |", checklist, StringComparison.Ordinal);
         Assert.Contains("合法 WebSeed 下载→Bangumi/TMDB→move/NFO/sidecar→API/WebUI→qB 清理的全链门禁", checklist, StringComparison.Ordinal);
-        Assert.DoesNotContain("Docker runner 实跑待验收", checklist, StringComparison.Ordinal);
+        Assert.Contains("Ubuntu 24.04 x86_64 CT 已实际验证", checklist, StringComparison.Ordinal);
+        Assert.Contains("linux-arm64", checklist, StringComparison.Ordinal);
     }
 
     [Fact]

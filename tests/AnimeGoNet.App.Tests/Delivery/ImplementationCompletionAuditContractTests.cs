@@ -33,7 +33,8 @@ public sealed class ImplementationCompletionAuditContractTests
         var audit = File.ReadAllText(auditPath);
         Assert.Contains("1525/1525", audit, StringComparison.Ordinal);
         Assert.Contains("U2/TTG 首版暂缓", audit, StringComparison.Ordinal);
-        Assert.Contains("Docker 实跑 `[~]`", audit, StringComparison.Ordinal);
+        Assert.Contains("Ubuntu 24.04 x86_64 CT", audit, StringComparison.Ordinal);
+        Assert.Contains("linux-arm64", audit, StringComparison.Ordinal);
         Assert.Contains("Mikan 真实数据完整链", audit, StringComparison.Ordinal);
     }
 }
