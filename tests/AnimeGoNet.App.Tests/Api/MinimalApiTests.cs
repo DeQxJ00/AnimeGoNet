@@ -597,6 +597,51 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
+    public async Task NonMikanIngestDoesNotTrustTheSubmittedTorrentHost()
+    {
+        var staging = new CapturingRejectingStagingService();
+        await using var app = await RunningApp.StartAsync(
+            stagingService: staging,
+            configure: options => options with
+            {
+                InitialSourceProfiles =
+                [
+                    .. options.InitialSourceProfiles,
+                    new SourceProfileSeed
+                    {
+                        Id = "u2-allowlist-test",
+                        Adapter = "u2",
+                        DownloaderId = "bt",
+                        FileStrategy = FileStrategy.Link,
+                        AllowedTorrentHosts = ["u2.example.invalid"],
+                    },
+                ],
+            });
+        const string payload = """
+            {
+              "source": "u2-allowlist-test",
+              "data": [{
+                "torrent": "https://attacker.example/private/item.torrent",
+                "info": {
+                  "title": "Untrusted host",
+                  "source_work_id": "u2-work-1"
+                }
+              }]
+            }
+            """;
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, json.RootElement.GetProperty("accepted_count").GetInt32());
+        Assert.Equal(["u2.example.invalid"], staging.Policy?.AllowedHosts);
+        Assert.Equal("attacker.example", staging.RequestUrl?.IdnHost);
+    }
+
+    [Fact]
     public async Task DownloadListReturnsCanonicalSnapshotWithoutSecretPaths()
     {
         await using var app = await RunningApp.StartAsync();
@@ -703,6 +748,37 @@ public sealed class MinimalApiTests
         public FileStream OpenRead(string stagingFileName) => throw new FileNotFoundException();
 
         public Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
+    }
+
+    private sealed class CapturingRejectingStagingService : ITorrentStagingService
+    {
+        public Uri? RequestUrl { get; private set; }
+
+        public TorrentSourcePolicy? Policy { get; private set; }
+
+        public Task<StagedTorrent> StageAsync(
+            Uri secretUrl,
+            TorrentSourcePolicy sourcePolicy,
+            CancellationToken cancellationToken = default)
+        {
+            RequestUrl = secretUrl;
+            Policy = sourcePolicy;
+            throw new TorrentStagingException(
+                TorrentStagingFailureCode.HostNotAllowed,
+                "Torrent host is not allowed by the source profile.");
+        }
+
+        public Task<bool> DeleteAsync(
+            string stagingFileName,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public FileStream OpenRead(string stagingFileName) =>
+            throw new FileNotFoundException();
+
+        public Task<int> CleanupExpiredAsync(
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
     }
 }

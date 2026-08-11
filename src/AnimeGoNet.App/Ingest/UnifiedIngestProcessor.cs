@@ -106,8 +106,12 @@ public sealed class UnifiedIngestProcessor(
                 StringComparison.OrdinalIgnoreCase)
             ? MikanEndpointRewriter.Rewrite(normalized.TorrentUrl, options.Metadata.Mikan)
             : normalized.TorrentUrl;
-        var allowedHosts = profile.AllowedTorrentHosts
-            .Append(torrentRequestUrl.IdnHost)
+        var allowedHosts = (string.Equals(
+                profile.Adapter,
+                "mikan",
+                StringComparison.OrdinalIgnoreCase)
+                ? profile.AllowedTorrentHosts.Append(torrentRequestUrl.IdnHost)
+                : profile.AllowedTorrentHosts)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var trustedPrivateHosts = string.Equals(
