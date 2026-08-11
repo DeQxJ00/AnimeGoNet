@@ -120,7 +120,11 @@ authenticated_post() {
     --header "Origin: http://127.0.0.1:8080" \
     --cookie "$cookie_jar" \
     "$@" \
-    "$base_url$endpoint"
+    "$base_url$endpoint" || {
+      local exit_code=$?
+      echo "qBittorrent POST failed: endpoint=$endpoint curl_exit=$exit_code" >&2
+      return "$exit_code"
+    }
 }
 
 authenticated_get() {
@@ -132,7 +136,11 @@ authenticated_get() {
     --header "Referer: http://127.0.0.1:8080/" \
     --header "Origin: http://127.0.0.1:8080" \
     --cookie "$cookie_jar" \
-    "$base_url$endpoint"
+    "$base_url$endpoint" || {
+      local exit_code=$?
+      echo "qBittorrent GET failed: endpoint=$endpoint curl_exit=$exit_code" >&2
+      return "$exit_code"
+    }
 }
 
 configure_qbittorrent() {
@@ -408,14 +416,22 @@ animegonet_post() {
   else
     arguments+=(--request POST)
   fi
-  curl "${arguments[@]}" "$animegonet_url$endpoint"
+  curl "${arguments[@]}" "$animegonet_url$endpoint" || {
+    local exit_code=$?
+    echo "AnimeGoNet POST failed: endpoint=$endpoint curl_exit=$exit_code" >&2
+    return "$exit_code"
+  }
 }
 
 animegonet_get() {
   local endpoint="$1"
   curl --fail-with-body --silent --show-error \
     --header "X-AnimeGo-Access-Key: $access_key" \
-    "$animegonet_url$endpoint"
+    "$animegonet_url$endpoint" || {
+      local exit_code=$?
+      echo "AnimeGoNet GET failed: endpoint=$endpoint curl_exit=$exit_code" >&2
+      return "$exit_code"
+    }
 }
 
 animegonet_put() {
@@ -426,7 +442,11 @@ animegonet_put() {
     --header "X-AnimeGo-Access-Key: $access_key" \
     --header "Content-Type: application/json" \
     --data "$json" \
-    "$animegonet_url$endpoint"
+    "$animegonet_url$endpoint" || {
+      local exit_code=$?
+      echo "AnimeGoNet PUT failed: endpoint=$endpoint curl_exit=$exit_code" >&2
+      return "$exit_code"
+    }
 }
 
 exercise_external_plugin() {
