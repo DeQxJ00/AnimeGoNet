@@ -750,6 +750,27 @@ cleanup_routed_task() {
     --data-urlencode "categories=$category" >/dev/null
 }
 
+reset_animegonet_state_for_full_chain() {
+  stage "reset temporary application state before full chain"
+  compose stop --timeout 10 animegonet >/dev/null
+  rm -f -- \
+    "$integration_root/animegonet/data/animegonet.db" \
+    "$integration_root/animegonet/data/animegonet.db-shm" \
+    "$integration_root/animegonet/data/animegonet.db-wal"
+  compose start animegonet >/dev/null
+  for attempt in $(seq 1 80); do
+    if curl --fail --silent "$animegonet_url/ping" >/dev/null; then
+      return
+    fi
+    if [[ "$attempt" == 80 ]]; then
+      compose logs --no-color --tail 300 animegonet
+      echo "AnimeGoNet did not restart after the isolated full-chain state reset" >&2
+      exit 1
+    fi
+    sleep 0.25
+  done
+}
+
 fixture_get() {
   local endpoint="$1"
   compose exec --no-TTY torrent-fixture \
@@ -1144,6 +1165,7 @@ wait_for_routed_task \
 
 cleanup_routed_task "$bt_connection" "$bt_hash" "$bt_category" "$bt_tag"
 cleanup_routed_task "$pt_connection" "$pt_hash" "$pt_category" "$pt_tag"
+reset_animegonet_state_for_full_chain
 stage "exercise download, TMDB, organization, and library full chain"
 exercise_full_chain_e2e
 
