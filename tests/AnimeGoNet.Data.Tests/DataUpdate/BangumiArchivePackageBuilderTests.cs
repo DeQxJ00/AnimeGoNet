@@ -301,7 +301,13 @@ public sealed class BangumiArchivePackageBuilderTests
         Assert.Contains("--minimum-subject-count 30000", workflow, StringComparison.Ordinal);
         Assert.Contains("--minimum-episode-count 300000", workflow, StringComparison.Ordinal);
         Assert.Contains("--minimum-relation-count 10000", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "--minimum-episode-count 300000 \\\n            --minimum-relation-count 10000",
+            workflow.ReplaceLineEndings("\n"),
+            StringComparison.Ordinal);
+        Assert.Contains("actions/checkout@v6", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/upload-artifact@v7", workflow, StringComparison.Ordinal);
         Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_DATA_REPOSITORY", workflow, StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_DATA_TOKEN", workflow, StringComparison.Ordinal);

@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
       - name: Validate external data repository boundary
@@ -73,9 +73,9 @@ jobs:
             --upstream-sha256 '${{ steps.archive.outputs.sha256 }}' \
             --generated-at-utc '${{ steps.archive.outputs.generated_at }}' \
             --minimum-subject-count 30000 \
-            --minimum-episode-count 300000
+            --minimum-episode-count 300000 \
             --minimum-relation-count 10000
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: animegonet-data-${{ steps.archive.outputs.data_version }}
           path: artifacts/animegonet-data-${{ steps.archive.outputs.data_version }}/
