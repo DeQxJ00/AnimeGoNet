@@ -845,11 +845,74 @@ print(items[0]["job_id"] if len(items) == 1 and items[0]["business_status"] == "
 ' "$task_id" <<<"$downloads")"
     [[ -n "$job_id" ]] && break
     if [[ "$attempt" == 360 ]]; then
-      compose logs --no-color animegonet || true
+      compose logs --no-color --tail 300 animegonet || true
+      printf 'Full-chain download list: %s\n' "$downloads" >&2
+      diagnostic_job_id="$(python3 -c '
+import json
+import sys
+task_id = sys.argv[1]
+items = [item for item in json.load(sys.stdin)["items"] if item["task_id"] == task_id]
+print(items[0]["job_id"] if len(items) == 1 else "")
+' "$task_id" <<<"$downloads")"
+      if [[ -n "$diagnostic_job_id" ]]; then
+        animegonet_get "/api/v1/downloads/$diagnostic_job_id" || true
+      fi
       authenticated_get "${bt_connection%%|*}" "$(connection_cookie_jar "$bt_connection")" \
         "/api/v2/torrents/info?hashes=$expected_hash" || true
       animegonet_get "/api/v1/metadata/tasks/$task_id" || true
       fixture_get /__state || true
+      python3 - "$integration_root/animegonet/data/animegonet.db" "$task_id" <<'PY' || true
+import json
+import sqlite3
+import sys
+
+database, task_id = sys.argv[1:]
+connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+connection.row_factory = sqlite3.Row
+
+def rows(sql, parameters=(task_id,)):
+    return [dict(row) for row in connection.execute(sql, parameters)]
+
+diagnostic = {
+    "task": rows("""
+        SELECT id, status, failure_kind, failure_reason, created_at_utc, updated_at_utc
+        FROM ingest_tasks WHERE id = ?
+    """),
+    "files": rows("""
+        SELECT id, disposition, other_reason, tmdb_series_id, tmdb_season_number,
+               tmdb_episode_number, episode_resolution_source,
+               episode_resolution_run_id, episode_resolution_attempt_id
+        FROM task_files WHERE task_id = ? ORDER BY id
+    """),
+    "runs": rows("""
+        SELECT id, status, failure_kind, fallback_denial_reason, attempt_number,
+               lease_expires_at_utc, started_at_utc, completed_at_utc
+        FROM metadata_resolution_runs WHERE task_id = ?
+        ORDER BY attempt_number, id
+    """),
+    "attempts": rows("""
+        SELECT attempt.stage, attempt.strategy, attempt.result, attempt.error_code,
+               attempt.retryable, attempt.attempt_number, attempt.created_at_utc
+        FROM metadata_resolution_attempts AS attempt
+        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+        WHERE run.task_id = ? ORDER BY attempt.created_at_utc, attempt.id
+    """),
+    "claims": rows("""
+        SELECT claim.state, claim.tmdb_series_id, claim.tmdb_season_number,
+               claim.tmdb_episode_number, claim.claimed_at_utc, claim.expires_at_utc
+        FROM episode_claims AS claim
+        JOIN task_files AS file ON file.id = claim.task_file_id
+        WHERE file.task_id = ?
+    """),
+    "jobs": rows("""
+        SELECT id, state, progress, failure_reason, preparation_state,
+               preparation_failure_code, organization_state,
+               organization_failure_code, updated_at_utc
+        FROM download_jobs WHERE task_id = ?
+    """),
+}
+print("Full-chain SQLite diagnostic: " + json.dumps(diagnostic, separators=(",", ":")))
+PY
       echo "Full-chain task $task_id did not reach organized within 180 seconds" >&2
       exit 1
     fi
