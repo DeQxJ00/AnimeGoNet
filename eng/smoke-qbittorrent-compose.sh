@@ -822,54 +822,57 @@ print(items[0]["job_id"] if len(items) == 1 and items[0]["business_status"] == "
     sleep 0.5
   done
 
+  stage "verify organized download snapshot"
   python3 -c '
 import json
 import sys
 task_id, job_id, expected_hash, expected_size = sys.argv[1:]
 item = next(item for item in json.load(sys.stdin)["items"] if item["task_id"] == task_id)
-assert item["job_id"] == job_id
-assert item["source"] == "container-e2e-ci"
-assert item["downloader_id"] == "bt"
-assert item["info_hash"] == expected_hash
-assert item["business_status"] == "organized"
-assert item["progress"] == 1
-assert item["total_bytes"] == int(expected_size)
+assert item["job_id"] == job_id, item
+assert item["source"] == "container-e2e-ci", item
+assert item["downloader_id"] == "bt", item
+assert item["info_hash"] == expected_hash, item
+assert item["business_status"] == "organized", item
+assert item["progress"] == 1, item
+assert item["total_bytes"] == int(expected_size), item
 ' "$task_id" "$job_id" "$expected_hash" "$expected_size" <<<"$downloads"
 
   detail="$(animegonet_get "/api/v1/metadata/tasks/$task_id")"
+  stage "verify TMDB resolution strategies and episode file"
   python3 -c '
 import json
 import sys
 task_id = sys.argv[1]
 value = json.load(sys.stdin)
 summary = value["summary"]
-assert summary["task_id"] == task_id
-assert summary["status"] == "organized"
-assert summary["tmdb_series_id"] == 990001
-assert summary["tmdb_season_number"] == 1
-assert summary["series_strategy"] == "tmdb_title"
-assert summary["season_strategy"] == "tmdb_air_date"
-assert summary["episode_strategy"] == "tmdb_episode_number"
-assert summary["episode_file_count"] == 1
+assert summary["task_id"] == task_id, summary
+assert summary["status"] == "organized", summary
+assert summary["tmdb_series_id"] == 990001, summary
+assert summary["tmdb_season_number"] == 1, summary
+assert summary["series_strategy"] == "tmdb_title", summary
+assert summary["season_strategy"] == "tmdb_air_date", summary
+assert summary["episode_strategy"] == "tmdb_episode_number", summary
+assert summary["episode_file_count"] == 1, summary
 file = value["files"][0]
-assert file["source_name"] == "AnimeGoNet.Container.E2E.S01E01.mkv"
-assert file["disposition"] == "episode"
-assert file["tmdb_series_id"] == 990001
-assert file["tmdb_season_number"] == 1
-assert file["tmdb_episode_number"] == 1
+assert file["source_name"] == "AnimeGoNet.Container.E2E.S01E01.mkv", file
+assert file["disposition"] == "episode", file
+assert file["tmdb_series_id"] == 990001, file
+assert file["tmdb_season_number"] == 1, file
+assert file["tmdb_episode_number"] == 1, file
 ' "$task_id" <<<"$detail"
 
   library="$(animegonet_get "/api/v1/library/seasons?page=1&page_size=12&sort=last_updated&direction=desc")"
+  stage "verify TMDB-based library progress"
   python3 -c '
 import json
 import sys
 items = [item for item in json.load(sys.stdin)["items"]
          if item["tmdb_series_id"] == 990001 and item["tmdb_season_number"] == 1]
-assert len(items) == 1
+assert len(items) == 1, items
 item = items[0]
-assert item["display_name"] == "AnimeGoNet Container E2E"
-assert item["episode_downloaded"] == 1
-assert item["episode_total"] == 1
+assert item["display_name"] == "AnimeGoNet Container E2E", item
+assert item["episode_downloaded"] == 1, item
+assert item["episode_total"] == 1, item
 ' <<<"$library"
 
   test -f "$target"
@@ -880,6 +883,7 @@ assert item["episode_total"] == 1
   test -f "$integration_root/download/anime/AnimeGoNet Container E2E/S01/anime.s_json"
   test -f "$integration_root/download/anime/AnimeGoNet Container E2E/S01/E001.e_json"
 
+  stage "verify fixture network call coverage"
   fixture_state="$(fixture_get /__state)"
   python3 -c '
 import json
@@ -888,8 +892,8 @@ value = json.load(sys.stdin)
 for key in ("torrent_requests", "payload_requests", "tmdb_search_requests",
             "tmdb_series_requests", "tmdb_season_requests", "tmdb_episode_requests",
             "bangumi_subject_requests"):
-    assert value[key] >= 1, (key, value[key])
-assert value["tmdb_credential_failures"] == 0
+    assert value[key] >= 1, (key, value)
+assert value["tmdb_credential_failures"] == 0, value
 ' <<<"$fixture_state"
 
   for connection in "$bt_connection" "$pt_connection"; do
