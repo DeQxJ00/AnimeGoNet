@@ -43,7 +43,7 @@
 - [x] 确认 Mikan RSS 同集优选的黑白名单是前置资格过滤，单候选也执行；只有资格过滤后同一 `mikanid+来源EP` 仍有多个候选时才运行可配置优先级组。
 - [x] 确认默认 Mikan SourceProfile 使用 `move`：下载完成后移动到媒体库、不继续做种；Web可改其他策略且只影响新任务。
 - [x] 确认 U2/TTG 首版暂缓：不选择默认文件策略、不生成默认 SourceProfile、不做站点业务验收；现有通用 adapter/API/路由骨架保留，未来恢复范围时重新确认策略。
-- [~] Linux Go 容器基线 job 已生成：固定 `golang:1.22.10-bookworm` 与上游 `c7475df`，以 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...` 串行采集 `events.jsonl`、stderr、稳定 summary 和 SHA-256，失败也上传 30 天 artifact；按用户要求容器执行标记为未验证，等待后续自行实跑。
+- [x] Linux Go 容器基线 job 已验证：Ubuntu 24.04 x86_64 CT 使用官方 `golang:1.22.10-bookworm` 与上游 `c7475df`，以 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...` 串行执行；结果 exit 0、3109 条事件、100 个上游 skip，`events.jsonl`、stderr、稳定 summary 和 SHA-256 均已取回校验。Docker Hub 下载使用所有者提供的代理，官方摘要和清理已记录。
 - [x] 生成上游 fixture SHA-256 清单和 OpenAPI 快照。
 
 ## P1 — .NET 10 / NativeAOT 工程骨架
@@ -149,7 +149,7 @@
 - [x] 实现 `AnimeGo.PluginTool`：AOT-safe `validate/run/pack` CLI 复用主程序 manifest、配置 schema、进程协议和六类结果校验；严格 fixture UTF-8/JSON/operation/config 边界、包树权限/链接/容量审计、内容摘要、确定性 ZIP 与原子覆盖已完成。专用 fake 测试覆盖退出码、脱敏、生命周期、健康失败、临时/显式 data path、变更竞态和可重复打包；五 RID template workflow 使用原生工具对生成的 NativeAOT filter 执行真实 validate→run→pack。
 - [x] 移植 parser manager：保持上游“第一个启用/显式指定 parser”语义，解析无匹配或错误时不自动切换后续实现；未知 ID 使用稳定配置错误。
 - [x] 移植 ordered filter manager：按显式配置或目录顺序逐级传递 accepted items，插件错误/无效索引立即终止，拒绝项不会进入后续 filter；空显式链等价于跳过过滤。
-- [x] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约、winner→统一 staging、真实本机 qB 下载、SQLite snapshot、TMDB 已验证边界、move/NFO/sidecar/completion 和安全 cleanup 已串联；Docker 双实例统一导入门禁由独立未验证项跟踪，不回退本机闭环状态。
+- [x] 移植 feed → filter → parse → download pipeline：有界 feed、安全 URL 获取、legacy `/api/rss`、Filiter0..4、来源 EP、新优选、schema v16 审计/租约、winner→统一 staging、真实 qB 下载、SQLite snapshot、TMDB 已验证边界、move/NFO/sidecar/completion 和安全 cleanup 已串联；Ubuntu CT linux-x64 Docker 双实例统一导入与完整链路已通过。
 - [x] 通过上游所有插件/parser/filter fixture，以及外部 C# 插件协议故障注入测试：固定 `develop@c7475df` 的 59 个 plugin/feed/filter/parser/Python fixture 与 Go 测试入口逐文件归类为 ported/replaced/removed/documentation，机器测试锁定精确清单、SHA-256、证据目标和无遗漏；5 个真实 RSS fixture 逐字段/失败码通过，filter fixture 的 13 个输入、4 个 NC-Raws、9 个有效 1080p 及 inline regex 单候选结果由编译期 C# 直接复现。Python 运行时及任意 Python 扩展仍明确移除；外部 C# 协议 fake/真实进程已覆盖成功生命周期、业务错误、严格响应、超限、超时、取消、崩溃、脏 stdout、stderr、并发、健康失败、关闭期限与 manifest 竞态，六类 adapter 已覆盖配置合并、禁用、业务错误、未知/重复字段、索引完整性、URL 指纹和路径逃逸。
 
 ## P7 — 首版 qBittorrent 下载客户端
@@ -173,16 +173,16 @@
 - [x] 移植重启恢复、去重、失败重试和删除 callback：dispatch lease 恢复、qB 同 hash 幂等、按实例+hash 运行快照恢复、离线 stale/实例 circuit breaker/健康探测与退避重试、每 job 不可变 download/save root 均已实现。上游重命名完成 callback 直接执行 `DeleteFile:true`；新程序按安全语义替换为持久化 `organizing_cleanup` 租约，固定 `deleteFiles=false`。qB 故障时已落盘媒体和 completion 保持不变，Store cleanup 租约可释放重领，健康探测关闭 circuit 后只重试 qB 任务清理。
 - [x] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：worker 在所有文件、原子 `tvshow.nfo`、上游兼容目录 JSON 及 schema v27 索引全部成功后才于同一事务写 completion、来源 alias 并完成 episode claim，qB cleanup 独立在后；RSS winner 在 Bangumi 页面和 Torrent 网络访问前以 SQLite IMMEDIATE 事务复查同 `mikanid+来源EP` alias，并在 staging 前再次事务复查以关闭并发窗口。命中即返回 `already_completed`，删除业务完成记录后可重新进入。
 - [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。
-- [x] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、目录 JSON/SQLite 索引、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联；除 fake-qB+临时文件外，本机 TestSpace 已以合法 128 KiB 文件完成真实 qB 共享路径 E2E。Docker/跨容器验证不作为本功能实现完成的前置条件，另行标记未验证。
+- [x] `move` 安全编排：下载完成后暂停、持久化逐文件执行、TMDB规范路径、同卷原子移动/跨卷copy+SHA-256、冲突保全、崩溃恢复、原子 `tvshow.nfo`、目录 JSON/SQLite 索引、完成记录事务及独立 `deleteFiles=false` qB cleanup 已串联；本机 TestSpace 与 Ubuntu CT linux-x64 共享 `/download` 均以合法 128 KiB 文件完成真实 qB E2E。
 - [x] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：schema v33 固化 `seeding_target_minutes`、单调 `seeding_elapsed_seconds`、waiting/seeding/completed 与完成时间，`0/-1/正数` 语义独立于 qB 瞬时 state；媒体操作、qB cleanup 与四类删除均按独立持久化状态、租约和失败重试推进，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束。
 - [x] 处理多文件、跨盘、目标冲突和部分失败：逐文件 operation 按 Torrent 相对路径/文件 ID 稳定执行；同卷优先原子 move，跨盘进入 task-owned partial + 容量/SHA-256 校验 + 原子提交；不同内容的既有目标保留源/目标并返回 `target_conflict`；前序文件已完成而后序文件失败时不写业务 completion，解除冲突后仅续做 pending operation，最终一次性完成全部 Episode 记录和独立下载器 cleanup。
-- [x] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。除 fake/SQLite 并发、恢复和失败外，本机 TestSpace 已用四文件合法 Torrent 验证真实 qB `1,1,0,0` priority、未下载重复 EP/ignored 海报、主视频+绑定字幕落盘和单 completion；容器验证另行标记未验证。
+- [x] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。除 fake/SQLite 并发、恢复和失败外，本机 TestSpace 已用四文件合法 Torrent 验证真实 qB `1,1,0,0` priority、未下载重复 EP/ignored 海报、主视频+绑定字幕落盘和单 completion；Ubuntu CT 另验证单文件容器全链。
 - [x] 实现字幕识别与唯一绑定：同目录同 stem 优先、语言/default/forced/SDH 后缀原样保留、不同 stem 按来源 EP 唯一匹配、`.idx/.sub` 分别绑定并保留扩展；匹配后只复用视频的已验证 TMDB EP/claim/priority，未匹配或歧义进入已确认季度 `Other`，整理不产生重复完成记录。
 - [x] 串联媒体目录 DB 与 NFO：NFO 与三层目录侧车都位于业务完成记录之前；侧车损坏、越界或索引失败会保持可重试且不写完成记录。
 - [x] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`；字幕生成 `Eyyy.<保留后缀>.<字幕扩展>`，Other 保留安全清洗后的原文件名，均已串联持久化 move worker。
 - [x] 确定性季度结果先执行同号 EP 快速校验；失败且统一 AI 开启、任务从未尝试 AI 时进行一次任务级映射，返回的 TMDB ID/Season 必须与已确认值相同，结果逐集由 TMDB 验证。
 - [x] 保留来源名称和来源集号用于审计、去重诊断及 UI 展示：逐文件原始相对路径、来源 EP、本地文件候选与最终 TMDB 身份分别持久化并在任务详情并列显示；完成时写来源 alias，RSS 批次保存早期命中证据。AI 结果必须逐级通过 TMDB API 验证，未验证值不得参与路径、数据库键或 NFO。
-- [x] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工/可信 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；除 fake qB 外，本机 TestSpace 已从隔离 SQLite 的合成“已验证 Episode”边界继续执行真实 qB 逐文件 priority/恢复/下载、字幕语言后缀 move、单一 completion 和安全 cleanup。真实 TMDB 网络由受控 loopback/fake 验证，容器同链另行标记未验证。
+- [x] 多文件任务逐集验证 TMDB Episode：已实现独立租约 worker、官方 Episode 身份验证、规范 Episode 持久化、人工/可信 offset、网络失败保持 pending、季度已知时 `Other` 原因，以及跨任务完成/活动 claim 的逐 EP 重复门禁；本机 TestSpace 已从隔离 SQLite 的合成“已验证 Episode”边界执行真实 qB 逐文件 priority/恢复/下载、字幕语言后缀 move、单一 completion 和安全 cleanup；Ubuntu CT 容器全链另以 Bangumi 日期证据匹配并最终验证 TMDB Episode。
 - [x] 增加 `tmdb_fail_use_bangumi` 业务兜底开关，默认 `false`；关闭时 TMDB 完全失败沿用失败流程，不继续下载/刮削且不生成 NFO。
 - [x] NFO 默认仅在 `tmdbid=0` 的 Bangumi 完全兜底写 `bangumiid`；新增默认关闭的 `write_bangumi_id_when_tmdb_matched` YAML/API/WebUI 选项，显式开启才在 TMDB 成功时写入，并提示共享 TMDB 根目录的覆盖风险。
 - [x] 开关开启后，仅在权威 TMDB 成功访问且最终为确定性 Series 无匹配、已有有效 Bangumi Subject ID 时继续；季度固定本地 `S01`，不依赖 P2/P1，不输出有效 TMDB ID，动画根目录 `tvshow.nfo` 写 `<tmdbid>0</tmdbid>` 和对应 `<bangumiid>`。
@@ -236,7 +236,7 @@
 - [x] 实现缓存/数据库浏览和安全删除：现代 `/api/v1/cache` 只投影 `bolt`/`bolt_sub` 的不可逆 bucket/key SHA-256 ID、条目数、JSON 字节数和时间，不返回原始 key/value、SQLite 路径或凭据；分页读取惰性清理过期项，`bolt_sub` 永久只读，`bolt` 单项删除需要二次确认及绑定当前 key/value/TTL/更新时间的 opaque token，预览后变化返回冲突。静态 TypeScript 页面、Access-Key、Kestrel/OpenAPI 和 NativeAOT smoke 均已接入；不开放任意 SQL 或业务表删除。
 - [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [x] 完成响应式布局、统一空/错/加载状态和基本可访问性：主异步区域共享显式状态机与安全文本节点，loading/empty/error 使用对应 busy/status/alert 语义；提供首个键盘跳转入口、全局可见焦点、44px 控件目标、reduced-motion 和 620px 移动端收敛布局；静态 DOM 契约自动检查唯一 ID、section/dialog/控件名称、非正 tabindex 与初始状态，390×844 / 1280×800 本机 Kestrel 验收均无横向溢出和 console error。
-- [x] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2；Docker 发布镜像浏览器门禁由独立 `[~]` 条目记录为未验证。
+- [x] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2，Ubuntu CT linux-x64 发布镜像完整链路 Playwright 1/1 通过。
 - [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
 
 ## P10 — 组合与发布

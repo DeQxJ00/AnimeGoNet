@@ -47,12 +47,13 @@ Release 仍没有完整运行证据。U2/TTG 已由所有者明确暂缓，不�
 - Ubuntu 24.04 x86_64 CT 报告
   `docker-ct-audit-be9bcedb24f546a2b4a8ea6a8ae8a3e7.json`：5/5 阶段与清理均为 0；
   发布镜像 Playwright 1/1 通过。
+- 固定上游 `c7475df` 在官方 Go 1.22.10 linux/amd64 容器串行执行：exit 0、
+  3109 条 JSON 事件、100 个上游 skip，报告 SHA-256 全部复验通过。
 
 ## 明确不冒充已验证的外部项
 
 - Docker linux-arm64 构建和容器 E2E；linux-x64 已由 Ubuntu CT 验证。
 - `win-arm64`、`linux-arm64`、`osx-arm64` 原生 runner 结果。
-- 固定上游 Go 的 Linux 容器基线。
 - 第一个实际 GitHub Prerelease 标签和 Release。
 - 独立 AnimeGoNetData 仓库的 token/变量及首次不可变 Release。
 

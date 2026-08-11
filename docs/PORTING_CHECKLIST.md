@@ -102,12 +102,12 @@
 
 | 上游行为 | AnimeGoNet 目标 | 类型 | 状态 | 验收证据 |
 |---|---|---:|---:|---|
-| Go release workflows | .NET 10 build/test | 替换 | 未验证 | Windows/Linux/macOS Actions 已生成且 YAML 通过解析；另生成固定 Go 1.22.10 Linux 容器的上游串行 `go test -json` 基线 job，锁定提交、原始事件/stderr/summary/SHA-256 且失败也上传；容器与远端运行按用户要求标记为未验证 |
+| Go release workflows | .NET 10 build/test | 替换 | 未验证 | Windows/Linux/macOS Actions 已生成且 YAML 通过解析；固定 Go 1.22.10 Linux amd64 容器的上游串行 `go test -json` 已在 Ubuntu CT 真实通过并校验原始事件/stderr/summary/SHA-256，跨平台 .NET Actions 的远端整体结果仍待验收 |
 | 多架构发布 | win-x64/win-arm64/linux-x64/linux-arm64/osx-arm64 | 替换矩阵 | 未验证 | 五 RID NativeAOT 矩阵及标签预发布闭环已建立；每个 RID 在上传前从实际产物和精确 NuGet graph 生成逐文件 `SHA256SUMS`、CycloneDX 1.5 SBOM 与第三方许可证清单，五份完整 artifact 再确定性打包为 ZIP 与独立校验和；win-x64 本机与 Ubuntu CT linux-x64 publish/smoke 已通过，win-arm64、linux-arm64、osx-arm64 和首个 Prerelease 仍待远端实跑 |
 | MIPS/386/macOS x64 | 不在首版 RID | 例外 | 例外 | 文档化 |
 | Go Dockerfile | NativeAOT runtime image | 替换 | 未验证 | amd64/arm64 Buildx 与容器 smoke 已生成；Ubuntu 24.04 x86_64 CT 的 linux-x64 NativeAOT 镜像及完整容器 smoke 已通过，linux-arm64 仍未验证 |
 | 嵌入资源 | AOT 静态资源与配置模板 | 保留语义 | 已验证 | win-x64 published binary 静态 WebUI smoke |
-| 用户迁移、插件与运维手册 | 可执行操作文档 | 新增 | 已验证 | 新安装/旧 YAML/旧 Bolt/媒体 sidecar 的隔离迁移和完整回滚，外部 C# 插件 validate/run/pack、安装/升级/reset/卸载，以及状态、停机备份、SQLite quick_check、升级恢复、四类删除和故障处置均已文档化；README 入口、相对链接、关键安全边界与 Docker 未验证状态由契约测试锁定 |
+| 用户迁移、插件与运维手册 | 可执行操作文档 | 新增 | 已验证 | 新安装/旧 YAML/旧 Bolt/媒体 sidecar 的隔离迁移和完整回滚，外部 C# 插件 validate/run/pack、安装/升级/reset/卸载，以及状态、停机备份、SQLite quick_check、升级恢复、四类删除和故障处置均已文档化；README 入口、相对链接、关键安全边界、Ubuntu CT 证据与剩余跨架构范围由契约测试锁定 |
 
 ## 提交门禁
 

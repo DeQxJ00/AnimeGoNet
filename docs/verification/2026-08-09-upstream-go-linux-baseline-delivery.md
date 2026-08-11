@@ -1,5 +1,9 @@
 # Upstream Go Linux baseline delivery — 2026-08-09
 
+> 历史状态说明：本文记录 2026-08-09 仅生成 job 时的边界。该门禁已于
+> 2026-08-11 在 Ubuntu 24.04 x86_64 CT 的官方 Go 1.22.10 容器内通过；当前证据见
+> `2026-08-11-upstream-go-linux-baseline.md`。
+
 ## Generated job
 
 `.github/workflows/upstream-go-baseline.yml` defines a dedicated

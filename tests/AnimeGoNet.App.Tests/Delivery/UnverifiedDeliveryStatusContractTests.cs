@@ -14,10 +14,9 @@ public sealed class UnverifiedDeliveryStatusContractTests
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(7, unverified.Length);
+        Assert.Equal(6, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
-        AssertUnverified(unverified, "Linux Go 容器基线 job");
         AssertUnverified(unverified, "优雅退出和取消传播");
         AssertUnverified(unverified, "Docker NativeAOT 双架构功能");
         AssertUnverified(unverified, "Linux x64/arm64 NativeAOT");
@@ -31,6 +30,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
         AssertCompleted(todo, "多文件 Torrent 逐文件去重");
         AssertCompleted(todo, "多文件任务逐集验证 TMDB Episode");
         AssertCompleted(todo, "TypeScript 7 strict 类型检查");
+        AssertCompleted(todo, "Linux Go 容器基线 job");
     }
 
     [Fact]
