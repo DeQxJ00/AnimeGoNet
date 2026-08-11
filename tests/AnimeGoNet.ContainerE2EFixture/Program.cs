@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 
 const string FileName = "AnimeGoNet.Container.E2E.S01E01.mkv";
+const string RouteFileName = "animegonet-mikan-route.bin";
 const int PayloadLength = 128 * 1024;
 const int PieceLength = 16 * 1024;
 const string TmdbApiKey = "container-e2e-tmdb-key";
@@ -23,6 +24,12 @@ var torrent = BuildTorrent(
     payload,
     new Uri(publicBase, $"payload/{FileName}"),
     out var infoHash);
+var routePayload = new byte[] { 17, 34, 51, 68, 85 };
+var routeTorrent = BuildTorrent(
+    RouteFileName,
+    routePayload,
+    new Uri(publicBase, $"payload/{RouteFileName}"),
+    out var routeInfoHash);
 var state = new FixtureState();
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.UseUrls(
@@ -33,16 +40,27 @@ var app = builder.Build();
 app.MapGet("/ready", () => Results.Text(
     $$"""{"info_hash":"{{infoHash}}","file_name":"{{FileName}}","size_bytes":{{PayloadLength}},"payload_sha256":"{{payloadSha256}}"}""",
     "application/json"));
+app.MapGet("/route-ready", () => Results.Text(
+    $$"""{"info_hash":"{{routeInfoHash}}","file_name":"{{RouteFileName}}","size_bytes":{{routePayload.Length}}}""",
+    "application/json"));
 app.MapGet("/animegonet-container-e2e.torrent", () =>
 {
     state.RecordTorrent();
     return Results.Bytes(torrent, "application/x-bittorrent");
+});
+app.MapGet("/animegonet-route-smoke.torrent", () =>
+{
+    state.RecordTorrent();
+    return Results.Bytes(routeTorrent, "application/x-bittorrent");
 });
 app.MapGet($"/payload/{FileName}", () =>
 {
     state.RecordPayload();
     return Results.Bytes(payload, "application/octet-stream");
 });
+app.MapGet($"/payload/{RouteFileName}", () => Results.Bytes(
+    routePayload,
+    "application/octet-stream"));
 app.MapGet("/tmdb/3/discover/tv", (HttpContext context) =>
 {
     state.RecordTmdbSearch(HasTmdbCredential(context));

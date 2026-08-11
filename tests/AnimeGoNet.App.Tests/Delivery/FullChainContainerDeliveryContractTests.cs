@@ -33,6 +33,8 @@ public sealed class FullChainContainerDeliveryContractTests
         Assert.Contains("bangumi_retry_count: \"0\"", compose, StringComparison.Ordinal);
 
         Assert.Contains("/animegonet-container-e2e.torrent", fixture, StringComparison.Ordinal);
+        Assert.Contains("/animegonet-route-smoke.torrent", fixture, StringComparison.Ordinal);
+        Assert.Contains("/route-ready", fixture, StringComparison.Ordinal);
         Assert.Contains("/payload/{FileName}", fixture, StringComparison.Ordinal);
         Assert.Contains("/tmdb/3/discover/tv", fixture, StringComparison.Ordinal);
         Assert.Contains("/tmdb/3/tv/990001/season/1/episode/1", fixture, StringComparison.Ordinal);
