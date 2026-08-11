@@ -67,7 +67,7 @@ test("full-chain result is visible through API and the static WebUI", async ({ p
     tmdb_season_number: 1,
     series_strategy: "tmdb_title",
     season_strategy: "tmdb_air_date",
-    episode_strategy: "tmdb_episode_number",
+    episode_strategy: "tmdb_episode_bangumi_date",
     episode_file_count: 1,
   });
   expect(metadata.files).toHaveLength(1);

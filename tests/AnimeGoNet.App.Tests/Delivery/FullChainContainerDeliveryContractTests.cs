@@ -59,7 +59,10 @@ public sealed class FullChainContainerDeliveryContractTests
         Assert.Contains("/api/v1/metadata/tasks/$task_id", smoke, StringComparison.Ordinal);
         Assert.Contains("series_strategy\"] == \"tmdb_title\"", smoke, StringComparison.Ordinal);
         Assert.Contains("season_strategy\"] == \"tmdb_air_date\"", smoke, StringComparison.Ordinal);
-        Assert.Contains("episode_strategy\"] == \"tmdb_episode_number\"", smoke, StringComparison.Ordinal);
+        Assert.Contains(
+            "episode_strategy\"] == \"tmdb_episode_bangumi_date\"",
+            smoke,
+            StringComparison.Ordinal);
         Assert.Contains("/api/v1/library/seasons", smoke, StringComparison.Ordinal);
         Assert.Contains("episode_downloaded\"] == 1", smoke, StringComparison.Ordinal);
         Assert.Contains("AnimeGoNet Container E2E/S01/E001.mkv", smoke, StringComparison.Ordinal);
@@ -89,7 +92,10 @@ public sealed class FullChainContainerDeliveryContractTests
         Assert.Contains("business_status: \"organized\"", spec, StringComparison.Ordinal);
         Assert.Contains("series_strategy: \"tmdb_title\"", spec, StringComparison.Ordinal);
         Assert.Contains("season_strategy: \"tmdb_air_date\"", spec, StringComparison.Ordinal);
-        Assert.Contains("episode_strategy: \"tmdb_episode_number\"", spec, StringComparison.Ordinal);
+        Assert.Contains(
+            "episode_strategy: \"tmdb_episode_bangumi_date\"",
+            spec,
+            StringComparison.Ordinal);
         Assert.Contains("#downloads", spec, StringComparison.Ordinal);
         Assert.Contains("#metadata-tasks", spec, StringComparison.Ordinal);
         Assert.Contains("#library-list", spec, StringComparison.Ordinal);

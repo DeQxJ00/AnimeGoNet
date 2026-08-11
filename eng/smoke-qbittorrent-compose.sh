@@ -851,7 +851,7 @@ assert summary["tmdb_series_id"] == 990001, summary
 assert summary["tmdb_season_number"] == 1, summary
 assert summary["series_strategy"] == "tmdb_title", summary
 assert summary["season_strategy"] == "tmdb_air_date", summary
-assert summary["episode_strategy"] == "tmdb_episode_number", summary
+assert summary["episode_strategy"] == "tmdb_episode_bangumi_date", summary
 assert summary["episode_file_count"] == 1, summary
 file = value["files"][0]
 assert file["source_name"] == "AnimeGoNet.Container.E2E.S01E01.mkv", file
