@@ -661,7 +661,13 @@ wait_for_routed_task() {
 
   for attempt in $(seq 1 120); do
     tasks="$(authenticated_get "$base_url" "$cookie_jar" "/api/v2/torrents/info?hashes=$hash")"
-    if python3 -c 'import json,sys; sys.exit(0 if len(json.load(sys.stdin)) == 1 else 1)' \
+    if python3 -c '
+import json
+import sys
+items = json.load(sys.stdin)
+ready = len(items) == 1 and items[0]["state"].lower().startswith(("stopped", "paused"))
+sys.exit(0 if ready else 1)
+' \
       <<<"$tasks"; then
       break
     fi
@@ -679,11 +685,11 @@ import sys
 instance, expected_hash, category, tag = sys.argv[1:]
 item = json.load(sys.stdin)[0]
 tags = {value.strip() for value in item["tags"].split(",") if value.strip()}
-assert item["hash"] == expected_hash
-assert item["category"] == category
-assert tag in tags
-assert item["save_path"].rstrip("/") == f"/download/incomplete/{instance}"
-assert item["state"].lower().startswith(("stopped", "paused"))
+assert item["hash"] == expected_hash, item
+assert item["category"] == category, item
+assert tag in tags, item
+assert item["save_path"].rstrip("/") == f"/download/incomplete/{instance}", item
+assert item["state"].lower().startswith(("stopped", "paused")), item
 ' "$instance" "$hash" "$category" "$tag" <<<"$tasks"
 
   local files=""

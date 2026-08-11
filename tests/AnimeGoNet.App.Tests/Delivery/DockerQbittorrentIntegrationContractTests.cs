@@ -124,6 +124,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("\"source\":\"mikan-ci\"", smoke, StringComparison.Ordinal);
         Assert.Contains("\"source\":\"u2-ci\"", smoke, StringComparison.Ordinal);
         Assert.Contains("wait_for_routed_task", smoke, StringComparison.Ordinal);
+        Assert.Contains(
+            "ready = len(items) == 1 and items[0][\"state\"].lower().startswith((\"stopped\", \"paused\"))",
+            smoke,
+            StringComparison.Ordinal);
         Assert.Contains("other_connection", smoke, StringComparison.Ordinal);
         Assert.Contains("cleanup_routed_task", smoke, StringComparison.Ordinal);
         Assert.Contains("\"downloader_id\":\"pt\"", smoke, StringComparison.Ordinal);
