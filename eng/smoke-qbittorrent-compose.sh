@@ -109,6 +109,11 @@ login() {
   [[ "$body" == "Ok." ]]
 }
 
+connection_cookie_jar() {
+  local connection_tail="${1#*|}"
+  printf '%s' "${connection_tail%%|*}"
+}
+
 authenticated_post() {
   local base_url="$1"
   local cookie_jar="$2"
@@ -583,7 +588,8 @@ prepare_route_identity() {
   local category="$3"
   local tag="$4"
   local base_url="${connection%%|*}"
-  local cookie_jar="${connection#*|}"
+  local cookie_jar=""
+  cookie_jar="$(connection_cookie_jar "$connection")"
 
   authenticated_post \
     "$base_url" "$cookie_jar" "/api/v2/torrents/createCategory" \
@@ -637,11 +643,13 @@ wait_for_routed_task() {
   local expected_name="$7"
   local expected_size="$8"
   local base_url="${connection%%|*}"
-  local cookie_jar="${connection#*|}"
+  local cookie_jar=""
   local other_base_url="${other_connection%%|*}"
-  local other_cookie_jar="${other_connection#*|}"
+  local other_cookie_jar=""
   local tasks=""
   local other_tasks=""
+  cookie_jar="$(connection_cookie_jar "$connection")"
+  other_cookie_jar="$(connection_cookie_jar "$other_connection")"
 
   for attempt in $(seq 1 120); do
     tasks="$(authenticated_get "$base_url" "$cookie_jar" "/api/v2/torrents/info?hashes=$hash")"
@@ -695,8 +703,9 @@ cleanup_routed_task() {
   local category="$3"
   local tag="$4"
   local base_url="${connection%%|*}"
-  local cookie_jar="${connection#*|}"
+  local cookie_jar=""
   local tasks=""
+  cookie_jar="$(connection_cookie_jar "$connection")"
 
   authenticated_post \
     "$base_url" "$cookie_jar" "/api/v2/torrents/delete" \
@@ -789,7 +798,7 @@ print(items[0]["job_id"] if len(items) == 1 and items[0]["business_status"] == "
     [[ -n "$job_id" ]] && break
     if [[ "$attempt" == 360 ]]; then
       compose logs --no-color animegonet || true
-      authenticated_get "${bt_connection%%|*}" "${bt_connection#*|}" \
+      authenticated_get "${bt_connection%%|*}" "$(connection_cookie_jar "$bt_connection")" \
         "/api/v2/torrents/info?hashes=$expected_hash" || true
       animegonet_get "/api/v1/metadata/tasks/$task_id" || true
       fixture_get /__state || true
@@ -871,14 +880,15 @@ assert value["tmdb_credential_failures"] == 0
 
   for connection in "$bt_connection" "$pt_connection"; do
     local base_url="${connection%%|*}"
-    local cookie_jar="${connection#*|}"
+    local cookie_jar=""
     local tasks=""
+    cookie_jar="$(connection_cookie_jar "$connection")"
     tasks="$(authenticated_get "$base_url" "$cookie_jar" "/api/v2/torrents/info?hashes=$expected_hash")"
     python3 -c 'import json,sys; assert json.load(sys.stdin) == []' <<<"$tasks"
   done
-  authenticated_post "${bt_connection%%|*}" "${bt_connection#*|}" \
+  authenticated_post "${bt_connection%%|*}" "$(connection_cookie_jar "$bt_connection")" \
     "/api/v2/torrents/deleteTags" --data-urlencode "tags=$tag" >/dev/null
-  authenticated_post "${bt_connection%%|*}" "${bt_connection#*|}" \
+  authenticated_post "${bt_connection%%|*}" "$(connection_cookie_jar "$bt_connection")" \
     "/api/v2/torrents/removeCategories" --data-urlencode "categories=$category" >/dev/null
 
   export ANIMEGONET_FULL_CHAIN_TASK_ID="$task_id"
@@ -1008,7 +1018,7 @@ exercise_full_chain_e2e
 
 for connection in "$bt_connection" "$pt_connection"; do
   base_url="${connection%%|*}"
-  cookie_jar="${connection#*|}"
+  cookie_jar="$(connection_cookie_jar "$connection")"
   for hash in "$bt_hash" "$pt_hash"; do
     tasks="$(authenticated_get "$base_url" "$cookie_jar" "/api/v2/torrents/info?hashes=$hash")"
     python3 -c 'import json,sys; assert json.load(sys.stdin) == []' <<<"$tasks"
