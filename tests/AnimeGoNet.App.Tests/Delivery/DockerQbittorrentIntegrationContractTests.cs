@@ -92,6 +92,9 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("compose down --volumes --remove-orphans", smoke, StringComparison.Ordinal);
         Assert.Contains("emporary password is provided for this session:", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/auth/login", smoke, StringComparison.Ordinal);
+        Assert.Contains("--header \"Host: 127.0.0.1:8080\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("--header \"Referer: http://127.0.0.1:8080/\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("--header \"Origin: http://127.0.0.1:8080\"", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/app/setPreferences", smoke, StringComparison.Ordinal);
         Assert.Contains("login \"$base_url\" \"$temporary_password\" \"$cookie_jar\"", smoke, StringComparison.Ordinal);
         Assert.Contains("bt_password=\"${bt_connection##*|}\"", smoke, StringComparison.Ordinal);

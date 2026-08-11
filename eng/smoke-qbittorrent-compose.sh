@@ -98,8 +98,9 @@ login() {
   local body=""
   body="$(
     curl --silent --show-error \
-      --header "Referer: $base_url/" \
-      --header "Origin: $base_url" \
+      --header "Host: 127.0.0.1:8080" \
+      --header "Referer: http://127.0.0.1:8080/" \
+      --header "Origin: http://127.0.0.1:8080" \
       --cookie-jar "$cookie_jar" \
       --data-urlencode "username=admin" \
       --data-urlencode "password=$password" \
@@ -114,8 +115,9 @@ authenticated_post() {
   local endpoint="$3"
   shift 3
   curl --fail-with-body --silent --show-error \
-    --header "Referer: $base_url/" \
-    --header "Origin: $base_url" \
+    --header "Host: 127.0.0.1:8080" \
+    --header "Referer: http://127.0.0.1:8080/" \
+    --header "Origin: http://127.0.0.1:8080" \
     --cookie "$cookie_jar" \
     "$@" \
     "$base_url$endpoint"
@@ -126,8 +128,9 @@ authenticated_get() {
   local cookie_jar="$2"
   local endpoint="$3"
   curl --fail-with-body --silent --show-error \
-    --header "Referer: $base_url/" \
-    --header "Origin: $base_url" \
+    --header "Host: 127.0.0.1:8080" \
+    --header "Referer: http://127.0.0.1:8080/" \
+    --header "Origin: http://127.0.0.1:8080" \
     --cookie "$cookie_jar" \
     "$base_url$endpoint"
 }
