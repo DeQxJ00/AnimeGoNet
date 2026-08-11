@@ -29,6 +29,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
             "COPY docs/TMDB_AI_MATCH_PROMPT.md docs/TMDB_AI_MATCH_PROMPT.md",
             dockerfile,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "COPY docs/TMDB_AI_MATCH_PROMPT_TESTER.md docs/TMDB_AI_MATCH_PROMPT_TESTER.md",
+            dockerfile,
+            StringComparison.Ordinal);
         Assert.Contains("!tests/AnimeGoNet.ContainerE2EFixture/**", dockerignore, StringComparison.Ordinal);
         Assert.Contains("user: \"${PUID:-1000}:${PGID:-1000}\"", compose, StringComparison.Ordinal);
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);

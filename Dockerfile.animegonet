@@ -21,6 +21,7 @@ RUN case "$TARGETARCH" in \
 
 COPY src/ src/
 COPY docs/TMDB_AI_MATCH_PROMPT.md docs/TMDB_AI_MATCH_PROMPT.md
+COPY docs/TMDB_AI_MATCH_PROMPT_TESTER.md docs/TMDB_AI_MATCH_PROMPT_TESTER.md
 RUN case "$TARGETARCH" in \
       amd64) rid=linux-x64 ;; \
       arm64) rid=linux-arm64 ;; \
