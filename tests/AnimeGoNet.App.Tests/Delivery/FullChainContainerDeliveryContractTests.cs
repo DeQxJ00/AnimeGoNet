@@ -88,6 +88,10 @@ public sealed class FullChainContainerDeliveryContractTests
         var workflow = await ReadAsync(root, ".github/workflows/animegonet-docker.yml");
 
         Assert.Contains("web:e2e:full-chain", package, StringComparison.Ordinal);
+        Assert.Contains(
+            "mcr.microsoft.com/playwright:v1.62.0-noble",
+            await ReadAsync(root, "eng/smoke-qbittorrent-compose.sh"),
+            StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_FULL_CHAIN_TASK_ID", spec, StringComparison.Ordinal);
         Assert.Contains("business_status: \"organized\"", spec, StringComparison.Ordinal);
         Assert.Contains("series_strategy: \"tmdb_title\"", spec, StringComparison.Ordinal);

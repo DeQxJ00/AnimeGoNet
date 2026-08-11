@@ -12,6 +12,8 @@ access_key="animegonet-compose-smoke"
 test_uid="$(id -u)"
 test_gid="$(id -g)"
 container_e2e_fixture_image="animegonet-container-e2e-fixture:${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
+playwright_image="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.62.0-noble}"
+playwright_image_owned=0
 
 if [[ "$test_uid" == "0" ]]; then
   test_uid=10001
@@ -39,6 +41,9 @@ stage() {
 cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm --force "$container_e2e_fixture_image" >/dev/null 2>&1 || true
+  if [[ "$playwright_image_owned" == "1" ]]; then
+    docker image rm --force "$playwright_image" >/dev/null 2>&1 || true
+  fi
   rm -rf -- "$integration_root"
 }
 trap cleanup EXIT
@@ -752,6 +757,35 @@ fixture_get() {
     "http://container-e2e-fixture.invalid:8089$endpoint"
 }
 
+run_full_chain_webui() {
+  if command -v npm >/dev/null 2>&1; then
+    npm run web:e2e:full-chain
+    return
+  fi
+
+  if ! docker image inspect "$playwright_image" >/dev/null 2>&1; then
+    playwright_image_owned=1
+  fi
+  mkdir -p "$repository_root/node_modules" "$repository_root/.artifacts"
+  docker run --rm \
+    --network host \
+    --ipc host \
+    --volume "$repository_root:/work:ro" \
+    --tmpfs /work/node_modules:rw,exec,nosuid,nodev,size=512m \
+    --tmpfs /work/.artifacts:rw,exec,nosuid,nodev,size=256m \
+    --tmpfs /tmp:rw,exec,nosuid,nodev,size=512m \
+    --workdir /work \
+    --env HOME=/tmp \
+    --env PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    --env ANIMEGONET_WEBUI_BASE_URL \
+    --env ANIMEGONET_WEBUI_ACCESS_KEY \
+    --env ANIMEGONET_FULL_CHAIN_TASK_ID \
+    --env ANIMEGONET_FULL_CHAIN_TITLE \
+    --env ANIMEGONET_FULL_CHAIN_TMDB_SERIES_ID \
+    "$playwright_image" \
+    bash -lc 'npm ci --ignore-scripts --no-audit --no-fund && npm run web:e2e:full-chain'
+}
+
 exercise_full_chain_e2e() {
   local profile="container-e2e-ci"
   local category="animegonet-ci-full-chain"
@@ -1060,7 +1094,8 @@ for connection in "$bt_connection" "$pt_connection"; do
 done
 
 if [[ "${ANIMEGONET_FULL_CHAIN_WEBUI:-0}" == "1" ]]; then
+  stage "verify full-chain result in Chromium WebUI"
   export ANIMEGONET_WEBUI_BASE_URL="$animegonet_url"
   export ANIMEGONET_WEBUI_ACCESS_KEY="$access_key"
-  npm run web:e2e:full-chain
+  run_full_chain_webui
 fi
