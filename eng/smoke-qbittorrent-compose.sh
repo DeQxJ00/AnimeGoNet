@@ -484,13 +484,13 @@ assert result["downloader_id"] == "bt"
 import json
 import sys
 result = json.load(sys.stdin)
-assert result["source"] == "container-source-ci"
-assert result["accepted_count"] == 0
-assert result["rejected_count"] == 1
+assert result["source"] == "container-source-ci", result
+assert result["accepted_count"] == 0, result
+assert result["rejected_count"] == 1, result
 item = result["items"][0]
-assert item["status"] == "rejected"
-assert item["ingest_id"] is None
-assert item["errors"] == ["torrent staging failed: HostNotAllowed"]
+assert item["status"] == "rejected", item
+assert item["ingest_id"] is None, item
+assert item["errors"] == ["torrent staging failed: HostNotAllowed"], item["errors"]
 ' <<<"$rejected"
   if [[ "$rejected" == *"not-allowed.invalid"* ]]; then
     echo "External plugin ingest response leaked the synthetic Torrent URL" >&2
