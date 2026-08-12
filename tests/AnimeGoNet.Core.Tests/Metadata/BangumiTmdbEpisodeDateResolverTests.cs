@@ -56,7 +56,7 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
     }
 
     [Fact]
-    public void SameAirDateUsesUniqueMatchingEpisodeNumberAsTieBreaker()
+    public void OneDayEpisodeDifferenceIsNotAccepted()
     {
         BangumiEpisode[] bangumi =
         [
@@ -70,8 +70,8 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
 
         var result = BangumiTmdbEpisodeDateResolver.Resolve(bangumi, tmdb, 13);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(13, result.Episode!.EpisodeNumber);
+        Assert.Equal(BangumiTmdbEpisodeDateMatchKind.NoMatch, result.Kind);
+        Assert.Equal("tmdb_episode_bangumi_date_not_found", result.FailureCode);
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
     }
 
     [Fact]
-    public void ExactSourceEpisodeIsNotOverriddenByPublicationDate()
+    public void OneDayEpisodeDifferenceIsNotATimezoneException()
     {
         BangumiEpisode[] bangumi =
         [
@@ -127,7 +127,7 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
             tmdb,
             15);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(15, result.Episode!.EpisodeNumber);
+        Assert.Equal(BangumiTmdbEpisodeDateMatchKind.NoMatch, result.Kind);
+        Assert.Equal("tmdb_episode_bangumi_date_not_found", result.FailureCode);
     }
 }

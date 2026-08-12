@@ -2,7 +2,7 @@ namespace AnimeGoNet.Core.Metadata;
 
 public static class TmdbSeasonSelector
 {
-    public const int MaximumAirDateDifferenceDays = 90;
+    public const int MaximumAirDateDifferenceDays = 1;
 
     public static TmdbSeasonResolutionResult SelectByAirDate(
         IReadOnlyList<TmdbSeason> seasons,

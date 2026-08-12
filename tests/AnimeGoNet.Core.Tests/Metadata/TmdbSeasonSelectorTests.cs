@@ -13,17 +13,20 @@ public sealed class TmdbSeasonSelectorTests
             Season(11, 1, "Season 1", new DateOnly(2017, 7, 7)),
             Season(12, 2, "Season 2", new DateOnly(2022, 7, 6)),
         ],
-        new DateOnly(2022, 7, 8));
+        new DateOnly(2022, 7, 7));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.Value!.SeasonNumber);
-        Assert.Equal(2, result.AirDateDifferenceDays);
+        Assert.Equal(1, result.AirDateDifferenceDays);
     }
 
     [Theory]
-    [InlineData(90, true)]
-    [InlineData(91, false)]
-    public void PreservesUpstreamNinetyDayThreshold(int difference, bool expectedSuccess)
+    [InlineData(-2, false)]
+    [InlineData(-1, true)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(2, false)]
+    public void AllowsOnlyOneCalendarDayDifference(int difference, bool expectedSuccess)
     {
         var source = new DateOnly(2022, 1, 1);
         var result = TmdbSeasonSelector.SelectByAirDate(

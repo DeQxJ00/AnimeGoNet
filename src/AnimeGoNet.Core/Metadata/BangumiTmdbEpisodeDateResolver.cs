@@ -26,18 +26,14 @@ public sealed record BangumiTmdbEpisodeDateMatch(
 
 public static class BangumiTmdbEpisodeDateResolver
 {
-    public const int MaximumTmdbAirDateDifferenceDays = 1;
-
     public static BangumiTmdbEpisodeDateMatch Resolve(
         IReadOnlyList<BangumiEpisode> bangumiEpisodes,
         IReadOnlyList<TmdbEpisode> tmdbEpisodes,
-        int sourceEpisode,
-        int maximumDistanceDays = MaximumTmdbAirDateDifferenceDays)
+        int sourceEpisode)
     {
         ArgumentNullException.ThrowIfNull(bangumiEpisodes);
         ArgumentNullException.ThrowIfNull(tmdbEpisodes);
         ArgumentOutOfRangeException.ThrowIfLessThan(sourceEpisode, 1);
-        ArgumentOutOfRangeException.ThrowIfNegative(maximumDistanceDays);
 
         var evidence = SelectReferenceDate(bangumiEpisodes, sourceEpisode);
         if (evidence is null || tmdbEpisodes.All(value => value.AirDate is null))
@@ -61,7 +57,7 @@ public static class BangumiTmdbEpisodeDateResolver
                 Episode = value,
                 Distance = Math.Abs(value.AirDate!.Value.DayNumber - evidence.Value.Date.DayNumber),
             })
-            .Where(value => value.Distance <= maximumDistanceDays)
+            .Where(value => value.Distance == 0)
             .OrderBy(value => value.Distance)
             .ThenBy(value => value.Episode.EpisodeNumber)
             .ThenBy(value => value.Episode.Id)

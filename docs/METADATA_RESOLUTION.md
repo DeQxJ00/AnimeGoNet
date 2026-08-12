@@ -51,7 +51,7 @@
 
 1. 先用 Bangumi `name`（通常是日文原名），穷尽原始标题与四步上游后缀清理产生的不同搜索词；再对 `name_cn` 执行同样流程。重复搜索词不重复请求。
 2. 每个 TMDB 搜索响应内，先按原名/本地化名精确匹配、UTF-8 byte 相似度和响应顺序稳定排序，再逐个检查所有达到阈值的 TV Series。
-3. 每个候选都必须取得身份一致的 Series details，以 Bangumi 开播日期选出 90 天内的普通季度，再从官方 Season endpoint 验证 `tmdbid + Season Number`。候选详情、日期季度或 Season endpoint 任一不成立，只拒绝该候选。
+3. 每个候选都必须取得身份一致的 Series details，以 Bangumi 季度首播日期选出首播日期相差不超过 `±1` 个日历日的普通季度，再从官方 Season endpoint 验证 `tmdbid + Season Number`。候选详情、日期季度或 Season endpoint 任一不成立，只拒绝该候选。
 4. 当前响应内还有候选时继续候选；响应穷尽后继续当前名字的下一条清理搜索词；该名字穷尽后才切到另一个名字。只有完整 Series+Season 验证成功才立即停止。认证、配置、网络、远端服务或协议失败不会伪装成“无匹配”并继续低优先级语义搜索。
 
 例如 `name="Re:ゼロから始める異世界生活 4th season 喪失編"`、`name_cn="Re：从零开始的异世界生活 第四季 丧失篇"` 时，日文原始词选出的 Series 如果季度验证失败，仍会尝试清理后的 `Re:ゼロから始める異世界生活`；日文轮次全部穷尽后再尝试中文名。中文搜索返回多个同名 Series 时也逐个做季度验证，不会因第一个失败而提前进入 P4/P3/P2/P1。
@@ -241,8 +241,8 @@ advanced:
 确定性流程已确认 Series/Season 后，先执行普通 Episode 校验：
 
 1. 在已确认的 TMDB Season 中读取完整 Episode 列表。P4/P3 的日期候选只用于选定季度，成功前必须再请求官方 `/tv/{series}/season/{season}` endpoint；该响应的完整普通 Episode snapshot 与季度投影在同一事务保存。待补全 TMDB 的人工恢复同样使用已验证 Season 响应保存 snapshot，不能用 `episode_count` 自行生成不存在的 Episode。
-2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，优先用单集首播日期确定对应关系。来源集号同时匹配 Bangumi 普通 Episode 的局部 `ep` 与全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 只允许 `±1` 个日历日的时区误差，并且必须得到唯一最近候选；日期缺失、超过范围或并列无法消歧时都不猜测。候选随后仍须通过 TMDB Episode endpoint 验证 Series/Season/Episode 身份。
-3. Torrent `published_at` 不属于上述 `±1` 天校验，不作为确定性 EP 通过/拒绝条件，也不用于替代 Bangumi 单集首播日期。它仅在 Mikan 的统一 AI 输入中保留为辅助参数。
+2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，可用单集首播日期确定对应关系。来源集号同时匹配 Bangumi 普通 Episode 的局部 `ep` 与全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 必须是同一日，并且必须得到唯一候选；日期缺失、日期不同或多个候选无法消歧时都不猜测。候选随后仍须通过 TMDB Episode endpoint 验证 Series/Season/Episode 身份。
+3. `±1` 个日历日的时区误差只用于 Bangumi 与 TMDB 的季度首播日期匹配，不用于单集 Episode。Torrent `published_at` 不作为确定性 EP 通过/拒绝条件，也不用于替代 Bangumi 单集首播日期；它仅在 Mikan 的统一 AI 输入中保留为辅助参数。
 4. 日期映射成功时使用 `tmdb_episode_bangumi_date` 记录策略。它可以把来源 EP 6 映射到 TMDB EP 56，也可以用 Bangumi `sort=45` 映射 TMDB S02E21，因此不能先因 TMDB 中存在同号来源 EP 就直接接受。
 5. 非 Mikan、没有 `bgmid`、无法取得唯一 Bangumi Episode，或日期证据不能可靠消歧时，才检查与 `SourceEpisodeNumber` 同号的 TMDB Episode；不存在标题/日期冲突时可采用并记录 `tmdb_episode_number`。
 6. 仍无法确定时进入同一个任务级 AI 元数据流程（仅在开关开启且此前未调用时）；AI 结果必须再次验证完整 TMDB Series/Season/Episode。AI 未启用、已尝试或验证失败时进入已确认季度的 `Other`，不得把来源集号伪装成 TMDB EP。

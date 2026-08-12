@@ -25,7 +25,7 @@
 
 ## 验收证据
 
-- Core：普通正整数过滤、只选已播条目、稳定 tie-break、小数/特别篇排除。原 31 日窗口已于 2026-08-09 按业务确认删除；`±1` 日只适用于 Bangumi EP `airdate` 与 TMDB EP `air_date` 的确定性映射。
+- Core：普通正整数过滤、只选已播条目、稳定 tie-break、小数/特别篇排除。原 31 日 Torrent 发布窗口已于 2026-08-09 按业务确认删除。2026-08-13 进一步确认：`±1` 日只适用于 Bangumi/TMDB 季度首播日期；单集 Episode 日期确定性映射只接受同一日。
 - App HTTP：官方 Episode page 映射、跨页 offset、User-Agent、非法分页安全失败。
 - Data：季度与 EP claim 均带 adapter/时间/实际文件数；`ignored` 文件仍计入实际 Torrent 文件数。
 - App gate：非 Mikan、多文件、缺 bgmid、缺时间、配置关闭均零 Bangumi 请求；网络失败安全降级。

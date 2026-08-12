@@ -54,7 +54,7 @@ files 按输入顺序给出。每个文件只有：
 6. 不得因为不同数据源、title 或文件名中的标题字面不一致就拒绝候选；必须考虑本地化译名、别名、罗马字、续作命名和数据库季度/作品拆分差异。
 7. Bangumi/AniDB/文件名中的 EP 编号可能与 TMDB Episode Number 不同，不得直接复制成 TMDB Episode Number，也不得只按同号确认。
 8. 来源集号可能与 TMDB Episode Number 不同，不得只查找相同集号。
-9. 优先使用单集首播日期判断对应关系，允许正负 1 天的时区误差。
+9. 优先使用季度首播日期判断季度对应关系，Bangumi 与 TMDB 的季度首播日期允许正负 1 天的时区误差。单集 Episode 的首播日期不使用该误差范围。
 10. 其次使用动画名称、单集标题和连续播放关系进行判断。
 11. Menu、SP、Summary、PV、NCOP、NCED、Logo、特别篇、OVA、CM、特典等无法可靠匹配到普通季度 Episode 时，该文件必须返回 matched=false，episode=null，reason 具体说明；如果普通季度可靠，可保留 season 为大于 0 的普通季度编号，使主程序放入 Sxx/Other。
 12. 季度未知时 season=null；任何情况下都不得返回 season=0。
