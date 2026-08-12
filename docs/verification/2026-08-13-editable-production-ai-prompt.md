@@ -13,7 +13,7 @@
 
 - `AiMetadataPromptRendererTests`：条件块开启/裁剪、占位符替换和非法模板拒绝。
 - `OpenAiCompatibleMetadataMatcherTests`：后台匹配器在请求未覆盖 Prompt 时使用主程序配置模板，并在真实 Provider 请求体中留下测试标记。
-- `AiMetadataTestApiTests`：Prompt API、Tester bootstrap 与后台配置模板逐字一致；经项目所有者明确确认，`tmdb-ai-match-v15` 第 9 条只保留季度首播日期规则，本地 Episode 判断规则不进入 Prompt。
+- `AiMetadataTestApiTests`：Prompt API、Tester bootstrap 与后台配置模板逐字一致；经项目所有者最终确认，内置 Prompt 恢复为 `tmdb-ai-match-v14`。
 - `ConfigurationApiTests`：私有覆盖持久化、非法模板拒绝、脱敏 Prompt 预览。
 - `DeploymentConfigurationLocksTests`：环境变量/命令行锁定 `ai_prompt_template` 后 WebUI/API 不得覆盖。
 - `StaticWebUiTests`、`WorkspaceNavigationTests`：编辑器、恢复按钮、一级菜单名称、workspace/hash 归属和生成静态资产。
