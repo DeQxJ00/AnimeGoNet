@@ -21,7 +21,7 @@ public sealed class AiMetadataTestApiTests
         var prompt = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/prompt");
         var bootstrap = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/bootstrap");
 
-        Assert.Equal("tmdb-ai-match-v14", prompt.GetProperty("prompt_version").GetString());
+        Assert.Equal("tmdb-ai-match-v16", prompt.GetProperty("prompt_version").GetString());
         Assert.Contains("{{SOURCE_TITLE_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
         Assert.Contains("{{OPTIONAL_BGM_ID_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
         Assert.Equal(

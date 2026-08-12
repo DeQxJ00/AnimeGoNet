@@ -6131,7 +6131,7 @@ function renderAiTestResult(result) {
     summary.replaceChildren(aiTestSummaryItem("HTTP", result.status_code ? String(result.status_code) : "unavailable"), aiTestSummaryItem("Tester 请求", result.success ? "成功" : "失败"), aiTestSummaryItem("Result JSON", result.result_json_valid ? "有效" : "无效"), aiTestSummaryItem("主程序 TMDB 验证", production?.success ? "通过" : production?.failure_code ?? "未执行/未通过"), aiTestSummaryItem("耗时", `${result.elapsed_milliseconds} ms`), aiTestSummaryItem("请求 / 工具", `${result.ai_api_requests?.length ?? 0} / ${calls.length}`), aiTestSummaryItem("Input Tokens", String(usage.input_tokens ?? "—")), aiTestSummaryItem("Output Tokens", String(usage.output_tokens ?? "—")), aiTestSummaryItem("Reasoning Tokens", String(usage.reasoning_tokens ?? "—")), aiTestSummaryItem("Total Tokens", String(usage.total_tokens ?? "—")), aiTestSummaryItem("Request Identity", result.request_identity ?? "—"), aiTestSummaryItem("错误", result.error_message ?? result.result_json_error ?? "—"));
     summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
     const badge = element("#ai-test-prompt-version");
-    badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v14";
+    badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v16";
     badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
     element("#ai-test-raw-output").textContent =
         result.raw_response || "模型未返回响应。";
