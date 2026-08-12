@@ -150,6 +150,163 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task MikanSingleFileUsesFilenameConfirmedNearestDateWithinSevenDays()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                300,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2026, 7, 3),
+                1,
+                Episodes:
+                [new TmdbEpisode(606, 72517, 2, 6, "Episode 6", new DateOnly(2026, 8, 10))]),
+            EpisodeFactory = number => number == 6
+                ? new TmdbEpisode(606, 72517, 2, 6, "Episode 6", new DateOnly(2026, 8, 10))
+                : null,
+        };
+        var bangumi = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(600, 0, 6, new DateOnly(2026, 8, 7)),
+        ]);
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(app, ("Kokoore - 06.mkv", "6", "6"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(6, file.EpisodeNumber);
+        Assert.Equal("tmdb_episode_bangumi_nearest_date", file.ResolutionSource);
+        Assert.Equal([6], tmdb.EpisodeRequests);
+    }
+
+    [Fact]
+    public async Task MikanMultipleFilesWithoutPrimaryDateMatchesUseOneTaskLevelAiCall()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                301,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2026, 7, 3),
+                2,
+                Episodes:
+                [
+                    new TmdbEpisode(605, 72517, 2, 5, "Episode 5", new DateOnly(2026, 8, 3)),
+                    new TmdbEpisode(606, 72517, 2, 6, "Episode 6", new DateOnly(2026, 8, 10)),
+                ]),
+            EpisodeFactory = number => number is 5 or 6
+                ? new TmdbEpisode(600 + number, 72517, 2, number, $"Episode {number}",
+                    number == 5 ? new DateOnly(2026, 8, 3) : new DateOnly(2026, 8, 10))
+                : null,
+        };
+        var bangumi = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(500, 0, 5, new DateOnly(2026, 7, 31)),
+            new BangumiEpisode(600, 0, 6, new DateOnly(2026, 8, 7)),
+        ]);
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    2,
+                    file.Name.Contains("05", StringComparison.Ordinal) ? 5 : 6,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Kokoore - 05.mkv", "5", "5"),
+            ("Kokoore - 06.mkv", "6", "6"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Collection(
+            files,
+            file => Assert.Equal(5, file.EpisodeNumber),
+            file => Assert.Equal(6, file.EpisodeNumber));
+        Assert.All(files, file => Assert.Equal("ai_metadata", file.ResolutionSource));
+    }
+
+    [Fact]
+    public async Task MikanSingleFileNearestDateBeyondSevenDaysUsesAi()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                302,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2026, 7, 3),
+                1,
+                Episodes:
+                [new TmdbEpisode(606, 72517, 2, 6, "Episode 6", new DateOnly(2026, 8, 16))]),
+            EpisodeFactory = number => number == 6
+                ? new TmdbEpisode(606, 72517, 2, 6, "Episode 6", new DateOnly(2026, 8, 16))
+                : null,
+        };
+        var bangumi = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(600, 0, 6, new DateOnly(2026, 8, 7)),
+        ]);
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                [new(input.Files[0].Name, true, 2, 6, null)],
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(app, ("Kokoore - 06.mkv", "6", "6"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal(6, file.EpisodeNumber);
+        Assert.Equal("ai_metadata", file.ResolutionSource);
+        Assert.Equal(
+            "tmdb_episode_bangumi_nearest_date_too_distant",
+            await ReadLatestAttemptErrorAsync(
+                app,
+                taskId,
+                "tmdb_episode_bangumi_nearest_date"));
+    }
+
+    [Fact]
     public async Task CompletedEpisodeIsSkippedWithoutSuppressingAnotherEpisode()
     {
         var tmdb = new FakeTmdbClient
@@ -433,7 +590,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             tmdb,
             episodeOffset: null,
             aiMatcher: ai,
-            enableEpisodeAi: true);
+            enableEpisodeAi: true,
+            bangumiEpisodeClient: new FakeBangumiEpisodeClient([]));
         var taskId = await PrepareFilesAsync(
             app,
             ("Show unknown.mkv", null, null),
@@ -663,7 +821,12 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             bangumiEpisodeClient: bangumiEpisodeClient ?? new FakeBangumiEpisodeClient([]),
             aiMetadataMatcher: aiMatcher);
         await app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>().SaveAsync(
-            new MikanWorkMetadataRuleUpdate(3951, 547888, 72517, 2, episodeOffset),
+            new MikanWorkMetadataRuleUpdate(
+                3951,
+                bangumiEpisodeClient is null ? null : 547888,
+                72517,
+                2,
+                episodeOffset),
             expectedRevision: 0,
             DateTimeOffset.UtcNow);
         return app;
@@ -712,6 +875,19 @@ public sealed class EpisodeMetadataResolutionProcessorTests
 
         var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
         await using var connection = await database.OpenConnectionAsync();
+        await using (var alignBangumi = connection.CreateCommand())
+        {
+            alignBangumi.CommandText = """
+                UPDATE ingest_tasks
+                SET bangumi_subject_id = (
+                    SELECT bangumi_subject_id
+                    FROM mikan_work_rules
+                    WHERE mikanid = 3951 AND enabled = 1)
+                WHERE id = $task_id;
+                """;
+            alignBangumi.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(1, await alignBangumi.ExecuteNonQueryAsync());
+        }
         await using (var delete = connection.CreateCommand())
         {
             delete.CommandText = "DELETE FROM task_files WHERE task_id = $task_id;";

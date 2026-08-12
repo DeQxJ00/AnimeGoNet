@@ -35,11 +35,12 @@ public sealed class AiMetadataPromptRendererTests
         Assert.Contains("\"use_bangumi_pubdate_first\": true", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", rendered, StringComparison.Ordinal);
         Assert.Contains(
-            "9. 优先使用季度首播日期判断季度对应关系，Bangumi 与 TMDB 的季度首播日期允许正负 1 天的时区误差。单集 Episode 的首播日期不使用该误差范围。",
+            "Episode 对应关系先比较 Bangumi/TMDB 单集首播日期并允许正负 1 天",
             rendered,
             StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v13", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Contains("最近日期差不超过 7 天且 TMDB EP 与文件名 EP 一致", rendered, StringComparison.Ordinal);
+        Assert.Equal("tmdb-ai-match-v14", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]

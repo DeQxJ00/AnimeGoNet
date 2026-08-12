@@ -3,25 +3,28 @@
 日期容差的业务语义于 2026-08-13 明确为：
 
 - Bangumi 作品/季度首播日期与 TMDB Season `air_date` 允许相差 `±1` 个日历日；
-- Bangumi Episode `airdate` 与 TMDB Episode `air_date` 不使用上述容差，确定性日期映射只接受同一日且唯一的候选；
+- Bangumi Episode `airdate` 与 TMDB Episode `air_date` 的主匹配同样允许 `±1` 日；
+- 主匹配失败后，仅实际 Torrent 文件总数为 1 时，从文件名读取普通整数 EP，以该 EP 定位 Bangumi Episode，再找 TMDB Season 中日期最近项；差值不超过 7 日且 TMDB EP 与文件名 EP 一致才接受；
+- 超过 7 日、编号不一致、证据缺失、无法消歧或多文件主匹配失败时进入统一 AI；AI 关闭时进入已确认季度 Other；
 - Torrent `published_at` 不参与季度或 Episode 的确定性日期校验，只保留为 Mikan AI 的可选辅助输入。
 
 旧 Go `develop` 在 `internal/constant/anisource.go` 定义
 `ThemoviedbMatchSeasonDays = 90`，并在 `parseAnimeSeason` 中用 Bangumi Subject
 日期选择 TMDB 普通 Season。AnimeGoNet 早期为保持上游行为保留了该窗口；本次按已确认
-业务语义有意收窄为 `±1` 日。此前新增的 Episode `±1` 日窗口属于错误套用，现已移除。
+业务语义有意收窄为 `±1` 日。Episode 使用独立的上述两级规则。
 
-验收覆盖季度差值 `-2/-1/0/+1/+2`，期望只有 `-1/0/+1` 成功；Episode
-同日映射继续成功，相差一天明确返回 `tmdb_episode_bangumi_date_not_found`。内置统一
-AI Prompt 同步升级为 `tmdb-ai-match-v13`，明确容差只属于季度首播日期。
+验收覆盖季度差值 `-2/-1/0/+1/+2`，期望只有 `-1/0/+1` 成功；Episode 主匹配覆盖
+`±1` 日，单文件补判覆盖 2/3/7 日成功、8 日失败、编号不一致失败和多文件转 AI。
+内置统一 AI Prompt 同步升级为 `tmdb-ai-match-v14`。
 
-旧 Mikan 实测报告是在错误的 Episode 容差下生成的历史证据；其中只有日期同日的映射
-仍可直接作为当前规则证据，依赖相邻日期的结果必须按新规则重新执行后才能验收。
+旧 Mikan 实测报告早于单文件 7 日补判和独立证据来源，必须按最终规则重新执行后才能
+作为完整验收证据。
 
 ## 验收结果
 
-- Core 边界定向测试：17/17 通过；
-- Prompt/API/配置定向测试：45/45 通过；
-- 完整 .NET Debug 测试：1625/1625 通过（Plugin Abstractions 13、Plugin SDK 16、
-  Core 389、Plugin Tool 23、Data 217、App 967）；
+- Core 边界定向测试已纳入完整回归，覆盖 `±1` 日主匹配、2/3/7 日单文件补判、
+  8 日拒绝、编号不一致拒绝及多文件转 AI；
+- Prompt/API/配置契约已随内置版本 `tmdb-ai-match-v14` 纳入完整回归；
+- 完整 .NET Debug 测试：1638/1638 通过（Plugin Abstractions 13、Plugin SDK 16、
+  Core 399、Plugin Tool 23、Data 217、App 970）；
 - WebUI TypeScript 类型检查、构建和静态 DOM 测试通过，Web 测试 19/19。

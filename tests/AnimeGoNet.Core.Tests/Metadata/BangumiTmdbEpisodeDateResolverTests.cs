@@ -55,8 +55,10 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
         Assert.Equal("tmdb_episode_bangumi_date_ambiguous", result.FailureCode);
     }
 
-    [Fact]
-    public void OneDayEpisodeDifferenceIsNotAccepted()
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public void PrimaryDateMatchAllowsOneCalendarDayDifference(int difference)
     {
         BangumiEpisode[] bangumi =
         [
@@ -64,18 +66,20 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
         ];
         TmdbEpisode[] tmdb =
         [
-            new(2013394, 91768, 1, 13, "Episode 13", new DateOnly(2019, 12, 26)),
-            new(2013395, 91768, 1, 14, "Episode 14", new DateOnly(2019, 12, 26)),
+            new(2013394, 91768, 1, 13, "Episode 13", new DateOnly(2019, 12, 25).AddDays(difference)),
+            new(2013395, 91768, 1, 14, "Episode 14", new DateOnly(2019, 12, 25).AddDays(difference)),
         ];
 
         var result = BangumiTmdbEpisodeDateResolver.Resolve(bangumi, tmdb, 13);
 
-        Assert.Equal(BangumiTmdbEpisodeDateMatchKind.NoMatch, result.Kind);
-        Assert.Equal("tmdb_episode_bangumi_date_not_found", result.FailureCode);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(13, result.Episode!.EpisodeNumber);
+        Assert.Equal(1, result.AirDateDifferenceDays);
+        Assert.Equal(TmdbEpisodeDateEvidenceKind.BangumiEpisode, result.EvidenceKind);
     }
 
     [Fact]
-    public void MissingDateEvidenceKeepsExistingNumberFlowApplicable()
+    public void MissingDateEvidenceCannotProduceDateMatch()
     {
         var result = BangumiTmdbEpisodeDateResolver.Resolve(
             [new BangumiEpisode(1, 0, 4, null)],
@@ -109,7 +113,7 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
     }
 
     [Fact]
-    public void OneDayEpisodeDifferenceIsNotATimezoneException()
+    public void OneDayEpisodeDifferenceUsesPrimaryDateEvidence()
     {
         BangumiEpisode[] bangumi =
         [
@@ -127,7 +131,69 @@ public sealed class BangumiTmdbEpisodeDateResolverTests
             tmdb,
             15);
 
+        Assert.True(result.IsSuccess);
+        Assert.Equal(15, result.Episode!.EpisodeNumber);
+        Assert.Equal(TmdbEpisodeDateEvidenceKind.BangumiEpisode, result.EvidenceKind);
+    }
+
+    [Theory]
+    [InlineData(-7)]
+    [InlineData(-2)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(7)]
+    public void SingleFileFallbackAcceptsNearestSameNumberWithinSevenDays(int difference)
+    {
+        var sourceDate = new DateOnly(2026, 8, 7);
+        var result = BangumiTmdbEpisodeDateResolver.Resolve(
+            [new BangumiEpisode(6, 0, 6, sourceDate)],
+            [new TmdbEpisode(600, 302051, 1, 6, "Episode 6", sourceDate.AddDays(difference))],
+            6,
+            allowFilenameNearestFallback: true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(6, result.Episode!.EpisodeNumber);
+        Assert.Equal(Math.Abs(difference), result.AirDateDifferenceDays);
+        Assert.Equal(TmdbEpisodeDateEvidenceKind.FilenameEpisodeNearestDate, result.EvidenceKind);
+    }
+
+    [Fact]
+    public void NearestDateFallbackIsDisabledForMultipleFiles()
+    {
+        var result = BangumiTmdbEpisodeDateResolver.Resolve(
+            [new BangumiEpisode(6, 0, 6, new DateOnly(2026, 8, 7))],
+            [new TmdbEpisode(600, 302051, 1, 6, "Episode 6", new DateOnly(2026, 8, 10))],
+            6);
+
         Assert.Equal(BangumiTmdbEpisodeDateMatchKind.NoMatch, result.Kind);
         Assert.Equal("tmdb_episode_bangumi_date_not_found", result.FailureCode);
+    }
+
+    [Fact]
+    public void FilenameFallbackRejectsNearestDateBeyondSevenDays()
+    {
+        var result = BangumiTmdbEpisodeDateResolver.Resolve(
+            [new BangumiEpisode(6, 0, 6, new DateOnly(2026, 8, 1))],
+            [new TmdbEpisode(600, 302051, 1, 6, "Episode 6", new DateOnly(2026, 8, 9))],
+            6,
+            allowFilenameNearestFallback: true);
+
+        Assert.Equal(BangumiTmdbEpisodeDateMatchKind.NoMatch, result.Kind);
+        Assert.Equal("tmdb_episode_bangumi_nearest_date_too_distant", result.FailureCode);
+        Assert.Equal(8, result.AirDateDifferenceDays);
+    }
+
+    [Fact]
+    public void FilenameFallbackRejectsNearestTmdbEpisodeWithDifferentNumber()
+    {
+        var result = BangumiTmdbEpisodeDateResolver.Resolve(
+            [new BangumiEpisode(6, 0, 6, new DateOnly(2026, 8, 1))],
+            [new TmdbEpisode(607, 302051, 1, 7, "Episode 7", new DateOnly(2026, 8, 4))],
+            6,
+            allowFilenameNearestFallback: true);
+
+        Assert.Equal(BangumiTmdbEpisodeDateMatchKind.NoMatch, result.Kind);
+        Assert.Equal("tmdb_episode_bangumi_nearest_date_filename_mismatch", result.FailureCode);
+        Assert.Equal(3, result.AirDateDifferenceDays);
     }
 }

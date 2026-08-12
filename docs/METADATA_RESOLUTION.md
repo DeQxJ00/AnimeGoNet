@@ -241,14 +241,13 @@ advanced:
 确定性流程已确认 Series/Season 后，先执行普通 Episode 校验：
 
 1. 在已确认的 TMDB Season 中读取完整 Episode 列表。P4/P3 的日期候选只用于选定季度，成功前必须再请求官方 `/tv/{series}/season/{season}` endpoint；该响应的完整普通 Episode snapshot 与季度投影在同一事务保存。待补全 TMDB 的人工恢复同样使用已验证 Season 响应保存 snapshot，不能用 `episode_count` 自行生成不存在的 Episode。
-2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，可用单集首播日期确定对应关系。来源集号同时匹配 Bangumi 普通 Episode 的局部 `ep` 与全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 必须是同一日，并且必须得到唯一候选；日期缺失、日期不同或多个候选无法消歧时都不猜测。候选随后仍须通过 TMDB Episode endpoint 验证 Series/Season/Episode 身份。
-3. `±1` 个日历日的时区误差只用于 Bangumi 与 TMDB 的季度首播日期匹配，不用于单集 Episode。Torrent `published_at` 不作为确定性 EP 通过/拒绝条件，也不用于替代 Bangumi 单集首播日期；它仅在 Mikan 的统一 AI 输入中保留为辅助参数。
-4. 日期映射成功时使用 `tmdb_episode_bangumi_date` 记录策略。它可以把来源 EP 6 映射到 TMDB EP 56，也可以用 Bangumi `sort=45` 映射 TMDB S02E21，因此不能先因 TMDB 中存在同号来源 EP 就直接接受。
-5. 非 Mikan、没有 `bgmid`、无法取得唯一 Bangumi Episode，或日期证据不能可靠消歧时，才检查与 `SourceEpisodeNumber` 同号的 TMDB Episode；不存在标题/日期冲突时可采用并记录 `tmdb_episode_number`。
-6. 仍无法确定时进入同一个任务级 AI 元数据流程（仅在开关开启且此前未调用时）；AI 结果必须再次验证完整 TMDB Series/Season/Episode。AI 未启用、已尝试或验证失败时进入已确认季度的 `Other`，不得把来源集号伪装成 TMDB EP。
-4. 仍有文件无法对应、`ai_use_metadata_match=true` 且该任务此前没有尝试过 AI 时，使用任务总标题和完整候选视频列表发起同一任务级 AI 请求。
-5. AI 必须返回与已确认值相同的 `tmdb_id` 和 `season_number`，且目标 Episode 必须存在；AI 试图更换 Series/Season 时拒绝。
-6. 开关关闭、该任务已尝试 AI、AI 失败或 TMDB 二次验证失败时进入 `EpisodeUnmatched`，不得退回来源 EP；普通季度已确认时按 `Other` 规则整理，季度未知时不移动。
+2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，先用单集首播日期确定对应关系。主程序从文件名重新解析普通正整数 EP，用它匹配 Bangumi 普通 Episode 的局部 `ep` 或全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 允许 `±1` 个日历日，取距离最近且可唯一消歧的候选。
+3. 上一步失败且 Torrent 实际文件总数恰好为 1 时，才启用文件名补判：以文件名 EP 定位 Bangumi 普通 Episode，在已确认 TMDB Season 中寻找首播日期最近的普通 Episode。最近日期差必须不超过 7 日，并且最近候选的 TMDB Episode Number 必须与文件名 EP 一致；否则不得确定性接受。该补判成功记录为 `tmdb_episode_bangumi_nearest_date`。
+4. 超过 7 日、最近候选编号不一致、日期/身份缺失、多个最近候选无法消歧，或实际多文件任务的 `±1` 日主匹配失败，都进入同一个任务级 AI 匹配。AI 开关关闭或 AI 无法验证时，文件进入已确认季度的 `Other`。候选成功后仍须通过 TMDB Episode endpoint 验证 Series/Season/Episode 身份。
+5. Torrent `published_at` 不属于季度或 EP 的确定性日期校验，也不能替代 Bangumi 单集首播日期；它仅在 Mikan 的统一 AI 输入中保留为辅助参数。
+6. 主日期映射成功时使用 `tmdb_episode_bangumi_date` 记录策略。它可以把来源 EP 6 映射到 TMDB EP 56，也可以用 Bangumi `sort=45` 映射 TMDB S02E21，因此不能先因 TMDB 中存在同号来源 EP 就直接接受。单文件最近日期补判则要求 TMDB EP 与文件名 EP 同号，并记录独立策略。
+7. 非 Mikan 或没有 `bgmid` 时，才检查与文件名普通整数候选同号的 TMDB Episode；不存在已知日期冲突时可采用并记录 `tmdb_episode_number`。
+8. AI 必须返回与已确认值相同的 `tmdb_id` 和 `season_number`，且目标 Episode 必须存在；AI 试图更换 Series/Season 时拒绝。开关关闭、该任务已尝试 AI、AI 失败或 TMDB 二次验证失败时进入 `EpisodeUnmatched`，不得退回来源 EP；普通季度已确认时按 `Other` 规则整理，季度未知时不移动。
 
 “一次”指一个下载任务在季度和 Episode 全流程合计最多一次语义匹配，不对无效答案继续改写 Prompt 追问。季度阶段已经成功或失败尝试 AI 后，Episode 阶段均不得再次请求。没有收到响应时可按网络策略幂等重试同一请求；重试不得改变任务标题、文件列表、Prompt 或已确认的 Series/Season。
 

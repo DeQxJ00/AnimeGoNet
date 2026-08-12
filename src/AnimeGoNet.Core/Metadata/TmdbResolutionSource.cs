@@ -13,6 +13,7 @@ public enum TmdbResolutionSource
     ManualMikanOffset,
     TmdbEpisodeNumber,
     TmdbEpisodeBangumiDate,
+    TmdbEpisodeBangumiNearestDate,
     SubtitleAssociation,
 }
 
@@ -45,6 +46,8 @@ public static class TmdbResolutionSourceExtensions
                 "tmdb_episode_number",
             TmdbResolutionSource.TmdbEpisodeBangumiDate =>
                 "tmdb_episode_bangumi_date",
+            TmdbResolutionSource.TmdbEpisodeBangumiNearestDate =>
+                "tmdb_episode_bangumi_nearest_date",
             TmdbResolutionSource.SubtitleAssociation =>
                 "subtitle_association",
             _ => throw new ArgumentOutOfRangeException(nameof(source)),
@@ -70,6 +73,8 @@ public static class TmdbResolutionSourceExtensions
                 TmdbResolutionSource.TmdbEpisodeNumber,
             "tmdb_episode_bangumi_date" =>
                 TmdbResolutionSource.TmdbEpisodeBangumiDate,
+            "tmdb_episode_bangumi_nearest_date" =>
+                TmdbResolutionSource.TmdbEpisodeBangumiNearestDate,
             "subtitle_association" =>
                 TmdbResolutionSource.SubtitleAssociation,
             _ => throw new ArgumentException(

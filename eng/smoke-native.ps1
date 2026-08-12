@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 42,
+    [int]$ExpectedSchemaVersion = 43,
 
     [switch]$LegacyYamlUpgrade
 )

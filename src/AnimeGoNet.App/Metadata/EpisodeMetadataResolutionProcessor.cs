@@ -242,32 +242,33 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 var dateMatch = BangumiTmdbEpisodeDateResolver.Resolve(
                     episodeDateContext.BangumiEpisodes,
                     episodeDateContext.TmdbEpisodes,
-                    parsedSourceEpisode.Value);
-                if (dateMatch.IsApplicable)
+                    parsedSourceEpisode.Value,
+                    allowFilenameNearestFallback: claim.Resolution.TorrentFileCount == 1);
+                strategy = dateMatch.EvidenceKind == TmdbEpisodeDateEvidenceKind.FilenameEpisodeNearestDate
+                    ? "tmdb_episode_bangumi_nearest_date"
+                    : "tmdb_episode_bangumi_date";
+                if (!dateMatch.IsSuccess)
                 {
-                    strategy = "tmdb_episode_bangumi_date";
-                    if (!dateMatch.IsSuccess)
-                    {
-                        var reason = dateMatch.FailureCode!;
-                        await RecordAsync(
-                            claim,
-                            strategy,
-                            null,
-                            "other",
-                            reason,
-                            retryable: false,
-                            0,
-                            cancellationToken).ConfigureAwait(false);
-                        results.Add(new MetadataEpisodeFileResolution(
-                            file.FileId,
-                            null,
-                            "other",
-                            reason));
-                        continue;
-                    }
-
-                    targetEpisode = dateMatch.Episode!.EpisodeNumber;
+                    var reason = dateMatch.FailureCode
+                        ?? "tmdb_episode_bangumi_date_not_applicable";
+                    await RecordAsync(
+                        claim,
+                        strategy,
+                        null,
+                        "other",
+                        reason,
+                        retryable: false,
+                        0,
+                        cancellationToken).ConfigureAwait(false);
+                    results.Add(new MetadataEpisodeFileResolution(
+                        file.FileId,
+                        null,
+                        "other",
+                        reason));
+                    continue;
                 }
+
+                targetEpisode = dateMatch.Episode!.EpisodeNumber;
             }
 
             if (claim.EpisodeResolvedByTrustedOffset)

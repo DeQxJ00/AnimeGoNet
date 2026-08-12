@@ -3096,6 +3096,8 @@ function libraryStrategy(value: string | null): string {
     manual_mikan_offset: "人工 Mikan EP offset + TMDB 验证",
     trusted_mikan_offset: "可信 Mikan EP offset + TMDB 验证",
     tmdb_episode_number: "文件名 EP + TMDB Episode 验证",
+    tmdb_episode_bangumi_date: "Bangumi/TMDB EP ±1 日 + TMDB 验证",
+    tmdb_episode_bangumi_nearest_date: "单文件 7 日最近日期 + 文件名 EP + TMDB 验证",
     subtitle_association: "字幕关联已确认 EP",
   };
   return value ? labels[value] ?? value : "未记录";
@@ -7839,7 +7841,7 @@ function renderAiTestResult(result: AiTesterRunResult): void {
   );
   summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
   const badge = element<HTMLElement>("#ai-test-prompt-version");
-  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v13";
+  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v14";
   badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
   element<HTMLElement>("#ai-test-raw-output").textContent =
     result.raw_response || "模型未返回响应。";

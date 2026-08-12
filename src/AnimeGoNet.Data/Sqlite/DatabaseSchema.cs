@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 42;
+    public const int CurrentVersion = 43;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -54,7 +54,87 @@ public static class DatabaseSchema
             42,
             "bangumi_archive_subject_relations",
             BangumiArchiveSubjectRelations),
+        new SchemaMigration(
+            43,
+            "tmdb_episode_nearest_date_evidence",
+            TmdbEpisodeNearestDateEvidence),
     ];
+
+    private const string TmdbEpisodeNearestDateEvidence = """
+        DROP TRIGGER tr_task_files_episode_evidence_insert;
+        DROP TRIGGER tr_task_files_episode_evidence_update;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_insert
+        BEFORE INSERT ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'tmdb_episode_bangumi_date',
+                    'tmdb_episode_bangumi_nearest_date',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_update
+        BEFORE UPDATE OF
+            episode_resolution_source, episode_resolution_run_id,
+            episode_resolution_attempt_id
+        ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'tmdb_episode_bangumi_date',
+                    'tmdb_episode_bangumi_nearest_date',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+        """;
 
     private const string BangumiArchiveSubjectRelations = """
         CREATE TABLE data_update_staging_relations (
