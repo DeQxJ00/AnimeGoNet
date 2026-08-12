@@ -16,6 +16,12 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("id=\"sidebar-toggle\"", html, StringComparison.Ordinal);
         Assert.Contains(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"Mikan 手动设置\"", script, StringComparison.Ordinal);
+        Assert.Contains(">bangumi缓存</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"bangumi缓存\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"bangumi-cache\" data-subview=\"versions\"",
+            html,
+            StringComparison.Ordinal);
         Assert.Contains(">下载工具配置</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"下载工具配置\"", script, StringComparison.Ordinal);
         Assert.Contains(">AI 匹配测试工具</button>", html, StringComparison.Ordinal);
@@ -27,6 +33,7 @@ public sealed class WorkspaceNavigationTests
             "library",
             "tasks",
             "mikan",
+            "bangumi-cache",
             "download-tools",
             "connections",
             "tools",

@@ -108,6 +108,14 @@ const workspaceDefinitions = {
             { id: "legacy-filter", label: "五级过滤" },
         ],
     },
+    "bangumi-cache": {
+        title: "bangumi缓存",
+        description: "管理 AnimeGoNetData 离线 Bangumi Subject、Episode 与前传关系档案。",
+        defaultSubview: "versions",
+        tabs: [
+            { id: "versions", label: "数据版本与更新" },
+        ],
+    },
     "download-tools": {
         title: "下载工具配置",
         description: "管理 qBittorrent 实例、连接验证和跨容器路径映射。",
@@ -136,10 +144,9 @@ const workspaceDefinitions = {
     },
     system: {
         title: "系统",
-        description: "维护数据版本、缓存和后台基础设施。",
-        defaultSubview: "updates",
+        description: "维护通用 HTTP 缓存和后台基础设施。",
+        defaultSubview: "cache",
         tabs: [
-            { id: "updates", label: "数据更新" },
             { id: "cache", label: "缓存管理" },
         ],
     },

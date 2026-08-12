@@ -208,6 +208,7 @@
 - [x] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、SourceProfile 独立开关、expected-revision 保存、真实服务端批次 preview（名单结果、winner、实际执行组），以及 schema v25 历史快照选择与 revision 安全回滚；首版使用可键盘操作的上下移动，不依赖拖拽。
 - [x] 移植静态页并生成 OpenAPI：静态 TypeScript/HTML/CSS 页面由 Kestrel/AOT smoke 覆盖；官方 .NET 10 AOT-safe 生成器在 `/openapi/v1.json` 输出完整当前 Minimal API 契约，具有确定性 operationId/标签、现代及旧 Access-Key 安全说明、无运行端口/路径/密钥泄露，并由原生进程 smoke 验证。
 - [x] 将超长单页重构为左侧一级菜单和页面内二级菜单；后续按实际管理边界补充独立“下载工具配置”，并将“测试工具”明确命名为“AI 匹配测试工具”。全部工作区通过 hash 可直接定位/前进后退，默认只显示当前二级页面；窄屏左栏收成可访问抽屉，原表单、revision、轮询和 API 契约不变。
+- [x] 增加一级“bangumi缓存”：将 AnimeGoNetData/Bangumi 离线 Subject、Episode、前传关系的版本状态、检查、下载、离线导入和回滚页面迁入独立工作区；通用 `bolt/themoviedb` 缓存继续留在系统缓存管理，避免混淆。
 - [x] 通过 API/WS 契约差分测试：生成文档与所有当前非排除 HTTP endpoint 的 method/path 精确相等；机器 golden 穷尽固定上游 OpenAPI 的 11 个 HTTP + 1 个 WebSocket operation，并由真实 Kestrel 响应逐层校验 root/data/item、失败 envelope、日志帧和 control 帧精确字段。原 AnimeGoHelper 浏览器 E2E 同样已完成。
 - [x] 创建 Web 前端工程、类型化 API client 和前端测试基线：TypeScript 7 strict 工程输出原生 ES module；共享 JSON client 只接受同源绝对路径、集中携带 Access-Key、序列化类型化请求体，并以稳定错误类型处理结构化失败/非 JSON 响应；运行状态与目录数据库请求已接入，Node 内置 runner 的 5 项安全/协议测试及 CI 产物差分门禁已建立。
 - [x] 实现仪表盘和下载器/任务状态：下载状态卡片、进度、连接且非 stale 的跨实例速度汇总、活动/暂停/失败/等待整理/完成/离线指标、qB 状态与 AnimeGoNet 业务阶段独立筛选，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、策略尝试时间线、文件归类计数、准备/整理失败详情和显式重试入口均已接入。
