@@ -758,7 +758,7 @@ public sealed class ConfigurationApiTests
         var change = Assert.Single(
             json.RootElement.GetProperty("changes").EnumerateArray(),
             item => item.GetProperty("field").GetString() == "ai_prompt_template");
-        Assert.Contains("tmdb-ai-match-v14", change.GetProperty("after").GetString(), StringComparison.Ordinal);
+        Assert.Contains("tmdb-ai-match-v13", change.GetProperty("after").GetString(), StringComparison.Ordinal);
         Assert.Contains("sha256:", change.GetProperty("after").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("PROMPT-CONTENT-MUST-NOT-ECHO", body, StringComparison.Ordinal);
     }
