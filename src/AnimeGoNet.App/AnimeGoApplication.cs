@@ -357,6 +357,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(downloaderOverrides);
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
+        builder.Services.AddSingleton<ConfigurationArchiveService>();
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(dataPackages);
         builder.Services.AddSingleton(dataUpdateTransfers);

@@ -14,6 +14,7 @@ internal static class ApiOpenApi
         "compatibility",
         "ai-test",
         "config",
+        "configuration-archive",
         "cache",
         "data-update",
         "delete",

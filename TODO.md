@@ -220,6 +220,7 @@
 - [x] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、内置及已发现 external source adapter 下拉（未启用/缺包明确禁用）、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态/动态 tags、做种分钟、Mikan Cookie 只写设置、revision 冲突、move 提示，以及复用真实 adapter 且无副作用的路由预览。schema v38 增加默认开启的来源级重复命中通知开关并固化进任务路由快照；RSS 来源 alias/并发 winner 与规范 TMDB Episode 重复会通过事件 4301 写入脱敏实时日志，关闭仅抑制通知且不改变全局去重。
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
+- [x] 实现总配置归档：版本化 JSON 覆盖应用私有配置、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则和外部插件；WebUI 支持导出、SHA-256 预检、确认导入、手动备份、下载、恢复和删除。导入/恢复前自动创建安全备份并采用同 ID 覆盖、包外项目保留的安全合并；归档明确包含凭据与 qB 实例路径，但排除部署根目录、运行任务、下载历史、可信 offset、缓存、日志及媒体文件。API 流程、错误摘要、4 MiB 上限与 NativeAOT 均纳入验收。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥只写不回显，保存前 diff 只显示 `继承/已配置/已清除` 状态，环境锁、即时生效和需重启字段均可见。
 - [x] 唯一正式 AI Prompt 已纳入应用配置、私有覆盖、部署锁和 WebUI 编辑器：后台 Worker 与“AI 匹配测试工具”默认读取同一份有效模板；模板保留全部契约标记且限 128 KiB，预览只显示版本/长度/短哈希，保存后重启生效。
 - [x] 动画任务详情同时展示任务级 `source_evidence`、逐文件来源名称/来源 EP/本地候选和最终 TMDB 名称/Season/Episode，以及 AI 调用状态、TMDB 验证可信依据、最终失败原因和策略尝试时间线；来源 profile/revision、标题、Mikan/Bangumi/AniDB/IMDb/发布时间与不透明 ID 指纹独立成区，不采信或展示模型自报的数字置信度，也不把来源值表示成 TMDB 权威结果。

@@ -6,6 +6,26 @@ namespace AnimeGoNet.Data.Mikan;
 
 public sealed class MikanWorkMetadataRuleStore(AnimeGoSqliteDatabase database)
 {
+    public async Task<IReadOnlyList<MikanWorkMetadataRule>> ListAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT mikanid, bangumi_subject_id, tmdb_series_id, tmdb_season_number,
+                   episode_offset, enabled, revision, created_at_utc, updated_at_utc
+            FROM mikan_work_rules
+            ORDER BY mikanid;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var result = new List<MikanWorkMetadataRule>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            result.Add(Read(reader));
+        }
+        return result;
+    }
+
     public Task<MikanWorkMetadataRule?> GetAsync(
         int mikanId,
         CancellationToken cancellationToken = default) =>
@@ -142,7 +162,11 @@ public sealed class MikanWorkMetadataRuleStore(AnimeGoSqliteDatabase database)
             return null;
         }
 
-        return new MikanWorkMetadataRule(
+        return Read(reader);
+    }
+
+    private static MikanWorkMetadataRule Read(SqliteDataReader reader) =>
+        new(
             reader.GetInt32(0),
             OptionalInt32(reader, 1),
             OptionalInt32(reader, 2),
@@ -152,7 +176,6 @@ public sealed class MikanWorkMetadataRuleStore(AnimeGoSqliteDatabase database)
             reader.GetInt64(6),
             Parse(reader.GetString(7)),
             Parse(reader.GetString(8)));
-    }
 
     private static void AddValues(SqliteCommand command, MikanWorkMetadataRuleUpdate update, string now)
     {

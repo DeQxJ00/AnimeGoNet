@@ -219,6 +219,18 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-card dl div { min-width: 0; padding: 9px 11px; border-radius: 10px; background: rgba(5,8,16,.5); }
 .configuration-card dt { color: #8da2c9; font-size: .7rem; }
 .configuration-card dd { margin: 5px 0 0; color: #dbe6fa; font-size: .82rem; overflow-wrap: anywhere; }
+.configuration-archive-grid { display: grid; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); gap: 14px; }
+.configuration-archive-file { display: grid; gap: 7px; color: #8da2c9; font-size: .75rem; }
+.configuration-archive-file input { width: 100%; border: 1px solid #344260; border-radius: 9px; padding: 9px; color: #edf2ff; background: #090e19; }
+.configuration-archive-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.configuration-archive-preview { margin-top: 12px; padding: 12px; border: 1px solid #4d6184; border-radius: 12px; background: rgba(8,13,24,.62); }
+.configuration-archive-preview p { margin: 5px 0; overflow-wrap: anywhere; }
+.configuration-archive-preview ul { margin-bottom: 0; padding-left: 1.2rem; color: #d8c899; }
+.configuration-backup-list { display: grid; gap: 9px; }
+.configuration-backup-item { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; align-items: center; padding: 11px; border: 1px solid #344260; border-radius: 11px; background: rgba(5,8,16,.5); }
+.configuration-backup-item strong, .configuration-backup-item small { display: block; overflow-wrap: anywhere; }
+.configuration-backup-item small { margin-top: 4px; color: #8da2c9; }
+.configuration-backup-item div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .failure-priority { margin-top: 14px; padding-top: 14px; border-top: 1px solid #344260; }
 .failure-priority-caption { margin: 0 0 11px; color: #aebbd3; font-size: .76rem; line-height: 1.5; }
 .failure-priority-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
@@ -643,6 +655,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .pending-tmdb-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .downloader-list { grid-template-columns: 1fr; }
   .configuration-grid { grid-template-columns: 1fr; }
+  .configuration-archive-grid { grid-template-columns: 1fr; }
   .configuration-form-grid { grid-template-columns: 1fr; }
   .configuration-form-grid .wide { grid-column: auto; }
   .configuration-data-update-grid { grid-template-columns: 1fr; }

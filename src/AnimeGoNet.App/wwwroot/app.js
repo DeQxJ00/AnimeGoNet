@@ -25,6 +25,8 @@ const downloaderConfigDialog = element("#downloader-config-dialog");
 const configurationDialog = element("#configuration-dialog");
 let activeDeletePreview = null;
 let currentConfiguration = null;
+let pendingConfigurationArchive = null;
+let pendingConfigurationArchivePreview = null;
 let activeRssRules = null;
 let activeLegacyMikanFilter = null;
 let sourceProfiles = [];
@@ -130,6 +132,7 @@ const workspaceDefinitions = {
         defaultSubview: "application",
         tabs: [
             { id: "application", label: "应用配置" },
+            { id: "archive", label: "导入导出与备份" },
             { id: "sources", label: "输入源" },
             { id: "plugins", label: "外部插件" },
         ],
@@ -2343,6 +2346,224 @@ async function loadConfiguration() {
         currentConfiguration = null;
         container.replaceChildren();
         status.textContent = `配置读取失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+function configurationArchiveCountText(counts) {
+    return [
+        `应用 ${counts.application}`,
+        `下载器 ${counts.downloaders}`,
+        `插件 ${counts.external_plugins}`,
+        `来源 ${counts.sources}`,
+        `RSS 规则 ${counts.rss_rule_sets}`,
+        `五级过滤 ${counts.legacy_mikan_filters}`,
+        `人工规则 ${counts.mikan_work_rules}`,
+    ].join(" · ");
+}
+async function downloadConfigurationArchive(path, fallbackName) {
+    const response = await fetch(path, { headers });
+    if (!response.ok)
+        throw new Error(await responseError(response));
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = fallbackName;
+        anchor.click();
+    }
+    finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+}
+function clearConfigurationArchivePreview(message) {
+    pendingConfigurationArchivePreview = null;
+    element("#configuration-archive-import").disabled = true;
+    const preview = element("#configuration-archive-preview-result");
+    preview.hidden = true;
+    preview.replaceChildren();
+    if (message)
+        element("#configuration-archive-status").textContent = message;
+}
+function renderConfigurationArchivePreview(preview) {
+    const container = element("#configuration-archive-preview-result");
+    const digest = document.createElement("p");
+    digest.textContent = `SHA-256：${preview.sha256}`;
+    const exported = document.createElement("p");
+    exported.textContent = `导出时间：${new Date(preview.exported_at_utc).toLocaleString()}`;
+    const counts = document.createElement("p");
+    counts.textContent = configurationArchiveCountText(preview.counts);
+    const warnings = document.createElement("ul");
+    for (const warning of preview.warnings) {
+        const item = document.createElement("li");
+        item.textContent = warning;
+        warnings.append(item);
+    }
+    container.replaceChildren(digest, exported, counts, warnings);
+    container.hidden = false;
+}
+async function previewConfigurationArchive() {
+    const file = pendingConfigurationArchive;
+    if (!file)
+        return;
+    const status = element("#configuration-archive-status");
+    status.textContent = "正在校验归档格式、引用关系和配置值…";
+    clearConfigurationArchivePreview();
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch("/api/v1/configuration-archive/import/preview", {
+            method: "POST",
+            headers: requestHeaders,
+            body: file,
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const preview = await response.json();
+        pendingConfigurationArchivePreview = preview;
+        renderConfigurationArchivePreview(preview);
+        element("#configuration-archive-import").disabled = false;
+        status.textContent = "预检通过。确认导入前会自动创建一份本机安全备份。";
+    }
+    catch (error) {
+        status.textContent = `预检失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function importConfigurationArchive() {
+    const file = pendingConfigurationArchive;
+    const preview = pendingConfigurationArchivePreview;
+    if (!file || !preview)
+        return;
+    if (!window.confirm("确认导入这份总配置？同 ID 配置会被覆盖，导入后需要重启主程序完整生效。"))
+        return;
+    const status = element("#configuration-archive-status");
+    const button = element("#configuration-archive-import");
+    button.disabled = true;
+    status.textContent = "正在创建安全备份并导入配置…";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch(`/api/v1/configuration-archive/import?expected_sha256=${encodeURIComponent(preview.sha256)}`, { method: "POST", headers: requestHeaders, body: file });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        status.textContent = `导入完成；安全备份 ${result.backup_id}。请重启主程序使全部配置生效。`;
+        pendingConfigurationArchive = null;
+        element("#configuration-archive-file").value = "";
+        clearConfigurationArchivePreview();
+        await Promise.all([loadConfigurationBackups(), loadConfiguration(), loadSources(), loadDownloaders()]);
+    }
+    catch (error) {
+        status.textContent = `导入失败：${errorMessage(error, "未知错误")}`;
+        button.disabled = false;
+    }
+}
+async function loadConfigurationBackups() {
+    const container = element("#configuration-backup-list");
+    container.setAttribute("aria-busy", "true");
+    try {
+        const response = await fetch("/api/v1/configuration-archive/backups", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const backups = await response.json();
+        if (backups.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "muted empty";
+            empty.textContent = "暂无总配置备份。";
+            container.replaceChildren(empty);
+            return;
+        }
+        container.replaceChildren(...backups.map(backup => {
+            const item = document.createElement("article");
+            item.className = "configuration-backup-item";
+            const summary = document.createElement("div");
+            const title = document.createElement("strong");
+            title.textContent = backup.kind === "manual" ? "手动备份"
+                : backup.kind === "pre-restore" ? "恢复前安全备份" : "导入前安全备份";
+            const detail = document.createElement("small");
+            detail.textContent = `${new Date(backup.created_at_utc).toLocaleString()} · ${formatBytes(backup.size_bytes)} · ${backup.sha256.slice(0, 12)}…`;
+            summary.append(title, detail);
+            const actions = document.createElement("div");
+            const download = document.createElement("button");
+            download.type = "button";
+            download.className = "secondary-button";
+            download.textContent = "下载";
+            download.addEventListener("click", () => void downloadConfigurationArchive(`/api/v1/configuration-archive/backups/${encodeURIComponent(backup.id)}/download`, `${backup.id}.json`).catch(error => {
+                element("#configuration-archive-status").textContent =
+                    `备份下载失败：${errorMessage(error, "未知错误")}`;
+            }));
+            const restore = document.createElement("button");
+            restore.type = "button";
+            restore.className = "primary-button";
+            restore.textContent = "恢复";
+            restore.addEventListener("click", () => void restoreConfigurationBackup(backup));
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "danger-button";
+            remove.textContent = "删除";
+            remove.addEventListener("click", () => void deleteConfigurationBackup(backup));
+            actions.append(download, restore, remove);
+            item.append(summary, actions);
+            return item;
+        }));
+    }
+    catch (error) {
+        const failed = document.createElement("p");
+        failed.className = "muted empty";
+        failed.textContent = `备份读取失败：${errorMessage(error, "未知错误")}`;
+        container.replaceChildren(failed);
+    }
+    finally {
+        container.setAttribute("aria-busy", "false");
+    }
+}
+async function createConfigurationBackup() {
+    const status = element("#configuration-archive-status");
+    status.textContent = "正在生成手动备份…";
+    try {
+        const response = await fetch("/api/v1/configuration-archive/backups", {
+            method: "POST",
+            headers,
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const backup = await response.json();
+        status.textContent = `已创建手动备份：${backup.id}`;
+        await loadConfigurationBackups();
+    }
+    catch (error) {
+        status.textContent = `备份失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function restoreConfigurationBackup(backup) {
+    if (!window.confirm(`确认恢复 ${backup.id}？恢复前会再创建一份安全备份，完成后需要重启。`))
+        return;
+    const status = element("#configuration-archive-status");
+    status.textContent = "正在创建恢复前安全备份并应用配置…";
+    try {
+        const response = await fetch(`/api/v1/configuration-archive/backups/${encodeURIComponent(backup.id)}/restore`, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        status.textContent = `恢复完成；恢复前安全备份 ${result.backup_id}。请重启主程序。`;
+        await Promise.all([loadConfigurationBackups(), loadConfiguration(), loadSources(), loadDownloaders()]);
+    }
+    catch (error) {
+        status.textContent = `恢复失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function deleteConfigurationBackup(backup) {
+    if (!window.confirm(`确认永久删除备份 ${backup.id}？此操作不可恢复。`))
+        return;
+    const status = element("#configuration-archive-status");
+    try {
+        const response = await fetch(`/api/v1/configuration-archive/backups/${encodeURIComponent(backup.id)}`, { method: "DELETE", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        status.textContent = `已删除备份：${backup.id}`;
+        await loadConfigurationBackups();
+    }
+    catch (error) {
+        status.textContent = `删除失败：${errorMessage(error, "未知错误")}`;
     }
 }
 function configurationSecretLabel(state) {
@@ -6422,6 +6643,27 @@ element("#pending-tmdb-reload").addEventListener("click", () => void loadPending
 element("#configuration-reload").addEventListener("click", () => void loadConfiguration());
 element("#configuration-edit").addEventListener("click", openConfigurationEditor);
 element("#configuration-reset").addEventListener("click", () => void resetConfiguration());
+element("#configuration-archive-export").addEventListener("click", () => {
+    void downloadConfigurationArchive("/api/v1/configuration-archive/export", `animegonet-config-${new Date().toISOString().replace(/[:.]/g, "-")}.json`).then(() => {
+        element("#configuration-archive-status").textContent =
+            "配置已导出。文件包含敏感凭据，请妥善保管。";
+    }).catch(error => {
+        element("#configuration-archive-status").textContent =
+            `导出失败：${errorMessage(error, "未知错误")}`;
+    });
+});
+element("#configuration-archive-file").addEventListener("change", event => {
+    pendingConfigurationArchive = event.currentTarget.files?.[0] ?? null;
+    clearConfigurationArchivePreview(pendingConfigurationArchive
+        ? `已选择 ${pendingConfigurationArchive.name}（${formatBytes(pendingConfigurationArchive.size)}），请先预检。`
+        : "请选择由 AnimeGoNet 导出的 JSON。预检不会修改任何配置。");
+    element("#configuration-archive-preview").disabled =
+        pendingConfigurationArchive === null;
+});
+element("#configuration-archive-preview").addEventListener("click", () => void previewConfigurationArchive());
+element("#configuration-archive-import").addEventListener("click", () => void importConfigurationArchive());
+element("#configuration-backup-create").addEventListener("click", () => void createConfigurationBackup());
+element("#configuration-backup-reload").addEventListener("click", () => void loadConfigurationBackups());
 element("#configuration-close").addEventListener("click", () => configurationDialog.close());
 element("#configuration-form").addEventListener("submit", (event) => void previewConfiguration(event));
 element("#configuration-confirm").addEventListener("click", () => void confirmConfiguration());
@@ -6562,6 +6804,7 @@ void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
 void loadConfiguration();
+void loadConfigurationBackups();
 void loadDownloads();
 void loadMetadataTasks();
 void loadPendingTmdb();

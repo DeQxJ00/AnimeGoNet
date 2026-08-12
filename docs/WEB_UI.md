@@ -121,6 +121,8 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 确认保存仍使用预览时的 `expected_configuration_revision`；并发变化返回冲突并要求重新预览。覆盖现有私有配置或恢复部署默认前，服务端先把旧 revision 保存到 `data_path/backups/application.private.revision-{20位revision}.json`，再原子替换当前文件。响应只返回被备份的 revision，不返回备份内容或路径；首个私有 revision 没有旧文件可备份。原始部署 YAML 继续只由运维维护，Web 不展示含 secret 的原文，也不改写其注释和格式。
 
+“连接与配置 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则与外部插件；密码、Cookie、API Key、插件私有变量及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含部署三路径/Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
+
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 
 `editable.locked_fields` 为每个环境变量控制的字段返回规范字段名、`source=environment` 和实际命中的环境变量名，但不返回环境变量值。当前覆盖全局代理 URL/域名列表、TMDB 地址/语言/超时/API Key/Read Token、Bangumi 地址/超时，以及统一 AI 开关、超时和正式 Prompt；旧 `ai_use_season_match`、`ai_use_episode_match` 也会锁定规范的 `ai_use_metadata_match`。页面显示最终有效值和锁来源，禁用对应输入、凭据清除控件与提交语义。服务端不信任前端禁用状态：不同值或显式凭据写入统一返回 `configuration_field_locked`，错误只列字段名，不包含凭据。保存其他未锁字段时，锁字段保留其保存前的底层私有覆盖，首次保存则记录为“继承部署”；因此移除环境变量后不会把当时的环境值误当成新的私有覆盖。
@@ -163,7 +165,7 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 ## 12. 一级/二级导航
 
 静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
-“总览、动画库、任务中心、Mikan 手动设置、bangumi缓存、下载工具配置、连接与配置、AI 匹配测试工具、系统”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，不复制第二套下载器页面；每个工作区在内容头部
+“总览、动画库、任务中心、Mikan 手动设置、bangumi缓存、下载工具配置、连接与配置、AI 匹配测试工具、系统”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“连接与配置 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
 提供二级标签。URL hash 采用 `#/一级/二级`，可收藏并支持浏览器前进/后退，不会把
 Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域，既有轮询、WebSocket、
 表单 revision 和对话框仍复用同一份状态，不创建第二套业务请求。

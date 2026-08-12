@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=20260813-config-archive">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -189,6 +189,42 @@
       </div>
       <p id="configuration-status" class="muted">正在读取脱敏后的生效配置…</p>
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
+    </section>
+
+    <section id="configuration-archive" aria-labelledby="configuration-archive-title" data-workspace="connections" data-subview="archive" data-nav-label="导入导出与备份">
+      <div class="section-heading configuration-heading">
+        <div>
+          <p class="eyebrow">Portable configuration archive</p>
+          <h2 id="configuration-archive-title">总配置导入、导出与备份</h2>
+        </div>
+        <div class="configuration-actions">
+          <button id="configuration-archive-export" type="button" class="secondary-button">导出当前配置</button>
+          <button id="configuration-backup-create" type="button" class="primary-button">立即备份</button>
+          <button id="configuration-backup-reload" type="button" class="secondary-button">刷新备份</button>
+        </div>
+      </div>
+      <p class="muted">归档包含应用、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则和外部插件配置。密码、Cookie、API Key 及 qB 实例下载路径也会导出；任务、下载记录、缓存、日志、媒体库文件以及本机 data/download/save 部署根目录不包含在内。</p>
+      <div class="configuration-archive-grid">
+        <article class="configuration-card">
+          <h3>导入配置</h3>
+          <label class="configuration-archive-file">AnimeGoNet 配置 JSON
+            <input id="configuration-archive-file" type="file" accept=".json,application/json">
+          </label>
+          <div class="configuration-archive-actions">
+            <button id="configuration-archive-preview" type="button" class="secondary-button" disabled>预检导入包</button>
+            <button id="configuration-archive-import" type="button" class="danger-button" disabled>确认导入</button>
+          </div>
+          <p id="configuration-archive-status" class="muted" role="status">请选择由 AnimeGoNet 导出的 JSON。预检不会修改任何配置。</p>
+          <div id="configuration-archive-preview-result" class="configuration-archive-preview" hidden></div>
+        </article>
+        <article class="configuration-card">
+          <h3>本机备份</h3>
+          <p class="muted">确认导入和恢复前都会自动创建安全备份。恢复同样采用同 ID 覆盖、包外项目保留的安全合并方式。</p>
+          <div id="configuration-backup-list" class="configuration-backup-list" aria-live="polite" aria-busy="true">
+            <p class="muted empty">正在读取备份…</p>
+          </div>
+        </article>
+      </div>
     </section>
 
     <section id="data-update" aria-labelledby="data-update-title" data-workspace="bangumi-cache" data-subview="versions" data-nav-label="数据版本与更新">
@@ -1157,6 +1193,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="/app.js?v=20260813-config-prefill"></script>
+  <script type="module" src="/app.js?v=20260813-config-archive"></script>
 </body>
 </html>

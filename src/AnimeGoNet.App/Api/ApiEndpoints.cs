@@ -44,6 +44,7 @@ public static class ApiEndpoints
 {
     public static void Map(WebApplication app)
     {
+        ConfigurationArchiveEndpoints.Map(app);
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);

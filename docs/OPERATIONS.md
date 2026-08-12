@@ -33,6 +33,25 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 
 ## 备份
 
+### 可迁移总配置归档
+
+WebUI 的“连接与配置 → 导入导出与备份”用于迁移或回滚配置，不替代完整数据备份。
+导出包为版本化 JSON，包含应用私有覆盖、命名 qBittorrent 实例、输入源、RSS 规则、
+Mikan 五级过滤、人工作品规则和外部插件配置。为方便迁移，用户名、密码、Cookie、API
+Key、插件私有变量和 qB 实例下载路径会原样进入归档；文件必须按 secret 管理，不能提交
+Git、上传公开工单或放入普通日志。
+
+导入必须先上传同一文件执行预检。预检校验格式、产品版本、引用关系和应用强类型配置，
+并返回 SHA-256；确认导入时客户端必须提交该摘要，文件变化会被拒绝。应用采用“同 ID 覆盖、
+包外项目保留”的安全合并，防止删除仍被历史任务引用的来源。每次确认导入和恢复都会先在
+`data_path/backups/configuration-archives` 创建 `pre-import-*` 或 `pre-restore-*` 安全备份；
+手动备份使用 `manual-*`。配置包最大 4 MiB，Linux/macOS 文件权限固定为当前用户读写。
+
+归档不包含 `data_path/download_path/save_path` 三个部署根目录、部署 YAML/Access Key、SQLite
+任务与下载记录、可信 offset 学习证据、Bangumi/TMDB 缓存、日志、媒体库文件或 qB profile。
+导入后要检查目标机的 qB 下载路径和共享挂载，再重启主程序；完整灾难恢复仍应按下述停机流程
+复制整个 `data_path`。
+
 一致性备份建议停机执行：
 
 1. 正常停止 AnimeGoNet，确认进程退出。
