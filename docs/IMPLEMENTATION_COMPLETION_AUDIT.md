@@ -1,6 +1,6 @@
 # AnimeGoNet 首版实现完成审计
 
-审计日期：2026-08-10。业务基线为
+审计日期：2026-08-12。业务基线为
 `wetor/AnimeGo develop@c7475dfc55a374cd0dd08821bf17125dab1e3145`，并叠加项目所有者
 在开发期间确认的 AnimeGoNet 新语义。
 
@@ -8,15 +8,16 @@
 
 首版约定范围内已经没有未开始、进行中或阻塞的实现项。Ubuntu 24.04 x86_64 CT
 已真实验证 linux-x64 NativeAOT Docker、双 qB、Mikan 完整链路、外部 C# 插件和发布
-镜像 WebUI。`TODO.md` 中剩余 `[~]` 表示对应 arm64/macOS 平台、上游 Go 基线或外部
-Release 仍没有完整运行证据。U2/TTG 已由所有者明确暂缓，不属于首版正式输入源。
+镜像 WebUI。`TODO.md` 中剩余 `[~]` 表示对应 arm64/macOS 平台或外部 Release 仍没有
+完整运行证据。固定上游 Go Linux amd64 基线已于 2026-08-11 通过；
+U2/TTG 已由所有者明确暂缓，不属于首版正式输入源。
 
 ## 原始硬性要求与证据
 
 | 要求 | 当前实现证据 | 验收证据 |
 |---|---|---|
 | 从 Git 开始、`codex/` 分支、模块独立提交 | 当前分支 `codex/animegonet-main`；TODO、测试与代码按功能提交 | Git 历史及干净工作树 |
-| .NET 10、NativeAOT、五 RID | `Directory.Build.props`、App AOT 项目、`animegonet-native-aot.yml` 五个原生 runner | 当前提交 win-x64 publish/smoke；其余 RID 由 `[~]` 明确等待远端原生 runner |
+| .NET 10、NativeAOT、五 RID | `Directory.Build.props`、App AOT 项目、`animegonet-native-aot.yml` 五个原生 runner | win-x64 与 Ubuntu CT linux-x64 publish/smoke 已通过；win-arm64、linux-arm64、osx-arm64 由 `[~]` 明确等待远端原生 runner；工作流在 restore 前断言实际 OS/CPU 与 RID 一致 |
 | GitHub Actions 构建/测试/AOT/Docker | `dotnet-ci.yml`、`animegonet-native-aot.yml`、`animegonet-docker.yml` | YAML/交付契约测试；Ubuntu CT linux-x64 Docker 实跑通过，linux-arm64 待远端 |
 | Minimal API 与轻量静态 WebUI | `ApiEndpoints.cs`、TypeScript 7 strict 源码及嵌入 `wwwroot` | Kestrel、Node DOM、静态资源与 NativeAOT smoke |
 | SQLite 显式 SQL、避免反射 ORM | `AnimeGoNet.Data` schema/migration/store 全部使用显式 SQL | migration、事务、并发、恢复及 AOT SQLite smoke |
@@ -40,7 +41,7 @@ Release 仍没有完整运行证据。U2/TTG 已由所有者明确暂缓，不�
 
 ## 当前验证快照
 
-- `dotnet test AnimeGoNet.slnx --configuration Release --no-restore`：1525/1525 通过。
+- `dotnet test AnimeGoNet.slnx --configuration Release --no-restore`：1613/1613 通过。
 - `npm run web:test`：17/17 通过。
 - 当前提交重新发布 `win-x64` NativeAOT：0 error；已发布二进制 first-start smoke 通过。
 - qB Mikan 审计清理后，测试 category/tag 任务残留为 0。

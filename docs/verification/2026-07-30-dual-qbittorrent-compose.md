@@ -1,8 +1,9 @@
 # 双 qBittorrent 隔离 Compose 门禁（2026-07-30）
 
-> 状态更新（2026-08-09）：本文记录最初生成范围。实际统一导入到双实例的后续门禁见
-> `2026-08-09-dual-qbittorrent-unified-ingest-delivery.md`。按项目所有者要求，当前所有
-> Docker 执行均记为未验证，不把 workflow 接线表述为运行成功。
+> 状态更新（2026-08-11）：本文正文保留最初生成时的验收边界。双实例 qB 隔离路由和
+> linux-x64 容器完整链现已在 Ubuntu 24.04 x86_64 CT 实跑通过；执行、清理和剩余
+> linux-arm64 边界见 `2026-08-11-ubuntu-ct-docker-validation.md`。统一导入门禁的实现
+> 记录见 `2026-08-09-dual-qbittorrent-unified-ingest-delivery.md`。
 
 ## 已实现
 

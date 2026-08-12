@@ -1,5 +1,11 @@
 # Container runtime hardening smoke — 2026-08-08
 
+> Status update (2026-08-11): this report preserves the verification boundary
+> at generation time. The linux-x64 image has since passed the Ubuntu 24.04
+> x86_64 CT runtime smoke, including non-root execution, read-only rootfs,
+> healthcheck, SQLite creation and SIGTERM cleanup. See
+> `2026-08-11-ubuntu-ct-docker-validation.md`. linux-arm64 remains unverified.
+
 ## Runtime contract
 
 `eng/smoke-container.sh` now starts the actual `animegonet:ci` NativeAOT image

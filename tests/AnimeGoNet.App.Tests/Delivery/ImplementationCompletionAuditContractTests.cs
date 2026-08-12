@@ -31,9 +31,11 @@ public sealed class ImplementationCompletionAuditContractTests
         Assert.True(File.Exists(auditPath));
 
         var audit = File.ReadAllText(auditPath);
-        Assert.Contains("1525/1525", audit, StringComparison.Ordinal);
+        Assert.Contains("1613/1613", audit, StringComparison.Ordinal);
         Assert.Contains("U2/TTG 首版暂缓", audit, StringComparison.Ordinal);
         Assert.Contains("Ubuntu 24.04 x86_64 CT", audit, StringComparison.Ordinal);
+        Assert.Contains("固定上游 Go Linux amd64 基线已于 2026-08-11 通过", audit, StringComparison.Ordinal);
+        Assert.DoesNotContain("arm64/macOS 平台、上游 Go 基线", audit, StringComparison.Ordinal);
         Assert.Contains("linux-arm64", audit, StringComparison.Ordinal);
         Assert.Contains("Mikan 真实数据完整链", audit, StringComparison.Ordinal);
     }

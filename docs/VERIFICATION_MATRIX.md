@@ -3,6 +3,13 @@
 范围说明：U2/TTG 已由项目所有者确认为首版暂缓。矩阵中已有的 U2/TTG 用例只锁定
 通用 adapter、跨来源去重和路由骨架不回退，不代表首版站点支持或默认配置验收。
 
+当前基础设施快照（2026-08-12）：win-x64 NativeAOT 与 Ubuntu 24.04 x86_64 上的
+linux-x64 NativeAOT/Docker/双 qB/完整链路/发布 WebUI 已实跑；固定上游 Go 1.22.10
+Linux amd64 基线已通过。linux-arm64 Docker、win-arm64/linux-arm64/osx-arm64 原生
+runner 和外部 Release 仍未验证。详见
+`docs/verification/2026-08-11-ubuntu-ct-docker-validation.md` 与
+`docs/verification/2026-08-11-upstream-go-linux-baseline.md`。
+
 ## 验证层级
 
 - **U**：纯单元测试，无网络/磁盘或使用临时内存实现。
@@ -50,13 +57,13 @@
 | Web API | 10 路由、method、body/query、auth、响应 envelope | C/P/E | OpenAPI 与响应契约通过 |
 | WebSocket | 认证、日志流、pause/resume、断线、慢消费者 | C/E | 无泄漏/死锁，AOT 实机通过 |
 | 静态资源 | 首次释放、内嵌页、缓存头、404 | C/E | AOT 单文件环境可访问 |
-| Web UI | 仪表盘、下载、配置、插件、缓存、日志、路由、响应式 | U/C/E | Node + linkedom DOM/状态/可访问性契约与 Kestrel 资源测试通过；发布镜像 Playwright 待验收 |
+| Web UI | 仪表盘、下载、配置、插件、缓存、日志、路由、响应式 | U/C/I/E | Node + linkedom DOM/状态/可访问性契约与 Kestrel 资源测试通过；win-x64 NativeAOT Playwright 2/2、Ubuntu CT linux-x64 完整链发布镜像 Chromium 1/1 通过且无 console/page error |
 | Web UI 下载进度 | qB状态/进度/速度/ETA/文件priority、做种目标/累计/门禁、业务整理阶段/单位进度、多实例同步、stale恢复 | U/C/I/E | qB100%不提前完成；schema v37 各整理阶段可持久恢复且不会重复文件工作；0/-1/正数目标可解释；wanted进度正确；离线保留快照；暂停恢复/重试通过 |
 | Web UI 作品库 | TMDB 名称/Cover/Season、EP完成网格、四种稳定排序、待补全TMDB | U/C/I/E | EP全集与状态只来自TMDB和规范完成记录；排序/分页稳定；`tmdbid=0` 不伪造进度 |
 | Web UI 作品详情 | mikanid人工规则、TMDB三层获取阶段、偏移、验证状态、解析时间线 | U/C/E | 页面值与SQLite解析运行一致；人工规则修改有影响预览 |
 | 删除编排 | 业务记录、下载器任务、下载源文件、媒体库文件、组合删除、部分失败 | U/C/I/E | 四种可独立执行且不隐式级联；越界零删除，失败可重试且有审计 |
 | Web UI 安全 | access-key 会话、敏感字段脱敏、危险操作确认、XSS | U/C/E | 浏览器 E2E 和安全用例通过 |
-| Docker | 固定三路径、单一媒体卷、外部客户端路径转换、端口 7991、非 root、UID/GID/TZ、healthcheck、SIGTERM、只读根 | I/E | amd64/arm64 Compose 全链路及硬链接通过 |
+| Docker | 固定三路径、单一媒体卷、外部客户端路径转换、端口 7991、非 root、UID/GID/TZ、healthcheck、SIGTERM、只读根 | I/E | Ubuntu CT linux-x64 Compose、双 qB、完整下载整理、外部插件和 WebUI 已通过；linux-arm64 与 `link/link_delete` 跨容器同 inode 仍待对应门禁 |
 | 旧数据迁移 | YAML、媒体 JSON、可选旧 Go JSON 导出、重复导入 | C/I/E | 不解析 Bolt；已导出的关键数据语义一致 |
 | 数据仓库生成 | 上游版本、清洗、分片、schema、计数、引用、确定性 | U/C | 相同输入哈希一致，坏数据不发布 |
 | 数据自动更新 | 私有覆盖开关/Cron/URL/自动下载/导入/保留数、环境锁、热重排、manifest、校验、staging、切换、回滚 | U/C/I/E | 各配置组合即时生效，Cron 失败恢复旧任务，任一数据失败继续使用上一可用版本 |

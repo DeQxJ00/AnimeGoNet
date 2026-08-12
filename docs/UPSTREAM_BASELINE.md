@@ -45,8 +45,12 @@ fork/exec ...\*.test: %1 is not a valid Win32 application.
 `c7475dfc55a374cd0dd08821bf17125dab1e3145`，使用
 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...`
 串行运行，并无论成功失败上传原始 JSON Lines、stderr、稳定摘要和 SHA-256。报告不连接
-用户 qBittorrent，也不读取 TestSpace 或任何凭据。按项目所有者要求，容器 job 当前只视为
-已生成、未验证；首次实际 runner 结果由部署者后续验收。
+用户 qBittorrent，也不读取任何凭据。2026-08-11 已在 Ubuntu 24.04 x86_64 CT 使用
+官方 `golang:1.22.10-bookworm` 实跑：固定提交完全一致，`go version go1.22.10
+linux/amd64`，原始退出码 0、3109 条事件、100 个上游 skip；取回后按 `SHA256SUMS`
+逐文件复算全部匹配。Docker Hub 下载经所有者提供的 HTTP 代理访问官方地址，未采用镜像
+地址；容器、官方镜像、远端目录和临时 Git bundle 已清理。详细报告边界见
+`docs/verification/2026-08-11-upstream-go-linux-baseline.md`。
 
 ## 兼容定义
 

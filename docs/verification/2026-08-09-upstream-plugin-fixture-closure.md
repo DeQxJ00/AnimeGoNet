@@ -1,5 +1,11 @@
 # Upstream plugin/parser/filter fixture closure — 2026-08-09
 
+> Status update (2026-08-11): the historical verification section below is
+> retained as written. The linux-x64 external plugin fixture has since passed
+> in the Ubuntu 24.04 x86_64 CT full-container chain; see
+> `2026-08-11-ubuntu-ct-docker-validation.md`. The parser/filter parity evidence
+> remains the focused fixture suite recorded in this report.
+
 ## Baseline and traceability
 
 The only behavioral baseline is the separate repository

@@ -80,7 +80,10 @@ sqlite3 E:\AnimeGoNet\data\animegonet.db "PRAGMA quick_check;"
 ## Docker 状态
 
 仓库已经生成双架构 NativeAOT Dockerfile、Compose、非 root/只读 rootfs/healthcheck/
-SIGTERM smoke、双 qB 集成脚本和 GitHub Actions。按项目所有者要求，这些功能文件保留，
-但当前状态明确为“未验证”，不把未执行的 Docker/远端 runner 结果写成成功。正式使用前
-由部署者自行构建并验证；固定容器路径仍是 `/data`、`/download/incomplete`、
-`/download/anime`。
+SIGTERM smoke、双 qB 集成脚本和 GitHub Actions。2026-08-11 已在 Ubuntu 24.04
+x86_64 CT 真实验证 linux-x64 NativeAOT 镜像、任意非 root UID/GID、只读根、
+healthcheck、SQLite、SIGTERM、固定三路径、双 qB 隔离路由、合法 WebSeed 完整下载整理、
+外部 C# 插件和 Chromium WebUI；本次唯一容器、镜像和目录已精确清理。固定容器路径为
+`/data`、`/download/incomplete`、`/download/anime`。linux-arm64 镜像及原生 runner 仍
+未验证，不能由 x86_64 CT 结果代替。执行和清理证据见
+`docs/verification/2026-08-11-ubuntu-ct-docker-validation.md`。

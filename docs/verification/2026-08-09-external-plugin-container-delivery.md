@@ -2,6 +2,11 @@
 
 日期：2026-08-09
 
+> 状态更新（2026-08-11）：本文正文保留生成当日的验收边界。linux-x64 外部 C# source
+> 插件现已在 Ubuntu 24.04 x86_64 CT 随完整容器链实跑通过，包括发现、启用、normalize、
+> 插件数据目录、包只读、非 root UID 和禁用后的失败边界；证据见
+> `2026-08-11-ubuntu-ct-docker-validation.md`。linux-arm64 插件容器仍未验证。
+
 ## 生成内容
 
 新增 `AnimeGoNet.ContainerPluginFixture`，它是只用于交付验收的 source 插件：

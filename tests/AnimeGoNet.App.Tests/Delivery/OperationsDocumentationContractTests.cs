@@ -58,7 +58,7 @@ public sealed partial class OperationsDocumentationContractTests
     }
 
     [Fact]
-    public void OperationsGuideLocksHealthBackupDeleteAndUnverifiedDockerStatus()
+    public void OperationsGuideLocksHealthBackupDeleteAndDockerVerificationBoundary()
     {
         var text = Read("docs/OPERATIONS.md");
 
@@ -69,7 +69,9 @@ public sealed partial class OperationsDocumentationContractTests
         Assert.Contains("schema_migrations", text, StringComparison.Ordinal);
         Assert.Contains("deleteFiles=false", text, StringComparison.Ordinal);
         Assert.Contains("未验证", text, StringComparison.Ordinal);
-        Assert.Contains("不把未执行的 Docker/远端 runner 结果写成成功", text, StringComparison.Ordinal);
+        Assert.Contains("Ubuntu 24.04", text, StringComparison.Ordinal);
+        Assert.Contains("linux-arm64 镜像及原生 runner 仍", text, StringComparison.Ordinal);
+        Assert.Contains("2026-08-11-ubuntu-ct-docker-validation.md", text, StringComparison.Ordinal);
     }
 
     [Fact]

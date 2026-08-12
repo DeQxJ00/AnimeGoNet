@@ -235,9 +235,13 @@ lowercase SHA-256 `access_key`，不会把明文 key 放入 URL。
 
 `eng/smoke-webui-container.sh IMAGE` 会用随机回环端口、非 root UID/GID、只读根
 文件系统、`no-new-privileges` 和独立临时 `/data`/`/download` 启动发布镜像，再运行
-桌面与 390×844 移动端用例。当前 Docker 脚本及 Actions 门禁已生成，但按项目所有者
-要求标记为未验证，等待后续自行在 Docker 环境实跑；本机 win-x64 NativeAOT 二进制
-已通过相同 Playwright 用例。
+桌面与 390×844 移动端用例。本机 win-x64 NativeAOT 二进制已通过 2/2；2026-08-11
+Ubuntu 24.04 x86_64 CT 又使用 linux-x64 NativeAOT 发布镜像完成统一导入、真实 qB
+WebSeed 下载、Bangumi/TMDB、move/NFO/sidecar、API 后的 Chromium 页面断言，1/1
+通过且无 console/page error。CT 无宿主 Node 时使用固定官方 Playwright 容器，源码只读
+挂载，临时依赖和产物位于 tmpfs，退出时精确清理。linux-arm64 发布镜像浏览器验收仍由
+跨架构门禁跟踪。完整证据见
+`docs/verification/2026-08-11-ubuntu-ct-docker-validation.md`。
 
 客户端只接受以单个 `/` 开头且不含反斜杠的同源路径，在进入 `fetch` 前拒绝绝对 URL、
 协议相对 URL和浏览器可重解释的反斜杠 host，防止 Access-Key 被发送到外部来源。失败
