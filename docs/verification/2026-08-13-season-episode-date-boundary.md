@@ -15,7 +15,7 @@
 
 验收覆盖季度差值 `-2/-1/0/+1/+2`，期望只有 `-1/0/+1` 成功；Episode 主匹配覆盖
 `±1` 日，单文件补判覆盖 2/3/7 日成功、8 日失败、编号不一致失败和多文件转 AI。
-本地确定性 Episode 规则不写入 AI Prompt；内置统一 AI Prompt 保持已确认的 `tmdb-ai-match-v13`。
+本地确定性 Episode 规则不写入 AI Prompt；经项目所有者明确确认，内置统一 AI Prompt `tmdb-ai-match-v15` 的第 9 条只保留季度首播日期规则。
 
 旧 Mikan 实测报告早于单文件 7 日补判和独立证据来源，必须按最终规则重新执行后才能
 作为完整验收证据。
@@ -24,7 +24,7 @@
 
 - Core 边界定向测试已纳入完整回归，覆盖 `±1` 日主匹配、2/3/7 日单文件补判、
   8 日拒绝、编号不一致拒绝及多文件转 AI；
-- Prompt/API/配置契约继续使用已确认的内置版本 `tmdb-ai-match-v13` 并纳入完整回归；
+- Prompt/API/配置契约使用已确认的内置版本 `tmdb-ai-match-v15` 并纳入完整回归；
 - 完整 .NET Debug 测试：1638/1638 通过（Plugin Abstractions 13、Plugin SDK 16、
   Core 399、Plugin Tool 23、Data 217、App 970）；
 - WebUI TypeScript 类型检查、构建和静态 DOM 测试通过，Web 测试 19/19。
