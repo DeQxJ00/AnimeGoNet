@@ -295,7 +295,9 @@ public sealed class SourceProfileApiTests
             == "mikan_identity_cookie"
             && value.GetProperty("controlling_keys")[0].GetString()
             == "ANIMEGO_MIKAN_COOKIE");
-        Assert.DoesNotContain("environment-private-cookie", getText, StringComparison.Ordinal);
+        Assert.Equal(
+            "environment-private-cookie",
+            item.GetProperty("mikan_identity_cookie").GetString());
 
         using var rejected = await app.Client.PutAsync("/api/v1/sources/mikan", Json(new
         {
@@ -505,7 +507,7 @@ public sealed class SourceProfileApiTests
         Assert.Contains("秒 分 时 日 月 周", html, StringComparison.Ordinal);
         Assert.Contains("rss_feed_url_configured", script, StringComparison.Ordinal);
         Assert.Contains("rss_schedule_registered", script, StringComparison.Ordinal);
-        Assert.Contains("值永不回显", script, StringComparison.Ordinal);
+        Assert.Contains("已配置并已回填", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);
@@ -520,7 +522,7 @@ public sealed class SourceProfileApiTests
     }
 
     [Fact]
-    public async Task MikanCookieIsWriteOnlyPreservedAndExplicitlyClearable()
+    public async Task MikanCookieIsPrefilledPreservedAndExplicitlyClearable()
     {
         const string secret = ".AspNetCore.Identity.Application=private-cookie-value";
         await using var app = await RunningApp.StartAsync();
@@ -544,13 +546,9 @@ public sealed class SourceProfileApiTests
         Assert.True(created.RootElement
             .GetProperty("mikan_identity_cookie_configured")
             .GetBoolean());
-        Assert.DoesNotContain(
-            "private-cookie-value",
-            createText,
-            StringComparison.Ordinal);
-        Assert.False(created.RootElement.TryGetProperty(
-            "mikan_identity_cookie",
-            out _));
+        Assert.Equal("private-cookie-value", created.RootElement
+            .GetProperty("mikan_identity_cookie")
+            .GetString());
 
         var store = app.App.Services.GetRequiredService<SourceProfileStore>();
         var stored = Assert.IsType<SourceProfileAdminRecord>(
@@ -597,7 +595,7 @@ public sealed class SourceProfileApiTests
     }
 
     [Fact]
-    public async Task MikanRssUrlIsWriteOnlyPreservedAndExplicitlyClearable()
+    public async Task MikanRssUrlIsPrefilledPreservedAndExplicitlyClearable()
     {
         const string secretUrl =
             "https://mikanani.me/RSS/MyBangumi?token=api-private-passkey";
@@ -625,13 +623,12 @@ public sealed class SourceProfileApiTests
         Assert.True(created.RootElement.GetProperty("rss_schedule_enabled").GetBoolean());
         Assert.False(created.RootElement.GetProperty("rss_schedule_registered").GetBoolean());
         Assert.Equal("never", created.RootElement.GetProperty("rss_last_run_state").GetString());
-        Assert.DoesNotContain("api-private-passkey", createText, StringComparison.Ordinal);
-        Assert.False(created.RootElement.TryGetProperty("rss_feed_url", out _));
+        Assert.Equal(secretUrl, created.RootElement.GetProperty("rss_feed_url").GetString());
 
         var listText = await app.Client.GetStringAsync("/api/v1/sources");
         var getText = await app.Client.GetStringAsync("/api/v1/sources/mikan-scheduled");
-        Assert.DoesNotContain("api-private-passkey", listText, StringComparison.Ordinal);
-        Assert.DoesNotContain("api-private-passkey", getText, StringComparison.Ordinal);
+        Assert.Contains("api-private-passkey", listText, StringComparison.Ordinal);
+        Assert.Contains("api-private-passkey", getText, StringComparison.Ordinal);
         var store = app.App.Services.GetRequiredService<SourceProfileStore>();
         Assert.Equal(secretUrl, (await store.GetAsync("mikan-scheduled"))?.RssFeedUrl);
 

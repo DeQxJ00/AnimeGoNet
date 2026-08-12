@@ -157,13 +157,16 @@ public sealed class ConfigurationApiTests
         Assert.Equal(2, dataUpdate.GetProperty("keep_versions").GetInt32());
         Assert.True(dataUpdate.GetProperty("hot_reload_supported").GetBoolean());
         Assert.DoesNotContain("local-access-secret", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("tmdb-api-secret", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("tmdb-bearer-secret", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("ai-api-secret", text, StringComparison.Ordinal);
+        var editable = json.RootElement.GetProperty("editable");
+        Assert.Equal("tmdb-api-secret", editable.GetProperty("tmdb_api_key").GetString());
+        Assert.Equal(
+            "tmdb-bearer-secret",
+            editable.GetProperty("tmdb_read_access_token").GetString());
+        Assert.Equal("ai-api-secret", editable.GetProperty("ai_api_key").GetString());
     }
 
     [Fact]
-    public async Task StaticWebUiLoadsRedactedConfigurationPanel()
+    public async Task StaticWebUiLoadsPrefilledConfigurationPanel()
     {
         await using var app = await RunningApp.StartAsync();
 
@@ -174,7 +177,7 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-reload\"", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/config", script, StringComparison.Ordinal);
         Assert.Contains("loadConfiguration", script, StringComparison.Ordinal);
-        Assert.Contains("凭据永不回传", script, StringComparison.Ordinal);
+        Assert.Contains("配置编辑器会回填已保存凭据", script, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
@@ -551,9 +554,6 @@ public sealed class ConfigurationApiTests
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(1, firstJson.RootElement.GetProperty("configuration_revision").GetInt64());
         Assert.True(firstJson.RootElement.GetProperty("restart_required").GetBoolean());
-        Assert.DoesNotContain("new-api-secret", firstText, StringComparison.Ordinal);
-        Assert.DoesNotContain("new-read-secret", firstText, StringComparison.Ordinal);
-        Assert.DoesNotContain("new-ai-secret", firstText, StringComparison.Ordinal);
 
         using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var current = JsonDocument.Parse(await currentResponse.Content.ReadAsStreamAsync()))
@@ -565,14 +565,19 @@ public sealed class ConfigurationApiTests
                 .GetProperty("tmdb").GetProperty("api_key_configured").GetBoolean());
             var editable = current.RootElement.GetProperty("editable");
             Assert.Equal("configured", editable.GetProperty("tmdb_api_key_state").GetString());
+            Assert.Equal("new-api-secret", editable.GetProperty("tmdb_api_key").GetString());
             Assert.Equal(336, editable.GetProperty("tmdb_cache_hours").GetDouble());
             Assert.Equal(
                 "configured",
                 editable.GetProperty("tmdb_read_access_token_state").GetString());
+            Assert.Equal(
+                "new-read-secret",
+                editable.GetProperty("tmdb_read_access_token").GetString());
             Assert.Equal("http://openai.test.invalid/", editable.GetProperty("ai_base_url").GetString());
             Assert.Equal("test-live-model", editable.GetProperty("ai_model").GetString());
             Assert.Equal(customPrompt, editable.GetProperty("ai_prompt_template").GetString());
             Assert.Equal("configured", editable.GetProperty("ai_api_key_state").GetString());
+            Assert.Equal("new-ai-secret", editable.GetProperty("ai_api_key").GetString());
             Assert.Equal(
                 "http://tmdb-mcp.test.invalid/mcp",
                 editable.GetProperty("ai_tmdb_mcp_url").GetString());
@@ -661,9 +666,17 @@ public sealed class ConfigurationApiTests
                 clearedJson.RootElement.GetProperty("editable")
                     .GetProperty("tmdb_api_key_state").GetString());
             Assert.Equal(
+                JsonValueKind.Null,
+                clearedJson.RootElement.GetProperty("editable")
+                    .GetProperty("tmdb_api_key").ValueKind);
+            Assert.Equal(
                 "cleared",
                 clearedJson.RootElement.GetProperty("editable")
                     .GetProperty("ai_api_key_state").GetString());
+            Assert.Equal(
+                JsonValueKind.Null,
+                clearedJson.RootElement.GetProperty("editable")
+                    .GetProperty("ai_api_key").ValueKind);
         }
 
         using var conflict = await app.Client.PutAsync(
@@ -838,7 +851,7 @@ public sealed class ConfigurationApiTests
                 .GetProperty("environment_variables")[0].GetString());
             Assert.True(locks.ContainsKey("tmdb_api_key"));
             Assert.True(locks.ContainsKey("ai_use_metadata_match"));
-            Assert.DoesNotContain(environmentApiKey, currentText, StringComparison.Ordinal);
+            Assert.Equal(environmentApiKey, editable.GetProperty("tmdb_api_key").GetString());
         }
 
         using var baseUrlWrite = await app.Client.PutAsync(

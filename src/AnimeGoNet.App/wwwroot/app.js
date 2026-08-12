@@ -2337,7 +2337,7 @@ async function loadConfiguration() {
             : config.restart_required
                 ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
                     + `当前应用 revision ${config.applied_configuration_revision}`
-                : `当前进程的生效值 · revision ${config.configuration_revision}；凭据永不回传。`;
+                : `当前进程的生效值 · revision ${config.configuration_revision}；配置编辑器会回填已保存凭据。`;
     }
     catch (error) {
         currentConfiguration = null;
@@ -2347,10 +2347,14 @@ async function loadConfiguration() {
 }
 function configurationSecretLabel(state) {
     switch (state) {
-        case "configured": return "当前私密覆盖：已配置（值已隐藏）";
+        case "configured": return "当前私密覆盖：已配置并已回填";
         case "cleared": return "当前私密覆盖：已明确清除";
-        default: return "当前私密覆盖：继承部署配置";
+        default: return "当前私密覆盖：继承部署配置；有效值存在时已回填";
     }
+}
+function configurationSecretUpdateValue(id, current) {
+    const value = element(id).value;
+    return value === (current ?? "") ? null : value || null;
 }
 function setConfigurationValue(id, value) {
     element(id).value = String(value);
@@ -2459,11 +2463,11 @@ function openConfigurationEditor() {
     setConfigurationValue("#configuration-tmdb-retry-count", editable.tmdb_retry_count);
     setConfigurationValue("#configuration-tmdb-retry-delay", editable.tmdb_retry_delay_seconds);
     setConfigurationValue("#configuration-tmdb-cache-hours", editable.tmdb_cache_hours);
-    setConfigurationValue("#configuration-tmdb-key", "");
+    setConfigurationValue("#configuration-tmdb-key", editable.tmdb_api_key ?? "");
     setConfigurationChecked("#configuration-tmdb-key-clear", false);
     element("#configuration-tmdb-key-state").textContent =
         configurationSecretLabel(editable.tmdb_api_key_state);
-    setConfigurationValue("#configuration-tmdb-token", "");
+    setConfigurationValue("#configuration-tmdb-token", editable.tmdb_read_access_token ?? "");
     setConfigurationChecked("#configuration-tmdb-token-clear", false);
     element("#configuration-tmdb-token-state").textContent =
         configurationSecretLabel(editable.tmdb_read_access_token_state);
@@ -2481,7 +2485,7 @@ function openConfigurationEditor() {
         editable.ai_prompt_template;
     element("#configuration-ai-prompt-status").textContent =
         `${currentConfiguration.metadata.ai.prompt_version} · ${currentConfiguration.metadata.ai.prompt_customized ? "自定义模板" : "程序默认模板"}；后台 Worker 与测试工具共用，保存后重启生效。`;
-    setConfigurationValue("#configuration-ai-key", "");
+    setConfigurationValue("#configuration-ai-key", editable.ai_api_key ?? "");
     setConfigurationChecked("#configuration-ai-key-clear", false);
     element("#configuration-ai-key-state").textContent =
         configurationSecretLabel(editable.ai_api_key_state);
@@ -2571,9 +2575,9 @@ function configurationRequest() {
         tmdb_retry_count: element("#configuration-tmdb-retry-count").valueAsNumber,
         tmdb_retry_delay_seconds: element("#configuration-tmdb-retry-delay").valueAsNumber,
         tmdb_cache_hours: element("#configuration-tmdb-cache-hours").valueAsNumber,
-        tmdb_api_key: element("#configuration-tmdb-key").value || null,
+        tmdb_api_key: configurationSecretUpdateValue("#configuration-tmdb-key", currentConfiguration.editable.tmdb_api_key),
         clear_tmdb_api_key: element("#configuration-tmdb-key-clear").checked,
-        tmdb_read_access_token: element("#configuration-tmdb-token").value || null,
+        tmdb_read_access_token: configurationSecretUpdateValue("#configuration-tmdb-token", currentConfiguration.editable.tmdb_read_access_token),
         clear_tmdb_read_access_token: element("#configuration-tmdb-token-clear").checked,
         bangumi_base_url: element("#configuration-bangumi-url").value,
         bangumi_http_timeout_seconds: element("#configuration-bangumi-timeout").valueAsNumber,
@@ -2586,7 +2590,7 @@ function configurationRequest() {
         ai_base_url: element("#configuration-ai-base-url").value || null,
         ai_model: element("#configuration-ai-model").value || null,
         ai_prompt_template: element("#configuration-ai-prompt-template").value,
-        ai_api_key: element("#configuration-ai-key").value || null,
+        ai_api_key: configurationSecretUpdateValue("#configuration-ai-key", currentConfiguration.editable.ai_api_key),
         clear_ai_api_key: element("#configuration-ai-key-clear").checked,
         ai_tmdb_mcp_url: element("#configuration-ai-tmdb-mcp-url").value,
         ai_bangumi_mcp_url: element("#configuration-ai-bangumi-mcp-url").value,
@@ -4172,8 +4176,8 @@ function openDownloaderConfig(instance) {
     id.disabled = instance !== null;
     id.value = instance?.id ?? "";
     element("#downloader-config-url").value = instance?.base_url ?? "http://127.0.0.1:8080/";
-    element("#downloader-config-username").value = "";
-    element("#downloader-config-password").value = "";
+    element("#downloader-config-username").value = instance?.username ?? "";
+    element("#downloader-config-password").value = instance?.password ?? "";
     element("#downloader-config-path").value = instance?.download_path ?? "";
     element("#downloader-config-enabled").checked = instance?.enabled ?? true;
     element("#downloader-config-clear-password").checked = false;
@@ -4181,7 +4185,7 @@ function openDownloaderConfig(instance) {
     element("#downloader-config-delete").disabled =
         instance?.configuration_source !== "private_override";
     const credentialState = instance?.credentials_configured
-        ? "已有凭据已配置；密码字段留空会保留，且不会从服务端读回。"
+        ? "已有凭据已配置并已回填；可直接查看或修改。"
         : "当前没有已配置凭据。";
     const lockState = instance && instance.locked_fields.length > 0
         ? ` 部署锁：${instance.locked_fields.map((lock) => `${lock.field}（${lock.controlling_keys.join(" / ")}）`).join("、")}；锁定字段只读且不会写入私有覆盖。`
@@ -4193,6 +4197,7 @@ function openDownloaderConfig(instance) {
 async function saveDownloaderConfig(event) {
     event.preventDefault();
     const id = activeDownloaderId ?? element("#downloader-config-id").value;
+    const current = downloaderInstances.find(item => item.id === activeDownloaderId) ?? null;
     const save = element("#downloader-config-save");
     const message = element("#downloader-config-message");
     save.disabled = true;
@@ -4205,8 +4210,12 @@ async function saveDownloaderConfig(event) {
             headers: requestHeaders,
             body: JSON.stringify({
                 base_url: element("#downloader-config-url").value,
-                username: element("#downloader-config-username").value || null,
-                password: element("#downloader-config-password").value || null,
+                username: element("#downloader-config-username").value === (current?.username ?? "")
+                    ? null
+                    : element("#downloader-config-username").value || null,
+                password: element("#downloader-config-password").value === (current?.password ?? "")
+                    ? null
+                    : element("#downloader-config-password").value || null,
                 clear_password: element("#downloader-config-clear-password").checked,
                 download_path: element("#downloader-config-path").value,
                 enabled: element("#downloader-config-enabled").checked,
@@ -4364,11 +4373,11 @@ function updateSourceCredentialInputs() {
     if (!isMikan || clear.checked)
         input.value = "";
     element("#source-mikan-cookie-state").textContent = cookieLock
-        ? `部署锁只读（${cookieLock.controlling_keys.join(" / ")}），值永不回显。`
+        ? `部署锁只读（${cookieLock.controlling_keys.join(" / ")}），当前有效值已回填。`
         : !isMikan
             ? "仅 Mikan 适配器可配置登录 Cookie。"
             : current?.mikan_identity_cookie_configured
-                ? "已配置（值永不回显）；留空保持不变。"
+                ? "已配置并已回填；可直接查看或修改。"
                 : "未配置；可粘贴 Cookie 值或完整 Cookie。";
     const rssUrl = element("#source-rss-url");
     const clearRssUrl = element("#source-rss-url-clear");
@@ -4388,7 +4397,7 @@ function updateSourceCredentialInputs() {
         : clearRssUrl.checked
             ? "保存后明确清除 RSS URL，并关闭自动调度。"
             : current?.rss_feed_url_configured
-                ? "已保存于服务端数据目录（值永不回显）；留空保持不变。"
+                ? "已保存于服务端数据目录并已回填；可直接查看或修改。"
                 : "未配置；启用自动调度前必须填写。";
     const scheduleState = element("#source-rss-schedule-state");
     if (!scheduleEnabled.checked) {
@@ -4443,9 +4452,9 @@ function populateSourceForm(profile) {
     element("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
     element("#source-duplicate-notification-enabled").checked =
         profile?.duplicate_notification_enabled ?? true;
-    element("#source-mikan-cookie").value = "";
+    element("#source-mikan-cookie").value = profile?.mikan_identity_cookie ?? "";
     element("#source-mikan-cookie-clear").checked = false;
-    element("#source-rss-url").value = "";
+    element("#source-rss-url").value = profile?.rss_feed_url ?? "";
     element("#source-rss-url-clear").checked = false;
     element("#source-rss-cron").value =
         profile?.rss_schedule_cron ?? "0 0/15 * * * ?";
@@ -5058,8 +5067,12 @@ async function saveSource(event) {
         rss_priority_enabled: element("#source-priority-enabled").checked,
         duplicate_notification_enabled: element("#source-duplicate-notification-enabled").checked,
         enabled: element("#source-enabled").checked,
-        mikan_identity_cookie: element("#source-mikan-cookie").value || null,
-        rss_feed_url: element("#source-rss-url").value || null,
+        mikan_identity_cookie: element("#source-mikan-cookie").value === (current?.mikan_identity_cookie ?? "")
+            ? null
+            : element("#source-mikan-cookie").value || null,
+        rss_feed_url: element("#source-rss-url").value === (current?.rss_feed_url ?? "")
+            ? null
+            : element("#source-rss-url").value || null,
         rss_schedule_enabled: element("#source-rss-schedule-enabled").checked,
         rss_schedule_cron: element("#source-rss-cron").value.trim(),
     };

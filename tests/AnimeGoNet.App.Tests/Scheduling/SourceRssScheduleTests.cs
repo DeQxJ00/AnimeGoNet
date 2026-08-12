@@ -263,10 +263,9 @@ public sealed class SourceRssScheduleTests
                 Encoding.UTF8,
                 "application/json"));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.DoesNotContain(
-            new Uri(url).Query,
-            await response.Content.ReadAsStringAsync(),
-            StringComparison.Ordinal);
+        using var created = JsonDocument.Parse(
+            await response.Content.ReadAsStreamAsync());
+        Assert.Equal(url, created.RootElement.GetProperty("rss_feed_url").GetString());
     }
 
     private sealed class PublicDnsResolver : ITorrentDnsResolver

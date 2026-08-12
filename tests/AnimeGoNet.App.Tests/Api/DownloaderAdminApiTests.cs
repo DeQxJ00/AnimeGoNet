@@ -10,7 +10,7 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class DownloaderAdminApiTests
 {
     [Fact]
-    public async Task ListProjectsConfiguredInstancesUsageAndNeverCredentials()
+    public async Task ListProjectsConfiguredInstancesUsageAndPrefillsCredentials()
     {
         await using var app = await RunningApp.StartAsync(configure: options => options with
         {
@@ -32,8 +32,8 @@ public sealed class DownloaderAdminApiTests
         Assert.Equal(1, bt.GetProperty("source_profile_count").GetInt64());
         Assert.Equal(0, bt.GetProperty("download_job_count").GetInt64());
         Assert.Equal(JsonValueKind.Null, bt.GetProperty("connected").ValueKind);
-        Assert.DoesNotContain("private-password", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"username\"", text, StringComparison.Ordinal);
+        Assert.Equal("admin", bt.GetProperty("username").GetString());
+        Assert.Equal("private-password", bt.GetProperty("password").GetString());
     }
 
     [Fact]
@@ -176,8 +176,8 @@ public sealed class DownloaderAdminApiTests
             item => item.GetProperty("controlling_keys")
                 .EnumerateArray()
                 .Any(key => key.GetString() == "ANIMEGO_CLIENT_USERNAME"));
-        Assert.DoesNotContain(deploymentUsername, listedText, StringComparison.Ordinal);
-        Assert.DoesNotContain(deploymentPassword, listedText, StringComparison.Ordinal);
+        Assert.Equal(deploymentUsername, bt.GetProperty("username").GetString());
+        Assert.Equal(deploymentPassword, bt.GetProperty("password").GetString());
 
         using var rejected = await app.Client.PutAsync("/api/v1/downloaders/bt", Json(new
         {
@@ -226,8 +226,8 @@ public sealed class DownloaderAdminApiTests
         Assert.Equal("http://127.0.0.1:18080", effectiveBt.GetProperty("base_url").GetString());
         Assert.Equal(newDownloadPath, effectiveBt.GetProperty("download_path").GetString());
         Assert.True(effectiveBt.GetProperty("credentials_configured").GetBoolean());
-        Assert.DoesNotContain(deploymentUsername, effectiveText, StringComparison.Ordinal);
-        Assert.DoesNotContain(deploymentPassword, effectiveText, StringComparison.Ordinal);
+        Assert.Equal(deploymentUsername, effectiveBt.GetProperty("username").GetString());
+        Assert.Equal(deploymentPassword, effectiveBt.GetProperty("password").GetString());
     }
 
     [Fact]
@@ -268,7 +268,7 @@ public sealed class DownloaderAdminApiTests
     }
 
     [Fact]
-    public async Task PrivateOverrideWritesAreRevisionedWriteOnlyAndRequireRestart()
+    public async Task PrivateOverrideWritesAreRevisionedPrefilledAndRequireRestart()
     {
         await using var app = await RunningApp.StartAsync();
         var downloadPath = Path.Combine(app.RootPath, "download", "incomplete", "archive");
@@ -295,8 +295,8 @@ public sealed class DownloaderAdminApiTests
             item => item.GetProperty("id").GetString() == "archive");
         Assert.Equal("private_override", archive.GetProperty("configuration_source").GetString());
         Assert.True(archive.GetProperty("credentials_configured").GetBoolean());
-        Assert.DoesNotContain("archive-user", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("archive-private-password", text, StringComparison.Ordinal);
+        Assert.Equal("archive-user", archive.GetProperty("username").GetString());
+        Assert.Equal("archive-private-password", archive.GetProperty("password").GetString());
 
         using var update = await app.Client.PutAsync("/api/v1/downloaders/archive", Json(new
         {

@@ -98,7 +98,7 @@ public sealed class StaticWebUiTests
     [InlineData("/", "text/html", "ai-test-prompt-template")]
     [InlineData("/", "text/html", "configuration-ai-prompt-template")]
     [InlineData("/", "text/html", "configuration-ai-prompt-reset")]
-    [InlineData("/", "text/html", "/app.js?v=20260813-bangumi-cache-nav")]
+    [InlineData("/", "text/html", "/app.js?v=20260813-config-prefill")]
     [InlineData("/", "text/html", "ai-test-mikan-import")]
     [InlineData("/", "text/html", "ai-test-enable-tmdb-mcp")]
     [InlineData("/app.js", "text/javascript", "enable_bgm_mcp")]

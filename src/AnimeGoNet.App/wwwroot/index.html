@@ -551,14 +551,14 @@
             <label class="source-hosts">允许的 Torrent Host
               <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
             </label>
-            <label class="source-hosts">Mikan 登录 Cookie（只写）
-              <input id="source-mikan-cookie" type="password" autocomplete="new-password" spellcheck="false" placeholder=".AspNetCore.Identity.Application=...">
+            <label class="source-hosts">Mikan 登录 Cookie
+              <input id="source-mikan-cookie" autocomplete="off" spellcheck="false" placeholder=".AspNetCore.Identity.Application=...">
               <small id="source-mikan-cookie-state">仅 Mikan 适配器可配置。</small>
             </label>
             <label class="configuration-clear"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
-            <label class="source-hosts">Mikan RSS URL（只写，可能包含 passkey）
-              <input id="source-rss-url" type="password" inputmode="url" autocomplete="new-password" spellcheck="false" placeholder="https://mikanani.me/RSS/MyBangumi?token=...">
-              <small id="source-rss-url-state">仅 Mikan 适配器可配置；值永不回显。</small>
+            <label class="source-hosts">Mikan RSS URL（可能包含 passkey）
+              <input id="source-rss-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://mikanani.me/RSS/MyBangumi?token=...">
+              <small id="source-rss-url-state">仅 Mikan 适配器可配置；保存值会直接回填。</small>
             </label>
             <label class="configuration-clear"><input id="source-rss-url-clear" type="checkbox">明确清除 RSS URL</label>
             <label class="source-hosts">RSS 调度 Cron（秒 分 时 日 月 周）
@@ -1006,10 +1006,10 @@
         <label>TMDB 额外重试次数<input id="configuration-tmdb-retry-count" type="number" min="0" max="10" required></label>
         <label>TMDB 重试间隔（秒）<input id="configuration-tmdb-retry-delay" type="number" min="0" max="300" step="0.1" required></label>
         <label>TMDB 成功响应缓存（小时）<input id="configuration-tmdb-cache-hours" type="number" min="0.1" max="8760" step="0.1" required></label>
-        <label>新 TMDB API Key<input id="configuration-tmdb-key" type="password" autocomplete="new-password"></label>
+        <label>TMDB API Key<input id="configuration-tmdb-key" autocomplete="off" spellcheck="false"></label>
         <label class="configuration-clear"><input id="configuration-tmdb-key-clear" type="checkbox">明确清除 API Key</label>
         <p id="configuration-tmdb-key-state" class="configuration-secret-state wide"></p>
-        <label>新 TMDB Read Token<input id="configuration-tmdb-token" type="password" autocomplete="new-password"></label>
+        <label>TMDB Read Token<input id="configuration-tmdb-token" autocomplete="off" spellcheck="false"></label>
         <label class="configuration-clear"><input id="configuration-tmdb-token-clear" type="checkbox">明确清除 Read Token</label>
         <p id="configuration-tmdb-token-state" class="configuration-secret-state wide"></p>
         <label class="wide">Bangumi API 地址<input id="configuration-bangumi-url" type="url" required placeholder="https://api.bgm.tv/"></label>
@@ -1044,11 +1044,11 @@
         </fieldset>
         <fieldset class="wide configuration-data-update-editor">
           <legend>AI 与 MCP</legend>
-          <p class="configuration-data-update-caption">OpenAI-compatible 请求使用 Base URL 下的 <code>v1/chat/completions</code>；API Key 只保存到私有配置且不会回显。两个 MCP 由 AnimeGoNet 本地连接，模型不会直接访问 MCP 地址。</p>
+          <p class="configuration-data-update-caption">OpenAI-compatible 请求使用 Base URL 下的 <code>v1/chat/completions</code>；API Key 保存到私有配置并在编辑器中回填。两个 MCP 由 AnimeGoNet 本地连接，模型不会直接访问 MCP 地址。</p>
           <div class="configuration-data-update-grid">
             <label class="wide">OpenAI-compatible Base URL（可选）<input id="configuration-ai-base-url" type="url" maxlength="2048" placeholder="http://openai.local/"></label>
             <label>模型<input id="configuration-ai-model" maxlength="256" placeholder="gpt-5.4-mini"></label>
-            <label>新 AI API Key<input id="configuration-ai-key" type="password" autocomplete="new-password"></label>
+            <label>AI API Key<input id="configuration-ai-key" autocomplete="off" spellcheck="false"></label>
             <label class="configuration-clear"><input id="configuration-ai-key-clear" type="checkbox">明确清除 AI API Key</label>
             <p id="configuration-ai-key-state" class="configuration-secret-state wide"></p>
             <label class="wide">TMDB MCP 地址<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
@@ -1141,14 +1141,14 @@
         <label>稳定 ID<input id="downloader-config-id" required pattern="[a-z0-9][a-z0-9._-]*"></label>
         <label>Base URL<input id="downloader-config-url" type="url" required></label>
         <label>用户名<input id="downloader-config-username" autocomplete="username"></label>
-        <label>新密码<input id="downloader-config-password" type="password" autocomplete="new-password" placeholder="留空则保留现有密码"></label>
+        <label>密码<input id="downloader-config-password" autocomplete="off" spellcheck="false"></label>
         <label class="source-hosts">下载目录<input id="downloader-config-path" required></label>
       </div>
       <div class="source-switches">
         <label><input id="downloader-config-enabled" type="checkbox">启用实例</label>
         <label><input id="downloader-config-clear-password" type="checkbox">清除已有密码</label>
       </div>
-      <p class="muted">密码只写入 data_path 私有配置文件，API 不回显。保存后需重启主程序才替换当前客户端。</p>
+      <p class="muted">用户名和密码保存到 data_path 私有配置文件，并在编辑器中回填。保存后需重启主程序才替换当前客户端。</p>
       <p id="downloader-config-message" class="delete-message" aria-live="polite"></p>
       <div class="source-form-actions">
         <button id="downloader-config-delete" type="button" class="delete-button">移除私有覆盖</button>
@@ -1157,6 +1157,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="/app.js?v=20260813-bangumi-cache-nav"></script>
+  <script type="module" src="/app.js?v=20260813-config-prefill"></script>
 </body>
 </html>

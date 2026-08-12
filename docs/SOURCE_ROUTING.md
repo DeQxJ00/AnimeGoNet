@@ -57,7 +57,7 @@ downloaders:
 
 - 实例名是稳定、不区分大小写的 ID；同一种客户端可以配置多次。
 - 每个实例有独立连接状态、限流、分类/tag、路径映射和错误熔断，不共享会话或缓存。
-- 密码支持环境变量/secret file；Web 私有覆盖只写不回显，保存到 `data_path/config/downloaders.private.json` 并要求重启应用。该文件不属于业务 SQLite，随 data_path secret 备份策略管理，禁止提交 Git。
+- 密码支持环境变量/secret file；Web 配置页会通过受统一鉴权保护的管理 API 回填当前有效用户名和密码，保存到 `data_path/config/downloaders.private.json` 并要求重启应用。该文件不属于业务 SQLite，随 data_path secret 备份策略管理，禁止提交 Git。
 - 全局 Docker 根路径仍为 `download_path=/download/incomplete`、`save_path=/download/anime`，实例路径只能位于下载根目录下。两个下载器和 AnimeGoNet 必须把共同宿主父目录挂载到容器内同一个 `/download`。
 - 下载任务创建时保存下载器实例 ID 和配置版本快照；之后修改源绑定不会偷偷迁移正在导入或已经进行中的任务。
 

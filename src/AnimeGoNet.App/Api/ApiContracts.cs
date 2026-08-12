@@ -329,7 +329,9 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("tmdb_retry_delay_seconds")] double TmdbRetryDelaySeconds,
     [property: JsonPropertyName("tmdb_cache_hours")] double TmdbCacheHours,
     [property: JsonPropertyName("tmdb_api_key_state")] string TmdbApiKeyState,
+    [property: JsonPropertyName("tmdb_api_key")] string? TmdbApiKey,
     [property: JsonPropertyName("tmdb_read_access_token_state")] string TmdbReadAccessTokenState,
+    [property: JsonPropertyName("tmdb_read_access_token")] string? TmdbReadAccessToken,
     [property: JsonPropertyName("bangumi_base_url")] string BangumiBaseUrl,
     [property: JsonPropertyName("bangumi_http_timeout_seconds")] double BangumiHttpTimeoutSeconds,
     [property: JsonPropertyName("bangumi_retry_count")] int BangumiRetryCount,
@@ -342,6 +344,7 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("ai_model")] string? AiModel,
     [property: JsonPropertyName("ai_prompt_template")] string AiPromptTemplate,
     [property: JsonPropertyName("ai_api_key_state")] string AiApiKeyState,
+    [property: JsonPropertyName("ai_api_key")] string? AiApiKey,
     [property: JsonPropertyName("ai_tmdb_mcp_url")] string AiTmdbMcpUrl,
     [property: JsonPropertyName("ai_bangumi_mcp_url")] string AiBangumiMcpUrl,
     [property: JsonPropertyName("ai_use_metadata_match")] bool AiUseMetadataMatch,
@@ -1295,6 +1298,7 @@ public sealed record SourceProfileResponse(
     IReadOnlyList<SourceProfileFieldLockResponse> LockedFields,
     [property: JsonPropertyName("mikan_identity_cookie_configured")]
     bool MikanIdentityCookieConfigured,
+    [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
     [property: JsonPropertyName("revision")] long Revision,
     [property: JsonPropertyName("ingest_task_count")] long IngestTaskCount,
     [property: JsonPropertyName("rss_batch_count")] long RssBatchCount,
@@ -1303,6 +1307,7 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
     [property: JsonPropertyName("rss_feed_url_configured")] bool RssFeedUrlConfigured = false,
+    [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
     [property: JsonPropertyName("rss_schedule_enabled")] bool RssScheduleEnabled = false,
     [property: JsonPropertyName("rss_schedule_cron")] string RssScheduleCron =
         SourceRssSchedulePolicy.DefaultCron,
@@ -1333,6 +1338,8 @@ public sealed record DownloaderInstanceResponse(
     [property: JsonPropertyName("download_path")] string DownloadPath,
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("credentials_configured")] bool CredentialsConfigured,
+    [property: JsonPropertyName("username")] string? Username,
+    [property: JsonPropertyName("password")] string? Password,
     [property: JsonPropertyName("configuration_source")] string ConfigurationSource,
     [property: JsonPropertyName("locked_fields")]
     IReadOnlyList<DownloaderFieldLockResponse> LockedFields,
