@@ -20,8 +20,9 @@
         <button type="button" data-workspace-target="library"><span aria-hidden="true">▣</span>动画库</button>
         <button type="button" data-workspace-target="tasks"><span aria-hidden="true">↻</span>任务中心</button>
         <button type="button" data-workspace-target="mikan"><span aria-hidden="true">◇</span>Mikan 手动设置</button>
+        <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>连接与配置</button>
-        <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>测试工具</button>
+        <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统</button>
       </nav>
       <p class="sidebar-footnote">所有页面共用同一套脱敏 API 与 revision 控制。</p>
@@ -483,7 +484,7 @@
       </nav>
     </section>
 
-    <section id="downloaders" aria-labelledby="downloaders-title" data-workspace="connections" data-subview="downloaders" data-nav-label="下载器">
+    <section id="downloaders" aria-labelledby="downloaders-title" data-workspace="download-tools" data-subview="qbittorrent" data-nav-label="qBittorrent">
       <div class="section-heading downloader-heading">
         <div>
           <p class="eyebrow">qBittorrent instances</p>
@@ -875,7 +876,7 @@
           <h2>AI 元数据测试</h2>
           <p class="muted">执行逻辑与已验证 Tester 逐项一致；仅页面样式接入主程序。不会创建下载任务或写入动画库，最终结果另行显示主程序 TMDB 二次验证。</p>
         </div>
-        <span id="ai-test-prompt-version" class="badge pending">tmdb-ai-match-v8-tester</span>
+        <span id="ai-test-prompt-version" class="badge pending">tmdb-ai-match-v12</span>
       </div>
       <form id="ai-test-form" class="ai-test-workbench">
         <div class="ai-test-input-stack">
@@ -1051,6 +1052,11 @@
             <p id="configuration-ai-key-state" class="configuration-secret-state wide"></p>
             <label class="wide">TMDB MCP 地址<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
             <label class="wide">Bangumi MCP 地址<input id="configuration-ai-bangumi-mcp-url" type="url" maxlength="2048" required placeholder="http://bgm.mcp.local/mcp"></label>
+            <label class="wide">正式 AI Prompt
+              <textarea id="configuration-ai-prompt-template" class="ai-test-prompt" rows="20" maxlength="131072" required spellcheck="false" aria-describedby="configuration-ai-prompt-status"></textarea>
+              <small id="configuration-ai-prompt-status">后台 Worker 与 AI 匹配测试工具共用此模板；保存后重启生效。</small>
+            </label>
+            <button id="configuration-ai-prompt-reset" type="button" class="secondary-button">恢复程序默认 Prompt</button>
           </div>
         </fieldset>
         <fieldset class="wide">
@@ -1150,6 +1156,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=20260813-prompt-nav"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Torrents;
 
@@ -20,11 +21,38 @@ public sealed class AiMetadataTestApiTests
         var prompt = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/prompt");
         var bootstrap = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/bootstrap");
 
-        Assert.Equal("tmdb-ai-match-v8-tester", prompt.GetProperty("prompt_version").GetString());
-        Assert.Contains("{{TITLE_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
-        Assert.Contains("{{REQUEST_IDENTITY_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
+        Assert.Equal("tmdb-ai-match-v12", prompt.GetProperty("prompt_version").GetString());
+        Assert.Contains("{{SOURCE_TITLE_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
+        Assert.Contains("{{OPTIONAL_BGM_ID_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
+        Assert.Equal(
+            prompt.GetProperty("default_template").GetString(),
+            prompt.GetProperty("template").GetString());
+        Assert.False(prompt.GetProperty("customized").GetBoolean());
         Assert.Equal(string.Empty, bootstrap.GetProperty("defaults").GetProperty("api_key").GetString());
-        Assert.Contains("{{#TMDB_MCP}}", bootstrap.GetProperty("prompt_template").GetString(), StringComparison.Ordinal);
+        Assert.Equal(
+            prompt.GetProperty("template").GetString(),
+            bootstrap.GetProperty("prompt_template").GetString());
+    }
+
+    [Fact]
+    public async Task TesterAndBackgroundWorkerExposeTheSameConfiguredProductionPrompt()
+    {
+        var configuredPrompt = AiMetadataPromptRenderer.LoadTemplate()
+            .Replace("你是一个动画 TMDB 元数据匹配器。", "你是一个动画 TMDB 元数据匹配器。（共享配置验收）", StringComparison.Ordinal);
+        await using var app = await RunningApp.StartAsync(configure: options => options with
+        {
+            Metadata = options.Metadata with
+            {
+                Ai = options.Metadata.Ai with { PromptTemplate = configuredPrompt },
+            },
+        });
+
+        var prompt = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/prompt");
+        var bootstrap = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/bootstrap");
+
+        Assert.True(prompt.GetProperty("customized").GetBoolean());
+        Assert.Equal(configuredPrompt, prompt.GetProperty("template").GetString());
+        Assert.Equal(configuredPrompt, bootstrap.GetProperty("prompt_template").GetString());
     }
 
     [Fact]

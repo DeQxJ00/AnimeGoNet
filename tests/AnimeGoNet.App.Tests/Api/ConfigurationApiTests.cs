@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Configuration;
+using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -527,6 +528,8 @@ public sealed class ConfigurationApiTests
     public async Task PrivateConfigurationUsesRevisionAndSecretTriState()
     {
         await using var app = await RunningApp.StartAsync();
+        var customPrompt = AiMetadataPromptRenderer.LoadTemplate()
+            .Replace("你是一个动画", "CONFIGURATION-PROMPT 你是一个动画", StringComparison.Ordinal);
         using var first = await app.Client.PutAsync(
             "/api/v1/config",
             Payload(
@@ -535,6 +538,7 @@ public sealed class ConfigurationApiTests
                 readToken: "new-read-secret",
                 aiBaseUrl: "http://openai.test.invalid/",
                 aiModel: "test-live-model",
+                aiPromptTemplate: customPrompt,
                 aiApiKey: "new-ai-secret",
                 aiTmdbMcpUrl: "http://tmdb-mcp.test.invalid/mcp",
                 aiBangumiMcpUrl: "http://bgm-mcp.test.invalid/mcp",
@@ -567,6 +571,7 @@ public sealed class ConfigurationApiTests
                 editable.GetProperty("tmdb_read_access_token_state").GetString());
             Assert.Equal("http://openai.test.invalid/", editable.GetProperty("ai_base_url").GetString());
             Assert.Equal("test-live-model", editable.GetProperty("ai_model").GetString());
+            Assert.Equal(customPrompt, editable.GetProperty("ai_prompt_template").GetString());
             Assert.Equal("configured", editable.GetProperty("ai_api_key_state").GetString());
             Assert.Equal(
                 "http://tmdb-mcp.test.invalid/mcp",
@@ -582,6 +587,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal("new-read-secret", saved.Settings?.TmdbReadAccessToken);
         Assert.Equal("http://openai.test.invalid/", saved.Settings?.AiBaseUrl);
         Assert.Equal("test-live-model", saved.Settings?.AiModel);
+        Assert.Equal(customPrompt, saved.Settings?.AiPromptTemplate);
         Assert.Equal("new-ai-secret", saved.Settings?.AiApiKey);
         Assert.Equal("http://tmdb-mcp.test.invalid/mcp", saved.Settings?.AiTmdbMcpUrl);
         Assert.Equal("http://bgm-mcp.test.invalid/mcp", saved.Settings?.AiBangumiMcpUrl);
@@ -703,6 +709,45 @@ public sealed class ConfigurationApiTests
         Assert.True(saved.Settings?.AiUseMetadataMatch);
         Assert.True(saved.Settings?.AiUseSeasonMatch);
         Assert.True(saved.Settings?.AiUseEpisodeMatch);
+    }
+
+    [Fact]
+    public async Task RejectsPromptMissingProductionPlaceholdersBeforeSavingOverride()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var response = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(expectedRevision: 0, aiPromptTemplate: "not-a-production-prompt"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("ai_prompt_required_placeholder_missing", body, StringComparison.Ordinal);
+        Assert.Null((await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync()).Settings);
+    }
+
+    [Fact]
+    public async Task PromptPreviewUsesVersionLengthAndHashInsteadOfEchoingTemplate()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var customPrompt = AiMetadataPromptRenderer.LoadTemplate()
+            .Replace("你是一个动画", "PROMPT-CONTENT-MUST-NOT-ECHO 你是一个动画", StringComparison.Ordinal);
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/config/preview",
+            Payload(expectedRevision: 0, aiPromptTemplate: customPrompt));
+        var body = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var change = Assert.Single(
+            json.RootElement.GetProperty("changes").EnumerateArray(),
+            item => item.GetProperty("field").GetString() == "ai_prompt_template");
+        Assert.Contains("tmdb-ai-match-v12", change.GetProperty("after").GetString(), StringComparison.Ordinal);
+        Assert.Contains("sha256:", change.GetProperty("after").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("PROMPT-CONTENT-MUST-NOT-ECHO", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1020,6 +1065,7 @@ public sealed class ConfigurationApiTests
         string bangumiBase = "https://api.bgm.tv/",
         string? aiBaseUrl = null,
         string? aiModel = null,
+        string? aiPromptTemplate = null,
         string? aiApiKey = null,
         bool clearAiApiKey = false,
         string aiTmdbMcpUrl = "http://tmdb.mcp.local/mcp",
@@ -1049,6 +1095,7 @@ public sealed class ConfigurationApiTests
             bangumi_retry_delay_seconds = bangumiRetryDelaySeconds,
             ai_base_url = aiBaseUrl,
             ai_model = aiModel,
+            ai_prompt_template = aiPromptTemplate,
             ai_api_key = aiApiKey,
             clear_ai_api_key = clearAiApiKey,
             ai_tmdb_mcp_url = aiTmdbMcpUrl,

@@ -51,6 +51,11 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         AiMetadataMatchInput input,
         CancellationToken cancellationToken = default)
     {
+        if (input.PromptTemplateOverride is null && options.PromptTemplate is not null)
+        {
+            input = input with { PromptTemplateOverride = options.PromptTemplate };
+        }
+
         if (options.BaseUrl is null || string.IsNullOrWhiteSpace(options.Model))
         {
             throw new AiMetadataMatcherException(

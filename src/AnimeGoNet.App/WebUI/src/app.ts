@@ -263,6 +263,8 @@ interface RuntimeConfiguration {
       provider: string;
       base_url: string | null;
       model: string | null;
+      prompt_version: string;
+      prompt_customized: boolean;
       api_key_configured: boolean;
       use_metadata_match: boolean;
       use_season_match: boolean;
@@ -316,6 +318,7 @@ interface RuntimeConfiguration {
     season_failure_use_first_season: boolean;
     ai_base_url: string | null;
     ai_model: string | null;
+    ai_prompt_template: string;
     ai_api_key_state: "inherit" | "configured" | "cleared";
     ai_tmdb_mcp_url: string;
     ai_bangumi_mcp_url: string;
@@ -380,6 +383,7 @@ interface ConfigurationUpdatePayload {
   season_failure_use_first_season: boolean;
   ai_base_url: string | null;
   ai_model: string | null;
+  ai_prompt_template: string;
   ai_api_key: string | null;
   clear_ai_api_key: boolean;
   ai_tmdb_mcp_url: string;
@@ -1328,6 +1332,7 @@ type WorkspaceId =
   | "library"
   | "tasks"
   | "mikan"
+  | "download-tools"
   | "connections"
   | "tools"
   | "system";
@@ -1431,6 +1436,8 @@ interface AiMetadataTestPrompt {
   prompt_version: string;
   template: string;
   maximum_length: number;
+  default_template: string;
+  customized: boolean;
 }
 
 interface AiMetadataTestMikanImport {
@@ -1516,19 +1523,26 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
       { id: "legacy-filter", label: "五级过滤" },
     ],
   },
+  "download-tools": {
+    title: "下载工具配置",
+    description: "管理 qBittorrent 实例、连接验证和跨容器路径映射。",
+    defaultSubview: "qbittorrent",
+    tabs: [
+      { id: "qbittorrent", label: "qBittorrent" },
+    ],
+  },
   connections: {
     title: "连接与配置",
-    description: "管理应用上游、输入源、下载器和外部插件。",
+    description: "管理应用上游、输入源和外部插件。",
     defaultSubview: "application",
     tabs: [
       { id: "application", label: "应用配置" },
       { id: "sources", label: "输入源" },
-      { id: "downloaders", label: "下载器" },
       { id: "plugins", label: "外部插件" },
     ],
   },
   tools: {
-    title: "测试工具",
+    title: "AI 匹配测试工具",
     description: "以只读方式验证生产 Prompt、AI 工具调用与 TMDB 最终校验。",
     defaultSubview: "ai-metadata",
     tabs: [
@@ -4007,6 +4021,7 @@ const configurationLockSelectors: Record<string, string[]> = {
   bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
   ai_base_url: ["#configuration-ai-base-url"],
   ai_model: ["#configuration-ai-model"],
+  ai_prompt_template: ["#configuration-ai-prompt-template", "#configuration-ai-prompt-reset"],
   ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
   ai_tmdb_mcp_url: ["#configuration-ai-tmdb-mcp-url"],
   ai_bangumi_mcp_url: ["#configuration-ai-bangumi-mcp-url"],
@@ -4105,6 +4120,10 @@ function openConfigurationEditor(): void {
   setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
   setConfigurationValue("#configuration-ai-base-url", editable.ai_base_url ?? "");
   setConfigurationValue("#configuration-ai-model", editable.ai_model ?? "");
+  element<HTMLTextAreaElement>("#configuration-ai-prompt-template").value =
+    editable.ai_prompt_template;
+  element<HTMLElement>("#configuration-ai-prompt-status").textContent =
+    `${currentConfiguration.metadata.ai.prompt_version} · ${currentConfiguration.metadata.ai.prompt_customized ? "自定义模板" : "程序默认模板"}；后台 Worker 与测试工具共用，保存后重启生效。`;
   setConfigurationValue("#configuration-ai-key", "");
   setConfigurationChecked("#configuration-ai-key-clear", false);
   element<HTMLElement>("#configuration-ai-key-state").textContent =
@@ -4181,6 +4200,7 @@ const configurationFieldLabels: Record<string, string> = {
   season_failure_use_first_season: "TMDBFailUseFirstSeason",
   ai_base_url: "OpenAI-compatible API 地址",
   ai_model: "AI 模型",
+  ai_prompt_template: "正式 AI Prompt",
   ai_api_key: "AI API Key",
   ai_tmdb_mcp_url: "TMDB MCP 地址",
   ai_bangumi_mcp_url: "Bangumi MCP 地址",
@@ -4255,6 +4275,8 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-ai-base-url").value || null,
     ai_model:
       element<HTMLInputElement>("#configuration-ai-model").value || null,
+    ai_prompt_template:
+      element<HTMLTextAreaElement>("#configuration-ai-prompt-template").value,
     ai_api_key:
       element<HTMLInputElement>("#configuration-ai-key").value || null,
     clear_ai_api_key:
@@ -4472,6 +4494,25 @@ async function resetConfiguration(): Promise<void> {
       : `已恢复部署默认；${backup}；修改已即时生效。`;
   } catch (error) {
     status.textContent = `恢复失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+async function resetConfigurationAiPrompt(): Promise<void> {
+  const button = element<HTMLButtonElement>("#configuration-ai-prompt-reset");
+  const status = element<HTMLElement>("#configuration-ai-prompt-status");
+  button.disabled = true;
+  try {
+    aiTestDefaultPrompt ??=
+      await api.get<AiMetadataTestPrompt>("/api/v1/ai-test/prompt");
+    element<HTMLTextAreaElement>("#configuration-ai-prompt-template").value =
+      aiTestDefaultPrompt.default_template;
+    status.textContent =
+      `已载入 ${aiTestDefaultPrompt.prompt_version} 程序默认模板；预览并保存后重启生效。`;
+    clearConfigurationPreview("Prompt 已恢复为程序默认，请重新预览差异。");
+  } catch (error) {
+    status.textContent = `读取程序默认 Prompt 失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    button.disabled = activeConfigurationLockedFields.has("ai_prompt_template");
   }
 }
 
@@ -7790,7 +7831,7 @@ function renderAiTestResult(result: AiTesterRunResult): void {
   );
   summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
   const badge = element<HTMLElement>("#ai-test-prompt-version");
-  badge.textContent = "tmdb-ai-match-v8-tester";
+  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v12";
   badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
   element<HTMLElement>("#ai-test-raw-output").textContent =
     result.raw_response || "模型未返回响应。";
@@ -8329,6 +8370,10 @@ element<HTMLFormElement>("#configuration-form").addEventListener(
 element<HTMLButtonElement>("#configuration-confirm").addEventListener(
   "click",
   () => void confirmConfiguration(),
+);
+element<HTMLButtonElement>("#configuration-ai-prompt-reset").addEventListener(
+  "click",
+  () => void resetConfigurationAiPrompt(),
 );
 element<HTMLFormElement>("#configuration-form").addEventListener("input", () => {
   const preview = element<HTMLElement>("#configuration-preview");

@@ -46,15 +46,15 @@ ai:
 
 ## 主程序内置 AI 测试
 
-WebUI 的“测试工具 / AI 元数据测试”以已验证独立 Tester 为行为基准，内置相同请求/响应 DTO、Prompt 条件区块、OpenAI Responses/Chat Completions 请求格式、工具注册/缓存、最多 8 轮工具调用、Responses stateful→stateless 续轮、用量累计、结果结构校验、Mikan pubDate 门禁和本地 EP offset 计算。页面样式接入主程序侧栏，但协议和交互不再由主程序简化。
+WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Tester 为行为基准，内置相同请求/响应 DTO、Prompt 条件区块、OpenAI Responses/Chat Completions 请求格式、工具注册/缓存、最多 8 轮工具调用、Responses stateful→stateless 续轮、用量累计、结果结构校验、Mikan pubDate 门禁和本地 EP offset 计算。页面样式接入主程序侧栏，但协议和交互不再由主程序简化。
 
-测试页分为公共区域、Mikan/BGM、U2/AniDB、高级 Prompt 和结果审计区。固定 Tester Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块；被关闭或不适用的字段与说明不会发送给模型，对应工具也不会注册。Tester 原结构校验结论保持不变，随后额外显示主程序 `AiMetadataResultValidator` 的 TMDB Series/普通 Season/真实 Episode 二次验证，二者不能混为一个状态。
+测试页分为公共区域、Mikan/BGM、U2/AniDB、高级 Prompt 和结果审计区。后台 Worker 与测试页默认读取同一份有效生产 Prompt；该 Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块。被关闭或不适用的字段与说明不会发送给模型，对应工具也不会注册。Tester 原结构校验结论保持不变，随后额外显示主程序 `AiMetadataResultValidator` 的 TMDB Series/普通 Season/真实 Episode 二次验证，二者不能混为一个状态。
 
 模型连接字段与原 Tester 一致：Base URL、API Key、Model、Responses/Chat Completions、reasoning effort、Responses Web Search、600 秒默认超时、单次测试 HTTP 代理、TMDB/BGM MCP 地址和 AniDB URL 模板。API Key 只存在于当前请求和内存，不进入浏览器持久化、Prompt、执行日志或响应。Mikan URL 导入继续使用主程序全局“域名匹配代理”，不使用该测试代理。
 
 该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。`run-stream` 逐行返回 `progress/result/stopped/error`；结果包含原始 Provider 响应、提取后的模型 JSON、结构校验、`request_identity`、累计 Token、每轮脱敏 AI 请求、工具顺序与脱敏 Request/Response Content、本地 offset 及主程序 TMDB 二次验证。密钥、Authorization、Cookie、passkey 和宿主机路径不得出现在审计内容。
 
-`GET /api/v1/ai-test/prompt` 返回 `tmdb-ai-match-v8-tester` 兼容模板及长度上限；它只属于诊断工具，不替换正式业务的生产 Prompt。WebUI 可编辑 `prompt_template` 并按版本保存浏览器草稿；恢复默认不会改写部署配置或正式匹配行为。
+`GET /api/v1/ai-test/prompt` 返回当前进程实际使用的 `tmdb-ai-match-v12` 生产模板、程序内置默认模板、是否自定义及长度上限。WebUI“编辑应用配置 / AI 与 MCP”可持久化正式 Prompt 私有覆盖，保存前验证全部必需占位符和条件区块，预览只显示版本、字符数和短 SHA-256，不回显完整差异；保存后重启生效。测试页的高级 Prompt 仍可临时修改并按版本保存浏览器草稿，但只影响当次测试；“恢复默认”恢复当前进程的有效生产模板，不写配置。
 
 `POST /api/v1/ai-test/torrent-import` 接收 Torrent base64，后端解析实际文件数并签发 4 小时有效、最多 256 条的 `import_id`；运行请求不能直接声明可信 `torrent_file_count`。`POST /api/v1/ai-test/mikan-import` 使用现有 Mikan DNS/重定向/Host/Cookie/Torrent staging 安全链，并签发同类 `import_id`。响应不返回 Torrent URL、Cookie 或 passkey；WebUI 只填表，不自动运行 AI。
 
@@ -153,7 +153,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 不要求模型返回动画名称、首播日期、Episode标题、置信度或复杂错误枚举。这些内容要么由主程序从 TMDB 获取，要么由主程序根据 HTTP/验证结果分类。
 
-唯一正式 Prompt 见 [`TMDB_AI_MATCH_PROMPT.md`](TMDB_AI_MATCH_PROMPT.md)。本次契约版本为 `tmdb-ai-match-v9`；实现不得维护第二份 Prompt，变更时更新 `prompt_version` 并通过 snapshot review。
+唯一正式 Prompt 见 [`TMDB_AI_MATCH_PROMPT.md`](TMDB_AI_MATCH_PROMPT.md)。本次契约版本为 `tmdb-ai-match-v12`；实现不得维护第二份运行时 Prompt。部署配置或私有配置可以覆盖模板正文，但必须保留契约要求的全部占位符和条件区块；变更内置模板时更新 `prompt_version` 并通过 snapshot review。
 
 ## 6. 未匹配文件与 Other
 

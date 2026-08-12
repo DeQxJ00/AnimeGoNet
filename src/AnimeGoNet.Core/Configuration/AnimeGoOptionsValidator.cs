@@ -228,6 +228,14 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AI model must contain 1 to 256 trimmed characters when configured.");
         }
 
+        if (ai.PromptTemplate is not null
+            && (string.IsNullOrWhiteSpace(ai.PromptTemplate)
+                || ai.PromptTemplate.Length > AiMatchingOptions.MaximumPromptTemplateLength
+                || ai.PromptTemplate.Contains('\0')))
+        {
+            errors.Add($"AI Prompt template must contain 1 to {AiMatchingOptions.MaximumPromptTemplateLength} characters without NUL when configured.");
+        }
+
         if (ai.RetryCount is < 0 or > 10)
         {
             errors.Add("AI retry count must be between 0 and 10.");

@@ -1,4 +1,5 @@
 using AnimeGoNet.App.Configuration;
+using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
@@ -172,6 +173,10 @@ public sealed class ApplicationOverrideStoreTests
             Assert.True(effective.Metadata.SeasonFailure.Backtrace);
             Assert.True(effective.Metadata.Ai.UseMetadataMatch);
             Assert.Equal(TimeSpan.FromSeconds(600), effective.Metadata.Ai.HttpTimeout);
+            Assert.Contains(
+                "PRIVATE-PROMPT",
+                effective.Metadata.Ai.PromptTemplate,
+                StringComparison.Ordinal);
             Assert.Equal(
                 new Uri("https://bangumi.test.invalid/api/"),
                 effective.Metadata.Bangumi.BaseUrl);
@@ -387,5 +392,7 @@ public sealed class ApplicationOverrideStoreTests
         OutboundProxyUrlOverridden: true,
         OutboundProxyUrl: "http://127.0.0.1:7890/",
         OutboundProxyHosts: ["tmdb.test.invalid", "*.mikanime.tv"],
-        WriteBangumiIdWhenTmdbMatched: true);
+        WriteBangumiIdWhenTmdbMatched: true,
+        AiPromptTemplate: AiMetadataPromptRenderer.LoadTemplate()
+            .Replace("你是一个动画", "PRIVATE-PROMPT 你是一个动画", StringComparison.Ordinal));
 }

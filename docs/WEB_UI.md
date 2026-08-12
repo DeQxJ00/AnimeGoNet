@@ -113,7 +113,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进入同一个配置编辑器。Mikan 内网反向代理只对明确配置的 host 放宽私网 DNS 门禁，不会把其它 Torrent host 一并设为可信；TMDB 图片 Base URL 保留 `/t/p/` 等路径前缀。
 
-“AI 与 MCP”分区可修改 OpenAI-compatible Base URL、模型、AI API Key、TMDB MCP 和 Bangumi MCP 地址。AI API Key 只显示 `继承/已配置/已清除` 状态：留空保留，勾选后明确清除，配置响应和保存前差异都不回显明文。上述五项都进入部署字段锁，环境变量或命令行已控制时 WebUI 只读且服务端拒绝改写。
+“AI 与 MCP”分区可修改 OpenAI-compatible Base URL、模型、AI API Key、TMDB MCP、Bangumi MCP 和唯一正式 Prompt。后台 Worker 与“AI 匹配测试工具”默认使用同一份有效 Prompt；模板保存前必须保留生产契约的全部占位符和条件区块，最大 128 KiB，可一键载入程序内置默认模板。保存前差异只显示 Prompt 版本、字符数和短 SHA-256，完整模板不进入差异响应。AI API Key 只显示 `继承/已配置/已清除` 状态：留空保留，勾选后明确清除，配置响应和保存前差异都不回显明文。上述字段都进入部署字段锁，环境变量或命令行已控制时 WebUI 只读且服务端拒绝改写。
 
 该接口只返回 `api_key_configured`、`read_access_token_configured` 和 `access_key_configured` 布尔值，绝不返回凭据内容；仍受统一 API 鉴权保护。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，密钥输入为空表示保留，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 
@@ -123,7 +123,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 
-`editable.locked_fields` 为每个环境变量控制的字段返回规范字段名、`source=environment` 和实际命中的环境变量名，但不返回环境变量值。当前覆盖全局代理 URL/域名列表、TMDB 地址/语言/超时/API Key/Read Token、Bangumi 地址/超时，以及统一 AI 开关和超时；旧 `ai_use_season_match`、`ai_use_episode_match` 也会锁定规范的 `ai_use_metadata_match`。页面显示最终有效值和锁来源，禁用对应输入、凭据清除控件与提交语义。服务端不信任前端禁用状态：不同值或显式凭据写入统一返回 `configuration_field_locked`，错误只列字段名，不包含凭据。保存其他未锁字段时，锁字段保留其保存前的底层私有覆盖，首次保存则记录为“继承部署”；因此移除环境变量后不会把当时的环境值误当成新的私有覆盖。
+`editable.locked_fields` 为每个环境变量控制的字段返回规范字段名、`source=environment` 和实际命中的环境变量名，但不返回环境变量值。当前覆盖全局代理 URL/域名列表、TMDB 地址/语言/超时/API Key/Read Token、Bangumi 地址/超时，以及统一 AI 开关、超时和正式 Prompt；旧 `ai_use_season_match`、`ai_use_episode_match` 也会锁定规范的 `ai_use_metadata_match`。页面显示最终有效值和锁来源，禁用对应输入、凭据清除控件与提交语义。服务端不信任前端禁用状态：不同值或显式凭据写入统一返回 `configuration_field_locked`，错误只列字段名，不包含凭据。保存其他未锁字段时，锁字段保留其保存前的底层私有覆盖，首次保存则记录为“继承部署”；因此移除环境变量后不会把当时的环境值误当成新的私有覆盖。
 
 ## 9. 手动 Torrent 与 RSS 提交
 
@@ -163,7 +163,7 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 ## 12. 一级/二级导航
 
 静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
-“总览、动画库、任务中心、Mikan 手动设置、连接与配置、系统”；每个工作区在内容头部
+“总览、动画库、任务中心、Mikan 手动设置、下载工具配置、连接与配置、AI 匹配测试工具、系统”；现有 qBittorrent 实例管理归入“下载工具配置”，不复制第二套下载器页面；每个工作区在内容头部
 提供二级标签。URL hash 采用 `#/一级/二级`，可收藏并支持浏览器前进/后退，不会把
 Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域，既有轮询、WebSocket、
 表单 revision 和对话框仍复用同一份状态，不创建第二套业务请求。

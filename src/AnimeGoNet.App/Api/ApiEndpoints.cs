@@ -303,12 +303,18 @@ public static class ApiEndpoints
         }
     }
 
-    private static Ok<AiMetadataTestPromptResponse> GetAiMetadataTestPrompt() =>
+    private static Ok<AiMetadataTestPromptResponse> GetAiMetadataTestPrompt(
+        AnimeGoOptions options) =>
         TypedResults.Ok(new AiMetadataTestPromptResponse(
-            "tmdb-ai-match-v8-tester",
-            AnimeGoNet.App.AiTesterCompat.PromptTemplate.LoadFromMarkdown(
-                AnimeGoNet.App.AiTesterCompat.PromptTemplate.FindDefaultMarkdownPath()),
-            AiMetadataPromptRenderer.MaximumTemplateLength));
+            AiMetadataPromptRenderer.PromptVersion,
+            options.Metadata.Ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate(),
+            AiMetadataPromptRenderer.MaximumTemplateLength,
+            AiMetadataPromptRenderer.LoadTemplate(),
+            options.Metadata.Ai.PromptTemplate is not null
+                && !string.Equals(
+                    options.Metadata.Ai.PromptTemplate,
+                    AiMetadataPromptRenderer.LoadTemplate(),
+                    StringComparison.Ordinal)));
 
     private static AiMetadataTestFeatureResponse ToAiTestFeatures(
         AiMetadataPromptFeatures features) =>
@@ -1777,6 +1783,12 @@ public static class ApiEndpoints
                     ai.Provider,
                     ai.BaseUrl?.AbsoluteUri,
                     ai.Model,
+                    AiMetadataPromptRenderer.PromptVersion,
+                    ai.PromptTemplate is not null
+                        && !string.Equals(
+                            ai.PromptTemplate,
+                            AiMetadataPromptRenderer.LoadTemplate(),
+                            StringComparison.Ordinal),
                     !string.IsNullOrWhiteSpace(ai.ApiKey),
                     ai.UseMetadataMatch,
                     ai.UseMetadataMatch,
@@ -1843,6 +1855,7 @@ public static class ApiEndpoints
             season.UseFirstSeason,
             ai.BaseUrl?.AbsoluteUri,
             ai.Model,
+            ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate(),
             SecretState(settings?.AiApiKeyOverridden == true, settings?.AiApiKey),
             ai.TmdbMcpUrl.AbsoluteUri,
             ai.BangumiMcpUrl.AbsoluteUri,
@@ -1948,7 +1961,19 @@ public static class ApiEndpoints
                     1,
                     current.Revision + 1,
                     settings)));
-        var errors = AnimeGoOptionsValidator.Validate(candidate);
+        var errors = AnimeGoOptionsValidator.Validate(candidate).ToList();
+        if (candidate.Metadata.Ai.PromptTemplate is not null)
+        {
+            try
+            {
+                AiMetadataPromptRenderer.ValidateTemplate(
+                    candidate.Metadata.Ai.PromptTemplate);
+            }
+            catch (AiMetadataMatcherException exception)
+            {
+                errors.Add($"AI Prompt template is invalid ({exception.SafeCode}).");
+            }
+        }
         if (errors.Count > 0)
         {
             throw new ArgumentException(string.Join("; ", errors));
@@ -2051,6 +2076,10 @@ public static class ApiEndpoints
             afterSeason.UseFirstSeason);
         Add("ai_base_url", beforeAi.BaseUrl?.AbsoluteUri, afterAi.BaseUrl?.AbsoluteUri);
         Add("ai_model", beforeAi.Model, afterAi.Model);
+        Add(
+            "ai_prompt_template",
+            PromptSummary(beforeAi.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate()),
+            PromptSummary(afterAi.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate()));
         if (request.ClearAiApiKey || !string.IsNullOrWhiteSpace(request.AiApiKey))
         {
             Add(
@@ -2278,6 +2307,21 @@ public static class ApiEndpoints
         {
             throw new ArgumentException("ai_model must contain at most 256 characters.");
         }
+        var aiPromptTemplate = string.IsNullOrWhiteSpace(request.AiPromptTemplate)
+            ? current?.AiPromptTemplate
+            : request.AiPromptTemplate.Replace("\r\n", "\n", StringComparison.Ordinal);
+        if (aiPromptTemplate is not null)
+        {
+            try
+            {
+                AiMetadataPromptRenderer.ValidateTemplate(aiPromptTemplate);
+            }
+            catch (AiMetadataMatcherException exception)
+            {
+                throw new ArgumentException(
+                    $"ai_prompt_template is invalid ({exception.SafeCode}).");
+            }
+        }
         var aiTmdbMcpUrl = NormalizeRequiredUrl(
             request.AiTmdbMcpUrl
                 ?? current?.AiTmdbMcpUrl
@@ -2430,8 +2474,12 @@ public static class ApiEndpoints
             AiTmdbMcpUrl: aiTmdbMcpUrl,
             AiBangumiMcpUrl: aiBangumiMcpUrl,
             WriteBangumiIdWhenTmdbMatched:
-                request.WriteBangumiIdWhenTmdbMatched);
+                request.WriteBangumiIdWhenTmdbMatched,
+            AiPromptTemplate: aiPromptTemplate);
     }
+
+    private static string PromptSummary(string template) =>
+        $"{AiMetadataPromptRenderer.PromptVersion} · {template.Length} chars · sha256:{StableHash.Sha256LowerHex(template)[..12]}";
 
     private static bool RequiresRestart(AnimeGoOptions current, AnimeGoOptions candidate)
     {

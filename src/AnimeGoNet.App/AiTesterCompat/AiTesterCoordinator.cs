@@ -21,6 +21,10 @@ public sealed class AiTesterCoordinator(
 
     public TesterConfig Defaults => BuildDefaults(applicationOptions);
 
+    public string EffectivePromptTemplate =>
+        applicationOptions.Metadata.Ai.PromptTemplate
+        ?? AiMetadataPromptRenderer.LoadTemplate();
+
     public TorrentImportResponse ImportTorrent(TorrentImportRequest? request)
     {
         if (string.IsNullOrWhiteSpace(request?.DataBase64))
@@ -198,17 +202,23 @@ public sealed class AiTesterCoordinator(
         }
 
         string template = string.IsNullOrWhiteSpace(request.PromptTemplate)
-            ? PromptTemplate.LoadFromMarkdown(PromptTemplate.FindDefaultMarkdownPath())
+            ? EffectivePromptTemplate
             : request.PromptTemplate;
-        RenderedPrompt prompt = PromptTemplate.Render(template, input, PromptFeatures.From(config, input));
+        var promptFeatures = PromptFeatures.From(config, input);
+        var productionInput = ToProductionInput(input, template, promptFeatures);
+        string renderedPrompt = AiMetadataPromptRenderer.LoadAndRender(productionInput);
+        string requestIdentity = PromptTemplate.ComputeRequestIdentity(
+            template,
+            input,
+            promptFeatures);
         await CaptureProgressAsync(new ExecutionProgress(
-            "prompt", 0, "最终 Prompt 已生成", Content: prompt.Text), cancellationToken).ConfigureAwait(false);
+            "prompt", 0, "最终 Prompt 已生成", Content: renderedPrompt), cancellationToken).ConfigureAwait(false);
 
         using HttpClient httpClient = HttpClientFactory.Create(config);
         var registry = new ToolRegistry(config, input, httpClient, _mcpCache);
         var client = new OpenAiCompatibleClient(httpClient, config);
         ApiCallResult result = await client
-            .SendAsync(prompt.Text, registry, CaptureProgressAsync, cancellationToken)
+            .SendAsync(renderedPrompt, registry, CaptureProgressAsync, cancellationToken)
             .ConfigureAwait(false);
         (bool valid, string? validationError, TmdbAiMatchResult? parsed) =
             ResultValidator.Validate(result.ModelJson, input);
@@ -251,10 +261,10 @@ public sealed class AiTesterCoordinator(
             result.ErrorMessage,
             valid,
             validationError,
-            prompt.RequestIdentity,
+            requestIdentity,
             result.ToolTimeline,
             gate,
-            prompt.Text,
+            renderedPrompt,
             aiApiRequests,
             localOffset,
             candidates,
@@ -291,6 +301,29 @@ public sealed class AiTesterCoordinator(
             .ConfigureAwait(false);
         return ApiEndpoints.ToAiTestValidationResponse(validation);
     }
+
+    private static AiMetadataMatchInput ToProductionInput(
+        MatchRequestInput input,
+        string template,
+        PromptFeatures features) =>
+        new(
+            input.Title,
+            input.Files.Select(file => new AiMetadataFileInput(file.Name, file.SizeBytes)).ToArray(),
+            input.Bgmid is > 0 and <= int.MaxValue ? (int)input.Bgmid.Value : null,
+            input.Anidbid is > 0 and <= int.MaxValue ? (int)input.Anidbid.Value : null,
+            null,
+            input.TorrentFileCount ?? input.Files.Count,
+            ParseDate(input.MikanPubDate),
+            input.BgmEpisodeCandidate,
+            input.EnableBangumiPubDateFirst)
+        {
+            PromptTemplateOverride = template,
+            PromptFeaturesOverride = new AiMetadataPromptFeatures(
+                features.TmdbMcp,
+                features.BgmMcp,
+                features.AniDbLookup,
+                features.BangumiPubDateFirst),
+        };
 
     private string RegisterTorrentImport(int count)
     {

@@ -160,18 +160,21 @@ public sealed class AiMetadataPromptRendererTests
     [Fact]
     public void RequestLocalTemplateOverrideIsRenderedWithoutChangingDefaultTemplate()
     {
+        var template = AiMetadataPromptRenderer.LoadTemplate()
+            .Replace("你是一个动画", "CUSTOM 你是一个动画", StringComparison.Ordinal);
         var input = new AiMetadataMatchInput(
             "Custom title",
             [new AiMetadataFileInput("01.mkv", 1)],
             null, null, null, 1, null, null, false)
         {
-            PromptTemplateOverride = "TEST {{SOURCE_TITLE_JSON}} {{FILES_JSON}}",
+            PromptTemplateOverride = template,
         };
 
         var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
 
-        Assert.StartsWith("TEST \"Custom title\"", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("TEST", AiMetadataPromptRenderer.LoadTemplate(), StringComparison.Ordinal);
+        Assert.Contains("CUSTOM 你是一个动画", rendered, StringComparison.Ordinal);
+        Assert.Contains("\"title\": \"Custom title\"", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("CUSTOM", AiMetadataPromptRenderer.LoadTemplate(), StringComparison.Ordinal);
     }
 
     [Fact]

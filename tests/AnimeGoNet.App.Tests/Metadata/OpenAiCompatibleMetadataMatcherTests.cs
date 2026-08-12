@@ -10,6 +10,24 @@ namespace AnimeGoNet.App.Tests.Metadata;
 public sealed class OpenAiCompatibleMetadataMatcherTests
 {
     [Fact]
+    public async Task UsesConfiguredProductionPromptTemplateWhenRequestHasNoOverride()
+    {
+        var handler = new FakeAiAndMcpHandler();
+        var template = AiMetadataPromptRenderer.LoadTemplate()
+            .Replace("你是一个动画", "CONFIGURED-PROMPT 你是一个动画", StringComparison.Ordinal);
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { PromptTemplate = template });
+
+        _ = await matcher.MatchAsync(Input());
+
+        Assert.Contains(
+            handler.AiBodies,
+            body => body.Contains("CONFIGURED-PROMPT", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ExecutesResponsesApiToolLoopAndParsesUsage()
     {
         var handler = new FakeAiAndMcpHandler();

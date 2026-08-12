@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.App.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Configuration;
@@ -14,12 +15,15 @@ public sealed class AiDeploymentConfigurationTests
             Guid.NewGuid().ToString("N"));
         try
         {
+            var prompt = AiMetadataPromptRenderer.LoadTemplate()
+                .Replace("你是一个动画", "DEPLOYMENT-PROMPT 你是一个动画", StringComparison.Ordinal);
             await using var app = await AnimeGoApplication.BuildAsync(
                 Args(root,
                     "--ai_provider=openai_compatible",
                     "--ai_base_url=https://ai.test.invalid/compatible/",
                     "--ai_api_key=deployment-secret",
                     "--ai_model=test-model",
+                    $"--ai_prompt_template={prompt}",
                     "--ai_use_metadata_match=true",
                     "--ai_timeout_second=600",
                     "--ai_retry_count=3",
@@ -33,6 +37,7 @@ public sealed class AiDeploymentConfigurationTests
             Assert.Equal(new Uri("https://ai.test.invalid/compatible/"), ai.BaseUrl);
             Assert.Equal("deployment-secret", ai.ApiKey);
             Assert.Equal("test-model", ai.Model);
+            Assert.Equal(prompt, ai.PromptTemplate);
             Assert.True(ai.UseMetadataMatch);
             Assert.Equal(TimeSpan.FromSeconds(600), ai.HttpTimeout);
             Assert.Equal(3, ai.RetryCount);

@@ -125,7 +125,9 @@ public sealed record AiMetadataTestRequest(
 public sealed record AiMetadataTestPromptResponse(
     [property: JsonPropertyName("prompt_version")] string PromptVersion,
     [property: JsonPropertyName("template")] string Template,
-    [property: JsonPropertyName("maximum_length")] int MaximumLength);
+    [property: JsonPropertyName("maximum_length")] int MaximumLength,
+    [property: JsonPropertyName("default_template")] string DefaultTemplate,
+    [property: JsonPropertyName("customized")] bool Customized);
 
 public sealed record AiMetadataTestMikanImportRequest(
     [property: JsonPropertyName("episode_url")] string? EpisodeUrl);
@@ -338,6 +340,7 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("season_failure_use_first_season")] bool SeasonFailureUseFirstSeason,
     [property: JsonPropertyName("ai_base_url")] string? AiBaseUrl,
     [property: JsonPropertyName("ai_model")] string? AiModel,
+    [property: JsonPropertyName("ai_prompt_template")] string AiPromptTemplate,
     [property: JsonPropertyName("ai_api_key_state")] string AiApiKeyState,
     [property: JsonPropertyName("ai_tmdb_mcp_url")] string AiTmdbMcpUrl,
     [property: JsonPropertyName("ai_bangumi_mcp_url")] string AiBangumiMcpUrl,
@@ -417,7 +420,8 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("ai_api_key")] string? AiApiKey = null,
     [property: JsonPropertyName("clear_ai_api_key")] bool ClearAiApiKey = false,
     [property: JsonPropertyName("ai_tmdb_mcp_url")] string? AiTmdbMcpUrl = null,
-    [property: JsonPropertyName("ai_bangumi_mcp_url")] string? AiBangumiMcpUrl = null);
+    [property: JsonPropertyName("ai_bangumi_mcp_url")] string? AiBangumiMcpUrl = null,
+    [property: JsonPropertyName("ai_prompt_template")] string? AiPromptTemplate = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -500,6 +504,8 @@ public sealed record AiConfigurationResponse(
     [property: JsonPropertyName("provider")] string Provider,
     [property: JsonPropertyName("base_url")] string? BaseUrl,
     [property: JsonPropertyName("model")] string? Model,
+    [property: JsonPropertyName("prompt_version")] string PromptVersion,
+    [property: JsonPropertyName("prompt_customized")] bool PromptCustomized,
     [property: JsonPropertyName("api_key_configured")] bool ApiKeyConfigured,
     [property: JsonPropertyName("use_metadata_match")] bool UseMetadataMatch,
     [property: JsonPropertyName("use_season_match")] bool UseSeasonMatch,

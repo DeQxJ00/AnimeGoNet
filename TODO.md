@@ -207,7 +207,7 @@
 - [x] 实现 Mikan 过滤 Web UI：RSS 过滤总开关、五档规则 CRUD/启停/排序、关键词 JSON 数组编辑、服务端样例预览及逐档决策详情、旧 JSON 导入导出、revision 冲突和快照回滚均已接入；页面明确警告多 F0“最后结果生效”、空关键词匹配全部标题和区分大小写语义。
 - [x] 实现 Mikan RSS 优选 Web UI：原生 TypeScript 页面支持白/黑名单及有序组/数组的增删、启停、上下移动、values 编辑、SourceProfile 独立开关、expected-revision 保存、真实服务端批次 preview（名单结果、winner、实际执行组），以及 schema v25 历史快照选择与 revision 安全回滚；首版使用可键盘操作的上下移动，不依赖拖拽。
 - [x] 移植静态页并生成 OpenAPI：静态 TypeScript/HTML/CSS 页面由 Kestrel/AOT smoke 覆盖；官方 .NET 10 AOT-safe 生成器在 `/openapi/v1.json` 输出完整当前 Minimal API 契约，具有确定性 operationId/标签、现代及旧 Access-Key 安全说明、无运行端口/路径/密钥泄露，并由原生进程 smoke 验证。
-- [x] 将超长单页重构为左侧一级菜单和页面内二级菜单：总览、动画库、任务中心、Mikan 自动化、连接与配置、系统六个工作区通过 hash 可直接定位/前进后退，默认只显示当前二级页面；窄屏左栏收成可访问抽屉，原表单、revision、轮询和 API 契约不变。
+- [x] 将超长单页重构为左侧一级菜单和页面内二级菜单；后续按实际管理边界补充独立“下载工具配置”，并将“测试工具”明确命名为“AI 匹配测试工具”。全部工作区通过 hash 可直接定位/前进后退，默认只显示当前二级页面；窄屏左栏收成可访问抽屉，原表单、revision、轮询和 API 契约不变。
 - [x] 通过 API/WS 契约差分测试：生成文档与所有当前非排除 HTTP endpoint 的 method/path 精确相等；机器 golden 穷尽固定上游 OpenAPI 的 11 个 HTTP + 1 个 WebSocket operation，并由真实 Kestrel 响应逐层校验 root/data/item、失败 envelope、日志帧和 control 帧精确字段。原 AnimeGoHelper 浏览器 E2E 同样已完成。
 - [x] 创建 Web 前端工程、类型化 API client 和前端测试基线：TypeScript 7 strict 工程输出原生 ES module；共享 JSON client 只接受同源绝对路径、集中携带 Access-Key、序列化类型化请求体，并以稳定错误类型处理结构化失败/非 JSON 响应；运行状态与目录数据库请求已接入，Node 内置 runner 的 5 项安全/协议测试及 CI 产物差分门禁已建立。
 - [x] 实现仪表盘和下载器/任务状态：下载状态卡片、进度、连接且非 stale 的跨实例速度汇总、活动/暂停/失败/等待整理/完成/离线指标、qB 状态与 AnimeGoNet 业务阶段独立筛选，以及 `download_preparing`/重复跳过、元数据 Series/Season/Episode 阶段、失败原因、策略尝试时间线、文件归类计数、准备/整理失败详情和显式重试入口均已接入。
@@ -220,6 +220,7 @@
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥只写不回显，保存前 diff 只显示 `继承/已配置/已清除` 状态，环境锁、即时生效和需重启字段均可见。
+- [x] 唯一正式 AI Prompt 已纳入应用配置、私有覆盖、部署锁和 WebUI 编辑器：后台 Worker 与“AI 匹配测试工具”默认读取同一份有效模板；模板保留全部契约标记且限 128 KiB，预览只显示版本/长度/短哈希，保存后重启生效。
 - [x] 动画任务详情同时展示任务级 `source_evidence`、逐文件来源名称/来源 EP/本地候选和最终 TMDB 名称/Season/Episode，以及 AI 调用状态、TMDB 验证可信依据、最终失败原因和策略尝试时间线；来源 profile/revision、标题、Mikan/Bangumi/AniDB/IMDb/发布时间与不透明 ID 指纹独立成区，不采信或展示模型自报的数字置信度，也不把来源值表示成 TMDB 权威结果。
 - [x] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。列表/详情 API、Cover 安全代理/缓存/占位图和静态 TypeScript 页面均已完成；页面显示 TMDB 规范进度、取得策略、验证状态、一致性警告和可筛选 EP 网格，删除完成记录会立即恢复未下载。
 - [x] 实现作品库服务端分页排序和前端升/降序：服务端与页面支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；排序、方向、页大小、EP 筛选和当前详情保存在浏览器本地。

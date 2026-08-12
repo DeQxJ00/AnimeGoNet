@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Metadata;
@@ -8,7 +9,29 @@ namespace AnimeGoNet.App.Metadata;
 public static class AiMetadataPromptRenderer
 {
     public const string PromptVersion = "tmdb-ai-match-v12";
-    public const int MaximumTemplateLength = 128 * 1024;
+    public const int MaximumTemplateLength = AiMatchingOptions.MaximumPromptTemplateLength;
+
+    private static readonly string[] RequiredPlaceholders =
+    [
+        "{{SOURCE_TITLE_JSON}}",
+        "{{FILES_JSON}}",
+        "{{OPTIONAL_BGM_ID_JSON}}",
+        "{{OPTIONAL_ANIDB_ID_JSON}}",
+        "{{OPTIONAL_IMDB_ID_JSON}}",
+        "{{TORRENT_FILE_COUNT_JSON}}",
+        "{{OPTIONAL_PUBLISHED_AT_JSON}}",
+        "{{OPTIONAL_BGM_EPISODE_CANDIDATE_JSON}}",
+        "{{USE_BANGUMI_PUBDATE_FIRST_JSON}}",
+    ];
+
+    private static readonly string[] RequiredConditionalSections =
+    [
+        "TMDB_MCP",
+        "BGM_MCP",
+        "ANIDB_LOOKUP",
+        "IMDB_LOOKUP",
+        "BANGUMI_PUBDATE_FIRST",
+    ];
 
     public static string LoadAndRender(AiMetadataMatchInput input)
     {
@@ -20,7 +43,68 @@ public static class AiMetadataPromptRenderer
                 "ai_prompt_template_too_large");
         }
 
+        ValidateTemplate(template);
+
         return Render(template, input);
+    }
+
+    public static void ValidateTemplate(string template)
+    {
+        if (string.IsNullOrWhiteSpace(template)
+            || template.Length > MaximumTemplateLength
+            || template.Contains('\0'))
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.InvalidInput,
+                "ai_prompt_template_invalid");
+        }
+
+        if (RequiredPlaceholders.Any(placeholder =>
+            !template.Contains(placeholder, StringComparison.Ordinal)))
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.InvalidInput,
+                "ai_prompt_required_placeholder_missing");
+        }
+
+        if (RequiredConditionalSections.Any(section =>
+            !template.Contains("{{#" + section + "}}", StringComparison.Ordinal)
+            || !template.Contains("{{/" + section + "}}", StringComparison.Ordinal)))
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.InvalidInput,
+                "ai_prompt_required_conditional_missing");
+        }
+
+        var fixture = new AiMetadataMatchInput(
+            "Prompt validation",
+            [new AiMetadataFileInput("01.mkv", 1)],
+            1,
+            1,
+            "tt0000001",
+            1,
+            DateTimeOffset.UnixEpoch,
+            1,
+            true)
+        {
+            PromptFeaturesOverride = new AiMetadataPromptFeatures(true, true, true, true)
+            {
+                ImdbLookup = true,
+            },
+        };
+        _ = Render(template, fixture);
+        _ = Render(
+            template,
+            fixture with
+            {
+                BangumiSubjectId = null,
+                AniDbAnimeId = null,
+                ImdbTitleId = null,
+                PublishedAt = null,
+                BangumiEpisodeCandidate = null,
+                UseBangumiPubDateFirst = false,
+                PromptFeaturesOverride = new AiMetadataPromptFeatures(false, false, false, false),
+            });
     }
 
     public static string LoadTemplate()

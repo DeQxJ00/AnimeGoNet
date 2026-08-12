@@ -26,7 +26,7 @@ internal static class AiTesterApiEndpoints
         var coordinator = context.RequestServices.GetRequiredService<AiTesterCoordinator>();
         var response = new TesterBootstrapResponse(
             coordinator.Defaults with { ApiKey = string.Empty },
-            PromptTemplate.LoadFromMarkdown(PromptTemplate.FindDefaultMarkdownPath()));
+            coordinator.EffectivePromptTemplate);
         await WriteJsonAsync(
             context,
             response,

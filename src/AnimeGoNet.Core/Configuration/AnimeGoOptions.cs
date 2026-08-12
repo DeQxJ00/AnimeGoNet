@@ -163,6 +163,8 @@ public sealed record SeasonFailureOptions
 
 public sealed record AiMatchingOptions
 {
+    public const int MaximumPromptTemplateLength = 128 * 1024;
+
     public const string FixedAniDbMappingUrlTemplate =
         "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
 
@@ -173,6 +175,8 @@ public sealed record AiMatchingOptions
     public string? ApiKey { get; init; }
 
     public string? Model { get; init; }
+
+    public string? PromptTemplate { get; init; }
 
     public AiApiMode ApiMode { get; init; } = AiApiMode.ChatCompletions;
 

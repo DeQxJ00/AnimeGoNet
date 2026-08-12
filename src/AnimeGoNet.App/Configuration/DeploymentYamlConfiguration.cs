@@ -664,6 +664,8 @@ internal static class DeploymentYamlConfiguration
                 base_url: ''
                 api_key: ''
                 model: ''
+                # 留空使用程序内置 Prompt；多行自定义值建议通过 WebUI 私有配置保存。
+                prompt_template: ''
                 use_metadata_match: false
                 timeout_seconds: 600
                 retry_count: 2
@@ -876,6 +878,8 @@ internal static class DeploymentYamlConfiguration
                 base_url: ''
                 api_key: ''
                 model: ''
+                # 留空使用程序内置 Prompt；多行自定义值建议通过 WebUI 私有配置保存。
+                prompt_template: ''
                 use_metadata_match: false
                 timeout_seconds: 600
                 retry_count: 2

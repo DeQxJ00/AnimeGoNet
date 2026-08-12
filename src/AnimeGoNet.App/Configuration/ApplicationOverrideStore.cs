@@ -56,7 +56,8 @@ public sealed record ApplicationOverrideEntry(
     string? AiModel = null,
     string? AiTmdbMcpUrl = null,
     string? AiBangumiMcpUrl = null,
-    bool? WriteBangumiIdWhenTmdbMatched = null);
+    bool? WriteBangumiIdWhenTmdbMatched = null,
+    string? AiPromptTemplate = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -350,6 +351,10 @@ public sealed class ApplicationOverrideStore : IDisposable
                         && settings.AiModelOverridden == true
                         ? settings.AiModel
                         : options.Metadata.Ai.Model,
+                    PromptTemplate = !inheritedFields.Contains("ai_prompt_template")
+                        && settings.AiPromptTemplate is not null
+                        ? settings.AiPromptTemplate
+                        : options.Metadata.Ai.PromptTemplate,
                     TmdbMcpUrl = !inheritedFields.Contains("ai_tmdb_mcp_url")
                         && settings.AiTmdbMcpUrl is not null
                         ? ParseRequiredUri(settings.AiTmdbMcpUrl, "AI TMDB MCP URL")

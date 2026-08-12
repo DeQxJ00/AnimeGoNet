@@ -52,6 +52,7 @@ public sealed class DeploymentConfigurationLocks
         new("ai_base_url", ["ai_base_url", "metadata:ai:base_url"]),
         new("ai_api_key", ["ai_api_key", "metadata:ai:api_key"]),
         new("ai_model", ["ai_model", "metadata:ai:model"]),
+        new("ai_prompt_template", ["ai_prompt_template", "metadata:ai:prompt_template"]),
         new("ai_tmdb_mcp_url", ["ai_tmdb_mcp_url", "metadata:ai:tmdb_mcp_url"]),
         new("ai_bangumi_mcp_url", ["ai_bangumi_mcp_url", "metadata:ai:bangumi_mcp_url"]),
         new("ai_http_timeout_seconds", ["ai_timeout_second", "metadata:ai:timeout_seconds"]),
@@ -317,6 +318,10 @@ public sealed class DeploymentConfigurationLocks
                     current.AiModelOverridden,
                     candidate.AiModelOverridden),
                 AiModel = Preserve("ai_model", current.AiModel, candidate.AiModel),
+                AiPromptTemplate = Preserve(
+                    "ai_prompt_template",
+                    current.AiPromptTemplate,
+                    candidate.AiPromptTemplate),
                 AiTmdbMcpUrl = Preserve(
                     "ai_tmdb_mcp_url",
                     current.AiTmdbMcpUrl,
@@ -543,6 +548,10 @@ public sealed class DeploymentConfigurationLocks
         {
             ai = ai with { Model = deployment.Metadata.Ai.Model };
         }
+        if (IsLocked("ai_prompt_template"))
+        {
+            ai = ai with { PromptTemplate = deployment.Metadata.Ai.PromptTemplate };
+        }
         if (IsLocked("ai_tmdb_mcp_url"))
         {
             ai = ai with { TmdbMcpUrl = deployment.Metadata.Ai.TmdbMcpUrl };
@@ -748,6 +757,10 @@ public sealed class DeploymentConfigurationLocks
             "ai_model",
             deployment.Metadata.Ai.Model,
             candidate.Metadata.Ai.Model);
+        AddIfChanged(
+            "ai_prompt_template",
+            deployment.Metadata.Ai.PromptTemplate,
+            candidate.Metadata.Ai.PromptTemplate);
         AddIfChanged(
             "ai_tmdb_mcp_url",
             deployment.Metadata.Ai.TmdbMcpUrl,

@@ -234,7 +234,18 @@ public static class AnimeGoApplication
         {
             throw new InvalidOperationException("Docker mode requires a non-empty access_key.");
         }
-        var errors = AnimeGoOptionsValidator.Validate(options);
+        var errors = AnimeGoOptionsValidator.Validate(options).ToList();
+        if (options.Metadata.Ai.PromptTemplate is not null)
+        {
+            try
+            {
+                AiMetadataPromptRenderer.ValidateTemplate(options.Metadata.Ai.PromptTemplate);
+            }
+            catch (AiMetadataMatcherException exception)
+            {
+                errors.Add($"AI Prompt template is invalid ({exception.SafeCode}).");
+            }
+        }
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
@@ -760,6 +771,10 @@ public static class AnimeGoApplication
                         configuration,
                         "ai_model",
                         "metadata:ai:model")),
+                    PromptTemplate = NormalizeOptional(FirstConfigurationValue(
+                        configuration,
+                        "ai_prompt_template",
+                        "metadata:ai:prompt_template")),
                     UseMetadataMatch = ParseAiMetadataMatch(
                         configuration,
                         ParseOptionalBool(

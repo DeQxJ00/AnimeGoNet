@@ -16,6 +16,10 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("id=\"sidebar-toggle\"", html, StringComparison.Ordinal);
         Assert.Contains(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"Mikan 手动设置\"", script, StringComparison.Ordinal);
+        Assert.Contains(">下载工具配置</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"下载工具配置\"", script, StringComparison.Ordinal);
+        Assert.Contains(">AI 匹配测试工具</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"AI 匹配测试工具\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Mikan 自动化", html + script, StringComparison.Ordinal);
         foreach (var workspace in new[]
         {
@@ -23,6 +27,7 @@ public sealed class WorkspaceNavigationTests
             "library",
             "tasks",
             "mikan",
+            "download-tools",
             "connections",
             "tools",
             "system",

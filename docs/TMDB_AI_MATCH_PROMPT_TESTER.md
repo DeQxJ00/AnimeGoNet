@@ -1,4 +1,6 @@
-# TMDB AI 固定 Prompt
+# TMDB AI 固定 Prompt（Tester v8，历史兼容参考）
+
+> 此文件仅保留用于旧独立 Tester 的行为追踪，不再是运行时 Prompt。主程序后台 Worker 与内置 AI 匹配测试工具统一使用 `TMDB_AI_MATCH_PROMPT.md` 或其经过契约校验的应用配置覆盖。
 
 Prompt version：`tmdb-ai-match-v8-tester`
 
