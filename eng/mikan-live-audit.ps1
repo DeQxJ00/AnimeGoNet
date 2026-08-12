@@ -10,15 +10,17 @@ param(
     [string]$AiModel = 'gpt-5.4-mini',
     [string]$TmdbMcpUrl = 'http://tmdb.mcp.local/mcp',
     [string]$BangumiMcpUrl = 'http://bgm.mcp.local/mcp',
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Release',
     [switch]$RealDownload,
     [switch]$SyntheticPayload,
     [ValidateRange(1, 1440)]
     [int]$DownloadTimeoutMinutes = 180,
     [ValidateRange(1, 60)]
     [int]$ZeroProgressSkipMinutes = 5,
-    [ValidateRange(2, 30)]
+    [ValidateRange(2, 101)]
     [int]$StartRow = 2,
-    [ValidateRange(1, 29)]
+    [ValidateRange(1, 100)]
     [int]$MaxCases = 29
 )
 
@@ -83,7 +85,7 @@ try {
     }
 
     dotnet test (Join-Path $RepositoryRoot 'tests\AnimeGoNet.LocalIntegration.Tests\AnimeGoNet.LocalIntegration.Tests.csproj') `
-        --configuration Release `
+        --configuration $Configuration `
         --filter 'FullyQualifiedName~MikanLiveChainAuditTests' `
         --logger 'console;verbosity=normal'
     if ($LASTEXITCODE -ne 0) {

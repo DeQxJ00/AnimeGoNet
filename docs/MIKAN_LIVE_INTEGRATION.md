@@ -55,7 +55,16 @@ $env:ANIMEGONET_AI_API_KEY = '<test-key>'
 预期已通过、真实载荷不可验收，不能算作真实下载完成。可显式修改等待分钟数，但
 不能关闭总下载超时。
 
-可用 `StartRow`/`MaxCases` 分批续跑。默认地址是本地反向代理，可通过脚本的 `MikanBaseUrl`、`TmdbBaseUrl`、`BangumiBaseUrl`、`AiBaseUrl`、`TmdbMcpUrl`、`BangumiMcpUrl` 参数替换；应用本身对应地址同样可在配置/WebUI修改。
+可用 `StartRow`/`MaxCases` 分批续跑；输入允许 1–100 条，默认仍执行原始 29 条基准。
+`ep预期序号` 支持普通整数、`13-14` 形式的闭区间、明确表示“不应生成普通
+TMDB Episode”的 `none`，以及只断言任务必须进入统一 AI 并正常收口、但不预设
+模型输出的 `ai`。默认地址是本地反向代理，可通过脚本的 `MikanBaseUrl`、
+`TmdbBaseUrl`、`BangumiBaseUrl`、`AiBaseUrl`、`TmdbMcpUrl`、`BangumiMcpUrl` 参数替换；
+应用本身对应地址同样可在配置/WebUI修改。
+
+脚本默认使用 `Release`；如果同目录 Release 主程序正在运行并锁定输出，可显式传入
+`-Configuration Debug`，无需关闭正在展示的 WebUI。该选项只改变测试程序集的构建配置，
+不改变业务流程或报告内容。
 
 ## 报告与验收
 

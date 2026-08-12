@@ -32,7 +32,7 @@ public sealed class MikanLiveChainAuditTests
     {
         Assert.Equal("1", Required("ANIMEGONET_MIKAN_LIVE_AUDIT"));
         var sourceCases = ReadCases(Path.GetFullPath(Required("ANIMEGONET_MIKAN_AUDIT_CSV")));
-        Assert.Equal(29, sourceCases.Length);
+        Assert.InRange(sourceCases.Length, 1, 100);
         var startRow = int.Parse(
             Required("ANIMEGONET_MIKAN_AUDIT_START_ROW"),
             CultureInfo.InvariantCulture);
@@ -184,6 +184,10 @@ public sealed class MikanLiveChainAuditTests
                         await resolutions.GetTaskDetailAsync(taskId!));
                     var attempts = await resolutions.ListAttemptsAsync(taskId!, 500);
                     var expectedEpisodes = ParseEpisodeSet(testCase.ExpectedEpisode);
+                    var expectsAiRouting = string.Equals(
+                        testCase.ExpectedEpisode.Trim(),
+                        "ai",
+                        StringComparison.OrdinalIgnoreCase);
                     var actualEpisodes = detail.Files
                         .Select(file => file.TmdbEpisodeNumber)
                         .Where(value => value is not null)
@@ -193,7 +197,13 @@ public sealed class MikanLiveChainAuditTests
                         .ToArray();
                     var passed = detail.Summary.TmdbSeriesId == testCase.ExpectedTmdbSeriesId
                         && detail.Summary.TmdbSeasonNumber == testCase.ExpectedSeason
-                        && expectedEpisodes.SequenceEqual(actualEpisodes);
+                        && (expectsAiRouting
+                            ? string.Equals(
+                                detail.Summary.Status,
+                                "metadata_resolved",
+                                StringComparison.Ordinal)
+                                && attempts.Any(value => value.Strategy == "ai_metadata")
+                            : expectedEpisodes.SequenceEqual(actualEpisodes));
                     var downloadResult = "metadata_only";
                     IReadOnlyList<string> mediaRelativePaths = [];
                     if (passed && (realDownload || syntheticPayload))
@@ -867,6 +877,12 @@ public sealed class MikanLiveChainAuditTests
 
     private static int[] ParseEpisodeSet(string value)
     {
+        if (string.Equals(value.Trim(), "none", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value.Trim(), "ai", StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
         var parts = value.Split('-', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 1)
         {

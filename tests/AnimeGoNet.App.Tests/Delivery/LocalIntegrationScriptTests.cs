@@ -99,6 +99,9 @@ public sealed class LocalIntegrationScriptTests
         Assert.Contains("mikan-live-audit", script, StringComparison.Ordinal);
         Assert.Contains("[switch]$RealDownload", script, StringComparison.Ordinal);
         Assert.Contains("[switch]$SyntheticPayload", script, StringComparison.Ordinal);
+        Assert.Contains("[string]$Configuration = 'Release'", script, StringComparison.Ordinal);
+        Assert.Contains("--configuration $Configuration", script, StringComparison.Ordinal);
+        Assert.Contains("[ValidateRange(2, 101)]", script, StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_MIKAN_REAL_DOWNLOAD", script, StringComparison.Ordinal);
         Assert.Contains("ANIMEGONET_MIKAN_SYNTHETIC_PAYLOAD", script, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-", script, StringComparison.OrdinalIgnoreCase);
@@ -107,7 +110,10 @@ public sealed class LocalIntegrationScriptTests
         Assert.Contains("deleteFiles: false", test, StringComparison.Ordinal);
         Assert.Contains("ListAttemptsAsync", test, StringComparison.Ordinal);
         Assert.Contains("AiUsageSummary", test, StringComparison.Ordinal);
-        Assert.Contains("Assert.Equal(29, sourceCases.Length)", test, StringComparison.Ordinal);
+        Assert.Contains("Assert.InRange(sourceCases.Length, 1, 100)", test, StringComparison.Ordinal);
+        Assert.Contains("string.Equals(value.Trim(), \"none\"", test, StringComparison.Ordinal);
+        Assert.Contains("testCase.ExpectedEpisode.Trim()", test, StringComparison.Ordinal);
+        Assert.Contains("attempts.Any(value => value.Strategy == \"ai_metadata\")", test, StringComparison.Ordinal);
         Assert.Contains("DownloadPreparationProcessor", test, StringComparison.Ordinal);
         Assert.Contains("MediaOrganizationProcessor", test, StringComparison.Ordinal);
         Assert.Contains("WaitForDownloadAsync", test, StringComparison.Ordinal);
