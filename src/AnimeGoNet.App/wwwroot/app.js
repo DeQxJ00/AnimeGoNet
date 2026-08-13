@@ -131,6 +131,14 @@ const workspaceDefinitions = {
             { id: "legacy-filter", label: "五级过滤" },
         ],
     },
+    sources: {
+        title: "输入源",
+        description: "管理来源适配器、凭据、RSS、下载器路由和整理规则。",
+        defaultSubview: "manage",
+        tabs: [
+            { id: "manage", label: "输入源管理" },
+        ],
+    },
     "bangumi-cache": {
         title: "Bangumi缓存",
         description: "管理 AnimeGoNetData 离线 Bangumi Subject、Episode 与前传关系档案。",
@@ -147,15 +155,21 @@ const workspaceDefinitions = {
             { id: "qbittorrent", label: "qBittorrent" },
         ],
     },
+    plugins: {
+        title: "外部插件",
+        description: "管理进程外 C# 插件包、运行状态和配置。",
+        defaultSubview: "manage",
+        tabs: [
+            { id: "manage", label: "插件管理" },
+        ],
+    },
     connections: {
         title: "设置与备份",
-        description: "管理应用设置、输入源凭据、外部插件和总配置备份。",
+        description: "管理应用设置以及总配置的导入、导出和备份。",
         defaultSubview: "application",
         tabs: [
             { id: "application", label: "应用配置" },
             { id: "archive", label: "导入导出与备份" },
-            { id: "sources", label: "输入源" },
-            { id: "plugins", label: "外部插件" },
         ],
     },
     tools: {
@@ -6176,7 +6190,7 @@ function updateSavedRssRunState() {
     const manage = element("#manual-rss-manage-source");
     manage.disabled = profile?.adapter !== "mikan";
     manage.title = profile?.adapter === "mikan"
-        ? "打开设置与备份 / 输入源，并直接显示这个来源已保存的 Mikan Cookie。"
+        ? "打开输入源，并直接显示这个来源已保存的 Mikan Cookie。"
         : "请先选择一个已启用的 Mikan 来源。";
     run.disabled = profile?.adapter !== "mikan"
         || !profile.enabled
@@ -6189,7 +6203,7 @@ function openSelectedMikanSourceSettings() {
     const sourceId = element("#manual-rss-source").value;
     const profile = sourceProfiles.find((item) => item.id === sourceId) ?? null;
     populateSourceForm(profile);
-    selectWorkspace("connections", "sources");
+    selectWorkspace("sources", "manage");
 }
 function updateManualDownloadHint() {
     const sourceId = element("#manual-download-source").value;

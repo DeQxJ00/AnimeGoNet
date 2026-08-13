@@ -27,8 +27,28 @@ public sealed class WorkspaceNavigationTests
             StringComparison.Ordinal);
         Assert.Contains(">下载工具配置</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"下载工具配置\"", script, StringComparison.Ordinal);
+        Assert.Contains(">输入源</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"输入源\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"sources\" data-subview=\"manage\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(">外部插件</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"外部插件\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"plugins\" data-subview=\"manage\"",
+            html,
+            StringComparison.Ordinal);
         Assert.Contains(">设置与备份</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"设置与备份\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "{ id: \"sources\", label: \"输入源\" }",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "{ id: \"plugins\", label: \"外部插件\" }",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("id=\"manual-rss-manage-source\"", html, StringComparison.Ordinal);
         Assert.Contains("openSelectedMikanSourceSettings", script, StringComparison.Ordinal);
         Assert.DoesNotContain(">连接与配置</button>", html, StringComparison.Ordinal);
@@ -55,8 +75,10 @@ public sealed class WorkspaceNavigationTests
             "library",
             "tasks",
             "mikan",
+            "sources",
             "bangumi-cache",
             "download-tools",
+            "plugins",
             "connections",
             "tools",
             "logs",
