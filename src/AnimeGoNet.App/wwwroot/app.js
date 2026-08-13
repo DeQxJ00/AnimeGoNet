@@ -113,10 +113,10 @@ const workspaceDefinitions = {
     tasks: {
         title: "任务中心",
         description: "查看下载、匹配、整理和失败原因。",
-        defaultSubview: "downloads",
+        defaultSubview: "metadata",
         tabs: [
-            { id: "downloads", label: "下载任务" },
             { id: "metadata", label: "匹配与整理" },
+            { id: "downloads", label: "下载任务" },
         ],
     },
     mikan: {

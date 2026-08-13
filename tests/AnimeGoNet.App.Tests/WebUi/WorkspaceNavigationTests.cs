@@ -75,6 +75,14 @@ public sealed class WorkspaceNavigationTests
 
         Assert.Contains("function initializeWorkspaceNavigation", script, StringComparison.Ordinal);
         Assert.Contains("function selectWorkspace", script, StringComparison.Ordinal);
+        Assert.Contains("defaultSubview: \"metadata\"", script, StringComparison.Ordinal);
+        var metadataTab = script.IndexOf(
+            "{ id: \"metadata\", label: \"匹配与整理\" }",
+            StringComparison.Ordinal);
+        var downloadsTab = script.IndexOf(
+            "{ id: \"downloads\", label: \"下载任务\" }",
+            StringComparison.Ordinal);
+        Assert.True(metadataTab >= 0 && downloadsTab > metadataTab);
         Assert.Contains("#/", script, StringComparison.Ordinal);
         Assert.Contains("#main-content > section[data-workspace]", script, StringComparison.Ordinal);
         Assert.Contains(".app-shell", styles, StringComparison.Ordinal);
