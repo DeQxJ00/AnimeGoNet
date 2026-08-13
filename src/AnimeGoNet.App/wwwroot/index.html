@@ -114,6 +114,13 @@
         <span id="library-admin-status" class="muted" role="status">名称、封面、季度和 EP snapshot 将直接采用 TMDB 返回值。</span>
       </form>
       <div class="library-toolbar" aria-label="作品库排序和分页设置">
+        <form id="library-search-form" class="library-search-form" role="search">
+          <label>搜索作品
+            <input id="library-search" type="search" maxlength="200" placeholder="TMDB 名称、原名、季度名或 Series ID">
+          </label>
+          <button type="submit" class="primary-button">搜索</button>
+          <button id="library-search-clear" type="button" class="secondary-button">清除</button>
+        </form>
         <label>排序
           <select id="library-sort">
             <option value="last_updated">最后更新时间</option>

@@ -27,6 +27,8 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             throw new ArgumentOutOfRangeException(nameof(query), "Library sort direction is invalid.");
         }
 
+        var search = NormalizeSearch(query.Search);
+
         var offset = checked((query.Page - 1) * query.PageSize);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var count = connection.CreateCommand();
@@ -36,14 +38,16 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             JOIN anime_series AS series ON series.id = season.series_id
             WHERE series.tmdb_series_id > 0
               AND series.needs_tmdb_completion = 0
-              AND season.season_number > 0;
-            """;
+              AND season.season_number > 0
+            """ + SearchSql("AND", "series.tmdb_series_id", "series.canonical_name", "series.original_name", "season.canonical_name", search) + ";";
+        AddSearchParameters(count, search);
         var totalItems = Convert.ToInt32(
             await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
             CultureInfo.InvariantCulture);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = BuildListSql(query.Sort, query.Direction);
+        command.CommandText = BuildListSql(query.Sort, query.Direction, search);
+        AddSearchParameters(command, search);
         command.Parameters.AddWithValue("$limit", query.PageSize);
         command.Parameters.AddWithValue("$offset", offset);
         var items = new List<AnimeSeasonListProjection>(Math.Min(query.PageSize, totalItems));
@@ -194,7 +198,8 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
 
     private static string BuildListSql(
         AnimeLibrarySort sort,
-        AnimeLibrarySortDirection direction)
+        AnimeLibrarySortDirection direction,
+        string? search)
     {
         var sqlDirection = direction == AnimeLibrarySortDirection.Ascending ? "ASC" : "DESC";
         var orderBy = sort switch
@@ -227,6 +232,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    series_resource_id, series_resource_updated_at,
                    season_resource_id, season_resource_updated_at
             FROM projection
+            {{SearchSql("WHERE", "tmdb_series_id", "display_name", "original_name", "season_name", search)}}
             ORDER BY {{orderBy}}
             LIMIT $limit OFFSET $offset;
             """;
@@ -301,6 +307,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                     COALESCE(NULLIF(series.canonical_name, ''),
                              NULLIF(series.original_name, ''),
                              'TMDB ' || series.tmdb_series_id) AS display_name,
+                    COALESCE(NULLIF(series.original_name, ''), '') AS original_name,
                     COALESCE(NULLIF(season.canonical_name, ''),
                              'Season ' || season.season_number) AS season_name,
                     series.poster_path AS series_poster_path,
@@ -372,6 +379,58 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                   AND season.season_number > 0
             )
             """;
+
+    private static string? NormalizeSearch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (value.Any(char.IsControl))
+        {
+            throw new ArgumentException("Library search is invalid.", nameof(value));
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 200)
+        {
+            throw new ArgumentException("Library search is invalid.", nameof(value));
+        }
+
+        return normalized;
+    }
+
+    private static string SearchSql(
+        string conjunction,
+        string idColumn,
+        string displayNameColumn,
+        string originalNameColumn,
+        string seasonNameColumn,
+        string? search) => search is null
+            ? string.Empty
+            : $$"""
+
+              {{conjunction}} (
+                    {{displayNameColumn}} LIKE $search_pattern ESCAPE '\' COLLATE NOCASE
+                 OR {{originalNameColumn}} LIKE $search_pattern ESCAPE '\' COLLATE NOCASE
+                 OR {{seasonNameColumn}} LIKE $search_pattern ESCAPE '\' COLLATE NOCASE
+                 OR CAST({{idColumn}} AS TEXT) = $search_exact
+              )
+              """;
+
+    private static void AddSearchParameters(SqliteCommand command, string? search)
+    {
+        if (search is null)
+        {
+            return;
+        }
+
+        command.Parameters.AddWithValue("$search_exact", search);
+        command.Parameters.AddWithValue(
+            "$search_pattern",
+            $"%{search.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal)}%");
+    }
 
     private static AnimeSeasonListProjection ReadSeasonProjection(
         SqliteDataReader reader)

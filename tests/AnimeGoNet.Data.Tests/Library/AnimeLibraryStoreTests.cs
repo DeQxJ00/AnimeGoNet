@@ -78,6 +78,39 @@ public sealed class AnimeLibraryStoreTests
         Assert.Equal(3, items.Distinct().Count());
     }
 
+    [Theory]
+    [InlineData("alpha", 2, 100, 1)]
+    [InlineData("Alpha JP", 2, 100, 1)]
+    [InlineData("Alpha Two", 1, 100, 2)]
+    [InlineData("200", 1, 200, 1)]
+    [InlineData("%", 0, 0, 0)]
+    public async Task SearchMatchesNamesSeasonOrExactSeriesIdAndEscapesWildcards(
+        string search,
+        int expectedCount,
+        int expectedSeriesId,
+        int expectedSeasonNumber)
+    {
+        await using var fixture = await LibraryFixture.CreateAsync();
+
+        var page = await fixture.Store.ListSeasonsAsync(new AnimeSeasonListQuery(
+            Sort: AnimeLibrarySort.Name,
+            Direction: AnimeLibrarySortDirection.Ascending,
+            Search: search));
+
+        Assert.Equal(expectedCount, page.TotalItems);
+        if (expectedCount == 0)
+        {
+            Assert.Empty(page.Items);
+            return;
+        }
+
+        Assert.Equal(expectedSeriesId, page.Items[0].TmdbSeriesId);
+        if (expectedCount == 1)
+        {
+            Assert.Equal(expectedSeasonNumber, page.Items[0].TmdbSeasonNumber);
+        }
+    }
+
     [Fact]
     public async Task SeasonDetailUsesOfficialEpisodeSnapshotAndReflectsCompletionDeletion()
     {
@@ -187,6 +220,12 @@ public sealed class AnimeLibraryStoreTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             fixture.Store.ListSeasonsAsync(new AnimeSeasonListQuery(
                 Sort: (AnimeLibrarySort)999)));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            fixture.Store.ListSeasonsAsync(new AnimeSeasonListQuery(
+                Search: new string('x', 201))));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            fixture.Store.ListSeasonsAsync(new AnimeSeasonListQuery(
+                Search: "alpha\n")));
     }
 
     private sealed class LibraryFixture : IAsyncDisposable

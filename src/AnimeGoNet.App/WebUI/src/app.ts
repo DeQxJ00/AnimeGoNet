@@ -881,6 +881,7 @@ interface AnimeSeasonDetail {
 }
 
 interface AnimeLibraryUiState {
+  search: string;
   sort: AnimeLibrarySort;
   direction: AnimeLibraryDirection;
   page: number;
@@ -2971,6 +2972,7 @@ function toggleLiveLogPause(): void {
 
 function readLibraryState(): AnimeLibraryUiState {
   const defaults: AnimeLibraryUiState = {
+    search: "",
     sort: "last_updated",
     direction: "desc",
     page: 1,
@@ -2988,6 +2990,8 @@ function readLibraryState(): AnimeLibraryUiState {
     const filters: AnimeEpisodeFilter[] = ["all", "downloaded", "not_downloaded"];
     const pageSizes = [12, 24, 48] as const;
     return {
+      search: typeof stored.search === "string" && stored.search.length <= 200
+        ? stored.search : defaults.search,
       sort: sorts.includes(stored.sort as AnimeLibrarySort)
         ? stored.sort as AnimeLibrarySort : defaults.sort,
       direction: directions.includes(stored.direction as AnimeLibraryDirection)
@@ -3232,7 +3236,8 @@ function renderLibraryPage(page: AnimeSeasonListPage): void {
   const pageCount = Math.max(1, Math.ceil(page.total_items / page.page_size));
   element<HTMLElement>("#library-status").textContent =
     `${page.total_items} 个季度 · ${librarySortLabel(page.sort)} · `
-    + (page.direction === "asc" ? "升序" : "降序");
+    + (page.direction === "asc" ? "升序" : "降序")
+    + (libraryState.search ? ` · 搜索“${libraryState.search}”` : "");
   element<HTMLElement>("#library-page-label").textContent =
     `第 ${page.page} / ${pageCount} 页`;
   element<HTMLButtonElement>("#library-previous").disabled = page.page <= 1;
@@ -3241,7 +3246,9 @@ function renderLibraryPage(page: AnimeSeasonListPage): void {
     renderRegionMessage(
       list,
       "empty",
-      "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。",
+      libraryState.search
+        ? `没有找到与“${libraryState.search}”匹配的作品或季度。`
+        : "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。",
     );
     return;
   }
@@ -3603,6 +3610,7 @@ async function loadLibrary(): Promise<void> {
     sort: libraryState.sort,
     direction: libraryState.direction,
   });
+  if (libraryState.search) query.set("search", libraryState.search);
   try {
     const response = await fetch(`/api/v1/library/seasons?${query}`, { headers });
     if (!response.ok) throw new Error(await responseError(response));
@@ -3777,6 +3785,24 @@ function changeLibraryOrdering(): void {
     element<HTMLSelectElement>("#library-page-size").value,
   ) as 12 | 24 | 48;
   libraryState.page = 1;
+  closeLibraryDetail();
+  saveLibraryState();
+  void loadLibrary();
+}
+
+function searchLibrary(event: SubmitEvent): void {
+  event.preventDefault();
+  libraryState.search = element<HTMLInputElement>("#library-search").value.trim();
+  libraryState.page = 1;
+  closeLibraryDetail();
+  saveLibraryState();
+  void loadLibrary();
+}
+
+function clearLibrarySearch(): void {
+  libraryState.search = "";
+  libraryState.page = 1;
+  element<HTMLInputElement>("#library-search").value = "";
   closeLibraryDetail();
   saveLibraryState();
   void loadLibrary();
@@ -8487,6 +8513,7 @@ element<HTMLFormElement>("#ai-test-form").addEventListener("input", event => {
   updateAiTesterSourceStates();
 });
 element<HTMLSelectElement>("#library-sort").value = libraryState.sort;
+element<HTMLInputElement>("#library-search").value = libraryState.search;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
 element<HTMLSelectElement>("#library-page-size").value = String(libraryState.page_size);
 element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episode_filter;
@@ -8614,6 +8641,14 @@ element<HTMLButtonElement>("#download-next").addEventListener("click", () => {
   void loadDownloads();
 });
 element<HTMLButtonElement>("#library-reload").addEventListener("click", () => void loadLibrary());
+element<HTMLFormElement>("#library-search-form").addEventListener(
+  "submit",
+  searchLibrary,
+);
+element<HTMLButtonElement>("#library-search-clear").addEventListener(
+  "click",
+  clearLibrarySearch,
+);
 element<HTMLFormElement>("#library-create-form").addEventListener(
   "submit",
   (event) => void createLibrarySeason(event),

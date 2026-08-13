@@ -4738,6 +4738,7 @@ public static class ApiEndpoints
     private static async Task<IResult> LibrarySeasons(
         [FromQuery] int? page,
         [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? search,
         [FromQuery] string? sort,
         [FromQuery] string? direction,
         AnimeLibraryStore library,
@@ -4759,6 +4760,21 @@ public static class ApiEndpoints
                 "Library page size must be between 1 and 100."));
         }
 
+        if (search?.Any(char.IsControl) == true)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_search_invalid",
+                "Library search must be at most 200 characters without control characters."));
+        }
+
+        var resolvedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (resolvedSearch is { Length: > 200 })
+        {
+            return TypedResults.BadRequest(Error(
+                "library_search_invalid",
+                "Library search must be at most 200 characters without control characters."));
+        }
+
         if (!TryParseLibrarySort(sort, out var resolvedSort))
         {
             return TypedResults.BadRequest(Error(
@@ -4778,7 +4794,8 @@ public static class ApiEndpoints
                 resolvedPage,
                 resolvedPageSize,
                 resolvedSort,
-                resolvedDirection),
+                resolvedDirection,
+                resolvedSearch),
             cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(new AnimeSeasonListResponse(
             result.Page,

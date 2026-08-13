@@ -145,7 +145,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-admin-form #library-admin-status { flex: 1 1 280px; padding-bottom: 7px; font-size: .78rem; }
 .library-toolbar, .library-episode-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin: 16px 0; }
 .library-toolbar label, .library-episode-toolbar label { display: grid; gap: 5px; color: #8da2c9; font-size: .72rem; }
-.library-toolbar select, .library-episode-toolbar select { min-width: 145px; border: 1px solid #344260; border-radius: 9px; padding: 8px 10px; color: #edf2ff; background: #0c1220; font: inherit; }
+.library-toolbar select, .library-toolbar input, .library-episode-toolbar select { min-width: 145px; border: 1px solid #344260; border-radius: 9px; padding: 8px 10px; color: #edf2ff; background: #0c1220; font: inherit; }
+.library-search-form { display: flex; align-items: end; gap: 8px; flex: 1 1 430px; }
+.library-search-form label { flex: 1 1 260px; }
+.library-search-form input { width: 100%; }
 .library-toolbar #library-status, .library-episode-toolbar #library-episode-status { margin-left: auto; padding-bottom: 7px; font-size: .78rem; }
 .library-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
 .library-list > .empty { grid-column: 1 / -1; }

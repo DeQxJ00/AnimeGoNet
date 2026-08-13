@@ -1410,6 +1410,7 @@ function toggleLiveLogPause() {
 }
 function readLibraryState() {
     const defaults = {
+        search: "",
         sort: "last_updated",
         direction: "desc",
         page: 1,
@@ -1428,6 +1429,8 @@ function readLibraryState() {
         const filters = ["all", "downloaded", "not_downloaded"];
         const pageSizes = [12, 24, 48];
         return {
+            search: typeof stored.search === "string" && stored.search.length <= 200
+                ? stored.search : defaults.search,
             sort: sorts.includes(stored.sort)
                 ? stored.sort : defaults.sort,
             direction: directions.includes(stored.direction)
@@ -1658,13 +1661,16 @@ function renderLibraryPage(page) {
     const pageCount = Math.max(1, Math.ceil(page.total_items / page.page_size));
     element("#library-status").textContent =
         `${page.total_items} 个季度 · ${librarySortLabel(page.sort)} · `
-            + (page.direction === "asc" ? "升序" : "降序");
+            + (page.direction === "asc" ? "升序" : "降序")
+            + (libraryState.search ? ` · 搜索“${libraryState.search}”` : "");
     element("#library-page-label").textContent =
         `第 ${page.page} / ${pageCount} 页`;
     element("#library-previous").disabled = page.page <= 1;
     element("#library-next").disabled = page.page >= pageCount;
     if (page.items.length === 0) {
-        renderRegionMessage(list, "empty", "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。");
+        renderRegionMessage(list, "empty", libraryState.search
+            ? `没有找到与“${libraryState.search}”匹配的作品或季度。`
+            : "作品库暂时为空。只有已确认 TMDB Series 与普通 Season 的作品会显示在这里；tmdbid=0 条目请到“待补全 TMDB”处理。");
         return;
     }
     renderRegionContent(list, ...page.items.map((item) => {
@@ -1965,6 +1971,8 @@ async function loadLibrary() {
         sort: libraryState.sort,
         direction: libraryState.direction,
     });
+    if (libraryState.search)
+        query.set("search", libraryState.search);
     try {
         const response = await fetch(`/api/v1/library/seasons?${query}`, { headers });
         if (!response.ok)
@@ -2127,6 +2135,22 @@ function changeLibraryOrdering() {
         .value;
     libraryState.page_size = Number(element("#library-page-size").value);
     libraryState.page = 1;
+    closeLibraryDetail();
+    saveLibraryState();
+    void loadLibrary();
+}
+function searchLibrary(event) {
+    event.preventDefault();
+    libraryState.search = element("#library-search").value.trim();
+    libraryState.page = 1;
+    closeLibraryDetail();
+    saveLibraryState();
+    void loadLibrary();
+}
+function clearLibrarySearch() {
+    libraryState.search = "";
+    libraryState.page = 1;
+    element("#library-search").value = "";
     closeLibraryDetail();
     saveLibraryState();
     void loadLibrary();
@@ -6482,6 +6506,7 @@ element("#ai-test-form").addEventListener("input", event => {
     updateAiTesterSourceStates();
 });
 element("#library-sort").value = libraryState.sort;
+element("#library-search").value = libraryState.search;
 element("#library-direction").value = libraryState.direction;
 element("#library-page-size").value = String(libraryState.page_size);
 element("#library-episode-filter").value = libraryState.episode_filter;
@@ -6607,6 +6632,8 @@ element("#download-next").addEventListener("click", () => {
     void loadDownloads();
 });
 element("#library-reload").addEventListener("click", () => void loadLibrary());
+element("#library-search-form").addEventListener("submit", searchLibrary);
+element("#library-search-clear").addEventListener("click", clearLibrarySearch);
 element("#library-create-form").addEventListener("submit", (event) => void createLibrarySeason(event));
 element("#library-sort").addEventListener("change", changeLibraryOrdering);
 element("#library-direction").addEventListener("change", changeLibraryOrdering);

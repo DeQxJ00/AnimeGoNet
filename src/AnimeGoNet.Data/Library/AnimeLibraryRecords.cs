@@ -18,7 +18,8 @@ public sealed record AnimeSeasonListQuery(
     int Page = 1,
     int PageSize = 24,
     AnimeLibrarySort Sort = AnimeLibrarySort.LastUpdated,
-    AnimeLibrarySortDirection Direction = AnimeLibrarySortDirection.Descending);
+    AnimeLibrarySortDirection Direction = AnimeLibrarySortDirection.Descending,
+    string? Search = null);
 
 public sealed record AnimeSeasonListProjection(
     int TmdbSeriesId,

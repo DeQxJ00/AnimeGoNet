@@ -73,6 +73,40 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal(JsonValueKind.Null, item.GetProperty("air_date").ValueKind);
     }
 
+    [Theory]
+    [InlineData("alpha", 100)]
+    [InlineData("Alpha One", 100)]
+    [InlineData("200", 200)]
+    public async Task SearchFiltersAcrossCanonicalNameSeasonAndExactSeriesId(
+        string search,
+        int expectedSeriesId)
+    {
+        await using var app = await RunningApp.StartAsync();
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+
+        using var response = await app.Client.GetAsync(
+            "/api/v1/library/seasons?search=" + Uri.EscapeDataString(search));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, json.RootElement.GetProperty("total_items").GetInt32());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(expectedSeriesId, item.GetProperty("tmdb_series_id").GetInt32());
+    }
+
+    [Fact]
+    public async Task InvalidSearchUsesStableError()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var response = await app.Client.GetAsync(
+            "/api/v1/library/seasons?search=" + new string('x', 201));
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("library_search_invalid", json.RootElement.GetProperty("code").GetString());
+    }
+
     [Fact]
     public async Task SeasonDetailReturnsOfficialEpisodeGridWithoutLocalMediaPaths()
     {
