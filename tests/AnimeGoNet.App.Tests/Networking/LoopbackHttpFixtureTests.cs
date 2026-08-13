@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Networking;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace AnimeGoNet.App.Tests.Networking;
 
@@ -101,14 +103,19 @@ public sealed class LoopbackHttpFixtureTests
     public async Task PinnedTransportSendsOnlyNormalizedMikanIdentityCookie()
     {
         const string secret = "private-cookie-value";
+        const string querySecret = "private-query-value";
         await using var server = new OneShotLoopbackServer(
             BuildResponse(HttpStatusCode.OK, []));
-        var transport = new PinnedTorrentHttpTransport();
+        var logger = new CollectingLogger();
+        var transport = new PinnedTorrentHttpTransport(
+            null,
+            new OutboundHttpLogSink(logger),
+            "Mikan");
         var options = new TorrentHttpRequestOptions(secret);
 
         await using var response = await transport.SendAsync(
             new Uri(
-                $"http://mikanani.example.invalid:{server.Origin.Port}/RSS"),
+                $"http://mikanani.example.invalid:{server.Origin.Port}/RSS?token={querySecret}"),
             [IPAddress.Loopback],
             options,
             CancellationToken.None);
@@ -120,6 +127,23 @@ public sealed class LoopbackHttpFixtureTests
             request,
             StringComparison.Ordinal);
         Assert.DoesNotContain(secret, options.ToString(), StringComparison.Ordinal);
+        Assert.Collection(
+            logger.Entries,
+            entry =>
+            {
+                Assert.Equal(4700, entry.EventId.Id);
+                Assert.Contains("Mikan GET", entry.Message, StringComparison.Ordinal);
+                Assert.Contains("/RSS", entry.Message, StringComparison.Ordinal);
+                Assert.DoesNotContain(querySecret, entry.Message, StringComparison.Ordinal);
+                Assert.DoesNotContain(secret, entry.Message, StringComparison.Ordinal);
+            },
+            entry =>
+            {
+                Assert.Equal(4701, entry.EventId.Id);
+                Assert.Contains("status 200", entry.Message, StringComparison.Ordinal);
+                Assert.DoesNotContain(querySecret, entry.Message, StringComparison.Ordinal);
+                Assert.DoesNotContain(secret, entry.Message, StringComparison.Ordinal);
+            });
     }
 
     [Fact]
@@ -206,6 +230,25 @@ public sealed class LoopbackHttpFixtureTests
         }
         output.Write("0\r\n\r\n"u8);
         return output.ToArray();
+    }
+
+    private sealed record LogEntry(LogLevel Level, EventId EventId, string Message);
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add(new LogEntry(logLevel, eventId, formatter(state, exception)));
     }
 
     private sealed class OneShotLoopbackServer : IAsyncDisposable

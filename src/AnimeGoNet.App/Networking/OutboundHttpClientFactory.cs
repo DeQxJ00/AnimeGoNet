@@ -4,9 +4,18 @@ namespace AnimeGoNet.App.Networking;
 
 internal static class OutboundHttpClientFactory
 {
-    public static HttpClient Create(OutboundProxyOptions options)
+    public static HttpClient Create(
+        OutboundProxyOptions options,
+        OutboundHttpLogSink? logSink = null,
+        string service = "External")
     {
-        var client = new HttpClient(CreateHandler(options), disposeHandler: true)
+        HttpMessageHandler handler = CreateHandler(options);
+        if (logSink is not null)
+        {
+            handler = new OutboundHttpLoggingHandler(handler, logSink, service);
+        }
+
+        var client = new HttpClient(handler, disposeHandler: true)
         {
             Timeout = Timeout.InfiniteTimeSpan,
         };

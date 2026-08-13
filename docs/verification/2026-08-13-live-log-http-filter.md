@@ -16,6 +16,12 @@ StaticFiles 和 Kestrel category；外连识别覆盖 `System.Net.Http`、
 `Microsoft.Extensions.Http` 及标准 HttpClient 请求/响应消息。仅包含 URL 的应用启动、配置或
 普通业务消息保持 `none`，不会被误报为真正的外部请求。
 
+主程序默认创建的 Mikan、TMDB API、TMDB 图片、Bangumi、AI、Torrent 和 AnimeGoNetData
+客户端会显式写入 `AnimeGoNet.App.Http.Outbound`：开始、收到响应头或失败分别使用 Event ID
+4700/4701/4702，并记录服务名、HTTP 方法、去掉 query/fragment 的 endpoint、状态码和耗时。
+请求/响应正文、Header、Cookie、passkey、API Key、完整 Torrent URL 和异常消息均不写入，
+因此这些记录可以进入实时 UI 与滚动文件日志而不扩大敏感数据边界。
+
 筛选仅作用于浏览器当前最新 500 条日志，不改变 WebSocket 协议、服务端文件日志、日志级别
 或脱敏边界。
 
@@ -24,3 +30,4 @@ StaticFiles 和 Kestrel category；外连识别覆盖 `System.Net.Http`、
 - `npm run web:test`：21/21 通过；
 - TypeScript strict build 通过；
 - 测试分别断言外连、入站、非 HTTP 分类及“排除 HTTP”组合筛选。
+- 真实 loopback Mikan transport 断言开始/完成事件可筛选，且 Cookie 与 query token 不进入日志。

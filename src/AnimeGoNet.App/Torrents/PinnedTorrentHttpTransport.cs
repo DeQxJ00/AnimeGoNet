@@ -6,9 +6,27 @@ using AnimeGoNet.Core.Sources;
 
 namespace AnimeGoNet.App.Torrents;
 
-public sealed class PinnedTorrentHttpTransport(
-    OutboundProxyOptions? outboundProxy = null) : ITorrentHttpTransport
+public sealed class PinnedTorrentHttpTransport : ITorrentHttpTransport
 {
+    private readonly OutboundProxyOptions? _outboundProxy;
+    private readonly OutboundHttpLogSink? _logSink;
+    private readonly string _service;
+
+    public PinnedTorrentHttpTransport(OutboundProxyOptions? outboundProxy = null)
+        : this(outboundProxy, null, "Torrent")
+    {
+    }
+
+    internal PinnedTorrentHttpTransport(
+        OutboundProxyOptions? outboundProxy,
+        OutboundHttpLogSink? logSink,
+        string service)
+    {
+        _outboundProxy = outboundProxy;
+        _logSink = logSink;
+        _service = service;
+    }
+
     public async ValueTask<TorrentHttpResponse> SendAsync(
         Uri uri,
         IReadOnlyList<IPAddress> validatedAddresses,
@@ -33,15 +51,15 @@ public sealed class PinnedTorrentHttpTransport(
             throw new ArgumentException("At least one validated address is required.", nameof(validatedAddresses));
         }
 
-        var useProxy = outboundProxy is not null
-            && OutboundProxyPolicy.ShouldProxy(uri, outboundProxy);
+        var useProxy = _outboundProxy is not null
+            && OutboundProxyPolicy.ShouldProxy(uri, _outboundProxy);
         HttpMessageHandler handler = useProxy
             ? new HttpClientHandler
             {
                 AllowAutoRedirect = false,
                 UseCookies = false,
                 UseProxy = true,
-                Proxy = new SelectiveWebProxy(outboundProxy!),
+                Proxy = new SelectiveWebProxy(_outboundProxy!),
             }
             : CreatePinnedHandler(uri, validatedAddresses);
         var client = new HttpClient(handler, disposeHandler: true)
@@ -56,12 +74,14 @@ public sealed class PinnedTorrentHttpTransport(
                 "Cookie",
                 $"{MikanIdentityCookie.Name}={cookie}");
         }
+        var trace = _logSink?.Start(_service, request.Method, uri);
         try
         {
             var response = await client.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken).ConfigureAwait(false);
+            trace?.Complete((int)response.StatusCode);
             var content = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var owner = new HttpResponseOwner(response, client);
             return new TorrentHttpResponse(
@@ -71,8 +91,9 @@ public sealed class PinnedTorrentHttpTransport(
                 content,
                 owner);
         }
-        catch
+        catch (Exception exception)
         {
+            trace?.Fail(exception);
             client.Dispose();
             throw;
         }

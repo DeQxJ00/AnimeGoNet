@@ -97,7 +97,8 @@ public static class AnimeGoApplication
         }
         builder.Services.Configure<HostOptions>(host =>
             host.ShutdownTimeout = TimeSpan.FromSeconds(5));
-        builder.Services.AddSingleton<WebSocketLogHub>();
+        var webSocketLogHub = new WebSocketLogHub();
+        builder.Services.AddSingleton(webSocketLogHub);
         builder.Services.AddSingleton<ILoggerProvider>(
             static services =>
                 services.GetRequiredService<WebSocketLogHub>());
@@ -198,20 +199,23 @@ public static class AnimeGoApplication
             layout.ConfigurationPath);
         await externalPluginConfigurations.LoadAsync(cancellationToken)
             .ConfigureAwait(false);
-        builder.Services.AddSingleton(
-            _ => new RollingFileLoggerProvider(
-                new RollingFileLogOptions
-                {
-                    FilePath = Path.Combine(
-                        layout.LogsPath,
-                        "animego.log"),
-                    MinimumLevel = debugEnabled
-                        ? LogLevel.Debug
-                        : LogLevel.Information,
-                }));
+        var rollingFileLoggerProvider = new RollingFileLoggerProvider(
+            new RollingFileLogOptions
+            {
+                FilePath = Path.Combine(
+                    layout.LogsPath,
+                    "animego.log"),
+                MinimumLevel = debugEnabled
+                    ? LogLevel.Debug
+                    : LogLevel.Information,
+            });
+        builder.Services.AddSingleton(rollingFileLoggerProvider);
         builder.Services.AddSingleton<ILoggerProvider>(
             static services =>
                 services.GetRequiredService<RollingFileLoggerProvider>());
+        var outboundHttpLogs = new OutboundHttpLogSink(
+            webSocketLogHub.CreateLogger("AnimeGoNet.App.Http.Outbound"),
+            rollingFileLoggerProvider.CreateLogger("AnimeGoNet.App.Http.Outbound"));
         var applicationOverrides = new ApplicationOverrideStore(
             layout.ConfigurationPath,
             layout.BackupsPath);
@@ -261,7 +265,10 @@ public static class AnimeGoApplication
         var bangumiArchive = new BangumiArchiveStore(database);
         var dataUpdateTransfers = new DataUpdateTransferStore(database);
         var ownsDataUpdateHttpClient = dataUpdateHttpClient is null;
-        dataUpdateHttpClient ??= OutboundHttpClientFactory.Create(options.OutboundProxy);
+        dataUpdateHttpClient ??= OutboundHttpClientFactory.Create(
+            options.OutboundProxy,
+            outboundHttpLogs,
+            "AnimeGoNetData");
         var dataUpdates = new DataUpdateService(
             dataUpdateHttpClient,
             dataUpdateRuntime,
@@ -303,7 +310,10 @@ public static class AnimeGoApplication
             layout,
             options.TorrentFetch,
             new SystemTorrentDnsResolver(),
-            new PinnedTorrentHttpTransport(options.OutboundProxy));
+            new PinnedTorrentHttpTransport(
+                options.OutboundProxy,
+                outboundHttpLogs,
+                "Torrent"));
         var expiredStaging = await ingestTasks
             .ExpireStagedAsync(DateTimeOffset.UtcNow, cancellationToken)
             .ConfigureAwait(false);
@@ -408,7 +418,10 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanBangumiSubjectResolver>();
         builder.Services.AddSingleton<MikanRssIngestProcessor>();
         rssDnsResolver ??= new SystemTorrentDnsResolver();
-        rssHttpTransport ??= new PinnedTorrentHttpTransport(options.OutboundProxy);
+        rssHttpTransport ??= new PinnedTorrentHttpTransport(
+            options.OutboundProxy,
+            outboundHttpLogs,
+            "Mikan");
         var profileRssClient = new ProfileBoundRssFeedHttpClient(
             sourceProfiles, rssDnsResolver, rssHttpTransport, options);
         builder.Services.AddSingleton<IRssFeedHttpClient>(profileRssClient);
@@ -441,7 +454,10 @@ public static class AnimeGoApplication
         {
             builder.Services.AddSingleton<ITmdbPosterTransport>(_ =>
                 new HttpTmdbPosterTransport(
-                    MetadataHttpClientFactory.Create(options.OutboundProxy),
+                    MetadataHttpClientFactory.Create(
+                        options.OutboundProxy,
+                        outboundHttpLogs,
+                        "TMDB image"),
                     ownsHttpClient: true));
         }
         else
@@ -464,7 +480,10 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<DeleteExecutionProcessor>();
         tmdbClient ??= new TmdbCachingClient(
             new TmdbClient(
-                MetadataHttpClientFactory.Create(options.OutboundProxy),
+                MetadataHttpClientFactory.Create(
+                    options.OutboundProxy,
+                    outboundHttpLogs,
+                    "TMDB"),
                 options.Metadata.Tmdb,
                 ownsHttpClient: true),
             jsonCache,
@@ -479,7 +498,10 @@ public static class AnimeGoApplication
         if (bangumiSubjectClient is null)
         {
             var upstream = new BangumiSubjectClient(
-                MetadataHttpClientFactory.Create(options.OutboundProxy),
+                MetadataHttpClientFactory.Create(
+                    options.OutboundProxy,
+                    outboundHttpLogs,
+                    "Bangumi"),
                 options.Metadata.Bangumi,
                 ownsHttpClient: true);
             var cached = new BangumiArchiveCachingClient(
@@ -508,7 +530,10 @@ public static class AnimeGoApplication
             options.Metadata.Ai));
         builder.Services.AddSingleton(new AiMetadataDebugTraceStore(layout));
         aiMetadataMatcher ??= new OpenAiCompatibleMetadataMatcher(
-            OutboundHttpClientFactory.Create(options.OutboundProxy),
+            OutboundHttpClientFactory.Create(
+                options.OutboundProxy,
+                outboundHttpLogs,
+                "AI"),
             options.Metadata.Ai,
             ownsHttpClient: true,
             referenceHttpClient: CreateAiReferenceHttpClient(),

@@ -99,6 +99,7 @@ export function classifyLiveLogHttpDirection(entry) {
     }
     if (category.startsWith("system.net.http")
         || category.startsWith("microsoft.extensions.http")
+        || category.startsWith("animegonet.app.http.outbound")
         || message.startsWith("start processing http request")
         || message.startsWith("sending http request")
         || message.startsWith("received http response headers")
