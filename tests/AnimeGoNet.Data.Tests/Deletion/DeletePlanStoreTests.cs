@@ -45,6 +45,21 @@ public sealed class DeletePlanStoreTests
     }
 
     [Fact]
+    public async Task PreviewDoesNotDuplicateOneMediaPathAsDownloadSourceAndMediaTarget()
+    {
+        await using var fixture = await DeleteFixture.CreateAsync();
+        await fixture.MakeSourcePathEqualMediaPathAsync();
+
+        var preview = Assert.IsType<DeletePlanPreview>(
+            await fixture.Store.GetPreviewAsync(fixture.TaskId));
+
+        Assert.Empty(preview.SourceFiles);
+        var media = Assert.Single(preview.MediaFiles);
+        Assert.Equal("/download/anime/Series/S01/E001.mkv", media.TargetKey);
+        Assert.Equal("/download/anime", media.RootPath);
+    }
+
+    [Fact]
     public async Task PendingReadaptationReviewBlocksTaskRecordDeletion()
     {
         await using var fixture = await DeleteFixture.CreateAsync();
@@ -174,6 +189,19 @@ public sealed class DeletePlanStoreTests
                 UPDATE ingest_tasks SET readaptation_review_state = $state WHERE id = $task_id;
                 """;
             command.Parameters.AddWithValue("$state", state);
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task MakeSourcePathEqualMediaPathAsync()
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE file_operations
+                SET source_path = target_path
+                WHERE task_file_id IN (SELECT id FROM task_files WHERE task_id = $task_id);
+                """;
             command.Parameters.AddWithValue("$task_id", TaskId);
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }

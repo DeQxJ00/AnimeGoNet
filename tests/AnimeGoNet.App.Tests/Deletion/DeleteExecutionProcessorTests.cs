@@ -72,7 +72,32 @@ public sealed class DeleteExecutionProcessorTests
         Assert.False(await TaskExistsAsync(app, prepared.TaskId));
     }
 
-    private static async Task<PreparedPlan> PreparePlanAsync(RunningApp app, DeleteSelection selection)
+    [Fact]
+    public async Task FrozenDuplicateSourceTargetIsSkippedAndMediaDeletionCompletes()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var prepared = await PreparePlanAsync(
+            app,
+            new DeleteSelection(true, true, true, true, DeleteTaskRecord: true),
+            duplicateFrozenSourceTarget: true);
+
+        var result = await app.App.Services.GetRequiredService<DeleteExecutionProcessor>().RunOnceAsync();
+
+        Assert.Equal(DeleteExecutionResult.Completed, result);
+        Assert.True(File.Exists(prepared.SourcePath));
+        Assert.False(File.Exists(prepared.MediaPath));
+        var state = await ReadStateAsync(app, prepared.ExecutionId);
+        Assert.Equal("completed", state.ExecutionState);
+        Assert.Equal(4, state.CompletedItems);
+        Assert.Equal(1, state.SkippedItems);
+        Assert.False(await TaskExistsAsync(app, prepared.TaskId));
+    }
+
+    private static async Task<PreparedPlan> PreparePlanAsync(
+        RunningApp app,
+        DeleteSelection selection,
+        bool duplicateFrozenSourceTarget = false)
     {
         const string payload = """
             {
@@ -147,6 +172,19 @@ public sealed class DeleteExecutionProcessorTests
         var plans = app.App.Services.GetRequiredService<DeletePlanStore>();
         var preview = Assert.IsType<DeletePlanPreview>(await plans.GetPreviewAsync(taskId));
         var plan = await plans.CreateAsync(taskId, preview.Fingerprint, selection, DateTimeOffset.UtcNow);
+        if (duplicateFrozenSourceTarget)
+        {
+            await using var connection = await database.OpenConnectionAsync();
+            await using var corruptFrozenPlan = connection.CreateCommand();
+            corruptFrozenPlan.CommandText = """
+                UPDATE delete_execution_items
+                SET target_key = $media
+                WHERE execution_id = $execution_id AND item_kind = 'source_file';
+                """;
+            corruptFrozenPlan.Parameters.AddWithValue("$media", mediaPath);
+            corruptFrozenPlan.Parameters.AddWithValue("$execution_id", plan.ExecutionId);
+            Assert.Equal(1, await corruptFrozenPlan.ExecuteNonQueryAsync());
+        }
         return new PreparedPlan(plan.ExecutionId, taskId, sourcePath, mediaPath);
     }
 
@@ -171,6 +209,8 @@ public sealed class DeleteExecutionProcessorTests
             SELECT state, failure_reason,
                    (SELECT COUNT(*) FROM delete_execution_items
                     WHERE execution_id = execution.id AND state = 'completed'),
+                   (SELECT COUNT(*) FROM delete_execution_items
+                    WHERE execution_id = execution.id AND state = 'skipped'),
                    (SELECT COUNT(*) FROM completion_records),
                    (SELECT COUNT(*) FROM episode_claims)
             FROM delete_executions AS execution WHERE id = $id;
@@ -180,7 +220,7 @@ public sealed class DeleteExecutionProcessorTests
         Assert.True(await reader.ReadAsync());
         return new State(
             reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1),
-            reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+            reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5));
     }
 
     private sealed class FakeRegistry(IDownloadClient client) : IDownloadClientRegistry
@@ -219,6 +259,7 @@ public sealed class DeleteExecutionProcessorTests
         string ExecutionState,
         string? FailureReason,
         int CompletedItems,
+        int SkippedItems,
         int CompletionRecords,
         int EpisodeClaims);
 }

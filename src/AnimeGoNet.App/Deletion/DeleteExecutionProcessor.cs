@@ -33,6 +33,17 @@ public sealed class DeleteExecutionProcessor(
         {
             try
             {
+                if (item.ItemKind == DeleteItemKinds.SourceFile
+                    && claim.Items.Any(candidate =>
+                        candidate.ItemKind == DeleteItemKinds.MediaFile
+                        && SameFileTarget(candidate.TargetKey, item.TargetKey)))
+                {
+                    await store.CompleteItemAsync(
+                        claim, item, false, _timeProvider.GetUtcNow(), cancellationToken)
+                        .ConfigureAwait(false);
+                    continue;
+                }
+
                 await ExecuteItemAsync(claim, item, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -111,4 +122,24 @@ public sealed class DeleteExecutionProcessor(
         IOException => "delete_file_io_error",
         _ => "delete_execution_error",
     };
+
+    private static bool SameFileTarget(string left, string right)
+    {
+        try
+        {
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return string.Equals(
+                Path.GetFullPath(left),
+                Path.GetFullPath(right),
+                comparison);
+        }
+        catch (Exception exception) when (exception is ArgumentException
+                                          or NotSupportedException
+                                          or PathTooLongException)
+        {
+            return false;
+        }
+    }
 }

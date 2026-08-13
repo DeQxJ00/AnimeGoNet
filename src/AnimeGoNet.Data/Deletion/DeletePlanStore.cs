@@ -162,6 +162,7 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
             JOIN task_files AS file ON file.id = operation.task_file_id
             JOIN download_jobs AS job ON job.task_id = file.task_id
             WHERE file.task_id = $task_id
+              AND operation.source_path <> operation.target_path
             ORDER BY operation.source_path;
             """, taskId, cancellationToken).ConfigureAwait(false);
         var media = await ReadTargetsAsync(connection, transaction, """
