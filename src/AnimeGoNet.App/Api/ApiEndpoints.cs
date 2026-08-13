@@ -110,6 +110,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
+        app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
         app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
         app.MapPost("/api/v1/library/directory-database/refresh", RefreshDirectoryDatabase);
         app.MapGet("/api/v1/data-update", GetDataUpdateStatus);
@@ -133,6 +134,9 @@ public static class ApiEndpoints
         app.MapDelete(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}",
             DeleteLibrarySeason);
+        app.MapPost(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/external-media/import",
+            ImportExternalMediaSeason);
         app.MapGet(
             "/api/v1/library/covers/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibraryCover);
@@ -5028,6 +5032,97 @@ public static class ApiEndpoints
                 "TMDB returned an invalid Series or Season snapshot."));
         }
     }
+
+    private static async Task<IResult> ImportExternalMedia(
+        AnimeGoOptions options,
+        ExternalMediaImportStore importer,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await importer.ScanAllAsync(
+                options.Paths.SavePath,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ExternalMediaResponse(result));
+        }
+        catch (IOException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_media_scan_failed",
+                "The configured media library could not be scanned safely."));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_media_scan_denied",
+                "The configured media library could not be read."));
+        }
+    }
+
+    private static async Task<IResult> ImportExternalMediaSeason(
+        int tmdbSeriesId,
+        int seasonNumber,
+        AnimeGoOptions options,
+        ExternalMediaImportStore importer,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_series_id_invalid",
+                "TMDB Series ID must be a positive integer."));
+        }
+        if (seasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_season_number_invalid",
+                "TMDB Season number must be a positive integer."));
+        }
+
+        try
+        {
+            var result = await importer.ScanSeasonAsync(
+                options.Paths.SavePath,
+                tmdbSeriesId,
+                seasonNumber,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return result is null
+                ? TypedResults.NotFound(Error(
+                    "library_season_not_found",
+                    "The requested TMDB season was not found in the local library."))
+                : TypedResults.Ok(ExternalMediaResponse(result));
+        }
+        catch (IOException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_media_scan_failed",
+                "The configured media library could not be scanned safely."));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return TypedResults.Conflict(Error(
+                "external_media_scan_denied",
+                "The configured media library could not be read."));
+        }
+    }
+
+    private static ExternalMediaImportResponse ExternalMediaResponse(
+        ExternalMediaImportResult result) =>
+        new(
+            result.ScannedSeasonCount,
+            result.CandidateFileCount,
+            result.ImportedCount,
+            result.AlreadyRecordedCount,
+            result.SkippedCount,
+            result.Items.Select(item => new ExternalMediaImportItemResponse(
+                item.TmdbSeriesId,
+                item.TmdbSeasonNumber,
+                item.TmdbEpisodeNumber,
+                item.RelativePath,
+                item.Status,
+                item.ReasonCode)).ToArray());
 
     private static async Task<IResult> LibrarySeasonDetail(
         int tmdbSeriesId,

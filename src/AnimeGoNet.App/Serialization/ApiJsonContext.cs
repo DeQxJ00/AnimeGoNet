@@ -72,6 +72,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(AnimeSeasonRefreshRequest))]
 [JsonSerializable(typeof(AnimeSeasonMutationResponse))]
 [JsonSerializable(typeof(AnimeSeasonDeleteResponse))]
+[JsonSerializable(typeof(ExternalMediaImportResponse))]
 [JsonSerializable(typeof(DirectoryDatabaseStatusResponse))]
 [JsonSerializable(typeof(DataUpdateStatusResponse))]
 [JsonSerializable(typeof(BangumiArchiveUsageResponse))]

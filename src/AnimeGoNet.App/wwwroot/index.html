@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260813-config-archive">
+  <link rel="stylesheet" href="/styles.css?v=20260813-external-media">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -100,9 +100,13 @@
           <p class="eyebrow">TMDB canonical library</p>
           <h2 id="anime-library-title">动画作品库</h2>
         </div>
-        <button id="library-reload" type="button" class="secondary-button">刷新作品库</button>
+        <div class="section-heading-actions">
+          <button id="library-external-import" type="button" class="secondary-button">扫描外部媒体并补录</button>
+          <button id="library-reload" type="button" class="secondary-button">刷新作品库</button>
+        </div>
       </div>
-      <p class="muted">每张卡片代表一个已验证的 TMDB Series + 普通 Season；进度和 EP 网格只认 TMDB Episode 与规范完成记录。</p>
+      <p class="muted">每张卡片代表一个已验证的 TMDB Series + 普通 Season；进度和 EP 网格只认 TMDB Episode 与规范完成记录。外部媒体默认不扫描，只有点击手动补录按钮时才读取标准季度目录。</p>
+      <div id="library-external-import-result" class="external-import-result" aria-live="polite" hidden></div>
       <form id="library-create-form" class="library-admin-form">
         <label>TMDB Series ID
           <input id="library-create-series" type="number" min="1" step="1" required>
@@ -163,10 +167,12 @@
         </div>
         <div id="library-detail-summary"></div>
         <div class="library-detail-actions">
+          <button id="library-detail-external-import" type="button" class="secondary-button">扫描本季度外部媒体</button>
           <button id="library-detail-refresh" type="button" class="secondary-button">从 TMDB 刷新</button>
           <button id="library-detail-delete" type="button" class="danger-button">删除无引用投影</button>
           <span id="library-detail-action-status" class="muted" role="status"></span>
         </div>
+        <div id="library-detail-external-import-result" class="external-import-result" aria-live="polite" hidden></div>
         <div id="library-audit" class="library-audit" aria-live="polite"></div>
         <div class="library-episode-toolbar">
           <label>EP 状态
@@ -1260,6 +1266,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260813-visible-config"></script>
+    <script type="module" src="/app.js?v=20260813-external-media"></script>
 </body>
 </html>

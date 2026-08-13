@@ -59,7 +59,7 @@ runner 和外部 Release 仍未验证。详见
 | 静态资源 | 首次释放、内嵌页、缓存头、404 | C/E | AOT 单文件环境可访问 |
 | Web UI | 仪表盘、下载、配置、插件、缓存、日志、路由、响应式 | U/C/I/E | Node + linkedom DOM/状态/可访问性契约与 Kestrel 资源测试通过；win-x64 NativeAOT Playwright 2/2、Ubuntu CT linux-x64 完整链发布镜像 Chromium 1/1 通过且无 console/page error |
 | Web UI 下载进度 | qB状态/进度/速度/ETA/文件priority、做种目标/累计/门禁、业务整理阶段/单位进度、多实例同步、stale恢复 | U/C/I/E | qB100%不提前完成；schema v37 各整理阶段可持久恢复且不会重复文件工作；0/-1/正数目标可解释；wanted进度正确；离线保留快照；暂停恢复/重试通过 |
-| Web UI 作品库 | TMDB 名称/Cover/Season、EP完成网格、四种稳定排序、待补全TMDB | U/C/I/E | EP全集与状态只来自TMDB和规范完成记录；排序/分页稳定；`tmdbid=0` 不伪造进度 |
+| Web UI 作品库 | TMDB 名称/Cover/Season、EP完成网格、四种稳定排序、外部媒体手动补录、待补全TMDB | U/C/I/E | EP全集与状态只来自TMDB和规范完成记录；外部扫描默认不运行且只补录标准唯一文件；排序/分页稳定；`tmdbid=0` 不伪造进度 |
 | Web UI 作品详情 | mikanid人工规则、TMDB三层获取阶段、偏移、验证状态、解析时间线 | U/C/E | 页面值与SQLite解析运行一致；人工规则修改有影响预览 |
 | 删除编排 | 业务记录、下载器任务、下载源文件、媒体库文件、组合删除、部分失败 | U/C/I/E | 四种可独立执行且不隐式级联；越界零删除，失败可重试且有审计 |
 | Web UI 配置与安全边界 | access-key 会话、配置敏感值直显、日志/运行轨迹脱敏、危险操作确认、XSS | U/C/E | 浏览器 E2E 和安全用例通过 |
@@ -258,6 +258,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 23. 对同一 `mikanid+来源EP` 并发提交不同字幕组、不同 Torrent 和不同下载器路由，断言 SQLite 只有一个活动 claim 且至多一个下载器收到该文件；第一项成功后其余输入早停，失败/崩溃恢复不会盲目重下，其他 EP 不受影响，页面标明去重范围仅为同一 mikanid。
 24. 对两个来源提交标题/容量相似但没有共同可靠 Episode 身份的文件，断言系统不跨来源误拦截，并在待补全详情提示可能重复；相同 source item、info-hash 或文件指纹仍可幂等早停。
 25. 将多个 fallback 记录恢复到同一 TMDB Episode，断言事务只产生一个规范完成记录，其他项标记 `DuplicateAfterResolution`，不新增下载任务、不自动删除或移动冲突文件。
+26. 在标准 `save_path/<TMDB规范名>/S01` 放入唯一非空 `E001.mkv`，未点击时进度不变；显式执行季度扫描后新增 `external_import` 完成记录并显示已下载，第二次扫描返回 `already_recorded`。同目录的 `E099.mkv`、非标准文件名、空文件、同 EP 多视频、字幕、`Other` 子目录和符号链接均不补录，API/WebUI 只展示相对路径和稳定跳过原因。
 
 ## Docker 路径 E2E
 

@@ -99,6 +99,8 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 `GET /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 返回季度头部和完整 EP 网格。网格只枚举该季度实际保存的 `tmdb_episodes`，不会按 `episode_count` 猜造缺失项；状态只由同一规范 TMDB 三元组的 `completion_records` 决定。响应可显示来源、完成时间和媒体路径是否已记录，但不返回媒体绝对路径、内部 SQLite 行 ID、Torrent URL 或凭据。删除完成记录后下一次读取立即显示 `not_downloaded`。
 
+外部自行补齐的媒体默认不扫描。作品库顶部的“扫描外部媒体并补录”显式调用 `POST /api/v1/library/external-media/import`；季度详情的按钮调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/external-media/import`。扫描只检查当前正式作品库投影对应的 `save_path/<TMDB规范名>/Sxx` 直接目录，接受非空且文件 stem 精确为 `E###`（也支持更多位正整数）的已知视频扩展名；`Other`、子目录、字幕、非标准命名、未知 TMDB EP、无法读取项、目录链/文件符号链接和同 EP 多视频不会补录。每个唯一候选必须命中当前 `tmdb_episodes`，再以 `source_id=external_import` 和媒体绝对路径写入规范完成记录；响应和 WebUI 只展示相对路径及稳定跳过原因。重复点击通过 TMDB 三元组唯一键返回 `already_recorded`。此操作不移动或删除文件，不生成缺少真实 Torrent 身份的目录 sidecar/NFO/来源 alias，也没有 schedule、启动扫描或配置开关。
+
 `POST /api/v1/library/seasons` 只接受正整数 `tmdb_series_id` 与普通 `tmdb_season_number`。服务端必须分别读取并验证 TMDB Series、Season 的身份，再以 TMDB 名称、开播日期、封面和完整 Episode snapshot 创建本地投影；页面不允许手工填写动画名、季度名或 Episode。已存在资源返回冲突，不能用创建请求静默覆盖。
 
 `PUT /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 是权威刷新，不是自由编辑。请求必须提交详情响应中的 64 位 `expected_revision`；服务端在远端请求前和写事务内都检查 revision，再重新验证 Series 与 Season，替换 TMDB 当前 Episode snapshot，并保留规范完成记录。`DELETE` 使用相同 revision；只删除无业务引用的本地 Season/EP 投影，最后一个 Season 删除后才删除 Series。任务文件、完成记录、Episode claim、Mikan 人工规则、fallback 完成记录或活动 NFO 重写仍引用该身份时返回冲突，并要求使用四类删除流程。该操作始终不删除 qBittorrent 任务、源文件或媒体文件。

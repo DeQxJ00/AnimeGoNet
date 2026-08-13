@@ -181,6 +181,17 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-admin-form label { display: grid; gap: 5px; color: #8da2c9; font-size: .72rem; }
 .library-admin-form input { width: 150px; border: 1px solid var(--control-border); border-radius: var(--control-radius); padding: 9px 11px; color: var(--control-text); background: var(--control-background); font-family: inherit; font-size: var(--control-font-size); }
 .library-admin-form #library-admin-status { flex: 1 1 280px; padding-bottom: 7px; font-size: .78rem; }
+.section-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
+.external-import-result { margin: 14px 0; padding: 12px 14px; border: 1px solid #334565; border-radius: 12px; background: rgba(5,8,16,.52); }
+.external-import-result > p { margin: 0; color: #a9bad7; font-size: .78rem; line-height: 1.5; }
+.external-import-result > details { margin-top: 10px; }
+.external-import-result summary { cursor: pointer; color: #dce7fb; font-size: .76rem; }
+.external-import-list { display: grid; gap: 8px; margin-top: 10px; }
+.external-import-item { padding: 9px 10px; border: 1px solid #334565; border-radius: 10px; background: rgba(5,8,16,.62); }
+.external-import-item.imported { border-color: #31755f; background: rgba(14,43,35,.55); }
+.external-import-item.skipped { border-color: #7b4250; background: rgba(54,18,28,.45); }
+.external-import-item strong { display: block; color: #dce7fb; font-size: .76rem; overflow-wrap: anywhere; }
+.external-import-item span { display: block; margin-top: 4px; color: #94a7c8; font-size: .7rem; overflow-wrap: anywhere; }
 .library-toolbar, .library-episode-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin: 16px 0; }
 .library-toolbar label, .library-episode-toolbar label { display: grid; gap: 5px; color: #8da2c9; font-size: .72rem; }
 .library-toolbar select, .library-toolbar input, .library-episode-toolbar select { min-width: 145px; border: 1px solid var(--control-border); border-radius: var(--control-radius); padding: 9px 11px; color: var(--control-text); background: var(--control-background); font-family: inherit; font-size: var(--control-font-size); }

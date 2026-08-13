@@ -231,6 +231,7 @@
 - [x] 实现作品库季度列表：schema v23 已持久化 TMDB Series/Season 名称、首播日期、总集数与 Series/Season poster 路径；P4/P3 联合匹配会再请求官方 Season endpoint，并在正常解析和待补全恢复事务中保存完整普通 Episode snapshot。列表/详情 API、Cover 安全代理/缓存/占位图和静态 TypeScript 页面均已完成；页面显示 TMDB 规范进度、取得策略、验证状态、一致性警告和可筛选 EP 网格，删除完成记录会立即恢复未下载。
 - [x] 实现作品库服务端分页排序和前端升/降序：服务端与页面支持最后业务更新时间（默认降序）、TMDB 名称、TMDB Season 开播日期、本地加入日期四种升/降序，空开播日期始终置后并使用 TMDB ID/Season 稳定翻页；排序、方向、页大小、EP 筛选和当前详情保存在浏览器本地。
 - [x] 实现作品库服务端搜索：按 TMDB 规范名称、原名、季度名和精确 Series ID 检索全部作品，不受当前分页限制；搜索词与排序/页大小一同保存在浏览器本地，提交或清除搜索都会回到第一页并关闭旧详情。
+- [x] 增加显式外部媒体扫描与补录：作品库支持全库手动扫描，季度详情支持单季度手动扫描，默认不运行后台扫描；只接受 `save_path/<TMDB规范名>/Sxx/E###.<视频扩展名>` 的非空直接视频文件，逐集验证现有 TMDB Episode snapshot，以 `external_import` 幂等写入规范完成记录并完成同 EP 活动 claim。`Other`、未知 EP、非标准命名、符号链接和同 EP 多视频均跳过并在 WebUI 返回相对路径明细，不移动/删除文件、不伪造 sidecar/NFO/来源 alias。
 - [x] 统一 WebUI 基础控件视觉规范：输入框、搜索框、下拉框、文件选择器和主/次/危险按钮共用高度、字体、圆角、边框、背景、placeholder、disabled 与 hover token；修复任务筛选按钮被 Grid 拉高、下载器动态按钮使用浏览器默认样式及缓存下拉框未着色，并保留导航、作品卡片和代码编辑区的专用样式。
 - [x] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。`poster_url` 只指向同源 `/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}`；Season/Series 回退、5 MiB 流式上限、图片魔数校验、并发合并、磁盘缓存与失败占位均有测试。
 - [x] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格、季度封面或完成比例；逐项恢复并验证真实 TMDB 映射后，再事务并入标准作品库。

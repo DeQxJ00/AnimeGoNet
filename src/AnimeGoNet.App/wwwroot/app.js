@@ -45,6 +45,7 @@ const metadataStorageKey = "animegonet.metadata-tasks.v1";
 let metadataState = readMetadataState();
 const expandedDownloadJobIds = new Set();
 let activeLibraryDetail = null;
+let externalImportDetailIdentity = null;
 let libraryListRequestSequence = 0;
 let libraryDetailRequestSequence = 0;
 let activeMikanWorkRule = null;
@@ -1760,6 +1761,59 @@ function libraryValidation(value) {
     };
     return labels[value] ?? value;
 }
+function externalMediaImportReason(value) {
+    const labels = {
+        external_media_season_path_ambiguous: "多个 TMDB 季度映射到同一个目录",
+        external_media_season_path_unsafe: "季度目录是符号链接或重解析点",
+        external_media_file_unsafe: "媒体文件是符号链接或重解析点",
+        external_media_file_unreadable: "媒体文件无法读取",
+        external_media_file_empty: "媒体文件为空",
+        external_media_filename_invalid: "文件名不符合 E###.<视频扩展名>",
+        external_media_tmdb_episode_missing: "TMDB Episode snapshot 中不存在该 EP",
+        external_media_episode_ambiguous: "同一 TMDB EP 找到多个视频文件",
+        external_media_file_changed: "扫描期间文件被删除、清空或替换",
+    };
+    return value ? labels[value] ?? value : "无";
+}
+function renderExternalMediaImportResult(target, result) {
+    const container = element(target);
+    container.hidden = false;
+    const summary = document.createElement("p");
+    summary.textContent =
+        `已扫描 ${result.scanned_season_count} 个季度、${result.candidate_file_count} 个视频文件；`
+            + `新增 ${result.imported_count}，已有记录 ${result.already_recorded_count}，跳过 ${result.skipped_count}。`;
+    if (result.items.length === 0) {
+        container.replaceChildren(summary);
+        return;
+    }
+    const details = document.createElement("details");
+    details.open = result.skipped_count > 0;
+    const heading = document.createElement("summary");
+    heading.textContent = `查看 ${result.items.length} 条扫描明细`;
+    const list = document.createElement("div");
+    list.className = "external-import-list";
+    list.replaceChildren(...result.items.map((item) => {
+        const row = document.createElement("article");
+        row.className = `external-import-item ${item.status}`;
+        const path = document.createElement("strong");
+        path.textContent = item.relative_path;
+        const metadata = document.createElement("span");
+        const status = item.status === "imported"
+            ? "已补录"
+            : item.status === "already_recorded"
+                ? "已有完成记录"
+                : `已跳过：${externalMediaImportReason(item.reason_code)}`;
+        metadata.textContent =
+            `TMDB ${item.tmdb_series_id} / S${String(item.tmdb_season_number).padStart(2, "0")}`
+                + ` / ${item.tmdb_episode_number === null
+                    ? "EP 未识别" : `EP ${String(item.tmdb_episode_number).padStart(3, "0")}`}`
+                + ` · ${status}`;
+        row.append(path, metadata);
+        return row;
+    }));
+    details.append(heading, list);
+    container.replaceChildren(summary, details);
+}
 function librarySortLabel(value) {
     const labels = {
         last_updated: "最后更新时间",
@@ -2065,9 +2119,10 @@ function renderLibraryDetail(detail, focus) {
     layout.append(image, content);
     summary.replaceChildren(layout);
     element("#library-detail-refresh").disabled = false;
+    element("#library-detail-external-import").disabled = false;
     element("#library-detail-delete").disabled = false;
     element("#library-detail-action-status").textContent =
-        "刷新只更新 TMDB 权威投影；删除不处理业务记录、下载器任务或文件。";
+        "外部媒体只在手动点击时扫描；TMDB 刷新只更新权威投影；删除不处理业务记录、下载器任务或文件。";
     renderLibraryAudit(detail);
     renderLibraryEpisodes(detail);
     if (focus) {
@@ -2077,6 +2132,12 @@ function renderLibraryDetail(detail, focus) {
 }
 async function loadLibraryDetail(tmdbSeriesId, seasonNumber, focus = false) {
     const sequence = ++libraryDetailRequestSequence;
+    const detailIdentity = `${tmdbSeriesId}:${seasonNumber}`;
+    if (externalImportDetailIdentity !== detailIdentity) {
+        const importResult = element("#library-detail-external-import-result");
+        importResult.hidden = true;
+        importResult.replaceChildren();
+    }
     const panel = element("#library-detail");
     panel.hidden = false;
     element("#library-detail-title").textContent = "正在读取季度详情…";
@@ -2085,6 +2146,7 @@ async function loadLibraryDetail(tmdbSeriesId, seasonNumber, focus = false) {
     element("#library-episodes").replaceChildren();
     element("#library-episode-status").textContent = "";
     element("#library-detail-refresh").disabled = true;
+    element("#library-detail-external-import").disabled = true;
     element("#library-detail-delete").disabled = true;
     element("#library-detail-action-status").textContent = "";
     try {
@@ -2231,6 +2293,58 @@ async function refreshLibrarySeason() {
         remove.disabled = false;
     }
 }
+async function importExternalMedia(scope) {
+    const detail = activeLibraryDetail;
+    if (scope === "season" && !detail)
+        return;
+    const message = scope === "all"
+        ? "手动扫描整个动画作品库？只读取标准的 <动画名>/Sxx/E###.<视频扩展名>，不会移动或删除文件。"
+        : `手动扫描 ${detail.display_name} / ${detail.season_name}？只补录已通过 TMDB Episode snapshot 验证的标准视频文件。`;
+    if (!window.confirm(message))
+        return;
+    const globalButton = element("#library-external-import");
+    const seasonButton = element("#library-detail-external-import");
+    const refreshButton = element("#library-detail-refresh");
+    const deleteButton = element("#library-detail-delete");
+    const target = scope === "all"
+        ? "#library-external-import-result"
+        : "#library-detail-external-import-result";
+    const resultContainer = element(target);
+    if (scope === "season" && detail) {
+        externalImportDetailIdentity = `${detail.tmdb_series_id}:${detail.tmdb_season_number}`;
+    }
+    globalButton.disabled = true;
+    seasonButton.disabled = true;
+    refreshButton.disabled = true;
+    deleteButton.disabled = true;
+    resultContainer.hidden = false;
+    resultContainer.textContent = "正在扫描外部媒体并验证 TMDB Episode…";
+    try {
+        const url = scope === "all"
+            ? "/api/v1/library/external-media/import"
+            : `/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}/external-media/import`;
+        const response = await fetch(url, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        renderExternalMediaImportResult(target, result);
+        await loadLibrary();
+        if (scope === "season" && detail) {
+            await loadLibraryDetail(detail.tmdb_series_id, detail.tmdb_season_number);
+        }
+    }
+    catch (error) {
+        resultContainer.textContent = `外部媒体补录失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        globalButton.disabled = false;
+        if (activeLibraryDetail) {
+            seasonButton.disabled = false;
+            refreshButton.disabled = false;
+            deleteButton.disabled = false;
+        }
+    }
+}
 async function deleteLibrarySeason() {
     if (!activeLibraryDetail)
         return;
@@ -2267,10 +2381,12 @@ async function deleteLibrarySeason() {
 function closeLibraryDetail() {
     libraryDetailRequestSequence++;
     activeLibraryDetail = null;
+    externalImportDetailIdentity = null;
     libraryState.active_series_id = null;
     libraryState.active_season_number = null;
     saveLibraryState();
     element("#library-detail").hidden = true;
+    element("#library-detail-external-import-result").hidden = true;
     document.querySelectorAll(".library-card.active")
         .forEach((card) => card.classList.remove("active"));
 }
@@ -6830,6 +6946,7 @@ element("#download-next").addEventListener("click", () => {
     void loadDownloads();
 });
 element("#library-reload").addEventListener("click", () => void loadLibrary());
+element("#library-external-import").addEventListener("click", () => void importExternalMedia("all"));
 element("#library-search-form").addEventListener("submit", searchLibrary);
 element("#library-search-clear").addEventListener("click", clearLibrarySearch);
 element("#library-create-form").addEventListener("submit", (event) => void createLibrarySeason(event));
@@ -6856,6 +6973,7 @@ element("#library-detail-close").addEventListener("click", () => {
     activeCard?.focus();
 });
 element("#library-detail-refresh").addEventListener("click", () => void refreshLibrarySeason());
+element("#library-detail-external-import").addEventListener("click", () => void importExternalMedia("season"));
 element("#library-detail-delete").addEventListener("click", () => void deleteLibrarySeason());
 element("#library-episode-filter").addEventListener("change", () => {
     libraryState.episode_filter = element("#library-episode-filter")

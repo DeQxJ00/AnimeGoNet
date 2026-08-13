@@ -1060,6 +1060,22 @@ public sealed record AnimeSeasonDeleteResponse(
     [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
     [property: JsonPropertyName("series_removed")] bool SeriesRemoved);
 
+public sealed record ExternalMediaImportResponse(
+    [property: JsonPropertyName("scanned_season_count")] int ScannedSeasonCount,
+    [property: JsonPropertyName("candidate_file_count")] int CandidateFileCount,
+    [property: JsonPropertyName("imported_count")] int ImportedCount,
+    [property: JsonPropertyName("already_recorded_count")] int AlreadyRecordedCount,
+    [property: JsonPropertyName("skipped_count")] int SkippedCount,
+    [property: JsonPropertyName("items")] IReadOnlyList<ExternalMediaImportItemResponse> Items);
+
+public sealed record ExternalMediaImportItemResponse(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_episode_number")] int? TmdbEpisodeNumber,
+    [property: JsonPropertyName("relative_path")] string RelativePath,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("reason_code")] string? ReasonCode);
+
 public sealed record PendingTmdbListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
 

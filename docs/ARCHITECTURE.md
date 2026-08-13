@@ -82,6 +82,8 @@ HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 re
 
 作品库管理继续服从 TMDB 权威边界。创建只以 `TMDB Series ID + Season` 在线验证后写入 Series/Season/完整 Episode snapshot；刷新使用由内部行身份与更新时间计算的 SHA-256 `resource_revision` 做乐观并发，并重新验证相同 TMDB 身份；没有自由文本改名或本地伪造 Season/EP 的写入口。删除只移除无引用的本地投影：事务内检查任务文件、完成记录、Episode claim、Mikan 人工规则、fallback 完成记录和活动 NFO 重写，任何命中都拒绝并引导四类删除流程；下载器任务、源文件和媒体文件永不由作品库 CRUD 处理。
 
+外部媒体补录是作品库的显式命令，不是目录数据库定时刷新的一部分。全库或单季度命令从当前 TMDB 投影推导唯一标准目录，只将直接目录内精确 `E###`、非空、非符号链接且唯一命中现有 `tmdb_episodes` 的视频写为 `external_import` 完成记录，并将同 TMDB 三元组的活动 Episode claim 原子标为 completed；SQLite 唯一键保证重复扫描幂等。它不从任意标题猜 Series/Season/EP，不遍历 `Other`，不为无 Torrent 身份的文件伪造 sidecar、NFO 或来源 alias，也不注册 hosted service/schedule。API 只返回媒体相对路径和稳定结果码。
+
 ### 任务、去重与生命周期
 
 - `IngestTask`：接受一个统一导入 item 后的总任务，保存 source profile/revision、adapter、来源标题、item/work ID、Mikan/group/Bangumi/AniDB/IMDb、来源发布时间及路由/规则快照；这些均为来源证据，不得写入 TMDB 规范身份。详情 API 只返回不透明 item/work ID 的域隔离 SHA-256 指纹，不返回原值。

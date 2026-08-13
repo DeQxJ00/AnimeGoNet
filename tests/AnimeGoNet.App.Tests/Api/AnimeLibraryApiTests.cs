@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using AnimeGoNet.Data.Sqlite;
 using AnimeGoNet.App.Tests.Library;
+using AnimeGoNet.Core.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
@@ -151,6 +152,45 @@ public sealed class AnimeLibraryApiTests
         Assert.DoesNotContain("/media/alpha.mkv", body, StringComparison.Ordinal);
         Assert.DoesNotContain("season-alpha", body, StringComparison.Ordinal);
         Assert.DoesNotContain("series-alpha", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExplicitExternalMediaImportUpdatesCanonicalProgressAndReturnsRelativeAudit()
+    {
+        await using var app = await RunningApp.StartAsync();
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
+        var seasonPath = Path.Combine(options.Paths.SavePath, "Alpha", "S01");
+        Directory.CreateDirectory(seasonPath);
+        await File.WriteAllBytesAsync(Path.Combine(seasonPath, "E002.mkv"), [1, 2, 3]);
+
+        using var imported = await app.Client.PostAsync(
+            "/api/v1/library/seasons/100/1/external-media/import",
+            content: null);
+        var body = await imported.Content.ReadAsStringAsync();
+        using var importedJson = JsonDocument.Parse(body);
+        using var detail = await app.Client.GetAsync("/api/v1/library/seasons/100/1");
+        using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, imported.StatusCode);
+        Assert.Equal(1, importedJson.RootElement.GetProperty("scanned_season_count").GetInt32());
+        Assert.Equal(1, importedJson.RootElement.GetProperty("candidate_file_count").GetInt32());
+        Assert.Equal(1, importedJson.RootElement.GetProperty("imported_count").GetInt32());
+        var item = Assert.Single(importedJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("Alpha/S01/E002.mkv", item.GetProperty("relative_path").GetString());
+        Assert.DoesNotContain(options.Paths.SavePath, body, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, detailJson.RootElement.GetProperty("episode_downloaded").GetInt32());
+        var episode = detailJson.RootElement.GetProperty("episodes").EnumerateArray().Last();
+        Assert.Equal("downloaded", episode.GetProperty("status").GetString());
+        Assert.Equal("external_import", episode.GetProperty("source_id").GetString());
+
+        using var repeated = await app.Client.PostAsync(
+            "/api/v1/library/external-media/import",
+            content: null);
+        using var repeatedJson = JsonDocument.Parse(await repeated.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
+        Assert.Equal(0, repeatedJson.RootElement.GetProperty("imported_count").GetInt32());
+        Assert.Equal(1, repeatedJson.RootElement.GetProperty("already_recorded_count").GetInt32());
     }
 
     [Fact]
