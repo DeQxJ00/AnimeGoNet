@@ -299,7 +299,9 @@ public sealed class MediaOrganizationProcessor(
                     claim.SaveRootPath,
                     operation.SourcePath,
                     operation.TargetPath,
-                    file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified;
+                    file.SizeBytes,
+                    ForceCopyAndVerify: file.PreserveSource,
+                    PreserveSource: file.PreserveSource), cancellationToken).ConfigureAwait(false)).BytesVerified;
             }
             await store.CompleteFileAsync(
                 claim,

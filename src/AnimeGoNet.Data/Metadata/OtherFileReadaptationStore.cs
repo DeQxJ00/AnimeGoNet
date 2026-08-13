@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -14,13 +15,22 @@ public sealed record OtherFileReadaptationFile(
     string SourceMediaPath,
     int SharedPathReferenceCount);
 
+public sealed record OtherFileReadaptationSourceIdentity(
+    int? MikanId,
+    int? GroupId,
+    int? BangumiSubjectId);
+
 public sealed record OtherFileReadaptationPreview(
     string TaskId,
     string Title,
     string TaskStatus,
     string FileStrategy,
     IReadOnlyList<OtherFileReadaptationFile> Files,
-    bool HasActiveResolutionLease);
+    bool HasActiveResolutionLease,
+    string SourceProfileId,
+    string SourceAdapter,
+    string? SourcePageUrl,
+    string ReviewState);
 
 public enum OtherFileReadaptationStartResult
 {
@@ -28,6 +38,14 @@ public enum OtherFileReadaptationStartResult
     NotFound,
     NotEligible,
     ActiveLease,
+}
+
+public enum OtherFileReadaptationReviewResult
+{
+    Approved,
+    NotFound,
+    NotPending,
+    NotCompleted,
 }
 
 public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
@@ -42,6 +60,10 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
         string? title = null;
         string? status = null;
         string? strategy = null;
+        string? sourceProfileId = null;
+        string? sourceAdapter = null;
+        string? sourcePageUrl = null;
+        string? reviewState = null;
         var activeLease = false;
         await using (var task = connection.CreateCommand())
         {
@@ -50,8 +72,11 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                        json_extract(task.route_snapshot_json, '$.file_strategy'),
                        EXISTS (
                            SELECT 1 FROM metadata_resolution_runs AS run
-                           WHERE run.task_id = task.id AND run.status = 'running')
+                           WHERE run.task_id = task.id AND run.status = 'running'),
+                       task.source_profile_id, profile.adapter, task.source_page_url,
+                       task.readaptation_review_state
                 FROM ingest_tasks AS task
+                JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 WHERE task.id = $task_id;
                 """;
             task.Parameters.AddWithValue("$task_id", taskId);
@@ -65,6 +90,10 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             status = reader.GetString(1);
             strategy = reader.GetString(2);
             activeLease = reader.GetInt64(3) == 1;
+            sourceProfileId = reader.GetString(4);
+            sourceAdapter = reader.GetString(5);
+            sourcePageUrl = reader.IsDBNull(6) ? null : reader.GetString(6);
+            reviewState = reader.GetString(7);
         }
 
         var files = new List<OtherFileReadaptationFile>();
@@ -115,12 +144,17 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             status!,
             strategy!,
             files,
-            activeLease);
+            activeLease,
+            sourceProfileId!,
+            sourceAdapter!,
+            sourcePageUrl,
+            reviewState!);
     }
 
     public async Task<OtherFileReadaptationStartResult> StartAsync(
         string taskId,
         DateTimeOffset utcNow,
+        OtherFileReadaptationSourceIdentity? freshIdentity = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
@@ -137,8 +171,7 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
 
         if (preview.TaskStatus != "organized"
             || preview.FileStrategy is not ("move" or "wait_move")
-            || preview.Files.Count == 0
-            || preview.Files.Any(file => file.SharedPathReferenceCount != 1))
+            || preview.Files.Count == 0)
         {
             return OtherFileReadaptationStartResult.NotEligible;
         }
@@ -187,11 +220,7 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                   AND file.tmdb_season_number > 0
                   AND NOT EXISTS (
                       SELECT 1 FROM other_file_readaptation_jobs AS active
-                      WHERE active.task_file_id = file.id AND active.state = 'pending')
-                  AND 1 = (
-                      SELECT COUNT(*) FROM file_operations AS shared
-                      WHERE shared.target_path = operation.target_path
-                        AND shared.state = 'completed');
+                      WHERE active.task_file_id = file.id AND active.state = 'pending');
                 """;
             fileGuard.Parameters.AddWithValue("$task_id", taskId);
             if (Convert.ToInt32(
@@ -210,10 +239,11 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             insert.CommandText = """
                 INSERT INTO other_file_readaptation_jobs (
                     id, task_id, task_file_id, source_media_path,
-                    original_other_reason, state, requested_at_utc, completed_at_utc)
+                    original_other_reason, state, requested_at_utc, completed_at_utc,
+                    preserve_source)
                 VALUES (
                     $id, $task_id, $file_id, $source_media_path,
-                    $other_reason, 'pending', $now, NULL);
+                    $other_reason, 'pending', $now, NULL, $preserve_source);
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", taskId);
@@ -221,7 +251,49 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$source_media_path", file.SourceMediaPath);
             insert.Parameters.AddWithValue("$other_reason", file.OtherReason);
             insert.Parameters.AddWithValue("$now", now);
+            insert.Parameters.AddWithValue(
+                "$preserve_source",
+                file.SharedPathReferenceCount > 1 ? 1 : 0);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var file in preview.Files)
+        {
+            var sourceEpisode = TorrentEpisodeCandidateParser.Parse(file.SourceName);
+            var fileCandidate = FileEpisodeCandidateResolver.Resolve(
+                preview.SourceAdapter,
+                file.SourceName);
+            await using var resetFile = connection.CreateCommand();
+            resetFile.Transaction = transaction;
+            resetFile.CommandText = """
+                UPDATE task_files
+                SET disposition = 'pending', other_reason = NULL,
+                    tmdb_series_id = NULL, tmdb_season_number = NULL,
+                    tmdb_episode_number = NULL, tmdb_episode_id = NULL,
+                    associated_task_file_id = NULL, rename_suffix = NULL,
+                    episode_resolution_source = NULL,
+                    episode_resolution_run_id = NULL,
+                    episode_resolution_attempt_id = NULL,
+                    source_episode = $source_episode,
+                    file_episode_candidate = $file_episode_candidate
+                WHERE task_id = $task_id AND id = $file_id;
+                """;
+            resetFile.Parameters.AddWithValue("$task_id", taskId);
+            resetFile.Parameters.AddWithValue("$file_id", file.TaskFileId);
+            resetFile.Parameters.AddWithValue(
+                "$source_episode",
+                (object?)sourceEpisode.SourceEpisode
+                ?? (object?)fileCandidate?.Episode?.ToString(CultureInfo.InvariantCulture)
+                ?? DBNull.Value);
+            resetFile.Parameters.AddWithValue(
+                "$file_episode_candidate",
+                fileCandidate?.Episode is int candidate
+                    ? candidate.ToString(CultureInfo.InvariantCulture)
+                    : DBNull.Value);
+            if (await resetFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException("Other readaptation file changed concurrently.");
+            }
         }
 
         await using (var reset = connection.CreateCommand())
@@ -232,18 +304,6 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                 WHERE task_file_id IN (
                     SELECT task_file_id FROM other_file_readaptation_jobs
                     WHERE task_id = $task_id AND state = 'pending');
-
-                UPDATE task_files
-                SET disposition = 'pending', other_reason = NULL,
-                    tmdb_episode_number = NULL, tmdb_episode_id = NULL,
-                    associated_task_file_id = NULL, rename_suffix = NULL,
-                    episode_resolution_source = NULL,
-                    episode_resolution_run_id = NULL,
-                    episode_resolution_attempt_id = NULL
-                WHERE task_id = $task_id
-                  AND id IN (
-                      SELECT task_file_id FROM other_file_readaptation_jobs
-                      WHERE task_id = $task_id AND state = 'pending');
 
                 UPDATE download_jobs
                 SET organization_state = 'pending',
@@ -259,15 +319,25 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                 WHERE task_id = $task_id AND organization_state = 'completed';
 
                 UPDATE ingest_tasks
-                SET status = 'metadata_season_resolved',
+                SET status = 'download_preparing',
+                    mikanid = CASE WHEN $apply_fresh = 1 THEN $mikanid ELSE mikanid END,
+                    groupid = CASE WHEN $apply_fresh = 1 THEN $groupid ELSE groupid END,
+                    bangumi_subject_id = CASE WHEN $apply_fresh = 1 THEN $bgmid ELSE bangumi_subject_id END,
                     failure_kind = NULL, failure_reason = NULL,
+                    readaptation_review_state = 'pending',
+                    readaptation_review_requested_at_utc = $now,
+                    readaptation_reviewed_at_utc = NULL,
                     updated_at_utc = $now
                 WHERE id = $task_id AND status = 'organized';
                 """;
             reset.Parameters.AddWithValue("$task_id", taskId);
             reset.Parameters.AddWithValue("$now", now);
+            reset.Parameters.AddWithValue("$mikanid", (object?)freshIdentity?.MikanId ?? DBNull.Value);
+            reset.Parameters.AddWithValue("$groupid", (object?)freshIdentity?.GroupId ?? DBNull.Value);
+            reset.Parameters.AddWithValue("$bgmid", (object?)freshIdentity?.BangumiSubjectId ?? DBNull.Value);
+            reset.Parameters.AddWithValue("$apply_fresh", freshIdentity is null ? 0 : 1);
             if (await reset.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false)
-                != (preview.Files.Count * 2) + 2)
+                != preview.Files.Count + 2)
             {
                 throw new InvalidOperationException("Other readaptation state changed concurrently.");
             }
@@ -275,5 +345,53 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return OtherFileReadaptationStartResult.Started;
+    }
+
+    public async Task<OtherFileReadaptationReviewResult> ApproveReviewAsync(
+        string taskId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE ingest_tasks
+            SET readaptation_review_state = 'approved',
+                readaptation_reviewed_at_utc = $now,
+                updated_at_utc = $now
+            WHERE id = $task_id
+              AND status = 'organized'
+              AND readaptation_review_state = 'pending'
+              AND NOT EXISTS (
+                SELECT 1 FROM other_file_readaptation_jobs AS job
+                WHERE job.task_id = ingest_tasks.id AND job.state = 'pending')
+            RETURNING 1;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+        {
+            return OtherFileReadaptationReviewResult.Approved;
+        }
+
+        await using var state = connection.CreateCommand();
+        state.CommandText = """
+            SELECT status, readaptation_review_state,
+                   EXISTS (SELECT 1 FROM other_file_readaptation_jobs AS job
+                           WHERE job.task_id = ingest_tasks.id AND job.state = 'pending')
+            FROM ingest_tasks WHERE id = $task_id;
+            """;
+        state.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await state.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return OtherFileReadaptationReviewResult.NotFound;
+        }
+        if (reader.GetString(1) != "pending")
+        {
+            return OtherFileReadaptationReviewResult.NotPending;
+        }
+        return OtherFileReadaptationReviewResult.NotCompleted;
     }
 }

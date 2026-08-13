@@ -20,7 +20,8 @@ public sealed record MetadataTaskClaim(
     int TorrentFileCount = 0,
     string? SourceProfileId = null,
     string? SourceId = null,
-    bool DuplicateNotificationEnabled = true);
+    bool DuplicateNotificationEnabled = true,
+    bool IsForcedReadaptation = false);
 
 public sealed record MetadataAttempt(
     string Stage,
@@ -200,6 +201,7 @@ public sealed record MetadataTaskListProjection(
     int DuplicateFileCount,
     int PendingFileCount,
     DateTimeOffset UpdatedAtUtc,
+    string ReadaptationReviewState,
     TmdbResolutionEvidence? SeriesResolution = null,
     TmdbResolutionEvidence? SeasonResolution = null,
     TmdbResolutionEvidence? EpisodeResolution = null,

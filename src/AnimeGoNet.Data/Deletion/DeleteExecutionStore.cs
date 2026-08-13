@@ -146,7 +146,8 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
                     WHEN 'source_file' THEN 1
                     WHEN 'media_file' THEN 2
                     WHEN 'business_record' THEN 3
-                    ELSE 4 END, ordinal, id;
+                    WHEN 'task_record' THEN 4
+                    ELSE 5 END, ordinal, id;
                 """;
             query.Parameters.AddWithValue("$id", executionId);
             await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -225,6 +226,40 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         await SetItemStateAsync(
             connection, transaction, claim, item,
             series is null ? "skipped" : "completed", null, Format(utcNow), cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task CompleteTaskRecordAsync(
+        DeleteExecutionClaim claim,
+        DeleteExecutionItem item,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        if (item.ItemKind != DeleteItemKinds.TaskRecord
+            || !string.Equals(item.TargetKey, claim.TaskId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Delete item is not this execution's task record.", nameof(item));
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        await using var delete = connection.CreateCommand();
+        delete.Transaction = transaction;
+        delete.CommandText = """
+            DELETE FROM ingest_tasks
+            WHERE id = $task_id AND readaptation_review_state <> 'pending';
+            """;
+        delete.Parameters.AddWithValue("$task_id", claim.TaskId);
+        var deleted = await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (deleted != 1)
+        {
+            throw new InvalidOperationException(
+                "Task record is missing or its Other readaptation result still awaits manual review.");
+        }
+
+        await SetItemStateAsync(
+            connection, transaction, claim, item, "completed", null, Format(utcNow), cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 

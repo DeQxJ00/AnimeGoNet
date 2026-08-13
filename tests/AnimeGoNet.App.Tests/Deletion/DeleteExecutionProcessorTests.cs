@@ -52,6 +52,26 @@ public sealed class DeleteExecutionProcessorTests
         Assert.Equal(2, state.EpisodeClaims);
     }
 
+    [Fact]
+    public async Task TaskRecordIsDeletedLastAfterExplicitSelection()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var prepared = await PreparePlanAsync(
+            app,
+            new DeleteSelection(true, true, true, true, DeleteTaskRecord: true));
+
+        var result = await app.App.Services.GetRequiredService<DeleteExecutionProcessor>().RunOnceAsync();
+
+        Assert.Equal(DeleteExecutionResult.Completed, result);
+        var state = await ReadStateAsync(app, prepared.ExecutionId);
+        Assert.Equal("completed", state.ExecutionState);
+        Assert.Equal(5, state.CompletedItems);
+        Assert.Equal(1, state.CompletionRecords);
+        Assert.Equal(0, state.EpisodeClaims);
+        Assert.False(await TaskExistsAsync(app, prepared.TaskId));
+    }
+
     private static async Task<PreparedPlan> PreparePlanAsync(RunningApp app, DeleteSelection selection)
     {
         const string payload = """
@@ -127,7 +147,19 @@ public sealed class DeleteExecutionProcessorTests
         var plans = app.App.Services.GetRequiredService<DeletePlanStore>();
         var preview = Assert.IsType<DeletePlanPreview>(await plans.GetPreviewAsync(taskId));
         var plan = await plans.CreateAsync(taskId, preview.Fingerprint, selection, DateTimeOffset.UtcNow);
-        return new PreparedPlan(plan.ExecutionId, sourcePath, mediaPath);
+        return new PreparedPlan(plan.ExecutionId, taskId, sourcePath, mediaPath);
+    }
+
+    private static async Task<bool> TaskExistsAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM ingest_tasks WHERE id = $task_id);";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Convert.ToInt64(
+            await command.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture) == 1;
     }
 
     private static async Task<State> ReadStateAsync(RunningApp app, string executionId)
@@ -182,7 +214,7 @@ public sealed class DeleteExecutionProcessorTests
         }
     }
 
-    private sealed record PreparedPlan(string ExecutionId, string SourcePath, string MediaPath);
+    private sealed record PreparedPlan(string ExecutionId, string TaskId, string SourcePath, string MediaPath);
     private sealed record State(
         string ExecutionState,
         string? FailureReason,

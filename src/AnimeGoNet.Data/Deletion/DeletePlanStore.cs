@@ -43,6 +43,18 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
             throw new InvalidOperationException("Delete preview is stale; request a new preview before confirming deletion.");
         }
 
+        if (selection.DeleteTaskRecord && !preview.TaskRecordDeletionAllowed)
+        {
+            throw new InvalidOperationException(
+                preview.TaskRecordDeletionDenialReason ?? "Task record deletion is not allowed.");
+        }
+
+        if (selection.DeleteTaskRecord && preview.DownloaderTasks.Count > 0 && !selection.DeleteDownloaderTask)
+        {
+            throw new InvalidOperationException(
+                "Delete the downloader task before deleting its AnimeGoNet task record.");
+        }
+
         var targets = preview.AllTargets
             .Where(target => selection.Includes(target.ItemKind))
             .ToArray();
@@ -107,10 +119,11 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
     {
         string taskTitle;
         string taskStatus;
+        string reviewState;
         await using (var task = connection.CreateCommand())
         {
             task.Transaction = transaction;
-            task.CommandText = "SELECT title, status FROM ingest_tasks WHERE id = $task_id;";
+            task.CommandText = "SELECT title, status, readaptation_review_state FROM ingest_tasks WHERE id = $task_id;";
             task.Parameters.AddWithValue("$task_id", taskId);
             await using var reader = await task.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -120,6 +133,7 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
 
             taskTitle = reader.GetString(0);
             taskStatus = reader.GetString(1);
+            reviewState = reader.GetString(2);
         }
 
         var business = await ReadTargetsAsync(connection, transaction, """
@@ -159,10 +173,19 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
             WHERE file.task_id = $task_id
             ORDER BY operation.target_path;
             """, taskId, cancellationToken).ConfigureAwait(false);
-        var all = business.Concat(downloader).Concat(source).Concat(media).ToArray();
+        var taskRecords = new[]
+        {
+            new DeletePlanTarget(DeleteItemKinds.TaskRecord, taskId, null, null, $"任务记录：{taskTitle}"),
+        };
+        var taskRecordDeletionAllowed = reviewState != "pending";
+        var denialReason = taskRecordDeletionAllowed
+            ? null
+            : "Other 重新适配结果尚未人工审核，不能删除任务记录。";
+        var all = business.Concat(downloader).Concat(source).Concat(media).Concat(taskRecords).ToArray();
         return new DeletePlanPreview(
             taskId, taskTitle, taskStatus, ComputeFingerprint(taskId, all),
-            business, downloader, source, media);
+            business, downloader, source, media, taskRecords,
+            taskRecordDeletionAllowed, denialReason);
     }
 
     private static async Task<IReadOnlyList<DeletePlanTarget>> ReadTargetsAsync(

@@ -32,6 +32,22 @@ public sealed class IngestCommandNormalizerTests
         Assert.True(IngestCommandNormalizer.Normalize("mikan", command, requireModernMetadata: false).IsValid);
     }
 
+    [Theory]
+    [InlineData("https://mikanime.tv/Home/Episode/abc", "https://mikanime.tv/Home/Episode/abc")]
+    [InlineData("https://mikanime.tv/Home/Episode/abc?token=secret", null)]
+    [InlineData("https://mikanime.tv/Home/Bangumi/3951", null)]
+    public void PersistsOnlyCredentialFreeMikanEpisodeSourcePage(
+        string sourceUrl,
+        string? expected)
+    {
+        var result = IngestCommandNormalizer.Normalize(
+            "mikan",
+            Item(title: "Episode 01", mikanUrl: sourceUrl, mikanId: 3951, bgmid: 547888));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+        Assert.Equal(expected, result.Item!.SourcePageUrl);
+    }
+
     [Fact]
     public void RejectsConflictingTitleAliasesAndNonHttpTorrent()
     {

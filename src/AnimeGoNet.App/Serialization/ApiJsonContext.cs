@@ -66,6 +66,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MetadataRetryResponse))]
 [JsonSerializable(typeof(OtherFileReadaptationPreviewResponse))]
 [JsonSerializable(typeof(OtherFileReadaptationStartResponse))]
+[JsonSerializable(typeof(OtherFileReadaptationReviewResponse))]
 [JsonSerializable(typeof(MetadataTaskListResponse))]
 [JsonSerializable(typeof(MetadataTaskDetailResponse))]
 [JsonSerializable(typeof(MetadataAttemptListResponse))]

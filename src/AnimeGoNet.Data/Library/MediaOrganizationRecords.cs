@@ -33,7 +33,8 @@ public sealed record MediaOrganizationFile(
     string? RenameSuffix,
     string? AssociatedFileId,
     string? SourceEpisode = null,
-    string? SourceOverridePath = null);
+    string? SourceOverridePath = null,
+    bool PreserveSource = false);
 
 public sealed record MediaOrganizationClaim(
     string JobId,

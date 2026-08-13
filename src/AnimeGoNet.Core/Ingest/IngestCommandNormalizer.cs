@@ -73,7 +73,10 @@ public static class IngestCommandNormalizer
                 result.Errors.Select(error => error.Message).ToArray());
         }
 
-        return ValidatePluginOutput(normalizedSource, result.Item);
+        return ValidatePluginOutput(
+            normalizedSource,
+            result.Item,
+            command.Info.MikanUrl ?? command.Info.LegacyUrl);
     }
 
     internal static IngestValidationResult NormalizeKnownSource(
@@ -180,13 +183,30 @@ public static class IngestCommandNormalizer
                 command.Info.AniDbId,
                 imdbId,
                 publishedAtRaw,
-                publishedAt),
+                publishedAt,
+                NormalizeSafeSourcePageUrl(mikanUrl)),
             []);
+    }
+
+    private static string? NormalizeSafeSourcePageUrl(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment)
+            || !uri.AbsolutePath.StartsWith("/Home/Episode/", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return uri.GetLeftPart(UriPartial.Path);
     }
 
     private static IngestValidationResult ValidatePluginOutput(
         string requestedSource,
-        SourceNormalizedItem item)
+        SourceNormalizedItem item,
+        string? sourcePageUrl)
     {
         var errors = new List<string>();
         if (!string.Equals(item.Source, requestedSource, StringComparison.Ordinal))
@@ -227,7 +247,8 @@ public static class IngestCommandNormalizer
                     item.AniDbId,
                     item.ImdbId,
                     item.PublishedAtRaw,
-                    item.PublishedAt),
+                    item.PublishedAt,
+                    SourcePageUrl: NormalizeSafeSourcePageUrl(sourcePageUrl)),
                 []);
     }
 

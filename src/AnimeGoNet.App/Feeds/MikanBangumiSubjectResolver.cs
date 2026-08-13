@@ -7,6 +7,67 @@ public sealed class MikanBangumiSubjectResolver(
     IRssFeedHttpClient httpClient,
     MikanBangumiIdentityCache? persistentCache = null)
 {
+    public async Task<MikanBangumiDiscovery> ResolveFreshAsync(
+        int mikanId,
+        Uri episodeUri,
+        string sourceProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(mikanId, 1);
+        ArgumentNullException.ThrowIfNull(episodeUri);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceProfileId);
+        var origin = ParsePageOrigin(episodeUri.AbsoluteUri);
+        if (origin is null)
+        {
+            return new MikanBangumiDiscovery(
+                null, MikanBangumiDiscoveryStates.Failed,
+                "mikan_bgmid_page_origin_missing");
+        }
+
+        var page = new Uri(
+            origin,
+            $"/Home/Bangumi/{mikanId.ToString(CultureInfo.InvariantCulture)}");
+        try
+        {
+            var html = httpClient is ISourceProfileRssFeedHttpClient profileClient
+                ? await profileClient.GetAsync(page, sourceProfileId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await httpClient.GetAsync(page, cancellationToken).ConfigureAwait(false);
+            var bangumiId = MikanBangumiSubjectParser.Parse(html);
+            if (persistentCache is not null)
+            {
+                await persistentCache.PutAsync(mikanId, bangumiId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            return new MikanBangumiDiscovery(
+                bangumiId, MikanBangumiDiscoveryStates.Resolved, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (MikanBangumiSubjectException exception)
+        {
+            return new MikanBangumiDiscovery(
+                null,
+                exception.Code == "mikan_bgmid_link_missing"
+                    ? MikanBangumiDiscoveryStates.NotFound
+                    : MikanBangumiDiscoveryStates.Failed,
+                exception.Code);
+        }
+        catch (RssFeedException exception)
+        {
+            return new MikanBangumiDiscovery(
+                null, MikanBangumiDiscoveryStates.Failed, exception.Code);
+        }
+        catch
+        {
+            return new MikanBangumiDiscovery(
+                null, MikanBangumiDiscoveryStates.Failed,
+                "mikan_bgmid_discovery_failed");
+        }
+    }
+
     public async Task<MikanBangumiDiscovery> ResolveAsync(
         RssFeedDocument feed,
         CancellationToken cancellationToken = default)

@@ -11,7 +11,7 @@ namespace AnimeGoNet.Data.Tests.Deletion;
 public sealed class DeletePlanStoreTests
 {
     [Fact]
-    public async Task PreviewSeparatesFourDeleteTargetKindsAndCreateFreezesSelectedTargets()
+    public async Task PreviewSeparatesDeleteTargetKindsAndCreateFreezesSelectedTargets()
     {
         await using var fixture = await DeleteFixture.CreateAsync();
         var preview = Assert.IsType<DeletePlanPreview>(await fixture.Store.GetPreviewAsync(fixture.TaskId));
@@ -21,6 +21,8 @@ public sealed class DeletePlanStoreTests
         Assert.Single(preview.DownloaderTasks);
         Assert.Single(preview.SourceFiles);
         Assert.Single(preview.MediaFiles);
+        Assert.Single(preview.TaskRecords);
+        Assert.True(preview.TaskRecordDeletionAllowed);
         Assert.Equal("/download/incomplete/bt/episode.mkv", preview.SourceFiles[0].TargetKey);
         Assert.Equal("/download/incomplete/bt", preview.SourceFiles[0].RootPath);
         Assert.Equal("/download/anime/Series/S01/E001.mkv", preview.MediaFiles[0].TargetKey);
@@ -40,6 +42,20 @@ public sealed class DeletePlanStoreTests
         Assert.Equal(0, persisted.DeleteDownloaderTask);
         Assert.Equal(0, persisted.DeleteSourceFiles);
         Assert.Equal(1, persisted.DeleteMediaFiles);
+    }
+
+    [Fact]
+    public async Task PendingReadaptationReviewBlocksTaskRecordDeletion()
+    {
+        await using var fixture = await DeleteFixture.CreateAsync();
+        await fixture.SetReviewStateAsync("pending");
+        var preview = Assert.IsType<DeletePlanPreview>(await fixture.Store.GetPreviewAsync(fixture.TaskId));
+
+        Assert.False(preview.TaskRecordDeletionAllowed);
+        Assert.Contains("人工审核", preview.TaskRecordDeletionDenialReason, StringComparison.Ordinal);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Store.CreateAsync(
+            fixture.TaskId, preview.Fingerprint,
+            new DeleteSelection(false, true, false, false, true), DateTimeOffset.UtcNow));
     }
 
     [Fact]
@@ -148,6 +164,18 @@ public sealed class DeletePlanStoreTests
             Assert.True(await reader.ReadAsync());
             return new PersistedState(
                 reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+        }
+
+        public async Task SetReviewStateAsync(string state)
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE ingest_tasks SET readaptation_review_state = $state WHERE id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$state", state);
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public ValueTask DisposeAsync() => _database.DisposeAsync();

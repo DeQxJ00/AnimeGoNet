@@ -37,7 +37,8 @@ public sealed record NormalizedIngestItem(
     int? AniDbId,
     string? ImdbId,
     string? PublishedAtRaw = null,
-    DateTimeOffset? PublishedAt = null);
+    DateTimeOffset? PublishedAt = null,
+    string? SourcePageUrl = null);
 
 public sealed record IngestValidationResult(NormalizedIngestItem? Item, IReadOnlyList<string> Errors)
 {

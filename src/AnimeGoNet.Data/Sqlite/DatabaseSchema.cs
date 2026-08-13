@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 47;
+    public const int CurrentVersion = 48;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -74,7 +74,67 @@ public static class DatabaseSchema
             47,
             "other_file_readaptation",
             OtherFileReadaptation),
+        new SchemaMigration(
+            48,
+            "fresh_readaptation_review_and_task_delete",
+            FreshReadaptationReviewAndTaskDelete),
     ];
+
+    private const string FreshReadaptationReviewAndTaskDelete = """
+        ALTER TABLE ingest_tasks ADD COLUMN source_page_url TEXT;
+        ALTER TABLE ingest_tasks ADD COLUMN readaptation_review_state TEXT NOT NULL
+            DEFAULT 'not_required'
+            CHECK (readaptation_review_state IN ('not_required', 'pending', 'approved'));
+        ALTER TABLE ingest_tasks ADD COLUMN readaptation_review_requested_at_utc TEXT;
+        ALTER TABLE ingest_tasks ADD COLUMN readaptation_reviewed_at_utc TEXT;
+
+        ALTER TABLE other_file_readaptation_jobs
+            ADD COLUMN preserve_source INTEGER NOT NULL DEFAULT 0
+            CHECK (preserve_source IN (0, 1));
+
+        UPDATE ingest_tasks
+        SET source_page_url = (
+            SELECT entry.mikan_url
+            FROM mikan_rss_batch_entries AS entry
+            WHERE entry.ingest_task_id = ingest_tasks.id
+              AND instr(entry.mikan_url, '?') = 0
+              AND instr(entry.mikan_url, '#') = 0
+            ORDER BY entry.rowid DESC
+            LIMIT 1)
+        WHERE source_page_url IS NULL
+          AND EXISTS (
+            SELECT 1 FROM mikan_rss_batch_entries AS entry
+            WHERE entry.ingest_task_id = ingest_tasks.id
+              AND instr(entry.mikan_url, '?') = 0
+              AND instr(entry.mikan_url, '#') = 0);
+
+        DROP INDEX ix_delete_execution_items_pending;
+        ALTER TABLE delete_execution_items RENAME TO delete_execution_items_v47;
+        CREATE TABLE delete_execution_items (
+            id TEXT NOT NULL PRIMARY KEY,
+            execution_id TEXT NOT NULL REFERENCES delete_executions(id) ON DELETE CASCADE,
+            item_kind TEXT NOT NULL CHECK (item_kind IN (
+                'business_record', 'downloader_task', 'source_file', 'media_file', 'task_record')),
+            target_key TEXT NOT NULL,
+            root_path TEXT,
+            downloader_id TEXT,
+            display_value TEXT NOT NULL,
+            ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+            state TEXT NOT NULL CHECK (state IN ('pending', 'completed', 'skipped', 'failed')),
+            failure_code TEXT,
+            completed_at_utc TEXT,
+            UNIQUE (execution_id, item_kind, target_key)
+        ) STRICT;
+        INSERT INTO delete_execution_items (
+            id, execution_id, item_kind, target_key, root_path, downloader_id,
+            display_value, ordinal, state, failure_code, completed_at_utc)
+        SELECT id, execution_id, item_kind, target_key, root_path, downloader_id,
+               display_value, ordinal, state, failure_code, completed_at_utc
+        FROM delete_execution_items_v47;
+        DROP TABLE delete_execution_items_v47;
+        CREATE INDEX ix_delete_execution_items_pending
+        ON delete_execution_items(execution_id, state, ordinal);
+        """;
 
     private const string OtherFileReadaptation = """
         CREATE TABLE other_file_readaptation_jobs (

@@ -18,7 +18,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
     AnimeGoOptions options,
     IBangumiSubjectClient bangumiSubjects,
     IBangumiEpisodeClient? bangumiEpisodes = null,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    MetadataRefreshScope? refreshScope = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -33,6 +34,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         {
             return false;
         }
+        using var refresh = refreshScope?.Begin(claim.IsOtherReadaptation);
 
         var rule = claim.Resolution.MikanId is null
             ? null

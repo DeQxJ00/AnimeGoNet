@@ -38,6 +38,28 @@ public sealed class SafeFileMoverTests
         Assert.Equal(bytes, await File.ReadAllBytesAsync(target));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreserveSourceCopiesSharedFileAndIsIdempotent(bool targetAlreadyExists)
+    {
+        await using var fixture = new MoveFixture();
+        var bytes = new byte[] { 4, 8, 15, 16, 23, 42 };
+        var source = fixture.CreateSource("shared/episode.mkv", bytes);
+        var target = targetAlreadyExists
+            ? fixture.CreateTarget("Series/S01/E002.mkv", bytes)
+            : fixture.Target("Series/S01/E002.mkv");
+
+        var result = await new SafeFileMover().MoveAsync(new SafeFileMoveRequest(
+            "operation-shared", fixture.SourceRoot, fixture.TargetRoot, source, target,
+            bytes.Length, ForceCopyAndVerify: true, PreserveSource: true));
+
+        Assert.True(File.Exists(source));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(source));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(target));
+        Assert.Equal(targetAlreadyExists, result.RecoveredExistingTarget);
+    }
+
     [Fact]
     public async Task ConflictingTargetPreservesSourceAndTarget()
     {

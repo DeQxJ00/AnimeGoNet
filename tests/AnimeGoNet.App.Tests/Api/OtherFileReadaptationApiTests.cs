@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sqlite;
@@ -13,7 +14,10 @@ public sealed class OtherFileReadaptationApiTests
     [Fact]
     public async Task PreviewAndStartRequeuesOtherWithoutRedownloading()
     {
-        await using var app = await RunningApp.StartAsync();
+        var transport = new MikanPageTransport();
+        await using var app = await RunningApp.StartAsync(
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
         const string payload = """
             {
               "source": "mikan",
@@ -23,6 +27,7 @@ public sealed class OtherFileReadaptationApiTests
                   "title": "Other 重新适配样本 第12话",
                   "source_item_id": "readapt-api-item",
                   "source_work_id": "3951",
+                  "mikan_url": "https://mikanime.tv/Home/Episode/readapt-api",
                   "mikanid": 3951,
                   "bgmid": 547888
                 }
@@ -120,11 +125,60 @@ public sealed class OtherFileReadaptationApiTests
         state.Parameters.AddWithValue("$task_id", taskId);
         await using var reader = await state.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal("metadata_season_resolved", reader.GetString(0));
+        Assert.Equal("download_preparing", reader.GetString(0));
         Assert.Equal("pending", reader.GetString(1));
-        Assert.Equal(65942, reader.GetInt32(2));
-        Assert.Equal(1, reader.GetInt32(3));
+        Assert.True(reader.IsDBNull(2));
+        Assert.True(reader.IsDBNull(3));
         Assert.Equal("completed", reader.GetString(4));
         Assert.Equal("pending", reader.GetString(5));
+        Assert.Equal(2, transport.Requests.Count);
+        await reader.DisposeAsync();
+
+        await using (var complete = verify.CreateCommand())
+        {
+            complete.CommandText = """
+                UPDATE other_file_readaptation_jobs SET state = 'completed', completed_at_utc = $now
+                WHERE task_id = $task_id AND state = 'pending';
+                UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
+                """;
+            complete.Parameters.AddWithValue("$task_id", taskId);
+            complete.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(2, await complete.ExecuteNonQueryAsync());
+        }
+
+        using var approve = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
+            null);
+        Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
+        using var deletePreview = await app.Client.GetAsync($"/api/v1/delete/tasks/{taskId}/preview");
+        using var deleteJson = JsonDocument.Parse(await deletePreview.Content.ReadAsStreamAsync());
+        Assert.True(deleteJson.RootElement.GetProperty("task_record_deletion_allowed").GetBoolean());
+    }
+
+    private sealed class PublicDnsResolver : ITorrentDnsResolver
+    {
+        public ValueTask<IReadOnlyList<IPAddress>> ResolveAsync(
+            string host,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Parse("1.1.1.1")]);
+    }
+
+    private sealed class MikanPageTransport : ITorrentHttpTransport
+    {
+        public List<Uri> Requests { get; } = [];
+
+        public ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(uri);
+            var html = uri.AbsolutePath.StartsWith("/Home/Episode/", StringComparison.OrdinalIgnoreCase)
+                ? "<a class='mikan-rss' href='/RSS/Bangumi?bangumiId=3951&amp;subgroupid=370'>RSS</a>"
+                : "<p class='bangumi-info'><a href='https://bgm.tv/subject/547888'>Bangumi</a></p>";
+            var bytes = Encoding.UTF8.GetBytes(html);
+            return ValueTask.FromResult(new TorrentHttpResponse(
+                HttpStatusCode.OK, null, bytes.Length, new MemoryStream(bytes, writable: false)));
+        }
     }
 }

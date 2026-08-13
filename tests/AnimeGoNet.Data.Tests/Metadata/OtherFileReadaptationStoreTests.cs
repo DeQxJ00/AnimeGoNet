@@ -13,7 +13,7 @@ namespace AnimeGoNet.Data.Tests.Metadata;
 public sealed class OtherFileReadaptationStoreTests
 {
     [Fact]
-    public async Task StartsOnlyOtherFilesAndPreservesConfirmedSeriesSeason()
+    public async Task StartsOnlyOtherFilesAndClearsMetadataForFreshResolution()
     {
         await using var fixture = await ReadaptationFixture.CreateAsync();
 
@@ -30,11 +30,11 @@ public sealed class OtherFileReadaptationStoreTests
             await fixture.Store.StartAsync(fixture.TaskId, DateTimeOffset.UtcNow));
 
         var state = await fixture.ReadStateAsync();
-        Assert.Equal("metadata_season_resolved", state.TaskStatus);
+        Assert.Equal("download_preparing", state.TaskStatus);
         Assert.Equal("pending", state.FileDisposition);
         Assert.Null(state.OtherReason);
-        Assert.Equal(100, state.TmdbSeriesId);
-        Assert.Equal(2, state.TmdbSeasonNumber);
+        Assert.Null(state.TmdbSeriesId);
+        Assert.Null(state.TmdbSeasonNumber);
         Assert.Equal("pending", state.OrganizationState);
         Assert.Equal("not_started", state.OrganizationPhase);
         Assert.Equal(0, state.OperationCount);
@@ -42,7 +42,7 @@ public sealed class OtherFileReadaptationStoreTests
     }
 
     [Fact]
-    public async Task RejectsMediaPathReferencedByAnotherCompletedOperation()
+    public async Task SharedMediaPathStartsWithPreserveSourceCopySemantics()
     {
         await using var fixture = await ReadaptationFixture.CreateAsync();
         await fixture.AddSharedPathReferenceAsync();
@@ -51,9 +51,10 @@ public sealed class OtherFileReadaptationStoreTests
             await fixture.Store.PreviewAsync(fixture.TaskId));
         Assert.Equal(2, Assert.Single(preview.Files).SharedPathReferenceCount);
         Assert.Equal(
-            OtherFileReadaptationStartResult.NotEligible,
+            OtherFileReadaptationStartResult.Started,
             await fixture.Store.StartAsync(fixture.TaskId, DateTimeOffset.UtcNow));
-        Assert.Equal("organized", (await fixture.ReadStateAsync()).TaskStatus);
+        Assert.Equal("download_preparing", (await fixture.ReadStateAsync()).TaskStatus);
+        Assert.True(await fixture.ReadPreserveSourceAsync());
     }
 
     [Fact]
@@ -223,6 +224,7 @@ public sealed class OtherFileReadaptationStoreTests
             command.CommandText = """
                 UPDATE task_files
                 SET disposition = 'episode', other_reason = NULL,
+                    tmdb_series_id = 100, tmdb_season_number = 2,
                     tmdb_episode_number = $episode_number,
                     tmdb_episode_id = $episode_id
                 WHERE id = $file_id;
@@ -233,6 +235,20 @@ public sealed class OtherFileReadaptationStoreTests
             command.Parameters.AddWithValue("$file_id", FileId);
             command.Parameters.AddWithValue("$task_id", TaskId);
             Assert.Equal(2, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task<bool> ReadPreserveSourceAsync()
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT preserve_source FROM other_file_readaptation_jobs
+                WHERE task_file_id = $file_id AND state = 'pending';
+                """;
+            command.Parameters.AddWithValue("$file_id", FileId);
+            return Convert.ToInt64(
+                await command.ExecuteScalarAsync(),
+                System.Globalization.CultureInfo.InvariantCulture) == 1;
         }
 
         public async Task<State> ReadStateAsync()
@@ -259,8 +275,8 @@ public sealed class OtherFileReadaptationStoreTests
                 reader.GetString(0),
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.GetInt32(3),
-                reader.GetInt32(4),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4),
                 reader.GetString(5),
                 reader.GetString(6),
                 reader.GetInt32(7),
@@ -274,8 +290,8 @@ public sealed class OtherFileReadaptationStoreTests
         string TaskStatus,
         string FileDisposition,
         string? OtherReason,
-        int TmdbSeriesId,
-        int TmdbSeasonNumber,
+        int? TmdbSeriesId,
+        int? TmdbSeasonNumber,
         string OrganizationState,
         string OrganizationPhase,
         int OperationCount,

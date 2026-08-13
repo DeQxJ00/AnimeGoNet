@@ -7,7 +7,8 @@ public sealed class BangumiArchiveCachingClient(
     BangumiArchiveStore archive,
     IBangumiSubjectClient subjects,
     IBangumiEpisodeClient episodes,
-    bool ownsClients = false)
+    bool ownsClients = false,
+    MetadataRefreshScope? refreshScope = null)
     : IBangumiSubjectClient, IBangumiEpisodeClient, IDisposable
 {
     private int _disposed;
@@ -16,7 +17,7 @@ public sealed class BangumiArchiveCachingClient(
         int subjectId,
         CancellationToken cancellationToken = default)
     {
-        var cached = await archive
+        var cached = refreshScope?.BypassCaches == true ? null : await archive
             .GetAsync(subjectId, cancellationToken)
             .ConfigureAwait(false);
         if (cached is not null)
@@ -39,7 +40,7 @@ public sealed class BangumiArchiveCachingClient(
         int subjectId,
         CancellationToken cancellationToken = default)
     {
-        var cached = await archive
+        var cached = refreshScope?.BypassCaches == true ? null : await archive
             .GetRelatedSubjectsSnapshotAsync(subjectId, cancellationToken)
             .ConfigureAwait(false);
         if (cached is not null)
@@ -62,7 +63,7 @@ public sealed class BangumiArchiveCachingClient(
         int subjectId,
         CancellationToken cancellationToken = default)
     {
-        var cached = await archive
+        var cached = refreshScope?.BypassCaches == true ? null : await archive
             .GetAsync(subjectId, cancellationToken)
             .ConfigureAwait(false);
         if (cached is { HasCompleteEpisodeSet: true })

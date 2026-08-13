@@ -37,11 +37,28 @@ public sealed class MikanFeedIdentityResolver(
         return results;
     }
 
+    public async Task<MikanFeedIdentityResolution> ResolveFreshAsync(
+        Uri episodeUri,
+        string sourceProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(episodeUri);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceProfileId);
+        var lookup = await LookupAsync(
+            episodeUri.AbsoluteUri,
+            sourceProfileId,
+            new Dictionary<string, IdentityLookup>(StringComparer.Ordinal),
+            cancellationToken,
+            bypassPersistentCache: true).ConfigureAwait(false);
+        return new MikanFeedIdentityResolution(0, lookup.Identity, lookup.FailureCode);
+    }
+
     private async Task<IdentityLookup> LookupAsync(
         string value,
         string sourceProfileId,
         Dictionary<string, IdentityLookup> cache,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool bypassPersistentCache = false)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
             || uri.Scheme is not ("http" or "https")
@@ -56,7 +73,7 @@ public sealed class MikanFeedIdentityResolver(
             return cached;
         }
 
-        if (persistentCache is not null)
+        if (!bypassPersistentCache && persistentCache is not null)
         {
             var persistent = await persistentCache.GetAsync(uri, cancellationToken)
                 .ConfigureAwait(false);

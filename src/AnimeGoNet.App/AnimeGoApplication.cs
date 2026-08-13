@@ -428,6 +428,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
         builder.Services.AddSingleton<OtherFileReadaptationStore>();
+        var metadataRefreshScope = new MetadataRefreshScope();
+        builder.Services.AddSingleton(metadataRefreshScope);
         builder.Services.AddSingleton<PendingTmdbStore>();
         builder.Services.AddSingleton<PendingTmdbRecoveryStore>();
         builder.Services.AddSingleton<PendingTmdbNfoRewriteStore>();
@@ -467,7 +469,8 @@ public static class AnimeGoApplication
                 ownsHttpClient: true),
             jsonCache,
             options.Metadata.Tmdb,
-            ownsInner: true);
+            ownsInner: true,
+            refreshScope: metadataRefreshScope);
         var registeredTmdbClient = tmdbClient;
         builder.Services.AddSingleton<ITmdbClient>(_ => registeredTmdbClient);
         builder.Services.AddSingleton<TmdbAuthority>();
@@ -483,7 +486,8 @@ public static class AnimeGoApplication
                 bangumiArchive,
                 upstream,
                 upstream,
-                ownsClients: true);
+                ownsClients: true,
+                refreshScope: metadataRefreshScope);
             bangumiSubjectClient = cached;
             bangumiEpisodeClient ??= cached;
         }

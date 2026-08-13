@@ -8,7 +8,8 @@ public sealed class ManualMetadataResolutionProcessor(
     MetadataResolutionStore resolutions,
     MikanWorkMetadataRuleStore rules,
     ITmdbClient tmdb,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    MetadataRefreshScope? refreshScope = null)
 {
     public const int ManualOverridePriority = 100;
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -24,6 +25,7 @@ public sealed class ManualMetadataResolutionProcessor(
         {
             return false;
         }
+        using var refresh = refreshScope?.Begin(claim.IsForcedReadaptation);
 
         var rule = claim.MikanId is null
             ? null

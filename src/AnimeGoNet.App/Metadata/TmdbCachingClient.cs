@@ -13,7 +13,8 @@ internal sealed class TmdbCachingClient(
     SqliteJsonCacheStore cache,
     TmdbClientOptions options,
     TimeProvider? timeProvider = null,
-    bool ownsInner = false) : ITmdbClient, IDisposable
+    bool ownsInner = false,
+    MetadataRefreshScope? refreshScope = null) : ITmdbClient, IDisposable
 {
     internal const string DatabaseName = "bolt";
     internal const string BucketName = "themoviedb";
@@ -33,7 +34,7 @@ internal sealed class TmdbCachingClient(
         }
 
         var key = Key("search", title.Trim());
-        var cached = await ReadAsync(
+        var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbSeriesArray,
             static value => value.All(IsValidSeries)
@@ -77,7 +78,7 @@ internal sealed class TmdbCachingClient(
         }
 
         var key = Key("series", seriesId.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        var cached = await ReadAsync(
+        var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbSeriesDetails,
             value => IsValidDetails(value, seriesId),
@@ -112,7 +113,7 @@ internal sealed class TmdbCachingClient(
         }
 
         var key = Key("season", FormattableString.Invariant($"{seriesId}:{seasonNumber}"));
-        var cached = await ReadAsync(
+        var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbSeason,
             value => IsValidSeason(value, seriesId, seasonNumber),
@@ -151,7 +152,7 @@ internal sealed class TmdbCachingClient(
         var key = Key(
             "episode",
             FormattableString.Invariant($"{seriesId}:{seasonNumber}:{episodeNumber}"));
-        var cached = await ReadAsync(
+        var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbEpisode,
             value => IsValidEpisode(value, seriesId, seasonNumber, episodeNumber),

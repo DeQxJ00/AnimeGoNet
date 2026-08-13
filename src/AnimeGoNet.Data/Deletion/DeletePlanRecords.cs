@@ -6,16 +6,18 @@ public static class DeleteItemKinds
     public const string DownloaderTask = "downloader_task";
     public const string SourceFile = "source_file";
     public const string MediaFile = "media_file";
+    public const string TaskRecord = "task_record";
 }
 
 public sealed record DeleteSelection(
     bool DeleteBusinessRecord,
     bool DeleteDownloaderTask,
     bool DeleteSourceFiles,
-    bool DeleteMediaFiles)
+    bool DeleteMediaFiles,
+    bool DeleteTaskRecord = false)
 {
     public bool Any =>
-        DeleteBusinessRecord || DeleteDownloaderTask || DeleteSourceFiles || DeleteMediaFiles;
+        DeleteBusinessRecord || DeleteDownloaderTask || DeleteSourceFiles || DeleteMediaFiles || DeleteTaskRecord;
 
     internal bool Includes(string itemKind) => itemKind switch
     {
@@ -23,6 +25,7 @@ public sealed record DeleteSelection(
         DeleteItemKinds.DownloaderTask => DeleteDownloaderTask,
         DeleteItemKinds.SourceFile => DeleteSourceFiles,
         DeleteItemKinds.MediaFile => DeleteMediaFiles,
+        DeleteItemKinds.TaskRecord => DeleteTaskRecord,
         _ => false,
     };
 }
@@ -42,10 +45,13 @@ public sealed record DeletePlanPreview(
     IReadOnlyList<DeletePlanTarget> BusinessRecords,
     IReadOnlyList<DeletePlanTarget> DownloaderTasks,
     IReadOnlyList<DeletePlanTarget> SourceFiles,
-    IReadOnlyList<DeletePlanTarget> MediaFiles)
+    IReadOnlyList<DeletePlanTarget> MediaFiles,
+    IReadOnlyList<DeletePlanTarget> TaskRecords,
+    bool TaskRecordDeletionAllowed,
+    string? TaskRecordDeletionDenialReason)
 {
     public IReadOnlyList<DeletePlanTarget> AllTargets =>
-        [.. BusinessRecords, .. DownloaderTasks, .. SourceFiles, .. MediaFiles];
+        [.. BusinessRecords, .. DownloaderTasks, .. SourceFiles, .. MediaFiles, .. TaskRecords];
 }
 
 public sealed record DeleteExecutionPlan(

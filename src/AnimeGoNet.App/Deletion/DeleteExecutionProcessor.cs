@@ -92,6 +92,10 @@ public sealed class DeleteExecutionProcessor(
                 await store.CompleteBusinessRecordAsync(
                     claim, item, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
                 break;
+            case DeleteItemKinds.TaskRecord:
+                await store.CompleteTaskRecordAsync(
+                    claim, item, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+                break;
             default:
                 throw new InvalidOperationException("Delete item kind is unsupported.");
         }

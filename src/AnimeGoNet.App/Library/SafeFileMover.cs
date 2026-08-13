@@ -12,7 +12,8 @@ public sealed record SafeFileMoveRequest(
     string SourcePath,
     string TargetPath,
     long ExpectedBytes,
-    bool ForceCopyAndVerify = false);
+    bool ForceCopyAndVerify = false,
+    bool PreserveSource = false);
 
 public sealed record SafeFileMoveResult(long BytesVerified, bool RecoveredExistingTarget);
 
@@ -85,6 +86,11 @@ public sealed class SafeFileMover
             throw new SafeFileMoveException("target_conflict", "Target exists with different content.");
         }
 
+        if (request.PreserveSource)
+        {
+            return new SafeFileMoveResult(request.ExpectedBytes, true);
+        }
+
         try
         {
             File.Delete(request.SourcePath);
@@ -131,6 +137,11 @@ public sealed class SafeFileMover
             }
 
             File.Move(partialPath, request.TargetPath, overwrite: false);
+            if (request.PreserveSource)
+            {
+                return new SafeFileMoveResult(request.ExpectedBytes, false);
+            }
+
             try
             {
                 File.Delete(request.SourcePath);

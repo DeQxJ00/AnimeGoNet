@@ -17,7 +17,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
     MikanTrustedOffsetStore trustedOffsets,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null,
-    IBangumiEpisodeClient? bangumiEpisodes = null)
+    IBangumiEpisodeClient? bangumiEpisodes = null,
+    MetadataRefreshScope? refreshScope = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -32,6 +33,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
         {
             return false;
         }
+        using var refresh = refreshScope?.Begin(claim.IsForcedReadaptation);
 
         var rule = claim.MikanId is null
             ? null
@@ -361,7 +363,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
         MetadataTaskClaim claim,
         CancellationToken cancellationToken)
     {
-        if (!options.Metadata.MikanTrustedOffsetCacheEnabled
+        if (claim.IsForcedReadaptation
+            || !options.Metadata.MikanTrustedOffsetCacheEnabled
             || !string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase)
             || claim.MikanId is null or <= 0
             || claim.GroupId is null or <= 0)

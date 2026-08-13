@@ -111,6 +111,9 @@ public static class ApiEndpoints
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation",
             StartOtherFileReadaptation);
+        app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
+            ApproveOtherFileReadaptationReview);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
@@ -4043,7 +4046,10 @@ public static class ApiEndpoints
                 preview.BusinessRecords.Select(ToResponse).ToArray(),
                 preview.DownloaderTasks.Select(ToResponse).ToArray(),
                 preview.SourceFiles.Select(ToResponse).ToArray(),
-                preview.MediaFiles.Select(ToResponse).ToArray()));
+                preview.MediaFiles.Select(ToResponse).ToArray(),
+                preview.TaskRecords.Select(ToResponse).ToArray(),
+                preview.TaskRecordDeletionAllowed,
+                preview.TaskRecordDeletionDenialReason));
     }
 
     private static async Task<IResult> CreateDeleteExecution(
@@ -4061,7 +4067,8 @@ public static class ApiEndpoints
                     request.DeleteBusinessRecord,
                     request.DeleteDownloaderTask,
                     request.DeleteSourceFiles,
-                    request.DeleteMediaFiles),
+                    request.DeleteMediaFiles,
+                    request.DeleteTaskRecord),
                 DateTimeOffset.UtcNow,
                 cancellationToken).ConfigureAwait(false);
             return TypedResults.Accepted(
@@ -4661,6 +4668,8 @@ public static class ApiEndpoints
     private static async Task<IResult> StartOtherFileReadaptation(
         string taskId,
         OtherFileReadaptationStore store,
+        MikanFeedIdentityResolver mikanIdentity,
+        MikanBangumiSubjectResolver mikanBangumi,
         CancellationToken cancellationToken)
     {
         var preview = await store.PreviewAsync(taskId, cancellationToken).ConfigureAwait(false);
@@ -4687,16 +4696,58 @@ public static class ApiEndpoints
             return TypedResults.Conflict(Error("other_readaptation_not_eligible", denial));
         }
 
+        OtherFileReadaptationSourceIdentity? freshIdentity = null;
+        if (string.Equals(preview.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Uri.TryCreate(preview.SourcePageUrl, UriKind.Absolute, out var sourcePage)
+                || sourcePage.Scheme is not ("http" or "https")
+                || !string.IsNullOrEmpty(sourcePage.UserInfo))
+            {
+                return TypedResults.Conflict(Error(
+                    "other_readaptation_source_url_missing",
+                    "任务没有可安全重新访问的 Mikan Episode 来源页；不能从来源重新解析。"));
+            }
+
+            var identity = await mikanIdentity.ResolveFreshAsync(
+                sourcePage,
+                preview.SourceProfileId,
+                cancellationToken).ConfigureAwait(false);
+            if (identity.Identity is null)
+            {
+                return TypedResults.Conflict(Error(
+                    identity.FailureCode ?? "mikan_identity_request_failed",
+                    "Mikan Episode 来源页重新解析失败；未修改任务。"));
+            }
+
+            var discovery = await mikanBangumi.ResolveFreshAsync(
+                identity.Identity.MikanId,
+                sourcePage,
+                preview.SourceProfileId,
+                cancellationToken).ConfigureAwait(false);
+            if (discovery.State == MikanBangumiDiscoveryStates.Failed)
+            {
+                return TypedResults.Conflict(Error(
+                    discovery.FailureCode ?? "mikan_bgmid_discovery_failed",
+                    "Mikan 对应 Bangumi 作品重新解析失败；未修改任务。"));
+            }
+
+            freshIdentity = new OtherFileReadaptationSourceIdentity(
+                identity.Identity.MikanId,
+                identity.Identity.SubGroupId,
+                discovery.BangumiSubjectId);
+        }
+
         var result = await store.StartAsync(
             taskId,
             DateTimeOffset.UtcNow,
+            freshIdentity,
             cancellationToken).ConfigureAwait(false);
         return result switch
         {
             OtherFileReadaptationStartResult.Started => TypedResults.Ok(
                 new OtherFileReadaptationStartResponse(
                     taskId,
-                    "metadata_season_resolved",
+                    "download_preparing",
                     files.Length)),
             OtherFileReadaptationStartResult.NotFound => TypedResults.NotFound(Error(
                 "metadata_task_not_found",
@@ -4707,6 +4758,29 @@ public static class ApiEndpoints
             _ => TypedResults.Conflict(Error(
                 "other_readaptation_not_eligible",
                 "The task changed and can no longer re-adapt Other files.")),
+        };
+    }
+
+    private static async Task<IResult> ApproveOtherFileReadaptationReview(
+        string taskId,
+        OtherFileReadaptationStore store,
+        CancellationToken cancellationToken)
+    {
+        var result = await store.ApproveReviewAsync(
+            taskId,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return result switch
+        {
+            OtherFileReadaptationReviewResult.Approved => TypedResults.Ok(
+                new OtherFileReadaptationReviewResponse(taskId, "approved")),
+            OtherFileReadaptationReviewResult.NotFound => TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found.")),
+            OtherFileReadaptationReviewResult.NotPending => TypedResults.Conflict(Error(
+                "other_readaptation_review_not_pending", "任务当前不需要人工审核。")),
+            _ => TypedResults.Conflict(Error(
+                "other_readaptation_review_not_completed",
+                "重新解析和整理尚未完成，不能确认人工审核。")),
         };
     }
 
@@ -4737,11 +4811,6 @@ public static class ApiEndpoints
         if (files.Any(file => !file.SourceAvailable))
         {
             return "至少一个 Other 文件不存在或大小已变化；未修改任务。";
-        }
-
-        if (files.Any(file => file.SharedPathReferenceCount != 1))
-        {
-            return "至少一个 Other 路径被多个任务引用；为避免移动共享文件，未修改任务。";
         }
 
         return null;
@@ -6991,7 +7060,8 @@ public static class ApiEndpoints
             item.OtherFileCount,
             item.DuplicateFileCount,
             item.PendingFileCount,
-            item.UpdatedAtUtc);
+            item.UpdatedAtUtc,
+            item.ReadaptationReviewState);
 
     private static IOrderedEnumerable<MetadataTaskListProjection> OrderMetadataTasks(
         IEnumerable<MetadataTaskListProjection> items,

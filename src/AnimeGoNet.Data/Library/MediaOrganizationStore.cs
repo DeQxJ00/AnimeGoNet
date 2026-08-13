@@ -196,7 +196,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 SELECT file.id, file.relative_path, file.size_bytes, file.disposition,
                        series.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
                        series.canonical_name, file.rename_suffix, file.associated_task_file_id
-                       , file.source_episode, readaptation.source_media_path
+                       , file.source_episode, readaptation.source_media_path,
+                       COALESCE(readaptation.preserve_source, 0)
                 FROM task_files AS file
                 JOIN ingest_tasks AS task ON task.id = file.task_id
                 LEFT JOIN other_file_readaptation_jobs AS readaptation
@@ -230,7 +231,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                     reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8),
                     reader.IsDBNull(9) ? null : reader.GetString(9),
                     reader.IsDBNull(10) ? null : reader.GetString(10),
-                    reader.IsDBNull(11) ? null : reader.GetString(11)));
+                    reader.IsDBNull(11) ? null : reader.GetString(11),
+                    reader.GetInt64(12) == 1));
             }
 
             if (files.Count == 0)
