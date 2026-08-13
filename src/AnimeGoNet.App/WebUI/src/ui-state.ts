@@ -1,5 +1,23 @@
 export type UiRegionState = "loading" | "ready" | "empty" | "error";
 
+export interface PolledRegionRefreshState {
+  background: boolean;
+  signatureChanged: boolean;
+  hasExpandedContent: boolean;
+  hasFocusedEditor: boolean;
+  hasOpenDialog: boolean;
+}
+
+export function shouldReplacePolledRegion(
+  state: PolledRegionRefreshState,
+): boolean {
+  if (!state.background) return true;
+  return state.signatureChanged
+    && !state.hasExpandedContent
+    && !state.hasFocusedEditor
+    && !state.hasOpenDialog;
+}
+
 export function setRegionState(
   region: HTMLElement,
   state: UiRegionState,

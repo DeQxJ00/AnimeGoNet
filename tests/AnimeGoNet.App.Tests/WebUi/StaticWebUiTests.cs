@@ -121,7 +121,7 @@ public sealed class StaticWebUiTests
     [InlineData("/", "text/html", "configuration-mikan-bangumi-cache-hours")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260813-metadata-refresh-position")]
+    [InlineData("/", "text/html", "/app.js?v=20260814-stable-background-refresh")]
     [InlineData("/", "text/html", "ai-test-mikan-import")]
     [InlineData("/", "text/html", "ai-test-enable-tmdb-mcp")]
     [InlineData("/app.js", "text/javascript", "enable_bgm_mcp")]
@@ -208,11 +208,26 @@ public sealed class StaticWebUiTests
 
         var script = await app.Client.GetStringAsync("/app.js");
 
-        Assert.Contains("renderSignature === metadataRenderSignature", script, StringComparison.Ordinal);
+        Assert.Contains("renderSignature !== metadataRenderSignature", script, StringComparison.Ordinal);
         Assert.Contains("expandedMetadataTaskIds.size > 0", script, StringComparison.Ordinal);
         Assert.Contains("card.dataset.taskId = item.task_id", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollBy", script, StringComparison.Ordinal);
         Assert.Contains("background && hadReadyContent", script, StringComparison.Ordinal);
         Assert.Contains("loadMetadataTasks(true)", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DownloadBackgroundRefreshPreservesInteractionAndVisibleCard()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        var script = await app.Client.GetStringAsync("/app.js");
+
+        Assert.Contains("renderSignature !== downloadRenderSignature", script, StringComparison.Ordinal);
+        Assert.Contains("expandedDownloadJobIds.size > 0", script, StringComparison.Ordinal);
+        Assert.Contains("card.dataset.jobId = item.job_id", script, StringComparison.Ordinal);
+        Assert.Contains("hasFocusedEditorWithin(\"#download-tasks-workspace\")", script, StringComparison.Ordinal);
+        Assert.Contains("isSubviewVisible(\"tasks\", \"downloads\")", script, StringComparison.Ordinal);
+        Assert.Contains("loadDownloads(true)", script, StringComparison.Ordinal);
     }
 }

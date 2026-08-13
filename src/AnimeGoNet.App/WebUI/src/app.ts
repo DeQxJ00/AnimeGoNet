@@ -3,6 +3,7 @@ import {
   renderRegionContent,
   renderRegionMessage,
   setRegionState,
+  shouldReplacePolledRegion,
 } from "./ui-state.js";
 import {
   classifyLiveLogEntry,
@@ -1543,6 +1544,8 @@ const metadataStorageKey = "animegonet.metadata-tasks.v1";
 let metadataState = readMetadataState();
 let metadataListRequestSequence = 0;
 let metadataRenderSignature: string | null = null;
+let downloadListRequestSequence = 0;
+let downloadRenderSignature: string | null = null;
 const expandedDownloadJobIds = new Set<string>();
 let activeLibraryDetail: AnimeSeasonDetail | null = null;
 let externalImportDetailIdentity: string | null = null;
@@ -1846,6 +1849,23 @@ function workspaceFromHash(): { workspace: WorkspaceId; subview: string } {
   return { workspace, subview };
 }
 
+function isSubviewVisible(workspace: WorkspaceId, subview: string): boolean {
+  if (document.hidden) return false;
+  const current = workspaceFromHash();
+  return current.workspace === workspace && current.subview === subview;
+}
+
+function hasFocusedEditorWithin(selector: string): boolean {
+  const active = document.activeElement;
+  return active instanceof HTMLElement
+    && active.matches("input, select, textarea, [contenteditable='true']")
+    && element<HTMLElement>(selector).contains(active);
+}
+
+function hasOpenDialog(): boolean {
+  return document.querySelector("dialog[open]") !== null;
+}
+
 function closeMobileSidebar(): void {
   const sidebar = element<HTMLElement>("#app-sidebar");
   const toggle = element<HTMLButtonElement>("#sidebar-toggle");
@@ -1891,7 +1911,24 @@ function selectWorkspace(
     const nextHash = `#/${workspace}/${selectedSubview}`;
     if (window.location.hash !== nextHash) history.pushState(null, "", nextHash);
   }
+  if (workspace === "tasks" && selectedSubview === "downloads") {
+    void loadDownloads(true);
+  }
+  if (workspace === "tasks" && selectedSubview === "metadata") {
+    void loadMetadataTasks(true);
+  }
+  if (workspace === "library" && selectedSubview === "seasons"
+    && activeLibraryDetail === null) {
+    void loadLibrary();
+  }
+  if (workspace === "library" && selectedSubview === "pending") {
+    void loadPendingTmdb();
+  }
   if (workspace === "bangumi-cache") void loadBangumiArchiveUsage(true);
+  if (workspace === "bangumi-cache" && selectedSubview === "versions"
+    && !dataUpdateActionRunning) {
+    void loadDataUpdate(true);
+  }
   if (workspace === "logs" && selectedSubview === "ai-invocations") void loadAiInvocationLogs();
   closeMobileSidebar();
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -6019,7 +6056,7 @@ function renderDownloadSummary(body: DownloadListPage): void {
   element<HTMLElement>("#download-summary").replaceChildren(...cards, footer);
 }
 
-function renderDownloadPage(body: DownloadListPage): void {
+function renderDownloadPage(body: DownloadListPage, background = false): void {
   renderDownloadSummary(body);
   const container = element<HTMLElement>("#downloads");
   const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
@@ -6029,7 +6066,29 @@ function renderDownloadPage(body: DownloadListPage): void {
     `第 ${body.page} / ${totalPages} 页`;
   element<HTMLButtonElement>("#download-previous").disabled = body.page <= 1;
   element<HTMLButtonElement>("#download-next").disabled = body.page >= totalPages;
+  const renderSignature = JSON.stringify(body);
+  const replaceContent = shouldReplacePolledRegion({
+    background,
+    signatureChanged: renderSignature !== downloadRenderSignature,
+    hasExpandedContent: expandedDownloadJobIds.size > 0,
+    hasFocusedEditor: hasFocusedEditorWithin("#download-tasks-workspace"),
+    hasOpenDialog: hasOpenDialog(),
+  });
+  if (!replaceContent) {
+    setRegionState(container, "ready");
+    return;
+  }
+  const visibleAnchor = background
+    ? Array.from(container.querySelectorAll<HTMLElement>(".download-card"))
+      .find((card) => {
+        const bounds = card.getBoundingClientRect();
+        return bounds.bottom > 0 && bounds.top < window.innerHeight;
+      })
+    : undefined;
+  const anchorJobId = visibleAnchor?.dataset.jobId ?? null;
+  const anchorViewportTop = visibleAnchor?.getBoundingClientRect().top ?? null;
   if (body.items.length === 0) {
+    downloadRenderSignature = renderSignature;
     renderRegionMessage(
       container,
       "empty",
@@ -6043,6 +6102,7 @@ function renderDownloadPage(body: DownloadListPage): void {
   renderRegionContent(container, ...body.items.map((item) => {
     const card = document.createElement("article");
     card.className = `download-card ${item.is_stale ? "stale" : ""}`;
+    card.dataset.jobId = item.job_id;
     const heading = document.createElement("div");
     heading.className = "download-heading";
     const title = document.createElement("strong");
@@ -6101,11 +6161,25 @@ function renderDownloadPage(body: DownloadListPage): void {
     }
     return card;
   }));
+  downloadRenderSignature = renderSignature;
+  if (anchorJobId !== null && anchorViewportTop !== null) {
+    const replacementAnchor = Array.from(
+      container.querySelectorAll<HTMLElement>(".download-card"),
+    ).find((card) => card.dataset.jobId === anchorJobId);
+    if (replacementAnchor) {
+      window.scrollBy(
+        0,
+        replacementAnchor.getBoundingClientRect().top - anchorViewportTop,
+      );
+    }
+  }
 }
 
-async function loadDownloads(): Promise<void> {
+async function loadDownloads(background = false): Promise<void> {
   const container = element<HTMLElement>("#downloads");
-  setRegionState(container, "loading");
+  const hadReadyContent = container.dataset.uiState === "ready";
+  if (!background || !hadReadyContent) setRegionState(container, "loading");
+  const requestSequence = ++downloadListRequestSequence;
   const query = new URLSearchParams({
     page: String(downloadState.page),
     page_size: String(downloadState.page_size),
@@ -6123,17 +6197,25 @@ async function loadDownloads(): Promise<void> {
     const response = await fetch(`/api/v1/downloads?${query}`, { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as DownloadListPage;
+    if (requestSequence !== downloadListRequestSequence) return;
     if (body.items.length === 0 && body.total_items > 0 && downloadState.page > 1) {
       downloadState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
       saveDownloadState();
-      await loadDownloads();
+      await loadDownloads(background);
       return;
     }
     downloadState.page = body.page;
     downloadState.page_size = body.page_size as 10 | 25 | 50;
     saveDownloadState();
-    renderDownloadPage(body);
+    renderDownloadPage(body, background);
   } catch (error) {
+    if (requestSequence !== downloadListRequestSequence) return;
+    if (background && hadReadyContent) {
+      setRegionState(container, "ready");
+      element<HTMLElement>("#download-list-status").textContent =
+        `自动刷新失败，保留当前列表：${errorMessage(error, "未知错误")}`;
+      return;
+    }
     renderRegionMessage(
       container,
       "error",
@@ -6720,7 +6802,7 @@ async function loadMetadataAttempts(
 async function loadMetadataTasks(background = false): Promise<void> {
   const container = element<HTMLElement>("#metadata-tasks");
   const hadReadyContent = container.dataset.uiState === "ready";
-  setRegionState(container, "loading");
+  if (!background || !hadReadyContent) setRegionState(container, "loading");
   const requestSequence = ++metadataListRequestSequence;
   const query = new URLSearchParams({
     page: String(metadataState.page),
@@ -6758,12 +6840,15 @@ async function loadMetadataTasks(background = false): Promise<void> {
     element<HTMLButtonElement>("#metadata-previous").disabled = body.page <= 1;
     element<HTMLButtonElement>("#metadata-next").disabled = body.page >= totalPages;
     const renderSignature = JSON.stringify(body);
-    if (background && renderSignature === metadataRenderSignature) {
-      setRegionState(container, "ready");
-      return;
-    }
-    if (background
-      && (expandedMetadataTaskIds.size > 0 || expandedMetadataDetailIds.size > 0)) {
+    const replaceContent = shouldReplacePolledRegion({
+      background,
+      signatureChanged: renderSignature !== metadataRenderSignature,
+      hasExpandedContent:
+        expandedMetadataTaskIds.size > 0 || expandedMetadataDetailIds.size > 0,
+      hasFocusedEditor: hasFocusedEditorWithin("#metadata-tasks-workspace"),
+      hasOpenDialog: hasOpenDialog(),
+    });
+    if (!replaceContent) {
       setRegionState(container, "ready");
       return;
     }
@@ -10203,12 +10288,28 @@ void loadSources();
 void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
-window.setInterval(() => void loadDownloads(), 5000);
-window.setInterval(() => void loadMetadataTasks(true), 5000);
-window.setInterval(() => void loadPendingTmdb(), 10000);
 window.setInterval(() => {
-  if (!document.hidden) void loadDataUpdate(true);
+  if (isSubviewVisible("tasks", "downloads")) void loadDownloads(true);
+}, 5000);
+window.setInterval(() => {
+  if (isSubviewVisible("tasks", "metadata")) void loadMetadataTasks(true);
+}, 5000);
+window.setInterval(() => {
+  if (isSubviewVisible("library", "pending")
+    && !hasFocusedEditorWithin("#pending-tmdb") && !hasOpenDialog()) {
+    void loadPendingTmdb();
+  }
+}, 10000);
+window.setInterval(() => {
+  if (isSubviewVisible("bangumi-cache", "versions")
+    && !dataUpdateActionRunning
+    && !hasFocusedEditorWithin("#data-update") && !hasOpenDialog()) {
+    void loadDataUpdate(true);
+  }
 }, 3000);
 window.setInterval(() => {
-  if (!document.hidden && activeLibraryDetail === null) void loadLibrary();
+  if (isSubviewVisible("library", "seasons") && activeLibraryDetail === null
+    && !hasFocusedEditorWithin("#anime-library") && !hasOpenDialog()) {
+    void loadLibrary();
+  }
 }, 15000);

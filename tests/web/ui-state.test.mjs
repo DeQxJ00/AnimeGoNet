@@ -5,6 +5,7 @@ import {
   renderRegionContent,
   renderRegionMessage,
   setRegionState,
+  shouldReplacePolledRegion,
 } from "../../src/AnimeGoNet.App/wwwroot/ui-state.js";
 
 function region(markup = '<div id="target"></div>') {
@@ -59,4 +60,30 @@ test("ready content replaces status messages and clears busy state", () => {
   assert.equal(target.getAttribute("aria-busy"), "false");
   assert.equal(target.children.length, 1);
   assert.equal(target.firstElementChild, card);
+});
+
+test("foreground refresh always replaces the current region", () => {
+  assert.equal(shouldReplacePolledRegion({
+    background: false,
+    signatureChanged: false,
+    hasExpandedContent: true,
+    hasFocusedEditor: true,
+    hasOpenDialog: true,
+  }), true);
+});
+
+test("background refresh replaces only changed and idle regions", () => {
+  const idle = {
+    background: true,
+    signatureChanged: true,
+    hasExpandedContent: false,
+    hasFocusedEditor: false,
+    hasOpenDialog: false,
+  };
+
+  assert.equal(shouldReplacePolledRegion(idle), true);
+  assert.equal(shouldReplacePolledRegion({ ...idle, signatureChanged: false }), false);
+  assert.equal(shouldReplacePolledRegion({ ...idle, hasExpandedContent: true }), false);
+  assert.equal(shouldReplacePolledRegion({ ...idle, hasFocusedEditor: true }), false);
+  assert.equal(shouldReplacePolledRegion({ ...idle, hasOpenDialog: true }), false);
 });

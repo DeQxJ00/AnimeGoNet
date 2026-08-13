@@ -1,3 +1,11 @@
+export function shouldReplacePolledRegion(state) {
+    if (!state.background)
+        return true;
+    return state.signatureChanged
+        && !state.hasExpandedContent
+        && !state.hasFocusedEditor
+        && !state.hasOpenDialog;
+}
 export function setRegionState(region, state) {
     region.dataset.uiState = state;
     region.setAttribute("aria-busy", String(state === "loading"));

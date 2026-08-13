@@ -1,5 +1,5 @@
 import { ApiClient } from "./api-client.js";
-import { renderRegionContent, renderRegionMessage, setRegionState, } from "./ui-state.js";
+import { renderRegionContent, renderRegionMessage, setRegionState, shouldReplacePolledRegion, } from "./ui-state.js";
 import { classifyLiveLogEntry, classifyLiveLogHttpDirection, filterLiveLogEntries, parseLiveLogEntry, } from "./log-view.js";
 function element(selector) {
     const found = document.querySelector(selector);
@@ -46,6 +46,8 @@ const metadataStorageKey = "animegonet.metadata-tasks.v1";
 let metadataState = readMetadataState();
 let metadataListRequestSequence = 0;
 let metadataRenderSignature = null;
+let downloadListRequestSequence = 0;
+let downloadRenderSignature = null;
 const expandedDownloadJobIds = new Set();
 let activeLibraryDetail = null;
 let externalImportDetailIdentity = null;
@@ -187,6 +189,21 @@ function workspaceFromHash() {
         : definition.defaultSubview;
     return { workspace, subview };
 }
+function isSubviewVisible(workspace, subview) {
+    if (document.hidden)
+        return false;
+    const current = workspaceFromHash();
+    return current.workspace === workspace && current.subview === subview;
+}
+function hasFocusedEditorWithin(selector) {
+    const active = document.activeElement;
+    return active instanceof HTMLElement
+        && active.matches("input, select, textarea, [contenteditable='true']")
+        && element(selector).contains(active);
+}
+function hasOpenDialog() {
+    return document.querySelector("dialog[open]") !== null;
+}
 function closeMobileSidebar() {
     const sidebar = element("#app-sidebar");
     const toggle = element("#sidebar-toggle");
@@ -231,8 +248,25 @@ function selectWorkspace(workspace, subview, updateHash = true) {
         if (window.location.hash !== nextHash)
             history.pushState(null, "", nextHash);
     }
+    if (workspace === "tasks" && selectedSubview === "downloads") {
+        void loadDownloads(true);
+    }
+    if (workspace === "tasks" && selectedSubview === "metadata") {
+        void loadMetadataTasks(true);
+    }
+    if (workspace === "library" && selectedSubview === "seasons"
+        && activeLibraryDetail === null) {
+        void loadLibrary();
+    }
+    if (workspace === "library" && selectedSubview === "pending") {
+        void loadPendingTmdb();
+    }
     if (workspace === "bangumi-cache")
         void loadBangumiArchiveUsage(true);
+    if (workspace === "bangumi-cache" && selectedSubview === "versions"
+        && !dataUpdateActionRunning) {
+        void loadDataUpdate(true);
+    }
     if (workspace === "logs" && selectedSubview === "ai-invocations")
         void loadAiInvocationLogs();
     closeMobileSidebar();
@@ -3950,7 +3984,7 @@ function renderDownloadSummary(body) {
             : "尚无"}`;
     element("#download-summary").replaceChildren(...cards, footer);
 }
-function renderDownloadPage(body) {
+function renderDownloadPage(body, background = false) {
     renderDownloadSummary(body);
     const container = element("#downloads");
     const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
@@ -3960,7 +3994,29 @@ function renderDownloadPage(body) {
         `第 ${body.page} / ${totalPages} 页`;
     element("#download-previous").disabled = body.page <= 1;
     element("#download-next").disabled = body.page >= totalPages;
+    const renderSignature = JSON.stringify(body);
+    const replaceContent = shouldReplacePolledRegion({
+        background,
+        signatureChanged: renderSignature !== downloadRenderSignature,
+        hasExpandedContent: expandedDownloadJobIds.size > 0,
+        hasFocusedEditor: hasFocusedEditorWithin("#download-tasks-workspace"),
+        hasOpenDialog: hasOpenDialog(),
+    });
+    if (!replaceContent) {
+        setRegionState(container, "ready");
+        return;
+    }
+    const visibleAnchor = background
+        ? Array.from(container.querySelectorAll(".download-card"))
+            .find((card) => {
+            const bounds = card.getBoundingClientRect();
+            return bounds.bottom > 0 && bounds.top < window.innerHeight;
+        })
+        : undefined;
+    const anchorJobId = visibleAnchor?.dataset.jobId ?? null;
+    const anchorViewportTop = visibleAnchor?.getBoundingClientRect().top ?? null;
     if (body.items.length === 0) {
+        downloadRenderSignature = renderSignature;
         renderRegionMessage(container, "empty", body.total_items === 0
             ? "暂无符合筛选条件的下载任务"
             : "当前页没有任务，请返回上一页。");
@@ -3969,6 +4025,7 @@ function renderDownloadPage(body) {
     renderRegionContent(container, ...body.items.map((item) => {
         const card = document.createElement("article");
         card.className = `download-card ${item.is_stale ? "stale" : ""}`;
+        card.dataset.jobId = item.job_id;
         const heading = document.createElement("div");
         heading.className = "download-heading";
         const title = document.createElement("strong");
@@ -4029,10 +4086,20 @@ function renderDownloadPage(body) {
         }
         return card;
     }));
+    downloadRenderSignature = renderSignature;
+    if (anchorJobId !== null && anchorViewportTop !== null) {
+        const replacementAnchor = Array.from(container.querySelectorAll(".download-card")).find((card) => card.dataset.jobId === anchorJobId);
+        if (replacementAnchor) {
+            window.scrollBy(0, replacementAnchor.getBoundingClientRect().top - anchorViewportTop);
+        }
+    }
 }
-async function loadDownloads() {
+async function loadDownloads(background = false) {
     const container = element("#downloads");
-    setRegionState(container, "loading");
+    const hadReadyContent = container.dataset.uiState === "ready";
+    if (!background || !hadReadyContent)
+        setRegionState(container, "loading");
+    const requestSequence = ++downloadListRequestSequence;
     const query = new URLSearchParams({
         page: String(downloadState.page),
         page_size: String(downloadState.page_size),
@@ -4054,18 +4121,28 @@ async function loadDownloads() {
         if (!response.ok)
             throw new Error(await responseError(response));
         const body = await response.json();
+        if (requestSequence !== downloadListRequestSequence)
+            return;
         if (body.items.length === 0 && body.total_items > 0 && downloadState.page > 1) {
             downloadState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
             saveDownloadState();
-            await loadDownloads();
+            await loadDownloads(background);
             return;
         }
         downloadState.page = body.page;
         downloadState.page_size = body.page_size;
         saveDownloadState();
-        renderDownloadPage(body);
+        renderDownloadPage(body, background);
     }
     catch (error) {
+        if (requestSequence !== downloadListRequestSequence)
+            return;
+        if (background && hadReadyContent) {
+            setRegionState(container, "ready");
+            element("#download-list-status").textContent =
+                `自动刷新失败，保留当前列表：${errorMessage(error, "未知错误")}`;
+            return;
+        }
         renderRegionMessage(container, "error", `下载状态读取失败：${errorMessage(error, "未知错误")}`);
         element("#download-list-status").textContent = "下载任务读取失败";
     }
@@ -4600,7 +4677,8 @@ async function loadMetadataAttempts(taskId, target, button) {
 async function loadMetadataTasks(background = false) {
     const container = element("#metadata-tasks");
     const hadReadyContent = container.dataset.uiState === "ready";
-    setRegionState(container, "loading");
+    if (!background || !hadReadyContent)
+        setRegionState(container, "loading");
     const requestSequence = ++metadataListRequestSequence;
     const query = new URLSearchParams({
         page: String(metadataState.page),
@@ -4643,12 +4721,14 @@ async function loadMetadataTasks(background = false) {
         element("#metadata-previous").disabled = body.page <= 1;
         element("#metadata-next").disabled = body.page >= totalPages;
         const renderSignature = JSON.stringify(body);
-        if (background && renderSignature === metadataRenderSignature) {
-            setRegionState(container, "ready");
-            return;
-        }
-        if (background
-            && (expandedMetadataTaskIds.size > 0 || expandedMetadataDetailIds.size > 0)) {
+        const replaceContent = shouldReplacePolledRegion({
+            background,
+            signatureChanged: renderSignature !== metadataRenderSignature,
+            hasExpandedContent: expandedMetadataTaskIds.size > 0 || expandedMetadataDetailIds.size > 0,
+            hasFocusedEditor: hasFocusedEditorWithin("#metadata-tasks-workspace"),
+            hasOpenDialog: hasOpenDialog(),
+        });
+        if (!replaceContent) {
             setRegionState(container, "ready");
             return;
         }
@@ -7691,14 +7771,30 @@ void loadSources();
 void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
-window.setInterval(() => void loadDownloads(), 5000);
-window.setInterval(() => void loadMetadataTasks(true), 5000);
-window.setInterval(() => void loadPendingTmdb(), 10000);
 window.setInterval(() => {
-    if (!document.hidden)
+    if (isSubviewVisible("tasks", "downloads"))
+        void loadDownloads(true);
+}, 5000);
+window.setInterval(() => {
+    if (isSubviewVisible("tasks", "metadata"))
+        void loadMetadataTasks(true);
+}, 5000);
+window.setInterval(() => {
+    if (isSubviewVisible("library", "pending")
+        && !hasFocusedEditorWithin("#pending-tmdb") && !hasOpenDialog()) {
+        void loadPendingTmdb();
+    }
+}, 10000);
+window.setInterval(() => {
+    if (isSubviewVisible("bangumi-cache", "versions")
+        && !dataUpdateActionRunning
+        && !hasFocusedEditorWithin("#data-update") && !hasOpenDialog()) {
         void loadDataUpdate(true);
+    }
 }, 3000);
 window.setInterval(() => {
-    if (!document.hidden && activeLibraryDetail === null)
+    if (isSubviewVisible("library", "seasons") && activeLibraryDetail === null
+        && !hasFocusedEditorWithin("#anime-library") && !hasOpenDialog()) {
         void loadLibrary();
+    }
 }, 15000);
