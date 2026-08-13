@@ -111,6 +111,9 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
         app.MapPost("/api/v1/library/directory-database/refresh", RefreshDirectoryDatabase);
         app.MapGet("/api/v1/data-update", GetDataUpdateStatus);
+        app.MapGet(
+            "/api/v1/data-update/archive-usage",
+            ListBangumiArchiveUsage);
         app.MapPost("/api/v1/data-update/check", CheckDataUpdate);
         app.MapPost("/api/v1/data-update/download", DownloadDataUpdate);
         app.MapPost("/api/v1/data-update/update", ApplyDataUpdate);
@@ -778,6 +781,50 @@ public static class ApiEndpoints
                 usage.EpisodeHits,
                 usage.RelationHits,
                 usage.LastHitAtUtc)));
+    }
+
+    private static async Task<IResult> ListBangumiArchiveUsage(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery(Name = "hit_kind")] string? hitKind,
+        BangumiArchiveStore bangumiArchive,
+        CancellationToken cancellationToken)
+    {
+        var resolvedPage = page ?? 1;
+        var resolvedPageSize = pageSize ?? 25;
+        if (resolvedPage < 1 || resolvedPageSize is < 1 or > 100)
+        {
+            return TypedResults.BadRequest(Error(
+                "bangumi_archive_usage_pagination_invalid",
+                "Bangumi archive usage page must be positive and page_size must be between 1 and 100."));
+        }
+
+        try
+        {
+            var result = await bangumiArchive.ListUsageEventsAsync(
+                resolvedPage,
+                resolvedPageSize,
+                hitKind,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new BangumiArchiveUsageListResponse(
+                result.Page,
+                result.PageSize,
+                result.TotalItems,
+                result.HitKind,
+                result.Items.Select(item => new BangumiArchiveUsageEventResponse(
+                    item.Id,
+                    item.DataVersion,
+                    item.HitKind,
+                    item.SubjectId,
+                    item.ResultCount,
+                    item.HitAtUtc)).ToArray()));
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.BadRequest(Error(
+                "bangumi_archive_usage_kind_invalid",
+                "Bangumi archive usage hit_kind must be subject, episodes or relations."));
+        }
     }
 
     private static Task<IResult> CheckDataUpdate(

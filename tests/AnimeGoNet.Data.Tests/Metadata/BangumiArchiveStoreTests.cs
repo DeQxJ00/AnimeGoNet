@@ -145,11 +145,11 @@ public sealed class BangumiArchiveStoreTests
         var firstHit = new DateTimeOffset(2026, 8, 13, 1, 2, 3, TimeSpan.Zero);
         var lastHit = firstHit.AddMinutes(2);
 
-        await store.RecordSubjectHitAsync("2026.07.29.1", firstHit);
-        await store.RecordSubjectHitAsync("2026.07.29.1", firstHit.AddMinutes(1));
-        await store.RecordEpisodeHitAsync("2026.07.29.1", firstHit.AddMinutes(1));
-        await store.RecordRelationHitAsync("2026.08.05.1", lastHit);
-        await store.RecordEpisodeHitAsync("2026.07.29.1", firstHit);
+        await store.RecordSubjectHitAsync("2026.07.29.1", 51, firstHit);
+        await store.RecordSubjectHitAsync("2026.07.29.1", 52, firstHit.AddMinutes(1));
+        await store.RecordEpisodeHitAsync("2026.07.29.1", 52, 12, firstHit.AddMinutes(1));
+        await store.RecordRelationHitAsync("2026.08.05.1", 53, 0, lastHit);
+        await store.RecordEpisodeHitAsync("2026.07.29.1", 51, 24, firstHit);
 
         var usage = await store.GetUsageAsync();
 
@@ -158,5 +158,20 @@ public sealed class BangumiArchiveStoreTests
         Assert.Equal(2, usage.EpisodeHits);
         Assert.Equal(1, usage.RelationHits);
         Assert.Equal(lastHit, usage.LastHitAtUtc);
+
+        var firstPage = await store.ListUsageEventsAsync(1, 2);
+        Assert.Equal(5, firstPage.TotalItems);
+        Assert.Equal(2, firstPage.Items.Count);
+        Assert.Equal("relations", firstPage.Items[0].HitKind);
+        Assert.Equal(53, firstPage.Items[0].SubjectId);
+        Assert.Equal(0, firstPage.Items[0].ResultCount);
+        Assert.Equal("episodes", firstPage.Items[1].HitKind);
+        Assert.Equal(12, firstPage.Items[1].ResultCount);
+
+        var episodes = await store.ListUsageEventsAsync(1, 100, "EPISODES");
+        Assert.Equal("episodes", episodes.HitKind);
+        Assert.Equal(2, episodes.TotalItems);
+        Assert.All(episodes.Items, item => Assert.Equal("episodes", item.HitKind));
+        Assert.Equal([12, 24], episodes.Items.Select(item => item.ResultCount));
     }
 }

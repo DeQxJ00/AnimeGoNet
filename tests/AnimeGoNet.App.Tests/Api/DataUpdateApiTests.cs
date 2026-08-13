@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Tests.DataUpdate;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Metadata;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -33,6 +35,50 @@ public sealed class DataUpdateApiTests
         Assert.Equal(0, usage.GetProperty("episode_hits").GetInt64());
         Assert.Equal(0, usage.GetProperty("relation_hits").GetInt64());
         Assert.Equal(JsonValueKind.Null, usage.GetProperty("last_hit_at_utc").ValueKind);
+    }
+
+    [Fact]
+    public async Task ArchiveUsageListsEveryHitWithPaginationAndFiltering()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var store = app.App.Services.GetRequiredService<BangumiArchiveStore>();
+        var now = new DateTimeOffset(2026, 8, 13, 4, 5, 6, TimeSpan.Zero);
+        await store.RecordSubjectHitAsync("2026.08.11.2", 547888, now);
+        await store.RecordEpisodeHitAsync("2026.08.11.2", 547888, 12, now.AddSeconds(1));
+        await store.RecordRelationHitAsync("2026.08.11.2", 547888, 0, now.AddSeconds(2));
+
+        using var response = await app.Client.GetAsync(
+            "/api/v1/data-update/archive-usage?page=1&page_size=2");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(3, json.RootElement.GetProperty("total_items").GetInt64());
+        var items = json.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.Equal("relations", items[0].GetProperty("hit_kind").GetString());
+        Assert.Equal(547888, items[0].GetProperty("subject_id").GetInt32());
+        Assert.Equal(0, items[0].GetProperty("result_count").GetInt32());
+        Assert.Equal("2026.08.11.2", items[0].GetProperty("data_version").GetString());
+        Assert.Equal("episodes", items[1].GetProperty("hit_kind").GetString());
+        Assert.Equal(12, items[1].GetProperty("result_count").GetInt32());
+
+        using var filtered = await app.Client.GetAsync(
+            "/api/v1/data-update/archive-usage?hit_kind=subject");
+        using var filteredJson = JsonDocument.Parse(
+            await filtered.Content.ReadAsStreamAsync());
+        Assert.Equal(1, filteredJson.RootElement.GetProperty("total_items").GetInt64());
+        Assert.Equal(
+            "subject",
+            filteredJson.RootElement.GetProperty("hit_kind").GetString());
+
+        using var invalid = await app.Client.GetAsync(
+            "/api/v1/data-update/archive-usage?hit_kind=online");
+        using var invalidJson = JsonDocument.Parse(
+            await invalid.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(
+            "bangumi_archive_usage_kind_invalid",
+            invalidJson.RootElement.GetProperty("code").GetString());
     }
 
     [Fact]

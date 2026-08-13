@@ -258,6 +258,40 @@
       </form>
       <p id="data-update-status" class="muted" role="status">正在读取数据版本…</p>
       <div id="data-update-summary" class="data-update-summary" aria-live="polite"></div>
+      <article class="data-update-usage-detail" aria-labelledby="data-update-usage-title">
+        <div class="data-update-usage-heading">
+          <div>
+            <h3 id="data-update-usage-title">本地缓存逐条命中明细</h3>
+            <p class="muted">记录由 AnimeGoNetData 直接返回的每次读取；旧版本升级前的历史明细不会推测补造。</p>
+          </div>
+          <div class="data-update-usage-filters">
+            <label>类型
+              <select id="data-update-usage-kind">
+                <option value="">全部类型</option>
+                <option value="subject">Subject</option>
+                <option value="episodes">Episode 集</option>
+                <option value="relations">前传关系</option>
+              </select>
+            </label>
+            <label>每页
+              <select id="data-update-usage-page-size">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <p id="data-update-usage-status" class="muted" role="status">正在读取命中明细…</p>
+        <div id="data-update-usage-list" class="data-update-usage-list" aria-live="polite">
+          <p class="muted empty">暂无本地缓存命中明细。</p>
+        </div>
+        <nav class="data-update-usage-pagination" aria-label="本地缓存命中明细分页">
+          <button id="data-update-usage-previous" type="button" class="secondary-button" disabled>上一页</button>
+          <span id="data-update-usage-page">第 1 / 1 页</span>
+          <button id="data-update-usage-next" type="button" class="secondary-button" disabled>下一页</button>
+        </nav>
+      </article>
       <article id="data-update-transfer" class="data-update-transfer" aria-live="polite">
         <p class="muted empty">暂无检查或下载记录。</p>
       </article>

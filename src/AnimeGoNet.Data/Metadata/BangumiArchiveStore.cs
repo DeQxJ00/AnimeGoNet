@@ -29,6 +29,21 @@ public sealed record BangumiArchiveUsage(
     public long TotalHits => SubjectHits + EpisodeHits + RelationHits;
 }
 
+public sealed record BangumiArchiveUsageEvent(
+    long Id,
+    string DataVersion,
+    string HitKind,
+    int SubjectId,
+    int ResultCount,
+    DateTimeOffset HitAtUtc);
+
+public sealed record BangumiArchiveUsagePage(
+    int Page,
+    int PageSize,
+    long TotalItems,
+    string? HitKind,
+    IReadOnlyList<BangumiArchiveUsageEvent> Items);
+
 public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
 {
     public async Task<BangumiArchiveSnapshot?> GetAsync(
@@ -161,31 +176,45 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
 
     public Task RecordSubjectHitAsync(
         string dataVersion,
+        int subjectId,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default) =>
         RecordHitAsync(
             dataVersion,
+            "subject",
             "subject_hit_count",
+            subjectId,
+            1,
             utcNow,
             cancellationToken);
 
     public Task RecordEpisodeHitAsync(
         string dataVersion,
+        int subjectId,
+        int resultCount,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default) =>
         RecordHitAsync(
             dataVersion,
+            "episodes",
             "episode_hit_count",
+            subjectId,
+            resultCount,
             utcNow,
             cancellationToken);
 
     public Task RecordRelationHitAsync(
         string dataVersion,
+        int subjectId,
+        int resultCount,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default) =>
         RecordHitAsync(
             dataVersion,
+            "relations",
             "relation_hit_count",
+            subjectId,
+            resultCount,
             utcNow,
             cancellationToken);
 
@@ -219,13 +248,113 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
                     DateTimeStyles.RoundtripKind));
     }
 
+    public async Task<BangumiArchiveUsagePage> ListUsageEventsAsync(
+        int page,
+        int pageSize,
+        string? hitKind = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        if (pageSize is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageSize));
+        }
+
+        var normalizedKind = string.IsNullOrWhiteSpace(hitKind)
+            ? null
+            : hitKind.Trim().ToLowerInvariant();
+        if (normalizedKind is not null
+            && normalizedKind is not ("subject" or "episodes" or "relations"))
+        {
+            throw new ArgumentException(
+                "Bangumi archive hit kind is invalid.",
+                nameof(hitKind));
+        }
+
+        await using var connection = await database
+            .OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        long totalItems;
+        await using (var count = connection.CreateCommand())
+        {
+            count.Transaction = transaction;
+            count.CommandText = """
+                SELECT COUNT(*)
+                FROM bangumi_archive_usage_events
+                WHERE $hit_kind IS NULL OR hit_kind = $hit_kind;
+                """;
+            count.Parameters.AddWithValue(
+                "$hit_kind",
+                (object?)normalizedKind ?? DBNull.Value);
+            totalItems = Convert.ToInt64(
+                await count.ExecuteScalarAsync(cancellationToken)
+                    .ConfigureAwait(false),
+                CultureInfo.InvariantCulture);
+        }
+
+        var items = new List<BangumiArchiveUsageEvent>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT id, data_version, hit_kind, subject_id, result_count,
+                       hit_at_utc
+                FROM bangumi_archive_usage_events
+                WHERE $hit_kind IS NULL OR hit_kind = $hit_kind
+                ORDER BY hit_at_utc DESC, id DESC
+                LIMIT $limit OFFSET $offset;
+                """;
+            command.Parameters.AddWithValue(
+                "$hit_kind",
+                (object?)normalizedKind ?? DBNull.Value);
+            command.Parameters.AddWithValue("$limit", pageSize);
+            command.Parameters.AddWithValue("$offset", checked((page - 1L) * pageSize));
+            await using var reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                items.Add(new BangumiArchiveUsageEvent(
+                    reader.GetInt64(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetInt32(3),
+                    reader.GetInt32(4),
+                    DateTimeOffset.Parse(
+                        reader.GetString(5),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind)));
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new BangumiArchiveUsagePage(
+            page,
+            pageSize,
+            totalItems,
+            normalizedKind,
+            items);
+    }
+
     private async Task RecordHitAsync(
         string dataVersion,
+        string hitKind,
         string counterColumn,
+        int subjectId,
+        int resultCount,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataVersion);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(subjectId, 0);
+        ArgumentOutOfRangeException.ThrowIfNegative(resultCount);
+        if (hitKind is not ("subject" or "episodes" or "relations"))
+        {
+            throw new ArgumentOutOfRangeException(nameof(hitKind));
+        }
         if (counterColumn is not (
             "subject_hit_count" or
             "episode_hit_count" or
@@ -237,7 +366,11 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
         await using var connection = await database
             .OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO bangumi_archive_usage (
                 data_version, subject_hit_count, episode_hit_count,
@@ -253,12 +386,22 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
                 last_hit_at_utc = MAX(
                     last_hit_at_utc,
                     excluded.last_hit_at_utc);
+
+            INSERT INTO bangumi_archive_usage_events (
+                data_version, hit_kind, subject_id, result_count, hit_at_utc)
+            VALUES (
+                $data_version, $hit_kind, $subject_id, $result_count,
+                $last_hit_at_utc);
             """;
         command.Parameters.AddWithValue("$data_version", dataVersion);
+        command.Parameters.AddWithValue("$hit_kind", hitKind);
+        command.Parameters.AddWithValue("$subject_id", subjectId);
+        command.Parameters.AddWithValue("$result_count", resultCount);
         command.Parameters.AddWithValue(
             "$last_hit_at_utc",
             utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<(string DataVersion, BangumiSubject Subject)?>

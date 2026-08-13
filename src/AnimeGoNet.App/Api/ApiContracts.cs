@@ -1553,6 +1553,21 @@ public sealed record BangumiArchiveUsageResponse(
     [property: JsonPropertyName("relation_hits")] long RelationHits,
     [property: JsonPropertyName("last_hit_at_utc")] DateTimeOffset? LastHitAtUtc);
 
+public sealed record BangumiArchiveUsageEventResponse(
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("data_version")] string DataVersion,
+    [property: JsonPropertyName("hit_kind")] string HitKind,
+    [property: JsonPropertyName("subject_id")] int SubjectId,
+    [property: JsonPropertyName("result_count")] int ResultCount,
+    [property: JsonPropertyName("hit_at_utc")] DateTimeOffset HitAtUtc);
+
+public sealed record BangumiArchiveUsageListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] long TotalItems,
+    [property: JsonPropertyName("hit_kind")] string? HitKind,
+    [property: JsonPropertyName("items")] IReadOnlyList<BangumiArchiveUsageEventResponse> Items);
+
 public sealed record DataUpdateStatusResponse(
     [property: JsonPropertyName("scheduled_enabled")] bool ScheduledEnabled,
     [property: JsonPropertyName("cron")] string Cron,

@@ -172,6 +172,23 @@ interface DataUpdateActionResult {
   imported: boolean;
 }
 
+interface BangumiArchiveUsageEvent {
+  id: number;
+  data_version: string;
+  hit_kind: "subject" | "episodes" | "relations";
+  subject_id: number;
+  result_count: number;
+  hit_at_utc: string;
+}
+
+interface BangumiArchiveUsagePage {
+  page: number;
+  page_size: number;
+  total_items: number;
+  hit_kind: "subject" | "episodes" | "relations" | null;
+  items: BangumiArchiveUsageEvent[];
+}
+
 interface ConfigurationArchiveCounts {
   application: number;
   downloaders: number;
@@ -1683,6 +1700,7 @@ function selectWorkspace(
     const nextHash = `#/${workspace}/${selectedSubview}`;
     if (window.location.hash !== nextHash) history.pushState(null, "", nextHash);
   }
+  if (workspace === "bangumi-cache") void loadBangumiArchiveUsage(true);
   closeMobileSidebar();
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -2242,6 +2260,9 @@ async function loadDirectoryDatabase(refresh = false): Promise<void> {
 }
 
 let dataUpdateActionRunning = false;
+let dataUpdateUsagePage = 1;
+let dataUpdateUsagePageSize: 25 | 50 | 100 = 25;
+let dataUpdateUsageKind: "" | "subject" | "episodes" | "relations" = "";
 
 const dataUpdateStatusLabels: Record<string, string> = {
   checking: "正在检查 manifest",
@@ -2253,6 +2274,12 @@ const dataUpdateStatusLabels: Record<string, string> = {
   completed: "更新完成",
   failed: "更新失败",
   rolled_back: "已回滚",
+};
+
+const bangumiArchiveHitKindLabels: Record<BangumiArchiveUsageEvent["hit_kind"], string> = {
+  subject: "Subject",
+  episodes: "Episode 集",
+  relations: "前传关系",
 };
 
 function dataUpdateTime(value: string | null): string {
@@ -2381,6 +2408,89 @@ function renderDataUpdateDownloads(status: DataUpdateStatus): void {
   }));
 }
 
+function bangumiArchiveUsageMessage(text: string, alert = false): HTMLElement {
+  const message = document.createElement("p");
+  message.className = "muted empty";
+  message.textContent = text;
+  if (alert) message.setAttribute("role", "alert");
+  return message;
+}
+
+function renderBangumiArchiveUsage(page: BangumiArchiveUsagePage): void {
+  const target = element<HTMLElement>("#data-update-usage-list");
+  if (page.items.length === 0) {
+    target.replaceChildren(bangumiArchiveUsageMessage(
+      page.hit_kind === null
+        ? "暂无本地缓存命中明细；新的命中会从这里开始逐条记录。"
+        : "当前类型没有本地缓存命中明细。",
+    ));
+  } else {
+    target.replaceChildren(...page.items.map(item => {
+      const card = document.createElement("dl");
+      card.className = "data-update-usage-item";
+      const fields: Array<[string, string]> = [
+        ["命中类型", bangumiArchiveHitKindLabels[item.hit_kind]],
+        ["Bangumi Subject ID", String(item.subject_id)],
+        ["返回记录数", `${item.result_count} 条`],
+        ["AnimeGoNetData 版本", item.data_version],
+        ["命中时间", dataUpdateTime(item.hit_at_utc)],
+        ["明细序号", String(item.id)],
+      ];
+      for (const [label, value] of fields) {
+        const field = document.createElement("div");
+        const term = document.createElement("dt");
+        term.textContent = label;
+        const description = document.createElement("dd");
+        description.textContent = value;
+        field.append(term, description);
+        card.append(field);
+      }
+      return card;
+    }));
+  }
+
+  const totalPages = Math.max(1, Math.ceil(page.total_items / page.page_size));
+  element<HTMLElement>("#data-update-usage-page").textContent =
+    `第 ${page.page} / ${totalPages} 页 · 共 ${page.total_items} 条`;
+  element<HTMLButtonElement>("#data-update-usage-previous").disabled = page.page <= 1;
+  element<HTMLButtonElement>("#data-update-usage-next").disabled = page.page >= totalPages;
+}
+
+async function loadBangumiArchiveUsage(silent = false): Promise<void> {
+  const message = element<HTMLElement>("#data-update-usage-status");
+  if (!silent) message.textContent = "正在读取命中明细…";
+  const query = new URLSearchParams({
+    page: String(dataUpdateUsagePage),
+    page_size: String(dataUpdateUsagePageSize),
+  });
+  if (dataUpdateUsageKind) query.set("hit_kind", dataUpdateUsageKind);
+  try {
+    const response = await fetch(
+      `/api/v1/data-update/archive-usage?${query.toString()}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const page = await response.json() as BangumiArchiveUsagePage;
+    const totalPages = Math.max(1, Math.ceil(page.total_items / page.page_size));
+    if (dataUpdateUsagePage > totalPages) {
+      dataUpdateUsagePage = totalPages;
+      await loadBangumiArchiveUsage(silent);
+      return;
+    }
+
+    dataUpdateUsagePage = page.page;
+    message.textContent = page.hit_kind === null
+      ? `全部类型 · 共 ${page.total_items} 条`
+      : `${bangumiArchiveHitKindLabels[page.hit_kind]} · 共 ${page.total_items} 条`;
+    renderBangumiArchiveUsage(page);
+  } catch (error) {
+    message.textContent = errorMessage(error, "本地缓存命中明细读取失败");
+    element<HTMLElement>("#data-update-usage-list").replaceChildren(
+      bangumiArchiveUsageMessage("命中明细暂时不可用。", true),
+    );
+  }
+}
+
 async function loadDataUpdate(silent = false): Promise<void> {
   const message = element<HTMLElement>("#data-update-status");
   if (!silent) message.textContent = "正在读取数据版本…";
@@ -2420,6 +2530,9 @@ async function loadDataUpdate(silent = false): Promise<void> {
         ["最近命中", dataUpdateTime(status.archive_usage.last_hit_at_utc)],
       ]),
     );
+    if (workspaceFromHash().workspace === "bangumi-cache") {
+      await loadBangumiArchiveUsage(silent);
+    }
     renderDataUpdateTransfer(status);
     renderDataUpdateVersions(status);
     renderDataUpdateDownloads(status);
@@ -8917,6 +9030,40 @@ element<HTMLButtonElement>("#external-plugin-reload").addEventListener(
 element<HTMLButtonElement>("#data-update-reload").addEventListener(
   "click",
   () => void loadDataUpdate(),
+);
+element<HTMLSelectElement>("#data-update-usage-kind").addEventListener(
+  "change",
+  event => {
+    dataUpdateUsageKind = (event.currentTarget as HTMLSelectElement).value as
+      typeof dataUpdateUsageKind;
+    dataUpdateUsagePage = 1;
+    void loadBangumiArchiveUsage();
+  },
+);
+element<HTMLSelectElement>("#data-update-usage-page-size").addEventListener(
+  "change",
+  event => {
+    dataUpdateUsagePageSize = Number(
+      (event.currentTarget as HTMLSelectElement).value,
+    ) as typeof dataUpdateUsagePageSize;
+    dataUpdateUsagePage = 1;
+    void loadBangumiArchiveUsage();
+  },
+);
+element<HTMLButtonElement>("#data-update-usage-previous").addEventListener(
+  "click",
+  () => {
+    if (dataUpdateUsagePage <= 1) return;
+    dataUpdateUsagePage--;
+    void loadBangumiArchiveUsage();
+  },
+);
+element<HTMLButtonElement>("#data-update-usage-next").addEventListener(
+  "click",
+  () => {
+    dataUpdateUsagePage++;
+    void loadBangumiArchiveUsage();
+  },
 );
 element<HTMLButtonElement>("#data-update-check").addEventListener(
   "click",

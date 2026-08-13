@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 45;
+    public const int CurrentVersion = 46;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -66,7 +66,30 @@ public static class DatabaseSchema
             45,
             "bangumi_archive_usage_audit",
             BangumiArchiveUsageAudit),
+        new SchemaMigration(
+            46,
+            "bangumi_archive_usage_events",
+            BangumiArchiveUsageEvents),
     ];
+
+    private const string BangumiArchiveUsageEvents = """
+        CREATE TABLE bangumi_archive_usage_events (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            data_version TEXT NOT NULL,
+            hit_kind TEXT NOT NULL CHECK (
+                hit_kind IN ('subject', 'episodes', 'relations')),
+            subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+            result_count INTEGER NOT NULL CHECK (result_count >= 0),
+            hit_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_bangumi_archive_usage_events_recent
+            ON bangumi_archive_usage_events(hit_at_utc DESC, id DESC);
+
+        CREATE INDEX ix_bangumi_archive_usage_events_kind_recent
+            ON bangumi_archive_usage_events(
+                hit_kind, hit_at_utc DESC, id DESC);
+        """;
 
     private const string BangumiArchiveUsageAudit = """
         CREATE TABLE bangumi_archive_usage (

@@ -23,6 +23,7 @@ public sealed class BangumiArchiveCachingClient(
         {
             await archive.RecordSubjectHitAsync(
                 cached.DataVersion,
+                subjectId,
                 DateTimeOffset.UtcNow,
                 cancellationToken).ConfigureAwait(false);
             return cached.Subject;
@@ -45,6 +46,8 @@ public sealed class BangumiArchiveCachingClient(
         {
             await archive.RecordRelationHitAsync(
                 cached.DataVersion,
+                subjectId,
+                cached.Relations.Count,
                 DateTimeOffset.UtcNow,
                 cancellationToken).ConfigureAwait(false);
             return cached.Relations;
@@ -66,6 +69,8 @@ public sealed class BangumiArchiveCachingClient(
         {
             await archive.RecordEpisodeHitAsync(
                 cached.DataVersion,
+                subjectId,
+                cached.Episodes.Count,
                 DateTimeOffset.UtcNow,
                 cancellationToken).ConfigureAwait(false);
             return cached.Episodes;

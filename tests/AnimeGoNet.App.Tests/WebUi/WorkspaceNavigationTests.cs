@@ -19,6 +19,8 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains(">Bangumi缓存</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"Bangumi缓存\"", script, StringComparison.Ordinal);
         Assert.Contains("AnimeGoNetData 本地缓存使用记录", script, StringComparison.Ordinal);
+        Assert.Contains("本地缓存逐条命中明细", html, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/data-update/archive-usage", script, StringComparison.Ordinal);
         Assert.Contains(
             "data-workspace=\"bangumi-cache\" data-subview=\"versions\"",
             html,
