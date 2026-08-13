@@ -4973,21 +4973,36 @@ async function submitManualRss(event) {
         const accepted = body.items.filter((item) => item.ingest_task_id !== null).length;
         const summary = document.createElement("p");
         summary.className = "manual-result-summary";
-        summary.textContent =
-            `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · `
+        const batches = body.batches?.length ? body.batches : [body];
+        summary.textContent = batches.length > 1
+            ? `聚合 RSS · ${batches.length} 个番组批次 · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`
+            : `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · `
                 + `bgmid ${body.bgmid ?? "未取得"}（${body.bgmid_discovery_state}`
                 + `${body.bgmid_discovery_failure_code ? ` / ${body.bgmid_discovery_failure_code}` : ""}）`
                 + ` · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
-        result.replaceChildren(summary, ...body.items.map((item, index) => manualResultItem(`候选 ${index + 1} · ${rssStatusLabels[item.status] ?? item.status}`, [
-            item.decision_kind,
-            item.decision_reason,
-            item.status === "already_completed"
-                ? "命中完成记录的来源别名，未抓取 Torrent"
-                : null,
-            item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
-            item.errors.length > 0 ? item.errors.join("；") : null,
-        ].filter((value) => value !== null).join(" · "), !["staged", "blocked", "already_ingested", "already_completed"]
-            .includes(item.status))));
+        const renderedItems = batches.flatMap((batch, batchIndex) => {
+            const batchSummary = batches.length > 1
+                ? [manualResultItem(`番组批次 ${batchIndex + 1} · mikanid ${batch.mikanid ?? "未识别"}`, `批次 ${batch.batch_id} · bgmid ${batch.bgmid ?? "未取得"}`
+                        + `（${batch.bgmid_discovery_state}`
+                        + `${batch.bgmid_discovery_failure_code ? ` / ${batch.bgmid_discovery_failure_code}` : ""}）`, batch.bgmid_discovery_state !== "Resolved")]
+                : [];
+            return [
+                ...batchSummary,
+                ...batch.items.map((item, index) => manualResultItem(`候选 ${index + 1} · ${rssStatusLabels[item.status] ?? item.status}`, [
+                    item.decision_kind,
+                    item.decision_reason,
+                    item.identity_mikanid ? `mikanid ${item.identity_mikanid}` : null,
+                    item.identity_groupid ? `groupid ${item.identity_groupid}` : null,
+                    item.status === "already_completed"
+                        ? "命中完成记录的来源别名，未抓取 Torrent"
+                        : null,
+                    item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
+                    item.errors.length > 0 ? item.errors.join("；") : null,
+                ].filter((value) => value !== null).join(" · "), !["staged", "blocked", "already_ingested", "already_completed"]
+                    .includes(item.status))),
+            ];
+        });
+        result.replaceChildren(summary, ...renderedItems);
         void loadDownloads();
         void loadMetadataTasks();
         void loadSources(sourceId);

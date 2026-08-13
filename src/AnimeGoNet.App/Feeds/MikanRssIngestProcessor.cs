@@ -36,7 +36,9 @@ public sealed record MikanRssIngestResult(
     [property: JsonPropertyName("rule_revision")] long RuleRevision,
     [property: JsonPropertyName("legacy_filter_revision")] long LegacyFilterRevision,
     [property: JsonPropertyName("legacy_filter_enabled")] bool LegacyFilterEnabled,
-    [property: JsonPropertyName("items")] IReadOnlyList<MikanRssIngestItemResult> Items);
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanRssIngestItemResult> Items,
+    [property: JsonPropertyName("batches"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MikanRssIngestResult>? Batches = null);
 
 public sealed class MikanRssIngestProcessor(
     SourceProfileStore profiles,
@@ -44,6 +46,7 @@ public sealed class MikanRssIngestProcessor(
     MikanRssBatchStore batches,
     TitleParserManager parsers,
     OrderedFeedFilterManager filters,
+    MikanFeedIdentityResolver identityResolver,
     MikanBangumiSubjectResolver bangumiResolver,
     UnifiedIngestProcessor ingest,
     IHostApplicationLifetime applicationLifetime,
@@ -55,23 +58,106 @@ public sealed class MikanRssIngestProcessor(
         RssFeedDocument feed,
         string sourceProfileId = "mikan",
         CancellationToken cancellationToken = default) =>
-        ProcessCoreAsync(feed, sourceProfileId, null, cancellationToken);
+        ProcessAggregateAwareAsync(feed, sourceProfileId, null, cancellationToken);
 
     public Task<MikanRssIngestResult> ProcessScheduledAsync(
         RssFeedDocument feed,
         string sourceProfileId,
         long expectedSourceProfileRevision,
         CancellationToken cancellationToken = default) =>
-        ProcessCoreAsync(
+        ProcessAggregateAwareAsync(
             feed,
             sourceProfileId,
             expectedSourceProfileRevision,
             cancellationToken);
 
+    private async Task<MikanRssIngestResult> ProcessAggregateAwareAsync(
+        RssFeedDocument feed,
+        string sourceProfileId,
+        long? expectedSourceProfileRevision,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        if (feed.MikanId is > 0 || feed.Items.Count == 0)
+        {
+            return await ProcessCoreAsync(
+                feed,
+                sourceProfileId,
+                expectedSourceProfileRevision,
+                null,
+                null,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var identities = await identityResolver
+            .ResolveAsync(feed, sourceProfileId, cancellationToken)
+            .ConfigureAwait(false);
+        var work = identities
+            .Where(item => item.Identity is not null)
+            .GroupBy(item => item.Identity!.MikanId)
+            .Select(group => new AggregateWork(
+                group.Key,
+                group.Select(item => item.ItemIndex).Order().ToArray(),
+                group.OrderBy(item => item.ItemIndex).Select(item => item.Identity).ToArray(),
+                null))
+            .Concat(identities
+                .Where(item => item.Identity is null)
+                .Select(item => new AggregateWork(
+                    null,
+                    [item.ItemIndex],
+                    [null],
+                    item.FailureCode ?? "mikan_identity_unknown_failure")))
+            .OrderBy(group => group.ItemIndexes[0])
+            .ToArray();
+
+        var completed = new List<AggregateResult>(work.Length);
+        foreach (var group in work)
+        {
+            var childFeed = new RssFeedDocument(
+                group.ItemIndexes.Select(index => feed.Items[index]).ToArray(),
+                group.MikanId);
+            var result = await ProcessCoreAsync(
+                childFeed,
+                sourceProfileId,
+                expectedSourceProfileRevision,
+                group.IdentityFailureCode,
+                group.Identities,
+                cancellationToken).ConfigureAwait(false);
+            completed.Add(new AggregateResult(group.ItemIndexes, result));
+        }
+
+        if (completed.Count == 1)
+        {
+            return completed[0].Result;
+        }
+
+        var orderedItems = completed
+            .SelectMany(group => group.ItemIndexes.Zip(
+                group.Result.Items,
+                (index, item) => (Index: index, Item: item)))
+            .OrderBy(item => item.Index)
+            .Select(item => item.Item)
+            .ToArray();
+        var first = completed[0].Result;
+        return new MikanRssIngestResult(
+            first.BatchId,
+            null,
+            null,
+            "Multiple",
+            null,
+            first.RuleRevision,
+            first.LegacyFilterRevision,
+            first.LegacyFilterEnabled,
+            orderedItems,
+            completed.Select(group => group.Result).ToArray());
+    }
+
     private async Task<MikanRssIngestResult> ProcessCoreAsync(
         RssFeedDocument feed,
         string sourceProfileId,
         long? expectedSourceProfileRevision,
+        string? identityFailureCode,
+        IReadOnlyList<MikanEpisodeIdentity?>? resolvedIdentities,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(feed);
@@ -123,7 +209,9 @@ public sealed class MikanRssIngestProcessor(
         }
 
         var filterResult = filterExecution.Runs[0].Result;
-        var legacy = ToLegacyFilterBatch(filterResult, feed.Items.Count);
+        var legacy = WithResolvedIdentities(
+            ToLegacyFilterBatch(filterResult, feed.Items.Count),
+            resolvedIdentities);
         var plan = await MikanRssBatchPlanner.CreateAsync(
             feed,
             ruleSnapshot.Rules,
@@ -192,7 +280,12 @@ public sealed class MikanRssIngestProcessor(
         }
         else if (hasPendingWinner && !stored.BangumiDiscovery.IsResolved)
         {
-            var discovery = await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false);
+            var discovery = identityFailureCode is null
+                ? await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false)
+                : new MikanBangumiDiscovery(
+                    null,
+                    MikanBangumiDiscoveryStates.NotApplicable,
+                    identityFailureCode);
             stored = await batches.SetBangumiDiscoveryAsync(
                 stored.Id, discovery, cancellationToken).ConfigureAwait(false);
         }
@@ -376,6 +469,16 @@ public sealed class MikanRssIngestProcessor(
             results);
     }
 
+    private sealed record AggregateWork(
+        int? MikanId,
+        IReadOnlyList<int> ItemIndexes,
+        IReadOnlyList<MikanEpisodeIdentity?> Identities,
+        string? IdentityFailureCode);
+
+    private sealed record AggregateResult(
+        IReadOnlyList<int> ItemIndexes,
+        MikanRssIngestResult Result);
+
     private void NotifyDuplicate(
         SourceProfileRecord profile,
         string batchId,
@@ -496,6 +599,31 @@ public sealed class MikanRssIngestProcessor(
         }
 
         return new MikanLegacyFilterBatch(revision, enabled, audits);
+    }
+
+    private static MikanLegacyFilterBatch WithResolvedIdentities(
+        MikanLegacyFilterBatch batch,
+        IReadOnlyList<MikanEpisodeIdentity?>? identities)
+    {
+        if (identities is null)
+        {
+            return batch;
+        }
+        if (identities.Count != batch.Audits.Count)
+        {
+            throw InvalidFilterResult();
+        }
+
+        return batch with
+        {
+            Audits = batch.Audits.Select((audit, index) => identities[index] is { } identity
+                ? audit with
+                {
+                    IdentityMikanId = identity.MikanId,
+                    IdentityGroupId = identity.SubGroupId > 0 ? identity.SubGroupId : null,
+                }
+                : audit).ToArray(),
+        };
     }
 
     private static int? ParseNullablePositiveInt(string? value) =>

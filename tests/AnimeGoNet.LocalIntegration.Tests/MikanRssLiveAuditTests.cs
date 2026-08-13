@@ -16,6 +16,31 @@ public sealed class MikanRssLiveAuditTests
 
     [Fact]
     [Trait("Category", "LocalIntegration")]
+    public async Task MyBangumiAggregateResolvesPerItemWorkIdentityWithoutDownloading()
+    {
+        Assert.Equal("1", Required("ANIMEGONET_MIKAN_RSS_INTEGRATION"));
+        var rssUrl = Required("ANIMEGONET_MIKAN_RSS_URL");
+
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        var rssHttp = new RssFeedHttpClient(httpClient);
+        var feed = await new RssFeedReader(rssHttp).ParseUrlAsync(rssUrl);
+        Assert.NotEmpty(feed.Items);
+        Assert.Null(feed.MikanId);
+
+        var identities = await new MikanFeedIdentityResolver(rssHttp)
+            .ResolveAsync(feed, "mikan");
+
+        Assert.Equal(feed.Items.Count, identities.Count);
+        Assert.All(identities, item =>
+        {
+            Assert.NotNull(item.Identity);
+            Assert.Null(item.FailureCode);
+        });
+        Assert.True(identities.Select(item => item.Identity!.MikanId).Distinct().Count() > 1);
+    }
+
+    [Fact]
+    [Trait("Category", "LocalIntegration")]
     public async Task PrivateFeedCanBeFetchedParsedAndFilteredWithoutStagingDownloads()
     {
         Assert.Equal("1", Required("ANIMEGONET_MIKAN_RSS_INTEGRATION"));

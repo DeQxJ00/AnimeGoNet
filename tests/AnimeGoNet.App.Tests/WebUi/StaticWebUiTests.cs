@@ -73,6 +73,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "organizing_cleanup")]
     [InlineData("/app.js", "text/javascript", "organized")]
     [InlineData("/app.js", "text/javascript", "/api/v1/rss/ingest")]
+    [InlineData("/app.js", "text/javascript", "聚合 RSS")]
     [InlineData("/app.js", "text/javascript", "同一 mikanid 与来源 EP 已完成，已跳过")]
     [InlineData("/app.js", "text/javascript", "/api/v1/ingest")]
     [InlineData("/app.js", "text/javascript", "/impact?limit=100")]

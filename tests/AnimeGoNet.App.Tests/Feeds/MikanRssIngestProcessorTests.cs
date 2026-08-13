@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Library;
@@ -309,6 +310,56 @@ public sealed class MikanRssIngestProcessorTests
         Assert.Equal(failed.BatchId, retried.BatchId);
     }
 
+    [Fact]
+    public async Task MyBangumiFeedSplitsItemsByResolvedMikanWork()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new AggregateWorkPageTransport();
+        await using var app = await StartAsync(staging, transport);
+        var feed = new RssFeedDocument(
+            [
+                Item("First Show [03] [1080p]", "work-a"),
+                Item("Second Show [03] [1080p]", "work-b"),
+            ],
+            null);
+
+        var result = await app.App.Services
+            .GetRequiredService<MikanRssIngestProcessor>()
+            .ProcessAsync(feed);
+
+        Assert.Equal("Multiple", result.BangumiDiscoveryState);
+        Assert.Null(result.MikanId);
+        Assert.Null(result.BangumiSubjectId);
+        Assert.Equal(2, staging.StageCount);
+        Assert.Equal(2, result.Items.Count);
+        Assert.All(result.Items, item => Assert.Equal("staged", item.Status));
+        var childBatches = Assert.IsAssignableFrom<IReadOnlyList<MikanRssIngestResult>>(result.Batches);
+        Assert.Equal([3951, 4028], childBatches.Select(batch => batch.MikanId).ToArray());
+        Assert.Equal([547888, 556677], childBatches.Select(batch => batch.BangumiSubjectId).ToArray());
+        Assert.All(childBatches, batch => Assert.Single(batch.Items));
+        Assert.Equal(2, transport.EpisodeRequests.Count);
+        Assert.Equal(2, transport.BangumiRequests.Count);
+
+        var json = JsonSerializer.Serialize(result, ApiJsonContext.Default.MikanRssIngestResult);
+        using (var document = JsonDocument.Parse(json))
+        {
+            Assert.Equal(2, document.RootElement.GetProperty("batches").GetArrayLength());
+            Assert.Equal("Multiple", document.RootElement.GetProperty("bgmid_discovery_state").GetString());
+        }
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT source_work_id FROM ingest_tasks ORDER BY source_work_id;";
+        await using var reader = await command.ExecuteReaderAsync();
+        var sourceWorkIds = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            sourceWorkIds.Add(reader.GetString(0));
+        }
+        Assert.Equal(["3951", "4028"], sourceWorkIds);
+    }
+
     private static Task<RunningApp> StartAsync(
         ITorrentStagingService staging,
         ITorrentHttpTransport transport) =>
@@ -452,6 +503,41 @@ public sealed class MikanRssIngestProcessorTests
                   <a href="https://bgm.tv/subject/547888">Bangumi</a>
                 </p>
                 """);
+            return ValueTask.FromResult(new TorrentHttpResponse(
+                HttpStatusCode.OK,
+                null,
+                bytes.Length,
+                new MemoryStream(bytes, writable: false)));
+        }
+    }
+
+    private sealed class AggregateWorkPageTransport : ITorrentHttpTransport
+    {
+        public List<Uri> EpisodeRequests { get; } = [];
+        public List<Uri> BangumiRequests { get; } = [];
+
+        public ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            CancellationToken cancellationToken)
+        {
+            _ = validatedAddresses;
+            _ = cancellationToken;
+            string html;
+            if (uri.AbsolutePath.StartsWith("/Home/Episode/", StringComparison.OrdinalIgnoreCase))
+            {
+                EpisodeRequests.Add(uri);
+                var mikanId = uri.AbsolutePath.EndsWith("work-a", StringComparison.Ordinal) ? 3951 : 4028;
+                html = $"<a class='mikan-rss' href='/RSS/Bangumi?bangumiId={mikanId}&amp;subgroupid=370'>RSS</a>";
+            }
+            else
+            {
+                BangumiRequests.Add(uri);
+                var bgmId = uri.AbsolutePath.EndsWith("/3951", StringComparison.Ordinal) ? 547888 : 556677;
+                html = $"<p class='bangumi-info'><a href='https://bgm.tv/subject/{bgmId}'>Bangumi</a></p>";
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(html);
             return ValueTask.FromResult(new TorrentHttpResponse(
                 HttpStatusCode.OK,
                 null,
