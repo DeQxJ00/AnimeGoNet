@@ -47,6 +47,9 @@ public sealed class DownloadManagementApiTests
         Assert.Equal(0, item.GetProperty("seeding_target_minutes").GetInt32());
         Assert.Equal(0, item.GetProperty("seeding_elapsed_seconds").GetInt64());
         Assert.Equal(JsonValueKind.Null, item.GetProperty("seeding_completed_at_utc").ValueKind);
+        Assert.Equal("created", json.RootElement.GetProperty("sort").GetString());
+        Assert.Equal("desc", json.RootElement.GetProperty("direction").GetString());
+        Assert.Equal(JsonValueKind.String, item.GetProperty("created_at_utc").ValueKind);
         Assert.Equal("pending", item.GetProperty("dynamic_tag_state").GetString());
         Assert.Empty(item.GetProperty("dynamic_tags").EnumerateArray());
         Assert.Equal(JsonValueKind.Null, item.GetProperty("dynamic_tag_failure_code").ValueKind);
@@ -79,6 +82,18 @@ public sealed class DownloadManagementApiTests
         Assert.NotEmpty(detail.RootElement.GetProperty("timeline").EnumerateArray());
         Assert.DoesNotContain(fixture.App.RootPath, body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sort=unknown")]
+    [InlineData("direction=sideways")]
+    public async Task RejectsUnknownDownloadOrdering(string query)
+    {
+        await using var fixture = await DownloadApiFixture.CreateAsync(new FakeDownloadClient());
+
+        using var response = await fixture.App.Client.GetAsync($"/api/v1/downloads?{query}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

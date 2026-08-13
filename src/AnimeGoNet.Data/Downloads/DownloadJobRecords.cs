@@ -26,6 +26,7 @@ public sealed record DownloadJobListItemRecord(
     bool IsStale,
     long Revision,
     DateTimeOffset? SnapshotAtUtc,
+    DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
     bool DownloaderConnected,
     string? DownloaderFailureCode,
@@ -40,7 +41,9 @@ public sealed record DownloadJobListQuery(
     string? State,
     string? BusinessStatus,
     string? DownloaderId,
-    string? SourceId);
+    string? SourceId,
+    string? Sort = null,
+    string? Direction = null);
 
 public sealed record DownloadJobListPage(
     int Page,

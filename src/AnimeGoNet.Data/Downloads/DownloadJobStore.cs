@@ -229,7 +229,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 500);
         var page = await ListPageAsync(
-            new DownloadJobListQuery(1, limit, null, null, null, null, null),
+            new DownloadJobListQuery(1, limit, null, null, null, null, null, "created", "desc"),
             cancellationToken).ConfigureAwait(false);
         return page.Items;
     }
@@ -247,6 +247,8 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         var businessStatus = NormalizeFilter(query.BusinessStatus, nameof(query.BusinessStatus));
         var downloaderId = NormalizeFilter(query.DownloaderId, nameof(query.DownloaderId));
         var sourceId = NormalizeFilter(query.SourceId, nameof(query.SourceId));
+        var sort = NormalizeSort(query.Sort);
+        var direction = NormalizeDirection(query.Direction);
         var where = new List<string>();
         if (search is not null)
         {
@@ -295,20 +297,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
 
         var summary = await ReadDashboardSummaryAsync(connection, cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = ListProjectionSelect + whereSql + """
-
-            ORDER BY CASE
-                WHEN download_jobs.state = 'error'
-                  OR ingest_tasks.status = 'download_error'
-                  OR download_jobs.preparation_failure_code IS NOT NULL
-                  OR download_jobs.organization_failure_code IS NOT NULL THEN 0
-                WHEN download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding', 'paused')
-                  OR ingest_tasks.status NOT IN ('organized', 'download_skipped_duplicate') THEN 1
-                ELSE 2
-            END,
-            download_jobs.updated_at_utc DESC, download_jobs.id
-            LIMIT $limit OFFSET $offset;
-            """;
+        command.CommandText = ListProjectionSelect + whereSql
+            + BuildOrderBy(sort, direction)
+            + " LIMIT $limit OFFSET $offset;";
         AddListParameters(command, search, state, businessStatus, downloaderId, sourceId);
         command.Parameters.AddWithValue("$limit", query.PageSize);
         command.Parameters.AddWithValue("$offset", checked((query.Page - 1) * query.PageSize));
@@ -722,6 +713,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                    download_jobs.dynamic_tag_failure_code,
                    download_jobs.is_stale,
                    download_jobs.revision, download_jobs.snapshot_at_utc,
+                   ingest_tasks.created_at_utc,
                    download_jobs.updated_at_utc,
                    COALESCE(downloader_runtime_state.connected, 0),
                    downloader_runtime_state.failure_code,
@@ -837,9 +829,45 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.GetInt64(23),
             ReadDateTimeOffset(reader, 24),
             ReadDateTimeOffset(reader, 25)!.Value,
-            reader.GetInt64(26) != 0,
-            reader.IsDBNull(27) ? null : reader.GetString(27),
-            ReadDateTimeOffset(reader, 28));
+            ReadDateTimeOffset(reader, 26)!.Value,
+            reader.GetInt64(27) != 0,
+            reader.IsDBNull(28) ? null : reader.GetString(28),
+            ReadDateTimeOffset(reader, 29));
+
+    private static string NormalizeSort(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "created" => "created",
+            "updated" => "updated",
+            "priority" => "priority",
+            _ => throw new ArgumentException("Unsupported download sort field.", nameof(value)),
+        };
+
+    private static string NormalizeDirection(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "desc" => "DESC",
+            "asc" => "ASC",
+            _ => throw new ArgumentException("Unsupported download sort direction.", nameof(value)),
+        };
+
+    private static string BuildOrderBy(string sort, string direction) => sort switch
+    {
+        "created" => $" ORDER BY ingest_tasks.created_at_utc {direction}, download_jobs.id {direction}",
+        "updated" => $" ORDER BY download_jobs.updated_at_utc {direction}, download_jobs.id {direction}",
+        "priority" => $"""
+             ORDER BY CASE
+                 WHEN download_jobs.state = 'error'
+                   OR ingest_tasks.status = 'download_error'
+                   OR download_jobs.preparation_failure_code IS NOT NULL
+                   OR download_jobs.organization_failure_code IS NOT NULL THEN 0
+                 WHEN download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding', 'paused')
+                   OR ingest_tasks.status NOT IN ('organized', 'download_skipped_duplicate') THEN 1
+                 ELSE 2
+             END, download_jobs.updated_at_utc {direction}, download_jobs.id {direction}
+             """,
+        _ => throw new InvalidOperationException("Unexpected normalized download sort field."),
+    };
 
     private static string? NormalizeSearch(string? value)
     {

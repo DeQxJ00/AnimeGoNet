@@ -613,6 +613,8 @@ public sealed record DownloadListResponse(
     [property: JsonPropertyName("business_status")] string? BusinessStatus,
     [property: JsonPropertyName("downloader_id")] string? DownloaderId,
     [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("sort")] string Sort,
+    [property: JsonPropertyName("direction")] string Direction,
     [property: JsonPropertyName("summary")] DownloadDashboardSummary Summary,
     [property: JsonPropertyName("items")] IReadOnlyList<DownloadListItem> Items);
 
@@ -657,6 +659,7 @@ public sealed record DownloadListItem(
     [property: JsonPropertyName("is_stale")] bool IsStale,
     [property: JsonPropertyName("revision")] long Revision,
     [property: JsonPropertyName("snapshot_at_utc")] DateTimeOffset? SnapshotAtUtc,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
     [property: JsonPropertyName("downloader_connected")] bool DownloaderConnected,
     [property: JsonPropertyName("downloader_failure_code")] string? DownloaderFailureCode,

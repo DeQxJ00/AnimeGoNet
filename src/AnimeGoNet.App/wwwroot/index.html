@@ -679,6 +679,19 @@
         <label>来源
           <input id="download-source" maxlength="64" pattern="[a-z0-9][a-z0-9._-]*" placeholder="mikan">
         </label>
+        <label>排序
+          <select id="download-sort">
+            <option value="created" selected>任务加入时间</option>
+            <option value="updated">最后更新</option>
+            <option value="priority">异常与活动优先</option>
+          </select>
+        </label>
+        <label>方向
+          <select id="download-direction">
+            <option value="desc" selected>倒序（最新优先）</option>
+            <option value="asc">正序（最早优先）</option>
+          </select>
+        </label>
         <label>每页
           <select id="download-page-size">
             <option value="10">10</option>

@@ -188,6 +188,28 @@ public sealed class DownloadJobStoreTests
     }
 
     [Fact]
+    public async Task ListPageDefaultsToTaskCreatedTimeDescending()
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+        var older = DateTimeOffset.UtcNow.AddDays(-1);
+        var newer = DateTimeOffset.UtcNow;
+        await fixture.SetCreatedAtAsync(fixture.InfoHash, older);
+        var newestHash = new string('e', 40);
+        await fixture.AddJobAsync("Newest episode", newestHash, "two", newer);
+
+        var descending = await fixture.Jobs.ListPageAsync(
+            new DownloadJobListQuery(1, 10, null, null, null, null, null));
+        var ascending = await fixture.Jobs.ListPageAsync(
+            new DownloadJobListQuery(
+                1, 10, null, null, null, null, null, "created", "asc"));
+
+        Assert.Equal(["Newest episode", "Episode"], descending.Items.Select(item => item.Title));
+        Assert.Equal(["Episode", "Newest episode"], ascending.Items.Select(item => item.Title));
+        Assert.Equal(newer, descending.Items[0].CreatedAtUtc);
+        Assert.Equal(older, descending.Items[1].CreatedAtUtc);
+    }
+
+    [Fact]
     public async Task RemoteControlUsesRevisionAndRecordsSuccessfulTransition()
     {
         await using var fixture = await DownloadJobFixture.CreateAsync();
@@ -245,6 +267,59 @@ public sealed class DownloadJobStoreTests
         public DownloadJobStore Jobs { get; }
 
         public string InfoHash { get; }
+
+        public async Task AddJobAsync(
+            string title,
+            string hash,
+            string sourceItemId,
+            DateTimeOffset createdAt)
+        {
+            var profiles = new SourceProfileStore(_databaseFixture.Database);
+            var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("mikan"));
+            var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
+                "mikan",
+                new IngestItemCommand(
+                    $"https://mikanani.me/passkey/{sourceItemId}.torrent",
+                    new IngestItemInfo(
+                        title, null, sourceItemId, "3951", null, null,
+                        3951, 547888, null, null))).Item);
+            var tasks = new IngestTaskStore(_databaseFixture.Database);
+            await tasks.AddStagedAsync(
+                normalized,
+                profile,
+                new TorrentMetadata(
+                    $"{sourceItemId}.mkv",
+                    hash,
+                    100,
+                    [new TorrentFile($"{sourceItemId}.mkv", 100, false)]),
+                $"{sourceItemId}.torrent",
+                DateTimeOffset.UtcNow.AddMinutes(15));
+            var claim = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+                DateTimeOffset.UtcNow,
+                TimeSpan.FromMinutes(1)));
+            await tasks.CompleteDispatchAsync(
+                claim,
+                new DownloadTaskSnapshot(
+                    hash, title, DownloadTaskState.Waiting, 0, 0, 100, 0, null),
+                "/download/incomplete/bt",
+                "/download/anime",
+                createdAt);
+            await SetCreatedAtAsync(hash, createdAt);
+        }
+
+        public async Task SetCreatedAtAsync(string hash, DateTimeOffset createdAt)
+        {
+            await using var connection = await _databaseFixture.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET created_at_utc = $created_at_utc
+                WHERE id = (SELECT task_id FROM download_jobs WHERE info_hash = $info_hash);
+                """;
+            command.Parameters.AddWithValue("$created_at_utc", createdAt.ToUniversalTime().ToString("O"));
+            command.Parameters.AddWithValue("$info_hash", hash);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
 
         public async Task ConfigureSeedingAsync(int targetMinutes, string state)
         {

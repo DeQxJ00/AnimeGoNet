@@ -83,6 +83,13 @@ public sealed class WorkspaceNavigationTests
             "{ id: \"downloads\", label: \"下载任务\" }",
             StringComparison.Ordinal);
         Assert.True(metadataTab >= 0 && downloadsTab > metadataTab);
+        Assert.Contains("id=\"download-sort\"", html, StringComparison.Ordinal);
+        Assert.Contains(">任务加入时间</option>", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"download-direction\"", html, StringComparison.Ordinal);
+        Assert.Contains(">倒序（最新优先）</option>", html, StringComparison.Ordinal);
+        Assert.Contains("sort: \"created\"", script, StringComparison.Ordinal);
+        Assert.Contains("direction: \"desc\"", script, StringComparison.Ordinal);
+        Assert.Contains("sort: downloadState.sort", script, StringComparison.Ordinal);
         Assert.Contains("#/", script, StringComparison.Ordinal);
         Assert.Contains("#main-content > section[data-workspace]", script, StringComparison.Ordinal);
         Assert.Contains(".app-shell", styles, StringComparison.Ordinal);

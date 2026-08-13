@@ -546,6 +546,7 @@ interface DownloadItem {
   is_stale: boolean;
   revision: number;
   downloader_failure_code: string | null;
+  created_at_utc: string;
 }
 
 interface DownloadListPage {
@@ -557,6 +558,8 @@ interface DownloadListPage {
   business_status: string | null;
   downloader_id: string | null;
   source: string | null;
+  sort: "created" | "updated" | "priority";
+  direction: "asc" | "desc";
   summary: {
     total_jobs: number;
     active_jobs: number;
@@ -638,6 +641,8 @@ interface DownloadUiState {
   business_status: string;
   downloader_id: string;
   source: string;
+  sort: "created" | "updated" | "priority";
+  direction: "asc" | "desc";
 }
 
 interface MetadataItem {
@@ -3893,6 +3898,8 @@ function readDownloadState(): DownloadUiState {
     business_status: "",
     downloader_id: "",
     source: "",
+    sort: "created",
+    direction: "desc",
   };
   try {
     const raw = window.localStorage.getItem(downloadStorageKey);
@@ -3914,6 +3921,10 @@ function readDownloadState(): DownloadUiState {
         ? stored.downloader_id.slice(0, 64) : "",
       source: typeof stored.source === "string"
         ? stored.source.slice(0, 64) : "",
+      sort: ["created", "updated", "priority"].includes(stored.sort ?? "")
+        ? stored.sort as DownloadUiState["sort"] : defaults.sort,
+      direction: stored.direction === "asc" || stored.direction === "desc"
+        ? stored.direction : defaults.direction,
     };
   } catch {
     return defaults;
@@ -6264,6 +6275,9 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
     const details = document.createElement("p");
     details.className = "download-details";
     details.textContent = `${item.source} → ${item.downloader_id} · ${(item.progress * 100).toFixed(1)}% · ${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)} · ${formatBytes(item.speed_bytes_per_second)}/s · Seeds ${item.seeds} · Peers ${item.peers}`;
+    const addedAt = document.createElement("p");
+    addedAt.className = "download-added-at muted";
+    addedAt.textContent = `任务加入：${new Date(item.created_at_utc).toLocaleString()}`;
     const seeding = document.createElement("p");
     seeding.className = `download-seeding ${item.seeding_state}`;
     seeding.textContent = seedingDescription(item);
@@ -6300,7 +6314,7 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
     remove.textContent = "删除…";
     remove.addEventListener("click", () => void openDeletePreview(item.task_id));
     actions.append(remove);
-    card.append(heading, progress, details, seeding, dynamicTags, actions, detailTarget);
+    card.append(heading, progress, details, addedAt, seeding, dynamicTags, actions, detailTarget);
     if (expandedDownloadJobIds.has(item.job_id)) {
       void loadDownloadDetail(item, detailTarget, expand);
     }
@@ -6328,6 +6342,8 @@ async function loadDownloads(background = false): Promise<void> {
   const query = new URLSearchParams({
     page: String(downloadState.page),
     page_size: String(downloadState.page_size),
+    sort: downloadState.sort,
+    direction: downloadState.direction,
   });
   if (downloadState.search) query.set("search", downloadState.search);
   if (downloadState.state) query.set("state", downloadState.state);
@@ -10442,6 +10458,8 @@ element<HTMLSelectElement>("#download-business-status").value =
   downloadState.business_status;
 element<HTMLInputElement>("#download-downloader").value = downloadState.downloader_id;
 element<HTMLInputElement>("#download-source").value = downloadState.source;
+element<HTMLSelectElement>("#download-sort").value = downloadState.sort;
+element<HTMLSelectElement>("#download-direction").value = downloadState.direction;
 element<HTMLSelectElement>("#download-page-size").value = String(downloadState.page_size);
 element<HTMLFormElement>("#download-filters").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -10453,6 +10471,10 @@ element<HTMLFormElement>("#download-filters").addEventListener("submit", (event)
     element<HTMLInputElement>("#download-downloader").value.trim().toLowerCase();
   downloadState.source =
     element<HTMLInputElement>("#download-source").value.trim().toLowerCase();
+  downloadState.sort = element<HTMLSelectElement>("#download-sort")
+    .value as DownloadUiState["sort"];
+  downloadState.direction = element<HTMLSelectElement>("#download-direction")
+    .value as DownloadUiState["direction"];
   downloadState.page_size = Number(
     element<HTMLSelectElement>("#download-page-size").value,
   ) as 10 | 25 | 50;
@@ -10469,12 +10491,16 @@ element<HTMLButtonElement>("#download-filter-reset").addEventListener("click", (
     business_status: "",
     downloader_id: "",
     source: "",
+    sort: "created",
+    direction: "desc",
   };
   element<HTMLInputElement>("#download-search").value = "";
   element<HTMLSelectElement>("#download-state").value = "";
   element<HTMLSelectElement>("#download-business-status").value = "";
   element<HTMLInputElement>("#download-downloader").value = "";
   element<HTMLInputElement>("#download-source").value = "";
+  element<HTMLSelectElement>("#download-sort").value = "created";
+  element<HTMLSelectElement>("#download-direction").value = "desc";
   element<HTMLSelectElement>("#download-page-size").value = "25";
   saveDownloadState();
   void loadDownloads();

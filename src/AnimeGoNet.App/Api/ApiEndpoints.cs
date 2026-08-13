@@ -2763,6 +2763,8 @@ public static class ApiEndpoints
         [FromQuery(Name = "business_status")] string? businessStatus,
         [FromQuery(Name = "downloader_id")] string? downloaderId,
         [FromQuery] string? source,
+        [FromQuery] string? sort,
+        [FromQuery] string? direction,
         DownloadJobStore jobs,
         CancellationToken cancellationToken)
     {
@@ -2785,8 +2787,16 @@ public static class ApiEndpoints
                     state,
                     businessStatus,
                     downloaderId,
-                    source),
+                    source,
+                    sort,
+                    direction),
                 cancellationToken).ConfigureAwait(false);
+            var normalizedSort = string.IsNullOrWhiteSpace(sort)
+                ? "created"
+                : sort.Trim().ToLowerInvariant();
+            var normalizedDirection = string.IsNullOrWhiteSpace(direction)
+                ? "desc"
+                : direction.Trim().ToLowerInvariant();
             return TypedResults.Ok(new DownloadListResponse(
                 records.Page,
                 records.PageSize,
@@ -2796,6 +2806,8 @@ public static class ApiEndpoints
                 NormalizeEcho(businessStatus),
                 NormalizeEcho(downloaderId),
                 NormalizeEcho(source),
+                normalizedSort,
+                normalizedDirection,
                 new DownloadDashboardSummary(
                     records.Summary.TotalJobs,
                     records.Summary.ActiveJobs,
@@ -7322,6 +7334,7 @@ public static class ApiEndpoints
             record.IsStale,
             record.Revision,
             record.SnapshotAtUtc,
+            record.CreatedAtUtc,
             record.UpdatedAtUtc,
             record.DownloaderConnected,
             record.DownloaderFailureCode,

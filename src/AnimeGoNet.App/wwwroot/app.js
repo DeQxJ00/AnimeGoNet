@@ -2009,6 +2009,8 @@ function readDownloadState() {
         business_status: "",
         downloader_id: "",
         source: "",
+        sort: "created",
+        direction: "desc",
     };
     try {
         const raw = window.localStorage.getItem(downloadStorageKey);
@@ -2031,6 +2033,10 @@ function readDownloadState() {
                 ? stored.downloader_id.slice(0, 64) : "",
             source: typeof stored.source === "string"
                 ? stored.source.slice(0, 64) : "",
+            sort: ["created", "updated", "priority"].includes(stored.sort ?? "")
+                ? stored.sort : defaults.sort,
+            direction: stored.direction === "asc" || stored.direction === "desc"
+                ? stored.direction : defaults.direction,
         };
     }
     catch {
@@ -4112,6 +4118,9 @@ function renderDownloadPage(body, background = false) {
         const details = document.createElement("p");
         details.className = "download-details";
         details.textContent = `${item.source} → ${item.downloader_id} · ${(item.progress * 100).toFixed(1)}% · ${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.total_bytes)} · ${formatBytes(item.speed_bytes_per_second)}/s · Seeds ${item.seeds} · Peers ${item.peers}`;
+        const addedAt = document.createElement("p");
+        addedAt.className = "download-added-at muted";
+        addedAt.textContent = `任务加入：${new Date(item.created_at_utc).toLocaleString()}`;
         const seeding = document.createElement("p");
         seeding.className = `download-seeding ${item.seeding_state}`;
         seeding.textContent = seedingDescription(item);
@@ -4150,7 +4159,7 @@ function renderDownloadPage(body, background = false) {
         remove.textContent = "删除…";
         remove.addEventListener("click", () => void openDeletePreview(item.task_id));
         actions.append(remove);
-        card.append(heading, progress, details, seeding, dynamicTags, actions, detailTarget);
+        card.append(heading, progress, details, addedAt, seeding, dynamicTags, actions, detailTarget);
         if (expandedDownloadJobIds.has(item.job_id)) {
             void loadDownloadDetail(item, detailTarget, expand);
         }
@@ -4173,6 +4182,8 @@ async function loadDownloads(background = false) {
     const query = new URLSearchParams({
         page: String(downloadState.page),
         page_size: String(downloadState.page_size),
+        sort: downloadState.sort,
+        direction: downloadState.direction,
     });
     if (downloadState.search)
         query.set("search", downloadState.search);
@@ -7963,6 +7974,8 @@ element("#download-business-status").value =
     downloadState.business_status;
 element("#download-downloader").value = downloadState.downloader_id;
 element("#download-source").value = downloadState.source;
+element("#download-sort").value = downloadState.sort;
+element("#download-direction").value = downloadState.direction;
 element("#download-page-size").value = String(downloadState.page_size);
 element("#download-filters").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -7974,6 +7987,10 @@ element("#download-filters").addEventListener("submit", (event) => {
         element("#download-downloader").value.trim().toLowerCase();
     downloadState.source =
         element("#download-source").value.trim().toLowerCase();
+    downloadState.sort = element("#download-sort")
+        .value;
+    downloadState.direction = element("#download-direction")
+        .value;
     downloadState.page_size = Number(element("#download-page-size").value);
     downloadState.page = 1;
     saveDownloadState();
@@ -7988,12 +8005,16 @@ element("#download-filter-reset").addEventListener("click", () => {
         business_status: "",
         downloader_id: "",
         source: "",
+        sort: "created",
+        direction: "desc",
     };
     element("#download-search").value = "";
     element("#download-state").value = "";
     element("#download-business-status").value = "";
     element("#download-downloader").value = "";
     element("#download-source").value = "";
+    element("#download-sort").value = "created";
+    element("#download-direction").value = "desc";
     element("#download-page-size").value = "25";
     saveDownloadState();
     void loadDownloads();
