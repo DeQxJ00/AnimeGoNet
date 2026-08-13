@@ -12,7 +12,8 @@ public sealed record MikanLegacyFilterBatch(
 
 public sealed class MikanLegacyFilterProcessor(
     LegacyMikanFilterStore filters,
-    IRssFeedHttpClient httpClient)
+    IRssFeedHttpClient httpClient,
+    MikanEpisodeIdentityCache? persistentCache = null)
 {
     public async Task<MikanLegacyFilterBatch> EvaluateAsync(
         RssFeedDocument feed,
@@ -60,7 +61,10 @@ public sealed class MikanLegacyFilterProcessor(
             if (needsIdentity)
             {
                 var lookup = await LookupIdentityAsync(
-                    item.MikanUrl, identityCache, cancellationToken).ConfigureAwait(false);
+                    item.MikanUrl,
+                    profileId,
+                    identityCache,
+                    cancellationToken).ConfigureAwait(false);
                 if (lookup.Identity is null)
                 {
                     audits[index] = new MikanLegacyFilterAudit(
@@ -103,6 +107,7 @@ public sealed class MikanLegacyFilterProcessor(
 
     private async Task<IdentityLookup> LookupIdentityAsync(
         string value,
+        string sourceProfileId,
         Dictionary<string, IdentityLookup> cache,
         CancellationToken cancellationToken)
     {
@@ -114,11 +119,32 @@ public sealed class MikanLegacyFilterProcessor(
         var key = uri.AbsoluteUri;
         if (cache.TryGetValue(key, out var cached)) return cached;
 
+        if (persistentCache is not null)
+        {
+            var persistent = await persistentCache.GetAsync(uri, cancellationToken)
+                .ConfigureAwait(false);
+            if (persistent is not null)
+            {
+                var hit = new IdentityLookup(persistent, null);
+                cache.Add(key, hit);
+                return hit;
+            }
+        }
+
         IdentityLookup result;
         try
         {
-            var html = await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-            result = new IdentityLookup(MikanEpisodeIdentityParser.Parse(html), null);
+            var html = httpClient is ISourceProfileRssFeedHttpClient profileClient
+                ? await profileClient.GetAsync(uri, sourceProfileId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+            var identity = MikanEpisodeIdentityParser.Parse(html);
+            if (persistentCache is not null && identity.SubGroupId > 0)
+            {
+                await persistentCache.PutAsync(uri, identity, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            result = new IdentityLookup(identity, null);
         }
         catch (MikanEpisodeIdentityException exception)
         {

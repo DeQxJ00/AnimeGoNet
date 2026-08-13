@@ -30,7 +30,8 @@ public sealed partial class MikanAiTestImportService(
     IRssFeedHttpClient httpClient,
     SourceProfileStore profiles,
     ITorrentStagingService staging,
-    AnimeGoOptions options)
+    AnimeGoOptions options,
+    MikanEpisodeIdentityCache identityCache)
 {
     public async Task<MikanAiTestImportResult> ImportAsync(
         string episodeUrl,
@@ -44,24 +45,36 @@ public sealed partial class MikanAiTestImportService(
             throw Error("ai_test_mikan_profile_invalid", "The default Mikan source profile is invalid.");
         }
 
-        ReadOnlyMemory<byte> episodeHtml;
-        try
+        var identity = await identityCache.GetAsync(episodeUri, cancellationToken)
+            .ConfigureAwait(false);
+        if (identity is null)
         {
-            episodeHtml = await httpClient.GetAsync(episodeUri, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is RssFeedException or HttpRequestException)
-        {
-            throw Error("ai_test_mikan_episode_fetch_failed", "Mikan Episode page could not be fetched.", exception);
-        }
+            ReadOnlyMemory<byte> episodeHtml;
+            try
+            {
+                episodeHtml = httpClient is ISourceProfileRssFeedHttpClient profileClient
+                    ? await profileClient.GetAsync(episodeUri, profile.Id, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await httpClient.GetAsync(episodeUri, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is RssFeedException or HttpRequestException)
+            {
+                throw Error("ai_test_mikan_episode_fetch_failed", "Mikan Episode page could not be fetched.", exception);
+            }
 
-        MikanEpisodeIdentity identity;
-        try
-        {
-            identity = MikanEpisodeIdentityParser.Parse(episodeHtml);
-        }
-        catch (MikanEpisodeIdentityException exception)
-        {
-            throw Error(exception.Code, exception.Message, exception);
+            try
+            {
+                identity = MikanEpisodeIdentityParser.Parse(episodeHtml);
+                if (identity.SubGroupId > 0)
+                {
+                    await identityCache.PutAsync(episodeUri, identity, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+            catch (MikanEpisodeIdentityException exception)
+            {
+                throw Error(exception.Code, exception.Message, exception);
+            }
         }
         if (identity.SubGroupId <= 0)
         {

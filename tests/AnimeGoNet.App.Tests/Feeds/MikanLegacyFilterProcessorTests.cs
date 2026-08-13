@@ -85,6 +85,37 @@ public sealed class MikanLegacyFilterProcessorTests
     }
 
     [Fact]
+    public async Task SuccessfulIdentityIsReusedAcrossLaterRssBatches()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new StaticTransport(_ => Html("""
+            <a href="/RSS/Bangumi?bangumiId=3951&amp;subgroupid=370" class="mikan-rss">RSS</a>
+            """));
+        await using var app = await RunningApp.StartAsync(
+            stagingService: staging,
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
+        await SaveAsync(app, new LegacyMikanFilterConfig(
+            [],
+            Tier(("key_3951_370", Rule())),
+            EmptyTier(), EmptyTier(), EmptyTier()));
+
+        var first = await Processor(app).ProcessAsync(Feed(
+            Item("[Group] Show [03]", "shared", "first")));
+        var second = await Processor(app).ProcessAsync(Feed(
+            Item("[Group] Show [04]", "shared", "second")));
+
+        Assert.Equal("staged", Assert.Single(first.Items).Status);
+        Assert.Equal("already_ingested", Assert.Single(second.Items).Status);
+        Assert.Single(transport.EpisodeRequests);
+        Assert.Equal(1, staging.StageCount);
+        var cached = await app.App.Services
+            .GetRequiredService<MikanEpisodeIdentityCache>()
+            .GetAsync(new Uri("https://mikanani.me/Home/Episode/shared"));
+        Assert.Equal((3951, 370), (cached?.MikanId, cached?.SubGroupId));
+    }
+
+    [Fact]
     public async Task PageParseFailureIsAuditedPerCandidateWithoutBlockingOthers()
     {
         await using var staging = new CountingStagingService();

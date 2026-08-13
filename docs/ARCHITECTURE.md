@@ -76,6 +76,11 @@ HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 re
   单独落库；读取时再次验证
   Series/Season/Episode 父子身份，损坏或不一致条目删除后回源。404 与任何失败不做
   negative cache，缓存不可用时不阻断权威 TMDB 请求。
+- Mikan Episode 页面成功解析出的 `mikanid+groupid` 经 source-generated JSON 写入
+  SQLite `bolt/mikan_episode_identity`，以不含查询参数、用户信息和 fragment 的规范
+  Episode URL 为 key，且不设自动过期时间。聚合 RSS、legacy 过滤和 AI 测试导入共享
+  同一缓存；失败、缺失任一 ID 或缓存读写故障均不改变正常网络解析结果。缓存只保存
+  schema 版本和两个数字 ID，不保存页面 HTML、Cookie、Torrent URL 或 passkey。
 - `MetadataResolutionRun` / `MetadataResolutionAttempt`：分别保存 Series/Season/Episode 的来源、阶段、策略优先级、结果、失败分类、脱敏原因、可重试性、次数、耗时和时间。
 - 人工覆盖优先；确定性季度失败链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`。P3 需要 `bgmid`，按每个 Bangumi 前作的日文名、中文名和开播日期重新联合验证完整 `tmdbid + Season`，可恢复不同的 TMDB Series。P2 只解析统一导入任务 `title`，P1 固定本地 `S01`，两者都不验证 TMDB Season，并保存实际取得策略供 UI 区分。AI 元数据匹配是一个独立、默认关闭的任务级阶段：一个开关、一个 Prompt、每任务最多一次调用，同时返回 Series/Season/Episode；HTTP 默认超时 600 秒，Backtrace、AI 和后续 Episode 候选仍须由 TMDB 验证。
 - 特别篇、小数集号和无法可靠匹配的文件不转换为普通整数 EP；Series/普通 Season 已确认时保留原名进入该季度 `Other`。

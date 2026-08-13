@@ -7,7 +7,9 @@ public sealed record MikanFeedIdentityResolution(
     MikanEpisodeIdentity? Identity,
     string? FailureCode);
 
-public sealed class MikanFeedIdentityResolver(IRssFeedHttpClient httpClient)
+public sealed class MikanFeedIdentityResolver(
+    IRssFeedHttpClient httpClient,
+    MikanEpisodeIdentityCache? persistentCache = null)
 {
     public async Task<IReadOnlyList<MikanFeedIdentityResolution>> ResolveAsync(
         RssFeedDocument feed,
@@ -54,6 +56,18 @@ public sealed class MikanFeedIdentityResolver(IRssFeedHttpClient httpClient)
             return cached;
         }
 
+        if (persistentCache is not null)
+        {
+            var persistent = await persistentCache.GetAsync(uri, cancellationToken)
+                .ConfigureAwait(false);
+            if (persistent is not null)
+            {
+                var hit = new IdentityLookup(persistent, null);
+                cache.Add(key, hit);
+                return hit;
+            }
+        }
+
         IdentityLookup result;
         try
         {
@@ -62,7 +76,13 @@ public sealed class MikanFeedIdentityResolver(IRssFeedHttpClient httpClient)
                     .GetAsync(uri, sourceProfileId, cancellationToken)
                     .ConfigureAwait(false)
                 : await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-            result = new IdentityLookup(MikanEpisodeIdentityParser.Parse(html), null);
+            var identity = MikanEpisodeIdentityParser.Parse(html);
+            if (persistentCache is not null && identity.SubGroupId > 0)
+            {
+                await persistentCache.PutAsync(uri, identity, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            result = new IdentityLookup(identity, null);
         }
         catch (OperationCanceledException)
         {

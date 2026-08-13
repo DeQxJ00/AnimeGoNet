@@ -388,6 +388,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<OrderedFeedFilterManager>();
         var jsonCache = new SqliteJsonCacheStore(database);
         builder.Services.AddSingleton(jsonCache);
+        builder.Services.AddSingleton<MikanEpisodeIdentityCache>();
         builder.Services.AddSingleton(directoryDatabaseScanner);
         builder.Services.AddSingleton(directoryDatabaseIndex);
         builder.Services.AddSingleton<DirectoryDatabaseWriter>();

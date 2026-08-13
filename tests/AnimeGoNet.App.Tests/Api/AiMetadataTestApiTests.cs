@@ -74,10 +74,11 @@ public sealed class AiMetadataTestApiTests
     public async Task ImportsMikanIntoTrustedTesterSnapshotWithoutReturningPasskeyUrl()
     {
         var staging = new ImportStagingService();
+        var transport = new MikanImportTransport();
         await using var app = await RunningApp.StartAsync(
             stagingService: staging,
             rssDnsResolver: new PublicDnsResolver(),
-            rssHttpTransport: new MikanImportTransport());
+            rssHttpTransport: transport);
 
         using var response = await app.Client.PostAsJsonAsync("/api/v1/ai-test/mikan-import", new
         {
@@ -98,6 +99,19 @@ public sealed class AiMetadataTestApiTests
         Assert.Equal("Imported Show/06.mkv", json.GetProperty("files")[0].GetProperty("name").GetString());
         Assert.Equal("Imported Show/06.mkv", json.GetProperty("file_episode_candidates")[0].GetProperty("name").GetString());
         Assert.NotNull(staging.LastUrl);
+
+        using var repeatedResponse = await app.Client.PostAsJsonAsync("/api/v1/ai-test/mikan-import", new
+        {
+            episode_url = $"https://mikanime.tv/Home/Episode/{EpisodeId}",
+            proxy_url = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.OK, repeatedResponse.StatusCode);
+        Assert.Equal(
+            1,
+            transport.Requests.Count(uri => uri.AbsolutePath.StartsWith(
+                "/Home/Episode/",
+                StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -218,6 +232,8 @@ public sealed class AiMetadataTestApiTests
 
     private sealed class MikanImportTransport : ITorrentHttpTransport
     {
+        public List<Uri> Requests { get; } = [];
+
         public ValueTask<TorrentHttpResponse> SendAsync(
             Uri uri,
             IReadOnlyList<IPAddress> validatedAddresses,
@@ -230,6 +246,7 @@ public sealed class AiMetadataTestApiTests
             TorrentHttpRequestOptions requestOptions,
             CancellationToken cancellationToken)
         {
+            Requests.Add(uri);
             var body = uri.AbsolutePath switch
             {
                 var path when path.StartsWith("/Home/Episode/", StringComparison.Ordinal) =>

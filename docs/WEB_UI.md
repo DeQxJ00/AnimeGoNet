@@ -306,3 +306,8 @@ bucket/key ID 和当前删除 token；服务端事务内确认 token 仍对应�
 更新时间后才删除一条 cache entry。期间发生刷新或覆盖会返回稳定冲突并强制页面重新
 读取；`bolt_sub` 只显示“只读”，从 API 和页面两层都不提供删除。此功能不开放 SQL、
 整 bucket 删除、任意业务表修改或文件操作；业务记录和媒体删除继续只走四类删除中心。
+
+成功解析过的 Mikan Episode URL 会作为 `bolt/mikan_episode_identity` 长期缓存，页面显示
+原始 Episode URL key 与仅含 `mikanid/groupid` 的 JSON。该 bucket 没有自动 TTL：后续 RSS
+刷新和进程重启都会直接复用，只有用户在此处精确删除后才重新读取对应 Episode 页面。
+解析失败、网络异常、缺少 groupid，以及带查询参数或凭据的 URL 均不写入长期缓存。
