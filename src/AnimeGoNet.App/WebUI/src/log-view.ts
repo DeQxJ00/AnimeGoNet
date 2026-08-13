@@ -23,10 +23,15 @@ export interface LiveLogFilter {
   category: string;
   eventId: string;
   domain?: LiveLogDomain | "all";
+  httpScope?: LiveLogHttpScope;
   fromUtc?: string;
   toUtc?: string;
   exceptionOnly?: boolean;
 }
+
+export type LiveLogHttpScope = "all" | "outbound" | "inbound" | "non-http";
+
+export type LiveLogHttpDirection = "outbound" | "inbound" | "none";
 
 export type LiveLogDomain =
   | "ai"
@@ -109,6 +114,10 @@ export function filterLiveLogEntries(
     if (filter.domain && filter.domain !== "all" && classifyLiveLogEntry(entry) !== filter.domain) {
       return false;
     }
+    const httpDirection = classifyLiveLogHttpDirection(entry);
+    if (filter.httpScope === "outbound" && httpDirection !== "outbound") return false;
+    if (filter.httpScope === "inbound" && httpDirection !== "inbound") return false;
+    if (filter.httpScope === "non-http" && httpDirection !== "none") return false;
     if (filter.exceptionOnly && !entry.exception) return false;
     if ((from !== null || to !== null) && entry.timestamp) {
       const timestamp = Date.parse(entry.timestamp);
@@ -120,6 +129,34 @@ export function filterLiveLogEntries(
     }
     return !query || entry.text.toLocaleLowerCase().includes(query);
   });
+}
+
+export function classifyLiveLogHttpDirection(
+  entry: ParsedLiveLogEntry,
+): LiveLogHttpDirection {
+  const category = entry.category.toLocaleLowerCase();
+  const message = entry.message.toLocaleLowerCase();
+  if (
+    category.startsWith("microsoft.aspnetcore.hosting.diagnostics")
+    || category.startsWith("microsoft.aspnetcore.routing.endpointmiddleware")
+    || category.startsWith("microsoft.aspnetcore.staticfiles.staticfilemiddleware")
+    || category.startsWith("microsoft.aspnetcore.server.kestrel")
+    || message.startsWith("request starting http/")
+    || message.startsWith("request finished http/")
+  ) {
+    return "inbound";
+  }
+
+  if (
+    category.startsWith("system.net.http")
+    || category.startsWith("microsoft.extensions.http")
+    || message.includes("http://")
+    || message.includes("https://")
+  ) {
+    return "outbound";
+  }
+
+  return "none";
 }
 
 export function classifyLiveLogEntry(entry: ParsedLiveLogEntry): LiveLogDomain {

@@ -15,6 +15,7 @@ public sealed class DetailedLogWindowTests
         {
             "live-log-search",
             "live-log-category",
+            "live-log-http-scope",
             "live-log-event-id",
             "live-log-from",
             "live-log-to",
@@ -42,6 +43,9 @@ public sealed class DetailedLogWindowTests
         Assert.Contains("maximumRenderedLogs = 500", script, StringComparison.Ordinal);
         Assert.Contains("parseLiveLogEntry", parser, StringComparison.Ordinal);
         Assert.Contains("filterLiveLogEntries", parser, StringComparison.Ordinal);
+        Assert.Contains("classifyLiveLogHttpDirection", parser, StringComparison.Ordinal);
+        Assert.Contains("仅 WebUI / API 入站", html, StringComparison.Ordinal);
+        Assert.Contains("排除 HTTP 连接日志", html, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", parser, StringComparison.Ordinal);
     }

@@ -6,9 +6,11 @@ import {
 } from "./ui-state.js";
 import {
   classifyLiveLogEntry,
+  classifyLiveLogHttpDirection,
   filterLiveLogEntries,
   parseLiveLogEntry,
   type LiveLogFilter,
+  type LiveLogHttpScope,
   type LiveLogDomain,
   type LiveLogLevel,
   type ParsedLiveLogEntry,
@@ -3061,6 +3063,7 @@ function liveLogFilter(): LiveLogFilter {
     category: element<HTMLInputElement>("#live-log-category").value,
     eventId: element<HTMLInputElement>("#live-log-event-id").value,
     domain: liveLogDomain,
+    httpScope: element<HTMLSelectElement>("#live-log-http-scope").value as LiveLogHttpScope,
     fromUtc: localDateTimeToUtc("#live-log-from"),
     toUtc: localDateTimeToUtc("#live-log-to"),
     exceptionOnly: element<HTMLInputElement>("#live-log-exception-only").checked,
@@ -3161,6 +3164,16 @@ function renderLiveLogs(): void {
   element<HTMLElement>("#live-log-ai-count").textContent = String(
     liveLogEntries.filter(entry => classifyLiveLogEntry(entry) === "ai").length,
   );
+  const httpSummary = liveLogEntries.reduce(
+    (summary, entry) => {
+      const direction = classifyLiveLogHttpDirection(entry);
+      if (direction !== "none") summary[direction]++;
+      return summary;
+    },
+    { inbound: 0, outbound: 0 },
+  );
+  element<HTMLElement>("#live-log-http-count").textContent =
+    `${httpSummary.outbound} / ${httpSummary.inbound}`;
 }
 
 function localDateTimeToUtc(selector: string): string | undefined {
@@ -9950,6 +9963,7 @@ element<HTMLSelectElement>("#live-log-level").addEventListener(
 for (const selector of [
   "#live-log-search",
   "#live-log-category",
+  "#live-log-http-scope",
   "#live-log-event-id",
   "#live-log-from",
   "#live-log-to",

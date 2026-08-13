@@ -385,6 +385,7 @@
         <article><span>警告</span><strong id="live-log-warning-count">0</strong></article>
         <article><span>错误</span><strong id="live-log-error-count">0</strong></article>
         <article><span>AI 相关</span><strong id="live-log-ai-count">0</strong></article>
+        <article><span>HTTP 外连 / 入站</span><strong id="live-log-http-count">0 / 0</strong></article>
       </div>
       <div id="live-log-domain-filter" class="log-quick-filters" aria-label="运行日志快速分类">
         <button type="button" class="secondary-button active" data-log-domain="all">全部</button>
@@ -402,6 +403,14 @@
         </label>
         <label>类别
           <input id="live-log-category" type="search" maxlength="200" placeholder="AnimeGoNet.App.Metadata">
+        </label>
+        <label>HTTP 连接
+          <select id="live-log-http-scope">
+            <option value="all">全部日志</option>
+            <option value="outbound">仅程序外连</option>
+            <option value="inbound">仅 WebUI / API 入站</option>
+            <option value="non-http">排除 HTTP 连接日志</option>
+          </select>
         </label>
         <label>Event ID
           <input id="live-log-event-id" type="number" min="0" step="1" placeholder="例如 4301">

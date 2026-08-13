@@ -1,6 +1,6 @@
 import { ApiClient } from "./api-client.js";
 import { renderRegionContent, renderRegionMessage, setRegionState, } from "./ui-state.js";
-import { classifyLiveLogEntry, filterLiveLogEntries, parseLiveLogEntry, } from "./log-view.js";
+import { classifyLiveLogEntry, classifyLiveLogHttpDirection, filterLiveLogEntries, parseLiveLogEntry, } from "./log-view.js";
 function element(selector) {
     const found = document.querySelector(selector);
     if (!found)
@@ -1331,6 +1331,7 @@ function liveLogFilter() {
         category: element("#live-log-category").value,
         eventId: element("#live-log-event-id").value,
         domain: liveLogDomain,
+        httpScope: element("#live-log-http-scope").value,
         fromUtc: localDateTimeToUtc("#live-log-from"),
         toUtc: localDateTimeToUtc("#live-log-to"),
         exceptionOnly: element("#live-log-exception-only").checked,
@@ -1416,6 +1417,14 @@ function renderLiveLogs() {
     element("#live-log-warning-count").textContent = String(liveLogEntries.filter(entry => entry.level === "warning").length);
     element("#live-log-error-count").textContent = String(liveLogEntries.filter(entry => entry.level === "error" || entry.level === "critical").length);
     element("#live-log-ai-count").textContent = String(liveLogEntries.filter(entry => classifyLiveLogEntry(entry) === "ai").length);
+    const httpSummary = liveLogEntries.reduce((summary, entry) => {
+        const direction = classifyLiveLogHttpDirection(entry);
+        if (direction !== "none")
+            summary[direction]++;
+        return summary;
+    }, { inbound: 0, outbound: 0 });
+    element("#live-log-http-count").textContent =
+        `${httpSummary.outbound} / ${httpSummary.inbound}`;
 }
 function localDateTimeToUtc(selector) {
     const value = element(selector).value;
@@ -7501,6 +7510,7 @@ element("#live-log-level").addEventListener("change", renderLiveLogs);
 for (const selector of [
     "#live-log-search",
     "#live-log-category",
+    "#live-log-http-scope",
     "#live-log-event-id",
     "#live-log-from",
     "#live-log-to",

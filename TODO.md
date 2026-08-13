@@ -205,7 +205,7 @@
 - [x] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile CRUD/无副作用预览、下载器脱敏投影/连接测试、data_path 私有覆盖文件、凭据只写 create/update/remove、全局 revision、重启应用和引用保护均已完成。
 - [x] 移植 access-key、响应 envelope、参数错误：直接 key、旧 SHA-256 hash、ping/sha256、RSS/manager/plugin/config/Bolt、WebSocket 均接入统一鉴权；legacy HTTP 保持 HTTP 200 + `code=200/300`，配置畸形 JSON/Base64/YAML/强类型值在替换前失败。
 - [x] 移植 WebSocket 日志 pause/resume：保留 `/websocket/log`、旧 `type=log/count` 帧和三种控制命令；鉴权、逐连接暂停、1000 条有界缓存、慢消费者有界队列、脱敏及取消均已验证。
-- [x] 将实时日志升级为详细日志工作区：兼容旧文本帧并在浏览器拆分 UTC 时间、级别、类别、Event ID、消息、异常和脱敏原文；支持级别/关键词/类别/Event ID 组合筛选、自动滚动、长行换行、单条展开和复制当前脱敏结果，浏览器仍只保留最新 500 条。
+- [x] 将实时日志升级为详细日志工作区：兼容旧文本帧并在浏览器拆分 UTC 时间、级别、类别、Event ID、消息、异常和脱敏原文；支持级别/关键词/类别/Event ID 组合筛选、自动滚动、长行换行、单条展开和复制当前脱敏结果，浏览器仍只保留最新 500 条。HTTP 连接另有“全部 / 仅程序外连 / 仅 WebUI/API 入站 / 排除 HTTP”独立选项，ASP.NET Core 入站轮询不再与 AnimeGoNet 业务日志混在一起。
 - [x] 将“日志”独立为一级工作区：运行日志增加时间、仅异常、业务域快速筛选及级别统计；新增跨任务 AI 调用日志 API/页面，按任务、阶段、结果、模型和时间分页查询已持久化 provider usage，汇总成功/失败、Token、HTTP 与工具调用，并可回到任务详情。Prompt、响应正文和凭据继续不进入审计。
 - [x] 增加默认关闭的 AI Debug 完整链路：按 run_id 在 `data_path/ai-debug` 独立保存 AI 前任务输入、同一 run 已落库的确定性尝试、发布时间证据、Prompt 模板/最终渲染 Prompt、全部 AI/MCP 请求响应 Body、解析候选、TMDB 本地验证和用量；AI 调用日志提供分段时间线查看与单条删除。Authorization Header、API Key、Cookie、passkey 和 Torrent URL 不落盘，普通 SQLite AI 审计仍保持轻量。
 - [x] 移植轻量滚动文件日志：固定写入 `data_path/logs/animego.log`，仅 Information 以上，2 MiB、14 份备份、14 天保留；与 WebSocket 共用脱敏格式，宿主停止后由 DI 唯一释放句柄。

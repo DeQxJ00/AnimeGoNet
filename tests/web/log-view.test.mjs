@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyLiveLogEntry,
+  classifyLiveLogHttpDirection,
   filterLiveLogEntries,
   parseLiveLogEntry,
 } from "../../src/AnimeGoNet.App/wwwroot/log-view.js";
@@ -17,6 +18,38 @@ test("formatted log lines split into safe diagnostic fields", () => {
   assert.equal(parsed.eventId, 4301);
   assert.equal(parsed.message, "Duplicate skipped");
   assert.equal(parsed.exception, "InvalidOperationException: safe failure");
+});
+
+test("HTTP direction filter separates outbound services from inbound WebUI traffic", () => {
+  const entries = [
+    parseLiveLogEntry("2026-08-13T10:00:00Z [INF] System.Net.Http.HttpClient.tmdb (100): Sending HTTP request GET http://api.tmdb.local/3/tv/65942"),
+    parseLiveLogEntry("2026-08-13T10:00:01Z [INF] Microsoft.AspNetCore.Hosting.Diagnostics (1): Request starting HTTP/1.1 GET http://127.0.0.1:6180/api/v1/configuration"),
+    parseLiveLogEntry("2026-08-13T10:00:02Z [INF] AnimeGoNet.App.Metadata (4301): metadata task completed"),
+  ];
+
+  assert.equal(classifyLiveLogHttpDirection(entries[0]), "outbound");
+  assert.equal(classifyLiveLogHttpDirection(entries[1]), "inbound");
+  assert.equal(classifyLiveLogHttpDirection(entries[2]), "none");
+  assert.deepEqual(
+    filterLiveLogEntries(entries, {
+      minimumLevel: "all",
+      query: "",
+      category: "",
+      eventId: "",
+      httpScope: "outbound",
+    }).map(entry => entry.category),
+    ["System.Net.Http.HttpClient.tmdb"],
+  );
+  assert.deepEqual(
+    filterLiveLogEntries(entries, {
+      minimumLevel: "all",
+      query: "",
+      category: "",
+      eventId: "",
+      httpScope: "non-http",
+    }).map(entry => entry.category),
+    ["AnimeGoNet.App.Metadata"],
+  );
 });
 
 test("domain, time, and exception filters expose useful runtime diagnostics", () => {

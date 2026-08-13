@@ -65,6 +65,13 @@ export function filterLiveLogEntries(entries, filter) {
         if (filter.domain && filter.domain !== "all" && classifyLiveLogEntry(entry) !== filter.domain) {
             return false;
         }
+        const httpDirection = classifyLiveLogHttpDirection(entry);
+        if (filter.httpScope === "outbound" && httpDirection !== "outbound")
+            return false;
+        if (filter.httpScope === "inbound" && httpDirection !== "inbound")
+            return false;
+        if (filter.httpScope === "non-http" && httpDirection !== "none")
+            return false;
         if (filter.exceptionOnly && !entry.exception)
             return false;
         if ((from !== null || to !== null) && entry.timestamp) {
@@ -78,6 +85,25 @@ export function filterLiveLogEntries(entries, filter) {
         }
         return !query || entry.text.toLocaleLowerCase().includes(query);
     });
+}
+export function classifyLiveLogHttpDirection(entry) {
+    const category = entry.category.toLocaleLowerCase();
+    const message = entry.message.toLocaleLowerCase();
+    if (category.startsWith("microsoft.aspnetcore.hosting.diagnostics")
+        || category.startsWith("microsoft.aspnetcore.routing.endpointmiddleware")
+        || category.startsWith("microsoft.aspnetcore.staticfiles.staticfilemiddleware")
+        || category.startsWith("microsoft.aspnetcore.server.kestrel")
+        || message.startsWith("request starting http/")
+        || message.startsWith("request finished http/")) {
+        return "inbound";
+    }
+    if (category.startsWith("system.net.http")
+        || category.startsWith("microsoft.extensions.http")
+        || message.includes("http://")
+        || message.includes("https://")) {
+        return "outbound";
+    }
+    return "none";
 }
 export function classifyLiveLogEntry(entry) {
     const text = `${entry.category} ${entry.message}`.toLocaleLowerCase();
