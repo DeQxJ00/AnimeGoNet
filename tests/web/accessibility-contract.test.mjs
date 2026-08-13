@@ -123,8 +123,10 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(css, /\.readaptation-review-table\s*\{/);
   assert.match(css, /\.readaptation-manual-fields\s*\{/);
   assert.match(css, /#other-readaptation-review-dialog\s*\{[^}]*height:\s*min\(/s);
-  assert.match(css, /\.readaptation-review-files\s*\{[^}]*overflow-y:\s*scroll/s);
-  assert.match(css, /\.readaptation-review-files\s*\{[^}]*scrollbar-gutter:\s*stable/s);
+  assert.match(css, /\.readaptation-review-panel\s*\{[^}]*overflow-y:\s*scroll/s);
+  assert.match(css, /\.readaptation-review-panel\s*\{[^}]*scrollbar-gutter:\s*stable/s);
+  assert.match(css, /\.readaptation-review-panel\s*>\s*\.delete-heading\s*\{[^}]*position:\s*sticky/s);
+  assert.match(css, /\.readaptation-review-actions\s*\{[^}]*position:\s*sticky/s);
 });
 
 test("AI test page exposes verified Responses compatibility controls and usage", async () => {
