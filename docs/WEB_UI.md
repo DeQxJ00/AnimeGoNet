@@ -133,7 +133,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 首页“手动提交”区不建立第二套下载逻辑。单个 Torrent 调用 `POST /api/v1/ingest`，选择值是已启用的 SourceProfile ID，因此自定义 Mikan/U2/TTG 来源继续使用各自不可变的下载器、目录、文件策略、category、tags 和 revision 快照。Mikan 手动导入要求 `mikanid` 与 `bgmid`；U2/TTG 可附带作品级 `anidbid`/`imdbid` 参考。结果显示接受/拒绝数量、任务 ID、实际来源 revision、下载器、文件数、info hash 和不可逆 URL 指纹，不显示原 Torrent URL。
 
-Mikan RSS 调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。服务端必须先确认该 profile 已启用且 adapter 为 Mikan，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。响应显示 batch、mikanid、规则 revision、候选决策和实际任务 ID。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
+Mikan RSS 的临时 URL 测试调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。页面另提供“执行已保存 RSS”，调用 `POST /api/v1/sources/{source_profile_id}/rss/run`，直接读取该来源服务端保存的地址，不要求开启自动 Cron；它仍写入最近运行状态/batch，并与自动调度互斥，避免同一来源重叠执行。服务端必须先确认该 profile 已启用、adapter 为 Mikan 且已保存 RSS 地址，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。两种入口共用 batch、mikanid、规则 revision、候选决策和实际任务 ID 展示。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
 
 Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接显示，便于核对；仍不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。
 

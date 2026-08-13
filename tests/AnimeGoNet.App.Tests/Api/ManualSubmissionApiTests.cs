@@ -83,11 +83,70 @@ public sealed class ManualSubmissionApiTests
         Assert.Empty(transport.Requests);
     }
 
+    [Fact]
+    public async Task SavedRssRunUsesProfileUrlWithoutRequiringAutomaticSchedule()
+    {
+        const string secretUrl =
+            "https://mikanani.me/RSS?bangumiId=3951&token=saved-private-passkey";
+        var transport = new StaticTransport(_ => Response(HttpStatusCode.OK, FeedXml));
+        await using var app = await RunningApp.StartAsync(
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
+        await CreateSourceAsync(
+            app,
+            "mikan-saved",
+            "mikan",
+            "pt",
+            secretUrl);
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/sources/mikan-saved/rss/run",
+            content: null);
+        var content = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("saved-private-passkey", content, StringComparison.Ordinal);
+        Assert.Equal(3951, json.RootElement.GetProperty("mikanid").GetInt32());
+        Assert.Equal("staged", json.RootElement.GetProperty("items")[0]
+            .GetProperty("status").GetString());
+        Assert.Single(transport.FeedRequests);
+        Assert.Equal(secretUrl, transport.FeedRequests[0].AbsoluteUri);
+        using var source = JsonDocument.Parse(
+            await app.Client.GetStreamAsync("/api/v1/sources/mikan-saved"));
+        Assert.Equal("succeeded", source.RootElement.GetProperty("rss_last_run_state").GetString());
+        Assert.Equal(
+            json.RootElement.GetProperty("batch_id").GetString(),
+            source.RootElement.GetProperty("rss_last_batch_id").GetString());
+    }
+
+    [Fact]
+    public async Task SavedRssRunRejectsSourceWithoutSavedUrlBeforeNetworkRequest()
+    {
+        var transport = new StaticTransport(_ => Response(HttpStatusCode.OK, FeedXml));
+        await using var app = await RunningApp.StartAsync(
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
+        await CreateSourceAsync(app, "mikan-no-rss", "mikan", "pt");
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/sources/mikan-no-rss/rss/run",
+            content: null);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(
+            "rss_feed_url_missing",
+            json.RootElement.GetProperty("code").GetString());
+        Assert.Empty(transport.Requests);
+    }
+
     private static async Task CreateSourceAsync(
         RunningApp app,
         string id,
         string adapter,
-        string downloaderId)
+        string downloaderId,
+        string? rssFeedUrl = null)
     {
         using var response = await PostJsonAsync(
             app,
@@ -106,6 +165,8 @@ public sealed class ManualSubmissionApiTests
                 rss_filter_enabled = false,
                 rss_priority_enabled = true,
                 enabled = true,
+                rss_feed_url = rssFeedUrl,
+                rss_schedule_enabled = false,
             });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }

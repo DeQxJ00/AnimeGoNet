@@ -354,6 +354,37 @@ public sealed class SourceProfileStoreAdminTests
     }
 
     [Fact]
+    public async Task ManualRssRunIsAuditedWhileAutomaticScheduleIsDisabled()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var created = await store.CreateAsync(
+            "mikan-manual-rss",
+            Definition("Mikan manual RSS", "mikan", "bt", "move", ["mikanani.me"]) with
+            {
+                RssFeedUrl = "https://mikanani.me/RSS/MyBangumi?token=manual-private",
+                RssScheduleEnabled = false,
+            },
+            At(10));
+
+        Assert.Empty(await store.ListScheduledAsync());
+        Assert.True(await store.TryStartManualRssRunAsync(created.Id, created.Revision, At(11)));
+        Assert.False(await store.TryStartManualRssRunAsync(created.Id, created.Revision, At(11)));
+        Assert.True(await store.FailScheduledRunAsync(
+            created.Id,
+            created.Revision,
+            "rss_manual_test_failure",
+            At(12)));
+
+        var completed = Assert.IsType<SourceProfileAdminRecord>(await store.GetAsync(created.Id));
+        Assert.False(completed.RssScheduleEnabled);
+        Assert.Equal("failed", completed.RssLastRunState);
+        Assert.Equal("rss_manual_test_failure", completed.RssLastFailureCode);
+        Assert.Null(completed.RssLastBatchId);
+        Assert.Equal(At(12), completed.RssLastCompletedAtUtc);
+    }
+
+    [Fact]
     public async Task V33UpgradeAppliesConfiguredTemplateOnceAndExplicitClearSurvivesRestartSeed()
     {
         var root = Path.Combine(

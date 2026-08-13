@@ -614,6 +614,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .manual-submit-hint { min-height: 21px; margin: 0; color: #ffc985; font-size: .76rem; line-height: 1.45; }
 .manual-submit-card > .primary-button { justify-self: start; }
 .manual-submit-card > .primary-button:disabled { cursor: wait; opacity: .55; }
+.manual-submit-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.manual-submit-actions button:disabled { cursor: not-allowed; opacity: .55; }
 .manual-submit-result { display: grid; gap: 8px; min-height: 58px; padding: 12px; border-radius: 12px; background: rgba(5,8,16,.5); }
 .manual-submit-result > .muted { margin: 0; }
 .manual-result-summary { margin: 0; color: #dce7fb; font-size: .82rem; line-height: 1.5; overflow-wrap: anywhere; }

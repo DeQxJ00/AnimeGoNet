@@ -504,6 +504,9 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-rss-url-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-cron\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-schedule-enabled\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"manual-rss-run-saved\"", html, StringComparison.Ordinal);
+        Assert.Contains("/rss/run", script, StringComparison.Ordinal);
+        Assert.Contains("不要求开启自动调度", script, StringComparison.Ordinal);
         Assert.Contains("秒 分 时 日 月 周", html, StringComparison.Ordinal);
         Assert.Contains("rss_feed_url_configured", script, StringComparison.Ordinal);
         Assert.Contains("rss_schedule_registered", script, StringComparison.Ordinal);

@@ -468,6 +468,33 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
 
+    public async Task<bool> TryStartManualRssRunAsync(
+        string id,
+        long expectedRevision,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET rss_last_run_state = 'running',
+                rss_last_started_at_utc = $now,
+                rss_last_completed_at_utc = NULL,
+                rss_last_failure_code = NULL,
+                rss_last_batch_id = NULL
+            WHERE id = $id AND revision = $revision
+              AND enabled = 1
+              AND adapter = 'mikan'
+              AND rss_feed_url IS NOT NULL
+              AND rss_last_run_state <> 'running';
+            """;
+        command.Parameters.AddWithValue("$id", NormalizeId(id));
+        command.Parameters.AddWithValue("$revision", expectedRevision);
+        command.Parameters.AddWithValue("$now", Format(utcNow));
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
+
     public async Task<int> RecoverInterruptedScheduledRunsAsync(
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)

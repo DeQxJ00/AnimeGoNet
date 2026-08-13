@@ -738,7 +738,10 @@
             </label>
           </div>
           <p class="manual-submit-hint">只列出已启用且 adapter 为 Mikan 的 SourceProfile；任务固化当前 revision、下载器和规则快照。</p>
-          <button id="manual-rss-submit" type="submit" class="primary-button">抓取并处理 RSS</button>
+          <div class="manual-submit-actions">
+            <button id="manual-rss-run-saved" type="button" class="secondary-button">执行已保存 RSS</button>
+            <button id="manual-rss-submit" type="submit" class="primary-button">处理临时 RSS URL</button>
+          </div>
           <div id="manual-rss-result" class="manual-submit-result" aria-live="polite">
             <p class="muted">尚未提交。</p>
           </div>

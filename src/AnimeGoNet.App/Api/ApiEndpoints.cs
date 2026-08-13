@@ -82,6 +82,7 @@ public static class ApiEndpoints
         app.MapPut("/api/v1/sources/{sourceProfileId}", UpdateSourceProfile);
         app.MapDelete("/api/v1/sources/{sourceProfileId}", DeleteSourceProfile);
         app.MapPost("/api/v1/sources/{sourceProfileId}/route-preview", PreviewSourceRoute);
+        app.MapPost("/api/v1/sources/{sourceProfileId}/rss/run", RunSourceRssNow);
         app.MapGet("/api/v1/rss-rules/{sourceProfileId}", GetRssRules);
         app.MapPut("/api/v1/rss-rules/{sourceProfileId}", PutRssRules);
         app.MapPost("/api/v1/rss-rules/{sourceProfileId}/preview", PreviewRssRules);
@@ -5724,6 +5725,118 @@ public static class ApiEndpoints
             return TypedResults.BadRequest(Error(
                 exception.Code,
                 "RSS processing failed."));
+        }
+    }
+
+    private static async Task<Results<
+        Ok<MikanRssIngestResult>,
+        BadRequest<ApiErrorResponse>,
+        Conflict<ApiErrorResponse>>> RunSourceRssNow(
+        string sourceProfileId,
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
+        SourceProfileStore profiles,
+        MikanRssIngestProcessor processor,
+        LegacyDownloaderMigrationState legacyMigration,
+        CancellationToken cancellationToken)
+    {
+        if (legacyMigration.BlockingDiagnostic is { } diagnostic)
+        {
+            return MigrationBlocked(diagnostic);
+        }
+
+        string id;
+        try
+        {
+            id = RequireCanonicalStableId(sourceProfileId, "source profile id");
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("source_profile_invalid", exception.Message));
+        }
+
+        var profile = await profiles.GetEnabledAsync(id, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            return TypedResults.BadRequest(Error(
+                "rss_source_profile_missing",
+                "Enabled RSS source profile was not found."));
+        }
+
+        if (!string.Equals(profile.Adapter, "mikan", StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.BadRequest(Error(
+                "rss_source_profile_invalid",
+                "RSS source profile must use the Mikan adapter."));
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.RssFeedUrl))
+        {
+            return TypedResults.BadRequest(Error(
+                "rss_feed_url_missing",
+                "The source profile does not have a saved RSS URL."));
+        }
+
+        if (!await profiles.TryStartManualRssRunAsync(
+                profile.Id,
+                profile.Revision,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false))
+        {
+            return TypedResults.Conflict(Error(
+                "rss_run_in_progress",
+                "This source already has an RSS run in progress or was modified."));
+        }
+
+        try
+        {
+            var feed = await FetchMikanFeedAsync(
+                profile.RssFeedUrl,
+                profile.Id,
+                plugins,
+                cancellationToken).ConfigureAwait(false);
+            var result = await processor
+                .ProcessAsync(feed, profile.Id, cancellationToken)
+                .ConfigureAwait(false);
+            await profiles.CompleteScheduledRunAsync(
+                profile.Id,
+                profile.Revision,
+                result.BatchId,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(result);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await profiles.FailScheduledRunAsync(
+                profile.Id,
+                profile.Revision,
+                "rss_manual_run_cancelled",
+                DateTimeOffset.UtcNow,
+                CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        catch (RssFeedException exception)
+        {
+            await profiles.FailScheduledRunAsync(
+                profile.Id,
+                profile.Revision,
+                exception.Code,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.BadRequest(Error(
+                exception.Code,
+                "RSS processing failed."));
+        }
+        catch
+        {
+            const string code = "rss_manual_run_failed";
+            await profiles.FailScheduledRunAsync(
+                profile.Id,
+                profile.Revision,
+                code,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.BadRequest(Error(code, "RSS processing failed."));
         }
     }
 

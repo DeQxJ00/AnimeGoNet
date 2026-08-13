@@ -27,6 +27,12 @@
 5. 通过 SourceProfile Host/DNS/redirect/Cookie 边界读取 feed，再进入现有 Mikan RSS 处理器。
 6. 成功保存 `succeeded`、完成时间和 batch ID；失败只保存稳定失败码。协调器按既有策略最多重试三次。
 
+WebUI 的“Mikan 手动设置 / 导入任务”还可调用
+`POST /api/v1/sources/{source_profile_id}/rss/run` 立即执行来源已保存的 RSS。此入口不要求
+`rss_schedule_enabled=true`，也不依赖后台调度器已注册；但来源必须启用、adapter 必须为
+Mikan 且 RSS URL 已保存。手动执行与 Cron 共用 SQLite `running` 门禁和最近运行审计，进入
+相同的抓取、过滤、优选、去重与统一导入链，响应和日志不回显保存 URL 或 passkey。
+
 来源配置每次更新都会增加 revision 并清空旧执行审计。CRUD 成功后管理器立即移除/重建对应任务；删除来源后移除任务。运行中的旧 revision 即使稍后返回，也不能写入新 revision 的审计状态。
 
 ## API 与 WebUI

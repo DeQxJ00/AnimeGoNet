@@ -6979,7 +6979,20 @@ function refreshManualSourceOptions(): void {
   );
   element<HTMLButtonElement>("#manual-rss-submit").disabled =
     enabled.every((profile) => profile.adapter !== "mikan");
+  updateSavedRssRunState();
   updateManualDownloadHint();
+}
+
+function updateSavedRssRunState(): void {
+  const sourceId = element<HTMLSelectElement>("#manual-rss-source").value;
+  const profile = sourceProfiles.find((item) => item.id === sourceId);
+  const run = element<HTMLButtonElement>("#manual-rss-run-saved");
+  run.disabled = profile?.adapter !== "mikan"
+    || !profile.enabled
+    || !profile.rss_feed_url_configured;
+  run.title = profile?.rss_feed_url_configured
+    ? "使用服务端为此来源保存的 RSS URL 立即执行；不要求开启自动调度。"
+    : "请先在来源管理中保存这个 Mikan 来源的 RSS URL。";
 }
 
 function updateManualDownloadHint(): void {
@@ -7115,50 +7128,7 @@ async function submitManualRss(event: SubmitEvent): Promise<void> {
     const response = await responsePromise;
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as ManualRssResponse;
-    const accepted = body.items.filter((item) => item.ingest_task_id !== null).length;
-    const summary = document.createElement("p");
-    summary.className = "manual-result-summary";
-    const batches = body.batches?.length ? body.batches : [body];
-    summary.textContent = batches.length > 1
-      ? `聚合 RSS · ${batches.length} 个番组批次 · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`
-      : `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · `
-        + `bgmid ${body.bgmid ?? "未取得"}（${body.bgmid_discovery_state}`
-        + `${body.bgmid_discovery_failure_code ? ` / ${body.bgmid_discovery_failure_code}` : ""}）`
-        + ` · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
-    const renderedItems = batches.flatMap((batch, batchIndex) => {
-      const batchSummary = batches.length > 1
-        ? [manualResultItem(
-            `番组批次 ${batchIndex + 1} · mikanid ${batch.mikanid ?? "未识别"}`,
-            `批次 ${batch.batch_id} · bgmid ${batch.bgmid ?? "未取得"}`
-              + `（${batch.bgmid_discovery_state}`
-              + `${batch.bgmid_discovery_failure_code ? ` / ${batch.bgmid_discovery_failure_code}` : ""}）`,
-            batch.bgmid_discovery_state !== "Resolved",
-          )]
-        : [];
-      return [
-        ...batchSummary,
-        ...batch.items.map((item, index) => manualResultItem(
-          `候选 ${index + 1} · ${rssStatusLabels[item.status] ?? item.status}`,
-          [
-            item.decision_kind,
-            item.decision_reason,
-            item.identity_mikanid ? `mikanid ${item.identity_mikanid}` : null,
-            item.identity_groupid ? `groupid ${item.identity_groupid}` : null,
-            item.status === "already_completed"
-              ? "命中完成记录的来源别名，未抓取 Torrent"
-              : null,
-            item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
-            item.errors.length > 0 ? item.errors.join("；") : null,
-          ].filter((value): value is string => value !== null).join(" · "),
-          !["staged", "blocked", "already_ingested", "already_completed"]
-            .includes(item.status),
-        )),
-      ];
-    });
-    result.replaceChildren(
-      summary,
-      ...renderedItems,
-    );
+    renderManualRssResponse(body, result);
     void loadDownloads();
     void loadMetadataTasks();
     void loadSources(sourceId);
@@ -7174,6 +7144,82 @@ async function submitManualRss(event: SubmitEvent): Promise<void> {
     submit.disabled = sourceProfiles.every(
       (profile) => !profile.enabled || profile.adapter !== "mikan",
     );
+  }
+}
+
+function renderManualRssResponse(body: ManualRssResponse, result: HTMLElement): void {
+  const accepted = body.items.filter((item) => item.ingest_task_id !== null).length;
+  const summary = document.createElement("p");
+  summary.className = "manual-result-summary";
+  const batches = body.batches?.length ? body.batches : [body];
+  summary.textContent = batches.length > 1
+    ? `聚合 RSS · ${batches.length} 个番组批次 · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`
+    : `批次 ${body.batch_id} · mikanid ${body.mikanid ?? "未识别"} · `
+      + `bgmid ${body.bgmid ?? "未取得"}（${body.bgmid_discovery_state}`
+      + `${body.bgmid_discovery_failure_code ? ` / ${body.bgmid_discovery_failure_code}` : ""}）`
+      + ` · 接收 ${accepted}/${body.items.length} · 规则 rev ${body.rule_revision}`;
+  const renderedItems = batches.flatMap((batch, batchIndex) => {
+    const batchSummary = batches.length > 1
+      ? [manualResultItem(
+          `番组批次 ${batchIndex + 1} · mikanid ${batch.mikanid ?? "未识别"}`,
+          `批次 ${batch.batch_id} · bgmid ${batch.bgmid ?? "未取得"}`
+            + `（${batch.bgmid_discovery_state}`
+            + `${batch.bgmid_discovery_failure_code ? ` / ${batch.bgmid_discovery_failure_code}` : ""}）`,
+          batch.bgmid_discovery_state !== "Resolved",
+        )]
+      : [];
+    return [
+      ...batchSummary,
+      ...batch.items.map((item, index) => manualResultItem(
+        `候选 ${index + 1} · ${rssStatusLabels[item.status] ?? item.status}`,
+        [
+          item.decision_kind,
+          item.decision_reason,
+          item.identity_mikanid ? `mikanid ${item.identity_mikanid}` : null,
+          item.identity_groupid ? `groupid ${item.identity_groupid}` : null,
+          item.status === "already_completed"
+            ? "命中完成记录的来源别名，未抓取 Torrent"
+            : null,
+          item.ingest_task_id ? `任务 ${item.ingest_task_id}` : null,
+          item.errors.length > 0 ? item.errors.join("；") : null,
+        ].filter((value): value is string => value !== null).join(" · "),
+        !["staged", "blocked", "already_ingested", "already_completed"]
+          .includes(item.status),
+      )),
+    ];
+  });
+  result.replaceChildren(summary, ...renderedItems);
+}
+
+async function runSavedSourceRss(): Promise<void> {
+  const sourceId = element<HTMLSelectElement>("#manual-rss-source").value;
+  const run = element<HTMLButtonElement>("#manual-rss-run-saved");
+  const result = element<HTMLElement>("#manual-rss-result");
+  run.disabled = true;
+  result.replaceChildren(manualResultItem(
+    "正在处理已保存 RSS",
+    "本次直接读取服务端保存地址，不要求开启自动调度。",
+    false,
+  ));
+  try {
+    const response = await fetch(
+      `/api/v1/sources/${encodeURIComponent(sourceId)}/rss/run`,
+      { method: "POST", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as ManualRssResponse;
+    renderManualRssResponse(body, result);
+    void loadDownloads();
+    void loadMetadataTasks();
+    void loadSources(sourceId);
+  } catch (error) {
+    result.replaceChildren(manualResultItem(
+      "已保存 RSS 处理失败",
+      errorMessage(error, "未知错误"),
+      true,
+    ));
+  } finally {
+    updateSavedRssRunState();
   }
 }
 
@@ -9060,6 +9106,14 @@ element<HTMLFormElement>("#manual-download-form").addEventListener(
 element<HTMLFormElement>("#manual-rss-form").addEventListener(
   "submit",
   (event) => void submitManualRss(event),
+);
+element<HTMLSelectElement>("#manual-rss-source").addEventListener(
+  "change",
+  updateSavedRssRunState,
+);
+element<HTMLButtonElement>("#manual-rss-run-saved").addEventListener(
+  "click",
+  () => void runSavedSourceRss(),
 );
 element<HTMLInputElement>("#mikan-work-rule-id").addEventListener(
   "input",
