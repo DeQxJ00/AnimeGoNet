@@ -6,6 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
+    [InlineData("/", "text/html", "/styles.css?v=20260813-ai-reasoning-align")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]
@@ -25,6 +26,7 @@ public sealed class StaticWebUiTests
     [InlineData("/styles.css", "text/css", ".download-stage-progress")]
     [InlineData("/styles.css", "text/css", ".data-update-columns")]
     [InlineData("/styles.css", "text/css", ".data-update-offline")]
+    [InlineData("/styles.css", "text/css", ".configuration-data-update-grid select { width: 100%")]
     [InlineData("/styles.css", "text/css", "prefers-reduced-motion")]
     [InlineData("/styles.css", "text/css", ".skip-link:focus")]
     [InlineData("/app.js", "text/javascript", "/api/v1/downloads")]

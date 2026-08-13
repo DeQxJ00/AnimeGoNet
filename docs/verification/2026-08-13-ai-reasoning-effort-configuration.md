@@ -23,3 +23,6 @@
 - win-x64 NativeAOT 发布成功；使用独立 TestSpace、关闭后台 worker 并以
   `--ai_reasoning_effort=high` 启动真实原生二进制，`metadata.ai.reasoning_effort` 与
   `editable.ai_reasoning_effort` 均返回 `high`，静态页面包含新选择框，验收后进程已停止。
+- WebUI 将配置网格内的 `select` 纳入与文本框相同的统一控件样式，并更新 CSS 资源版本
+  避免旧缓存。6180 NativeAOT 实测“模型”和“推理程度”均为 `357 × 44 px`，顶部坐标一致；
+  静态 WebUI 测试 170/170、TypeScript/Web 测试 21/21 通过。
