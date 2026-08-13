@@ -41,7 +41,7 @@ public sealed class MetadataTaskFilterApiTests
         {
             command.CommandText = """
                 UPDATE ingest_tasks
-                SET status = 'downloaded', updated_at_utc = $now
+                SET status = 'download_preparing', updated_at_utc = $now
                 WHERE id = $task_id;
                 """;
             command.Parameters.AddWithValue("$task_id", taskId);
