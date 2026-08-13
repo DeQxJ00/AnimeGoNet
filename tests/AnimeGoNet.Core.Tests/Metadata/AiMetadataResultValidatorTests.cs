@@ -51,6 +51,29 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
+    public async Task MatchedExplanatoryReasonsAreIgnoredAndTmdbIsStillFullyValidated()
+    {
+        var tmdb = new FakeTmdbClient();
+        var input = Input(new AiMetadataFileInput("Show/78.mkv", 100));
+        var candidate = new AiMetadataMatchCandidate(
+            true,
+            42,
+            [new(
+                "Show/78.mkv",
+                true,
+                1,
+                78,
+                "The model included a redundant explanation for this match.")],
+            "The model included a redundant top-level explanation.");
+
+        var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(78, Assert.Single(result.Value!.Files).Episode!.EpisodeNumber);
+        Assert.Equal(3, tmdb.TotalCalls);
+    }
+
+    [Fact]
     public async Task RejectsMultiFileOrderMismatchBeforeTmdbAccess()
     {
         var tmdb = new FakeTmdbClient();

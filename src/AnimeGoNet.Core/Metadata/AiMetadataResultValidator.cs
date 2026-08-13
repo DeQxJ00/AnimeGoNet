@@ -174,7 +174,7 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
 
         if (candidate.Matched == true)
         {
-            if (candidate.TmdbId is null or <= 0 || candidate.Reason is not null)
+            if (candidate.TmdbId is null or <= 0)
             {
                 return new MetadataFailure(MetadataFailureKind.Protocol, "ai_metadata_match_invalid", false);
             }
@@ -200,7 +200,7 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
 
             if (file.Matched == true)
             {
-                if (file.Season is null || file.Episode is null or <= 0 || file.Reason is not null)
+                if (file.Season is null || file.Episode is null or <= 0)
                 {
                     return new MetadataFailure(MetadataFailureKind.Protocol, "ai_episode_match_invalid", false);
                 }

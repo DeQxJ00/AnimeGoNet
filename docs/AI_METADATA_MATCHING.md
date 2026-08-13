@@ -155,6 +155,8 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 输入文件必须在输出中按原顺序恰好出现一次，`name` 原样返回。无法确认 Episode 的文件使用 `matched=false`、`episode=null` 并给出具体原因；普通季度可靠时保留大于0的 `season`，季度也不确定时才使用 `season=null`。
 
+模型偶尔会在已经 `matched=true` 的顶层或文件级 `reason` 中附带解释文字。主程序允许并忽略这类冗余说明，原始值仍保留在 AI Debug 审计中；这不会替代或放宽 `tmdb_id`、Season、Episode、文件身份/数量以及后续 TMDB Series/Season/Episode 二次验证。`matched=false` 时仍必须提供非空的具体原因。
+
 顶层 `matched` 表示整个任务是否已有明确落盘方案，不表示每个文件都是 TMDB Episode。Series 已确认，并且每个文件要么有经过验证的 Season/Episode，要么有大于0的已确认 Season 可进入 `Other` 时，顶层可以为 `true`。存在 Series 未确认、`season=null`、重复映射或目标冲突时才为 `false`。
 
 不要求模型返回动画名称、首播日期、Episode标题、置信度或复杂错误枚举。这些内容要么由主程序从 TMDB 获取，要么由主程序根据 HTTP/验证结果分类。
