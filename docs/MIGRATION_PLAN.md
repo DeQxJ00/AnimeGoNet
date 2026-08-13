@@ -268,7 +268,7 @@ docs/
   - 下载状态：统一展示多个qBittorrent实例的规范状态、百分比、容量、速度、ETA、Seeds/Peers和文件级priority，同时独立展示AnimeGoNet解析/移动/重命名/字幕/NFO/数据库阶段；qB 100%不等于业务完成。提供暂停、恢复、业务重试及删除中心跳转，详细边界见[`DOWNLOAD_PROGRESS_UI.md`](DOWNLOAD_PROGRESS_UI.md)。
   - 下载器实例：多实例 CRUD、连接/版本/延迟/任务数、路径与硬链接探测、来源引用；活动引用存在时禁止直接删除。
   - 输入源路由：下载器绑定、ID字段约束、过滤/匹配 profile、category/tag、文件/做种策略、重复命中通知和模拟路由预览。
-  - 配置：表单编辑、服务端校验、脱敏变更 diff、保存前 revision 备份、即时/重启生效提示；原始部署 YAML 保持运维只读，不在 Web 展示或改写。季度失败区显示四个确定性策略及一个任务级 AI 元数据开关，AI/TMDB 密钥只写不回显。
+  - 配置：表单编辑、服务端校验、明文变更 diff、保存前 revision 备份、即时/重启生效提示；原始部署 YAML 保持运维只读，不在 Web 展示或改写。季度失败区显示四个确定性策略及一个任务级 AI 元数据开关，AI/TMDB 密钥直接回填。
   - Mikan 过滤：内置 C# 复现 `Filiter0`～`Filiter4` 的旧规则和 AnimeGoHelper Base64 配置接口；默认 Mikan SourceProfile 提供默认开启的 RSS 过滤总开关，Web 提供开关、五档规则编辑、真实顺序预览、legacy JSON 导入导出、revision 冲突及快照回滚，详见 [`MIKAN_FILTER_COMPAT.md`](MIKAN_FILTER_COMPAT.md)。
   - Mikan 同集优选：一次 RSS 批次内按可靠的 `mikanid+来源EP` 聚合重复选项，使用完全可配置的有序优先级组和组内 `{name, values[]}` 具名数组逐级淘汰，剩一个立即短路；Web 可独立启停、任意增删/排序组与数组并维护具名黑白名单，预设字幕语言/封装/编码/分辨率四组并默认拒绝720p，详见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
   - 动画作品：按 `mikanid` 查看和编辑作品级人工规则，包括关联 Bgm Subject、TMDB Series/Season 与 Episode Offset；保存前预览受影响的未完成任务和样例 EP，支持禁用、清除和显式重新匹配。
@@ -404,7 +404,7 @@ docs/
 | 旧 Bolt 无直接 .NET 兼容读取 | 低 | 已决定不在主程序解析；缓存重建，必要时旧 Go 工具导出已知 bucket 为 JSON。 |
 | 第三方库表面可编译但 AOT 运行失败 | 高 | Phase 0 原生 spike；每次依赖升级重跑 published-binary tests。 |
 | 原 Go 测试在当前 Windows 无法执行 | 中 | Linux 容器固定 Go 基线，保存失败白名单及原因。 |
-| Web UI 扩大后端 API/安全面 | 中 | 兼容 API 保持不变；UI API 版本化；敏感字段脱敏；危险操作二次确认和契约测试。 |
+| Web UI 扩大后端 API/安全面 | 中 | 兼容 API 保持不变；UI API 版本化；本机配置值按便利要求直显，日志/运行轨迹继续脱敏；危险操作二次确认和契约测试。 |
 | Docker 路径/权限导致真实部署失败 | 高 | 非 root、PUID/PGID、卷路径映射矩阵和 Linux x64/arm64 Compose E2E。 |
 | “1:1”范围无限扩大 | 中 | 以本文件的可观察行为优先级和 `VERIFICATION_MATRIX` 为验收合同。 |
 

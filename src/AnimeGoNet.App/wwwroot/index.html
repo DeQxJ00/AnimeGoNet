@@ -26,7 +26,7 @@
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统</button>
       </nav>
-      <p class="sidebar-footnote">所有页面共用同一套脱敏 API 与 revision 控制。</p>
+      <p class="sidebar-footnote">配置编辑页直接回填本机已保存值；日志与运行轨迹继续脱敏。</p>
     </aside>
 
     <div class="app-content">
@@ -88,7 +88,7 @@
         </div>
         <button id="external-plugin-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
-      <p class="muted">插件包只读发现且默认禁用；可按 schema 配置启停、args 与 vars。writeOnly 值只显示是否已配置，协议故障会独立退避并自动禁用。</p>
+      <p class="muted">插件包只读发现且默认禁用；可按 schema 配置启停、args 与 vars。writeOnly 值也会在本机配置页直接回填，协议故障会独立退避并自动禁用。</p>
       <div id="external-plugin-list" class="external-plugin-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
         <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取外部插件…</p>
       </div>
@@ -187,7 +187,7 @@
           <button id="configuration-reset" type="button" class="danger-button">恢复部署默认</button>
         </div>
       </div>
-      <p id="configuration-status" class="muted">正在读取脱敏后的生效配置…</p>
+      <p id="configuration-status" class="muted">正在读取包含已保存凭据的生效配置…</p>
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
     </section>
 
@@ -654,8 +654,8 @@
             <label class="wide">任务 title
               <input id="manual-download-title" required maxlength="512" autocomplete="off">
             </label>
-            <label class="wide">Torrent URL（敏感）
-              <input id="manual-download-url" type="password" required inputmode="url" autocomplete="off" spellcheck="false">
+            <label class="wide">Torrent URL（直接显示）
+              <input id="manual-download-url" type="url" required inputmode="url" autocomplete="off" spellcheck="false">
             </label>
             <label>来源条目 ID
               <input id="manual-download-item-id" maxlength="256" autocomplete="off">
@@ -692,8 +692,8 @@
             <label class="wide">Mikan 输入源
               <select id="manual-rss-source" required></select>
             </label>
-            <label class="wide">RSS URL（敏感）
-              <input id="manual-rss-url" type="password" required inputmode="url" autocomplete="off" spellcheck="false">
+            <label class="wide">RSS URL（直接显示）
+              <input id="manual-rss-url" type="url" required inputmode="url" autocomplete="off" spellcheck="false">
             </label>
           </div>
           <p class="manual-submit-hint">只列出已启用且 adapter 为 Mikan 的 SourceProfile；任务固化当前 revision、下载器和规则快照。</p>
@@ -930,7 +930,7 @@
 ]</textarea></label>
               <h4 class="wide ai-test-subheading">模型连接与验证</h4>
               <label class="wide">Base URL<input id="ai-test-base-url" type="url" required placeholder="http://openai.local/"></label>
-              <label class="wide">API Key（不保存、不回显）<input id="ai-test-api-key" type="password" required autocomplete="off"></label>
+              <label class="wide">API Key（从主配置回填，本次测试可修改）<input id="ai-test-api-key" type="text" required autocomplete="off" spellcheck="false"></label>
               <label>Model<input id="ai-test-model" required placeholder="gpt-5.4-mini"></label>
               <label>Timeout Seconds<input id="ai-test-timeout" type="number" min="1" value="600" required></label>
               <label>Mode<select id="ai-test-api-mode"><option value="responses">Responses</option><option value="chat-completions">Chat Completions</option></select></label>
@@ -1003,7 +1003,7 @@
     </section>
 
     <section id="management-shortcuts" class="grid panels" aria-label="管理入口" data-workspace="overview" data-subview="shortcuts" data-nav-label="管理入口">
-      <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>脱敏运行视图已接入</span></article>
+      <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>已保存值直接回填</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
       <article><h3>规则</h3><p>RSS 黑白名单与可排序规则组。</p><span>管理与预览已接入</span></article>
       <article><h3>动画库</h3><p>封面、季度、TMDB EP 与下载进度。</p><span>列表、排序与 EP 网格已接入</span></article>
@@ -1133,7 +1133,7 @@
       <section id="configuration-preview" class="configuration-preview" aria-labelledby="configuration-preview-title" hidden>
         <div class="configuration-preview-heading">
           <h3 id="configuration-preview-title">保存前差异</h3>
-          <span>服务端验证 · 密钥脱敏</span>
+          <span>服务端验证 · 密钥明文预览</span>
         </div>
         <p id="configuration-preview-summary" class="muted" aria-live="polite"></p>
         <div id="configuration-diff-list" class="configuration-diff-list"></div>
@@ -1193,6 +1193,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="/app.js?v=20260813-config-archive"></script>
+    <script type="module" src="/app.js?v=20260813-visible-config"></script>
 </body>
 </html>

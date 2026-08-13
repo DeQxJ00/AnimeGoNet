@@ -80,7 +80,7 @@ public sealed class ExternalPluginConfigurationServiceTests
     }
 
     [Fact]
-    public async Task SafeViewRedactsAndSafeSaveRetainsWriteOnlyVars()
+    public async Task EditableViewReturnsAndSafeSaveRetainsWriteOnlyVars()
     {
         await using var fixture = await ServiceFixture.CreateAsync();
         await fixture.Service.SaveSafeAsync(
@@ -101,7 +101,7 @@ public sealed class ExternalPluginConfigurationServiceTests
             1);
         var persisted = fixture.Store.GetOrDefault(fixture.PluginId);
 
-        Assert.False(firstView.Vars.Value.TryGetProperty("token", out _));
+        Assert.Equal("secret", firstView.Vars.Value.GetProperty("token").GetString());
         Assert.Equal("/token", Assert.Single(firstView.Vars.ConfiguredWriteOnlyPaths));
         Assert.Equal("secret", persisted.Vars.GetProperty("token").GetString());
         Assert.Equal("720p", persisted.Vars.GetProperty("quality").GetString());

@@ -26,19 +26,19 @@
 - 传入非空密钥：替换私密覆盖。
 - `clear_tmdb_* = true`：明确覆盖为空，即使部署层有值也在重启后关闭对应凭据。
 - 同时传密钥和 clear、换行或超长密钥、带 userinfo 的 TMDB URL 均在写文件前拒绝。
-- GET/PUT/DELETE 响应均不返回密钥内容。
+- GET/PUT 的本机配置编辑响应直接返回当前有效密钥，便于查看和修改；DELETE 仍只返回 revision 结果。日志、错误和运行状态响应不返回密钥内容。
 
 ## 保存前预览
 
 - `POST /api/v1/config/preview` 与 PUT 复用相同的 revision、环境锁、字段规范化和强类型校验，但不写文件、不增 revision。
-- 响应只返回发生变化的字段以及 `restart`/`hot_reload` 效果；TMDB API Key/Read Token 的 before/after 只允许三态文字，不返回值。
+- 响应只返回发生变化的字段以及 `restart`/`hot_reload` 效果；TMDB API Key/Read Token/AI API Key 的 before/after 直接显示当前值和候选值。
 - WebUI 必须先成功预览才允许确认保存；任一输入变化使旧预览和待提交对象失效。
 
 ## 自动验收
 
 - `ApplicationOverrideStoreTests`：原子保存/重载/删除、revision 冲突、不可变 revision 备份、备份冲突 fail-closed、无临时残留、启动应用并验证覆盖已在客户端构造前生效。
-- `ConfigurationApiTests.PrivateConfigurationUsesRevisionAndSecretTriState`：保存、待重启 revision、保留、清除、冲突、恢复部署默认和响应脱敏。
-- `ConfigurationApiTests.PreviewValidatesAndReturnsRedactedEffectAwareDiffWithoutWriting`：预览的效果分类、密钥脱敏、零文件写入及 stale revision 冲突。
+- `ConfigurationApiTests.PrivateConfigurationUsesRevisionAndSecretTriState`：保存、待重启 revision、保留、清除、冲突、恢复部署默认和编辑响应明文回填。
+- `ConfigurationApiTests.PreviewValidatesAndReturnsVisibleEffectAwareDiffWithoutWriting`：预览的效果分类、密钥明文差异、零文件写入及 stale revision 冲突。
 - `ConfigurationApiTests.OverwriteAndResetReportAndPersistPreviousRevisionBackups`：覆盖和恢复都返回并持久化旧 revision 备份。
 - `ConfigurationApiTests.InvalidPrivateConfigurationDoesNotWriteSecretFile`：无效 URL 与冲突密钥输入返回 400，revision 保持 0 且文件不存在。
 - 解决方案全量 434 passed（Core 169、Data 69、App 196）。

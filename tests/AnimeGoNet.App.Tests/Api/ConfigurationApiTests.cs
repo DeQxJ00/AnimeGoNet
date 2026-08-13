@@ -262,7 +262,7 @@ public sealed class ConfigurationApiTests
     }
 
     [Fact]
-    public async Task PreviewValidatesAndReturnsRedactedEffectAwareDiffWithoutWriting()
+    public async Task PreviewValidatesAndReturnsVisibleEffectAwareDiffWithoutWriting()
     {
         await using var app = await RunningApp.StartAsync();
         using var preview = await app.Client.PostAsync(
@@ -273,7 +273,7 @@ public sealed class ConfigurationApiTests
                 cron: "0 15 4 * * ?",
                 manifestUrl: "https://updates.test.invalid/manifest.json",
                 tmdbLanguage: "ja-JP",
-                apiKey: "preview-secret-must-not-return"));
+                apiKey: "preview-secret-visible"));
         var text = await preview.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(text);
 
@@ -289,12 +289,12 @@ public sealed class ConfigurationApiTests
         Assert.Equal("ja-JP", changes["tmdb_language"].GetProperty("after").GetString());
         Assert.Equal("restart", changes["tmdb_language"].GetProperty("effect").GetString());
         Assert.True(changes["tmdb_api_key"].GetProperty("sensitive").GetBoolean());
-        Assert.Equal("inherit", changes["tmdb_api_key"].GetProperty("before").GetString());
-        Assert.Equal("configured", changes["tmdb_api_key"].GetProperty("after").GetString());
+        Assert.Equal(JsonValueKind.Null, changes["tmdb_api_key"].GetProperty("before").ValueKind);
+        Assert.Equal("preview-secret-visible", changes["tmdb_api_key"].GetProperty("after").GetString());
         Assert.Equal(
             "hot_reload",
             changes["data_update_cron"].GetProperty("effect").GetString());
-        Assert.DoesNotContain("preview-secret-must-not-return", text, StringComparison.Ordinal);
+        Assert.Contains("preview-secret-visible", text, StringComparison.Ordinal);
         Assert.Equal(
             0,
             (await app.App.Services.GetRequiredService<ApplicationOverrideStore>()

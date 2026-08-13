@@ -115,7 +115,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 “AI 与 MCP”分区可修改 OpenAI-compatible Base URL、模型、AI API Key、TMDB MCP、Bangumi MCP 和唯一正式 Prompt。后台 Worker 与“AI 匹配测试工具”默认使用同一份有效 Prompt；模板保存前必须保留生产契约的全部占位符和条件区块，最大 128 KiB，可一键载入程序内置默认模板。保存前差异只显示 Prompt 版本、字符数和短 SHA-256，完整模板不进入差异响应。配置编辑器会回填当前有效的 TMDB API Key、Read Token 与 AI API Key；未修改时请求仍按“保留现值”提交，勾选后才明确清除。上述字段都进入部署字段锁，环境变量或命令行已控制时 WebUI 只读且服务端拒绝改写。
 
-运行状态摘要仍只显示 `api_key_configured`、`read_access_token_configured` 和 `access_key_configured`；受统一 API 鉴权保护的 `editable` 配置对象额外返回 TMDB/AI 的当前有效凭据供表单回填。应用自己的 Access Key 不回传，避免已认证页面把认证钥匙本身再暴露。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，未修改的密钥保持原值，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
+运行配置摘要和编辑对话框都从受统一 API 鉴权保护的 `editable` 对象读取并直接显示 TMDB/AI 当前有效凭据；`api_key_configured` 与 `read_access_token_configured` 仍保留作机器状态字段。应用自己的 Access Key 不回传，避免已认证页面把认证钥匙本身再暴露。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，未修改的密钥保持原值，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 
 配置保存采用两个明确步骤。表单提交先调用 `POST /api/v1/config/preview`，服务端使用与实际 PUT 相同的字段锁、规范化和强类型校验，返回字段级 `before/after/effect/sensitive` 投影但不写文件。页面把 `hot_reload` 标为“即时生效”、`restart` 标为“重启生效”；敏感字段无论服务端返回什么都只按 `继承部署配置/已配置（值已隐藏）/已明确清除` 三态渲染。只有预览存在差异时才启用“确认保存并备份”，表单任一输入变化都会使旧预览和待提交对象失效。
 
@@ -133,7 +133,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 Mikan RSS 调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。服务端必须先确认该 profile 已启用且 adapter 为 Mikan，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。响应显示 batch、mikanid、规则 revision、候选决策和实际任务 ID。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
 
-Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。
+Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接显示，便于核对；仍不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。
 
 ## 10. Mikan 人工作品规则
 
@@ -160,7 +160,7 @@ Torrent URL 与 RSS URL 都按敏感值处理：页面使用密码输入，不�
 
 离线导入不要求 manifest URL。页面只接受一个 ZIP，并在请求建立后立即清空文件选择；不保存上传文件名、本机路径或 ZIP 本体。ZIP 根目录必须严格等于 `manifest.json + assets[].file_name`，服务端拒绝额外条目、目录、路径穿越、重复名称、长度或 SHA-256 不符。上传先进入 `data_path/data-update/.partial-*`，成功后只保留已验证包目录；失败清理 partial 且不改变 active。
 
-“编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前先显示脱敏字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
+“编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前显示包含密钥明文的字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
 
 ## 12. 一级/二级导航
 
@@ -209,10 +209,10 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
 自动禁用；它不会立即执行插件、改写或删除包，也不会伪造“已启用”。刷新按钮重新读取
 运行状态和 `GET /api/v1/plugins` 配置 revision。
 
-“启停与参数”按每个包的 `config.schema.json` 生成 string/password、enum、boolean、
+“启停与参数”按每个包的 `config.schema.json` 生成 string、enum、boolean、
 integer/number 与 JSON 容器控件。args 是非凭据 JSON 对象且只作为任务缺省值；vars
-通过 schema 校验后传入协议 config。`writeOnly` 值永不回显，页面只显示“已配置”；
-密码框留空时保留旧值，勾选“清除已保存值”才删除。保存使用全局 revision 防止多页面
+通过 schema 校验后传入协议 config。`writeOnly` 值在配置页面以普通文本或 JSON 直接回填；
+勾选“清除已保存值”才删除。保存使用全局 revision 防止多页面
 覆盖，并停止旧会话；“恢复默认禁用”明确确认后删除该插件私有配置，不删除插件包或
 plugin-data。
 

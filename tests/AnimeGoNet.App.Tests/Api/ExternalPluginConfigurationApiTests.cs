@@ -12,7 +12,7 @@ public sealed class ExternalPluginConfigurationApiTests
     private const string SecretValue = "external-plugin-secret-value";
 
     [Fact]
-    public async Task ListReturnsSafeDisabledDefaultAndSchema()
+    public async Task ListReturnsEditableDisabledDefaultAndSchema()
     {
         await using var app = await StartAsync();
 
@@ -28,12 +28,15 @@ public sealed class ExternalPluginConfigurationApiTests
         Assert.False(item.GetProperty("enabled").GetBoolean());
         Assert.Equal(0, item.GetProperty("entry_revision").GetInt64());
         Assert.Equal("object", item.GetProperty("schema").GetProperty("type").GetString());
-        Assert.DoesNotContain(SecretValue, text, StringComparison.Ordinal);
+        Assert.Equal(
+            SecretValue,
+            item.GetProperty("schema").GetProperty("properties")
+                .GetProperty("token").GetProperty("default").GetString());
         Assert.DoesNotContain(app.RootPath, text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task SaveNeverReturnsWriteOnlyValueAndListShowsConfiguredState()
+    public async Task SaveReturnsWriteOnlyValueToConfigurationApiButNotRuntimeStatus()
     {
         await using var app = await StartAsync();
 
@@ -55,8 +58,8 @@ public sealed class ExternalPluginConfigurationApiTests
             .GetProperty("external_plugins").GetProperty("packages").EnumerateArray());
 
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
-        Assert.DoesNotContain(SecretValue, savedText, StringComparison.Ordinal);
-        Assert.DoesNotContain(SecretValue, listedText, StringComparison.Ordinal);
+        Assert.Contains(SecretValue, savedText, StringComparison.Ordinal);
+        Assert.Contains(SecretValue, listedText, StringComparison.Ordinal);
         Assert.DoesNotContain(SecretValue, statusText, StringComparison.Ordinal);
         Assert.Equal(
             "/token",
@@ -66,7 +69,7 @@ public sealed class ExternalPluginConfigurationApiTests
         Assert.True(item.GetProperty("enabled").GetBoolean());
         Assert.True(statusPackage.GetProperty("configured").GetBoolean());
         Assert.True(statusPackage.GetProperty("enabled").GetBoolean());
-        Assert.False(item.GetProperty("vars").TryGetProperty("token", out _));
+        Assert.Equal(SecretValue, item.GetProperty("vars").GetProperty("token").GetString());
         Assert.Contains(
             SecretValue,
             await File.ReadAllTextAsync(ConfigurationPath(app)),

@@ -14,9 +14,19 @@ public sealed class AiMetadataTestApiTests
     private const string EpisodeId = "0123456789abcdef0123456789abcdef01234567";
 
     [Fact]
-    public async Task ExposesValidatedTesterPromptAndSecretFreeBootstrap()
+    public async Task ExposesValidatedTesterPromptAndConfiguredBootstrap()
     {
-        await using var app = await RunningApp.StartAsync();
+        await using var app = await RunningApp.StartAsync(configure: options => options with
+        {
+            Metadata = options.Metadata with
+            {
+                Ai = options.Metadata.Ai with
+                {
+                    ApiKey = "configured-ai-test-key",
+                    Model = "configured-ai-test-model",
+                },
+            },
+        });
 
         var prompt = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/prompt");
         var bootstrap = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/bootstrap");
@@ -28,7 +38,12 @@ public sealed class AiMetadataTestApiTests
             prompt.GetProperty("default_template").GetString(),
             prompt.GetProperty("template").GetString());
         Assert.False(prompt.GetProperty("customized").GetBoolean());
-        Assert.Equal(string.Empty, bootstrap.GetProperty("defaults").GetProperty("api_key").GetString());
+        Assert.Equal(
+            "configured-ai-test-key",
+            bootstrap.GetProperty("defaults").GetProperty("api_key").GetString());
+        Assert.Equal(
+            "configured-ai-test-model",
+            bootstrap.GetProperty("defaults").GetProperty("model").GetString());
         Assert.Equal(
             prompt.GetProperty("template").GetString(),
             bootstrap.GetProperty("prompt_template").GetString());

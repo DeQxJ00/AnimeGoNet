@@ -1571,7 +1571,7 @@ public static class ApiEndpoints
             var currentDesired = locks.Reapply(
                 deployment.Value,
                 ApplicationOverrideStore.Apply(deployment.Value, current));
-            var (settings, candidate) = BuildConfigurationCandidate(
+            var (_, candidate) = BuildConfigurationCandidate(
                 request,
                 current,
                 deployment.Value,
@@ -1579,9 +1579,7 @@ public static class ApiEndpoints
             var changes = ConfigurationChanges(
                 request,
                 currentDesired,
-                candidate,
-                current.Settings,
-                settings);
+                candidate);
             return TypedResults.Ok(new ConfigurationPreviewResponse(
                 request.ExpectedConfigurationRevision,
                 current.Revision,
@@ -1988,9 +1986,7 @@ public static class ApiEndpoints
     private static List<ConfigurationChangeResponse> ConfigurationChanges(
         ConfigurationUpdateRequest request,
         AnimeGoOptions current,
-        AnimeGoOptions candidate,
-        ApplicationOverrideEntry? currentSettings,
-        ApplicationOverrideEntry candidateSettings)
+        AnimeGoOptions candidate)
     {
         var changes = new List<ConfigurationChangeResponse>();
         var invariant = System.Globalization.CultureInfo.InvariantCulture;
@@ -2044,14 +2040,14 @@ public static class ApiEndpoints
             "tmdb_api_key",
             request.TmdbApiKey,
             request.ClearTmdbApiKey,
-            currentSettings?.TmdbApiKeyOverridden == true,
-            currentSettings?.TmdbApiKey);
+            beforeTmdb.ApiKey,
+            afterTmdb.ApiKey);
         AddSecret(
             "tmdb_read_access_token",
             request.TmdbReadAccessToken,
             request.ClearTmdbReadAccessToken,
-            currentSettings?.TmdbReadAccessTokenOverridden == true,
-            currentSettings?.TmdbReadAccessToken);
+            beforeTmdb.ReadAccessToken,
+            afterTmdb.ReadAccessToken);
         Add(
             "bangumi_base_url",
             beforeBangumi.BaseUrl.AbsoluteUri,
@@ -2088,12 +2084,8 @@ public static class ApiEndpoints
         {
             Add(
                 "ai_api_key",
-                SecretState(
-                    currentSettings?.AiApiKeyOverridden == true,
-                    currentSettings?.AiApiKey),
-                SecretState(
-                    candidateSettings.AiApiKeyOverridden == true,
-                    candidateSettings.AiApiKey),
+                beforeAi.ApiKey,
+                afterAi.ApiKey,
                 sensitive: true,
                 force: true);
         }
@@ -2224,8 +2216,8 @@ public static class ApiEndpoints
             string field,
             string? requestedValue,
             bool clear,
-            bool currentOverridden,
-            string? currentValue)
+            string? currentValue,
+            string? candidateValue)
         {
             if (!clear && string.IsNullOrWhiteSpace(requestedValue))
             {
@@ -2233,16 +2225,8 @@ public static class ApiEndpoints
             }
             Add(
                 field,
-                SecretState(currentOverridden, currentValue),
-                clear
-                    ? "cleared"
-                    : SecretState(
-                        field == "tmdb_api_key"
-                            ? candidateSettings.TmdbApiKeyOverridden
-                            : candidateSettings.TmdbReadAccessTokenOverridden,
-                        field == "tmdb_api_key"
-                            ? candidateSettings.TmdbApiKey
-                            : candidateSettings.TmdbReadAccessToken),
+                currentValue,
+                clear ? null : candidateValue,
                 sensitive: true,
                 force: true);
         }

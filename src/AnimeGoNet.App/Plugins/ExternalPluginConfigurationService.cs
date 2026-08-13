@@ -160,6 +160,7 @@ public sealed class ExternalPluginConfigurationService
             .ConfigureAwait(false);
         var schema = await _validator.LoadSchemaAsync(currentPackage, cancellationToken)
             .ConfigureAwait(false);
+        var projected = ExternalPluginConfigurationSecrets.ProjectSafe(schema, entry.Vars);
         return new ExternalPluginConfigurationView(
             package,
             entry.Revision > 0,
@@ -167,8 +168,10 @@ public sealed class ExternalPluginConfigurationService
             entry.Revision,
             entry.Revision > 0 ? entry.UpdatedAtUtc : null,
             entry.Args.Clone(),
-            ExternalPluginConfigurationSecrets.ProjectSafe(schema, entry.Vars),
-            ExternalPluginConfigurationSecrets.ProjectSafeSchema(schema));
+            new ExternalPluginSafeVars(
+                entry.Vars.Clone(),
+                projected.ConfiguredWriteOnlyPaths),
+            schema.Clone());
     }
 
     private async Task<ExternalPluginPackage> ReloadRequiredAsync(

@@ -107,5 +107,5 @@ schema v24 的 `download_job_events` 保存调度确认、qB 状态变化、快�
 5. 活动/空闲/隐藏页面刷新节奏，无重复在途请求和浏览器直连qB。
 6. 重启后按实例+hash恢复，快照过期明确显示且不重复添加Torrent。
 7. 暂停/恢复幂等、revision冲突、安全业务重试和删除中心跳转。
-8. 密钥、passkey、announce和完整敏感路径不出现在API、日志、DOM和截图。
+8. 密钥、passkey、announce和完整敏感路径不出现在下载进度/任务 API、日志、进度 DOM和截图；独立配置编辑页按便利要求允许回填 qB 凭据。
 9. NativeAOT发布目录和Docker `linux/amd64`、`linux/arm64`运行进度页Playwright E2E。

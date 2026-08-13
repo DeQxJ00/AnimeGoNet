@@ -291,22 +291,18 @@ function createExternalPluginVarField(propertyName, schema, value, required, con
     let control;
     if (schema.writeOnly && (schema.type === "string" || schema.type === undefined)) {
         const input = document.createElement("input");
-        input.type = "password";
+        input.type = "text";
         input.autocomplete = "off";
-        input.value = "";
+        input.value = typeof value === "string" ? value : "";
         input.dataset.pluginVarKind = "write-only";
-        if (configuredWriteOnlyPaths.has(pointer)) {
-            input.placeholder = "已配置；留空保留";
-        }
+        input.placeholder = "输入敏感值";
         control = input;
     }
     else if (schema.writeOnly) {
         const textarea = document.createElement("textarea");
         textarea.rows = 4;
-        textarea.value = "";
-        textarea.placeholder = configuredWriteOnlyPaths.has(pointer)
-            ? "已配置；留空保留"
-            : "输入 JSON 值";
+        textarea.value = value === undefined ? "" : JSON.stringify(value, null, 2);
+        textarea.placeholder = "输入 JSON 值";
         textarea.dataset.pluginVarKind = "write-only-json";
         control = textarea;
     }
@@ -396,12 +392,16 @@ function createExternalPluginNestedSecretClear(path) {
 }
 function collectExternalPluginVars(form) {
     const vars = {};
+    const clearWriteOnlyPaths = Array.from(form.querySelectorAll("[data-clear-write-only]")).filter(input => input.checked).map(input => input.dataset.clearWriteOnly);
+    const cleared = new Set(clearWriteOnlyPaths);
     const controls = Array.from(form.querySelectorAll("[data-plugin-var]"));
     for (const control of controls) {
         const name = control.dataset.pluginVar;
         const kind = control.dataset.pluginVarKind;
         const required = control.dataset.pluginVarRequired === "true";
         if (!name || !kind)
+            continue;
+        if (cleared.has(externalPluginPointer(name)))
             continue;
         if (kind === "boolean" && control instanceof HTMLInputElement) {
             vars[name] = control.checked;
@@ -430,7 +430,6 @@ function collectExternalPluginVars(form) {
             vars[name] = control.value;
         }
     }
-    const clearWriteOnlyPaths = Array.from(form.querySelectorAll("[data-clear-write-only]")).filter(input => input.checked).map(input => input.dataset.clearWriteOnly);
     return { vars, clearWriteOnlyPaths };
 }
 function externalPluginConfigurationForm(configuration, configurationRevision) {
@@ -2222,10 +2221,9 @@ function seasonFailurePriority(metadata) {
     return panel;
 }
 function metadataConfigurationCard(config) {
-    const tmdbCredential = config.metadata.tmdb.api_key_configured
-        || config.metadata.tmdb.read_access_token_configured;
     const card = configurationCard("TMDB 与季度失败链", [
-        ["TMDB", tmdbCredential ? "凭据已配置（值已隐藏）" : "未配置凭据"],
+        ["TMDB API Key", config.editable.tmdb_api_key ?? "未配置"],
+        ["TMDB Read Access Token", config.editable.tmdb_read_access_token ?? "未配置"],
         ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
         ["超时", `${config.metadata.tmdb.http_timeout_seconds} 秒`],
         [
@@ -2259,7 +2257,7 @@ function metadataConfigurationCard(config) {
 async function loadConfiguration() {
     const status = element("#configuration-status");
     const container = element("#configuration");
-    status.textContent = "正在读取脱敏后的生效配置…";
+    status.textContent = "正在读取包含已保存凭据的生效配置…";
     try {
         const response = await fetch("/api/v1/config", { headers });
         if (!response.ok)
@@ -2294,7 +2292,7 @@ async function loadConfiguration() {
             configurationCard("AI、偏移与 Torrent", [
                 ["OpenAI API", config.metadata.ai.base_url ?? "未配置"],
                 ["模型", config.metadata.ai.model ?? "未配置"],
-                ["API Key", config.metadata.ai.api_key_configured ? "已配置（值已隐藏）" : "未配置"],
+                ["API Key", config.editable.ai_api_key ?? "未配置"],
                 ["TMDB MCP", config.metadata.ai.tmdb_mcp_url],
                 ["Bangumi MCP", config.metadata.ai.bangumi_mcp_url],
                 [
@@ -2845,15 +2843,7 @@ function clearConfigurationPreview(message) {
         element("#configuration-message").textContent = message;
     }
 }
-function configurationPreviewValue(value, sensitive) {
-    if (sensitive) {
-        switch (value) {
-            case "inherit": return "继承部署配置";
-            case "configured": return "已配置（值已隐藏）";
-            case "cleared": return "已明确清除";
-            default: return "值已隐藏";
-        }
-    }
+function configurationPreviewValue(value, _sensitive) {
     if (value === null || value.length === 0)
         return "未配置";
     if (value === "true")
@@ -2910,7 +2900,7 @@ async function previewConfiguration(event) {
     const message = element("#configuration-message");
     clearConfigurationPreview();
     previewButton.disabled = true;
-    message.textContent = "正在验证并生成脱敏差异…";
+    message.textContent = "正在验证并生成明文差异…";
     try {
         const request = configurationRequest();
         const requestHeaders = new Headers(headers);
@@ -4550,7 +4540,7 @@ async function loadDownloaders() {
             ? `下载已被 ${body.migration_diagnostics.map((item) => item.code).join("、")} 阻断；不会连接或启动任何下载器任务`
             : body.restart_required
                 ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
-                : `${body.items.length} 个 qBittorrent 实例 · 凭据只显示是否配置`;
+                : `${body.items.length} 个 qBittorrent 实例 · 用户名和密码可在配置中直接查看`;
     }
     catch (error) {
         const message = `下载器读取失败：${errorMessage(error, "未知错误")}`;
@@ -6024,6 +6014,7 @@ async function loadAiTestPrompt() {
         editor.disabled = false;
         const defaults = bootstrap.defaults;
         element("#ai-test-base-url").value = defaults.base_url;
+        element("#ai-test-api-key").value = defaults.api_key;
         element("#ai-test-model").value = defaults.model;
         element("#ai-test-api-mode").value = defaults.mode === 0
             ? "responses"
@@ -6201,14 +6192,10 @@ function fillAiMetadataTestExample() {
 let activeAiTesterRunId = null;
 const aiTesterFormStorageKey = "animegonet.aiTester.form.v2";
 const aiTesterPersistedFields = [
-    "ai-test-base-url", "ai-test-model", "ai-test-timeout", "ai-test-http-proxy",
-    "ai-test-enable-tmdb-mcp", "ai-test-enable-bgm-mcp", "ai-test-tmdb-mcp-url",
-    "ai-test-bgm-mcp-url", "ai-test-use-bgm-pubdate", "ai-test-enable-anidb",
-    "ai-test-anidb-template", "ai-test-api-mode", "ai-test-reasoning-effort",
-    "ai-test-title", "ai-test-bgmid", "ai-test-anidbid", "ai-test-mikan-url",
+    "ai-test-use-bgm-pubdate", "ai-test-title", "ai-test-bgmid", "ai-test-anidbid", "ai-test-mikan-url",
     "ai-test-published-at", "ai-test-bgm-episode", "ai-test-is-mikan-source",
     "ai-test-torrent-import-id", "ai-test-file-count", "ai-test-files-json",
-    "ai-test-file-candidates", "ai-test-web-search",
+    "ai-test-file-candidates",
 ];
 function buildAiTesterRunRequest() {
     JSON.parse(element("#ai-test-files-json").value);
@@ -6476,8 +6463,7 @@ element("#ai-test-prompt-reset").addEventListener("click", resetAiTestPrompt);
 element("#ai-test-prompt-template").addEventListener("input", saveAiPromptDraft);
 element("#ai-test-form").addEventListener("input", event => {
     const target = event.target;
-    if (target.id !== "ai-test-api-key")
-        persistAiTesterForm();
+    persistAiTesterForm();
     updateAiTesterSourceStates();
 });
 element("#library-sort").value = libraryState.sort;

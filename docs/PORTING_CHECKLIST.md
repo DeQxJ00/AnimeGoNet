@@ -91,7 +91,7 @@
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
 | Mikan source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出和真实统一导入 normalizer tests |
 | U2/TTG source adapter | 保留编译期扩展骨架 | 扩展 | 暂缓 | 代码与协议回归测试保留，但不属于首版正式支持范围 |
-| `/api/config` | legacy deployment config + typed private overrides | 保留+扩展 | 已验证 | legacy `all/default/comment/raw` GET 与 `all/raw` PUT 保持 HTTP 200 + code 200/300、query 覆盖 body、Access-Key 和“重启后应用”；JSON/Base64/YAML/版本/强类型值先在同目录隔离文件验证，通过后才以 CreateNew 保存可选原字节备份并原子替换。现代 `/api/v1/config` 继续只返回脱敏生效值/safe editable desired projection，并通过 preview、revision PUT/DELETE、私有 0600 覆盖和 Web 两步确认管理；WebUI 不调用会回传 secret 的 legacy raw/all 接口 |
+| `/api/config` | legacy deployment config + typed private overrides | 保留+扩展 | 已验证 | legacy `all/default/comment/raw` GET 与 `all/raw` PUT 保持 HTTP 200 + code 200/300、query 覆盖 body、Access-Key 和“重启后应用”；JSON/Base64/YAML/版本/强类型值先在同目录隔离文件验证，通过后才以 CreateNew 保存可选原字节备份并原子替换。现代 `/api/v1/config` 返回含当前凭据的本机 editable projection，并通过明文 preview、revision PUT/DELETE、私有 0600 覆盖和 Web 两步确认管理；日志、运行状态和错误仍脱敏 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 Access-Key Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
 | `/websocket/log` | AOT-safe WebSocket logs | 保留 | 已验证 | 非 upgrade 兼容响应、直接/旧 hash 鉴权、旧帧 envelope、逐连接 pause/resume/terminate、1000 条缓存、异常命令、敏感字段脱敏、WebUI 和 win-x64 NativeAOT upgrade/control smoke 已通过 |
