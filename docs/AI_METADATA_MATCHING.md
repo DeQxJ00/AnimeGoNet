@@ -102,7 +102,7 @@ WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Test
 - IMDb：不注册任意 URL 工具；仅 `imdbid != null` 时注册参数为空的 `lookup_imdb_tmdb_tv`。主程序把已规范化的固定 IMDb ID 交给 TMDB MCP external ID/find，程序侧删除 Movie 结果，仅把正整数 TV Series ID 候选返回模型；通用 `tmdb__invoke-api-endpoint` 若调用 `/3/find`，也必须使用同一任务绑定 ID 和 `external_source=imdb_id`，否则在发往 MCP 前拒绝。
 - Web Search：只有适用 MCP 无结果、报错或信息不足后才可调用；不得作为第一数据源。
 
-两个 MCP 当前均实现 Streamable HTTP MCP `2025-03-26`，暴露 `list-api-endpoints`、`get-api-endpoint-schema`、`invoke-api-endpoint`。转换为模型函数时分别增加 `bgm__`、`tmdb__` 前缀，避免同名冲突。实现必须限制工具轮数、超时、参数/响应大小，并支持取消及 JSON/SSE 响应。
+两个 MCP 当前均实现 Streamable HTTP MCP `2025-03-26`，暴露 `list-api-endpoints`、`get-api-endpoint-schema`、`invoke-api-endpoint`。转换为模型函数时分别增加 `bgm__`、`tmdb__` 前缀，避免同名冲突。实现必须限制工具轮数、超时、参数/响应大小，并支持取消、同步 JSON 响应，以及 `tools/call` 返回 202 后用同一 session GET SSE 取得对应 JSON-RPC request id 的响应。MCP DNS、连接、一般网络、HTTP鉴权/限流/服务端/拒绝、SSE、协议和工具 `isError` 分别记录稳定错误码；模型未调用必需 TMDB MCP 使用 `ai_tmdb_mcp_not_used`，上述故障不得降格成普通未匹配。
 
 AniDB映射 URL 固定为：
 

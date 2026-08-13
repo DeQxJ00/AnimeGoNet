@@ -177,6 +177,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                                 "ai_response_content_missing");
                         }
 
+                        registry.EnsureRequiredTmdbToolWasUsed();
                         var candidate = ParseCandidate(parsed.Content);
                         var snapshot = usage.Snapshot();
                         return new AiMetadataMatchResponse(candidate, snapshot)
@@ -259,6 +260,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                             "ai_response_content_missing");
                     }
 
+                    registry.EnsureRequiredTmdbToolWasUsed();
                     var candidate = ParseCandidate(parsed.Content);
                     var snapshot = usage.Snapshot();
                     return new AiMetadataMatchResponse(candidate, snapshot)
@@ -357,12 +359,20 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         }
         catch (HttpRequestException exception)
         {
+            var safeCode = exception.HttpRequestError switch
+            {
+                HttpRequestError.NameResolutionError => "ai_dns_error",
+                HttpRequestError.ConnectionError
+                    or HttpRequestError.SecureConnectionError
+                    or HttpRequestError.ProxyTunnelError => "ai_connection_error",
+                _ => "ai_network_error",
+            };
             throw new AiMetadataMatcherException(
                 MetadataFailureKind.Network,
-                "ai_network_error",
+                safeCode,
                 exception,
                 usage.Snapshot(),
-                debugCapture?.Complete(null, null, usage.Snapshot(), "ai_network_error"));
+                debugCapture?.Complete(null, null, usage.Snapshot(), safeCode));
         }
         catch (JsonException exception)
         {

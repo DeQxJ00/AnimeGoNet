@@ -254,6 +254,29 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
         Assert.Equal(1, handler.AiCalls);
     }
 
+    [Theory]
+    [InlineData(HttpRequestError.NameResolutionError, "ai_dns_error")]
+    [InlineData(HttpRequestError.ConnectionError, "ai_connection_error")]
+    [InlineData(HttpRequestError.Unknown, "ai_network_error")]
+    public async Task ProviderNetworkFailuresUseSpecificClassification(
+        HttpRequestError requestError,
+        string expectedCode)
+    {
+        var handler = new FakeAiAndMcpHandler
+        {
+            AiFailure = new HttpRequestException(requestError, "test transport failure"),
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
+            () => matcher.MatchAsync(Input()));
+
+        Assert.Equal(MetadataFailureKind.Network, exception.Kind);
+        Assert.Equal(expectedCode, exception.SafeCode);
+        Assert.Equal(1, handler.AiCalls);
+    }
+
     [Fact]
     public async Task MalformedChatJsonUsesStableProtocolClassification()
     {
@@ -310,25 +333,31 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     [Fact]
     public async Task McpToolSchemaCacheAvoidsRepeatedDiscoveryForSameEndpoint()
     {
-        var handler = new FakeAiAndMcpHandler();
-        using var client = new HttpClient(handler);
         var options = Options() with
         {
             TmdbMcpUrl = new Uri("http://tmdb.test.invalid/mcp/cache-boundary-v1"),
         };
+        var firstHandler = new FakeAiAndMcpHandler();
+        using var firstClient = new HttpClient(firstHandler);
 
-        using (var first = new OpenAiCompatibleMetadataMatcher(client, options))
+        using (var first = new OpenAiCompatibleMetadataMatcher(firstClient, options))
         {
             Assert.True((await first.MatchAsync(Input())).Matched);
         }
 
-        using (var second = new OpenAiCompatibleMetadataMatcher(client, options))
+        var secondHandler = new FakeAiAndMcpHandler();
+        using var secondClient = new HttpClient(secondHandler);
+        using (var second = new OpenAiCompatibleMetadataMatcher(secondClient, options))
         {
             Assert.True((await second.MatchAsync(Input())).Matched);
         }
 
-        Assert.Equal(2, handler.McpInitializeCalls);
-        Assert.Equal(1, handler.McpToolsListCalls);
+        Assert.Equal(
+            2,
+            firstHandler.McpInitializeCalls + secondHandler.McpInitializeCalls);
+        Assert.Equal(
+            1,
+            firstHandler.McpToolsListCalls + secondHandler.McpToolsListCalls);
     }
 
     [Fact]
@@ -535,6 +564,8 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
 
         public bool RejectAllResponsesContinuations { get; init; }
 
+        public HttpRequestException? AiFailure { get; init; }
+
         public string? RawAiResponse { get; init; }
 
         public string? FinalModelResult { get; init; }
@@ -576,6 +607,11 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             AiCalls++;
             AuthorizationValues.Add(request.Headers.Authorization?.ToString());
             AiBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            if (AiFailure is not null)
+            {
+                throw AiFailure;
+            }
+
             if (DelayAiResponse)
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);

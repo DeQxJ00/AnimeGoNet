@@ -113,7 +113,7 @@
 - [x] 实现 Mikan 单文件发布日期 Prompt 提示和显式开关：保留完整 `pubDate`，无偏移时按 SourceProfile 时区解析；`published_at` 只在 Mikan AI 输入出现且不设日期拒绝窗口，可选 `bgm_episode_candidate` 失败时安全回通用统一 AI 流程。
 - [x] 同步 AI 测试程序：增加可编辑开关和手工 `bgm_episode_candidate`、只读有效门禁；覆盖两种单文件Torrent、实际多文件禁用、无bgmid/日期/候选禁用和优先分支失败回退。
 - [x] 使用固定 JSON 请求/响应 DTO 调用 OpenAI-compatible API；输入/输出结构、文件身份和结果完整性先校验，模型候选再由 TMDB Series/Season/Episode API 二次验证。
-- [x] 实现 AOT-safe 本地 Streamable HTTP MCP 客户端和 function-calling 工具循环；BGM/TMDB 工具使用命名空间，覆盖 JSON/SSE、session、工具 schema 缓存、超时、取消、响应上限和失败隔离。
+- [x] 实现 AOT-safe 本地 Streamable HTTP MCP 客户端和 function-calling 工具循环；BGM/TMDB 工具使用命名空间，覆盖同步 JSON、`tools/call` 202 后按 session GET SSE、request id 校验、工具 schema 缓存、超时、取消、响应上限和失败隔离。AI/MCP 的 DNS、连接、一般网络、鉴权、限流、服务端、HTTP拒绝、SSE、协议、工具 `isError` 与模型未使用必需 TMDB MCP 均有独立稳定错误码，不再伪装成普通匹配失败；真实 MCP 回放已验证。
 - [x] 实现可空 `anidbid` → `tmdbtv` 候选查询：URL 固定、模型零参数、响应有界、禁止重定向/代理并将 DNS 连接钉在公网地址；候选仍需 TMDB MCP 与主程序 API 验证。
 - [x] 实现可空 `imdbid` 规范化和固定零参数 `lookup_imdb_tmdb_tv`：主程序调用 TMDB MCP external ID/find，程序侧删除 Movie 结果，只返回正整数 TV Series 候选，最终 Series/Season/Episode 逐级验证。
 - [x] AI 和确定性匹配均拒绝 Season 0；Series/Season 已确认但 Episode 未匹配的小数集、特别篇、普通 TMDB EP 不存在、AI 未匹配和孤立字幕均持久化 `Other` 及稳定原因，实际保留原名整理到 `<TmdbName>/Sxx/Other/`；不生成 Episode completion/alias/claim 或 `Eyyy.e_json` 伪进度。AI 仅在统一开关开启且任务此前未尝试时调用，季度阶段尝试后不会在 Episode 阶段重复调用。

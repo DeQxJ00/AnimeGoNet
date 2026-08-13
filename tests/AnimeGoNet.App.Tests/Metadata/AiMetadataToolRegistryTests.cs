@@ -187,6 +187,182 @@ public sealed class AiMetadataToolRegistryTests
         Assert.Empty(handler.InvokeArguments);
     }
 
+    [Fact]
+    public async Task ToolCallAcceptsStreamableHttpAcceptedResponseAndReadsSessionSseResult()
+    {
+        var handler = new StreamableMcpHandler();
+        using var client = new HttpClient(handler);
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                TmdbMcpUrl = new Uri("http://tmdb-streamable.test.invalid/mcp"),
+            },
+            Input());
+
+        await registry.InitializeAsync(CancellationToken.None);
+        var output = await registry.CallAsync(
+            "tmdb__tv-episode-details",
+            """{"series_id":65942,"season_number":1,"episode_number":78}""",
+            CancellationToken.None);
+
+        using var result = JsonDocument.Parse(output);
+        Assert.False(result.RootElement.GetProperty("isError").GetBoolean());
+        Assert.Contains(
+            "\"episode_number\":78",
+            result.RootElement.GetProperty("content")[0].GetProperty("text").GetString(),
+            StringComparison.Ordinal);
+        Assert.Equal(1, handler.SseRequestCount);
+        Assert.Equal(1, handler.AcceptedToolCallCount);
+    }
+
+    [Fact]
+    public async Task TmdbMcpTransportFailureIsNotReportedAsMetadataNoMatch()
+    {
+        var handler = new FailingToolMcpHandler();
+        using var client = new HttpClient(handler);
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                TmdbMcpUrl = new Uri("http://tmdb-failing-tool.test.invalid/mcp"),
+            },
+            Input());
+
+        await registry.InitializeAsync(CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(() =>
+            registry.CallAsync(
+                "tmdb__tv-episode-details",
+                """{"series_id":65942,"season_number":1,"episode_number":78}""",
+                CancellationToken.None));
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("ai_tmdb_mcp_sse_error", exception.SafeCode);
+    }
+
+    [Theory]
+    [InlineData(HttpRequestError.NameResolutionError, "ai_tmdb_mcp_dns_error")]
+    [InlineData(HttpRequestError.ConnectionError, "ai_tmdb_mcp_connection_error")]
+    [InlineData(HttpRequestError.Unknown, "ai_tmdb_mcp_network_error")]
+    public async Task TmdbMcpNetworkFailuresUseSpecificClassification(
+        HttpRequestError requestError,
+        string expectedCode)
+    {
+        using var client = new HttpClient(new ThrowingMcpHandler(
+            new HttpRequestException(requestError, "test MCP transport failure")));
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                TmdbMcpUrl = new Uri("http://tmdb-network.test.invalid/mcp"),
+            },
+            Input());
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(() =>
+            registry.InitializeAsync(CancellationToken.None));
+
+        Assert.Equal(MetadataFailureKind.Network, exception.Kind);
+        Assert.Equal(expectedCode, exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task BangumiMcpConnectionFailureUsesBangumiClassification()
+    {
+        using var client = new HttpClient(new ThrowingMcpHandler(
+            new HttpRequestException(
+                HttpRequestError.ConnectionError,
+                "test Bangumi MCP connection failure")));
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                BangumiMcpUrl = new Uri("http://bangumi-network.test.invalid/mcp"),
+            },
+            Input() with
+            {
+                BangumiSubjectId = 123,
+                PromptFeaturesOverride = new(false, true, false, false),
+            });
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(() =>
+            registry.InitializeAsync(CancellationToken.None));
+
+        Assert.Equal(MetadataFailureKind.Network, exception.Kind);
+        Assert.Equal("ai_bangumi_mcp_connection_error", exception.SafeCode);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, MetadataFailureKind.Authentication, "ai_tmdb_mcp_authentication_failed")]
+    [InlineData(HttpStatusCode.TooManyRequests, MetadataFailureKind.RemoteService, "ai_tmdb_mcp_rate_limited")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, MetadataFailureKind.RemoteService, "ai_tmdb_mcp_service_error")]
+    [InlineData(HttpStatusCode.BadRequest, MetadataFailureKind.Protocol, "ai_tmdb_mcp_http_rejected")]
+    public async Task TmdbMcpHttpFailuresUseSpecificClassification(
+        HttpStatusCode statusCode,
+        MetadataFailureKind expectedKind,
+        string expectedCode)
+    {
+        using var client = new HttpClient(new StatusMcpHandler(statusCode));
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                TmdbMcpUrl = new Uri("http://tmdb-http.test.invalid/mcp"),
+            },
+            Input());
+
+        var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(() =>
+            registry.InitializeAsync(CancellationToken.None));
+
+        Assert.Equal(expectedKind, exception.Kind);
+        Assert.Equal(expectedCode, exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task RequiredTmdbToolNotUsedHasDedicatedClassification()
+    {
+        var handler = new ReferenceToolHandler();
+        using var client = new HttpClient(handler);
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                TmdbMcpUrl = new Uri("http://tmdb-reference.test.invalid/mcp"),
+            },
+            Input());
+
+        await registry.InitializeAsync(CancellationToken.None);
+        var exception = Assert.Throws<AiMetadataMatcherException>(
+            registry.EnsureRequiredTmdbToolWasUsed);
+
+        Assert.Equal(MetadataFailureKind.Protocol, exception.Kind);
+        Assert.Equal("ai_tmdb_mcp_not_used", exception.SafeCode);
+    }
+
+    [Fact]
+    public async Task TmdbMcpToolErrorHasDedicatedClassification()
+    {
+        using var client = new HttpClient(new ErrorResultMcpHandler());
+        var registry = new AiMetadataToolRegistry(
+            client,
+            new AiMatchingOptions
+            {
+                TmdbMcpUrl = new Uri("http://tmdb-tool-error.test.invalid/mcp"),
+            },
+            Input());
+
+        await registry.InitializeAsync(CancellationToken.None);
+        var output = await registry.CallAsync(
+            "tmdb__tv-season-details",
+            """{"series_id":65942,"season_number":4}""",
+            CancellationToken.None);
+        Assert.Contains("\"isError\":true", output, StringComparison.Ordinal);
+
+        var exception = Assert.Throws<AiMetadataMatcherException>(
+            registry.EnsureRequiredTmdbToolWasUsed);
+        Assert.Equal(MetadataFailureKind.RemoteService, exception.Kind);
+        Assert.Equal("ai_tmdb_mcp_tool_error", exception.SafeCode);
+    }
+
     private static AiMetadataMatchInput Input() =>
         new(
             "Task",
@@ -293,5 +469,185 @@ public sealed class AiMetadataToolRegistryTests
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
+    }
+
+    private sealed class StreamableMcpHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource<string> _ssePayload = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int SseRequestCount { get; private set; }
+
+        public int AcceptedToolCallCount { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Get)
+            {
+                SseRequestCount++;
+                var payload = await _ssePayload.Task.WaitAsync(cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "data: " + payload + "\n\n",
+                        Encoding.UTF8,
+                        "text/event-stream"),
+                };
+            }
+
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            if (body.Contains(
+                "\"method\":\"notifications/initialized\"",
+                StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
+            }
+
+            using var document = JsonDocument.Parse(body);
+            var method = document.RootElement.GetProperty("method").GetString();
+            var id = document.RootElement.GetProperty("id").GetInt32();
+            if (method == "initialize")
+            {
+                var response = Json(
+                    HttpStatusCode.OK,
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{}},\"serverInfo\":{{\"name\":\"fake\",\"version\":\"1\"}}}}}}");
+                response.Headers.Add("Mcp-Session-Id", "streamable-session");
+                return response;
+            }
+
+            if (method == "tools/list")
+            {
+                return Json(
+                    HttpStatusCode.OK,
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"tools\":[{{\"name\":\"tv-episode-details\",\"description\":\"Episode\",\"inputSchema\":{{\"type\":\"object\"}}}}]}}}}");
+            }
+
+            Assert.Equal("tools/call", method);
+            Assert.Equal("streamable-session", request.Headers.GetValues("Mcp-Session-Id").Single());
+            AcceptedToolCallCount++;
+            _ssePayload.TrySetResult(
+                $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"content\":[{{\"type\":\"text\",\"text\":\"{{\\\"episode_number\\\":78}}\"}}],\"isError\":false}}}}");
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        }
+
+        private static HttpResponseMessage Json(
+            HttpStatusCode status,
+            string json) =>
+            new(status)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+    }
+
+    private sealed class FailingToolMcpHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Get)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "data: not-json\n\n",
+                        Encoding.UTF8,
+                        "text/event-stream"),
+                };
+            }
+
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            if (body.Contains(
+                "\"method\":\"notifications/initialized\"",
+                StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
+            }
+
+            using var document = JsonDocument.Parse(body);
+            var method = document.RootElement.GetProperty("method").GetString();
+            var id = document.RootElement.GetProperty("id").GetInt32();
+            if (method == "initialize")
+            {
+                var response = Json(
+                    HttpStatusCode.OK,
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{}},\"serverInfo\":{{\"name\":\"fake\",\"version\":\"1\"}}}}}}");
+                response.Headers.Add("Mcp-Session-Id", "failing-session");
+                return response;
+            }
+
+            if (method == "tools/list")
+            {
+                return Json(
+                    HttpStatusCode.OK,
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"tools\":[{{\"name\":\"tv-episode-details\",\"description\":\"Episode\",\"inputSchema\":{{\"type\":\"object\"}}}}]}}}}");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        }
+
+        private static HttpResponseMessage Json(
+            HttpStatusCode status,
+            string json) =>
+            new(status)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+    }
+
+    private sealed class ThrowingMcpHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(exception);
+    }
+
+    private sealed class StatusMcpHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(statusCode));
+    }
+
+    private sealed class ErrorResultMcpHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            if (body.Contains(
+                "\"method\":\"notifications/initialized\"",
+                StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
+            }
+
+            using var document = JsonDocument.Parse(body);
+            var method = document.RootElement.GetProperty("method").GetString();
+            var id = document.RootElement.GetProperty("id").GetInt32();
+            var json = method switch
+            {
+                "initialize" =>
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{}},\"serverInfo\":{{\"name\":\"fake\",\"version\":\"1\"}}}}}}",
+                "tools/list" =>
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"tools\":[{{\"name\":\"tv-season-details\",\"description\":\"Season\",\"inputSchema\":{{\"type\":\"object\"}}}}]}}}}",
+                _ =>
+                    $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"content\":[{{\"type\":\"text\",\"text\":\"TMDB 404\"}}],\"isError\":true}}}}",
+            };
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+            if (method == "initialize")
+            {
+                response.Headers.Add("Mcp-Session-Id", "error-result-session");
+            }
+            return response;
+        }
     }
 }

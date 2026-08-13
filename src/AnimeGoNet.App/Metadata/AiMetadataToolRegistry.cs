@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -25,6 +26,8 @@ internal sealed class AiMetadataToolRegistry(
     private readonly AiMetadataPromptFeatures _features = AiMetadataPromptFeatures.Resolve(input);
     private McpEndpointClient? _tmdb;
     private McpEndpointClient? _bangumi;
+    private int _successfulTmdbToolCalls;
+    private int _failedTmdbToolCalls;
 
     public IReadOnlyList<AiFunctionTool> Tools => _tools;
 
@@ -47,10 +50,7 @@ internal sealed class AiMetadataToolRegistry(
             }
             catch (Exception exception) when (IsTransportOrProtocol(exception))
             {
-                throw new AiMetadataMatcherException(
-                    MetadataFailureKind.RemoteService,
-                    "ai_tmdb_mcp_unavailable",
-                    exception);
+                throw ClassifyMcpFailure("tmdb", exception);
             }
         }
 
@@ -71,7 +71,7 @@ internal sealed class AiMetadataToolRegistry(
             }
             catch (Exception exception) when (IsTransportOrProtocol(exception))
             {
-                _bangumi = null;
+                throw ClassifyMcpFailure("bangumi", exception);
             }
         }
 
@@ -115,10 +115,19 @@ internal sealed class AiMetadataToolRegistry(
                     return ErrorJson(error);
                 }
 
-                return await _tmdb.CallAsync(
+                var output = await _tmdb.CallAsync(
                     rawName,
                     argumentsJson,
                     cancellationToken).ConfigureAwait(false);
+                if (McpToolReturnedError(output))
+                {
+                    _failedTmdbToolCalls++;
+                }
+                else
+                {
+                    _successfulTmdbToolCalls++;
+                }
+                return output;
             }
 
             if (_features.BangumiMcp
@@ -151,10 +160,120 @@ internal sealed class AiMetadataToolRegistry(
         }
         catch (Exception exception) when (IsTransportOrProtocol(exception))
         {
-            return ErrorJson(exception is HttpRequestException
-                ? "tool_network_error"
-                : "tool_protocol_error");
+            if (name.StartsWith("tmdb__", StringComparison.Ordinal)
+                || name == "lookup_imdb_tmdb_tv")
+            {
+                throw ClassifyMcpFailure("tmdb", exception);
+            }
+
+            if (name.StartsWith("bgm__", StringComparison.Ordinal))
+            {
+                throw ClassifyMcpFailure("bangumi", exception);
+            }
+
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.RemoteService,
+                "ai_reference_tool_failed",
+                exception);
         }
+    }
+
+    public void EnsureRequiredTmdbToolWasUsed()
+    {
+        if (!_features.TmdbMcp || _successfulTmdbToolCalls > 0)
+        {
+            return;
+        }
+
+        throw new AiMetadataMatcherException(
+            _failedTmdbToolCalls > 0
+                ? MetadataFailureKind.RemoteService
+                : MetadataFailureKind.Protocol,
+            _failedTmdbToolCalls > 0
+                ? "ai_tmdb_mcp_tool_error"
+                : "ai_tmdb_mcp_not_used");
+    }
+
+    private static bool McpToolReturnedError(string output)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            return document.RootElement.TryGetProperty("isError", out var isError)
+                && isError.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
+    }
+
+    private static AiMetadataMatcherException ClassifyMcpFailure(
+        string source,
+        Exception exception)
+    {
+        var prefix = source == "tmdb" ? "ai_tmdb_mcp_" : "ai_bangumi_mcp_";
+        if (exception is TaskCanceledException)
+        {
+            return new AiMetadataMatcherException(
+                MetadataFailureKind.Network,
+                prefix + "timeout",
+                exception);
+        }
+
+        if (exception is HttpRequestException httpException)
+        {
+            if (httpException.StatusCode is { } statusCode)
+            {
+                return statusCode switch
+                {
+                    HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>
+                        new AiMetadataMatcherException(
+                            MetadataFailureKind.Authentication,
+                            prefix + "authentication_failed",
+                            exception),
+                    HttpStatusCode.TooManyRequests => new AiMetadataMatcherException(
+                        MetadataFailureKind.RemoteService,
+                        prefix + "rate_limited",
+                        exception),
+                    _ when (int)statusCode >= 500 => new AiMetadataMatcherException(
+                        MetadataFailureKind.RemoteService,
+                        prefix + "service_error",
+                        exception),
+                    _ => new AiMetadataMatcherException(
+                        MetadataFailureKind.Protocol,
+                        prefix + "http_rejected",
+                        exception),
+                };
+            }
+
+            var failureCode = httpException.HttpRequestError switch
+            {
+                HttpRequestError.NameResolutionError => "dns_error",
+                HttpRequestError.ConnectionError
+                    or HttpRequestError.SecureConnectionError
+                    or HttpRequestError.ProxyTunnelError => "connection_error",
+                _ => "network_error",
+            };
+            return new AiMetadataMatcherException(
+                MetadataFailureKind.Network,
+                prefix + failureCode,
+                exception);
+        }
+
+        if (exception is InvalidDataException invalidData
+            && invalidData.Message.StartsWith("mcp_sse_", StringComparison.Ordinal))
+        {
+            return new AiMetadataMatcherException(
+                MetadataFailureKind.Protocol,
+                prefix + "sse_error",
+                exception);
+        }
+
+        return new AiMetadataMatcherException(
+            MetadataFailureKind.Protocol,
+            prefix + "protocol_error",
+            exception);
     }
 
     private async Task<string> LookupAniDbAsync(CancellationToken cancellationToken)
@@ -483,6 +602,7 @@ internal sealed class AiMetadataToolRegistry(
         AiMetadataDebugCapture? debugCapture)
     {
         private const int MaxMcpResponseBytes = 65_536;
+        private const int MaxMcpSseEnvelopeBytes = 8 * 1024 * 1024;
         private static readonly ConcurrentDictionary<string, AiFunctionTool[]> ToolCache =
             new(StringComparer.Ordinal);
         private string? _sessionId;
@@ -569,7 +689,8 @@ internal sealed class AiMetadataToolRegistry(
             Action<Utf8JsonWriter>? writeParameters,
             CancellationToken cancellationToken)
         {
-            using var request = BuildRequest(method, writeParameters);
+            var requestId = ++_requestId;
+            using var request = BuildRequest(requestId, method, writeParameters);
             var requestBody = await request.Content!.ReadAsStringAsync(
                 cancellationToken).ConfigureAwait(false);
             var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -597,17 +718,22 @@ internal sealed class AiMetadataToolRegistry(
                     response.IsSuccessStatusCode ? null : "http_status");
                 responseCaptured = true;
                 response.EnsureSuccessStatusCode();
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    if (method != "tools/call" || _sessionId is null)
+                    {
+                        throw new InvalidDataException("mcp_response_empty");
+                    }
+
+                    return await ReadSseResponseAsync(
+                        requestId,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
                 var json = response.Content.Headers.ContentType?.MediaType == "text/event-stream"
                     ? ExtractSseJson(raw)
                     : raw;
-                var document = JsonDocument.Parse(json);
-                if (document.RootElement.TryGetProperty("error", out var error))
-                {
-                    document.Dispose();
-                    throw new InvalidDataException("mcp_jsonrpc_error:" + error.GetRawText());
-                }
-
-                return document;
+                return ParseJsonRpc(json, requestId);
             }
             catch (Exception exception) when (!responseCaptured
                 && exception is (HttpRequestException or OperationCanceledException))
@@ -619,6 +745,118 @@ internal sealed class AiMetadataToolRegistry(
                     endpoint,
                     requestBody,
                     null,
+                    null,
+                    timer.ElapsedMilliseconds,
+                    exception.GetType().Name);
+                throw;
+            }
+        }
+
+        private async Task<JsonDocument> ReadSseResponseAsync(
+            int expectedRequestId,
+            CancellationToken cancellationToken)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+            AddSession(request);
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var responseCaptured = false;
+            int? responseStatusCode = null;
+            try
+            {
+                using var response = await httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken).ConfigureAwait(false);
+                responseStatusCode = (int)response.StatusCode;
+                CaptureSession(response);
+                response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync(
+                    cancellationToken).ConfigureAwait(false);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                var data = new StringBuilder();
+                var receivedBytes = 0;
+                while (true)
+                {
+                    var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    if (line is null)
+                    {
+                        throw new InvalidDataException("mcp_sse_ended_without_result");
+                    }
+
+                    receivedBytes = checked(receivedBytes + Encoding.UTF8.GetByteCount(line) + 1);
+                    if (receivedBytes > MaxMcpSseEnvelopeBytes)
+                    {
+                        throw new InvalidDataException("mcp_sse_response_too_large");
+                    }
+
+                    if (line.Length == 0)
+                    {
+                        if (data.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        var json = data.ToString();
+                        data.Clear();
+                        JsonDocument candidate;
+                        try
+                        {
+                            candidate = JsonDocument.Parse(json);
+                        }
+                        catch (JsonException exception)
+                        {
+                            throw new InvalidDataException(
+                                "mcp_sse_json_invalid",
+                                exception);
+                        }
+                        using (candidate)
+                        {
+                            if (!candidate.RootElement.TryGetProperty("id", out var id)
+                                || id.ValueKind != JsonValueKind.Number
+                                || id.GetInt32() != expectedRequestId)
+                            {
+                                continue;
+                            }
+
+                            timer.Stop();
+                            debugCapture?.Record(
+                                "mcp:" + source,
+                                "tools/call/sse",
+                                endpoint,
+                                null,
+                                (int)response.StatusCode,
+                                json,
+                                timer.ElapsedMilliseconds,
+                                null);
+                            responseCaptured = true;
+                            return ParseJsonRpc(json, expectedRequestId);
+                        }
+                    }
+
+                    if (line.StartsWith("data:", StringComparison.Ordinal))
+                    {
+                        if (data.Length > 0)
+                        {
+                            data.AppendLine();
+                        }
+                        data.Append(line["data:".Length..].TrimStart());
+                    }
+                }
+            }
+            catch (Exception exception) when (!responseCaptured
+                && exception is (HttpRequestException
+                    or OperationCanceledException
+                    or JsonException
+                    or InvalidDataException))
+            {
+                timer.Stop();
+                debugCapture?.Record(
+                    "mcp:" + source,
+                    "tools/call/sse",
+                    endpoint,
+                    null,
+                    responseStatusCode,
                     null,
                     timer.ElapsedMilliseconds,
                     exception.GetType().Name);
@@ -680,6 +918,7 @@ internal sealed class AiMetadataToolRegistry(
         }
 
         private HttpRequestMessage BuildRequest(
+            int requestId,
             string method,
             Action<Utf8JsonWriter>? writeParameters)
         {
@@ -688,10 +927,34 @@ internal sealed class AiMetadataToolRegistry(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
             AddSession(request);
             request.Content = new StringContent(
-                BuildJsonRpcPayload(++_requestId, method, writeParameters),
+                BuildJsonRpcPayload(requestId, method, writeParameters),
                 Encoding.UTF8,
                 "application/json");
             return request;
+        }
+
+        private static JsonDocument ParseJsonRpc(string json, int expectedRequestId)
+        {
+            var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("id", out var id))
+            {
+                document.Dispose();
+                throw new InvalidDataException("mcp_jsonrpc_id_missing");
+            }
+
+            if (id.ValueKind != JsonValueKind.Number || id.GetInt32() != expectedRequestId)
+            {
+                document.Dispose();
+                throw new InvalidDataException("mcp_jsonrpc_id_mismatch");
+            }
+
+            if (document.RootElement.TryGetProperty("error", out var error))
+            {
+                document.Dispose();
+                throw new InvalidDataException("mcp_jsonrpc_error:" + error.GetRawText());
+            }
+
+            return document;
         }
 
         private void AddSession(HttpRequestMessage request)
