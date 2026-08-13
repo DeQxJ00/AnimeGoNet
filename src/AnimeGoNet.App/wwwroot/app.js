@@ -44,6 +44,8 @@ const downloadStorageKey = "animegonet.downloads.v1";
 let downloadState = readDownloadState();
 const metadataStorageKey = "animegonet.metadata-tasks.v1";
 let metadataState = readMetadataState();
+let metadataListRequestSequence = 0;
+let metadataRenderSignature = null;
 const expandedDownloadJobIds = new Set();
 let activeLibraryDetail = null;
 let externalImportDetailIdentity = null;
@@ -4556,9 +4558,11 @@ async function loadMetadataAttempts(taskId, target, button) {
         button.textContent = "重试策略时间线";
     }
 }
-async function loadMetadataTasks() {
+async function loadMetadataTasks(background = false) {
     const container = element("#metadata-tasks");
+    const hadReadyContent = container.dataset.uiState === "ready";
     setRegionState(container, "loading");
+    const requestSequence = ++metadataListRequestSequence;
     const query = new URLSearchParams({
         page: String(metadataState.page),
         page_size: String(metadataState.page_size),
@@ -4581,10 +4585,12 @@ async function loadMetadataTasks() {
         if (!response.ok)
             throw new Error(`HTTP ${response.status}`);
         const body = await response.json();
+        if (requestSequence !== metadataListRequestSequence)
+            return;
         if (body.items.length === 0 && body.total_items > 0 && metadataState.page > 1) {
             metadataState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
             saveMetadataState();
-            await loadMetadataTasks();
+            await loadMetadataTasks(background);
             return;
         }
         metadataState.page = body.page;
@@ -4596,13 +4602,34 @@ async function loadMetadataTasks() {
             `第 ${body.page} / ${totalPages} 页`;
         element("#metadata-previous").disabled = body.page <= 1;
         element("#metadata-next").disabled = body.page >= totalPages;
+        const renderSignature = JSON.stringify(body);
+        if (background && renderSignature === metadataRenderSignature) {
+            setRegionState(container, "ready");
+            return;
+        }
+        if (background
+            && (expandedMetadataTaskIds.size > 0 || expandedMetadataDetailIds.size > 0)) {
+            setRegionState(container, "ready");
+            return;
+        }
+        const visibleAnchor = background
+            ? Array.from(container.querySelectorAll(".metadata-card"))
+                .find((card) => {
+                const bounds = card.getBoundingClientRect();
+                return bounds.bottom > 0 && bounds.top < window.innerHeight;
+            })
+            : undefined;
+        const anchorTaskId = visibleAnchor?.dataset.taskId ?? null;
+        const anchorViewportTop = visibleAnchor?.getBoundingClientRect().top ?? null;
         if (body.items.length === 0) {
+            metadataRenderSignature = renderSignature;
             renderRegionMessage(container, "empty", "暂无符合筛选条件的元数据任务");
             return;
         }
         const cards = body.items.map((item) => {
             const card = document.createElement("article");
             card.className = `metadata-card ${item.status === "metadata_failed" ? "failed" : ""}`;
+            card.dataset.taskId = item.task_id;
             const heading = document.createElement("div");
             heading.className = "metadata-heading";
             const title = document.createElement("strong");
@@ -4714,9 +4741,23 @@ async function loadMetadataTasks() {
             }
             return card;
         });
+        metadataRenderSignature = renderSignature;
         renderRegionContent(container, ...cards);
+        if (anchorTaskId !== null && anchorViewportTop !== null) {
+            const replacementAnchor = Array.from(container.querySelectorAll(".metadata-card")).find((card) => card.dataset.taskId === anchorTaskId);
+            if (replacementAnchor) {
+                window.scrollBy(0, replacementAnchor.getBoundingClientRect().top - anchorViewportTop);
+            }
+        }
     }
     catch (error) {
+        if (requestSequence !== metadataListRequestSequence)
+            return;
+        if (background && hadReadyContent) {
+            element("#metadata-list-status").textContent =
+                `自动刷新失败，保留当前列表：${errorMessage(error, "未知错误")}`;
+            return;
+        }
         renderRegionMessage(container, "error", `元数据状态读取失败：${errorMessage(error, "未知错误")}`);
     }
 }
@@ -7598,7 +7639,7 @@ void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
-window.setInterval(() => void loadMetadataTasks(), 5000);
+window.setInterval(() => void loadMetadataTasks(true), 5000);
 window.setInterval(() => void loadPendingTmdb(), 10000);
 window.setInterval(() => {
     if (!document.hidden)

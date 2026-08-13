@@ -1523,6 +1523,8 @@ const downloadStorageKey = "animegonet.downloads.v1";
 let downloadState = readDownloadState();
 const metadataStorageKey = "animegonet.metadata-tasks.v1";
 let metadataState = readMetadataState();
+let metadataListRequestSequence = 0;
+let metadataRenderSignature: string | null = null;
 const expandedDownloadJobIds = new Set<string>();
 let activeLibraryDetail: AnimeSeasonDetail | null = null;
 let externalImportDetailIdentity: string | null = null;
@@ -6651,9 +6653,11 @@ async function loadMetadataAttempts(
   }
 }
 
-async function loadMetadataTasks(): Promise<void> {
+async function loadMetadataTasks(background = false): Promise<void> {
   const container = element<HTMLElement>("#metadata-tasks");
+  const hadReadyContent = container.dataset.uiState === "ready";
   setRegionState(container, "loading");
+  const requestSequence = ++metadataListRequestSequence;
   const query = new URLSearchParams({
     page: String(metadataState.page),
     page_size: String(metadataState.page_size),
@@ -6672,10 +6676,11 @@ async function loadMetadataTasks(): Promise<void> {
     const response = await fetch(`/api/v1/metadata/tasks?${query}`, { headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = await response.json() as MetadataTaskListPage;
+    if (requestSequence !== metadataListRequestSequence) return;
     if (body.items.length === 0 && body.total_items > 0 && metadataState.page > 1) {
       metadataState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
       saveMetadataState();
-      await loadMetadataTasks();
+      await loadMetadataTasks(background);
       return;
     }
     metadataState.page = body.page;
@@ -6687,7 +6692,27 @@ async function loadMetadataTasks(): Promise<void> {
       `第 ${body.page} / ${totalPages} 页`;
     element<HTMLButtonElement>("#metadata-previous").disabled = body.page <= 1;
     element<HTMLButtonElement>("#metadata-next").disabled = body.page >= totalPages;
+    const renderSignature = JSON.stringify(body);
+    if (background && renderSignature === metadataRenderSignature) {
+      setRegionState(container, "ready");
+      return;
+    }
+    if (background
+      && (expandedMetadataTaskIds.size > 0 || expandedMetadataDetailIds.size > 0)) {
+      setRegionState(container, "ready");
+      return;
+    }
+    const visibleAnchor = background
+      ? Array.from(container.querySelectorAll<HTMLElement>(".metadata-card"))
+        .find((card) => {
+          const bounds = card.getBoundingClientRect();
+          return bounds.bottom > 0 && bounds.top < window.innerHeight;
+        })
+      : undefined;
+    const anchorTaskId = visibleAnchor?.dataset.taskId ?? null;
+    const anchorViewportTop = visibleAnchor?.getBoundingClientRect().top ?? null;
     if (body.items.length === 0) {
+      metadataRenderSignature = renderSignature;
       renderRegionMessage(
         container,
         "empty",
@@ -6699,6 +6724,7 @@ async function loadMetadataTasks(): Promise<void> {
     const cards = body.items.map((item) => {
       const card = document.createElement("article");
       card.className = `metadata-card ${item.status === "metadata_failed" ? "failed" : ""}`;
+      card.dataset.taskId = item.task_id;
       const heading = document.createElement("div");
       heading.className = "metadata-heading";
       const title = document.createElement("strong");
@@ -6810,8 +6836,26 @@ async function loadMetadataTasks(): Promise<void> {
       }
       return card;
     });
+    metadataRenderSignature = renderSignature;
     renderRegionContent(container, ...cards);
+    if (anchorTaskId !== null && anchorViewportTop !== null) {
+      const replacementAnchor = Array.from(
+        container.querySelectorAll<HTMLElement>(".metadata-card"),
+      ).find((card) => card.dataset.taskId === anchorTaskId);
+      if (replacementAnchor) {
+        window.scrollBy(
+          0,
+          replacementAnchor.getBoundingClientRect().top - anchorViewportTop,
+        );
+      }
+    }
   } catch (error) {
+    if (requestSequence !== metadataListRequestSequence) return;
+    if (background && hadReadyContent) {
+      element<HTMLElement>("#metadata-list-status").textContent =
+        `自动刷新失败，保留当前列表：${errorMessage(error, "未知错误")}`;
+      return;
+    }
     renderRegionMessage(
       container,
       "error",
@@ -10082,7 +10126,7 @@ void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 window.setInterval(() => void loadDownloads(), 5000);
-window.setInterval(() => void loadMetadataTasks(), 5000);
+window.setInterval(() => void loadMetadataTasks(true), 5000);
 window.setInterval(() => void loadPendingTmdb(), 10000);
 window.setInterval(() => {
   if (!document.hidden) void loadDataUpdate(true);

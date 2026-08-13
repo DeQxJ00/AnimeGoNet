@@ -117,7 +117,7 @@ public sealed class StaticWebUiTests
     [InlineData("/", "text/html", "configuration-mikan-bangumi-cache-hours")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260813-external-media")]
+    [InlineData("/", "text/html", "/app.js?v=20260813-metadata-refresh-position")]
     [InlineData("/", "text/html", "ai-test-mikan-import")]
     [InlineData("/", "text/html", "ai-test-enable-tmdb-mcp")]
     [InlineData("/app.js", "text/javascript", "enable_bgm_mcp")]
@@ -195,5 +195,20 @@ public sealed class StaticWebUiTests
 
         Assert.Contains("enabled ? \"已启用\" : \"当前不可用\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("enabled ? \"已启用\" : \"待实现\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MetadataBackgroundRefreshKeepsStableCardsAndScrollAnchor()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        var script = await app.Client.GetStringAsync("/app.js");
+
+        Assert.Contains("renderSignature === metadataRenderSignature", script, StringComparison.Ordinal);
+        Assert.Contains("expandedMetadataTaskIds.size > 0", script, StringComparison.Ordinal);
+        Assert.Contains("card.dataset.taskId = item.task_id", script, StringComparison.Ordinal);
+        Assert.Contains("window.scrollBy", script, StringComparison.Ordinal);
+        Assert.Contains("background && hadReadyContent", script, StringComparison.Ordinal);
+        Assert.Contains("loadMetadataTasks(true)", script, StringComparison.Ordinal);
     }
 }
