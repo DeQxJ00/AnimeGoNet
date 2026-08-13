@@ -136,6 +136,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         string? sourceWorkId;
         int? mikanId;
         int? bangumiId;
+        var isOtherReadaptation = false;
         await using (var details = connection.CreateCommand())
         {
             details.Transaction = transaction;
@@ -143,7 +144,11 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 SELECT job.downloader_id, job.info_hash, job.download_root_path, job.save_root_path,
                        task.source_id, task.source_item_id, task.bangumi_subject_id,
                        task.source_work_id, task.mikanid,
-                       json_extract(task.route_snapshot_json, '$.file_strategy')
+                       json_extract(task.route_snapshot_json, '$.file_strategy'),
+                       EXISTS (
+                           SELECT 1 FROM other_file_readaptation_jobs AS readaptation
+                           WHERE readaptation.task_id = task.id
+                             AND readaptation.state = 'pending')
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
                 WHERE job.id = $job_id AND job.task_id = $task_id
@@ -169,6 +174,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             sourceWorkId = reader.IsDBNull(7) ? null : reader.GetString(7);
             mikanId = reader.IsDBNull(8) ? null : reader.GetInt32(8);
             fileStrategy = reader.GetString(9);
+            isOtherReadaptation = reader.GetInt64(10) == 1;
             if (fileStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
             {
                 throw new InvalidOperationException("Captured file strategy is unsupported.");
@@ -190,9 +196,12 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 SELECT file.id, file.relative_path, file.size_bytes, file.disposition,
                        series.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
                        series.canonical_name, file.rename_suffix, file.associated_task_file_id
-                       , file.source_episode
+                       , file.source_episode, readaptation.source_media_path
                 FROM task_files AS file
                 JOIN ingest_tasks AS task ON task.id = file.task_id
+                LEFT JOIN other_file_readaptation_jobs AS readaptation
+                  ON readaptation.task_file_id = file.id
+                 AND readaptation.state = 'pending'
                 JOIN anime_series AS series ON
                     (file.tmdb_series_id IS NOT NULL
                      AND series.tmdb_series_id = file.tmdb_series_id)
@@ -204,6 +213,11 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 WHERE file.task_id = $task_id
                   AND file.disposition IN ('episode', 'other')
                   AND COALESCE(file.download_wanted, 1) = 1
+                  AND (
+                      NOT EXISTS (
+                          SELECT 1 FROM other_file_readaptation_jobs AS active
+                          WHERE active.task_id = file.task_id AND active.state = 'pending')
+                      OR readaptation.task_file_id IS NOT NULL)
                 ORDER BY file.relative_path, file.id;
                 """;
             query.Parameters.AddWithValue("$task_id", taskId);
@@ -215,7 +229,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                     reader.GetInt32(4), reader.GetInt32(5), reader.IsDBNull(6) ? null : reader.GetInt32(6),
                     reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8),
                     reader.IsDBNull(9) ? null : reader.GetString(9),
-                    reader.IsDBNull(10) ? null : reader.GetString(10)));
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    reader.IsDBNull(11) ? null : reader.GetString(11)));
             }
 
             if (files.Count == 0)
@@ -228,7 +243,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         return new MediaOrganizationClaim(
             jobId, taskId, downloaderId, infoHash, fileStrategy, downloadRoot, saveRoot,
             sourceId, sourceItemId, bangumiId, token, attempt, stage, files,
-            sourceWorkId, mikanId);
+            sourceWorkId, mikanId, isOtherReadaptation);
     }
 
     public async Task<IReadOnlyList<MediaOperationRecord>> EnsureOperationsAsync(
@@ -484,9 +499,49 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        var isReadaptation = false;
+        await using (var readaptation = connection.CreateCommand())
+        {
+            readaptation.Transaction = transaction;
+            readaptation.CommandText = """
+                SELECT COUNT(*)
+                FROM other_file_readaptation_jobs
+                WHERE task_id = $task_id AND state = 'pending';
+                """;
+            readaptation.Parameters.AddWithValue("$task_id", claim.TaskId);
+            var pendingReadaptationFiles = Convert.ToInt32(
+                await readaptation.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                CultureInfo.InvariantCulture);
+            if (claim.IsOtherReadaptation && pendingReadaptationFiles != claim.Files.Count)
+            {
+                throw new InvalidOperationException("Other readaptation files changed concurrently.");
+            }
+
+            isReadaptation = claim.IsOtherReadaptation;
+        }
+
         await using var finish = connection.CreateCommand();
         finish.Transaction = transaction;
-        finish.CommandText = """
+        finish.CommandText = isReadaptation
+            ? """
+            UPDATE other_file_readaptation_jobs
+            SET state = 'completed', completed_at_utc = $now
+            WHERE task_id = $task_id AND state = 'pending';
+            UPDATE download_jobs
+            SET organization_state = 'completed', organization_lease_token = NULL,
+                organization_lease_expires_at_utc = NULL, organization_next_attempt_at_utc = NULL,
+                organization_failure_code = NULL,
+                organization_phase = 'completed',
+                organization_completed_units = 1, organization_total_units = 1,
+                updated_at_utc = $now, revision = revision + 1
+            WHERE id = $job_id AND task_id = $task_id AND organization_state = 'organizing'
+              AND organization_lease_token = $token;
+            UPDATE ingest_tasks
+            SET status = 'organized', failure_kind = NULL, failure_reason = NULL,
+                updated_at_utc = $now
+            WHERE id = $task_id AND status = 'downloaded';
+            """
+            : """
             UPDATE download_jobs
             SET organization_state = 'cleanup', organization_lease_token = NULL,
                 organization_lease_expires_at_utc = NULL, organization_next_attempt_at_utc = NULL,
@@ -507,7 +562,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         AddIdentity(finish, claim);
         finish.Parameters.AddWithValue("$strategy", claim.FileStrategy);
         finish.Parameters.AddWithValue("$now", now);
-        if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
+        var expectedUpdates = isReadaptation ? claim.Files.Count + 2 : 2;
+        if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != expectedUpdates)
         {
             throw new InvalidOperationException("Media organization completion changed concurrently.");
         }
@@ -643,6 +699,13 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
             WHERE file.task_id = $task_id
+              AND (
+                  NOT EXISTS (
+                      SELECT 1 FROM other_file_readaptation_jobs AS active
+                      WHERE active.task_id = file.task_id AND active.state = 'pending')
+                  OR EXISTS (
+                      SELECT 1 FROM other_file_readaptation_jobs AS selected
+                      WHERE selected.task_file_id = file.id AND selected.state = 'pending'))
             ORDER BY file.relative_path, file.id;
             """;
         query.Parameters.AddWithValue("$task_id", taskId);

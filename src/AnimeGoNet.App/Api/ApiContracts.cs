@@ -814,6 +814,28 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record OtherFileReadaptationFileResponse(
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("source_name")] string SourceName,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("other_reason")] string OtherReason,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("source_available")] bool SourceAvailable,
+    [property: JsonPropertyName("shared_path_reference_count")] int SharedPathReferenceCount);
+
+public sealed record OtherFileReadaptationPreviewResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("eligible")] bool Eligible,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("files")] IReadOnlyList<OtherFileReadaptationFileResponse> Files);
+
+public sealed record OtherFileReadaptationStartResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("file_count")] int FileCount);
+
 public sealed record MetadataTaskDetailResponse(
     [property: JsonPropertyName("summary")] MetadataTaskListItem Summary,
     [property: JsonPropertyName("source_evidence")]

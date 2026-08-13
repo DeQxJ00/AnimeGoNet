@@ -427,6 +427,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
+        builder.Services.AddSingleton<OtherFileReadaptationStore>();
         builder.Services.AddSingleton<PendingTmdbStore>();
         builder.Services.AddSingleton<PendingTmdbRecoveryStore>();
         builder.Services.AddSingleton<PendingTmdbNfoRewriteStore>();

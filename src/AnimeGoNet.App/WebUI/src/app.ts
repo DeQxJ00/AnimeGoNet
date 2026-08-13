@@ -683,6 +683,23 @@ interface MetadataTaskListPage {
   items: MetadataItem[];
 }
 
+interface OtherFileReadaptationPreview {
+  task_id: string;
+  title: string;
+  eligible: boolean;
+  reason: string | null;
+  files: Array<{
+    task_file_id: string;
+    source_name: string;
+    size_bytes: number;
+    other_reason: string;
+    tmdb_series_id: number;
+    tmdb_season_number: number;
+    source_available: boolean;
+    shared_path_reference_count: number;
+  }>;
+}
+
 interface MetadataUiState {
   page: number;
   page_size: 10 | 25 | 50;
@@ -6343,6 +6360,50 @@ async function retryMetadataTask(taskId: string, button: HTMLButtonElement): Pro
   }
 }
 
+async function readaptOtherFiles(taskId: string, button: HTMLButtonElement): Promise<void> {
+  const defaultLabel = "重新适配 Other";
+  button.disabled = true;
+  button.textContent = "读取预览…";
+  try {
+    const previewResponse = await fetch(
+      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/preview`,
+      { headers },
+    );
+    if (!previewResponse.ok) throw new Error(await responseError(previewResponse));
+    const preview = await previewResponse.json() as OtherFileReadaptationPreview;
+    if (!preview.eligible) {
+      throw new Error(preview.reason ?? "当前任务不能重新适配 Other 文件");
+    }
+
+    const files = preview.files
+      .map((file) => `• ${file.source_name}\n  当前原因：${file.other_reason}`)
+      .join("\n");
+    if (!window.confirm(
+      `将重新适配 ${preview.files.length} 个 Other 文件。\n\n`
+      + "保留历史任务和 AI 日志；沿用已确认的 TMDB Series / Season；不重新下载、不操作 qBittorrent。\n\n"
+      + files,
+    )) {
+      button.disabled = false;
+      button.textContent = defaultLabel;
+      return;
+    }
+
+    button.textContent = "重新入队中…";
+    const response = await fetch(
+      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation`,
+      { method: "POST", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadMetadataTasks();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = errorMessage(error, "Other 重新适配失败");
+    window.setTimeout(() => {
+      if (button.isConnected) button.textContent = defaultLabel;
+    }, 5000);
+  }
+}
+
 const expandedMetadataTaskIds = new Set<string>();
 const expandedMetadataDetailIds = new Set<string>();
 
@@ -6826,6 +6887,14 @@ async function loadMetadataTasks(background = false): Promise<void> {
         retry.textContent = "显式重新匹配";
         retry.addEventListener("click", () => void retryMetadataTask(item.task_id, retry));
         actions.append(retry);
+      }
+      if (item.status === "organized" && item.other_file_count > 0) {
+        const readapt = document.createElement("button");
+        readapt.type = "button";
+        readapt.className = "retry-button";
+        readapt.textContent = "重新适配 Other";
+        readapt.addEventListener("click", () => void readaptOtherFiles(item.task_id, readapt));
+        actions.append(readapt);
       }
       card.append(actions, detailTarget, attemptList);
       if (expandedMetadataDetailIds.has(item.task_id)) {

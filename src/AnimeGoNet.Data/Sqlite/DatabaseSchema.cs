@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 46;
+    public const int CurrentVersion = 47;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -70,7 +70,31 @@ public static class DatabaseSchema
             46,
             "bangumi_archive_usage_events",
             BangumiArchiveUsageEvents),
+        new SchemaMigration(
+            47,
+            "other_file_readaptation",
+            OtherFileReadaptation),
     ];
+
+    private const string OtherFileReadaptation = """
+        CREATE TABLE other_file_readaptation_jobs (
+            id TEXT NOT NULL PRIMARY KEY,
+            task_id TEXT NOT NULL REFERENCES ingest_tasks(id) ON DELETE CASCADE,
+            task_file_id TEXT NOT NULL REFERENCES task_files(id) ON DELETE CASCADE,
+            source_media_path TEXT NOT NULL,
+            original_other_reason TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+            requested_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT
+        ) STRICT;
+
+        CREATE UNIQUE INDEX ux_other_file_readaptation_active
+        ON other_file_readaptation_jobs(task_file_id)
+        WHERE state = 'pending';
+
+        CREATE INDEX ix_other_file_readaptation_task
+        ON other_file_readaptation_jobs(task_id, state, requested_at_utc DESC);
+        """;
 
     private const string BangumiArchiveUsageEvents = """
         CREATE TABLE bangumi_archive_usage_events (

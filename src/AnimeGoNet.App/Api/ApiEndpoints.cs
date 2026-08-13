@@ -105,6 +105,12 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/mikan/legacy-filter/rollback", RollbackLegacyMikanFilter);
         app.MapPost("/api/v1/mikan/legacy-filter/preview", PreviewLegacyMikanFilter);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
+        app.MapGet(
+            "/api/v1/metadata/tasks/{taskId}/other-readaptation/preview",
+            PreviewOtherFileReadaptation);
+        app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/other-readaptation",
+            StartOtherFileReadaptation);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
@@ -4611,6 +4617,134 @@ public static class ApiEndpoints
                 "metadata_task_not_failed",
                 "Only failed metadata tasks can be retried.")),
         };
+    }
+
+    private static async Task<IResult> PreviewOtherFileReadaptation(
+        string taskId,
+        OtherFileReadaptationStore store,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return TypedResults.BadRequest(Error(
+                "metadata_task_id_invalid",
+                "Metadata task ID is required."));
+        }
+
+        var preview = await store.PreviewAsync(taskId, cancellationToken).ConfigureAwait(false);
+        if (preview is null)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found",
+                "Metadata task was not found."));
+        }
+
+        var files = preview.Files.Select(file => new OtherFileReadaptationFileResponse(
+            file.TaskFileId,
+            file.SourceName,
+            file.SizeBytes,
+            file.OtherReason,
+            file.TmdbSeriesId,
+            file.TmdbSeasonNumber,
+            File.Exists(file.SourceMediaPath)
+                && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes,
+            file.SharedPathReferenceCount)).ToArray();
+        var reason = ReadaptationDenialReason(preview, files);
+        return TypedResults.Ok(new OtherFileReadaptationPreviewResponse(
+            preview.TaskId,
+            preview.Title,
+            reason is null,
+            reason,
+            files));
+    }
+
+    private static async Task<IResult> StartOtherFileReadaptation(
+        string taskId,
+        OtherFileReadaptationStore store,
+        CancellationToken cancellationToken)
+    {
+        var preview = await store.PreviewAsync(taskId, cancellationToken).ConfigureAwait(false);
+        if (preview is null)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found",
+                "Metadata task was not found."));
+        }
+
+        var files = preview.Files.Select(file => new OtherFileReadaptationFileResponse(
+            file.TaskFileId,
+            file.SourceName,
+            file.SizeBytes,
+            file.OtherReason,
+            file.TmdbSeriesId,
+            file.TmdbSeasonNumber,
+            File.Exists(file.SourceMediaPath)
+                && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes,
+            file.SharedPathReferenceCount)).ToArray();
+        var denial = ReadaptationDenialReason(preview, files);
+        if (denial is not null)
+        {
+            return TypedResults.Conflict(Error("other_readaptation_not_eligible", denial));
+        }
+
+        var result = await store.StartAsync(
+            taskId,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return result switch
+        {
+            OtherFileReadaptationStartResult.Started => TypedResults.Ok(
+                new OtherFileReadaptationStartResponse(
+                    taskId,
+                    "metadata_season_resolved",
+                    files.Length)),
+            OtherFileReadaptationStartResult.NotFound => TypedResults.NotFound(Error(
+                "metadata_task_not_found",
+                "Metadata task was not found.")),
+            OtherFileReadaptationStartResult.ActiveLease => TypedResults.Conflict(Error(
+                "metadata_task_active",
+                "Metadata task has an active resolution lease.")),
+            _ => TypedResults.Conflict(Error(
+                "other_readaptation_not_eligible",
+                "The task changed and can no longer re-adapt Other files.")),
+        };
+    }
+
+    private static string? ReadaptationDenialReason(
+        OtherFileReadaptationPreview preview,
+        OtherFileReadaptationFileResponse[] files)
+    {
+        if (preview.HasActiveResolutionLease)
+        {
+            return "当前任务正在匹配，不能重复提交 Other 重新适配。";
+        }
+
+        if (preview.TaskStatus != "organized")
+        {
+            return "仅已整理完成的任务可重新适配 Other 文件。";
+        }
+
+        if (preview.FileStrategy is not ("move" or "wait_move"))
+        {
+            return "首版 Other 重新适配仅支持 move / wait_move 文件策略。";
+        }
+
+        if (files.Length == 0)
+        {
+            return "任务没有可重新适配的 Other 文件。";
+        }
+
+        if (files.Any(file => !file.SourceAvailable))
+        {
+            return "至少一个 Other 文件不存在或大小已变化；未修改任务。";
+        }
+
+        if (files.Any(file => file.SharedPathReferenceCount != 1))
+        {
+            return "至少一个 Other 路径被多个任务引用；为避免移动共享文件，未修改任务。";
+        }
+
+        return null;
     }
 
     private static async Task<IResult> MetadataTasks(

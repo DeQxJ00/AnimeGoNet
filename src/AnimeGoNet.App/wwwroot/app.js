@@ -4277,6 +4277,43 @@ async function retryMetadataTask(taskId, button) {
         button.textContent = errorMessage(error, "重试失败");
     }
 }
+async function readaptOtherFiles(taskId, button) {
+    const defaultLabel = "重新适配 Other";
+    button.disabled = true;
+    button.textContent = "读取预览…";
+    try {
+        const previewResponse = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/preview`, { headers });
+        if (!previewResponse.ok)
+            throw new Error(await responseError(previewResponse));
+        const preview = await previewResponse.json();
+        if (!preview.eligible) {
+            throw new Error(preview.reason ?? "当前任务不能重新适配 Other 文件");
+        }
+        const files = preview.files
+            .map((file) => `• ${file.source_name}\n  当前原因：${file.other_reason}`)
+            .join("\n");
+        if (!window.confirm(`将重新适配 ${preview.files.length} 个 Other 文件。\n\n`
+            + "保留历史任务和 AI 日志；沿用已确认的 TMDB Series / Season；不重新下载、不操作 qBittorrent。\n\n"
+            + files)) {
+            button.disabled = false;
+            button.textContent = defaultLabel;
+            return;
+        }
+        button.textContent = "重新入队中…";
+        const response = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation`, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        await loadMetadataTasks();
+    }
+    catch (error) {
+        button.disabled = false;
+        button.textContent = errorMessage(error, "Other 重新适配失败");
+        window.setTimeout(() => {
+            if (button.isConnected)
+                button.textContent = defaultLabel;
+        }, 5000);
+    }
+}
 const expandedMetadataTaskIds = new Set();
 const expandedMetadataDetailIds = new Set();
 async function loadMetadataDetail(taskId, target, button) {
@@ -4731,6 +4768,14 @@ async function loadMetadataTasks(background = false) {
                 retry.textContent = "显式重新匹配";
                 retry.addEventListener("click", () => void retryMetadataTask(item.task_id, retry));
                 actions.append(retry);
+            }
+            if (item.status === "organized" && item.other_file_count > 0) {
+                const readapt = document.createElement("button");
+                readapt.type = "button";
+                readapt.className = "retry-button";
+                readapt.textContent = "重新适配 Other";
+                readapt.addEventListener("click", () => void readaptOtherFiles(item.task_id, readapt));
+                actions.append(readapt);
             }
             card.append(actions, detailTarget, attemptList);
             if (expandedMetadataDetailIds.has(item.task_id)) {

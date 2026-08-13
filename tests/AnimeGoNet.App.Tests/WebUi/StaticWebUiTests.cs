@@ -71,6 +71,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "handling_category")]
     [InlineData("/app.js", "text/javascript", "/attempts")]
     [InlineData("/app.js", "text/javascript", "查看策略时间线")]
+    [InlineData("/app.js", "text/javascript", "重新适配 Other")]
+    [InlineData("/app.js", "text/javascript", "/other-readaptation/preview")]
     [InlineData("/app.js", "text/javascript", "可自动重试")]
     [InlineData("/app.js", "text/javascript", "Bangumi 完全兜底：")]
     [InlineData("/app.js", "text/javascript", "TMDB 权威访问未确认")]

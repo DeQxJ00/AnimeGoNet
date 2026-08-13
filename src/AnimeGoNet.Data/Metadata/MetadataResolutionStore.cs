@@ -74,6 +74,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var hasMultipleSeasons = false;
         var episodeResolvedByTrustedOffset = false;
         var aiMetadataAttempted = false;
+        var isOtherReadaptation = false;
         string? sourceProfileId = null;
         string? sourceId = null;
         var duplicateNotificationEnabled = true;
@@ -109,6 +110,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
                          WHERE prior_run.task_id = task.id
                            AND attempt.strategy IN ('ai_metadata', 'ai_season', 'ai_episode'))
+                       , EXISTS (
+                           SELECT 1 FROM other_file_readaptation_jobs AS readaptation
+                           WHERE readaptation.task_id = task.id
+                             AND readaptation.state = 'pending')
                        , task.source_profile_id, task.source_id,
                        COALESCE(json_extract(
                            task.route_snapshot_json,
@@ -150,9 +155,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 hasMultipleSeasons = reader.GetInt64(14) == 1;
                 episodeResolvedByTrustedOffset = reader.GetInt64(15) == 1;
                 aiMetadataAttempted = reader.GetInt64(16) == 1;
-                sourceProfileId = reader.GetString(17);
-                sourceId = reader.GetString(18);
-                duplicateNotificationEnabled = reader.GetInt64(19) == 1;
+                isOtherReadaptation = reader.GetInt64(17) == 1;
+                sourceProfileId = reader.GetString(18);
+                sourceId = reader.GetString(19);
+                duplicateNotificationEnabled = reader.GetInt64(20) == 1;
             }
         }
 
@@ -256,7 +262,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             seasonResolvedByAi,
             hasMultipleSeasons,
             episodeResolvedByTrustedOffset,
-            aiMetadataAttempted);
+            aiMetadataAttempted,
+            isOtherReadaptation);
     }
 
     public async Task<MetadataCanonicalSeason?> GetCanonicalSeasonAsync(
@@ -1383,7 +1390,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 var decision = episodeClaims[identity];
                 if (decision != EpisodeClaimDecision.Owned)
                 {
-                    disposition = "duplicate";
+                    disposition = claim.IsOtherReadaptation ? "other" : "duplicate";
                     otherReason = decision == EpisodeClaimDecision.AlreadyCompleted
                         ? "episode_already_completed"
                         : "episode_claimed_by_another_task";
@@ -1456,7 +1463,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                   AND status = 'running' AND lease_token = $lease_token;
 
                 UPDATE ingest_tasks
-                SET status = 'metadata_resolved', failure_kind = NULL,
+                SET status = CASE
+                        WHEN $is_other_readaptation = 1 THEN 'downloaded'
+                        ELSE 'metadata_resolved'
+                    END,
+                    failure_kind = NULL,
                     failure_reason = NULL, updated_at_utc = $now
                 WHERE id = $task_id AND status = 'metadata_episode_resolving';
                 """;
@@ -1464,6 +1475,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             finish.Parameters.AddWithValue("$run_id", claim.Resolution.RunId);
             finish.Parameters.AddWithValue("$task_id", claim.Resolution.TaskId);
             finish.Parameters.AddWithValue("$lease_token", claim.Resolution.LeaseToken);
+            finish.Parameters.AddWithValue("$is_other_readaptation", claim.IsOtherReadaptation ? 1 : 0);
             if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
             {
                 throw new InvalidOperationException("Metadata Episode resolution lease is no longer active.");

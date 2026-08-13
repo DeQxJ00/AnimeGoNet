@@ -95,7 +95,8 @@ public sealed class MediaOrganizationProcessor(
                 return MediaOrganizationResult.CleanupCompleted;
             }
 
-            if (claim.FileStrategy is "move" or "wait_move")
+            if (!claim.IsOtherReadaptation
+                && claim.FileStrategy is "move" or "wait_move")
             {
                 await clients.ExecuteAsync(
                     claim.DownloaderId,
@@ -225,6 +226,7 @@ public sealed class MediaOrganizationProcessor(
         catch (Exception exception)
         {
             if (claim.Stage == MediaOrganizationStage.MoveFiles
+                && !claim.IsOtherReadaptation
                 && claim.FileStrategy is "move" or "wait_move")
             {
                 await BestEffortPauseAsync(claim, cancellationToken).ConfigureAwait(false);
@@ -260,20 +262,45 @@ public sealed class MediaOrganizationProcessor(
         foreach (var operation in operations.Where(operation => operation.State != "completed"))
         {
             var file = filesById[operation.TaskFileId];
-            var bytesVerified = claim.FileStrategy is "link" or "link_delete"
+            var sourceRoot = file.SourceOverridePath is null
+                ? claim.DownloadRootPath
+                : claim.SaveRootPath;
+            var samePath = string.Equals(
+                Path.GetFullPath(operation.SourcePath),
+                Path.GetFullPath(operation.TargetPath),
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal);
+            long bytesVerified;
+            if (samePath)
+            {
+                if (!File.Exists(operation.SourcePath)
+                    || new FileInfo(operation.SourcePath).Length != file.SizeBytes)
+                {
+                    throw new SafeFileMoveException(
+                        "readaptation_source_invalid",
+                        "Other readaptation source file is missing or has an unexpected size.");
+                }
+
+                bytesVerified = file.SizeBytes;
+            }
+            else
+            {
+                bytesVerified = claim.FileStrategy is "link" or "link_delete"
                 ? (await linker.LinkAsync(new SafeFileLinkRequest(
-                    claim.DownloadRootPath,
+                    sourceRoot,
                     claim.SaveRootPath,
                     operation.SourcePath,
                     operation.TargetPath,
                     file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
                 : (await mover.MoveAsync(new SafeFileMoveRequest(
                     operation.OperationId,
-                    claim.DownloadRootPath,
+                    sourceRoot,
                     claim.SaveRootPath,
                     operation.SourcePath,
                     operation.TargetPath,
                     file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified;
+            }
             await store.CompleteFileAsync(
                 claim,
                 operation.OperationId,
@@ -314,7 +341,8 @@ public sealed class MediaOrganizationProcessor(
                 rename.Errors.Count > 0 ? rename.Errors[0].Code : "rename_no_match");
         }
 
-        var source = PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
+        var source = file.SourceOverridePath
+            ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
         var target = PathBoundary.Combine(claim.SaveRootPath, rename.RelativeTargetPath);
         return new MediaOperationPlan(file.TaskFileId, source, target);
     }

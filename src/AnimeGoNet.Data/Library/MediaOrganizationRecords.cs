@@ -32,7 +32,8 @@ public sealed record MediaOrganizationFile(
     string CanonicalSeriesName,
     string? RenameSuffix,
     string? AssociatedFileId,
-    string? SourceEpisode = null);
+    string? SourceEpisode = null,
+    string? SourceOverridePath = null);
 
 public sealed record MediaOrganizationClaim(
     string JobId,
@@ -50,7 +51,8 @@ public sealed record MediaOrganizationClaim(
     MediaOrganizationStage Stage,
     IReadOnlyList<MediaOrganizationFile> Files,
     string? SourceWorkId = null,
-    int? MikanId = null);
+    int? MikanId = null,
+    bool IsOtherReadaptation = false);
 
 public sealed record MediaOperationPlan(
     string TaskFileId,

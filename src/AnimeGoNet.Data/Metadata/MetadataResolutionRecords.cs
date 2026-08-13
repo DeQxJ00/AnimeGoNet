@@ -137,7 +137,8 @@ public sealed record MetadataEpisodeTaskClaim(
     bool SeasonResolvedByAi = false,
     bool HasMultipleSeasons = false,
     bool EpisodeResolvedByTrustedOffset = false,
-    bool AiMetadataAttempted = false);
+    bool AiMetadataAttempted = false,
+    bool IsOtherReadaptation = false);
 
 public sealed record MetadataCanonicalSeason(
     TmdbSeries Series,
