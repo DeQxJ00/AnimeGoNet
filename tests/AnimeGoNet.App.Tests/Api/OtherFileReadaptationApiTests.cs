@@ -139,12 +139,33 @@ public sealed class OtherFileReadaptationApiTests
             complete.CommandText = """
                 UPDATE other_file_readaptation_jobs SET state = 'completed', completed_at_utc = $now
                 WHERE task_id = $task_id AND state = 'pending';
+                UPDATE task_files
+                SET disposition = 'episode', other_reason = NULL,
+                    tmdb_series_id = 65942, tmdb_season_number = 1,
+                    tmdb_episode_number = 12
+                WHERE task_id = $task_id;
                 UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
                 """;
             complete.Parameters.AddWithValue("$task_id", taskId);
             complete.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
-            Assert.Equal(2, await complete.ExecuteNonQueryAsync());
+            Assert.Equal(3, await complete.ExecuteNonQueryAsync());
         }
+
+        using var reviewPreview = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review");
+        Assert.Equal(HttpStatusCode.OK, reviewPreview.StatusCode);
+        using var reviewJson = JsonDocument.Parse(await reviewPreview.Content.ReadAsStreamAsync());
+        Assert.Equal("pending", reviewJson.RootElement.GetProperty("review_state").GetString());
+        var comparison = reviewJson.RootElement.GetProperty("files")[0];
+        Assert.Equal("other", comparison.GetProperty("before_disposition").GetString());
+        Assert.Equal("ai_tmdb_season_changed", comparison.GetProperty("before_other_reason").GetString());
+        Assert.Equal(65942, comparison.GetProperty("before_tmdb_series_id").GetInt32());
+        Assert.Equal(1, comparison.GetProperty("before_tmdb_season_number").GetInt32());
+        Assert.Equal("episode", comparison.GetProperty("after_disposition").GetString());
+        Assert.Equal(12, comparison.GetProperty("after_tmdb_episode_number").GetInt32());
+        Assert.Equal(JsonValueKind.Null, comparison.GetProperty("after_episode_strategy").ValueKind);
+        Assert.Equal(target, comparison.GetProperty("before_media_path").GetString());
+        Assert.Equal(JsonValueKind.Null, comparison.GetProperty("after_media_path").ValueKind);
 
         using var approve = await app.Client.PostAsync(
             $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review",

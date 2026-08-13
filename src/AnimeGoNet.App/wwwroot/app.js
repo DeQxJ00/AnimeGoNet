@@ -4412,11 +4412,69 @@ async function readaptOtherFiles(taskId, button) {
     }
 }
 async function approveOtherReadaptation(taskId, button) {
-    if (!window.confirm("确认已人工检查重新适配后的 Series、Season、Episode 和整理结果？确认后才允许删除任务记录。"))
-        return;
+    const defaultLabel = button.textContent ?? "确认人工审核";
     button.disabled = true;
-    button.textContent = "确认中…";
+    button.textContent = "读取前后对照…";
     try {
+        const previewResponse = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/review`, { headers });
+        if (!previewResponse.ok)
+            throw new Error(await responseError(previewResponse));
+        const preview = await previewResponse.json();
+        const dispositionLabels = {
+            episode: "正片",
+            duplicate: "重复跳过",
+            other: "Other",
+            pending: "待处理",
+            ignored: "忽略",
+            subtitle: "字幕",
+        };
+        const disposition = (value) => dispositionLabels[value] ?? value;
+        const identity = (seriesId, seriesName, seasonNumber, seasonName, episodeNumber, episodeName) => {
+            const series = seriesId === null
+                ? "TMDB Series 未知"
+                : `TMDB ${seriesId}${seriesName ? ` ${seriesName}` : ""}`;
+            const season = seasonNumber === null
+                ? "Season 未知"
+                : `S${String(seasonNumber).padStart(2, "0")}${seasonName ? ` ${seasonName}` : ""}`;
+            const episode = episodeNumber === null
+                ? "Episode 未知"
+                : `E${String(episodeNumber).padStart(2, "0")}${episodeName ? ` ${episodeName}` : ""}`;
+            return `${series} / ${season} / ${episode}`;
+        };
+        const comparisons = preview.files.map((file, index) => {
+            const before = identity(file.before_tmdb_series_id, file.before_series_name, file.before_tmdb_season_number, file.before_season_name, file.before_tmdb_episode_number, file.before_episode_name);
+            const after = identity(file.after_tmdb_series_id, file.after_series_name, file.after_tmdb_season_number, file.after_season_name, file.after_tmdb_episode_number, file.after_episode_name);
+            const shared = file.preserved_shared_source ? "\n共享文件：已保留原文件并复制整理，避免多任务冲突" : "";
+            return [
+                `${index + 1}. ${file.source_name}`,
+                `适配前：${disposition(file.before_disposition)} · ${before}`,
+                `原原因：${file.before_other_reason || "未记录"}`,
+                `原位置：${file.before_media_path}`,
+                `适配后：${disposition(file.after_disposition)} · ${after}`,
+                `新原因：${file.after_other_reason || "无"}`,
+                `新位置：${file.after_media_path || "未生成新的整理目标"}`,
+                `Episode 取得：${libraryStrategy(file.after_episode_strategy)}${shared}`,
+            ].join("\n");
+        }).join("\n\n");
+        const requested = libraryDate(preview.requested_at_utc, true);
+        const completed = libraryDate(preview.completed_at_utc, true);
+        const confirmed = window.confirm([
+            "Other 重新适配人工审核",
+            `任务：${preview.title}`,
+            `任务 ID：${preview.task_id}`,
+            `重新适配：${requested} → ${completed}`,
+            "",
+            comparisons,
+            "",
+            "请核对以上适配前后 Series、Season、Episode、归类和原因。",
+            "确认后会记录人工审核通过，随后才允许删除任务记录。",
+        ].join("\n"));
+        if (!confirmed) {
+            button.disabled = false;
+            button.textContent = defaultLabel;
+            return;
+        }
+        button.textContent = "确认中…";
         const response = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/review`, { method: "POST", headers });
         if (!response.ok)
             throw new Error(await responseError(response));
@@ -4425,6 +4483,10 @@ async function approveOtherReadaptation(taskId, button) {
     catch (error) {
         button.disabled = false;
         button.textContent = errorMessage(error, "审核确认失败");
+        window.setTimeout(() => {
+            if (button.isConnected)
+                button.textContent = defaultLabel;
+        }, 5000);
     }
 }
 const expandedMetadataTaskIds = new Set();

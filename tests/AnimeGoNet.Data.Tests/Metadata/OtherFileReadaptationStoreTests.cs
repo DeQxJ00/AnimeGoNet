@@ -89,6 +89,28 @@ public sealed class OtherFileReadaptationStoreTests
         Assert.Equal("completed", state.OrganizationPhase);
         Assert.Equal(0, state.ReadaptationCount);
         Assert.Null(await organizations.TryClaimNextAsync(now.AddSeconds(1), TimeSpan.FromMinutes(1)));
+
+        var review = Assert.IsType<OtherFileReadaptationReviewPreview>(
+            await fixture.Store.GetReviewPreviewAsync(fixture.TaskId));
+        Assert.Equal("pending", review.ReviewState);
+        Assert.NotEqual(DateTimeOffset.MinValue, review.RequestedAtUtc);
+        Assert.NotNull(review.CompletedAtUtc);
+        var comparison = Assert.Single(review.Files);
+        Assert.Equal("episode.mkv", comparison.SourceName);
+        Assert.Equal("other", comparison.BeforeDisposition);
+        Assert.Equal("episode_unresolved", comparison.BeforeOtherReason);
+        Assert.Equal(100, comparison.BeforeTmdbSeriesId);
+        Assert.Equal("Series", comparison.BeforeSeriesName);
+        Assert.Equal(2, comparison.BeforeTmdbSeasonNumber);
+        Assert.Null(comparison.BeforeTmdbEpisodeNumber);
+        Assert.Equal("episode", comparison.AfterDisposition);
+        Assert.Null(comparison.AfterOtherReason);
+        Assert.Equal(100, comparison.AfterTmdbSeriesId);
+        Assert.Equal(2, comparison.AfterTmdbSeasonNumber);
+        Assert.Equal(12, comparison.AfterTmdbEpisodeNumber);
+        Assert.False(comparison.PreservedSharedSource);
+        Assert.Equal(fixture.TargetPath, comparison.BeforeMediaPath);
+        Assert.Equal(finalTarget, comparison.AfterMediaPath);
     }
 
     private sealed class ReadaptationFixture : IAsyncDisposable

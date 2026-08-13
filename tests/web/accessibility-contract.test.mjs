@@ -92,6 +92,18 @@ test("metadata detail visibly separates source evidence from TMDB authority", as
   assert.match(css, /\.metadata-source-evidence\s*\{/);
 });
 
+test("Other readaptation review confirms a server-provided before and after comparison", async () => {
+  const app = await readFile(appPath, "utf8");
+  assert.match(app, /other-readaptation\/review/);
+  assert.match(app, /适配前：/);
+  assert.match(app, /适配后：/);
+  assert.match(app, /原原因：/);
+  assert.match(app, /新原因：/);
+  assert.match(app, /原位置：/);
+  assert.match(app, /新位置：/);
+  assert.match(app, /共享文件：已保留原文件并复制整理/);
+});
+
 test("AI test page exposes verified Responses compatibility controls and usage", async () => {
   const [document, app] = await Promise.all([
     page(),

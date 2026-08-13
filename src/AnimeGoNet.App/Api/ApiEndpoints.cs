@@ -114,6 +114,9 @@ public static class ApiEndpoints
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
             ApproveOtherFileReadaptationReview);
+        app.MapGet(
+            "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
+            PreviewOtherFileReadaptationReview);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
@@ -4782,6 +4785,57 @@ public static class ApiEndpoints
                 "other_readaptation_review_not_completed",
                 "重新解析和整理尚未完成，不能确认人工审核。")),
         };
+    }
+
+    private static async Task<IResult> PreviewOtherFileReadaptationReview(
+        string taskId,
+        OtherFileReadaptationStore store,
+        CancellationToken cancellationToken)
+    {
+        var preview = await store.GetReviewPreviewAsync(taskId, cancellationToken).ConfigureAwait(false);
+        if (preview is null)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found."));
+        }
+
+        if (preview.Files.Count == 0)
+        {
+            return TypedResults.Conflict(Error(
+                "other_readaptation_review_snapshot_missing",
+                "该任务没有可供人工审核的适配前后快照。"));
+        }
+
+        return TypedResults.Ok(new OtherFileReadaptationReviewPreviewResponse(
+            preview.TaskId,
+            preview.Title,
+            preview.TaskStatus,
+            preview.ReviewState,
+            preview.RequestedAtUtc,
+            preview.CompletedAtUtc,
+            preview.Files.Select(file => new OtherFileReadaptationReviewFileResponse(
+                file.TaskFileId,
+                file.SourceName,
+                file.BeforeDisposition,
+                file.BeforeOtherReason,
+                file.BeforeTmdbSeriesId,
+                file.BeforeSeriesName,
+                file.BeforeTmdbSeasonNumber,
+                file.BeforeSeasonName,
+                file.BeforeTmdbEpisodeNumber,
+                file.BeforeEpisodeName,
+                file.AfterDisposition,
+                file.AfterOtherReason,
+                file.AfterTmdbSeriesId,
+                file.AfterSeriesName,
+                file.AfterTmdbSeasonNumber,
+                file.AfterSeasonName,
+                file.AfterTmdbEpisodeNumber,
+                file.AfterEpisodeName,
+                file.AfterEpisodeStrategy,
+                file.PreservedSharedSource,
+                file.BeforeMediaPath,
+                file.AfterMediaPath)).ToArray()));
     }
 
     private static string? ReadaptationDenialReason(

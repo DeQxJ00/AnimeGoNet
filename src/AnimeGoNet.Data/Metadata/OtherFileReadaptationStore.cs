@@ -32,6 +32,39 @@ public sealed record OtherFileReadaptationPreview(
     string? SourcePageUrl,
     string ReviewState);
 
+public sealed record OtherFileReadaptationReviewFileComparison(
+    string TaskFileId,
+    string SourceName,
+    string BeforeDisposition,
+    string BeforeOtherReason,
+    int? BeforeTmdbSeriesId,
+    string? BeforeSeriesName,
+    int? BeforeTmdbSeasonNumber,
+    string? BeforeSeasonName,
+    int? BeforeTmdbEpisodeNumber,
+    string? BeforeEpisodeName,
+    string AfterDisposition,
+    string? AfterOtherReason,
+    int? AfterTmdbSeriesId,
+    string? AfterSeriesName,
+    int? AfterTmdbSeasonNumber,
+    string? AfterSeasonName,
+    int? AfterTmdbEpisodeNumber,
+    string? AfterEpisodeName,
+    string? AfterEpisodeStrategy,
+    bool PreservedSharedSource,
+    string BeforeMediaPath,
+    string? AfterMediaPath);
+
+public sealed record OtherFileReadaptationReviewPreview(
+    string TaskId,
+    string Title,
+    string TaskStatus,
+    string ReviewState,
+    DateTimeOffset RequestedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
+    IReadOnlyList<OtherFileReadaptationReviewFileComparison> Files);
+
 public enum OtherFileReadaptationStartResult
 {
     Started,
@@ -50,6 +83,143 @@ public enum OtherFileReadaptationReviewResult
 
 public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
 {
+    public async Task<OtherFileReadaptationReviewPreview?> GetReviewPreviewAsync(
+        string taskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string title;
+        string taskStatus;
+        string reviewState;
+        string? requestedAt;
+        await using (var task = connection.CreateCommand())
+        {
+            task.CommandText = """
+                SELECT title, status, readaptation_review_state,
+                       readaptation_review_requested_at_utc
+                FROM ingest_tasks WHERE id = $task_id;
+                """;
+            task.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await task.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            title = reader.GetString(0);
+            taskStatus = reader.GetString(1);
+            reviewState = reader.GetString(2);
+            requestedAt = reader.IsDBNull(3) ? null : reader.GetString(3);
+        }
+
+        if (requestedAt is null)
+        {
+            return new OtherFileReadaptationReviewPreview(
+                taskId, title, taskStatus, reviewState, DateTimeOffset.MinValue, null, []);
+        }
+
+        var files = new List<OtherFileReadaptationReviewFileComparison>();
+        DateTimeOffset? completedAt = null;
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT job.task_file_id, file.relative_path,
+                       COALESCE(job.original_disposition, 'other'),
+                       job.original_other_reason,
+                       job.original_tmdb_series_id, before_series.canonical_name,
+                       job.original_tmdb_season_number, before_season.canonical_name,
+                       job.original_tmdb_episode_number, before_episode.name,
+                       file.disposition, file.other_reason,
+                       file.tmdb_series_id, after_series.canonical_name,
+                       file.tmdb_season_number, after_season.canonical_name,
+                       file.tmdb_episode_number, after_episode.name,
+                       file.episode_resolution_source, job.preserve_source,
+                       job.completed_at_utc, job.source_media_path,
+                       (
+                           SELECT operation.target_path
+                           FROM file_operations AS operation
+                           WHERE operation.task_file_id = file.id
+                             AND operation.state = 'completed'
+                             AND operation.updated_at_utc >= job.requested_at_utc
+                           ORDER BY operation.updated_at_utc DESC, operation.id DESC
+                           LIMIT 1
+                       )
+                FROM other_file_readaptation_jobs AS job
+                JOIN task_files AS file ON file.id = job.task_file_id
+                LEFT JOIN anime_series AS before_series
+                  ON before_series.tmdb_series_id = job.original_tmdb_series_id
+                LEFT JOIN anime_seasons AS before_season
+                  ON before_season.series_id = before_series.id
+                 AND before_season.season_number = job.original_tmdb_season_number
+                LEFT JOIN tmdb_episodes AS before_episode
+                  ON before_episode.series_id = before_series.id
+                 AND before_episode.season_number = job.original_tmdb_season_number
+                 AND before_episode.episode_number = job.original_tmdb_episode_number
+                LEFT JOIN anime_series AS after_series
+                  ON after_series.tmdb_series_id = file.tmdb_series_id
+                LEFT JOIN anime_seasons AS after_season
+                  ON after_season.series_id = after_series.id
+                 AND after_season.season_number = file.tmdb_season_number
+                LEFT JOIN tmdb_episodes AS after_episode
+                  ON after_episode.series_id = after_series.id
+                 AND after_episode.season_number = file.tmdb_season_number
+                 AND after_episode.episode_number = file.tmdb_episode_number
+                WHERE job.task_id = $task_id AND job.requested_at_utc = $requested_at
+                ORDER BY file.relative_path, file.id;
+                """;
+            query.Parameters.AddWithValue("$task_id", taskId);
+            query.Parameters.AddWithValue("$requested_at", requestedAt);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                DateTimeOffset? rowCompletedAt = reader.IsDBNull(20)
+                    ? null
+                    : DateTimeOffset.Parse(
+                        reader.GetString(20),
+                        CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.RoundtripKind);
+                if (rowCompletedAt is not null
+                    && (completedAt is null || rowCompletedAt.Value > completedAt.Value))
+                {
+                    completedAt = rowCompletedAt;
+                }
+
+                files.Add(new OtherFileReadaptationReviewFileComparison(
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                    reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    reader.GetString(10), reader.IsDBNull(11) ? null : reader.GetString(11),
+                    reader.IsDBNull(12) ? null : reader.GetInt32(12),
+                    reader.IsDBNull(13) ? null : reader.GetString(13),
+                    reader.IsDBNull(14) ? null : reader.GetInt32(14),
+                    reader.IsDBNull(15) ? null : reader.GetString(15),
+                    reader.IsDBNull(16) ? null : reader.GetInt32(16),
+                    reader.IsDBNull(17) ? null : reader.GetString(17),
+                    reader.IsDBNull(18) ? null : reader.GetString(18),
+                    reader.GetInt64(19) == 1,
+                    reader.GetString(21),
+                    reader.IsDBNull(22) ? null : reader.GetString(22)));
+            }
+        }
+
+        return new OtherFileReadaptationReviewPreview(
+            taskId,
+            title,
+            taskStatus,
+            reviewState,
+            DateTimeOffset.Parse(
+                requestedAt,
+                CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind),
+            completedAt,
+            files);
+    }
+
     public async Task<OtherFileReadaptationPreview?> PreviewAsync(
         string taskId,
         CancellationToken cancellationToken = default)
@@ -240,10 +410,16 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                 INSERT INTO other_file_readaptation_jobs (
                     id, task_id, task_file_id, source_media_path,
                     original_other_reason, state, requested_at_utc, completed_at_utc,
-                    preserve_source)
-                VALUES (
+                    preserve_source, original_disposition,
+                    original_tmdb_series_id, original_tmdb_season_number,
+                    original_tmdb_episode_number)
+                SELECT
                     $id, $task_id, $file_id, $source_media_path,
-                    $other_reason, 'pending', $now, NULL, $preserve_source);
+                    $other_reason, 'pending', $now, NULL, $preserve_source,
+                    file.disposition, file.tmdb_series_id, file.tmdb_season_number,
+                    file.tmdb_episode_number
+                FROM task_files AS file
+                WHERE file.id = $file_id AND file.task_id = $task_id;
                 """;
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", taskId);
@@ -254,7 +430,10 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue(
                 "$preserve_source",
                 file.SharedPathReferenceCount > 1 ? 1 : 0);
-            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException("Other readaptation source snapshot changed concurrently.");
+            }
         }
 
         foreach (var file in preview.Files)

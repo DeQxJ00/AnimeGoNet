@@ -841,6 +841,39 @@ public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("review_state")] string ReviewState);
 
+public sealed record OtherFileReadaptationReviewFileResponse(
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("source_name")] string SourceName,
+    [property: JsonPropertyName("before_disposition")] string BeforeDisposition,
+    [property: JsonPropertyName("before_other_reason")] string BeforeOtherReason,
+    [property: JsonPropertyName("before_tmdb_series_id")] int? BeforeTmdbSeriesId,
+    [property: JsonPropertyName("before_series_name")] string? BeforeSeriesName,
+    [property: JsonPropertyName("before_tmdb_season_number")] int? BeforeTmdbSeasonNumber,
+    [property: JsonPropertyName("before_season_name")] string? BeforeSeasonName,
+    [property: JsonPropertyName("before_tmdb_episode_number")] int? BeforeTmdbEpisodeNumber,
+    [property: JsonPropertyName("before_episode_name")] string? BeforeEpisodeName,
+    [property: JsonPropertyName("after_disposition")] string AfterDisposition,
+    [property: JsonPropertyName("after_other_reason")] string? AfterOtherReason,
+    [property: JsonPropertyName("after_tmdb_series_id")] int? AfterTmdbSeriesId,
+    [property: JsonPropertyName("after_series_name")] string? AfterSeriesName,
+    [property: JsonPropertyName("after_tmdb_season_number")] int? AfterTmdbSeasonNumber,
+    [property: JsonPropertyName("after_season_name")] string? AfterSeasonName,
+    [property: JsonPropertyName("after_tmdb_episode_number")] int? AfterTmdbEpisodeNumber,
+    [property: JsonPropertyName("after_episode_name")] string? AfterEpisodeName,
+    [property: JsonPropertyName("after_episode_strategy")] string? AfterEpisodeStrategy,
+    [property: JsonPropertyName("preserved_shared_source")] bool PreservedSharedSource,
+    [property: JsonPropertyName("before_media_path")] string BeforeMediaPath,
+    [property: JsonPropertyName("after_media_path")] string? AfterMediaPath);
+
+public sealed record OtherFileReadaptationReviewPreviewResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("task_status")] string TaskStatus,
+    [property: JsonPropertyName("review_state")] string ReviewState,
+    [property: JsonPropertyName("requested_at_utc")] DateTimeOffset RequestedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
+    [property: JsonPropertyName("files")] IReadOnlyList<OtherFileReadaptationReviewFileResponse> Files);
+
 public sealed record MetadataTaskDetailResponse(
     [property: JsonPropertyName("summary")] MetadataTaskListItem Summary,
     [property: JsonPropertyName("source_evidence")]

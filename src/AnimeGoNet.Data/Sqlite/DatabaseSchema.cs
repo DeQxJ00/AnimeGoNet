@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 48;
+    public const int CurrentVersion = 49;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -78,7 +78,18 @@ public static class DatabaseSchema
             48,
             "fresh_readaptation_review_and_task_delete",
             FreshReadaptationReviewAndTaskDelete),
+        new SchemaMigration(
+            49,
+            "readaptation_review_comparison",
+            ReadaptationReviewComparison),
     ];
+
+    private const string ReadaptationReviewComparison = """
+        ALTER TABLE other_file_readaptation_jobs ADD COLUMN original_disposition TEXT;
+        ALTER TABLE other_file_readaptation_jobs ADD COLUMN original_tmdb_series_id INTEGER;
+        ALTER TABLE other_file_readaptation_jobs ADD COLUMN original_tmdb_season_number INTEGER;
+        ALTER TABLE other_file_readaptation_jobs ADD COLUMN original_tmdb_episode_number INTEGER;
+        """;
 
     private const string FreshReadaptationReviewAndTaskDelete = """
         ALTER TABLE ingest_tasks ADD COLUMN source_page_url TEXT;
