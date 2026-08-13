@@ -517,6 +517,12 @@
             <option value="other">其他</option>
           </select>
         </label>
+        <label>文件状态
+          <select id="metadata-file-state-filter">
+            <option value="all">全部文件</option>
+            <option value="has_other">含 Other</option>
+          </select>
+        </label>
         <label>失败阶段
           <input id="metadata-failure-stage" maxlength="64" placeholder="series / season / episode">
         </label>
@@ -1379,6 +1385,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260813-metadata-refresh-position"></script>
+    <script type="module" src="/app.js?v=20260814-other-file-filter"></script>
 </body>
 </html>

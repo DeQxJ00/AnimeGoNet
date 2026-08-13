@@ -706,6 +706,7 @@ interface MetadataUiState {
   search: string;
   status: string;
   handling: string;
+  file_state: string;
   failure_stage: string;
   error_code: string;
   retryability: string;
@@ -3814,6 +3815,7 @@ function readMetadataState(): MetadataUiState {
     search: "",
     status: "",
     handling: "all",
+    file_state: "all",
     failure_stage: "",
     error_code: "",
     retryability: "all",
@@ -3834,6 +3836,7 @@ function readMetadataState(): MetadataUiState {
       search: typeof stored.search === "string" ? stored.search.slice(0, 200) : "",
       status: typeof stored.status === "string" ? stored.status.slice(0, 64) : "",
       handling: typeof stored.handling === "string" ? stored.handling : "all",
+      file_state: stored.file_state === "has_other" ? "has_other" : "all",
       failure_stage: typeof stored.failure_stage === "string"
         ? stored.failure_stage.slice(0, 64) : "",
       error_code: typeof stored.error_code === "string"
@@ -6723,6 +6726,7 @@ async function loadMetadataTasks(background = false): Promise<void> {
     page: String(metadataState.page),
     page_size: String(metadataState.page_size),
     handling: metadataState.handling,
+    file_state: metadataState.file_state,
     retryability: metadataState.retryability,
     sort: metadataState.sort,
     direction: metadataState.direction,
@@ -9581,6 +9585,7 @@ element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episo
 element<HTMLInputElement>("#metadata-search").value = metadataState.search;
 element<HTMLSelectElement>("#metadata-status-filter").value = metadataState.status;
 element<HTMLSelectElement>("#metadata-handling-filter").value = metadataState.handling;
+element<HTMLSelectElement>("#metadata-file-state-filter").value = metadataState.file_state;
 element<HTMLInputElement>("#metadata-failure-stage").value = metadataState.failure_stage;
 element<HTMLInputElement>("#metadata-error-code").value = metadataState.error_code;
 element<HTMLSelectElement>("#metadata-retryability-filter").value =
@@ -9594,6 +9599,8 @@ element<HTMLFormElement>("#metadata-filters").addEventListener("submit", (event)
   metadataState.status = element<HTMLSelectElement>("#metadata-status-filter").value;
   metadataState.handling =
     element<HTMLSelectElement>("#metadata-handling-filter").value;
+  metadataState.file_state =
+    element<HTMLSelectElement>("#metadata-file-state-filter").value;
   metadataState.failure_stage =
     element<HTMLInputElement>("#metadata-failure-stage").value.trim().toLowerCase();
   metadataState.error_code =
@@ -9618,6 +9625,7 @@ element<HTMLButtonElement>("#metadata-filter-reset").addEventListener("click", (
     search: "",
     status: "",
     handling: "all",
+    file_state: "all",
     failure_stage: "",
     error_code: "",
     retryability: "all",
@@ -9627,6 +9635,7 @@ element<HTMLButtonElement>("#metadata-filter-reset").addEventListener("click", (
   element<HTMLInputElement>("#metadata-search").value = "";
   element<HTMLSelectElement>("#metadata-status-filter").value = "";
   element<HTMLSelectElement>("#metadata-handling-filter").value = "all";
+  element<HTMLSelectElement>("#metadata-file-state-filter").value = "all";
   element<HTMLInputElement>("#metadata-failure-stage").value = "";
   element<HTMLInputElement>("#metadata-error-code").value = "";
   element<HTMLSelectElement>("#metadata-retryability-filter").value = "all";

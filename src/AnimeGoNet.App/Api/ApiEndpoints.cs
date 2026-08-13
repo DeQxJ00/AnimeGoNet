@@ -4756,6 +4756,7 @@ public static class ApiEndpoints
         [FromQuery(Name = "error_code")] string? errorCode,
         [FromQuery] string? retryability,
         [FromQuery] string? handling,
+        [FromQuery(Name = "file_state")] string? fileState,
         [FromQuery] string? sort,
         [FromQuery] string? direction,
         MetadataResolutionStore resolutions,
@@ -4773,6 +4774,9 @@ public static class ApiEndpoints
         var resolvedHandling = string.IsNullOrWhiteSpace(handling)
             ? "all"
             : handling.Trim().ToLowerInvariant();
+        var resolvedFileState = string.IsNullOrWhiteSpace(fileState)
+            ? "all"
+            : fileState.Trim().ToLowerInvariant();
         var resolvedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         var resolvedStatus = NormalizeMetadataFilter(status);
         var resolvedFailureStage = NormalizeMetadataFilter(failureStage);
@@ -4788,7 +4792,8 @@ public static class ApiEndpoints
             || resolvedDirection is not ("asc" or "desc")
             || resolvedRetryability is not ("all" or "retryable" or "non_retryable" or "unknown")
             || resolvedHandling is not ("all" or "explicit_retry" or "configuration"
-                or "manual" or "skipped" or "fallback" or "active" or "resolved" or "other"))
+                or "manual" or "skipped" or "fallback" or "active" or "resolved" or "other")
+            || resolvedFileState is not ("all" or "has_other"))
         {
             return TypedResults.BadRequest(Error(
                 "metadata_task_filter_invalid",
@@ -4841,6 +4846,11 @@ public static class ApiEndpoints
         {
             filtered = filtered.Where(item =>
                 string.Equals(item.HandlingCategory, resolvedHandling, StringComparison.Ordinal));
+        }
+
+        if (resolvedFileState == "has_other")
+        {
+            filtered = filtered.Where(item => item.OtherFileCount > 0);
         }
 
         var ordered = OrderMetadataTasks(filtered, resolvedSort, resolvedDirection);

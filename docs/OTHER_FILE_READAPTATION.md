@@ -5,7 +5,7 @@
 
 ## 行为边界
 
-- 入口：任务库中状态为 `organized` 且 `Other > 0` 的任务显示“重新适配 Other”。
+- 入口：任务库中状态为 `organized` 且 `Other > 0` 的任务显示“重新适配 Other”；筛选栏选择“文件状态 → 含 Other”可只显示含 Other 文件的任务。
 - 预览：`GET /api/v1/metadata/tasks/{taskId}/other-readaptation/preview`。
 - 执行：`POST /api/v1/metadata/tasks/{taskId}/other-readaptation`。
 - 保留任务、来源证据、既有 Metadata Run、策略时间线和 AI 调用/Debug 日志。
