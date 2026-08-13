@@ -82,6 +82,14 @@ public enum OtherFileReadaptationReviewResult
     NotCompleted,
 }
 
+public enum OtherFileReadaptationManualOverrideResult
+{
+    OrganizationQueued,
+    DuplicateKeptInOther,
+    NotFound,
+    NotEligible,
+}
+
 public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
 {
     public async Task<OtherFileReadaptationReviewPreview?> GetReviewPreviewAsync(
@@ -138,7 +146,8 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                        file.tmdb_series_id, after_series.canonical_name,
                        file.tmdb_season_number, after_season.canonical_name,
                        file.tmdb_episode_number, after_episode.name,
-                       file.episode_resolution_source, job.preserve_source,
+                       COALESCE(job.resolution_source_override, file.episode_resolution_source),
+                       job.preserve_source,
                        job.completed_at_utc, job.source_media_path,
                        (
                            SELECT operation.target_path
@@ -582,5 +591,359 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             return OtherFileReadaptationReviewResult.NotPending;
         }
         return OtherFileReadaptationReviewResult.NotCompleted;
+    }
+
+    public async Task<OtherFileReadaptationManualOverrideResult> ApplyManualOverrideAsync(
+        string taskId,
+        string taskFileId,
+        TmdbCanonicalEpisode canonical,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskFileId);
+        ArgumentNullException.ThrowIfNull(canonical);
+        var now = utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        string otherReason;
+        string sourceMediaPath;
+        int? originalSeriesId;
+        int? originalSeasonNumber;
+        int? originalEpisodeNumber;
+        var preserveSource = false;
+        await using (var guard = connection.CreateCommand())
+        {
+            guard.Transaction = transaction;
+            guard.CommandText = """
+                SELECT file.other_reason, operation.target_path,
+                       file.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
+                       (SELECT COUNT(*) FROM file_operations AS shared
+                        WHERE shared.target_path = operation.target_path
+                          AND shared.state = 'completed')
+                FROM ingest_tasks AS task
+                JOIN download_jobs AS download ON download.task_id = task.id
+                JOIN task_files AS file ON file.task_id = task.id AND file.id = $file_id
+                JOIN file_operations AS operation
+                  ON operation.task_file_id = file.id AND operation.state = 'completed'
+                WHERE task.id = $task_id
+                  AND task.status = 'organized'
+                  AND task.readaptation_review_state = 'pending'
+                  AND download.organization_state = 'completed'
+                  AND json_extract(task.route_snapshot_json, '$.file_strategy') IN ('move', 'wait_move')
+                  AND file.disposition = 'other'
+                  AND file.other_reason IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM other_file_readaptation_jobs AS active
+                      WHERE active.task_file_id = file.id AND active.state = 'pending');
+                """;
+            guard.Parameters.AddWithValue("$task_id", taskId);
+            guard.Parameters.AddWithValue("$file_id", taskFileId);
+            await using var reader = await guard.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                await using var exists = connection.CreateCommand();
+                exists.CommandText = "SELECT EXISTS(SELECT 1 FROM ingest_tasks WHERE id = $task_id);";
+                exists.Parameters.AddWithValue("$task_id", taskId);
+                return Convert.ToInt64(
+                    await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                    CultureInfo.InvariantCulture) == 0
+                    ? OtherFileReadaptationManualOverrideResult.NotFound
+                    : OtherFileReadaptationManualOverrideResult.NotEligible;
+            }
+
+            otherReason = reader.GetString(0);
+            sourceMediaPath = reader.GetString(1);
+            originalSeriesId = reader.IsDBNull(2) ? null : reader.GetInt32(2);
+            originalSeasonNumber = reader.IsDBNull(3) ? null : reader.GetInt32(3);
+            originalEpisodeNumber = reader.IsDBNull(4) ? null : reader.GetInt32(4);
+            preserveSource = reader.GetInt32(5) > 1;
+        }
+
+        var seriesRowId = Guid.NewGuid().ToString("N");
+        await using (var series = connection.CreateCommand())
+        {
+            series.Transaction = transaction;
+            series.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
+                    poster_path, needs_tmdb_completion, first_air_date,
+                    created_at_utc, updated_at_utc)
+                VALUES ($id, $tmdb_id, NULL, $canonical_name, $original_name,
+                        $poster_path, 0, $first_air_date, $now, $now)
+                ON CONFLICT(tmdb_series_id) WHERE tmdb_series_id > 0 DO UPDATE SET
+                    canonical_name = excluded.canonical_name,
+                    original_name = excluded.original_name,
+                    poster_path = COALESCE(excluded.poster_path, anime_series.poster_path),
+                    first_air_date = COALESCE(excluded.first_air_date, anime_series.first_air_date),
+                    updated_at_utc = excluded.updated_at_utc;
+                """;
+            series.Parameters.AddWithValue("$id", seriesRowId);
+            series.Parameters.AddWithValue("$tmdb_id", canonical.Series.Id);
+            series.Parameters.AddWithValue("$canonical_name", canonical.CanonicalSeriesName);
+            series.Parameters.AddWithValue("$original_name", canonical.Series.OriginalName);
+            series.Parameters.AddWithValue("$poster_path", (object?)canonical.Series.PosterPath ?? DBNull.Value);
+            series.Parameters.AddWithValue(
+                "$first_air_date",
+                canonical.Series.FirstAirDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                    ?? (object)DBNull.Value);
+            series.Parameters.AddWithValue("$now", now);
+            await series.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var findSeries = connection.CreateCommand())
+        {
+            findSeries.Transaction = transaction;
+            findSeries.CommandText = "SELECT id FROM anime_series WHERE tmdb_series_id = $tmdb_id;";
+            findSeries.Parameters.AddWithValue("$tmdb_id", canonical.Series.Id);
+            seriesRowId = (string)(await findSeries.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Validated TMDB Series was not projected."));
+        }
+
+        await using (var season = connection.CreateCommand())
+        {
+            season.Transaction = transaction;
+            season.CommandText = """
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name, poster_path,
+                    created_at_utc, updated_at_utc, air_date, episode_count)
+                VALUES ($id, $series_id, $season_number, $name, $poster_path,
+                        $now, $now, $air_date, $episode_count)
+                ON CONFLICT(series_id, season_number) DO UPDATE SET
+                    canonical_name = excluded.canonical_name,
+                    poster_path = COALESCE(excluded.poster_path, anime_seasons.poster_path),
+                    air_date = COALESCE(excluded.air_date, anime_seasons.air_date),
+                    episode_count = MAX(anime_seasons.episode_count, excluded.episode_count),
+                    updated_at_utc = excluded.updated_at_utc;
+                """;
+            season.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            season.Parameters.AddWithValue("$series_id", seriesRowId);
+            season.Parameters.AddWithValue("$season_number", canonical.Season.SeasonNumber);
+            season.Parameters.AddWithValue("$name", canonical.Season.Name);
+            season.Parameters.AddWithValue("$poster_path", (object?)canonical.Season.PosterPath ?? DBNull.Value);
+            season.Parameters.AddWithValue(
+                "$air_date",
+                canonical.Season.AirDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                    ?? (object)DBNull.Value);
+            season.Parameters.AddWithValue("$episode_count", canonical.Season.EpisodeCount);
+            season.Parameters.AddWithValue("$now", now);
+            await season.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var episode = connection.CreateCommand())
+        {
+            episode.Transaction = transaction;
+            episode.CommandText = """
+                INSERT INTO tmdb_episodes (
+                    tmdb_episode_id, series_id, season_number, episode_number,
+                    name, air_date, runtime_minutes, fetched_at_utc)
+                VALUES ($episode_id, $series_id, $season_number, $episode_number,
+                        $name, $air_date, NULL, $now)
+                ON CONFLICT(series_id, season_number, episode_number) DO UPDATE SET
+                    tmdb_episode_id = excluded.tmdb_episode_id,
+                    name = excluded.name,
+                    air_date = excluded.air_date,
+                    fetched_at_utc = excluded.fetched_at_utc;
+                """;
+            episode.Parameters.AddWithValue("$episode_id", canonical.Episode.Id);
+            episode.Parameters.AddWithValue("$series_id", seriesRowId);
+            episode.Parameters.AddWithValue("$season_number", canonical.Episode.SeasonNumber);
+            episode.Parameters.AddWithValue("$episode_number", canonical.Episode.EpisodeNumber);
+            episode.Parameters.AddWithValue("$name", canonical.Episode.Name);
+            episode.Parameters.AddWithValue(
+                "$air_date",
+                canonical.Episode.AirDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                    ?? (object)DBNull.Value);
+            episode.Parameters.AddWithValue("$now", now);
+            await episode.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        string? duplicateReason = null;
+        await using (var duplicate = connection.CreateCommand())
+        {
+            duplicate.Transaction = transaction;
+            duplicate.CommandText = """
+                SELECT CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM completion_records
+                        WHERE tmdb_series_id = $series_id
+                          AND tmdb_season_number = $season_number
+                          AND tmdb_episode_number = $episode_number)
+                    THEN 'episode_already_completed'
+                    WHEN EXISTS (
+                        SELECT 1 FROM episode_claims AS claim
+                        WHERE claim.tmdb_series_id = $series_id
+                          AND claim.tmdb_season_number = $season_number
+                          AND claim.tmdb_episode_number = $episode_number
+                          AND (claim.state = 'completed'
+                               OR (claim.state = 'active' AND claim.task_file_id <> $file_id)))
+                    THEN 'episode_claimed_by_another_task'
+                    ELSE NULL END;
+                """;
+            duplicate.Parameters.AddWithValue("$series_id", canonical.Series.Id);
+            duplicate.Parameters.AddWithValue("$season_number", canonical.Season.SeasonNumber);
+            duplicate.Parameters.AddWithValue("$episode_number", canonical.Episode.EpisodeNumber);
+            duplicate.Parameters.AddWithValue("$file_id", taskFileId);
+            duplicateReason = await duplicate.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        }
+
+        await using (var insertJob = connection.CreateCommand())
+        {
+            insertJob.Transaction = transaction;
+            insertJob.CommandText = """
+                INSERT INTO other_file_readaptation_jobs (
+                    id, task_id, task_file_id, source_media_path, original_other_reason,
+                    state, requested_at_utc, completed_at_utc, preserve_source,
+                    original_disposition, original_tmdb_series_id,
+                    original_tmdb_season_number, original_tmdb_episode_number,
+                    resolution_source_override)
+                VALUES ($id, $task_id, $file_id, $source_path, $other_reason,
+                        $state, $now, $completed_at, $preserve_source,
+                        'other', $original_series, $original_season, $original_episode,
+                        'manual_review_override');
+                """;
+            insertJob.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            insertJob.Parameters.AddWithValue("$task_id", taskId);
+            insertJob.Parameters.AddWithValue("$file_id", taskFileId);
+            insertJob.Parameters.AddWithValue("$source_path", sourceMediaPath);
+            insertJob.Parameters.AddWithValue("$other_reason", otherReason);
+            insertJob.Parameters.AddWithValue("$state", duplicateReason is null ? "pending" : "completed");
+            insertJob.Parameters.AddWithValue("$completed_at", duplicateReason is null ? DBNull.Value : now);
+            insertJob.Parameters.AddWithValue("$preserve_source", preserveSource ? 1 : 0);
+            insertJob.Parameters.AddWithValue("$original_series", (object?)originalSeriesId ?? DBNull.Value);
+            insertJob.Parameters.AddWithValue("$original_season", (object?)originalSeasonNumber ?? DBNull.Value);
+            insertJob.Parameters.AddWithValue("$original_episode", (object?)originalEpisodeNumber ?? DBNull.Value);
+            insertJob.Parameters.AddWithValue("$now", now);
+            await insertJob.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var updateFile = connection.CreateCommand())
+        {
+            updateFile.Transaction = transaction;
+            updateFile.CommandText = """
+                UPDATE task_files
+                SET disposition = $disposition,
+                    other_reason = $other_reason,
+                    tmdb_series_id = $series_id,
+                    tmdb_season_number = $season_number,
+                    tmdb_episode_number = $episode_number,
+                    tmdb_episode_id = $episode_id,
+                    associated_task_file_id = NULL,
+                    rename_suffix = NULL,
+                    episode_resolution_source = NULL,
+                    episode_resolution_run_id = NULL,
+                    episode_resolution_attempt_id = NULL
+                WHERE id = $file_id AND task_id = $task_id;
+                """;
+            updateFile.Parameters.AddWithValue("$disposition", duplicateReason is null ? "episode" : "other");
+            updateFile.Parameters.AddWithValue("$other_reason", (object?)duplicateReason ?? DBNull.Value);
+            updateFile.Parameters.AddWithValue("$series_id", canonical.Series.Id);
+            updateFile.Parameters.AddWithValue("$season_number", canonical.Season.SeasonNumber);
+            updateFile.Parameters.AddWithValue("$episode_number", canonical.Episode.EpisodeNumber);
+            updateFile.Parameters.AddWithValue("$episode_id", canonical.Episode.Id);
+            updateFile.Parameters.AddWithValue("$file_id", taskFileId);
+            updateFile.Parameters.AddWithValue("$task_id", taskId);
+            await updateFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (duplicateReason is null)
+        {
+            await using (var release = connection.CreateCommand())
+            {
+                release.Transaction = transaction;
+                release.CommandText = """
+                    UPDATE episode_claims SET state = 'released', expires_at_utc = NULL
+                    WHERE task_file_id = $file_id AND state = 'active'
+                      AND NOT (tmdb_series_id = $series_id
+                               AND tmdb_season_number = $season_number
+                               AND tmdb_episode_number = $episode_number);
+                    """;
+                release.Parameters.AddWithValue("$file_id", taskFileId);
+                release.Parameters.AddWithValue("$series_id", canonical.Series.Id);
+                release.Parameters.AddWithValue("$season_number", canonical.Season.SeasonNumber);
+                release.Parameters.AddWithValue("$episode_number", canonical.Episode.EpisodeNumber);
+                await release.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await using (var claim = connection.CreateCommand())
+            {
+                claim.Transaction = transaction;
+                claim.CommandText = """
+                    INSERT INTO episode_claims (
+                        id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                        task_file_id, state, claimed_at_utc, expires_at_utc)
+                    VALUES ($id, $series_id, $season_number, $episode_number,
+                            $file_id, 'active', $now, NULL)
+                    ON CONFLICT(tmdb_series_id, tmdb_season_number, tmdb_episode_number)
+                    DO UPDATE SET id = excluded.id, task_file_id = excluded.task_file_id,
+                                  state = 'active', claimed_at_utc = excluded.claimed_at_utc,
+                                  expires_at_utc = NULL
+                    WHERE episode_claims.state = 'released';
+                    """;
+                claim.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                claim.Parameters.AddWithValue("$series_id", canonical.Series.Id);
+                claim.Parameters.AddWithValue("$season_number", canonical.Season.SeasonNumber);
+                claim.Parameters.AddWithValue("$episode_number", canonical.Episode.EpisodeNumber);
+                claim.Parameters.AddWithValue("$file_id", taskFileId);
+                claim.Parameters.AddWithValue("$now", now);
+                if (await claim.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                {
+                    throw new InvalidOperationException("Validated TMDB Episode became occupied concurrently.");
+                }
+            }
+
+            await using var requeue = connection.CreateCommand();
+            requeue.Transaction = transaction;
+            requeue.CommandText = """
+                DELETE FROM file_operations WHERE task_file_id = $file_id;
+                UPDATE download_jobs
+                SET organization_state = 'pending', organization_lease_token = NULL,
+                    organization_lease_expires_at_utc = NULL,
+                    organization_next_attempt_at_utc = NULL,
+                    organization_failure_code = NULL, organization_phase = 'not_started',
+                    organization_total_units = 0, organization_completed_units = 0,
+                    updated_at_utc = $now, revision = revision + 1
+                WHERE task_id = $task_id AND organization_state = 'completed';
+                UPDATE ingest_tasks
+                SET status = 'downloaded', readaptation_review_state = 'pending',
+                    readaptation_review_requested_at_utc = $now,
+                    readaptation_reviewed_at_utc = NULL,
+                    failure_kind = NULL, failure_reason = NULL, updated_at_utc = $now
+                WHERE id = $task_id AND status = 'organized';
+                """;
+            requeue.Parameters.AddWithValue("$file_id", taskFileId);
+            requeue.Parameters.AddWithValue("$task_id", taskId);
+            requeue.Parameters.AddWithValue("$now", now);
+            if (await requeue.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 3)
+            {
+                throw new InvalidOperationException("Manual TMDB correction state changed concurrently.");
+            }
+        }
+        else
+        {
+            await using var finish = connection.CreateCommand();
+            finish.Transaction = transaction;
+            finish.CommandText = """
+                UPDATE ingest_tasks
+                SET readaptation_review_state = 'pending',
+                    readaptation_review_requested_at_utc = $now,
+                    readaptation_reviewed_at_utc = NULL,
+                    updated_at_utc = $now
+                WHERE id = $task_id AND status = 'organized';
+                """;
+            finish.Parameters.AddWithValue("$task_id", taskId);
+            finish.Parameters.AddWithValue("$now", now);
+            if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException("Manual TMDB duplicate review state changed concurrently.");
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return duplicateReason is null
+            ? OtherFileReadaptationManualOverrideResult.OrganizationQueued
+            : OtherFileReadaptationManualOverrideResult.DuplicateKeptInOther;
     }
 }

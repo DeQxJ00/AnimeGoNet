@@ -841,6 +841,23 @@ public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("review_state")] string ReviewState);
 
+public sealed record OtherFileReadaptationManualOverrideRequest(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_episode_number")] int TmdbEpisodeNumber);
+
+public sealed record OtherFileReadaptationManualOverrideResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("series_name")] string SeriesName,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("season_name")] string SeasonName,
+    [property: JsonPropertyName("tmdb_episode_number")] int TmdbEpisodeNumber,
+    [property: JsonPropertyName("episode_name")] string EpisodeName,
+    [property: JsonPropertyName("other_action")] string OtherAction);
+
 public sealed record OtherFileReadaptationReviewFileResponse(
     [property: JsonPropertyName("task_file_id")] string TaskFileId,
     [property: JsonPropertyName("source_name")] string SourceName,

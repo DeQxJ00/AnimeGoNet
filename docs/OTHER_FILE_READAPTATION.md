@@ -14,6 +14,25 @@
 - 成功后以旧 `Other` 文件作为安全移动源，直接进入规范 Episode 路径；再次无法确认时文件原地保留在 `Other`。
 - 不重建 Torrent、不重新下载、不改变下载准备状态，也不调用 qB pause/delete/cleanup。
 
+## 人工审核与 TMDB 修正
+
+重新适配执行状态和人工审核状态相互独立。媒体整理完成后，任务仍是业务上的
+`organized`，WebUI 另外显示“重新适配待审核”；审核通过后显示“重新适配审核完成”，
+并保留只读的适配前后对照、执行完成时间与审核完成时间。
+
+待审核且最终仍为 `Other` 的单个文件可手工填写 TMDB Series ID、普通 Season 和
+Episode。服务端必须通过 TMDB Series/Season/Episode 三个 endpoint 验证规范身份后
+才允许写入；验证失败不修改任务、SQLite 状态或媒体文件。成功结果记为
+`manual_review_override`，不冒充确定性规则或 AI 证据。
+
+- 新 TMDB Episode 尚未完成且未被其他任务占用：重新建立 Episode claim，并使用已
+  整理的 Other 文件重新进入媒体整理。独占文件按原策略 move，旧 Other 路径随移动
+  消失；共享路径按 copy 语义保留共享源。
+- 新 TMDB Episode 已有完成记录或被其他任务占用：文件继续保留在 Other，记录明确
+  的重复原因，绝不自动删除。用户核对后仍可批准这次审核。
+- “审核通过”只完成审核，不隐式删除 Other。需要删除重复或不需要的实体文件时，
+  必须另走显式、可预览的删除操作。
+
 ## 安全门禁
 
 首版只支持任务快照中的 `move` / `wait_move`。执行前必须同时满足：
@@ -31,11 +50,15 @@
 SQLite schema v47 的 `other_file_readaptation_jobs` 按文件保存旧媒体路径、原始
 `other_reason`、请求时间和完成时间。重新适配期间，媒体整理只领取这些文件，并把旧
 媒体路径作为源路径。全部文件操作和完成记录提交后，任务直接恢复为 `organized`，
-不会再次进入下载器清理阶段。
+不会再次进入下载器清理阶段。schema v49 固化审核前的 TMDB/归类快照；schema v50
+为人工修正保存独立的 `manual_review_override` 来源。
 
 ## 验收
 
 - Data tests：状态重入、TMDB Series/Season 保留、共享路径拒绝、源路径覆盖、完成后不产生 qB cleanup。
 - API test：真实临时文件通过预览，执行后文件仍在原位等待 Episode worker，下载准备保持 `completed`。
 - WebUI：任务卡仅在 `organized + Other` 时显示按钮，先显示文件与旧原因确认，再执行。
+- 人工修正：Data tests 覆盖唯一目标重新入队和重复目标保留 Other；API test 使用 fake
+  TMDB 完成三段验证并证明审核完成后仍可只读查看结果；Web contract 覆盖手工表单及
+  Other 不自动删除说明。
 - NativeAOT：随正常 win-x64 发布 smoke 验证端点和静态 WebUI。

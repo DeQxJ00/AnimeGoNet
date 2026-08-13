@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 49;
+    public const int CurrentVersion = 50;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -82,7 +82,17 @@ public static class DatabaseSchema
             49,
             "readaptation_review_comparison",
             ReadaptationReviewComparison),
+        new SchemaMigration(
+            50,
+            "readaptation_manual_tmdb_override",
+            ReadaptationManualTmdbOverride),
     ];
+
+    private const string ReadaptationManualTmdbOverride = """
+        ALTER TABLE other_file_readaptation_jobs ADD COLUMN resolution_source_override TEXT
+            CHECK (resolution_source_override IS NULL
+                   OR resolution_source_override = 'manual_review_override');
+        """;
 
     private const string ReadaptationReviewComparison = """
         ALTER TABLE other_file_readaptation_jobs ADD COLUMN original_disposition TEXT;

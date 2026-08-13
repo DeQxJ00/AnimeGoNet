@@ -1,6 +1,7 @@
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Library;
@@ -113,6 +114,82 @@ public sealed class OtherFileReadaptationStoreTests
         Assert.Equal(finalTarget, comparison.AfterMediaPath);
     }
 
+    [Fact]
+    public async Task ManualTmdbOverrideValidTargetQueuesSafeOrganization()
+    {
+        await using var fixture = await ReadaptationFixture.CreateAsync();
+        await fixture.SetReviewPendingAsync();
+
+        var result = await fixture.Store.ApplyManualOverrideAsync(
+            fixture.TaskId,
+            fixture.FileId,
+            CanonicalEpisode(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(OtherFileReadaptationManualOverrideResult.OrganizationQueued, result);
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("downloaded", state.TaskStatus);
+        Assert.Equal("episode", state.FileDisposition);
+        Assert.Null(state.OtherReason);
+        Assert.Equal(200, state.TmdbSeriesId);
+        Assert.Equal(3, state.TmdbSeasonNumber);
+        Assert.Equal("pending", state.OrganizationState);
+        Assert.Equal("not_started", state.OrganizationPhase);
+        Assert.Equal(0, state.OperationCount);
+        Assert.Equal(1, state.ReadaptationCount);
+
+        var review = Assert.IsType<OtherFileReadaptationReviewPreview>(
+            await fixture.Store.GetReviewPreviewAsync(fixture.TaskId));
+        var comparison = Assert.Single(review.Files);
+        Assert.Equal("manual_review_override", comparison.AfterEpisodeStrategy);
+        Assert.Equal("other", comparison.BeforeDisposition);
+        Assert.Equal("episode", comparison.AfterDisposition);
+        Assert.Equal(9, comparison.AfterTmdbEpisodeNumber);
+        Assert.Equal(fixture.TargetPath, comparison.BeforeMediaPath);
+    }
+
+    [Fact]
+    public async Task ManualTmdbOverrideCompletedTargetKeepsOtherForExplicitReview()
+    {
+        await using var fixture = await ReadaptationFixture.CreateAsync();
+        await fixture.SetReviewPendingAsync();
+        await fixture.AddCompletionAsync(200, 3, 9);
+
+        var result = await fixture.Store.ApplyManualOverrideAsync(
+            fixture.TaskId,
+            fixture.FileId,
+            CanonicalEpisode(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(OtherFileReadaptationManualOverrideResult.DuplicateKeptInOther, result);
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("organized", state.TaskStatus);
+        Assert.Equal("other", state.FileDisposition);
+        Assert.Equal("episode_already_completed", state.OtherReason);
+        Assert.Equal(200, state.TmdbSeriesId);
+        Assert.Equal(3, state.TmdbSeasonNumber);
+        Assert.Equal("completed", state.OrganizationState);
+        Assert.Equal(1, state.OperationCount);
+        Assert.Equal(0, state.ReadaptationCount);
+
+        var review = Assert.IsType<OtherFileReadaptationReviewPreview>(
+            await fixture.Store.GetReviewPreviewAsync(fixture.TaskId));
+        Assert.NotNull(review.CompletedAtUtc);
+        var comparison = Assert.Single(review.Files);
+        Assert.Equal("manual_review_override", comparison.AfterEpisodeStrategy);
+        Assert.Equal("other", comparison.AfterDisposition);
+        Assert.Equal("episode_already_completed", comparison.AfterOtherReason);
+        Assert.Equal(9, comparison.AfterTmdbEpisodeNumber);
+        Assert.Equal(fixture.TargetPath, comparison.BeforeMediaPath);
+        Assert.Null(comparison.AfterMediaPath);
+    }
+
+    private static TmdbCanonicalEpisode CanonicalEpisode() => new(
+        new TmdbSeries(200, "Canonical Series", "Original Series", new DateOnly(2025, 1, 1)),
+        new TmdbSeason(300, 200, 3, "Season 3", new DateOnly(2025, 1, 1), 12),
+        new TmdbEpisode(30009, 200, 3, 9, "Episode 9", new DateOnly(2025, 2, 26)),
+        "Canonical Series");
+
     private sealed class ReadaptationFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _database;
@@ -135,7 +212,7 @@ public sealed class OtherFileReadaptationStoreTests
 
         public string TaskId { get; }
 
-        private string FileId { get; }
+        public string FileId { get; }
 
         public string TargetPath { get; }
 
@@ -237,6 +314,40 @@ public sealed class OtherFileReadaptationStoreTests
             command.Parameters.AddWithValue("$target", TargetPath);
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             Assert.Equal(2, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task SetReviewPendingAsync()
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET readaptation_review_state = 'pending',
+                    readaptation_review_requested_at_utc = $now,
+                    readaptation_reviewed_at_utc = NULL
+                WHERE id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O"));
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task AddCompletionAsync(int seriesId, int seasonNumber, int episodeNumber)
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO completion_records (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    source_id, source_item_id, media_path, completed_at_utc)
+                VALUES ('manual-override-completion', $series, $season, $episode,
+                        'test', 'completed-target', '/library/completed.mkv', $now);
+                """;
+            command.Parameters.AddWithValue("$series", seriesId);
+            command.Parameters.AddWithValue("$season", seasonNumber);
+            command.Parameters.AddWithValue("$episode", episodeNumber);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public async Task ResolveAsEpisodeAsync(int episodeNumber, int episodeId)

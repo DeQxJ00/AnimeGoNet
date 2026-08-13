@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,7 @@ public sealed class OtherFileReadaptationApiTests
     {
         var transport = new MikanPageTransport();
         await using var app = await RunningApp.StartAsync(
+            tmdbClient: new ReviewTmdbClient(),
             rssDnsResolver: new PublicDnsResolver(),
             rssHttpTransport: transport);
         const string payload = """
@@ -140,16 +142,49 @@ public sealed class OtherFileReadaptationApiTests
                 UPDATE other_file_readaptation_jobs SET state = 'completed', completed_at_utc = $now
                 WHERE task_id = $task_id AND state = 'pending';
                 UPDATE task_files
-                SET disposition = 'episode', other_reason = NULL,
+                SET disposition = 'other', other_reason = 'ai_tmdb_episode_unresolved',
                     tmdb_series_id = 65942, tmdb_season_number = 1,
-                    tmdb_episode_number = 12
+                    tmdb_episode_number = NULL
                 WHERE task_id = $task_id;
                 UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
+                UPDATE download_jobs
+                SET organization_state = 'completed', organization_phase = 'completed',
+                    organization_total_units = 1, organization_completed_units = 1
+                WHERE task_id = $task_id;
+                INSERT INTO file_operations (
+                    id, task_file_id, strategy, source_path, target_path, state,
+                    bytes_verified, failure_reason, created_at_utc, updated_at_utc)
+                SELECT 'readapt-api-operation-final', id, 'move', $target, $target,
+                       'completed', 5, NULL, $now, $now
+                FROM task_files WHERE task_id = $task_id;
+                INSERT INTO completion_records (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    source_id, source_item_id, media_path, completed_at_utc)
+                VALUES ('readapt-api-existing-e12', 65942, 1, 12,
+                        'test', 'existing-e12', $completed_target, $now);
                 """;
             complete.Parameters.AddWithValue("$task_id", taskId);
             complete.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
-            Assert.Equal(3, await complete.ExecuteNonQueryAsync());
+            complete.Parameters.AddWithValue("$target", target);
+            complete.Parameters.AddWithValue(
+                "$completed_target",
+                Path.Combine(app.RootPath, "library", "Series", "S01", "Series - S01E12.mkv"));
+            Assert.Equal(6, await complete.ExecuteNonQueryAsync());
         }
+
+        using var manual = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review/files/"
+                + $"{await ReadFileIdAsync(database, taskId)}/manual-override",
+            new StringContent(
+                """{"tmdb_series_id":65942,"tmdb_season_number":1,"tmdb_episode_number":12}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.True(
+            manual.StatusCode == HttpStatusCode.OK,
+            $"Expected OK, received {manual.StatusCode}: {await manual.Content.ReadAsStringAsync()}");
+        using var manualJson = JsonDocument.Parse(await manual.Content.ReadAsStreamAsync());
+        Assert.Equal("duplicate_kept_in_other", manualJson.RootElement.GetProperty("result").GetString());
+        Assert.Equal("kept_in_other_no_auto_delete", manualJson.RootElement.GetProperty("other_action").GetString());
 
         using var reviewPreview = await app.Client.GetAsync(
             $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review");
@@ -160,12 +195,13 @@ public sealed class OtherFileReadaptationApiTests
         Assert.Equal(JsonValueKind.Null, reviewJson.RootElement.GetProperty("reviewed_at_utc").ValueKind);
         var comparison = reviewJson.RootElement.GetProperty("files")[0];
         Assert.Equal("other", comparison.GetProperty("before_disposition").GetString());
-        Assert.Equal("ai_tmdb_season_changed", comparison.GetProperty("before_other_reason").GetString());
+        Assert.Equal("ai_tmdb_episode_unresolved", comparison.GetProperty("before_other_reason").GetString());
         Assert.Equal(65942, comparison.GetProperty("before_tmdb_series_id").GetInt32());
         Assert.Equal(1, comparison.GetProperty("before_tmdb_season_number").GetInt32());
-        Assert.Equal("episode", comparison.GetProperty("after_disposition").GetString());
+        Assert.Equal("other", comparison.GetProperty("after_disposition").GetString());
+        Assert.Equal("episode_already_completed", comparison.GetProperty("after_other_reason").GetString());
         Assert.Equal(12, comparison.GetProperty("after_tmdb_episode_number").GetInt32());
-        Assert.Equal(JsonValueKind.Null, comparison.GetProperty("after_episode_strategy").ValueKind);
+        Assert.Equal("manual_review_override", comparison.GetProperty("after_episode_strategy").GetString());
         Assert.Equal(target, comparison.GetProperty("before_media_path").GetString());
         Assert.Equal(JsonValueKind.Null, comparison.GetProperty("after_media_path").ValueKind);
 
@@ -185,6 +221,15 @@ public sealed class OtherFileReadaptationApiTests
         using var deletePreview = await app.Client.GetAsync($"/api/v1/delete/tasks/{taskId}/preview");
         using var deleteJson = JsonDocument.Parse(await deletePreview.Content.ReadAsStreamAsync());
         Assert.True(deleteJson.RootElement.GetProperty("task_record_deletion_allowed").GetBoolean());
+    }
+
+    private static async Task<string> ReadFileIdAsync(AnimeGoSqliteDatabase database, string taskId)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id FROM task_files WHERE task_id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Assert.IsType<string>(await command.ExecuteScalarAsync());
     }
 
     private sealed class PublicDnsResolver : ITorrentDnsResolver
@@ -212,5 +257,42 @@ public sealed class OtherFileReadaptationApiTests
             return ValueTask.FromResult(new TorrentHttpResponse(
                 HttpStatusCode.OK, null, bytes.Length, new MemoryStream(bytes, writable: false)));
         }
+    }
+
+    private sealed class ReviewTmdbClient : ITmdbClient
+    {
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+            string title,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TmdbSeries>>([]);
+
+        public Task<TmdbSeries?> GetSeriesAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeries?>(seriesId == 65942
+                ? new TmdbSeries(65942, "Re：从零开始的异世界生活", "Re:Zero", new DateOnly(2016, 4, 4))
+                : null);
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeriesDetails?>(null);
+
+        public Task<TmdbSeason?> GetSeasonAsync(
+            int seriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeason?>(seriesId == 65942 && seasonNumber == 1
+                ? new TmdbSeason(70001, 65942, 1, "Season 1", new DateOnly(2016, 4, 4), 78)
+                : null);
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(
+            int seriesId,
+            int seasonNumber,
+            int episodeNumber,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbEpisode?>(seriesId == 65942 && seasonNumber == 1 && episodeNumber == 12
+                ? new TmdbEpisode(70012, 65942, 1, 12, "Episode 12", new DateOnly(2016, 6, 20))
+                : null);
     }
 }

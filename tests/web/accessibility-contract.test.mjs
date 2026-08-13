@@ -109,12 +109,19 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(app, /"TMDB Series"/);
   assert.match(app, /"媒体位置"/);
   assert.match(app, /"Episode 取得"/);
+  assert.match(app, /"Other 处理"/);
+  assert.match(app, /人工修正 TMDB 归属/);
+  assert.match(app, /TMDB Series ID/);
+  assert.match(app, /验证并重新整理/);
+  assert.match(app, /manual-override/);
+  assert.match(app, /目标 Episode 已完成或被占用；保留当前 Other，不自动删除/);
   assert.match(app, /完成后状态/);
   assert.match(app, /重新适配审核完成/);
   assert.match(app, /查看审核结果/);
   assert.match(app, /复制整理并保留共享源文件/);
   assert.match(app, /otherReadaptationReviewDialog\.showModal\(\)/);
   assert.match(css, /\.readaptation-review-table\s*\{/);
+  assert.match(css, /\.readaptation-manual-fields\s*\{/);
 });
 
 test("AI test page exposes verified Responses compatibility controls and usage", async () => {

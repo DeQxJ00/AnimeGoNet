@@ -2120,6 +2120,7 @@ function libraryStrategy(value) {
         tmdb_episode_bangumi_date: "Bangumi/TMDB EP ±1 日 + TMDB 验证",
         tmdb_episode_bangumi_nearest_date: "单文件 7 日最近日期 + 文件名 EP + TMDB 验证",
         subtitle_association: "字幕关联已确认 EP",
+        manual_review_override: "人工审核 TMDB 修正 + TMDB 验证",
     };
     return value ? labels[value] ?? value : "未记录";
 }
@@ -4462,6 +4463,105 @@ function appendReadaptationRow(body, label, before, after, code = false) {
     row.append(heading, readaptationCell(before, code), readaptationCell(after, code));
     body.append(row);
 }
+function readaptationOtherAction(file) {
+    if (file.after_disposition === "episode") {
+        return file.preserved_shared_source
+            ? "共享源保留；复制到规范 Episode 路径"
+            : "独占文件迁出 Other；旧 Other 路径随移动消失";
+    }
+    if (file.after_other_reason === "episode_already_completed"
+        || file.after_other_reason === "episode_claimed_by_another_task") {
+        return "目标 Episode 已完成或被占用；保留当前 Other，不自动删除";
+    }
+    return "仍归类为 Other；保留当前文件，不自动删除";
+}
+function readaptationNumberInput(label, value) {
+    const field = document.createElement("label");
+    field.textContent = label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.step = "1";
+    input.required = true;
+    input.value = value === null ? "" : String(value);
+    field.append(input);
+    return { field, input };
+}
+function createReadaptationManualOverride(preview, file) {
+    const form = document.createElement("form");
+    form.className = "readaptation-manual-override";
+    const heading = document.createElement("strong");
+    heading.textContent = "人工修正 TMDB 归属";
+    const fields = document.createElement("div");
+    fields.className = "readaptation-manual-fields";
+    const series = readaptationNumberInput("TMDB Series ID", file.after_tmdb_series_id ?? file.before_tmdb_series_id);
+    const season = readaptationNumberInput("Season", file.after_tmdb_season_number ?? file.before_tmdb_season_number);
+    const episode = readaptationNumberInput("Episode", file.after_tmdb_episode_number ?? file.before_tmdb_episode_number);
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "primary-button";
+    submit.textContent = "验证并重新整理";
+    fields.append(series.field, season.field, episode.field, submit);
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "服务端会重新验证 TMDB Series / Season / Episode。新目标未占用时安全迁出或复制；目标已完成时继续保留 Other，不自动删除。";
+    form.append(heading, fields, note);
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        if (otherReadaptationReviewSubmitting)
+            return;
+        otherReadaptationReviewSubmitting = true;
+        submit.disabled = true;
+        submit.textContent = "正在验证 TMDB…";
+        const message = element("#other-readaptation-review-message");
+        message.textContent = "正在验证 TMDB 身份；验证通过前不会修改任务或文件。";
+        void (async () => {
+            try {
+                const requestHeaders = new Headers(headers);
+                requestHeaders.set("Content-Type", "application/json");
+                const response = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(preview.task_id)}`
+                    + `/other-readaptation/review/files/${encodeURIComponent(file.task_file_id)}`
+                    + "/manual-override", {
+                    method: "POST",
+                    headers: requestHeaders,
+                    body: JSON.stringify({
+                        tmdb_series_id: Number(series.input.value),
+                        tmdb_season_number: Number(season.input.value),
+                        tmdb_episode_number: Number(episode.input.value),
+                    }),
+                });
+                if (!response.ok)
+                    throw new Error(await responseError(response));
+                const result = await response.json();
+                if (result.result === "organization_queued") {
+                    otherReadaptationReviewDialog.close();
+                    await loadMetadataTasks();
+                    return;
+                }
+                const refreshedResponse = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(preview.task_id)}`
+                    + "/other-readaptation/review", { headers });
+                if (!refreshedResponse.ok)
+                    throw new Error(await responseError(refreshedResponse));
+                const refreshed = await refreshedResponse.json();
+                if (activeOtherReadaptationReview !== null) {
+                    activeOtherReadaptationReview.preview = refreshed;
+                }
+                renderOtherReadaptationReview(refreshed);
+                element("#other-readaptation-review-message").textContent =
+                    "TMDB 已验证；目标 Episode 已完成或被占用，因此当前 Other 文件已保留，等待人工审核。";
+            }
+            catch (error) {
+                message.textContent = errorMessage(error, "人工修正失败");
+                submit.disabled = false;
+                submit.textContent = "验证并重新整理";
+            }
+            finally {
+                otherReadaptationReviewSubmitting = false;
+            }
+        })();
+    });
+    return form;
+}
 function renderOtherReadaptationReview(preview) {
     const summary = element("#other-readaptation-review-summary");
     const episodeCount = preview.files.filter(file => file.after_disposition === "episode").length;
@@ -4520,9 +4620,15 @@ function renderOtherReadaptationReview(preview) {
         appendReadaptationRow(body, "共享文件", file.preserved_shared_source ? "是" : "否", file.preserved_shared_source
             ? "复制整理并保留共享源文件"
             : "不需要共享复制");
+        appendReadaptationRow(body, "Other 处理", "原文件位于 Other", readaptationOtherAction(file));
         table.append(head, body);
         wrapper.append(table);
         card.append(title, wrapper);
+        if (preview.review_state === "pending"
+            && preview.task_status === "organized"
+            && file.after_disposition === "other") {
+            card.append(createReadaptationManualOverride(preview, file));
+        }
         return card;
     });
     files.replaceChildren(...cards);

@@ -117,6 +117,9 @@ public static class ApiEndpoints
         app.MapGet(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
             PreviewOtherFileReadaptationReview);
+        app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/other-readaptation/review/files/{taskFileId}/manual-override",
+            ApplyOtherFileReadaptationManualOverride);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
@@ -4842,6 +4845,71 @@ public static class ApiEndpoints
                 file.PreservedSharedSource,
                 file.BeforeMediaPath,
                 file.AfterMediaPath)).ToArray()));
+    }
+
+    private static async Task<IResult> ApplyOtherFileReadaptationManualOverride(
+        string taskId,
+        string taskFileId,
+        OtherFileReadaptationManualOverrideRequest request,
+        TmdbAuthority authority,
+        OtherFileReadaptationStore store,
+        CancellationToken cancellationToken)
+    {
+        var validation = await authority.ValidateEpisodeAsync(
+            request.TmdbSeriesId,
+            request.TmdbSeasonNumber,
+            request.TmdbEpisodeNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (!validation.IsSuccess)
+        {
+            var failure = validation.Failure!;
+            var status = failure.Kind switch
+            {
+                MetadataFailureKind.InvalidInput => StatusCodes.Status400BadRequest,
+                MetadataFailureKind.SemanticNoMatch => StatusCodes.Status422UnprocessableEntity,
+                MetadataFailureKind.Network
+                    or MetadataFailureKind.RemoteService
+                    or MetadataFailureKind.Authentication
+                    or MetadataFailureKind.Configuration => StatusCodes.Status503ServiceUnavailable,
+                _ => StatusCodes.Status502BadGateway,
+            };
+            return TypedResults.Json(
+                Error(failure.Code, "TMDB Series / Season / Episode 验证失败；未修改任务和文件。"),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: status);
+        }
+
+        var canonical = validation.Value!;
+        var result = await store.ApplyManualOverrideAsync(
+            taskId,
+            taskFileId,
+            canonical,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        if (result == OtherFileReadaptationManualOverrideResult.NotFound)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found."));
+        }
+        if (result == OtherFileReadaptationManualOverrideResult.NotEligible)
+        {
+            return TypedResults.Conflict(Error(
+                "other_readaptation_manual_override_not_eligible",
+                "文件已不处于可人工修正的待审核 Other 状态。"));
+        }
+
+        var queued = result == OtherFileReadaptationManualOverrideResult.OrganizationQueued;
+        return TypedResults.Ok(new OtherFileReadaptationManualOverrideResponse(
+            taskId,
+            taskFileId,
+            queued ? "organization_queued" : "duplicate_kept_in_other",
+            canonical.Series.Id,
+            canonical.CanonicalSeriesName,
+            canonical.Season.SeasonNumber,
+            canonical.Season.Name,
+            canonical.Episode.EpisodeNumber,
+            canonical.Episode.Name,
+            queued ? "move_or_copy_from_other" : "kept_in_other_no_auto_delete"));
     }
 
     private static string? ReadaptationDenialReason(
