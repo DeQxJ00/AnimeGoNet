@@ -107,6 +107,10 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 `PUT /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 是权威刷新，不是自由编辑。请求必须提交详情响应中的 64 位 `expected_revision`；服务端在远端请求前和写事务内都检查 revision，再重新验证 Series 与 Season，替换 TMDB 当前 Episode snapshot，并保留规范完成记录。`DELETE` 使用相同 revision；只删除无业务引用的本地 Season/EP 投影，最后一个 Season 删除后才删除 Series。任务文件、完成记录、Episode claim、Mikan 人工规则、fallback 完成记录或活动 NFO 重写仍引用该身份时返回冲突，并要求使用四类删除流程。该操作始终不删除 qBittorrent 任务、源文件或媒体文件。
 
+季度详情同时提供“删除任务/文件”入口：只有一个关联任务时直接打开该任务的不可变四类删除预览；存在多个关联任务时展开“关联任务与四类删除”，由用户逐条选择任务、查看业务记录/qBittorrent 任务/下载源文件/媒体文件/任务记录目标后再确认。该入口不创建新的隐式级联语义；“仅删除无引用投影”仍与实际文件删除严格分开。
+
+季度详情同时提供“删除任务/文件”入口：只有一个关联任务时直接打开该任务的不可变四类删除预览；存在多个关联任务时展开“关联任务与四类删除”，由用户逐条选择任务、查看业务记录/qBittorrent 任务/下载源文件/媒体文件/任务记录目标后再确认。该入口不创建新的隐式级联语义；“仅删除无引用投影”仍与实际文件删除严格分开。
+
 季度详情同时返回元数据审计投影。`manual_offsets` 只显示当前仍与该规范季度或其关联 Mikan 任务有关、且确实含 EP offset 的人工规则，并同时标明启停、作用域和 revision；它是“当前配置”，不冒充某次历史 Run 实际使用的值。关联任务用规范 `task_files` 或任一解析 Run 的 `tmdb_series_id + tmdb_season_number` 建立，按最近更新时间返回最多 50 条。季度时间线再读取这些任务的全部历史 Run，按尝试时间倒序返回最多 200 条，保留阶段、策略、确定性优先级、结果、稳定错误码、脱敏原因、可重试性和耗时。响应提供总数与 `*_truncated`，页面把三类信息放在独立可展开区块，不用单个“最后成功策略”覆盖历史失败。
 
 `GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}` 依次读取 Season poster、Series poster、本地 SVG 占位图。远端图片使用 TMDB 的无密钥图片地址并按全局域名代理规则选择直连/代理，限制 5 MiB、校验 JPEG/PNG/WebP 魔数、合并同一 poster 的并发下载，并缓存到 `data_path/cache/covers`。上游超时、不可用或返回非图片时均返回短缓存占位图；响应头标明来源、缓存命中和安全警告码。浏览器请求、URL 和响应中都没有 TMDB API key。

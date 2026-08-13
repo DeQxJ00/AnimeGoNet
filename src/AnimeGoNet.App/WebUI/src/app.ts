@@ -4341,7 +4341,16 @@ function renderLibraryAudit(detail: AnimeSeasonDetail): void {
       : `最近 Run #${task.latest_run_attempt_number}`
         + `（${textOrDash(task.latest_run_status)}）`
         + ` · 更新 ${libraryDate(task.updated_at_utc, true)}`;
-    row.append(name, identity, run);
+    const actions = document.createElement("div");
+    actions.className = "library-audit-actions";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "delete-button";
+    remove.dataset.libraryDeleteTask = task.task_id;
+    remove.textContent = "预览并删除…";
+    remove.addEventListener("click", () => void openDeletePreview(task.task_id));
+    actions.append(remove);
+    row.append(name, identity, run, actions);
     return row;
   });
 
@@ -4377,6 +4386,14 @@ function renderLibraryAudit(detail: AnimeSeasonDetail): void {
     return row;
   });
 
+  const relatedTasksGroup = libraryAuditGroup(
+    "关联任务与四类删除",
+    detail.related_task_total,
+    detail.related_tasks_truncated,
+    tasks,
+  );
+  relatedTasksGroup.id = "library-related-task-delete-group";
+
   container.replaceChildren(
     heading,
     libraryAuditGroup(
@@ -4386,12 +4403,7 @@ function renderLibraryAudit(detail: AnimeSeasonDetail): void {
       offsets,
       detail.manual_offsets.length > 0,
     ),
-    libraryAuditGroup(
-      "关联任务",
-      detail.related_task_total,
-      detail.related_tasks_truncated,
-      tasks,
-    ),
+    relatedTasksGroup,
     libraryAuditGroup(
       "季度级逐次验证时间线",
       detail.resolution_attempt_total,
@@ -4464,9 +4476,10 @@ function renderLibraryDetail(detail: AnimeSeasonDetail, focus: boolean): void {
   summary.replaceChildren(layout);
   element<HTMLButtonElement>("#library-detail-refresh").disabled = false;
   element<HTMLButtonElement>("#library-detail-external-import").disabled = false;
+  element<HTMLButtonElement>("#library-detail-delete-content").disabled = false;
   element<HTMLButtonElement>("#library-detail-delete").disabled = false;
   element<HTMLElement>("#library-detail-action-status").textContent =
-    "外部媒体只在手动点击时扫描；TMDB 刷新只更新权威投影；删除不处理业务记录、下载器任务或文件。";
+    "“删除任务/文件”进入现有四类可审计删除；“仅删除无引用投影”不处理业务记录、下载器任务或文件。";
   renderLibraryAudit(detail);
   renderLibraryEpisodes(detail);
   if (focus) {
@@ -4496,6 +4509,7 @@ async function loadLibraryDetail(
   element<HTMLElement>("#library-episode-status").textContent = "";
   element<HTMLButtonElement>("#library-detail-refresh").disabled = true;
   element<HTMLButtonElement>("#library-detail-external-import").disabled = true;
+  element<HTMLButtonElement>("#library-detail-delete-content").disabled = true;
   element<HTMLButtonElement>("#library-detail-delete").disabled = true;
   element<HTMLElement>("#library-detail-action-status").textContent = "";
   try {
@@ -4619,9 +4633,11 @@ async function refreshLibrarySeason(): Promise<void> {
   )) return;
 
   const refresh = element<HTMLButtonElement>("#library-detail-refresh");
+  const deleteContent = element<HTMLButtonElement>("#library-detail-delete-content");
   const remove = element<HTMLButtonElement>("#library-detail-delete");
   const status = element<HTMLElement>("#library-detail-action-status");
   refresh.disabled = true;
+  deleteContent.disabled = true;
   remove.disabled = true;
   status.textContent = "正在验证并刷新 TMDB 权威投影…";
   try {
@@ -4643,6 +4659,7 @@ async function refreshLibrarySeason(): Promise<void> {
     status.textContent =
       `刷新失败：${errorMessage(error, "未知错误")}；revision 冲突时请重新载入。`;
     refresh.disabled = false;
+    deleteContent.disabled = false;
     remove.disabled = false;
   }
 }
@@ -4658,6 +4675,7 @@ async function importExternalMedia(scope: "all" | "season"): Promise<void> {
   const globalButton = element<HTMLButtonElement>("#library-external-import");
   const seasonButton = element<HTMLButtonElement>("#library-detail-external-import");
   const refreshButton = element<HTMLButtonElement>("#library-detail-refresh");
+  const deleteContentButton = element<HTMLButtonElement>("#library-detail-delete-content");
   const deleteButton = element<HTMLButtonElement>("#library-detail-delete");
   const target = scope === "all"
     ? "#library-external-import-result"
@@ -4669,6 +4687,7 @@ async function importExternalMedia(scope: "all" | "season"): Promise<void> {
   globalButton.disabled = true;
   seasonButton.disabled = true;
   refreshButton.disabled = true;
+  deleteContentButton.disabled = true;
   deleteButton.disabled = true;
   resultContainer.hidden = false;
   resultContainer.textContent = "正在扫描外部媒体并验证 TMDB Episode…";
@@ -4691,6 +4710,7 @@ async function importExternalMedia(scope: "all" | "season"): Promise<void> {
     if (activeLibraryDetail) {
       seasonButton.disabled = false;
       refreshButton.disabled = false;
+      deleteContentButton.disabled = false;
       deleteButton.disabled = false;
     }
   }
@@ -4706,9 +4726,11 @@ async function deleteLibrarySeason(): Promise<void> {
   )) return;
 
   const refresh = element<HTMLButtonElement>("#library-detail-refresh");
+  const deleteContent = element<HTMLButtonElement>("#library-detail-delete-content");
   const remove = element<HTMLButtonElement>("#library-detail-delete");
   const status = element<HTMLElement>("#library-detail-action-status");
   refresh.disabled = true;
+  deleteContent.disabled = true;
   remove.disabled = true;
   status.textContent = "正在检查引用并删除投影…";
   try {
@@ -4728,8 +4750,44 @@ async function deleteLibrarySeason(): Promise<void> {
     status.textContent =
       `删除失败：${errorMessage(error, "未知错误")}；有业务引用时请使用四类删除流程。`;
     refresh.disabled = false;
+    deleteContent.disabled = false;
     remove.disabled = false;
   }
+}
+
+function openLibraryContentDeletion(): void {
+  if (!activeLibraryDetail) return;
+  const detail = activeLibraryDetail;
+  const status = element<HTMLElement>("#library-detail-action-status");
+  if (detail.related_tasks.length === 0) {
+    status.textContent = detail.related_task_total > 0
+      ? "关联任务列表未完整载入，暂不能从动画库定位删除目标；请到任务中心处理。"
+      : "当前季度没有关联任务；如只需移除本地 TMDB 投影，请使用“仅删除无引用投影”。";
+    return;
+  }
+
+  if (detail.related_tasks.length === 1 && !detail.related_tasks_truncated) {
+    void openDeletePreview(detail.related_tasks[0].task_id);
+    return;
+  }
+
+  const group = document.querySelector<HTMLDetailsElement>(
+    "#library-related-task-delete-group",
+  );
+  if (!group) {
+    status.textContent = "无法定位关联任务删除列表，请刷新季度详情后重试。";
+    return;
+  }
+
+  group.open = true;
+  group.scrollIntoView({ behavior: "smooth", block: "center" });
+  const firstDelete = group.querySelector<HTMLButtonElement>(
+    "button[data-library-delete-task]",
+  );
+  firstDelete?.focus({ preventScroll: true });
+  status.textContent = detail.related_tasks_truncated
+    ? `该季度共有 ${detail.related_task_total} 个关联任务；当前显示最近 ${detail.related_tasks.length} 个，请逐条预览删除范围，其他任务到任务中心处理。`
+    : `该季度有 ${detail.related_tasks.length} 个关联任务，请选择具体任务并预览四类删除范围。`;
 }
 
 function closeLibraryDetail(): void {
@@ -10407,6 +10465,10 @@ element<HTMLButtonElement>("#library-detail-external-import").addEventListener(
 element<HTMLButtonElement>("#library-detail-delete").addEventListener(
   "click",
   () => void deleteLibrarySeason(),
+);
+element<HTMLButtonElement>("#library-detail-delete-content").addEventListener(
+  "click",
+  openLibraryContentDeletion,
 );
 element<HTMLSelectElement>("#library-episode-filter").addEventListener("change", () => {
   libraryState.episode_filter = element<HTMLSelectElement>("#library-episode-filter")

@@ -119,6 +119,25 @@ test("metadata attention counters are prominent buttons with direct filters", as
   assert.match(css, /\.metadata-attention-card strong\s*\{[^}]*font-size:\s*clamp\(2rem/s);
 });
 
+test("anime library exposes auditable task and file deletion without merging projection deletion", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  const contentDelete = document.querySelector("#library-detail-delete-content");
+  const projectionDelete = document.querySelector("#library-detail-delete");
+  assert.ok(contentDelete);
+  assert.ok(projectionDelete);
+  assert.match(contentDelete.textContent, /删除任务\/文件/);
+  assert.match(projectionDelete.textContent, /仅删除无引用投影/);
+  assert.match(app, /openLibraryContentDeletion/);
+  assert.match(app, /library-related-task-delete-group/);
+  assert.match(app, /dataset\.libraryDeleteTask/);
+  assert.match(app, /openDeletePreview\(task\.task_id\)/);
+  assert.match(css, /\.library-audit-actions\s*\{/);
+});
+
 test("Other readaptation review confirms a server-provided before and after comparison", async () => {
   const [document, app, css] = await Promise.all([
     page(),

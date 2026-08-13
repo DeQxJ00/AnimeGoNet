@@ -261,6 +261,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-episode .library-episode-name { color: #e1e9f7; font-size: .76rem; }
 .library-episode .library-episode-completion { color: #b7c7df; }
 .library-episode.downloaded .library-episode-completion { color: #9ddfc6; }
+.library-audit-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.library-audit-actions .delete-button { min-height: 34px; }
 .configuration-heading { gap: 18px; }
 .configuration-heading h2 { margin-bottom: 0; }
 .configuration-actions { display: flex; flex-wrap: wrap; gap: 8px; }
