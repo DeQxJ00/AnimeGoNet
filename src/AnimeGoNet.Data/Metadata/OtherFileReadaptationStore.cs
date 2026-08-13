@@ -63,6 +63,7 @@ public sealed record OtherFileReadaptationReviewPreview(
     string ReviewState,
     DateTimeOffset RequestedAtUtc,
     DateTimeOffset? CompletedAtUtc,
+    DateTimeOffset? ReviewedAtUtc,
     IReadOnlyList<OtherFileReadaptationReviewFileComparison> Files);
 
 public enum OtherFileReadaptationStartResult
@@ -93,11 +94,13 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
         string taskStatus;
         string reviewState;
         string? requestedAt;
+        string? reviewedAt;
         await using (var task = connection.CreateCommand())
         {
             task.CommandText = """
                 SELECT title, status, readaptation_review_state,
-                       readaptation_review_requested_at_utc
+                       readaptation_review_requested_at_utc,
+                       readaptation_reviewed_at_utc
                 FROM ingest_tasks WHERE id = $task_id;
                 """;
             task.Parameters.AddWithValue("$task_id", taskId);
@@ -111,12 +114,13 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             taskStatus = reader.GetString(1);
             reviewState = reader.GetString(2);
             requestedAt = reader.IsDBNull(3) ? null : reader.GetString(3);
+            reviewedAt = reader.IsDBNull(4) ? null : reader.GetString(4);
         }
 
         if (requestedAt is null)
         {
             return new OtherFileReadaptationReviewPreview(
-                taskId, title, taskStatus, reviewState, DateTimeOffset.MinValue, null, []);
+                taskId, title, taskStatus, reviewState, DateTimeOffset.MinValue, null, null, []);
         }
 
         var files = new List<OtherFileReadaptationReviewFileComparison>();
@@ -217,6 +221,12 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                 CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind),
             completedAt,
+            reviewedAt is null
+                ? null
+                : DateTimeOffset.Parse(
+                    reviewedAt,
+                    CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind),
             files);
     }
 

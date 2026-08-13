@@ -156,6 +156,8 @@ public sealed class OtherFileReadaptationApiTests
         Assert.Equal(HttpStatusCode.OK, reviewPreview.StatusCode);
         using var reviewJson = JsonDocument.Parse(await reviewPreview.Content.ReadAsStreamAsync());
         Assert.Equal("pending", reviewJson.RootElement.GetProperty("review_state").GetString());
+        Assert.Equal("awaiting_review", reviewJson.RootElement.GetProperty("completion_status").GetString());
+        Assert.Equal(JsonValueKind.Null, reviewJson.RootElement.GetProperty("reviewed_at_utc").ValueKind);
         var comparison = reviewJson.RootElement.GetProperty("files")[0];
         Assert.Equal("other", comparison.GetProperty("before_disposition").GetString());
         Assert.Equal("ai_tmdb_season_changed", comparison.GetProperty("before_other_reason").GetString());
@@ -171,6 +173,15 @@ public sealed class OtherFileReadaptationApiTests
             $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
             null);
         Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
+        using var completedReview = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review");
+        using var completedReviewJson = JsonDocument.Parse(
+            await completedReview.Content.ReadAsStreamAsync());
+        Assert.Equal("approved", completedReviewJson.RootElement.GetProperty("review_state").GetString());
+        Assert.Equal("review_completed", completedReviewJson.RootElement
+            .GetProperty("completion_status").GetString());
+        Assert.Equal(JsonValueKind.String, completedReviewJson.RootElement
+            .GetProperty("reviewed_at_utc").ValueKind);
         using var deletePreview = await app.Client.GetAsync($"/api/v1/delete/tasks/{taskId}/preview");
         using var deleteJson = JsonDocument.Parse(await deletePreview.Content.ReadAsStreamAsync());
         Assert.True(deleteJson.RootElement.GetProperty("task_record_deletion_allowed").GetBoolean());

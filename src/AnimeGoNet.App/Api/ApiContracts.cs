@@ -870,8 +870,10 @@ public sealed record OtherFileReadaptationReviewPreviewResponse(
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("task_status")] string TaskStatus,
     [property: JsonPropertyName("review_state")] string ReviewState,
+    [property: JsonPropertyName("completion_status")] string CompletionStatus,
     [property: JsonPropertyName("requested_at_utc")] DateTimeOffset RequestedAtUtc,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
+    [property: JsonPropertyName("reviewed_at_utc")] DateTimeOffset? ReviewedAtUtc,
     [property: JsonPropertyName("files")] IReadOnlyList<OtherFileReadaptationReviewFileResponse> Files);
 
 public sealed record MetadataTaskDetailResponse(

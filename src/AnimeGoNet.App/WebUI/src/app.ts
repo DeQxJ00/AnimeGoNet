@@ -707,8 +707,10 @@ interface OtherFileReadaptationReviewPreview {
   title: string;
   task_status: string;
   review_state: "not_required" | "pending" | "approved";
+  completion_status: "processing" | "awaiting_review" | "review_completed";
   requested_at_utc: string;
   completed_at_utc: string | null;
+  reviewed_at_utc: string | null;
   files: Array<{
     task_file_id: string;
     source_name: string;
@@ -6617,11 +6619,25 @@ function appendReadaptationRow(
 
 function renderOtherReadaptationReview(preview: OtherFileReadaptationReviewPreview): void {
   const summary = element<HTMLDListElement>("#other-readaptation-review-summary");
+  const episodeCount = preview.files.filter(file => file.after_disposition === "episode").length;
+  const otherCount = preview.files.filter(file => file.after_disposition === "other").length;
+  const duplicateCount = preview.files.filter(file =>
+    file.after_disposition === "duplicate"
+    || file.after_other_reason === "episode_already_completed"
+    || file.after_other_reason === "episode_claimed_by_another_task").length;
+  const completionLabels: Record<OtherFileReadaptationReviewPreview["completion_status"], string> = {
+    processing: "重新适配执行中",
+    awaiting_review: "执行完成 · 等待人工审核",
+    review_completed: "执行完成 · 人工审核完成",
+  };
   summary.replaceChildren(
     readaptationSummaryItem("任务", preview.title),
     readaptationSummaryItem("任务 ID", preview.task_id),
+    readaptationSummaryItem("完成后状态", completionLabels[preview.completion_status]),
+    readaptationSummaryItem("最终文件", `正片 ${episodeCount} · Other ${otherCount} · 重复目标 ${duplicateCount}`),
     readaptationSummaryItem("开始", libraryDate(preview.requested_at_utc, true)),
-    readaptationSummaryItem("完成", libraryDate(preview.completed_at_utc, true)),
+    readaptationSummaryItem("执行完成", libraryDate(preview.completed_at_utc, true)),
+    readaptationSummaryItem("审核完成", libraryDate(preview.reviewed_at_utc, true)),
   );
 
   const files = element<HTMLDivElement>("#other-readaptation-review-files");
@@ -6711,8 +6727,10 @@ async function approveOtherReadaptation(taskId: string, button: HTMLButtonElemen
     activeOtherReadaptationReview = { preview, triggerButton: button, defaultLabel };
     renderOtherReadaptationReview(preview);
     button.textContent = "审核窗口已打开";
-    otherReadaptationReviewConfirm.disabled = false;
+    otherReadaptationReviewConfirm.hidden = preview.review_state !== "pending";
+    otherReadaptationReviewConfirm.disabled = preview.review_state !== "pending";
     otherReadaptationReviewCancel.disabled = false;
+    otherReadaptationReviewCancel.textContent = preview.review_state === "pending" ? "返回检查" : "关闭";
     otherReadaptationReviewDialog.showModal();
   } catch (error) {
     button.disabled = false;
@@ -7143,7 +7161,11 @@ async function loadMetadataTasks(background = false): Promise<void> {
       title.textContent = item.title;
       const state = document.createElement("span");
       state.className = `badge ${item.status === "metadata_failed" ? "error" : "ready"}`;
-      state.textContent = statusLabels[item.status] ?? item.status;
+      state.textContent = item.readaptation_review_state === "pending" && item.status === "organized"
+        ? "重新适配待审核"
+        : item.readaptation_review_state === "approved"
+          ? "重新适配审核完成"
+          : statusLabels[item.status] ?? item.status;
       heading.append(title, state);
       const handling = document.createElement("p");
       handling.className = `metadata-handling ${item.handling_category}`;
@@ -7267,6 +7289,17 @@ async function loadMetadataTasks(background = false): Promise<void> {
         approve.textContent = "确认人工审核";
         approve.addEventListener("click", () => void approveOtherReadaptation(item.task_id, approve));
         actions.append(approve);
+      }
+      if (item.status === "organized" && item.readaptation_review_state === "approved") {
+        const reviewResult = document.createElement("button");
+        reviewResult.type = "button";
+        reviewResult.className = "metadata-attempt-button";
+        reviewResult.textContent = "查看审核结果";
+        reviewResult.addEventListener(
+          "click",
+          () => void approveOtherReadaptation(item.task_id, reviewResult),
+        );
+        actions.append(reviewResult);
       }
       const remove = document.createElement("button");
       remove.type = "button";
@@ -10481,7 +10514,9 @@ otherReadaptationReviewDialog.addEventListener("close", () => {
   element<HTMLElement>("#other-readaptation-review-files").replaceChildren();
   element<HTMLElement>("#other-readaptation-review-message").textContent = "";
   otherReadaptationReviewConfirm.disabled = false;
+  otherReadaptationReviewConfirm.hidden = false;
   otherReadaptationReviewCancel.disabled = false;
+  otherReadaptationReviewCancel.textContent = "返回检查";
   otherReadaptationReviewConfirm.textContent = "确认审核通过";
 });
 element<HTMLButtonElement>("#cache-previous").addEventListener("click", () => {

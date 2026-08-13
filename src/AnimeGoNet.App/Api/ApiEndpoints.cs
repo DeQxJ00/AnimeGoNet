@@ -4811,8 +4811,14 @@ public static class ApiEndpoints
             preview.Title,
             preview.TaskStatus,
             preview.ReviewState,
+            preview.ReviewState == "approved"
+                ? "review_completed"
+                : preview.TaskStatus == "organized" && preview.CompletedAtUtc is not null
+                    ? "awaiting_review"
+                    : "processing",
             preview.RequestedAtUtc,
             preview.CompletedAtUtc,
+            preview.ReviewedAtUtc,
             preview.Files.Select(file => new OtherFileReadaptationReviewFileResponse(
                 file.TaskFileId,
                 file.SourceName,
