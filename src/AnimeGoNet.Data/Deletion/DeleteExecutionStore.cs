@@ -244,6 +244,17 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        await using (var releaseRssReference = connection.CreateCommand())
+        {
+            releaseRssReference.Transaction = transaction;
+            releaseRssReference.CommandText = """
+            DELETE FROM mikan_rss_batch_entries
+            WHERE ingest_task_id = $task_id;
+            """;
+            releaseRssReference.Parameters.AddWithValue("$task_id", claim.TaskId);
+            await releaseRssReference.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await using var delete = connection.CreateCommand();
         delete.Transaction = transaction;
         delete.CommandText = """

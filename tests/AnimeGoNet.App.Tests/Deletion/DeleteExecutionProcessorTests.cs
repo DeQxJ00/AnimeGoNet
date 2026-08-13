@@ -81,6 +81,7 @@ public sealed class DeleteExecutionProcessorTests
             app,
             new DeleteSelection(true, true, true, true, DeleteTaskRecord: true),
             duplicateFrozenSourceTarget: true);
+        await SeedRssReferenceAsync(app, prepared.TaskId);
 
         var result = await app.App.Services.GetRequiredService<DeleteExecutionProcessor>().RunOnceAsync();
 
@@ -92,6 +93,7 @@ public sealed class DeleteExecutionProcessorTests
         Assert.Equal(4, state.CompletedItems);
         Assert.Equal(1, state.SkippedItems);
         Assert.False(await TaskExistsAsync(app, prepared.TaskId));
+        Assert.False(await RssReferenceExistsAsync(app, prepared.TaskId));
     }
 
     private static async Task<PreparedPlan> PreparePlanAsync(
@@ -194,6 +196,48 @@ public sealed class DeleteExecutionProcessorTests
         await using var connection = await database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT EXISTS(SELECT 1 FROM ingest_tasks WHERE id = $task_id);";
+        command.Parameters.AddWithValue("$task_id", taskId);
+        return Convert.ToInt64(
+            await command.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
+    private static async Task SeedRssReferenceAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO mikan_rss_batches (
+                id, source_profile_id, rule_revision, fingerprint, mikanid,
+                priority_enabled, entry_count, created_at_utc)
+            VALUES ('delete-rss-batch', 'mikan', 1, $fingerprint, 3951, 1, 1, $now);
+            INSERT INTO mikan_rss_batch_entries (
+                batch_id, candidate_id, ordinal, title, mikan_url,
+                torrent_url_fingerprint, content_type, length_bytes,
+                decision_kind, decision_reason, legacy_filter_state,
+                legacy_filter_reason, effect_state, ingest_task_id)
+            VALUES (
+                'delete-rss-batch', 'candidate', 0, 'Delete execution',
+                'https://mikanani.me/Home/Episode/delete', $fingerprint,
+                'application/x-bittorrent', 5, 'Winner', 'UngroupedBypass',
+                'Accepted', 'Accepted', 'ingested', $task_id);
+            """;
+        command.Parameters.AddWithValue("$fingerprint", new string('e', 64));
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(2, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<bool> RssReferenceExistsAsync(RunningApp app, string taskId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1 FROM mikan_rss_batch_entries WHERE ingest_task_id = $task_id);
+            """;
         command.Parameters.AddWithValue("$task_id", taskId);
         return Convert.ToInt64(
             await command.ExecuteScalarAsync(),
