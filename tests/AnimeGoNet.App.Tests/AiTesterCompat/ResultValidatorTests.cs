@@ -103,7 +103,7 @@ public sealed class ResultValidatorTests
     }
 
     [Fact]
-    public void RejectsMismatchedFileOrderOrName()
+    public void IgnoresEchoedFileNameBecauseOriginalInputIdentityIsAuthoritative()
     {
         string json = """
             {
@@ -119,8 +119,31 @@ public sealed class ResultValidatorTests
 
         (bool valid, string? error, _) = ResultValidator.Validate(json, input);
 
+        Assert.True(valid, error);
+    }
+
+    [Fact]
+    public void RejectsMismatchedEchoedNamesForMultiFileMapping()
+    {
+        string json = """
+            {
+              "matched": true,
+              "tmdb_id": 12345,
+              "files": [
+                { "name": "02.mkv", "matched": true, "season": 1, "episode": 2, "reason": null },
+                { "name": "01.mkv", "matched": true, "season": 1, "episode": 1, "reason": null }
+              ],
+              "reason": null
+            }
+            """;
+        var input = new MatchRequestInput(
+            "任务",
+            [new MatchFileInput("01.mkv", 1), new MatchFileInput("02.mkv", 2)]);
+
+        (bool valid, string? error, _) = ResultValidator.Validate(json, input);
+
         Assert.False(valid);
-        Assert.Contains("echo input name", error);
+        Assert.Contains("multi-file mapping", error);
     }
 
     [Fact]

@@ -24,8 +24,8 @@
 | TMDB MCP 工具返回 `isError=true`，且没有成功工具结果 | `ai_tmdb_mcp_tool_error` |
 | 模型返回最终结果但未使用必需的 TMDB MCP | `ai_tmdb_mcp_not_used` |
 
-`ai_file_identity_mismatch`、TMDB Series/Season/Episode 本地验证失败等仍属于模型输出或
-业务候选验证失败，不与 MCP 连接/工具故障合并。
+TMDB Series/Season/Episode 本地验证失败仍属于模型输出或业务候选验证失败，不与 MCP
+连接/工具故障合并。
 
 ## 自动验证
 
@@ -46,8 +46,8 @@
 2. 名侦探柯南：6 次 MCP 202 + SSE 返回，模型给出 TMDB 30983/S01E118，本地验证成功；
    因隔离库已有相同完成记录，最终按 `episode_already_completed` 标记 duplicate；
    73,505 tokens。
-3. Re:0 重复样本：8 次 MCP 202 + SSE 返回；模型把任务标题当作文件名并漏掉真实扩展名，
-   被本地边界明确拒绝为 `ai_file_identity_mismatch`，不是 MCP 或“匹配失败”；
+3. Re:0 重复样本：8 次 MCP 202 + SSE 返回；模型把任务标题当作文件名并漏掉真实扩展名；
+   当时版本因过严的 AI 文件名回显校验拒绝该结果，后续已改为只使用原始 Torrent 文件名；
    74,071 tokens。
 
 三份新 Debug 文件均包含 `tools/call` 202 与对应 `tools/call/sse` 200，未再出现旧的
@@ -62,7 +62,7 @@
 
 | 样本 | 模型最终候选 | 主程序最终结果 | Token | AI HTTP | MCP tools/call | MCP SSE |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| Re:0 样本一 | TMDB 65942 / S01 / E78 | `ai_file_identity_mismatch`，模型把真实 `.mp4` 文件名末尾改写成 `[MP4]`；落入已确认季度 Other | 73,326 | 5 | 6 | 6 |
+| Re:0 样本一 | TMDB 65942 / S01 / E78 | 当时版本因 AI 改写文件名回显而拒绝；该过严校验现已移除，原始 Torrent 文件名保持不变 | 73,326 | 5 | 6 | 6 |
 | Re:0 样本二 | TMDB 65942 / S01 / E78 | 本地 TMDB Series/Season/Episode 与文件身份验证通过，写入 S01E78 | 41,612 | 4 | 8 | 8 |
 | 名侦探柯南 | TMDB 30983 / S01 / E118 | 清除既有 completion 后重新验证通过，写入 S01E118 | 51,057 | 6 | 8 | 8 |
 

@@ -72,11 +72,14 @@ public static class ResultValidator
                 return $"files length must equal input files length ({normalizedInput.Files.Count}).";
             }
 
-            for (int i = 0; i < normalizedInput.Files.Count; i++)
+            if (normalizedInput.Files.Count > 1)
             {
-                if (!string.Equals(result.Files[i].Name, normalizedInput.Files[i].Name, StringComparison.Ordinal))
+                for (int i = 0; i < normalizedInput.Files.Count; i++)
                 {
-                    return $"files[{i}].name must echo input name '{normalizedInput.Files[i].Name}'.";
+                    if (!string.Equals(result.Files[i].Name, normalizedInput.Files[i].Name, StringComparison.Ordinal))
+                    {
+                        return $"files[{i}].name must echo input name '{normalizedInput.Files[i].Name}' for multi-file mapping.";
+                    }
                 }
             }
         }
@@ -84,7 +87,6 @@ public static class ResultValidator
         for (int i = 0; i < result.Files.Count; i++)
         {
             TmdbAiFileResult file = result.Files[i];
-            if (string.IsNullOrWhiteSpace(file.Name)) return $"files[{i}].name is required.";
             if (file.Matched is null) return $"files[{i}].matched is required.";
             if (file.Season == 0) return $"files[{i}].season must not be 0.";
             if (file.Matched == true)

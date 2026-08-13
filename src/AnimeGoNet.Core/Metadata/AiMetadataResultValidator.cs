@@ -187,7 +187,8 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
         for (var index = 0; index < input.Files.Count; index++)
         {
             var file = candidate.Files[index];
-            if (!string.Equals(file.Name, input.Files[index].Name, StringComparison.Ordinal))
+            if (input.Files.Count > 1
+                && !string.Equals(file.Name, input.Files[index].Name, StringComparison.Ordinal))
             {
                 return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_identity_mismatch", false);
             }

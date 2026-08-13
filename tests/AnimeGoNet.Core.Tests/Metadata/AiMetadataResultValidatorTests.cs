@@ -34,11 +34,37 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
-    public async Task RejectsOutputOrderMismatchBeforeTmdbAccess()
+    public async Task ReZeroCopiedTitleFileNameIsIgnoredAndOriginalInputIdentityIsPreserved()
     {
         var tmdb = new FakeTmdbClient();
-        var input = Input(new AiMetadataFileInput("01.mkv", 100));
-        var candidate = Success("02.mkv", 1, 1);
+        const string originalName = "[ANi] Re：從零開始的異世界生活 第四季 - 12 [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4";
+        const string echoedName = "[ANi] Re：從零開始的異世界生活 第四季 - 12 [1080P][Baha][WEB-DL][AAC AVC][CHT][MP4]";
+        var input = Input(new AiMetadataFileInput(originalName, 289_517_816));
+        var candidate = Success(echoedName, 1, 78);
+
+        var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(originalName, Assert.Single(result.Value!.Files).Input.Name);
+        Assert.Equal(78, result.Value.Files[0].Episode!.EpisodeNumber);
+        Assert.Equal(3, tmdb.TotalCalls);
+    }
+
+    [Fact]
+    public async Task RejectsMultiFileOrderMismatchBeforeTmdbAccess()
+    {
+        var tmdb = new FakeTmdbClient();
+        var input = Input(
+            new AiMetadataFileInput("01.mkv", 100),
+            new AiMetadataFileInput("02.mkv", 100));
+        var candidate = new AiMetadataMatchCandidate(
+            true,
+            42,
+            [
+                new("02.mkv", true, 1, 2, null),
+                new("01.mkv", true, 1, 1, null),
+            ],
+            null);
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
 

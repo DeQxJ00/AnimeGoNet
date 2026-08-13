@@ -382,7 +382,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     }
 
     [Fact]
-    public async Task FakeProviderFileListConflictIsRejectedBeforeTmdbAccess()
+    public async Task FakeProviderEchoedFileNameIsIgnoredBeforeAuthoritativeTmdbValidation()
     {
         var handler = new FakeAiAndMcpHandler
         {
@@ -397,9 +397,9 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
         var tmdb = new RejectingTmdbClient();
         var validation = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
 
-        Assert.Equal(MetadataFailureKind.Protocol, validation.Failure!.Kind);
-        Assert.Equal("ai_file_identity_mismatch", validation.Failure.Code);
-        Assert.Equal(0, tmdb.SeriesDetailsCalls);
+        Assert.Equal(MetadataFailureKind.SemanticNoMatch, validation.Failure!.Kind);
+        Assert.Equal("ai_tmdb_series_not_found", validation.Failure.Code);
+        Assert.Equal(1, tmdb.SeriesDetailsCalls);
     }
 
     [Fact]

@@ -202,6 +202,7 @@ AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/
 ## 10. 验证门禁
 
 - 请求 snapshot 严格只有 `title`、`files[].name/size_bytes`、可空 `bgmid`/`anidbid`/`imdbid`、`torrent_file_count`、可空 `published_at/bgm_episode_candidate` 和程序计算的 `use_bangumi_pubdate_first`。
+- AI 响应中的 `files[]` 按输入数组顺序解释，数量必须一致。单文件任务只有唯一对应关系，`name` 回显即使有误也不影响结果；多文件任务必须逐项原样回显 `name`，用来防止模型乱序导致 EP 串文件。回显值本身不参与整理或改名，主程序始终保留相同下标的原始 Torrent 文件名。
 - 开关关闭时门禁必须为假；开关开启也只有 Mikan Torrent实际文件条目数恰好为1、`bgmid/pubDate` 有效、BGM查询成功且普通Episode候选非空时才为真。
 - 门禁为真时 Prompt 直接以文件名EP和主程序计算的Bangumi日期EP定向查TMDB；失败后继续通用流程。任何Bangumi集号都不能直接成为最终TMDB集号。
 - 断言MCP endpoint/schema跨请求缓存；记录优先分支的Bangumi/TMDB工具次数及转入通用流程的原因。
