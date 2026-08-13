@@ -32,6 +32,12 @@ public sealed class DetailedLogWindowTests
         Assert.Contains("AI 调用日志", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/logs/ai-invocations", script, StringComparison.Ordinal);
         Assert.Contains("loadAiInvocationLogs", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"ai-debug-dialog\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-debug\"", html, StringComparison.Ordinal);
+        Assert.Contains("openAiDebugChain", script, StringComparison.Ordinal);
+        Assert.Contains("AI 前置链路", script, StringComparison.Ordinal);
+        Assert.Contains("原始 Prompt 模板", script, StringComparison.Ordinal);
+        Assert.Contains("最终渲染 Prompt", script, StringComparison.Ordinal);
         Assert.Contains("copyVisibleLiveLogs", script, StringComparison.Ordinal);
         Assert.Contains("maximumRenderedLogs = 500", script, StringComparison.Ordinal);
         Assert.Contains("parseLiveLogEntry", parser, StringComparison.Ordinal);

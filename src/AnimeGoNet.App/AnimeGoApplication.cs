@@ -501,6 +501,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(new AiPublicationEvidenceResolver(
             bangumiEpisodeClient,
             options.Metadata.Ai));
+        builder.Services.AddSingleton(new AiMetadataDebugTraceStore(layout));
         aiMetadataMatcher ??= new OpenAiCompatibleMetadataMatcher(
             OutboundHttpClientFactory.Create(options.OutboundProxy),
             options.Metadata.Ai,
@@ -806,6 +807,13 @@ public static class AnimeGoApplication
                                 "metadata:ai:use_metadata_match"),
                             defaults.Metadata.Ai.UseMetadataMatch,
                             "metadata:ai:use_metadata_match")),
+                    DebugMode = ParseOptionalBool(
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_debug_mode",
+                            "metadata:ai:debug_mode"),
+                        defaults.Metadata.Ai.DebugMode,
+                        "ai_debug_mode"),
                     HttpTimeout = TimeSpan.FromSeconds(ParseOptionalDouble(
                         FirstConfigurationValue(
                             configuration,

@@ -1,3 +1,4 @@
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
@@ -17,13 +18,24 @@ public sealed record AiMetadataTaskResolution(
 public sealed class AiMetadataTaskResolver(
     IAiMetadataMatcher matcher,
     AiMetadataResultValidator validator,
-    AiPublicationEvidenceResolver publicationEvidence)
+    AiPublicationEvidenceResolver publicationEvidence,
+    AiMetadataDebugTraceStore? debugStore = null,
+    ILogger<AiMetadataTaskResolver>? logger = null,
+    MetadataResolutionStore? resolutions = null,
+    AnimeGoOptions? options = null)
 {
+    private static readonly Action<ILogger, string, Exception?> DebugWriteFailed =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(7201, "AiDebugWriteFailed"),
+            "AI debug chain {TraceId} could not be persisted.");
+
     public async Task<AiMetadataTaskResolution> ResolveAsync(
         MetadataTaskClaim claim,
         IReadOnlyList<MetadataTaskFileProjection> files,
         int? expectedSeriesId = null,
         int? expectedSeasonNumber = null,
+        IReadOnlyList<string>? preAiSearchTitles = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
@@ -47,7 +59,18 @@ public sealed class AiMetadataTaskResolver(
         var publication = await publicationEvidence.ResolveAsync(
             claim,
             cancellationToken).ConfigureAwait(false);
-        var input = AiMetadataInputBoundary.Create(claim, videos, publication);
+        var debugContext = options?.Metadata.Ai.DebugMode == true
+            ? await CreateDebugContextAsync(
+                claim,
+                videos,
+                publication,
+                expectedSeriesId,
+                expectedSeasonNumber,
+                preAiSearchTitles,
+                resolutions,
+                cancellationToken).ConfigureAwait(false)
+            : null;
+        var input = AiMetadataInputBoundary.Create(claim, videos, publication, debugContext);
 
         AiMetadataMatchResponse response;
         try
@@ -56,6 +79,12 @@ public sealed class AiMetadataTaskResolver(
         }
         catch (AiMetadataMatcherException exception)
         {
+            await SaveDebugAsync(
+                exception.DebugChain,
+                null,
+                expectedSeriesId,
+                expectedSeasonNumber,
+                cancellationToken).ConfigureAwait(false);
             return new AiMetadataTaskResolution(
                 null,
                 new MetadataFailure(exception.Kind, exception.SafeCode, TmdbAccessConfirmed: false),
@@ -70,11 +99,117 @@ public sealed class AiMetadataTaskResolver(
             expectedSeriesId,
             expectedSeasonNumber,
             cancellationToken).ConfigureAwait(false);
+        await SaveDebugAsync(
+            response.DebugChain,
+            validated,
+            expectedSeriesId,
+            expectedSeasonNumber,
+            cancellationToken).ConfigureAwait(false);
         return new AiMetadataTaskResolution(
             validated.Value,
             validated.Failure,
             publication,
             response.Usage,
             IsApplicable: true);
+    }
+
+    private static async Task<AiMetadataDebugPreAiContext> CreateDebugContextAsync(
+        MetadataTaskClaim claim,
+        IReadOnlyList<MetadataTaskFileProjection> videos,
+        AiPublicationEvidenceResult publication,
+        int? expectedSeriesId,
+        int? expectedSeasonNumber,
+        IReadOnlyList<string>? preAiSearchTitles,
+        MetadataResolutionStore? resolutions,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<AiMetadataDebugPreAiAttempt> attempts = resolutions is null
+            ? []
+            : (await resolutions.ListAttemptsAsync(
+                    claim.TaskId,
+                    500,
+                    cancellationToken).ConfigureAwait(false))
+                .Where(attempt => string.Equals(attempt.RunId, claim.RunId, StringComparison.Ordinal))
+                .OrderBy(attempt => attempt.CreatedAtUtc)
+                .ThenBy(attempt => attempt.AttemptId, StringComparer.Ordinal)
+                .Select(attempt => new AiMetadataDebugPreAiAttempt(
+                    attempt.AttemptId,
+                    attempt.Stage,
+                    attempt.Strategy,
+                    attempt.Priority,
+                    attempt.Result,
+                    attempt.ErrorCode,
+                    attempt.Reason,
+                    attempt.Retryable,
+                    attempt.DurationMilliseconds,
+                    attempt.CreatedAtUtc))
+                .ToArray();
+        return new AiMetadataDebugPreAiContext(
+            expectedSeriesId is not null && expectedSeasonNumber is not null
+                ? "episode"
+                : "series_season",
+            new AiMetadataDebugTaskInput(
+                claim.Title,
+                claim.MikanId,
+                claim.GroupId,
+                claim.BangumiSubjectId,
+                claim.AniDbAnimeId,
+                claim.ImdbTitleId,
+                claim.SourceAdapter,
+                claim.SourceProfileId,
+                claim.SourceId,
+                claim.TorrentFileCount,
+                videos.Select(file => new AiMetadataDebugTaskFileInput(
+                    file.RelativePath,
+                    file.SizeBytes,
+                    file.SourceEpisode,
+                    file.FileEpisodeCandidate,
+                    file.PreResolvedEpisodeNumber,
+                    file.PreResolvedOtherReason,
+                    file.TmdbSeasonNumber)).ToArray()),
+            expectedSeriesId,
+            expectedSeasonNumber,
+            preAiSearchTitles?.Distinct(StringComparer.Ordinal).ToArray() ?? [],
+            publication.PublishedAt,
+            publication.BangumiEpisodeCandidate,
+            publication.UseBangumiPubDateFirst,
+            publication.Result,
+            publication.ErrorCode,
+            attempts);
+    }
+
+    private async Task SaveDebugAsync(
+        AiMetadataDebugChain? chain,
+        AiMetadataValidationResult? validation,
+        int? expectedSeriesId,
+        int? expectedSeasonNumber,
+        CancellationToken cancellationToken)
+    {
+        if (chain is null || debugStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await debugStore.WriteAsync(
+                chain,
+                validation,
+                expectedSeriesId,
+                expectedSeasonNumber,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            if (logger is not null)
+            {
+                DebugWriteFailed(logger, chain.TraceId, exception);
+            }
+        }
     }
 }

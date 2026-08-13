@@ -109,6 +109,8 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/logs/ai-invocations", AiInvocationLogs);
+        app.MapGet("/api/v1/logs/ai-invocations/{runId}/debug", AiInvocationDebug);
+        app.MapDelete("/api/v1/logs/ai-invocations/{runId}/debug", DeleteAiInvocationDebug);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
@@ -1904,6 +1906,7 @@ public static class ApiEndpoints
                     ai.UseMetadataMatch,
                     ai.UseMetadataMatch,
                     ai.UseMetadataMatch,
+                    ai.DebugMode,
                     ai.HttpTimeout.TotalSeconds,
                     ai.RetryCount,
                     ai.UseBangumiPubDateFirst,
@@ -1978,6 +1981,7 @@ public static class ApiEndpoints
             ai.UseMetadataMatch,
             ai.UseMetadataMatch,
             ai.UseMetadataMatch,
+            ai.DebugMode,
             ai.HttpTimeout.TotalSeconds,
             desired.Metadata.TmdbFailureUseBangumi,
             desired.Metadata.WriteBangumiIdWhenTmdbMatched,
@@ -2225,6 +2229,10 @@ public static class ApiEndpoints
             "ai_use_metadata_match",
             beforeAi.UseMetadataMatch,
             afterAi.UseMetadataMatch);
+        AddBool(
+            "ai_debug_mode",
+            beforeAi.DebugMode,
+            afterAi.DebugMode);
         AddSeconds(
             "ai_http_timeout_seconds",
             beforeAi.HttpTimeout,
@@ -2605,7 +2613,8 @@ public static class ApiEndpoints
                 request.WriteBangumiIdWhenTmdbMatched,
             AiPromptTemplate: aiPromptTemplate,
             MikanEpisodeIdentityCacheHours: mikanEpisodeIdentityCacheHours,
-            MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours);
+            MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours,
+            AiDebugMode: request.AiDebugMode ?? current?.AiDebugMode ?? false);
     }
 
     private static string PromptSummary(string template) =>
@@ -4765,6 +4774,7 @@ public static class ApiEndpoints
         [FromQuery(Name = "from_utc")] DateTimeOffset? fromUtc,
         [FromQuery(Name = "to_utc")] DateTimeOffset? toUtc,
         MetadataResolutionStore resolutions,
+        AiMetadataDebugTraceStore debugTraces,
         CancellationToken cancellationToken)
     {
         var resolvedPage = page ?? 1;
@@ -4859,8 +4869,28 @@ public static class ApiEndpoints
                 item.Usage.CompletionTokens,
                 item.Usage.TotalTokens,
                 item.Usage.RequestCount,
-                item.Usage.ToolCallCount)).ToArray()));
+                item.Usage.ToolCallCount,
+                debugTraces.Exists(item.RunId))).ToArray()));
     }
+
+    private static async Task<IResult> AiInvocationDebug(
+        string runId,
+        AiMetadataDebugTraceStore debugTraces,
+        CancellationToken cancellationToken)
+    {
+        var json = await debugTraces.ReadAsync(runId, cancellationToken)
+            .ConfigureAwait(false);
+        return json is null
+            ? TypedResults.NotFound()
+            : Results.Text(json, "application/json", Encoding.UTF8);
+    }
+
+    private static IResult DeleteAiInvocationDebug(
+        string runId,
+        AiMetadataDebugTraceStore debugTraces) =>
+        debugTraces.Delete(runId)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
 
     private static async Task<IResult> MetadataTaskDetail(
         string taskId,

@@ -218,3 +218,15 @@ AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/
 - fake AI 覆盖超时、429、5xx、取消、非 JSON、超长响应和部分文件失败。
 - fake TMDB 覆盖真实/伪造 TV ID、普通季度、Season 0 拒绝、Episode 缺失、季度 `Other` 和重复目标。
 - NativeAOT 发布二进制以正式后台 worker 完成 fake AI 两轮 → MCP 工具 → fake TMDB Series/Season/Episode 二次验证 → SQLite/API 权威状态落库；fixture 不连接真实 AI、TMDB、qBittorrent 或用户 TestSpace。
+
+## 11. AI Debug 完整链路
+
+`metadata.ai.debug_mode` / `ai_debug_mode` 默认 `false`。开启后，正式后台 AI 调用按 `run_id` 在 `data_path/ai-debug` 写入一份独立 JSON 调试文件；它不进入 SQLite，也不改变匹配、重试或验证结果。每份记录固定包含：
+
+1. 进入 AI 前的任务输入快照，包括标题、视频文件名/容量、本地来源 EP/文件名 EP 候选/已预解析结果、mikanid/groupid/bgmid/anidbid/imdbid、来源标识和 Torrent 实际文件数。
+2. 同一 metadata run 在 AI 调用前已经落库的确定性尝试，按时间顺序展示 stage、strategy、P4/P3 等 priority、结果、安全错误码、耗时和重试性；同时保存已经尝试过的 TMDB 搜索词、模型外锁定的 tmdbid/Season、Mikan 发布时间辅助证据及进入 Series/Season 或 Episode AI 的触发阶段。
+3. 当次有效 Prompt 模板原文和代入实际输入后的最终渲染 Prompt。全局模板日后修改不会覆盖历史快照。
+4. 每轮 OpenAI-compatible HTTP 请求/响应，以及 TMDB/Bangumi MCP initialize、工具列表、工具调用和响应；记录 endpoint、Body、HTTP 状态、耗时与安全错误类型。
+5. 模型原始输出、解析后的候选、累计 Token/请求/工具用量，以及主程序对 TMDB Series/普通 Season/真实 Episode 的最终本地验证。
+
+该文件属于本机敏感调试数据。捕获器从不保存 HTTP Authorization Header、API Key、Cookie、passkey、Torrent URL、announce、种子字节或下载器凭据；正式 AI 输入边界本身也没有这些字段。WebUI“日志 / AI 调用日志”仅在对应文件存在时显示“查看完整链路”，按“AI 前置链路 → Prompt → AI/MCP 请求链 → 模型结果与本地验证”分段和折叠展示，并允许只删除该 run 的 Debug 文件。普通 AI 调用日志和配置归档不包含这些大正文；关闭 Debug 不删除既有文件。

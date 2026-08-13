@@ -51,6 +51,7 @@ public sealed class DeploymentConfigurationLocks
         new(
             "ai_use_metadata_match",
             ["ai_use_metadata_match", "ai_use_season_match", "ai_use_episode_match", "metadata:ai:use_metadata_match"]),
+        new("ai_debug_mode", ["ai_debug_mode", "metadata:ai:debug_mode"]),
         new("ai_base_url", ["ai_base_url", "metadata:ai:base_url"]),
         new("ai_api_key", ["ai_api_key", "metadata:ai:api_key"]),
         new("ai_model", ["ai_model", "metadata:ai:model"]),
@@ -313,6 +314,10 @@ public sealed class DeploymentConfigurationLocks
                     "ai_use_metadata_match",
                     current.AiUseMetadataMatch,
                     candidate.AiUseMetadataMatch),
+                AiDebugMode = Preserve(
+                    "ai_debug_mode",
+                    current.AiDebugMode,
+                    candidate.AiDebugMode),
                 AiBaseUrlOverridden = Preserve(
                     "ai_base_url",
                     current.AiBaseUrlOverridden,
@@ -591,6 +596,10 @@ public sealed class DeploymentConfigurationLocks
                 UseMetadataMatch = deployment.Metadata.Ai.UseMetadataMatch,
             };
         }
+        if (IsLocked("ai_debug_mode"))
+        {
+            ai = ai with { DebugMode = deployment.Metadata.Ai.DebugMode };
+        }
         if (IsLocked("ai_http_timeout_seconds"))
         {
             ai = ai with { HttpTimeout = deployment.Metadata.Ai.HttpTimeout };
@@ -805,6 +814,10 @@ public sealed class DeploymentConfigurationLocks
             "ai_use_metadata_match",
             deployment.Metadata.Ai.UseMetadataMatch,
             candidate.Metadata.Ai.UseMetadataMatch);
+        AddIfChanged(
+            "ai_debug_mode",
+            deployment.Metadata.Ai.DebugMode,
+            candidate.Metadata.Ai.DebugMode);
         AddIfChanged(
             "ai_http_timeout_seconds",
             deployment.Metadata.Ai.HttpTimeout,

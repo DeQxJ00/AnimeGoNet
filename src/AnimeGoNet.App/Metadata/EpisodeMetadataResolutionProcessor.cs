@@ -535,7 +535,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             claim.Files,
             claim.TmdbSeriesId,
             claim.TmdbSeasonNumber,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         if (resolved.Publication?.ShouldAudit == true)
         {
             await RecordAsync(

@@ -9,6 +9,8 @@ public sealed record BangumiSeasonBacktraceResult(
     int VisitedSubjectCount)
 {
     public bool IsSuccess => Details is not null && Season is not null && Failure is null;
+
+    public IReadOnlyList<string> AttemptedTitles { get; init; } = [];
 }
 
 public sealed class BangumiSeasonBacktraceResolver(
@@ -21,6 +23,7 @@ public sealed class BangumiSeasonBacktraceResolver(
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(subjectId, 0);
         var visited = new HashSet<int> { subjectId };
+        var attemptedTitles = new List<string>();
         int[] currentLevel = [subjectId];
 
         while (currentLevel.Length > 0)
@@ -72,13 +75,17 @@ public sealed class BangumiSeasonBacktraceResolver(
                     TmdbSeriesSeasonResolver.BangumiTitles(predecessor),
                     predecessor.AirDate,
                     cancellationToken).ConfigureAwait(false);
+                attemptedTitles.AddRange(selected.AttemptedTitles);
                 if (selected.IsSuccess)
                 {
                     return new BangumiSeasonBacktraceResult(
                         selected.Details,
                         selected.Season,
                         null,
-                        visited.Count);
+                        visited.Count)
+                    {
+                        AttemptedTitles = attemptedTitles.ToArray(),
+                    };
                 }
 
                 if (selected.Failure!.Kind != MetadataFailureKind.SemanticNoMatch)
@@ -87,7 +94,10 @@ public sealed class BangumiSeasonBacktraceResolver(
                         null,
                         null,
                         selected.Failure,
-                        visited.Count);
+                        visited.Count)
+                    {
+                        AttemptedTitles = attemptedTitles.ToArray(),
+                    };
                 }
             }
 
@@ -98,6 +108,9 @@ public sealed class BangumiSeasonBacktraceResolver(
             null,
             null,
             new MetadataFailure(MetadataFailureKind.SemanticNoMatch, "tmdb_backtrace_exhausted", true),
-            visited.Count);
+            visited.Count)
+        {
+            AttemptedTitles = attemptedTitles.ToArray(),
+        };
     }
 }

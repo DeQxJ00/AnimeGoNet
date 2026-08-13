@@ -25,6 +25,7 @@ public sealed class AiDeploymentConfigurationTests
                     "--ai_model=test-model",
                     $"--ai_prompt_template={prompt}",
                     "--ai_use_metadata_match=true",
+                    "--ai_debug_mode=true",
                     "--ai_timeout_second=600",
                     "--ai_retry_count=3",
                     "--ai_use_bangumi_pubdate_first=false",
@@ -39,6 +40,7 @@ public sealed class AiDeploymentConfigurationTests
             Assert.Equal("test-model", ai.Model);
             Assert.Equal(prompt, ai.PromptTemplate);
             Assert.True(ai.UseMetadataMatch);
+            Assert.True(ai.DebugMode);
             Assert.Equal(TimeSpan.FromSeconds(600), ai.HttpTimeout);
             Assert.Equal(3, ai.RetryCount);
             Assert.False(ai.UseBangumiPubDateFirst);

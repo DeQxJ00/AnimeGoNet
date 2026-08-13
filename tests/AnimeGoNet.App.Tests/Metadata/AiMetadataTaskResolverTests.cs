@@ -73,6 +73,8 @@ public sealed class AiMetadataTaskResolverTests
                 "UseBangumiPubDateFirst",
                 "PromptTemplateOverride",
                 "PromptFeaturesOverride",
+                "DebugIdentity",
+                "DebugPreAiContext",
             ],
             typeof(AiMetadataMatchInput).GetProperties().Select(property => property.Name));
         Assert.Equal(

@@ -366,6 +366,7 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("ai_use_metadata_match")] bool AiUseMetadataMatch,
     [property: JsonPropertyName("ai_use_season_match")] bool AiUseSeasonMatch,
     [property: JsonPropertyName("ai_use_episode_match")] bool AiUseEpisodeMatch,
+    [property: JsonPropertyName("ai_debug_mode")] bool AiDebugMode,
     [property: JsonPropertyName("ai_http_timeout_seconds")] double AiHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
     [property: JsonPropertyName("write_bangumi_id_when_tmdb_matched")]
@@ -415,6 +416,7 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("ai_use_metadata_match")] bool? AiUseMetadataMatch,
     [property: JsonPropertyName("ai_use_season_match")] bool? AiUseSeasonMatch,
     [property: JsonPropertyName("ai_use_episode_match")] bool? AiUseEpisodeMatch,
+    [property: JsonPropertyName("ai_debug_mode")] bool? AiDebugMode,
     [property: JsonPropertyName("ai_http_timeout_seconds")] double AiHttpTimeoutSeconds,
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
     [property: JsonPropertyName("write_bangumi_id_when_tmdb_matched")]
@@ -533,6 +535,7 @@ public sealed record AiConfigurationResponse(
     [property: JsonPropertyName("use_metadata_match")] bool UseMetadataMatch,
     [property: JsonPropertyName("use_season_match")] bool UseSeasonMatch,
     [property: JsonPropertyName("use_episode_match")] bool UseEpisodeMatch,
+    [property: JsonPropertyName("debug_mode")] bool DebugMode,
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
     [property: JsonPropertyName("retry_count")] int RetryCount,
     [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
@@ -968,7 +971,8 @@ public sealed record AiInvocationLogItemResponse(
     [property: JsonPropertyName("completion_tokens")] long? CompletionTokens,
     [property: JsonPropertyName("total_tokens")] long? TotalTokens,
     [property: JsonPropertyName("request_count")] int RequestCount,
-    [property: JsonPropertyName("tool_call_count")] int ToolCallCount);
+    [property: JsonPropertyName("tool_call_count")] int ToolCallCount,
+    [property: JsonPropertyName("debug_available")] bool DebugAvailable);
 
 public sealed record AnimeSeasonListResponse(
     [property: JsonPropertyName("page")] int Page,

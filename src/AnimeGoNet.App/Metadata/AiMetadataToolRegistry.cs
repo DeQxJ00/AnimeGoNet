@@ -16,7 +16,8 @@ internal sealed class AiMetadataToolRegistry(
     HttpClient httpClient,
     AiMatchingOptions options,
     AiMetadataMatchInput input,
-    HttpClient? referenceHttpClient = null)
+    HttpClient? referenceHttpClient = null,
+    AiMetadataDebugCapture? debugCapture = null)
 {
     private const int MaxToolArgumentsChars = 32_768;
     private const int MaxToolResponseBytes = 20_000;
@@ -33,7 +34,11 @@ internal sealed class AiMetadataToolRegistry(
         {
             try
             {
-                _tmdb = new McpEndpointClient("tmdb", options.TmdbMcpUrl, httpClient);
+                _tmdb = new McpEndpointClient(
+                    "tmdb",
+                    options.TmdbMcpUrl,
+                    httpClient,
+                    debugCapture);
                 _tools.AddRange(await _tmdb.InitializeAsync(cancellationToken).ConfigureAwait(false));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -53,7 +58,11 @@ internal sealed class AiMetadataToolRegistry(
         {
             try
             {
-                _bangumi = new McpEndpointClient("bgm", options.BangumiMcpUrl, httpClient);
+                _bangumi = new McpEndpointClient(
+                    "bgm",
+                    options.BangumiMcpUrl,
+                    httpClient,
+                    debugCapture);
                 _tools.AddRange(await _bangumi.InitializeAsync(cancellationToken).ConfigureAwait(false));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -155,21 +164,33 @@ internal sealed class AiMetadataToolRegistry(
             input.AniDbAnimeId!.Value.ToString(
                 System.Globalization.CultureInfo.InvariantCulture),
             StringComparison.Ordinal);
-        using var response = await (referenceHttpClient ?? httpClient).GetAsync(
-            url,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            return """{"tmdbtv":null,"reason":"mapping unavailable"}""";
-        }
-
-        var raw = await ReadLimitedAsync(
-            response.Content,
-            MaxToolResponseBytes,
-            cancellationToken).ConfigureAwait(false);
+        var endpoint = new Uri(url, UriKind.Absolute);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            using var response = await (referenceHttpClient ?? httpClient).GetAsync(
+                url,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+            var raw = await ReadLimitedAsync(
+                response.Content,
+                MaxToolResponseBytes,
+                cancellationToken).ConfigureAwait(false);
+            timer.Stop();
+            debugCapture?.Record(
+                "reference",
+                "anidb_lookup",
+                endpoint,
+                null,
+                (int)response.StatusCode,
+                raw,
+                timer.ElapsedMilliseconds,
+                response.IsSuccessStatusCode ? null : "http_status");
+            if (!response.IsSuccessStatusCode)
+            {
+                return """{"tmdbtv":null,"reason":"mapping unavailable"}""";
+            }
+
             using var document = JsonDocument.Parse(raw);
             if (!document.RootElement.TryGetProperty("tmdbtv", out var value))
             {
@@ -194,6 +215,21 @@ internal sealed class AiMetadataToolRegistry(
         catch (JsonException)
         {
             return """{"tmdbtv":null,"reason":"mapping JSON malformed"}""";
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or InvalidDataException or OperationCanceledException)
+        {
+            timer.Stop();
+            debugCapture?.Record(
+                "reference",
+                "anidb_lookup",
+                endpoint,
+                null,
+                null,
+                null,
+                timer.ElapsedMilliseconds,
+                exception.GetType().Name);
+            throw;
         }
     }
 
@@ -443,7 +479,8 @@ internal sealed class AiMetadataToolRegistry(
     private sealed class McpEndpointClient(
         string source,
         Uri endpoint,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        AiMetadataDebugCapture? debugCapture)
     {
         private const int MaxMcpResponseBytes = 65_536;
         private static readonly ConcurrentDictionary<string, AiFunctionTool[]> ToolCache =
@@ -533,27 +570,60 @@ internal sealed class AiMetadataToolRegistry(
             CancellationToken cancellationToken)
         {
             using var request = BuildRequest(method, writeParameters);
-            using var response = await httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
+            var requestBody = await request.Content!.ReadAsStringAsync(
                 cancellationToken).ConfigureAwait(false);
-            CaptureSession(response);
-            response.EnsureSuccessStatusCode();
-            var raw = await ReadLimitedAsync(
-                response.Content,
-                MaxMcpResponseBytes,
-                cancellationToken).ConfigureAwait(false);
-            var json = response.Content.Headers.ContentType?.MediaType == "text/event-stream"
-                ? ExtractSseJson(raw)
-                : raw;
-            var document = JsonDocument.Parse(json);
-            if (document.RootElement.TryGetProperty("error", out var error))
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var responseCaptured = false;
+            try
             {
-                document.Dispose();
-                throw new InvalidDataException("mcp_jsonrpc_error:" + error.GetRawText());
-            }
+                using var response = await httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken).ConfigureAwait(false);
+                CaptureSession(response);
+                var raw = await ReadLimitedAsync(
+                    response.Content,
+                    MaxMcpResponseBytes,
+                    cancellationToken).ConfigureAwait(false);
+                timer.Stop();
+                debugCapture?.Record(
+                    "mcp:" + source,
+                    method,
+                    endpoint,
+                    requestBody,
+                    (int)response.StatusCode,
+                    raw,
+                    timer.ElapsedMilliseconds,
+                    response.IsSuccessStatusCode ? null : "http_status");
+                responseCaptured = true;
+                response.EnsureSuccessStatusCode();
+                var json = response.Content.Headers.ContentType?.MediaType == "text/event-stream"
+                    ? ExtractSseJson(raw)
+                    : raw;
+                var document = JsonDocument.Parse(json);
+                if (document.RootElement.TryGetProperty("error", out var error))
+                {
+                    document.Dispose();
+                    throw new InvalidDataException("mcp_jsonrpc_error:" + error.GetRawText());
+                }
 
-            return document;
+                return document;
+            }
+            catch (Exception exception) when (!responseCaptured
+                && exception is (HttpRequestException or OperationCanceledException))
+            {
+                timer.Stop();
+                debugCapture?.Record(
+                    "mcp:" + source,
+                    method,
+                    endpoint,
+                    requestBody,
+                    null,
+                    null,
+                    timer.ElapsedMilliseconds,
+                    exception.GetType().Name);
+                throw;
+            }
         }
 
         private async Task NotifyInitializedAsync(CancellationToken cancellationToken)
@@ -565,11 +635,48 @@ internal sealed class AiMetadataToolRegistry(
                 """{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}""",
                 Encoding.UTF8,
                 "application/json");
-            using var response = await httpClient.SendAsync(
-                request,
+            var requestBody = await request.Content.ReadAsStringAsync(
                 cancellationToken).ConfigureAwait(false);
-            CaptureSession(response);
-            response.EnsureSuccessStatusCode();
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var responseCaptured = false;
+            try
+            {
+                using var response = await httpClient.SendAsync(
+                    request,
+                    cancellationToken).ConfigureAwait(false);
+                CaptureSession(response);
+                var raw = await ReadLimitedAsync(
+                    response.Content,
+                    MaxMcpResponseBytes,
+                    cancellationToken).ConfigureAwait(false);
+                timer.Stop();
+                debugCapture?.Record(
+                    "mcp:" + source,
+                    "notifications/initialized",
+                    endpoint,
+                    requestBody,
+                    (int)response.StatusCode,
+                    raw,
+                    timer.ElapsedMilliseconds,
+                    response.IsSuccessStatusCode ? null : "http_status");
+                responseCaptured = true;
+                response.EnsureSuccessStatusCode();
+            }
+            catch (Exception exception) when (!responseCaptured
+                && exception is (HttpRequestException or OperationCanceledException))
+            {
+                timer.Stop();
+                debugCapture?.Record(
+                    "mcp:" + source,
+                    "notifications/initialized",
+                    endpoint,
+                    requestBody,
+                    null,
+                    null,
+                    timer.ElapsedMilliseconds,
+                    exception.GetType().Name);
+                throw;
+            }
         }
 
         private HttpRequestMessage BuildRequest(

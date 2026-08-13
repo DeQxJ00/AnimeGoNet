@@ -190,6 +190,8 @@ public sealed record AiMatchingOptions
 
     public bool UseMetadataMatch { get; init; }
 
+    public bool DebugMode { get; init; }
+
     public TimeSpan HttpTimeout { get; init; } = TimeSpan.FromSeconds(600);
 
     public int RetryCount { get; init; } = 2;

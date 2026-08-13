@@ -51,6 +51,9 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         AiMetadataMatchInput input,
         CancellationToken cancellationToken = default)
     {
+        var debugCapture = options.DebugMode
+            ? new AiMetadataDebugCapture(input, options)
+            : null;
         if (input.PromptTemplateOverride is null && options.PromptTemplate is not null)
         {
             input = input with { PromptTemplateOverride = options.PromptTemplate };
@@ -95,13 +98,17 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         timeout.CancelAfter(options.HttpTimeout);
         try
         {
+            var promptTemplate = input.PromptTemplateOverride
+                ?? AiMetadataPromptRenderer.LoadTemplate();
             var prompt = AiMetadataPromptRenderer.LoadAndRender(input);
+            debugCapture?.SetPrompt(promptTemplate, prompt);
             trace.Add(new(++sequence, "prompt_rendered", AiMetadataPromptRenderer.PromptVersion));
             var registry = new AiMetadataToolRegistry(
                 httpClient,
                 options,
                 input,
-                referenceHttpClient);
+                referenceHttpClient,
+                debugCapture);
             await registry.InitializeAsync(timeout.Token).ConfigureAwait(false);
             trace.Add(new(++sequence, "tools_initialized", $"tools={registry.Tools.Count}"));
             if (options.ApiMode == AiApiMode.Responses)
@@ -130,6 +137,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                         responseJson = await SendWithRetryAsync(
                             requestJson,
                             usage,
+                            debugCapture,
                             timeout.Token).ConfigureAwait(false);
                     }
                     catch (AiHttpStatusException exception) when (
@@ -149,6 +157,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                                 statelessItems,
                                 pendingOutputs),
                             usage,
+                            debugCapture,
                             timeout.Token).ConfigureAwait(false);
                     }
                     requestTimer.Stop();
@@ -168,12 +177,16 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                                 "ai_response_content_missing");
                         }
 
-                        return new AiMetadataMatchResponse(
-                            ParseCandidate(parsed.Content),
-                            usage.Snapshot())
+                        var candidate = ParseCandidate(parsed.Content);
+                        var snapshot = usage.Snapshot();
+                        return new AiMetadataMatchResponse(candidate, snapshot)
                         {
                             RawOutput = parsed.Content,
                             Trace = trace.ToArray(),
+                            DebugChain = debugCapture?.Complete(
+                                parsed.Content,
+                                candidate,
+                                snapshot),
                         };
                     }
 
@@ -227,6 +240,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 var responseJson = await SendWithRetryAsync(
                     BuildRequestJson(messages, registry.Tools),
                     usage,
+                    debugCapture,
                     timeout.Token).ConfigureAwait(false);
                 requestTimer.Stop();
                 var parsed = ParseResponse(responseJson);
@@ -245,12 +259,16 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                             "ai_response_content_missing");
                     }
 
-                    return new AiMetadataMatchResponse(
-                        ParseCandidate(parsed.Content),
-                        usage.Snapshot())
+                    var candidate = ParseCandidate(parsed.Content);
+                    var snapshot = usage.Snapshot();
+                    return new AiMetadataMatchResponse(candidate, snapshot)
                     {
                         RawOutput = parsed.Content,
                         Trace = trace.ToArray(),
+                        DebugChain = debugCapture?.Complete(
+                            parsed.Content,
+                            candidate,
+                            snapshot),
                     };
                 }
 
@@ -291,7 +309,12 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 classified.Kind,
                 classified.SafeCode,
                 exception,
-                usage.Snapshot());
+                usage.Snapshot(),
+                debugCapture?.Complete(
+                    null,
+                    null,
+                    usage.Snapshot(),
+                    classified.SafeCode));
         }
         catch (AiMetadataMatcherException exception) when (exception.Usage is null)
         {
@@ -299,7 +322,25 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 exception.Kind,
                 exception.SafeCode,
                 exception,
-                usage.Snapshot());
+                usage.Snapshot(),
+                debugCapture?.Complete(
+                    null,
+                    null,
+                    usage.Snapshot(),
+                    exception.SafeCode));
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            throw new AiMetadataMatcherException(
+                exception.Kind,
+                exception.SafeCode,
+                exception,
+                exception.Usage ?? usage.Snapshot(),
+                exception.DebugChain ?? debugCapture?.Complete(
+                    null,
+                    null,
+                    exception.Usage ?? usage.Snapshot(),
+                    exception.SafeCode));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -311,7 +352,8 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 MetadataFailureKind.Network,
                 "ai_http_timeout",
                 exception,
-                usage.Snapshot());
+                usage.Snapshot(),
+                debugCapture?.Complete(null, null, usage.Snapshot(), "ai_http_timeout"));
         }
         catch (HttpRequestException exception)
         {
@@ -319,7 +361,8 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 MetadataFailureKind.Network,
                 "ai_network_error",
                 exception,
-                usage.Snapshot());
+                usage.Snapshot(),
+                debugCapture?.Complete(null, null, usage.Snapshot(), "ai_network_error"));
         }
         catch (JsonException exception)
         {
@@ -327,7 +370,12 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                 MetadataFailureKind.Protocol,
                 "ai_response_json_invalid",
                 exception,
-                usage.Snapshot());
+                usage.Snapshot(),
+                debugCapture?.Complete(
+                    null,
+                    null,
+                    usage.Snapshot(),
+                    "ai_response_json_invalid"));
         }
         catch (InvalidDataException exception)
         {
@@ -337,7 +385,14 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                     ? "ai_response_too_large"
                     : "ai_response_invalid",
                 exception,
-                usage.Snapshot());
+                usage.Snapshot(),
+                debugCapture?.Complete(
+                    null,
+                    null,
+                    usage.Snapshot(),
+                    exception.Message == "response_too_large"
+                        ? "ai_response_too_large"
+                        : "ai_response_invalid"));
         }
     }
 
@@ -388,13 +443,15 @@ public sealed class OpenAiCompatibleMetadataMatcher(
     private async Task<string> SendWithRetryAsync(
         string json,
         UsageAccumulator usage,
+        AiMetadataDebugCapture? debugCapture,
         CancellationToken cancellationToken)
     {
         for (var attempt = 0; ; attempt++)
         {
+            var endpoint = BuildEndpoint(options.BaseUrl!, options.ApiMode);
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                BuildEndpoint(options.BaseUrl!, options.ApiMode));
+                endpoint);
             if (!string.IsNullOrWhiteSpace(options.ApiKey))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue(
@@ -403,6 +460,7 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             }
 
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            var timer = Stopwatch.StartNew();
             try
             {
                 usage.RegisterRequest();
@@ -414,6 +472,16 @@ public sealed class OpenAiCompatibleMetadataMatcher(
                     response.Content,
                     MaxAiResponseBytes,
                     cancellationToken).ConfigureAwait(false);
+                timer.Stop();
+                debugCapture?.Record(
+                    "ai",
+                    $"request_attempt_{attempt + 1}",
+                    endpoint,
+                    json,
+                    (int)response.StatusCode,
+                    raw,
+                    timer.ElapsedMilliseconds,
+                    response.IsSuccessStatusCode ? null : "http_status");
                 if (response.IsSuccessStatusCode)
                 {
                     return raw;
@@ -427,9 +495,37 @@ public sealed class OpenAiCompatibleMetadataMatcher(
 
                 throw new AiHttpStatusException(response.StatusCode, raw);
             }
-            catch (HttpRequestException) when (attempt < options.RetryCount)
+            catch (HttpRequestException exception)
             {
+                timer.Stop();
+                debugCapture?.Record(
+                    "ai",
+                    $"request_attempt_{attempt + 1}",
+                    endpoint,
+                    json,
+                    null,
+                    null,
+                    timer.ElapsedMilliseconds,
+                    exception.GetType().Name);
+                if (attempt >= options.RetryCount)
+                {
+                    throw;
+                }
                 await DelayRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException exception)
+            {
+                timer.Stop();
+                debugCapture?.Record(
+                    "ai",
+                    $"request_attempt_{attempt + 1}",
+                    endpoint,
+                    json,
+                    null,
+                    null,
+                    timer.ElapsedMilliseconds,
+                    exception.GetType().Name);
+                throw;
             }
         }
     }

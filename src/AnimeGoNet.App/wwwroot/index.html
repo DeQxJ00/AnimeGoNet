@@ -1159,6 +1159,24 @@
     </article>
   </dialog>
 
+  <dialog id="ai-debug-dialog" aria-labelledby="ai-debug-dialog-title">
+    <article class="ai-debug-dialog-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Local sensitive AI trace</p>
+          <h2 id="ai-debug-dialog-title">AI Debug 完整链路</h2>
+        </div>
+        <button id="ai-debug-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <p id="ai-debug-status" class="ai-debug-warning" role="status">正在读取完整链路…</p>
+      <div id="ai-debug-content" class="ai-debug-content"></div>
+      <div class="delete-actions">
+        <span class="muted">删除只影响本次本地 Debug 文件，不影响任务和普通调用日志。</span>
+        <button id="ai-debug-delete" type="button" class="delete-button" disabled>删除本次 Debug 链路</button>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="configuration-dialog" aria-labelledby="configuration-dialog-title">
     <form id="configuration-form" class="configuration-form">
       <div class="delete-heading">
@@ -1236,6 +1254,10 @@
             <p id="configuration-ai-key-state" class="configuration-secret-state wide"></p>
             <label class="wide">TMDB MCP 地址<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
             <label class="wide">Bangumi MCP 地址<input id="configuration-ai-bangumi-mcp-url" type="url" maxlength="2048" required placeholder="http://bgm.mcp.local/mcp"></label>
+            <label class="configuration-guided-option wide">
+              <input id="configuration-ai-debug" type="checkbox">
+              <span><strong>AI Debug 完整链路</strong><small>默认关闭。开启后按调用保存 AI 前置确定性尝试、任务输入、Prompt 模板与最终渲染 Prompt、每轮 AI/MCP 请求和响应、解析结果、TMDB 本地验证及用量。文件位于 data_path/ai-debug；不保存 API Key、Cookie、passkey 或 Authorization Header。</small></span>
+            </label>
             <label class="wide">正式 AI Prompt
               <textarea id="configuration-ai-prompt-template" class="ai-test-prompt" rows="20" maxlength="131072" required spellcheck="false" aria-describedby="configuration-ai-prompt-status"></textarea>
               <small id="configuration-ai-prompt-status">后台 Worker 与 AI 匹配测试工具共用此模板；保存后重启生效。</small>

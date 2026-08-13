@@ -16,7 +16,89 @@ public sealed record AiMetadataMatchInput(
     public string? PromptTemplateOverride { get; init; }
 
     public AiMetadataPromptFeatures? PromptFeaturesOverride { get; init; }
+
+    public AiMetadataDebugIdentity? DebugIdentity { get; init; }
+
+    public AiMetadataDebugPreAiContext? DebugPreAiContext { get; init; }
 }
+
+public sealed record AiMetadataDebugIdentity(string RunId, string TaskId);
+
+public sealed record AiMetadataDebugTaskInput(
+    string Title,
+    int? MikanId,
+    int? GroupId,
+    int? BangumiSubjectId,
+    int? AniDbAnimeId,
+    string? ImdbTitleId,
+    string? SourceAdapter,
+    string? SourceProfileId,
+    string? SourceId,
+    int TorrentFileCount,
+    IReadOnlyList<AiMetadataDebugTaskFileInput> Files);
+
+public sealed record AiMetadataDebugTaskFileInput(
+    string Name,
+    long SizeBytes,
+    string? SourceEpisode,
+    string? FileEpisodeCandidate,
+    int? PreResolvedEpisodeNumber,
+    string? PreResolvedOtherReason,
+    int? TmdbSeasonNumber);
+
+public sealed record AiMetadataDebugPreAiAttempt(
+    string AttemptId,
+    string Stage,
+    string Strategy,
+    int? Priority,
+    string Result,
+    string? ErrorCode,
+    string? Reason,
+    bool Retryable,
+    long DurationMilliseconds,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record AiMetadataDebugPreAiContext(
+    string TriggerStage,
+    AiMetadataDebugTaskInput Input,
+    int? ExpectedTmdbSeriesId,
+    int? ExpectedSeasonNumber,
+    IReadOnlyList<string> AttemptedTmdbSearchTitles,
+    DateTimeOffset? TorrentPublishedAt,
+    int? BangumiEpisodeCandidate,
+    bool UseBangumiPubDateFirst,
+    string PublicationResult,
+    string? PublicationErrorCode,
+    IReadOnlyList<AiMetadataDebugPreAiAttempt> Attempts);
+
+public sealed record AiMetadataDebugExchange(
+    int Sequence,
+    string Channel,
+    string Operation,
+    string Endpoint,
+    string? RequestBody,
+    int? StatusCode,
+    string? ResponseBody,
+    long DurationMilliseconds,
+    string? Error);
+
+public sealed record AiMetadataDebugChain(
+    string TraceId,
+    string? RunId,
+    string? TaskId,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset CompletedAtUtc,
+    string PromptVersion,
+    string ApiMode,
+    string Model,
+    AiMetadataDebugPreAiContext? PreAiContext,
+    string PromptTemplate,
+    string RenderedPrompt,
+    IReadOnlyList<AiMetadataDebugExchange> Exchanges,
+    string? RawOutput,
+    AiMetadataMatchCandidate? Candidate,
+    AiMetadataProviderUsage? Usage,
+    string? FailureCode);
 
 public sealed record AiMetadataPromptFeatures(
     bool TmdbMcp,
@@ -81,6 +163,8 @@ public sealed record AiMetadataMatchResponse(
 
     public IReadOnlyList<AiMetadataTraceEvent> Trace { get; init; } = [];
 
+    public AiMetadataDebugChain? DebugChain { get; init; }
+
     public bool? Matched => Candidate.Matched;
 
     public int? TmdbId => Candidate.TmdbId;
@@ -137,7 +221,8 @@ public sealed class AiMetadataMatcherException(
     MetadataFailureKind kind,
     string safeCode,
     Exception? innerException = null,
-    AiMetadataProviderUsage? usage = null)
+    AiMetadataProviderUsage? usage = null,
+    AiMetadataDebugChain? debugChain = null)
     : Exception(safeCode, innerException)
 {
     public MetadataFailureKind Kind { get; } = kind;
@@ -145,4 +230,6 @@ public sealed class AiMetadataMatcherException(
     public string SafeCode { get; } = StableErrorCode.Require(safeCode, nameof(safeCode));
 
     public AiMetadataProviderUsage? Usage { get; } = usage;
+
+    public AiMetadataDebugChain? DebugChain { get; } = debugChain;
 }

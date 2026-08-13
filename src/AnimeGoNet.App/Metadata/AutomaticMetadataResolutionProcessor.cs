@@ -126,6 +126,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
 
         var details = direct.Details;
         var terminalFailure = directFailure;
+        var attemptedTmdbSearchTitles = new List<string>(direct.AttemptedTitles);
         var policy = options.Metadata.SeasonFailure;
         if (policy.Skip)
         {
@@ -146,6 +147,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 var result = await backtrace.ResolveAsync(
                     claim.BangumiSubjectId.Value,
                     cancellationToken).ConfigureAwait(false);
+                attemptedTmdbSearchTitles.AddRange(result.AttemptedTitles);
                 await RecordAsync(claim, "season", "backtrace", 3,
                     result.IsSuccess
                         ? "matched"
@@ -186,7 +188,10 @@ public sealed class AutomaticMetadataResolutionProcessor(
 
         if (options.Metadata.Ai.UseMetadataMatch)
         {
-            if (await TryCompleteAiMetadataAsync(claim, cancellationToken).ConfigureAwait(false))
+            if (await TryCompleteAiMetadataAsync(
+                    claim,
+                    attemptedTmdbSearchTitles,
+                    cancellationToken).ConfigureAwait(false))
             {
                 return true;
             }
@@ -463,12 +468,14 @@ public sealed class AutomaticMetadataResolutionProcessor(
 
     private async Task<bool> TryCompleteAiMetadataAsync(
         MetadataTaskClaim claim,
+        IReadOnlyList<string> attemptedTmdbSearchTitles,
         CancellationToken cancellationToken)
     {
         var started = _timeProvider.GetTimestamp();
         var resolved = await aiMetadata.ResolveAsync(
             claim,
             claim.Files ?? [],
+            preAiSearchTitles: attemptedTmdbSearchTitles,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         if (resolved.Publication?.ShouldAudit == true)
         {

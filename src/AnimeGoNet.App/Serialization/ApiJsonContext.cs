@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Metadata;
 
 namespace AnimeGoNet.App.Serialization;
 
@@ -67,6 +68,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MetadataTaskDetailResponse))]
 [JsonSerializable(typeof(MetadataAttemptListResponse))]
 [JsonSerializable(typeof(AiInvocationLogListResponse))]
+[JsonSerializable(typeof(AiMetadataDebugDocument))]
 [JsonSerializable(typeof(AnimeSeasonListResponse))]
 [JsonSerializable(typeof(AnimeSeasonDetailResponse))]
 [JsonSerializable(typeof(AnimeSeasonCreateRequest))]

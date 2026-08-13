@@ -24,6 +24,7 @@ const deleteConfirm = element("#delete-confirm");
 const downloaderConfigDialog = element("#downloader-config-dialog");
 const configurationDialog = element("#configuration-dialog");
 const cacheEntryDialog = element("#cache-entry-dialog");
+const aiDebugDialog = element("#ai-debug-dialog");
 let activeDeletePreview = null;
 let currentConfiguration = null;
 let pendingConfigurationArchive = null;
@@ -74,6 +75,7 @@ let aiLogPage = 1;
 let aiLogPageSize = 25;
 let aiLogTotalItems = 0;
 let aiLogRequestSequence = 0;
+let activeAiDebugRunId = null;
 let aiTestDefaultPrompt = null;
 const aiTestPromptDraftKey = "animegonet.ai-test-prompt.v1";
 const workspaceDefinitions = {
@@ -1459,6 +1461,164 @@ function openAiLogTask(item) {
     selectWorkspace("tasks", "metadata");
     void loadMetadataTasks();
 }
+function aiDebugText(value) {
+    if (typeof value === "string") {
+        try {
+            return JSON.stringify(JSON.parse(value), null, 2);
+        }
+        catch {
+            return value;
+        }
+    }
+    return JSON.stringify(value, null, 2);
+}
+function aiDebugCodeBlock(value, className = "ai-debug-payload") {
+    const pre = document.createElement("pre");
+    pre.className = className;
+    const code = document.createElement("code");
+    code.textContent = aiDebugText(value);
+    pre.append(code);
+    return pre;
+}
+function aiDebugDisclosure(title, value, open = false) {
+    const details = document.createElement("details");
+    details.className = "ai-debug-disclosure";
+    details.open = open;
+    const summary = document.createElement("summary");
+    summary.textContent = title;
+    details.append(summary, aiDebugCodeBlock(value));
+    return details;
+}
+function renderAiDebugDocument(documentValue) {
+    const chain = documentValue.chain;
+    const content = element("#ai-debug-content");
+    const metadata = document.createElement("dl");
+    metadata.className = "live-log-detail ai-debug-summary";
+    metadata.append(liveLogDetail("Trace / Run", `${chain.trace_id} / ${textOrDash(chain.run_id)}`), liveLogDetail("任务 ID", textOrDash(chain.task_id)), liveLogDetail("模型", `${chain.model} · ${chain.api_mode} · ${chain.prompt_version}`), liveLogDetail("时间", `${dataUpdateTime(chain.started_at_utc)} → ${dataUpdateTime(chain.completed_at_utc)}`), liveLogDetail("最终状态", chain.failure_code ?? "本地验证已执行"), liveLogDetail("记录格式", `v${documentValue.format_version}`));
+    const sections = [metadata];
+    const preAi = chain.pre_ai_context;
+    if (preAi) {
+        const section = document.createElement("section");
+        section.className = "ai-debug-section";
+        const heading = document.createElement("div");
+        heading.className = "ai-debug-section-heading";
+        const title = document.createElement("h3");
+        title.textContent = "1. AI 前置链路";
+        const badge = document.createElement("span");
+        badge.className = "badge pending";
+        badge.textContent = preAi.trigger_stage === "episode" ? "EP 失败后进入 AI" : "Series / Season 失败后进入 AI";
+        heading.append(title, badge);
+        const evidence = document.createElement("dl");
+        evidence.className = "live-log-detail ai-debug-evidence";
+        evidence.append(liveLogDetail("Torrent 发布时间", textOrDash(preAi.torrent_published_at)), liveLogDetail("Bangumi EP 候选", textOrDash(preAi.bangumi_episode_candidate)), liveLogDetail("发布时间优先", preAi.use_bangumi_pub_date_first ? "启用" : "未启用"), liveLogDetail("发布时间证据", `${preAi.publication_result}${preAi.publication_error_code ? ` · ${preAi.publication_error_code}` : ""}`), liveLogDetail("模型外锁定 TMDB", preAi.expected_tmdb_series_id === null
+            ? "未锁定"
+            : `${preAi.expected_tmdb_series_id} / S${String(preAi.expected_season_number ?? 0).padStart(2, "0")}`), liveLogDetail("已尝试 TMDB 搜索词", preAi.attempted_tmdb_search_titles.length === 0
+            ? "无"
+            : preAi.attempted_tmdb_search_titles.join(" → ")));
+        section.append(heading, evidence, aiDebugDisclosure("任务输入快照", preAi.input, true));
+        const timeline = document.createElement("div");
+        timeline.className = "ai-debug-timeline";
+        if (preAi.attempts.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "muted";
+            empty.textContent = "本次调用前没有已落库的确定性尝试记录。";
+            timeline.append(empty);
+        }
+        else {
+            for (const [index, attempt] of preAi.attempts.entries()) {
+                const row = document.createElement("details");
+                row.className = `ai-debug-step ${attempt.result}`;
+                const summary = document.createElement("summary");
+                summary.textContent = `${index + 1}. ${attempt.stage} · ${attempt.strategy} → ${attempt.result}${attempt.error_code ? ` · ${attempt.error_code}` : ""}`;
+                row.append(summary, aiDebugCodeBlock(attempt));
+                timeline.append(row);
+            }
+        }
+        section.append(timeline);
+        sections.push(section);
+    }
+    const promptSection = document.createElement("section");
+    promptSection.className = "ai-debug-section";
+    const promptTitle = document.createElement("h3");
+    promptTitle.textContent = "2. 当次提示词快照";
+    promptSection.append(promptTitle, aiDebugDisclosure("原始 Prompt 模板", chain.prompt_template), aiDebugDisclosure("最终渲染 Prompt（实际发给模型）", chain.rendered_prompt, true));
+    sections.push(promptSection);
+    const exchangeSection = document.createElement("section");
+    exchangeSection.className = "ai-debug-section";
+    const exchangeTitle = document.createElement("h3");
+    exchangeTitle.textContent = `3. AI / MCP 请求链（${chain.exchanges.length} 步）`;
+    exchangeSection.append(exchangeTitle);
+    const exchanges = document.createElement("div");
+    exchanges.className = "ai-debug-timeline";
+    for (const exchange of chain.exchanges) {
+        const item = document.createElement("details");
+        item.className = `ai-debug-step ${exchange.error ? "error" : "matched"}`;
+        const summary = document.createElement("summary");
+        summary.textContent = `#${exchange.sequence} ${exchange.channel} · ${exchange.operation} · HTTP ${textOrDash(exchange.status_code)} · ${exchange.duration_milliseconds} ms`;
+        const endpoint = document.createElement("p");
+        endpoint.className = "ai-debug-endpoint";
+        endpoint.textContent = exchange.endpoint;
+        item.append(summary, endpoint);
+        if (exchange.request_body !== null)
+            item.append(aiDebugDisclosure("请求 Body", exchange.request_body));
+        if (exchange.response_body !== null)
+            item.append(aiDebugDisclosure("响应 Body", exchange.response_body));
+        if (exchange.error !== null)
+            item.append(aiDebugDisclosure("错误", exchange.error, true));
+        exchanges.append(item);
+    }
+    exchangeSection.append(exchanges);
+    sections.push(exchangeSection);
+    const resultSection = document.createElement("section");
+    resultSection.className = "ai-debug-section";
+    const resultTitle = document.createElement("h3");
+    resultTitle.textContent = "4. 模型结果与本地验证";
+    resultSection.append(resultTitle, aiDebugDisclosure("模型原始输出", chain.raw_output ?? "—", true), aiDebugDisclosure("解析候选", chain.candidate), aiDebugDisclosure("TMDB 本地验证", documentValue.validation, true), aiDebugDisclosure("用量", chain.usage));
+    sections.push(resultSection, aiDebugDisclosure("完整原始 Debug JSON", documentValue));
+    content.replaceChildren(...sections);
+}
+async function openAiDebugChain(item) {
+    activeAiDebugRunId = item.run_id;
+    element("#ai-debug-dialog-title").textContent = `AI Debug · ${item.title}`;
+    element("#ai-debug-status").textContent = "正在读取完整链路…";
+    element("#ai-debug-content").replaceChildren();
+    element("#ai-debug-delete").disabled = true;
+    aiDebugDialog.showModal();
+    try {
+        const documentValue = await api.get(`/api/v1/logs/ai-invocations/${encodeURIComponent(item.run_id)}/debug`);
+        if (activeAiDebugRunId !== item.run_id)
+            return;
+        renderAiDebugDocument(documentValue);
+        element("#ai-debug-status").textContent =
+            "本机敏感调试记录：包含任务标题、文件名、Prompt 与 AI/MCP Body；不包含 API Key、Cookie、passkey 或 Authorization Header。";
+        element("#ai-debug-delete").disabled = false;
+    }
+    catch (error) {
+        if (activeAiDebugRunId !== item.run_id)
+            return;
+        element("#ai-debug-status").textContent =
+            errorMessage(error, "AI Debug 链路读取失败");
+    }
+}
+async function deleteActiveAiDebugChain() {
+    if (activeAiDebugRunId === null)
+        return;
+    if (!window.confirm("只删除这一次 AI Debug 完整链路文件？任务、匹配结果和普通 AI 调用日志不会删除。"))
+        return;
+    const runId = activeAiDebugRunId;
+    const button = element("#ai-debug-delete");
+    button.disabled = true;
+    try {
+        await api.delete(`/api/v1/logs/ai-invocations/${encodeURIComponent(runId)}/debug`);
+        aiDebugDialog.close();
+        await loadAiInvocationLogs();
+    }
+    catch (error) {
+        button.disabled = false;
+        element("#ai-debug-status").textContent =
+            errorMessage(error, "AI Debug 链路删除失败");
+    }
+}
 function renderAiInvocationLogs(result) {
     const list = element("#ai-log-list");
     if (result.items.length === 0) {
@@ -1501,6 +1661,17 @@ function renderAiInvocationLogs(result) {
                 openAiLogTask(item);
             });
             actions.append(taskButton);
+            if (item.debug_available) {
+                const debugButton = document.createElement("button");
+                debugButton.type = "button";
+                debugButton.className = "secondary-button";
+                debugButton.textContent = "查看完整链路";
+                debugButton.addEventListener("click", event => {
+                    event.preventDefault();
+                    void openAiDebugChain(item);
+                });
+                actions.append(debugButton);
+            }
             entry.append(summary, details, actions);
             return entry;
         });
@@ -2758,6 +2929,10 @@ async function loadConfiguration() {
                     `任务级 ${enabledLabel(config.metadata.ai.use_metadata_match)} · 单提示词 · `
                         + `${config.metadata.ai.http_timeout_seconds} 秒`,
                 ],
+                [
+                    "AI Debug",
+                    `${enabledLabel(config.metadata.ai.debug_mode)} · 完整链路写入 data_path/ai-debug`,
+                ],
                 ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
                 [
                     "Torrent HTTP",
@@ -3088,6 +3263,7 @@ const configurationLockSelectors = {
     ai_tmdb_mcp_url: ["#configuration-ai-tmdb-mcp-url"],
     ai_bangumi_mcp_url: ["#configuration-ai-bangumi-mcp-url"],
     ai_use_metadata_match: ["#configuration-ai-metadata"],
+    ai_debug_mode: ["#configuration-ai-debug"],
     ai_http_timeout_seconds: ["#configuration-ai-timeout"],
     data_update_enabled: ["#configuration-data-update-enabled"],
     data_update_cron: ["#configuration-data-update-cron"],
@@ -3173,6 +3349,7 @@ function openConfigurationEditor() {
     setConfigurationValue("#configuration-ai-tmdb-mcp-url", editable.ai_tmdb_mcp_url);
     setConfigurationValue("#configuration-ai-bangumi-mcp-url", editable.ai_bangumi_mcp_url);
     setConfigurationChecked("#configuration-ai-metadata", editable.ai_use_metadata_match);
+    setConfigurationChecked("#configuration-ai-debug", editable.ai_debug_mode);
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
     setConfigurationChecked("#configuration-write-bangumi-with-tmdb", editable.write_bangumi_id_when_tmdb_matched);
     setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
@@ -3224,6 +3401,7 @@ const configurationFieldLabels = {
     ai_tmdb_mcp_url: "TMDB MCP 地址",
     ai_bangumi_mcp_url: "Bangumi MCP 地址",
     ai_use_metadata_match: "AI 元数据匹配",
+    ai_debug_mode: "AI Debug 完整链路",
     ai_http_timeout_seconds: "AI 超时（秒）",
     tmdb_failure_use_bangumi: "Bangumi 完全兜底",
     write_bangumi_id_when_tmdb_matched: "TMDB 成功时写 Bangumi ID",
@@ -3280,6 +3458,7 @@ function configurationRequest() {
         ai_tmdb_mcp_url: element("#configuration-ai-tmdb-mcp-url").value,
         ai_bangumi_mcp_url: element("#configuration-ai-bangumi-mcp-url").value,
         ai_use_metadata_match: element("#configuration-ai-metadata").checked,
+        ai_debug_mode: element("#configuration-ai-debug").checked,
         ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
         tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
         write_bangumi_id_when_tmdb_matched: element("#configuration-write-bangumi-with-tmdb").checked,
@@ -7371,6 +7550,12 @@ element("#ai-log-next").addEventListener("click", () => {
         return;
     aiLogPage++;
     void loadAiInvocationLogs();
+});
+element("#ai-debug-close").addEventListener("click", () => aiDebugDialog.close());
+element("#ai-debug-delete").addEventListener("click", () => void deleteActiveAiDebugChain());
+aiDebugDialog.addEventListener("close", () => {
+    activeAiDebugRunId = null;
+    element("#ai-debug-content").replaceChildren();
 });
 window.addEventListener("beforeunload", () => {
     liveLogShouldReconnect = false;

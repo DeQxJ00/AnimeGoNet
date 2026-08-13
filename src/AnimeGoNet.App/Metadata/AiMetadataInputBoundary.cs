@@ -8,7 +8,8 @@ internal static class AiMetadataInputBoundary
     public static AiMetadataMatchInput Create(
         MetadataTaskClaim claim,
         IReadOnlyList<MetadataTaskFileProjection> videos,
-        AiPublicationEvidenceResult publication)
+        AiPublicationEvidenceResult publication,
+        AiMetadataDebugPreAiContext? debugPreAiContext = null)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(videos);
@@ -27,6 +28,12 @@ internal static class AiMetadataInputBoundary
             claim.TorrentFileCount,
             publication.PublishedAt,
             publication.BangumiEpisodeCandidate,
-            publication.UseBangumiPubDateFirst);
+            publication.UseBangumiPubDateFirst)
+        {
+            DebugIdentity = debugPreAiContext is null
+                ? null
+                : new AiMetadataDebugIdentity(claim.RunId, claim.TaskId),
+            DebugPreAiContext = debugPreAiContext,
+        };
     }
 }

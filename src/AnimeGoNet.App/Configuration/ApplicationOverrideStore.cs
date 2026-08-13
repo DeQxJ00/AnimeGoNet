@@ -59,7 +59,8 @@ public sealed record ApplicationOverrideEntry(
     bool? WriteBangumiIdWhenTmdbMatched = null,
     string? AiPromptTemplate = null,
     double? MikanEpisodeIdentityCacheHours = null,
-    double? MikanBangumiIdentityCacheHours = null);
+    double? MikanBangumiIdentityCacheHours = null,
+    bool? AiDebugMode = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -381,6 +382,9 @@ public sealed class ApplicationOverrideStore : IDisposable
                         ? options.Metadata.Ai.UseMetadataMatch
                         : settings.AiUseMetadataMatch
                         ?? (settings.AiUseSeasonMatch || settings.AiUseEpisodeMatch),
+                    DebugMode = inheritedFields.Contains("ai_debug_mode")
+                        ? options.Metadata.Ai.DebugMode
+                        : settings.AiDebugMode ?? options.Metadata.Ai.DebugMode,
                     HttpTimeout = inheritedFields.Contains("ai_http_timeout_seconds")
                         ? options.Metadata.Ai.HttpTimeout
                         : TimeSpan.FromSeconds(settings.AiHttpTimeoutSeconds),

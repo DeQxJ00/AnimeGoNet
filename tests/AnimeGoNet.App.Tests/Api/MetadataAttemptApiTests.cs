@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.App.Metadata;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -111,6 +113,28 @@ public sealed class MetadataAttemptApiTests
                     1,
                     0)),
             now.AddSeconds(3));
+        var debugStore = app.App.Services.GetRequiredService<AiMetadataDebugTraceStore>();
+        await debugStore.WriteAsync(
+            new AiMetadataDebugChain(
+                "trace-api",
+                claim.RunId,
+                claim.TaskId,
+                now,
+                now.AddSeconds(1),
+                "prompt-v1",
+                "responses",
+                "gpt-5.4-mini",
+                null,
+                "PROMPT {{SOURCE_TITLE_JSON}}",
+                "PROMPT Attempt timeline",
+                [],
+                "{\"matched\":true}",
+                new AiMetadataMatchCandidate(true, 42, [], null),
+                new AiMetadataProviderUsage("gpt-5.4-mini", 100, 20, 120, 1, 0),
+                null),
+            null,
+            42,
+            1);
 
         using var response = await app.Client.GetAsync(
             $"/api/v1/metadata/tasks/{taskId}/attempts");
@@ -165,6 +189,7 @@ public sealed class MetadataAttemptApiTests
         Assert.Equal(3951, aiLogItem.GetProperty("mikanid").GetInt32());
         Assert.Equal(547888, aiLogItem.GetProperty("bgmid").GetInt32());
         Assert.Equal("gpt-5.4-mini", aiLogItem.GetProperty("model").GetString());
+        Assert.True(aiLogItem.GetProperty("debug_available").GetBoolean());
         Assert.DoesNotContain("private-passkey", aiLogBody, StringComparison.Ordinal);
         Assert.DoesNotContain("attempt-timeline.torrent", aiLogBody, StringComparison.Ordinal);
 
@@ -190,6 +215,20 @@ public sealed class MetadataAttemptApiTests
         using var noMatch = JsonDocument.Parse(await noMatchResponse.Content.ReadAsStreamAsync());
         Assert.Equal(0, noMatch.RootElement.GetProperty("total_items").GetInt32());
         Assert.Empty(noMatch.RootElement.GetProperty("items").EnumerateArray());
+
+        using var debugResponse = await app.Client.GetAsync(
+            $"/api/v1/logs/ai-invocations/{claim.RunId}/debug");
+        var debugBody = await debugResponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, debugResponse.StatusCode);
+        Assert.Contains("PROMPT Attempt timeline", debugBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-passkey", debugBody, StringComparison.Ordinal);
+
+        using var deleteDebug = await app.Client.DeleteAsync(
+            $"/api/v1/logs/ai-invocations/{claim.RunId}/debug");
+        using var missingDebug = await app.Client.GetAsync(
+            $"/api/v1/logs/ai-invocations/{claim.RunId}/debug");
+        Assert.Equal(HttpStatusCode.NoContent, deleteDebug.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missingDebug.StatusCode);
     }
 
     [Fact]

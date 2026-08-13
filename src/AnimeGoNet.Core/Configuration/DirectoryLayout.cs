@@ -12,6 +12,8 @@ public sealed record DirectoryLayout
 
     public required string LogsPath { get; init; }
 
+    public required string AiDebugPath { get; init; }
+
     public required string BackupsPath { get; init; }
 
     public required string PluginsPath { get; init; }
@@ -32,6 +34,7 @@ public sealed record DirectoryLayout
             StagingPath = PathBoundary.Combine(paths.DataPath, "staging"),
             CachePath = PathBoundary.Combine(paths.DataPath, "cache"),
             LogsPath = PathBoundary.Combine(paths.DataPath, "logs"),
+            AiDebugPath = PathBoundary.Combine(paths.DataPath, "ai-debug"),
             BackupsPath = PathBoundary.Combine(paths.DataPath, "backups"),
             PluginsPath = PathBoundary.Combine(paths.DataPath, "plugins"),
             PluginDataPath = PathBoundary.Combine(paths.DataPath, "plugin-data"),
@@ -46,6 +49,7 @@ public sealed record DirectoryLayout
         Directory.CreateDirectory(StagingPath);
         Directory.CreateDirectory(CachePath);
         Directory.CreateDirectory(LogsPath);
+        Directory.CreateDirectory(AiDebugPath);
         Directory.CreateDirectory(BackupsPath);
         Directory.CreateDirectory(PluginsPath);
         Directory.CreateDirectory(PluginDataPath);

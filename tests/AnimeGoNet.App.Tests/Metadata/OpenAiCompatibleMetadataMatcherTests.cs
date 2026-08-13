@@ -408,6 +408,85 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
         Assert.Equal("ai_legacy_result_field", exception.SafeCode);
     }
 
+    [Fact]
+    public async Task DebugModeCapturesPromptTemplateRenderedPromptAndCompleteExchangeBodies()
+    {
+        var handler = new FakeAiAndMcpHandler();
+        var preAi = new AiMetadataDebugPreAiContext(
+            "series_season",
+            new AiMetadataDebugTaskInput(
+                "Task title",
+                3951,
+                7,
+                null,
+                null,
+                null,
+                "mikan",
+                "source-profile",
+                "mikan",
+                1,
+                [new AiMetadataDebugTaskFileInput(
+                    "Season 1/01.mkv", 100, "1", "1", null, null, null)]),
+            null,
+            null,
+            ["Task title", "Task"],
+            null,
+            null,
+            false,
+            "not_applicable",
+            "ai_pubdate_disabled",
+            [new AiMetadataDebugPreAiAttempt(
+                "attempt-1",
+                "season",
+                "tmdb_air_date",
+                null,
+                "not_matched",
+                "tmdb_season_not_found",
+                null,
+                false,
+                12,
+                DateTimeOffset.UnixEpoch)]);
+        var input = Input() with
+        {
+            DebugIdentity = new AiMetadataDebugIdentity("run-1", "task-1"),
+            DebugPreAiContext = preAi,
+        };
+        using var client = new HttpClient(handler);
+        using var matcher = new OpenAiCompatibleMetadataMatcher(
+            client,
+            Options() with { DebugMode = true });
+
+        var result = await matcher.MatchAsync(input);
+
+        var debug = Assert.IsType<AiMetadataDebugChain>(result.DebugChain);
+        Assert.Equal("run-1", debug.RunId);
+        Assert.Equal("task-1", debug.TaskId);
+        Assert.Equal(preAi, debug.PreAiContext);
+        Assert.Contains("{{SOURCE_TITLE_JSON}}", debug.PromptTemplate, StringComparison.Ordinal);
+        Assert.Contains("Task title", debug.RenderedPrompt, StringComparison.Ordinal);
+        Assert.Contains(debug.Exchanges, exchange => exchange.Channel == "ai"
+            && exchange.RequestBody is not null
+            && exchange.ResponseBody is not null);
+        Assert.Contains(debug.Exchanges, exchange => exchange.Channel.StartsWith("mcp:", StringComparison.Ordinal)
+            && exchange.RequestBody is not null
+            && exchange.ResponseBody is not null);
+        Assert.DoesNotContain(
+            debug.Exchanges,
+            exchange => (exchange.RequestBody ?? string.Empty).Contains("local-secret", StringComparison.Ordinal)
+                || (exchange.ResponseBody ?? string.Empty).Contains("local-secret", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DebugModeDisabledDoesNotCreateDebugChain()
+    {
+        using var client = new HttpClient(new FakeAiAndMcpHandler());
+        using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
+
+        var result = await matcher.MatchAsync(Input());
+
+        Assert.Null(result.DebugChain);
+    }
+
     private static AiMetadataMatchInput Input() =>
         new(
             "Task title",
