@@ -500,6 +500,8 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-seeding-time\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("Cookie 位置：设置与备份", html, StringComparison.Ordinal);
+        Assert.Contains("管理来源与 Cookie", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-cron\"", html, StringComparison.Ordinal);

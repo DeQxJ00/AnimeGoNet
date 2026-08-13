@@ -136,7 +136,7 @@ public sealed record TmdbClientOptions
 
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(5);
 
-    public TimeSpan CacheTtl { get; init; } = TimeSpan.FromDays(14);
+    public TimeSpan CacheTtl { get; init; } = TimeSpan.FromHours(144);
 }
 
 public sealed record BangumiClientOptions

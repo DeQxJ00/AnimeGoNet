@@ -425,7 +425,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             "https://updates.test.invalid/manifest.json",
             stored.Settings?.DataUpdateManifestUrl);
-        Assert.Equal(336, stored.Settings?.TmdbCacheHours);
+        Assert.Equal(144, stored.Settings?.TmdbCacheHours);
     }
 
     [Fact]

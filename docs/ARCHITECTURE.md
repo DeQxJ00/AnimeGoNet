@@ -71,7 +71,7 @@ HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 re
 - `AnimeSeason`：普通正季度；Season 0 不进入普通季度候选。
 - `TmdbEpisode`：经 TMDB 验证的 Episode 全集，是 WebUI EP 网格和进度分母的唯一来源。
 - TMDB HTTP 成功响应经 source-generated JSON 写入 SQLite `bolt/themoviedb`，默认
-  TTL 为 14 天。缓存按规范 Base URL、语言、operation 与请求身份分区并使用
+  TTL 默认为 144 小时（6 天）。缓存按规范 Base URL、语言、operation 与请求身份分区并使用
   SHA-256 opaque key，不保存 API key 或 Bearer token，原始搜索词只参与键摘要而不
   单独落库；读取时再次验证
   Series/Season/Episode 父子身份，损坏或不一致条目删除后回源。404 与任何失败不做

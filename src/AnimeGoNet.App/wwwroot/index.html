@@ -22,7 +22,7 @@
         <button type="button" data-workspace-target="mikan"><span aria-hidden="true">◇</span>Mikan 手动设置</button>
         <button type="button" data-workspace-target="bangumi-cache"><span aria-hidden="true">▤</span>Bangumi缓存</button>
         <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
-        <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>连接与配置</button>
+        <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统缓存</button>
       </nav>
@@ -737,8 +737,9 @@
               <input id="manual-rss-url" type="url" required inputmode="url" autocomplete="off" spellcheck="false">
             </label>
           </div>
-          <p class="manual-submit-hint">只列出已启用且 adapter 为 Mikan 的 SourceProfile；任务固化当前 revision、下载器和规则快照。</p>
+          <p class="manual-submit-hint">只列出已启用且 adapter 为 Mikan 的 SourceProfile；任务固化当前 revision、下载器和规则快照。Cookie 位置：设置与备份 → 输入源，选择 Mikan 来源后直接显示已保存值。</p>
           <div class="manual-submit-actions">
+            <button id="manual-rss-manage-source" type="button" class="secondary-button">管理来源与 Cookie</button>
             <button id="manual-rss-run-saved" type="button" class="secondary-button">执行已保存 RSS</button>
             <button id="manual-rss-submit" type="submit" class="primary-button">处理临时 RSS URL</button>
           </div>

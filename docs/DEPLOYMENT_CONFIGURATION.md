@@ -209,7 +209,7 @@ metadata:
     timeout_seconds: 30
     retry_count: 3
     retry_wait_seconds: 5
-    cache_hours: 336
+    cache_hours: 144
   bangumi:
     base_url: https://api.bgm.tv/
     timeout_seconds: 30
@@ -296,7 +296,7 @@ SQLite profile 不会在每次重启时被 seed 覆盖，后续修改使用来�
 未展开模板发送到 qB。
 
 `metadata.tmdb.cache_hours` 只缓存已经通过协议与父子身份校验的 TMDB
-Search/Series/Season/Episode 成功响应，默认 `336` 小时（14 天），范围为大于 0
+Search/Series/Season/Episode 成功响应，默认 `144` 小时（6 天），范围为大于 0
 且不超过 8760 小时。权威 404、网络、认证、限流、服务、协议和取消失败不会写入
 缓存；到期条目惰性删除。旧配置
 `advanced.cache.themoviedb_cache_hour` 与扁平键 `tmdb_cache_hour` 会迁移到同一字段。

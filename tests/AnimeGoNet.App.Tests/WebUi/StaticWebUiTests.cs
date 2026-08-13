@@ -138,6 +138,7 @@ public sealed class StaticWebUiTests
     [InlineData("/", "text/html", "manual-download-form")]
     [InlineData("/", "text/html", "manual-rss-form")]
     [InlineData("/", "text/html", "manual-rss-run-saved")]
+    [InlineData("/", "text/html", "manual-rss-manage-source")]
     [InlineData("/", "text/html", "source-duplicate-notification-enabled")]
     [InlineData("/", "text/html", "mikan-work-rule-form")]
     [InlineData("/", "text/html", "mikan-work-rule-rematch")]

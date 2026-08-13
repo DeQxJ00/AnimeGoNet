@@ -844,7 +844,7 @@ internal static class DeploymentYamlConfiguration
                 rss_feed_url: ''
                 rss_schedule_enabled: false
                 rss_schedule_cron: '0 0/15 * * * ?'
-                # 可填写 Cookie 值或完整的 .AspNetCore.Identity.Application=...；Web API 永不回显。
+                # 可填写 Cookie 值或完整的 .AspNetCore.Identity.Application=...；受 Access-Key 保护的配置页会直接回填。
                 mikan_identity_cookie: ''
 
             metadata:

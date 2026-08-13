@@ -27,6 +27,11 @@ public sealed class WorkspaceNavigationTests
             StringComparison.Ordinal);
         Assert.Contains(">下载工具配置</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"下载工具配置\"", script, StringComparison.Ordinal);
+        Assert.Contains(">设置与备份</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"设置与备份\"", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"manual-rss-manage-source\"", html, StringComparison.Ordinal);
+        Assert.Contains("openSelectedMikanSourceSettings", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(">连接与配置</button>", html, StringComparison.Ordinal);
         Assert.Contains(">AI 匹配测试工具</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"AI 匹配测试工具\"", script, StringComparison.Ordinal);
         Assert.Contains(">系统缓存</button>", html, StringComparison.Ordinal);

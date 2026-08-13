@@ -84,7 +84,7 @@ public sealed class DeploymentConfigurationLocksTests
 
         var result = locks.Reapply(deployment, candidate);
 
-        Assert.Equal(TimeSpan.FromDays(14), result.Metadata.Tmdb.CacheTtl);
+        Assert.Equal(TimeSpan.FromHours(144), result.Metadata.Tmdb.CacheTtl);
         Assert.Equal(
             ["tmdb_cache_hours"],
             locks.FindChangedLockedFields(deployment, candidate));

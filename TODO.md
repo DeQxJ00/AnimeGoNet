@@ -139,6 +139,7 @@
 - [x] 默认 Mikan SourceProfile 的 `mikan_rss_filter_enabled` 已默认 `true` 并真实控制 `/api/rss`；关闭时零页面请求、逐项记录 `SkippedByConfiguration`、继续优选/staging且规则不变。来源 CRUD/UI 已完成；RSS 从请求起点显式贯穿同一 SourceProfile revision/双开关/下载器路由快照，并发修改只影响下一次请求。
 - [x] 增加独立 `mikan_rss_priority_enabled` 批次优选开关：默认 profile 已启用，schema v13 规则版本、默认初始化、预览 API 和真实 `/api/rss`/现代 RSS 批次均已接入；禁用时真实批次逐项记录 `SkippedByConfiguration`、不执行本功能的黑白名单/有序组且不清空规则，SQLite 审计保留当批开关状态。
 - [x] 在“Mikan 手动设置 / 导入任务”增加“执行已保存 RSS”：直接使用所选已启用 Mikan SourceProfile 的服务端 RSS URL 触发正式抓取、过滤、优选和统一导入链，不要求启用自动 Cron；临时 URL 测试入口继续保留，结果共用逐候选批次审计展示且不回显 passkey。
+- [x] 一级“连接与配置”改名为“设置与备份”；Mikan RSS 手动区增加“管理来源与 Cookie”直达入口并明确 Cookie 位于“设置与备份 / 输入源”，选择 Mikan 来源后直接回填。TMDB 成功响应缓存的新部署默认值调整为 144 小时，显式旧配置值继续保留。
 - [x] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 支持增删/排序，schema v25 保存每个 revision 的关系型历史快照并支持安全回滚；WebUI 已提供白/黑名单、组/数组 CRUD、启停、上下移动、服务端预览和历史回滚。
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。

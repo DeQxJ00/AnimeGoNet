@@ -59,7 +59,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Tmdb.HttpTimeout);
         Assert.Equal(3, options.Metadata.Tmdb.RetryCount);
         Assert.Equal(TimeSpan.FromSeconds(5), options.Metadata.Tmdb.RetryDelay);
-        Assert.Equal(TimeSpan.FromDays(14), options.Metadata.Tmdb.CacheTtl);
+        Assert.Equal(TimeSpan.FromHours(144), options.Metadata.Tmdb.CacheTtl);
         Assert.Equal(new Uri("https://api.bgm.tv/"), options.Metadata.Bangumi.BaseUrl);
         Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Bangumi.HttpTimeout);
         Assert.Equal(3, options.Metadata.Bangumi.RetryCount);

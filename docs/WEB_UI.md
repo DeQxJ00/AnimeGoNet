@@ -111,7 +111,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 ## 8. 当前生效配置投影
 
-首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、唯一全局选择性代理、TMDB/Bangumi API 地址、季度失败链、一个任务级 AI 元数据开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 纵向显示；P3 明确标注需要 `bgmid`，并说明当前联合匹配失败后会逐层回溯前作，以每个前作的日文名、中文名和开播日期重新验证完整 `tmdbid + Season`，而不是锁定当前 tmdbid 只换季度。P2 在前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器，解析成功即使用该本地季度，不验证 TMDB Season；解析不到时继续 P1。P1 直接使用本地 `S01`，同样不验证 TMDB Season。P4、P3 和统一 AI 使用的远端结果仍执行 TMDB 验证。AI 在实际执行位置以“独立 AI”标记，明确不占确定性优先级且默认关闭；其一个开关和一个 Prompt 同时处理 Series/Season/全部 Episode，每任务最多调用一次。Bangumi 完全兜底明确标为“一般不启用”：仅在 TMDB 完全失败且已有 `bgmid` 时使用 Bangumi，季度固定为 `S01`，页面不提供有效 TMDB ID；内部既有 `tmdbid=0` 写入与待补全逻辑保持不变。编辑器允许分别修改 Mikan、TMDB API、TMDB 图片和 Bangumi API 地址；代理只在独立的“全局选择性代理”区域设置一个 URL 与域名列表，支持精确域名和 `*.example.com`，未命中保持直连。TMDB 卡片同时显示并允许修改验证成功响应的缓存小时数，默认 336 小时；修改需要重启，部署环境或命令行设置后该字段只读。“系统缓存”页显示真实 bucket/key，并可按需查看未截断的完整 JSON；`bolt/themoviedb` 条目仍可精确删除。
+首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、唯一全局选择性代理、TMDB/Bangumi API 地址、季度失败链、一个任务级 AI 元数据开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 纵向显示；P3 明确标注需要 `bgmid`，并说明当前联合匹配失败后会逐层回溯前作，以每个前作的日文名、中文名和开播日期重新验证完整 `tmdbid + Season`，而不是锁定当前 tmdbid 只换季度。P2 在前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器，解析成功即使用该本地季度，不验证 TMDB Season；解析不到时继续 P1。P1 直接使用本地 `S01`，同样不验证 TMDB Season。P4、P3 和统一 AI 使用的远端结果仍执行 TMDB 验证。AI 在实际执行位置以“独立 AI”标记，明确不占确定性优先级且默认关闭；其一个开关和一个 Prompt 同时处理 Series/Season/全部 Episode，每任务最多调用一次。Bangumi 完全兜底明确标为“一般不启用”：仅在 TMDB 完全失败且已有 `bgmid` 时使用 Bangumi，季度固定为 `S01`，页面不提供有效 TMDB ID；内部既有 `tmdbid=0` 写入与待补全逻辑保持不变。编辑器允许分别修改 Mikan、TMDB API、TMDB 图片和 Bangumi API 地址；代理只在独立的“全局选择性代理”区域设置一个 URL 与域名列表，支持精确域名和 `*.example.com`，未命中保持直连。TMDB 卡片同时显示并允许修改验证成功响应的缓存小时数，默认 144 小时；修改需要重启，部署环境或命令行设置后该字段只读。“系统缓存”页显示真实 bucket/key，并可按需查看未截断的完整 JSON；`bolt/themoviedb` 条目仍可精确删除。
 
 Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进入同一个配置编辑器。Mikan 内网反向代理只对明确配置的 host 放宽私网 DNS 门禁，不会把其它 Torrent host 一并设为可信；TMDB 图片 Base URL 保留 `/t/p/` 等路径前缀。
 
@@ -123,7 +123,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 确认保存仍使用预览时的 `expected_configuration_revision`；并发变化返回冲突并要求重新预览。覆盖现有私有配置或恢复部署默认前，服务端先把旧 revision 保存到 `data_path/backups/application.private.revision-{20位revision}.json`，再原子替换当前文件。响应只返回被备份的 revision，不返回备份内容或路径；首个私有 revision 没有旧文件可备份。原始部署 YAML 继续只由运维维护，Web 不展示含 secret 的原文，也不改写其注释和格式。
 
-“连接与配置 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则与外部插件；密码、Cookie、API Key、插件私有变量及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含部署三路径/Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
+“设置与备份 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则与外部插件；密码、Cookie、API Key、插件私有变量及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含部署三路径/Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
 
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 
@@ -134,6 +134,8 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 首页“手动提交”区不建立第二套下载逻辑。单个 Torrent 调用 `POST /api/v1/ingest`，选择值是已启用的 SourceProfile ID，因此自定义 Mikan/U2/TTG 来源继续使用各自不可变的下载器、目录、文件策略、category、tags 和 revision 快照。Mikan 手动导入要求 `mikanid` 与 `bgmid`；U2/TTG 可附带作品级 `anidbid`/`imdbid` 参考。结果显示接受/拒绝数量、任务 ID、实际来源 revision、下载器、文件数、info hash 和不可逆 URL 指纹，不显示原 Torrent URL。
 
 Mikan RSS 的临时 URL 测试调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。页面另提供“执行已保存 RSS”，调用 `POST /api/v1/sources/{source_profile_id}/rss/run`，直接读取该来源服务端保存的地址，不要求开启自动 Cron；它仍写入最近运行状态/batch，并与自动调度互斥，避免同一来源重叠执行。服务端必须先确认该 profile 已启用、adapter 为 Mikan 且已保存 RSS 地址，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。两种入口共用 batch、mikanid、规则 revision、候选决策和实际任务 ID 展示。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
+
+同一卡片的“管理来源与 Cookie”会打开“设置与备份 / 输入源”，并选中当前 Mikan SourceProfile。Mikan 登录 Cookie 字段直接回填服务端已保存值；修改仍经完整 SourceProfile revision 保存，不创建第二套 Cookie 配置。
 
 Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接显示，便于核对；仍不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。
 
@@ -171,7 +173,7 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 ## 12. 一级/二级导航
 
 静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
-“总览、动画库、任务中心、Mikan 手动设置、Bangumi缓存、下载工具配置、连接与配置、AI 匹配测试工具、系统缓存”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“Bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统缓存 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“连接与配置 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
+“总览、动画库、任务中心、Mikan 手动设置、Bangumi缓存、下载工具配置、设置与备份、AI 匹配测试工具、系统缓存”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“Bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统缓存 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“设置与备份 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
 提供二级标签。URL hash 采用 `#/一级/二级`，可收藏并支持浏览器前进/后退，不会把
 Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域，既有轮询、WebSocket、
 表单 revision 和对话框仍复用同一份状态，不创建第二套业务请求。

@@ -35,7 +35,7 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 
 ### 可迁移总配置归档
 
-WebUI 的“连接与配置 → 导入导出与备份”用于迁移或回滚配置，不替代完整数据备份。
+WebUI 的“设置与备份 → 导入导出与备份”用于迁移或回滚配置，不替代完整数据备份。
 导出包为版本化 JSON，包含应用私有覆盖、命名 qBittorrent 实例、输入源、RSS 规则、
 Mikan 五级过滤、人工作品规则和外部插件配置。为方便迁移，用户名、密码、Cookie、API
 Key、插件私有变量和 qB 实例下载路径会原样进入归档；文件必须按 secret 管理，不能提交

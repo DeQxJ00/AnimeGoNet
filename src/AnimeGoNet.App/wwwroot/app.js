@@ -128,8 +128,8 @@ const workspaceDefinitions = {
         ],
     },
     connections: {
-        title: "连接与配置",
-        description: "管理应用上游、输入源和外部插件。",
+        title: "设置与备份",
+        description: "管理应用设置、输入源凭据、外部插件和总配置备份。",
         defaultSubview: "application",
         tabs: [
             { id: "application", label: "应用配置" },
@@ -5031,12 +5031,23 @@ function updateSavedRssRunState() {
     const sourceId = element("#manual-rss-source").value;
     const profile = sourceProfiles.find((item) => item.id === sourceId);
     const run = element("#manual-rss-run-saved");
+    const manage = element("#manual-rss-manage-source");
+    manage.disabled = profile?.adapter !== "mikan";
+    manage.title = profile?.adapter === "mikan"
+        ? "打开设置与备份 / 输入源，并直接显示这个来源已保存的 Mikan Cookie。"
+        : "请先选择一个已启用的 Mikan 来源。";
     run.disabled = profile?.adapter !== "mikan"
         || !profile.enabled
         || !profile.rss_feed_url_configured;
     run.title = profile?.rss_feed_url_configured
         ? "使用服务端为此来源保存的 RSS URL 立即执行；不要求开启自动调度。"
         : "请先在来源管理中保存这个 Mikan 来源的 RSS URL。";
+}
+function openSelectedMikanSourceSettings() {
+    const sourceId = element("#manual-rss-source").value;
+    const profile = sourceProfiles.find((item) => item.id === sourceId) ?? null;
+    populateSourceForm(profile);
+    selectWorkspace("connections", "sources");
 }
 function updateManualDownloadHint() {
     const sourceId = element("#manual-download-source").value;
@@ -6945,6 +6956,7 @@ element("#manual-download-form").addEventListener("submit", (event) => void subm
 element("#manual-rss-form").addEventListener("submit", (event) => void submitManualRss(event));
 element("#manual-rss-source").addEventListener("change", updateSavedRssRunState);
 element("#manual-rss-run-saved").addEventListener("click", () => void runSavedSourceRss());
+element("#manual-rss-manage-source").addEventListener("click", openSelectedMikanSourceSettings);
 element("#mikan-work-rule-id").addEventListener("input", invalidateMikanWorkRule);
 element("#mikan-work-rule-load").addEventListener("click", () => void loadMikanWorkRule());
 element("#mikan-work-rule-form").addEventListener("submit", (event) => void saveMikanWorkRule(event));
