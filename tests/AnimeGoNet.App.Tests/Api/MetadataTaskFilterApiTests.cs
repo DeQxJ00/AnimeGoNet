@@ -159,6 +159,7 @@ public sealed class MetadataTaskFilterApiTests
     [InlineData("direction=sideways")]
     [InlineData("handling=automatic")]
     [InlineData("file_state=other")]
+    [InlineData("review_state=waiting")]
     [InlineData("failure_stage=bad%20stage")]
     public async Task RejectsInvalidFilters(string query)
     {
@@ -215,6 +216,60 @@ public sealed class MetadataTaskFilterApiTests
         Assert.Equal(taskId, item.GetProperty("task_id").GetString());
         Assert.Equal(1, item.GetProperty("other_file_count").GetInt32());
         Assert.Equal("other", item.GetProperty("handling_category").GetString());
+        var attention = json.RootElement.GetProperty("attention");
+        Assert.Equal(1, attention.GetProperty("other_items").GetInt32());
+        Assert.Equal(0, attention.GetProperty("failed_items").GetInt32());
+        Assert.Equal(0, attention.GetProperty("review_pending_items").GetInt32());
+    }
+
+    [Fact]
+    public async Task ReportsGlobalFailureAndReviewAttentionAndFiltersPendingReview()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/metadata-attention.torrent",
+                "info": { "title": "Attention summary", "mikanid": 3951, "bgmid": 547888 }
+              }]
+            }
+            """;
+        using var ingest = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var ingestJson = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        var taskId = ingestJson.RootElement.GetProperty("items")[0]
+            .GetProperty("ingest_id").GetString()!;
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET status = 'metadata_failed',
+                    failure_kind = 'metadata_match_failed',
+                    failure_reason = 'attention_test',
+                    readaptation_review_state = 'pending',
+                    updated_at_utc = $now
+                WHERE id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        using var response = await app.Client.GetAsync(
+            "/api/v1/metadata/tasks?review_state=pending");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        var attention = json.RootElement.GetProperty("attention");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(taskId, item.GetProperty("task_id").GetString());
+        Assert.Equal(0, attention.GetProperty("other_items").GetInt32());
+        Assert.Equal(1, attention.GetProperty("failed_items").GetInt32());
+        Assert.Equal(1, attention.GetProperty("review_pending_items").GetInt32());
     }
 
     private static async Task SetTaskStateAsync(

@@ -4954,6 +4954,7 @@ public static class ApiEndpoints
         [FromQuery] string? retryability,
         [FromQuery] string? handling,
         [FromQuery(Name = "file_state")] string? fileState,
+        [FromQuery(Name = "review_state")] string? reviewState,
         [FromQuery] string? sort,
         [FromQuery] string? direction,
         MetadataResolutionStore resolutions,
@@ -4974,6 +4975,9 @@ public static class ApiEndpoints
         var resolvedFileState = string.IsNullOrWhiteSpace(fileState)
             ? "all"
             : fileState.Trim().ToLowerInvariant();
+        var resolvedReviewState = string.IsNullOrWhiteSpace(reviewState)
+            ? "all"
+            : reviewState.Trim().ToLowerInvariant();
         var resolvedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         var resolvedStatus = NormalizeMetadataFilter(status);
         var resolvedFailureStage = NormalizeMetadataFilter(failureStage);
@@ -4990,7 +4994,8 @@ public static class ApiEndpoints
             || resolvedRetryability is not ("all" or "retryable" or "non_retryable" or "unknown")
             || resolvedHandling is not ("all" or "explicit_retry" or "configuration"
                 or "manual" or "skipped" or "fallback" or "active" or "resolved" or "other")
-            || resolvedFileState is not ("all" or "has_other"))
+            || resolvedFileState is not ("all" or "has_other")
+            || resolvedReviewState is not ("all" or "pending" or "approved" or "not_required"))
         {
             return TypedResults.BadRequest(Error(
                 "metadata_task_filter_invalid",
@@ -4999,6 +5004,8 @@ public static class ApiEndpoints
 
         IEnumerable<MetadataTaskListProjection> filtered =
             await resolutions.ListTasksAsync(500, cancellationToken).ConfigureAwait(false);
+        var attention = await resolutions.GetTaskAttentionSummaryAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (resolvedSearch is not null)
         {
             filtered = filtered.Where(item =>
@@ -5050,6 +5057,14 @@ public static class ApiEndpoints
             filtered = filtered.Where(item => item.OtherFileCount > 0);
         }
 
+        if (resolvedReviewState != "all")
+        {
+            filtered = filtered.Where(item => string.Equals(
+                item.ReadaptationReviewState,
+                resolvedReviewState,
+                StringComparison.Ordinal));
+        }
+
         var ordered = OrderMetadataTasks(filtered, resolvedSort, resolvedDirection);
         var materialized = ordered.ToArray();
         var pageItems = materialized
@@ -5063,6 +5078,10 @@ public static class ApiEndpoints
             materialized.Length,
             resolvedSort,
             resolvedDirection,
+            new MetadataTaskAttentionSummaryResponse(
+                attention.OtherTaskCount,
+                attention.FailedTaskCount,
+                attention.ReviewPendingTaskCount),
             pageItems));
     }
 

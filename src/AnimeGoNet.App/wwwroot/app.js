@@ -2047,6 +2047,7 @@ function readMetadataState() {
         status: "",
         handling: "all",
         file_state: "all",
+        review_state: "all",
         failure_stage: "",
         error_code: "",
         retryability: "all",
@@ -2069,6 +2070,8 @@ function readMetadataState() {
             status: typeof stored.status === "string" ? stored.status.slice(0, 64) : "",
             handling: typeof stored.handling === "string" ? stored.handling : "all",
             file_state: stored.file_state === "has_other" ? "has_other" : "all",
+            review_state: ["pending", "approved", "not_required"].includes(stored.review_state ?? "")
+                ? stored.review_state : "all",
             failure_stage: typeof stored.failure_stage === "string"
                 ? stored.failure_stage.slice(0, 64) : "",
             error_code: typeof stored.error_code === "string"
@@ -5003,6 +5006,50 @@ async function loadMetadataAttempts(taskId, target, button) {
         button.textContent = "重试策略时间线";
     }
 }
+function syncMetadataFilterControls() {
+    element("#metadata-search").value = metadataState.search;
+    element("#metadata-status-filter").value = metadataState.status;
+    element("#metadata-handling-filter").value = metadataState.handling;
+    element("#metadata-file-state-filter").value = metadataState.file_state;
+    element("#metadata-review-filter").value = metadataState.review_state;
+    element("#metadata-failure-stage").value = metadataState.failure_stage;
+    element("#metadata-error-code").value = metadataState.error_code;
+    element("#metadata-retryability-filter").value = metadataState.retryability;
+    element("#metadata-sort").value = metadataState.sort;
+    element("#metadata-direction").value = metadataState.direction;
+    element("#metadata-page-size").value = String(metadataState.page_size);
+}
+function renderMetadataAttentionSummary(attention) {
+    element("#metadata-attention-other-count").textContent =
+        attention.other_items.toLocaleString("zh-CN");
+    element("#metadata-attention-failed-count").textContent =
+        attention.failed_items.toLocaleString("zh-CN");
+    element("#metadata-attention-review-count").textContent =
+        attention.review_pending_items.toLocaleString("zh-CN");
+    element("#metadata-attention-other").setAttribute("aria-pressed", String(metadataState.file_state === "has_other"
+        && metadataState.status === ""
+        && metadataState.review_state === "all"));
+    element("#metadata-attention-failed").setAttribute("aria-pressed", String(metadataState.status === "metadata_failed"
+        && metadataState.file_state === "all"
+        && metadataState.review_state === "all"));
+    element("#metadata-attention-review").setAttribute("aria-pressed", String(metadataState.review_state === "pending"
+        && metadataState.status === ""
+        && metadataState.file_state === "all"));
+}
+function applyMetadataAttentionFilter(filter) {
+    metadataState.search = "";
+    metadataState.status = filter === "failed" ? "metadata_failed" : "";
+    metadataState.handling = "all";
+    metadataState.file_state = filter === "other" ? "has_other" : "all";
+    metadataState.review_state = filter === "review" ? "pending" : "all";
+    metadataState.failure_stage = "";
+    metadataState.error_code = "";
+    metadataState.retryability = "all";
+    metadataState.page = 1;
+    syncMetadataFilterControls();
+    saveMetadataState();
+    void loadMetadataTasks();
+}
 async function loadMetadataTasks(background = false) {
     const container = element("#metadata-tasks");
     const hadReadyContent = container.dataset.uiState === "ready";
@@ -5014,6 +5061,7 @@ async function loadMetadataTasks(background = false) {
         page_size: String(metadataState.page_size),
         handling: metadataState.handling,
         file_state: metadataState.file_state,
+        review_state: metadataState.review_state,
         retryability: metadataState.retryability,
         sort: metadataState.sort,
         direction: metadataState.direction,
@@ -5034,6 +5082,7 @@ async function loadMetadataTasks(background = false) {
         const body = await response.json();
         if (requestSequence !== metadataListRequestSequence)
             return;
+        renderMetadataAttentionSummary(body.attention);
         if (body.items.length === 0 && body.total_items > 0 && metadataState.page > 1) {
             metadataState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
             saveMetadataState();
@@ -7734,17 +7783,7 @@ element("#library-search").value = libraryState.search;
 element("#library-direction").value = libraryState.direction;
 element("#library-page-size").value = String(libraryState.page_size);
 element("#library-episode-filter").value = libraryState.episode_filter;
-element("#metadata-search").value = metadataState.search;
-element("#metadata-status-filter").value = metadataState.status;
-element("#metadata-handling-filter").value = metadataState.handling;
-element("#metadata-file-state-filter").value = metadataState.file_state;
-element("#metadata-failure-stage").value = metadataState.failure_stage;
-element("#metadata-error-code").value = metadataState.error_code;
-element("#metadata-retryability-filter").value =
-    metadataState.retryability;
-element("#metadata-sort").value = metadataState.sort;
-element("#metadata-direction").value = metadataState.direction;
-element("#metadata-page-size").value = String(metadataState.page_size);
+syncMetadataFilterControls();
 element("#metadata-filters").addEventListener("submit", (event) => {
     event.preventDefault();
     metadataState.search = element("#metadata-search").value.trim();
@@ -7753,6 +7792,8 @@ element("#metadata-filters").addEventListener("submit", (event) => {
         element("#metadata-handling-filter").value;
     metadataState.file_state =
         element("#metadata-file-state-filter").value;
+    metadataState.review_state =
+        element("#metadata-review-filter").value;
     metadataState.failure_stage =
         element("#metadata-failure-stage").value.trim().toLowerCase();
     metadataState.error_code =
@@ -7776,25 +7817,20 @@ element("#metadata-filter-reset").addEventListener("click", () => {
         status: "",
         handling: "all",
         file_state: "all",
+        review_state: "all",
         failure_stage: "",
         error_code: "",
         retryability: "all",
         sort: "updated",
         direction: "desc",
     };
-    element("#metadata-search").value = "";
-    element("#metadata-status-filter").value = "";
-    element("#metadata-handling-filter").value = "all";
-    element("#metadata-file-state-filter").value = "all";
-    element("#metadata-failure-stage").value = "";
-    element("#metadata-error-code").value = "";
-    element("#metadata-retryability-filter").value = "all";
-    element("#metadata-sort").value = "updated";
-    element("#metadata-direction").value = "desc";
-    element("#metadata-page-size").value = "25";
+    syncMetadataFilterControls();
     saveMetadataState();
     void loadMetadataTasks();
 });
+element("#metadata-attention-other").addEventListener("click", () => applyMetadataAttentionFilter("other"));
+element("#metadata-attention-failed").addEventListener("click", () => applyMetadataAttentionFilter("failed"));
+element("#metadata-attention-review").addEventListener("click", () => applyMetadataAttentionFilter("review"));
 element("#metadata-previous").addEventListener("click", () => {
     if (metadataState.page <= 1)
         return;

@@ -776,7 +776,13 @@ public sealed record MetadataTaskListResponse(
     [property: JsonPropertyName("total_items")] int TotalItems,
     [property: JsonPropertyName("sort")] string Sort,
     [property: JsonPropertyName("direction")] string Direction,
+    [property: JsonPropertyName("attention")] MetadataTaskAttentionSummaryResponse Attention,
     [property: JsonPropertyName("items")] IReadOnlyList<MetadataTaskListItem> Items);
+
+public sealed record MetadataTaskAttentionSummaryResponse(
+    [property: JsonPropertyName("other_items")] int OtherItems,
+    [property: JsonPropertyName("failed_items")] int FailedItems,
+    [property: JsonPropertyName("review_pending_items")] int ReviewPendingItems);
 
 public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("task_id")] string TaskId,

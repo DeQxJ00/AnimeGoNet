@@ -2131,6 +2131,37 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 
+    public async Task<MetadataTaskAttentionSummary> GetTaskAttentionSummaryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                COALESCE(SUM(CASE WHEN EXISTS (
+                    SELECT 1 FROM task_files AS file
+                    WHERE file.task_id = task.id AND file.disposition = 'other'
+                ) THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN task.status = 'metadata_failed'
+                    THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN task.readaptation_review_state = 'pending'
+                    THEN 1 ELSE 0 END), 0)
+            FROM ingest_tasks AS task;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return new MetadataTaskAttentionSummary(0, 0, 0);
+        }
+
+        return new MetadataTaskAttentionSummary(
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2));
+    }
+
     public async Task<IReadOnlyList<MetadataTaskListProjection>> ListTasksAsync(
         int limit = 100,
         CancellationToken cancellationToken = default)

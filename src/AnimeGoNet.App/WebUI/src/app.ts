@@ -682,6 +682,11 @@ interface MetadataTaskListPage {
   total_items: number;
   sort: "updated" | "title" | "status" | "failure";
   direction: "asc" | "desc";
+  attention: {
+    other_items: number;
+    failed_items: number;
+    review_pending_items: number;
+  };
   items: MetadataItem[];
 }
 
@@ -750,6 +755,7 @@ interface MetadataUiState {
   status: string;
   handling: string;
   file_state: string;
+  review_state: string;
   failure_stage: string;
   error_code: string;
   retryability: string;
@@ -3913,6 +3919,7 @@ function readMetadataState(): MetadataUiState {
     status: "",
     handling: "all",
     file_state: "all",
+    review_state: "all",
     failure_stage: "",
     error_code: "",
     retryability: "all",
@@ -3934,6 +3941,8 @@ function readMetadataState(): MetadataUiState {
       status: typeof stored.status === "string" ? stored.status.slice(0, 64) : "",
       handling: typeof stored.handling === "string" ? stored.handling : "all",
       file_state: stored.file_state === "has_other" ? "has_other" : "all",
+      review_state: ["pending", "approved", "not_required"].includes(stored.review_state ?? "")
+        ? stored.review_state! : "all",
       failure_stage: typeof stored.failure_stage === "string"
         ? stored.failure_stage.slice(0, 64) : "",
       error_code: typeof stored.error_code === "string"
@@ -7255,6 +7264,64 @@ async function loadMetadataAttempts(
   }
 }
 
+function syncMetadataFilterControls(): void {
+  element<HTMLInputElement>("#metadata-search").value = metadataState.search;
+  element<HTMLSelectElement>("#metadata-status-filter").value = metadataState.status;
+  element<HTMLSelectElement>("#metadata-handling-filter").value = metadataState.handling;
+  element<HTMLSelectElement>("#metadata-file-state-filter").value = metadataState.file_state;
+  element<HTMLSelectElement>("#metadata-review-filter").value = metadataState.review_state;
+  element<HTMLInputElement>("#metadata-failure-stage").value = metadataState.failure_stage;
+  element<HTMLInputElement>("#metadata-error-code").value = metadataState.error_code;
+  element<HTMLSelectElement>("#metadata-retryability-filter").value = metadataState.retryability;
+  element<HTMLSelectElement>("#metadata-sort").value = metadataState.sort;
+  element<HTMLSelectElement>("#metadata-direction").value = metadataState.direction;
+  element<HTMLSelectElement>("#metadata-page-size").value = String(metadataState.page_size);
+}
+
+function renderMetadataAttentionSummary(
+  attention: MetadataTaskListPage["attention"],
+): void {
+  element<HTMLElement>("#metadata-attention-other-count").textContent =
+    attention.other_items.toLocaleString("zh-CN");
+  element<HTMLElement>("#metadata-attention-failed-count").textContent =
+    attention.failed_items.toLocaleString("zh-CN");
+  element<HTMLElement>("#metadata-attention-review-count").textContent =
+    attention.review_pending_items.toLocaleString("zh-CN");
+  element<HTMLButtonElement>("#metadata-attention-other").setAttribute(
+    "aria-pressed",
+    String(metadataState.file_state === "has_other"
+      && metadataState.status === ""
+      && metadataState.review_state === "all"),
+  );
+  element<HTMLButtonElement>("#metadata-attention-failed").setAttribute(
+    "aria-pressed",
+    String(metadataState.status === "metadata_failed"
+      && metadataState.file_state === "all"
+      && metadataState.review_state === "all"),
+  );
+  element<HTMLButtonElement>("#metadata-attention-review").setAttribute(
+    "aria-pressed",
+    String(metadataState.review_state === "pending"
+      && metadataState.status === ""
+      && metadataState.file_state === "all"),
+  );
+}
+
+function applyMetadataAttentionFilter(filter: "other" | "failed" | "review"): void {
+  metadataState.search = "";
+  metadataState.status = filter === "failed" ? "metadata_failed" : "";
+  metadataState.handling = "all";
+  metadataState.file_state = filter === "other" ? "has_other" : "all";
+  metadataState.review_state = filter === "review" ? "pending" : "all";
+  metadataState.failure_stage = "";
+  metadataState.error_code = "";
+  metadataState.retryability = "all";
+  metadataState.page = 1;
+  syncMetadataFilterControls();
+  saveMetadataState();
+  void loadMetadataTasks();
+}
+
 async function loadMetadataTasks(background = false): Promise<void> {
   const container = element<HTMLElement>("#metadata-tasks");
   const hadReadyContent = container.dataset.uiState === "ready";
@@ -7265,6 +7332,7 @@ async function loadMetadataTasks(background = false): Promise<void> {
     page_size: String(metadataState.page_size),
     handling: metadataState.handling,
     file_state: metadataState.file_state,
+    review_state: metadataState.review_state,
     retryability: metadataState.retryability,
     sort: metadataState.sort,
     direction: metadataState.direction,
@@ -7280,6 +7348,7 @@ async function loadMetadataTasks(background = false): Promise<void> {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = await response.json() as MetadataTaskListPage;
     if (requestSequence !== metadataListRequestSequence) return;
+    renderMetadataAttentionSummary(body.attention);
     if (body.items.length === 0 && body.total_items > 0 && metadataState.page > 1) {
       metadataState.page = Math.max(1, Math.ceil(body.total_items / body.page_size));
       saveMetadataState();
@@ -10165,17 +10234,7 @@ element<HTMLInputElement>("#library-search").value = libraryState.search;
 element<HTMLSelectElement>("#library-direction").value = libraryState.direction;
 element<HTMLSelectElement>("#library-page-size").value = String(libraryState.page_size);
 element<HTMLSelectElement>("#library-episode-filter").value = libraryState.episode_filter;
-element<HTMLInputElement>("#metadata-search").value = metadataState.search;
-element<HTMLSelectElement>("#metadata-status-filter").value = metadataState.status;
-element<HTMLSelectElement>("#metadata-handling-filter").value = metadataState.handling;
-element<HTMLSelectElement>("#metadata-file-state-filter").value = metadataState.file_state;
-element<HTMLInputElement>("#metadata-failure-stage").value = metadataState.failure_stage;
-element<HTMLInputElement>("#metadata-error-code").value = metadataState.error_code;
-element<HTMLSelectElement>("#metadata-retryability-filter").value =
-  metadataState.retryability;
-element<HTMLSelectElement>("#metadata-sort").value = metadataState.sort;
-element<HTMLSelectElement>("#metadata-direction").value = metadataState.direction;
-element<HTMLSelectElement>("#metadata-page-size").value = String(metadataState.page_size);
+syncMetadataFilterControls();
 element<HTMLFormElement>("#metadata-filters").addEventListener("submit", (event) => {
   event.preventDefault();
   metadataState.search = element<HTMLInputElement>("#metadata-search").value.trim();
@@ -10184,6 +10243,8 @@ element<HTMLFormElement>("#metadata-filters").addEventListener("submit", (event)
     element<HTMLSelectElement>("#metadata-handling-filter").value;
   metadataState.file_state =
     element<HTMLSelectElement>("#metadata-file-state-filter").value;
+  metadataState.review_state =
+    element<HTMLSelectElement>("#metadata-review-filter").value;
   metadataState.failure_stage =
     element<HTMLInputElement>("#metadata-failure-stage").value.trim().toLowerCase();
   metadataState.error_code =
@@ -10209,25 +10270,29 @@ element<HTMLButtonElement>("#metadata-filter-reset").addEventListener("click", (
     status: "",
     handling: "all",
     file_state: "all",
+    review_state: "all",
     failure_stage: "",
     error_code: "",
     retryability: "all",
     sort: "updated",
     direction: "desc",
   };
-  element<HTMLInputElement>("#metadata-search").value = "";
-  element<HTMLSelectElement>("#metadata-status-filter").value = "";
-  element<HTMLSelectElement>("#metadata-handling-filter").value = "all";
-  element<HTMLSelectElement>("#metadata-file-state-filter").value = "all";
-  element<HTMLInputElement>("#metadata-failure-stage").value = "";
-  element<HTMLInputElement>("#metadata-error-code").value = "";
-  element<HTMLSelectElement>("#metadata-retryability-filter").value = "all";
-  element<HTMLSelectElement>("#metadata-sort").value = "updated";
-  element<HTMLSelectElement>("#metadata-direction").value = "desc";
-  element<HTMLSelectElement>("#metadata-page-size").value = "25";
+  syncMetadataFilterControls();
   saveMetadataState();
   void loadMetadataTasks();
 });
+element<HTMLButtonElement>("#metadata-attention-other").addEventListener(
+  "click",
+  () => applyMetadataAttentionFilter("other"),
+);
+element<HTMLButtonElement>("#metadata-attention-failed").addEventListener(
+  "click",
+  () => applyMetadataAttentionFilter("failed"),
+);
+element<HTMLButtonElement>("#metadata-attention-review").addEventListener(
+  "click",
+  () => applyMetadataAttentionFilter("review"),
+);
 element<HTMLButtonElement>("#metadata-previous").addEventListener("click", () => {
   if (metadataState.page <= 1) return;
   metadataState.page--;

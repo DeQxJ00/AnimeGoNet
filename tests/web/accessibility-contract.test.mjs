@@ -92,6 +92,33 @@ test("metadata detail visibly separates source evidence from TMDB authority", as
   assert.match(css, /\.metadata-source-evidence\s*\{/);
 });
 
+test("metadata attention counters are prominent buttons with direct filters", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  const summary = document.querySelector("#metadata-attention-summary");
+  assert.ok(summary);
+  for (const id of [
+    "metadata-attention-other",
+    "metadata-attention-failed",
+    "metadata-attention-review",
+  ]) {
+    const button = summary.querySelector(`#${id}`);
+    assert.ok(button);
+    assert.equal(button.tagName, "BUTTON");
+    assert.equal(button.getAttribute("aria-pressed"), "false");
+  }
+  assert.ok(document.querySelector("#metadata-review-filter"));
+  assert.match(app, /applyMetadataAttentionFilter/);
+  assert.match(app, /attention\.other_items/);
+  assert.match(app, /attention\.failed_items/);
+  assert.match(app, /attention\.review_pending_items/);
+  assert.match(css, /\.metadata-attention-summary\s*\{[^}]*grid-template-columns:\s*repeat\(3/s);
+  assert.match(css, /\.metadata-attention-card strong\s*\{[^}]*font-size:\s*clamp\(2rem/s);
+});
+
 test("Other readaptation review confirms a server-provided before and after comparison", async () => {
   const [document, app, css] = await Promise.all([
     page(),

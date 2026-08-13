@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260814-readaptation-middle-scrollbar">
+  <link rel="stylesheet" href="/styles.css?v=20260814-metadata-attention-summary">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -490,6 +490,23 @@
           <h2 id="metadata-title">匹配与整理状态</h2>
         </div>
       </div>
+      <div id="metadata-attention-summary" class="metadata-attention-summary" aria-label="需要人工处理的任务统计">
+        <button id="metadata-attention-other" type="button" class="metadata-attention-card other" aria-pressed="false">
+          <span>Other 待处理</span>
+          <strong id="metadata-attention-other-count">—</strong>
+          <small>点击仅显示仍含 Other 文件的任务</small>
+        </button>
+        <button id="metadata-attention-failed" type="button" class="metadata-attention-card failed" aria-pressed="false">
+          <span>匹配错误</span>
+          <strong id="metadata-attention-failed-count">—</strong>
+          <small>点击仅显示匹配失败的任务</small>
+        </button>
+        <button id="metadata-attention-review" type="button" class="metadata-attention-card review" aria-pressed="false">
+          <span>等待人工审核</span>
+          <strong id="metadata-attention-review-count">—</strong>
+          <small>点击仅显示重新适配待确认的任务</small>
+        </button>
+      </div>
       <form id="metadata-filters" class="metadata-filters" aria-label="元数据任务筛选">
         <label>搜索
           <input id="metadata-search" type="search" maxlength="200" placeholder="标题、任务 ID、来源或错误码">
@@ -521,6 +538,14 @@
           <select id="metadata-file-state-filter">
             <option value="all">全部文件</option>
             <option value="has_other">含 Other</option>
+          </select>
+        </label>
+        <label>审核状态
+          <select id="metadata-review-filter">
+            <option value="all">全部审核状态</option>
+            <option value="pending">等待人工审核</option>
+            <option value="approved">审核已完成</option>
+            <option value="not_required">无需审核</option>
           </select>
         </label>
         <label>失败阶段
@@ -1422,6 +1447,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-readaptation-middle-scrollbar"></script>
+    <script type="module" src="/app.js?v=20260814-metadata-attention-summary"></script>
 </body>
 </html>

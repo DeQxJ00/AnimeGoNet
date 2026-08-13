@@ -207,6 +207,11 @@ public sealed record MetadataTaskListProjection(
     TmdbResolutionEvidence? EpisodeResolution = null,
     bool EpisodeResolutionMixed = false);
 
+public sealed record MetadataTaskAttentionSummary(
+    int OtherTaskCount,
+    int FailedTaskCount,
+    int ReviewPendingTaskCount);
+
 public sealed record MetadataTaskFileDetailProjection(
     string RelativePath,
     long SizeBytes,
