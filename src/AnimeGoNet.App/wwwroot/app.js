@@ -2598,6 +2598,9 @@ function configurationCard(title, fields) {
 function enabledLabel(value) {
     return value ? "已启用" : "已关闭";
 }
+function cacheHoursLabel(hours) {
+    return hours === 0 ? "永久（不自动过期）" : `${hours} 小时`;
+}
 function seasonFailurePriority(metadata) {
     const panel = document.createElement("section");
     panel.className = "failure-priority";
@@ -2667,7 +2670,16 @@ function seasonFailurePriority(metadata) {
     return panel;
 }
 function metadataConfigurationCard(config) {
-    const card = configurationCard("TMDB 与季度失败链", [
+    const card = configurationCard("Mikan、TMDB 与季度失败链", [
+        ["Mikan 地址", config.metadata.mikan.base_url],
+        [
+            "Mikan Episode 身份缓存",
+            cacheHoursLabel(config.metadata.mikan.episode_identity_cache_hours),
+        ],
+        [
+            "Mikan → Bangumi 映射缓存",
+            cacheHoursLabel(config.metadata.mikan.bangumi_identity_cache_hours),
+        ],
         ["TMDB API Key", config.editable.tmdb_api_key ?? "未配置"],
         ["TMDB Read Access Token", config.editable.tmdb_read_access_token ?? "未配置"],
         ["API / 语言", `${config.metadata.tmdb.base_url} · ${config.metadata.tmdb.language}`],
@@ -3054,6 +3066,8 @@ const configurationLockSelectors = {
     outbound_proxy_url: ["#configuration-outbound-proxy-url"],
     outbound_proxy_hosts: ["#configuration-outbound-proxy-hosts"],
     mikan_base_url: ["#configuration-mikan-url"],
+    mikan_episode_identity_cache_hours: ["#configuration-mikan-episode-cache-hours"],
+    mikan_bangumi_identity_cache_hours: ["#configuration-mikan-bangumi-cache-hours"],
     tmdb_base_url: ["#configuration-tmdb-url"],
     tmdb_image_base_url: ["#configuration-tmdb-image-url"],
     tmdb_language: ["#configuration-tmdb-language"],
@@ -3121,6 +3135,8 @@ function openConfigurationEditor() {
     element("#configuration-outbound-proxy-hosts").value =
         editable.outbound_proxy_hosts.join("\n");
     setConfigurationValue("#configuration-mikan-url", editable.mikan_base_url);
+    setConfigurationValue("#configuration-mikan-episode-cache-hours", editable.mikan_episode_identity_cache_hours);
+    setConfigurationValue("#configuration-mikan-bangumi-cache-hours", editable.mikan_bangumi_identity_cache_hours);
     setConfigurationValue("#configuration-tmdb-url", editable.tmdb_base_url);
     setConfigurationValue("#configuration-tmdb-image-url", editable.tmdb_image_base_url);
     setConfigurationValue("#configuration-tmdb-language", editable.tmdb_language);
@@ -3182,6 +3198,8 @@ const configurationFieldLabels = {
     outbound_proxy_url: "全局代理地址",
     outbound_proxy_hosts: "使用代理的域名",
     mikan_base_url: "Mikan 地址",
+    mikan_episode_identity_cache_hours: "Mikan Episode 身份缓存（小时）",
+    mikan_bangumi_identity_cache_hours: "Mikan → Bangumi 映射缓存（小时）",
     tmdb_base_url: "TMDB API 地址",
     tmdb_image_base_url: "TMDB 图片地址",
     tmdb_language: "TMDB 语言",
@@ -3233,6 +3251,8 @@ function configurationRequest() {
             .map(value => value.trim().toLowerCase())
             .filter(value => value.length > 0),
         mikan_base_url: element("#configuration-mikan-url").value,
+        mikan_episode_identity_cache_hours: element("#configuration-mikan-episode-cache-hours").valueAsNumber,
+        mikan_bangumi_identity_cache_hours: element("#configuration-mikan-bangumi-cache-hours").valueAsNumber,
         tmdb_base_url: element("#configuration-tmdb-url").value,
         tmdb_image_base_url: element("#configuration-tmdb-image-url").value,
         tmdb_language: element("#configuration-tmdb-language").value,

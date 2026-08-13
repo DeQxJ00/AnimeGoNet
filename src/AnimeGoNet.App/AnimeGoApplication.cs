@@ -388,7 +388,12 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<OrderedFeedFilterManager>();
         var jsonCache = new SqliteJsonCacheStore(database);
         builder.Services.AddSingleton(jsonCache);
-        builder.Services.AddSingleton<MikanEpisodeIdentityCache>();
+        builder.Services.AddSingleton(new MikanEpisodeIdentityCache(
+            jsonCache,
+            options.Metadata.Mikan.EpisodeIdentityCacheTtl));
+        builder.Services.AddSingleton(new MikanBangumiIdentityCache(
+            jsonCache,
+            options.Metadata.Mikan.BangumiIdentityCacheTtl));
         builder.Services.AddSingleton(directoryDatabaseScanner);
         builder.Services.AddSingleton(directoryDatabaseIndex);
         builder.Services.AddSingleton<DirectoryDatabaseWriter>();
@@ -634,6 +639,20 @@ public static class AnimeGoApplication
                             "mikan_base_url",
                             "metadata:mikan:base_url"),
                         "mikan_base_url") ?? defaults.Metadata.Mikan.BaseUrl,
+                    EpisodeIdentityCacheTtl = TimeSpan.FromHours(ParseOptionalDouble(
+                        FirstConfigurationValue(
+                            configuration,
+                            "mikan_episode_identity_cache_hours",
+                            "metadata:mikan:episode_identity_cache_hours"),
+                        defaults.Metadata.Mikan.EpisodeIdentityCacheTtl.TotalHours,
+                        "mikan_episode_identity_cache_hours")),
+                    BangumiIdentityCacheTtl = TimeSpan.FromHours(ParseOptionalDouble(
+                        FirstConfigurationValue(
+                            configuration,
+                            "mikan_bangumi_identity_cache_hours",
+                            "metadata:mikan:bangumi_identity_cache_hours"),
+                        defaults.Metadata.Mikan.BangumiIdentityCacheTtl.TotalHours,
+                        "mikan_bangumi_identity_cache_hours")),
                 },
                 Tmdb = defaults.Metadata.Tmdb with
                 {

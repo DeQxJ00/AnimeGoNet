@@ -112,6 +112,11 @@ public sealed class AiMetadataTestApiTests
             transport.Requests.Count(uri => uri.AbsolutePath.StartsWith(
                 "/Home/Episode/",
                 StringComparison.Ordinal)));
+        Assert.Equal(
+            1,
+            transport.Requests.Count(uri => uri.AbsolutePath.StartsWith(
+                "/Home/Bangumi/",
+                StringComparison.Ordinal)));
     }
 
     [Fact]

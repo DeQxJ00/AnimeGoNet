@@ -116,6 +116,10 @@ public sealed record MetadataMatchingOptions
 public sealed record MikanClientOptions
 {
     public Uri BaseUrl { get; init; } = new("https://mikanani.me/");
+
+    public TimeSpan EpisodeIdentityCacheTtl { get; init; } = TimeSpan.FromDays(365);
+
+    public TimeSpan BangumiIdentityCacheTtl { get; init; } = TimeSpan.FromDays(365);
 }
 
 public sealed record TmdbClientOptions

@@ -200,6 +200,8 @@ sources:
 metadata:
   mikan:
     base_url: https://mikanani.me/
+    episode_identity_cache_hours: 8760
+    bangumi_identity_cache_hours: 8760
   tmdb:
     base_url: https://api.themoviedb.org/
     image_base_url: https://image.tmdb.org/t/p/
@@ -257,6 +259,13 @@ RSS、作品页和带 passkey 的 Torrent URL 的 scheme/host/port 替换为该 
 原样保留 path/query。配置为内网反向代理（例如 `http://mikan.local/`）时，只信任该
 明确 host 可以解析到私网地址；其它允许 host、redirect 和 Torrent 地址仍执行原有
 SSRF 公网地址门禁。
+
+`metadata.mikan.episode_identity_cache_hours` 控制 Episode URL → `mikanid/groupid`；
+`metadata.mikan.bangumi_identity_cache_hours` 控制 `mikanid→bgmid`。两项默认均为
+`8760` 小时（1 年），允许 `0` 表示永久，最大 87600 小时（10 年）；只缓存成功且 ID
+完整的结果，失败不做 negative cache。对应 bucket 为 `bolt/mikan_episode_identity` 和
+`bolt/mikan_bangumi_identity`，均可在 WebUI“系统缓存”中逐项检查和删除。WebUI 修改后
+需重启，部署 YAML、环境变量或命令行显式设置时页面只读。
 
 `metadata.tmdb.image_base_url` 必须是以 `/` 结尾的 HTTP(S) base。官方默认值包含
 `/t/p/`；若反向代理根目录保持 TMDB 图片路径结构，应写成

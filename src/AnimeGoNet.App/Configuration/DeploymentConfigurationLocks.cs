@@ -27,6 +27,8 @@ public sealed class DeploymentConfigurationLocks
     private static readonly LockDefinition[] Definitions =
     [
         new("mikan_base_url", ["mikan_base_url", "metadata:mikan:base_url"]),
+        new("mikan_episode_identity_cache_hours", ["mikan_episode_identity_cache_hours", "metadata:mikan:episode_identity_cache_hours"]),
+        new("mikan_bangumi_identity_cache_hours", ["mikan_bangumi_identity_cache_hours", "metadata:mikan:bangumi_identity_cache_hours"]),
         new("outbound_proxy_url", ["outbound_proxy_url", "ANIMEGO_OUTBOUND_PROXY_URL", "outbound_proxy:url"]),
         new("outbound_proxy_hosts", ["outbound_proxy_hosts", "ANIMEGO_OUTBOUND_PROXY_HOSTS", "outbound_proxy:hosts"]),
         new("tmdb_base_url", ["tmdb_base_url", "metadata:tmdb:base_url"]),
@@ -203,6 +205,14 @@ public sealed class DeploymentConfigurationLocks
                     "mikan_base_url",
                     current.MikanBaseUrl,
                     candidate.MikanBaseUrl),
+                MikanEpisodeIdentityCacheHours = Preserve(
+                    "mikan_episode_identity_cache_hours",
+                    current.MikanEpisodeIdentityCacheHours,
+                    candidate.MikanEpisodeIdentityCacheHours),
+                MikanBangumiIdentityCacheHours = Preserve(
+                    "mikan_bangumi_identity_cache_hours",
+                    current.MikanBangumiIdentityCacheHours,
+                    candidate.MikanBangumiIdentityCacheHours),
                 OutboundProxyUrlOverridden = Preserve(
                     "outbound_proxy_url",
                     current.OutboundProxyUrlOverridden,
@@ -435,6 +445,20 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("mikan_base_url"))
         {
             mikan = mikan with { BaseUrl = deployment.Metadata.Mikan.BaseUrl };
+        }
+        if (IsLocked("mikan_episode_identity_cache_hours"))
+        {
+            mikan = mikan with
+            {
+                EpisodeIdentityCacheTtl = deployment.Metadata.Mikan.EpisodeIdentityCacheTtl,
+            };
+        }
+        if (IsLocked("mikan_bangumi_identity_cache_hours"))
+        {
+            mikan = mikan with
+            {
+                BangumiIdentityCacheTtl = deployment.Metadata.Mikan.BangumiIdentityCacheTtl,
+            };
         }
 
         var tmdb = candidate.Metadata.Tmdb;
@@ -685,6 +709,14 @@ public sealed class DeploymentConfigurationLocks
             "mikan_base_url",
             deployment.Metadata.Mikan.BaseUrl,
             candidate.Metadata.Mikan.BaseUrl);
+        AddIfChanged(
+            "mikan_episode_identity_cache_hours",
+            deployment.Metadata.Mikan.EpisodeIdentityCacheTtl,
+            candidate.Metadata.Mikan.EpisodeIdentityCacheTtl);
+        AddIfChanged(
+            "mikan_bangumi_identity_cache_hours",
+            deployment.Metadata.Mikan.BangumiIdentityCacheTtl,
+            candidate.Metadata.Mikan.BangumiIdentityCacheTtl);
         AddIfChanged(
             "tmdb_base_url",
             deployment.Metadata.Tmdb.BaseUrl,

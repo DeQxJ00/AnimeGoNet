@@ -335,6 +335,8 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("outbound_proxy_url")] string? OutboundProxyUrl,
     [property: JsonPropertyName("outbound_proxy_hosts")] IReadOnlyList<string> OutboundProxyHosts,
     [property: JsonPropertyName("mikan_base_url")] string MikanBaseUrl,
+    [property: JsonPropertyName("mikan_episode_identity_cache_hours")] double MikanEpisodeIdentityCacheHours,
+    [property: JsonPropertyName("mikan_bangumi_identity_cache_hours")] double MikanBangumiIdentityCacheHours,
     [property: JsonPropertyName("tmdb_base_url")] string TmdbBaseUrl,
     [property: JsonPropertyName("tmdb_image_base_url")] string TmdbImageBaseUrl,
     [property: JsonPropertyName("tmdb_language")] string TmdbLanguage,
@@ -438,7 +440,9 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("clear_ai_api_key")] bool ClearAiApiKey = false,
     [property: JsonPropertyName("ai_tmdb_mcp_url")] string? AiTmdbMcpUrl = null,
     [property: JsonPropertyName("ai_bangumi_mcp_url")] string? AiBangumiMcpUrl = null,
-    [property: JsonPropertyName("ai_prompt_template")] string? AiPromptTemplate = null);
+    [property: JsonPropertyName("ai_prompt_template")] string? AiPromptTemplate = null,
+    [property: JsonPropertyName("mikan_episode_identity_cache_hours")] double? MikanEpisodeIdentityCacheHours = null,
+    [property: JsonPropertyName("mikan_bangumi_identity_cache_hours")] double? MikanBangumiIdentityCacheHours = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -488,7 +492,9 @@ public sealed record MetadataConfigurationResponse(
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled);
 
 public sealed record MikanConfigurationResponse(
-    [property: JsonPropertyName("base_url")] string BaseUrl);
+    [property: JsonPropertyName("base_url")] string BaseUrl,
+    [property: JsonPropertyName("episode_identity_cache_hours")] double EpisodeIdentityCacheHours,
+    [property: JsonPropertyName("bangumi_identity_cache_hours")] double BangumiIdentityCacheHours);
 
 public sealed record OutboundProxyConfigurationResponse(
     [property: JsonPropertyName("url")] string? Url,

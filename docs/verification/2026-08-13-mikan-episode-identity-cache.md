@@ -5,8 +5,9 @@
 ## 行为边界
 
 - Mikan Episode 页面只有同时解析出正整数 `mikanid` 与 `groupid` 才写入缓存。
-- 缓存位置固定为 SQLite `bolt/mikan_episode_identity`，TTL 为 `null`，因此不会自动过期；
-  RSS 再刷新或应用重启后仍会命中，用户可在“系统缓存”逐条查看和删除。
+- 缓存位置固定为 SQLite `bolt/mikan_episode_identity`。默认 TTL 为 8760 小时（1 年），
+  可配置为 `0` 永久；RSS 再刷新或应用重启后仍会命中未过期项，用户可在“系统缓存”
+  逐条查看和删除。
 - key 是不含 userinfo、query 和 fragment 的绝对 HTTP(S) Episode URL。带参数 URL 继续按
   正常网络流程解析，但不长期落盘，避免意外保存 token/passkey。
 - value 仅包含 schema 版本、`mikanid` 和 `groupid`；不保存响应 HTML、Cookie、Torrent URL、

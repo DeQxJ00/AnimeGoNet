@@ -12,13 +12,16 @@ public sealed class MikanEpisodeIdentityCacheTests
         "https://mikanime.tv/Home/Episode/63d1e1c6ff6bd66323ad2c11e9deb772875b8e61");
 
     [Fact]
-    public async Task SuccessfulIdentityPersistsWithoutExpiryAndSurvivesNewResolverInstances()
+    public async Task PermanentSettingPersistsWithoutExpiryAndSurvivesNewResolverInstances()
     {
         await using var app = await RunningApp.StartAsync();
         var store = app.App.Services.GetRequiredService<SqliteJsonCacheStore>();
         var now = new DateTimeOffset(2026, 8, 13, 0, 0, 0, TimeSpan.Zero);
         var firstHttp = new FakeHttpClient(IdentityHtml(3951, 370));
-        var firstCache = new MikanEpisodeIdentityCache(store, new FixedTimeProvider(now));
+        var firstCache = new MikanEpisodeIdentityCache(
+            store,
+            TimeSpan.Zero,
+            new FixedTimeProvider(now));
         var feed = Feed(EpisodeUri);
 
         var first = await new MikanFeedIdentityResolver(firstHttp, firstCache)
@@ -41,6 +44,7 @@ public sealed class MikanEpisodeIdentityCacheTests
         var restartedCache = new MikanEpisodeIdentityCache(
             new SqliteJsonCacheStore(
                 app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>()),
+            TimeSpan.Zero,
             new FixedTimeProvider(now.AddYears(20)));
         var restarted = await new MikanFeedIdentityResolver(restartedHttp, restartedCache)
             .ResolveAsync(feed, "mikan");
@@ -63,6 +67,42 @@ public sealed class MikanEpisodeIdentityCacheTests
             await store.DeleteBrowserEntryAsync(
                 "bolt", bucket.BucketId, entry.EntryId, entry.DeleteToken));
         Assert.Null(await restartedCache.GetAsync(EpisodeUri));
+    }
+
+    [Fact]
+    public async Task ConfiguredTtlExpiresAndAllowsAuthoritativeRefresh()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var store = app.App.Services.GetRequiredService<SqliteJsonCacheStore>();
+        var now = new DateTimeOffset(2026, 8, 13, 0, 0, 0, TimeSpan.Zero);
+        var cache = new MikanEpisodeIdentityCache(
+            store,
+            TimeSpan.FromHours(12),
+            new FixedTimeProvider(now));
+
+        await cache.PutAsync(EpisodeUri, new MikanEpisodeIdentity(3951, 370));
+
+        var stored = Assert.IsType<CacheJsonValue>(await store.GetJsonAsync(
+            MikanEpisodeIdentityCache.DatabaseName,
+            MikanEpisodeIdentityCache.BucketName,
+            EpisodeUri.AbsoluteUri,
+            now));
+        Assert.Equal(now.AddHours(12), stored.ExpiresAtUtc);
+        Assert.Equal(3951, (await cache.GetAsync(EpisodeUri))?.MikanId);
+
+        var expired = new MikanEpisodeIdentityCache(
+            store,
+            TimeSpan.FromHours(12),
+            new FixedTimeProvider(now.AddHours(13)));
+        Assert.Null(await expired.GetAsync(EpisodeUri));
+
+        var refreshedHttp = new FakeHttpClient(IdentityHtml(4028, 123));
+        var refreshed = await new MikanFeedIdentityResolver(refreshedHttp, expired)
+            .ResolveAsync(Feed(EpisodeUri), "mikan");
+        Assert.Equal((4028, 123), (
+            Assert.Single(refreshed).Identity?.MikanId,
+            refreshed[0].Identity?.SubGroupId));
+        Assert.Single(refreshedHttp.Requests);
     }
 
     [Fact]

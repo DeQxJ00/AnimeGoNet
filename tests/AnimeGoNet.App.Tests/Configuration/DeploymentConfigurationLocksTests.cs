@@ -91,6 +91,36 @@ public sealed class DeploymentConfigurationLocksTests
     }
 
     [Fact]
+    public void MikanIdentityCacheLocksAreIndependentAndReapplyDeploymentTtls()
+    {
+        var deployment = AnimeGoDefaults.CreateDocker();
+        var candidate = deployment with
+        {
+            Metadata = deployment.Metadata with
+            {
+                Mikan = deployment.Metadata.Mikan with
+                {
+                    EpisodeIdentityCacheTtl = TimeSpan.Zero,
+                    BangumiIdentityCacheTtl = TimeSpan.FromHours(12),
+                },
+            },
+        };
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+        [
+            "metadata__mikan__episode_identity_cache_hours",
+            "mikan_bangumi_identity_cache_hours",
+        ]);
+
+        var result = locks.Reapply(deployment, candidate);
+
+        Assert.Equal(TimeSpan.FromHours(8760), result.Metadata.Mikan.EpisodeIdentityCacheTtl);
+        Assert.Equal(TimeSpan.FromHours(8760), result.Metadata.Mikan.BangumiIdentityCacheTtl);
+        Assert.Equal(
+            ["mikan_bangumi_identity_cache_hours", "mikan_episode_identity_cache_hours"],
+            locks.FindChangedLockedFields(deployment, candidate).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void CanonicalEnvironmentAndCommandLineAliasesShareOneSafeLockProjection()
     {
         var locks = DeploymentConfigurationLocks.FromSources(
@@ -139,6 +169,46 @@ public sealed class DeploymentConfigurationLocksTests
                 item => item.Field == "season_failure_backtrace");
             Assert.Equal("command_line", value.Source);
             Assert.Equal(["--tmdb_fail_backtrace"], value.CommandLineArguments);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ApplicationCompositionAppliesMikanIdentityCacheHours()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-mikan-cache-locks",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var app = await AnimeGoApplication.BuildAsync(
+            [
+                $"--data_path={Path.Combine(root, "data")}",
+                $"--download_path={Path.Combine(root, "download")}",
+                $"--save_path={Path.Combine(root, "library")}",
+                "--background_workers_enabled=false",
+                "--mikan_episode_identity_cache_hours=0",
+                "--mikan_bangumi_identity_cache_hours=4320",
+            ],
+                runningInContainer: false,
+                startBackgroundWorkers: false);
+
+            var options = app.Services.GetRequiredService<AnimeGoOptions>();
+            var locks = app.Services.GetRequiredService<DeploymentConfigurationLocks>();
+
+            Assert.Equal(TimeSpan.Zero, options.Metadata.Mikan.EpisodeIdentityCacheTtl);
+            Assert.Equal(
+                TimeSpan.FromHours(4320),
+                options.Metadata.Mikan.BangumiIdentityCacheTtl);
+            Assert.True(locks.IsLocked("mikan_episode_identity_cache_hours"));
+            Assert.True(locks.IsLocked("mikan_bangumi_identity_cache_hours"));
         }
         finally
         {

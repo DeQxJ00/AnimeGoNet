@@ -1180,6 +1180,8 @@
           </div>
         </fieldset>
         <label class="wide">Mikan 地址<input id="configuration-mikan-url" type="url" required placeholder="https://mikanime.tv/"></label>
+        <label>Mikan Episode 身份缓存（小时）<input id="configuration-mikan-episode-cache-hours" type="number" min="0" max="87600" step="1" required><small>默认 8760；填 0 表示永久缓存。</small></label>
+        <label>Mikan → Bangumi 映射缓存（小时）<input id="configuration-mikan-bangumi-cache-hours" type="number" min="0" max="87600" step="1" required><small>默认 8760；填 0 表示永久缓存。</small></label>
         <label class="wide">TMDB API 地址<input id="configuration-tmdb-url" type="url" required placeholder="https://api.themoviedb.org/"></label>
         <label class="wide">TMDB 图片地址<input id="configuration-tmdb-image-url" type="url" required placeholder="https://image.tmdb.org/t/p/"></label>
         <label>TMDB 语言<input id="configuration-tmdb-language" required maxlength="32"></label>

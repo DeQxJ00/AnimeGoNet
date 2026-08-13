@@ -1867,7 +1867,9 @@ public static class ApiEndpoints
                 options.OutboundProxy.HostPatterns),
             new MetadataConfigurationResponse(
                 new MikanConfigurationResponse(
-                    mikan.BaseUrl.AbsoluteUri),
+                    mikan.BaseUrl.AbsoluteUri,
+                    mikan.EpisodeIdentityCacheTtl.TotalHours,
+                    mikan.BangumiIdentityCacheTtl.TotalHours),
                 new TmdbConfigurationResponse(
                     tmdb.BaseUrl.AbsoluteUri,
                     tmdb.ImageBaseUrl.AbsoluteUri,
@@ -1943,6 +1945,8 @@ public static class ApiEndpoints
             desired.OutboundProxy.Url?.AbsoluteUri,
             desired.OutboundProxy.HostPatterns,
             mikan.BaseUrl.AbsoluteUri,
+            mikan.EpisodeIdentityCacheTtl.TotalHours,
+            mikan.BangumiIdentityCacheTtl.TotalHours,
             tmdb.BaseUrl.AbsoluteUri,
             tmdb.ImageBaseUrl.AbsoluteUri,
             tmdb.Language,
@@ -2028,6 +2032,8 @@ public static class ApiEndpoints
             request,
             current.Settings,
             deployment.Metadata.Mikan.BaseUrl.AbsoluteUri,
+            deployment.Metadata.Mikan.EpisodeIdentityCacheTtl.TotalHours,
+            deployment.Metadata.Mikan.BangumiIdentityCacheTtl.TotalHours,
             deployment.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri,
             deployment.Metadata.Tmdb.CacheTtl.TotalHours,
             DateTimeOffset.UtcNow);
@@ -2124,6 +2130,14 @@ public static class ApiEndpoints
             string.Join("\n", current.OutboundProxy.HostPatterns),
             string.Join("\n", candidate.OutboundProxy.HostPatterns));
         Add("mikan_base_url", beforeMikan.BaseUrl.AbsoluteUri, afterMikan.BaseUrl.AbsoluteUri);
+        Add(
+            "mikan_episode_identity_cache_hours",
+            beforeMikan.EpisodeIdentityCacheTtl.TotalHours.ToString(invariant),
+            afterMikan.EpisodeIdentityCacheTtl.TotalHours.ToString(invariant));
+        Add(
+            "mikan_bangumi_identity_cache_hours",
+            beforeMikan.BangumiIdentityCacheTtl.TotalHours.ToString(invariant),
+            afterMikan.BangumiIdentityCacheTtl.TotalHours.ToString(invariant));
         Add("tmdb_base_url", beforeTmdb.BaseUrl.AbsoluteUri, afterTmdb.BaseUrl.AbsoluteUri);
         Add(
             "tmdb_image_base_url",
@@ -2346,6 +2360,8 @@ public static class ApiEndpoints
         ConfigurationUpdateRequest request,
         ApplicationOverrideEntry? current,
         string deploymentMikanBaseUrl,
+        double deploymentMikanEpisodeIdentityCacheHours,
+        double deploymentMikanBangumiIdentityCacheHours,
         string deploymentTmdbImageBaseUrl,
         double deploymentTmdbCacheHours,
         DateTimeOffset utcNow)
@@ -2354,6 +2370,12 @@ public static class ApiEndpoints
         var mikanBaseUrl = request.MikanBaseUrl?.Trim()
             ?? current?.MikanBaseUrl
             ?? deploymentMikanBaseUrl;
+        var mikanEpisodeIdentityCacheHours = request.MikanEpisodeIdentityCacheHours
+            ?? current?.MikanEpisodeIdentityCacheHours
+            ?? deploymentMikanEpisodeIdentityCacheHours;
+        var mikanBangumiIdentityCacheHours = request.MikanBangumiIdentityCacheHours
+            ?? current?.MikanBangumiIdentityCacheHours
+            ?? deploymentMikanBangumiIdentityCacheHours;
         var baseUrl = request.TmdbBaseUrl?.Trim()
             ?? throw new ArgumentException("tmdb_base_url is required.");
         var tmdbImageBaseUrl = request.TmdbImageBaseUrl?.Trim()
@@ -2369,6 +2391,14 @@ public static class ApiEndpoints
             throw new ArgumentException(
                 "mikan_base_url must contain an absolute URL of at most 2048 characters.");
         }
+        ValidateNonNegativeSeconds(
+            mikanEpisodeIdentityCacheHours,
+            "mikan_episode_identity_cache_hours",
+            24 * 3650);
+        ValidateNonNegativeSeconds(
+            mikanBangumiIdentityCacheHours,
+            "mikan_bangumi_identity_cache_hours",
+            24 * 3650);
         if (baseUrl.Length is < 1 or > 2048)
         {
             throw new ArgumentException("tmdb_base_url must contain 1 to 2048 characters.");
@@ -2573,7 +2603,9 @@ public static class ApiEndpoints
             AiBangumiMcpUrl: aiBangumiMcpUrl,
             WriteBangumiIdWhenTmdbMatched:
                 request.WriteBangumiIdWhenTmdbMatched,
-            AiPromptTemplate: aiPromptTemplate);
+            AiPromptTemplate: aiPromptTemplate,
+            MikanEpisodeIdentityCacheHours: mikanEpisodeIdentityCacheHours,
+            MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours);
     }
 
     private static string PromptSummary(string template) =>

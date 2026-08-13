@@ -200,6 +200,44 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
+    public void MikanIdentityCacheTtlsAllowPermanentButRejectNegativeOrOverTenYears()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var permanent = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Mikan = defaults.Metadata.Mikan with
+                {
+                    EpisodeIdentityCacheTtl = TimeSpan.Zero,
+                    BangumiIdentityCacheTtl = TimeSpan.Zero,
+                },
+            },
+        };
+        Assert.Empty(AnimeGoOptionsValidator.Validate(permanent));
+
+        var invalid = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Mikan = defaults.Metadata.Mikan with
+                {
+                    EpisodeIdentityCacheTtl = TimeSpan.FromHours(-1),
+                    BangumiIdentityCacheTtl = TimeSpan.FromDays(3651),
+                },
+            },
+        };
+        var errors = AnimeGoOptionsValidator.Validate(invalid);
+
+        Assert.Contains(errors, error => error.Contains(
+            "Mikan Episode identity cache TTL",
+            StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains(
+            "Mikan Bangumi identity cache TTL",
+            StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void AcceptsPrefixedMetadataApisAndGlobalSelectiveProxy()
     {
         var defaults = AnimeGoDefaults.CreateDocker();

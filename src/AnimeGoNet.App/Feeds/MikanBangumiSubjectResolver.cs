@@ -3,7 +3,9 @@ using AnimeGoNet.Core.Feeds;
 
 namespace AnimeGoNet.App.Feeds;
 
-public sealed class MikanBangumiSubjectResolver(IRssFeedHttpClient httpClient)
+public sealed class MikanBangumiSubjectResolver(
+    IRssFeedHttpClient httpClient,
+    MikanBangumiIdentityCache? persistentCache = null)
 {
     public async Task<MikanBangumiDiscovery> ResolveAsync(
         RssFeedDocument feed,
@@ -16,6 +18,20 @@ public sealed class MikanBangumiSubjectResolver(IRssFeedHttpClient httpClient)
                 null,
                 MikanBangumiDiscoveryStates.NotApplicable,
                 "mikan_bgmid_mikanid_missing");
+        }
+
+        if (persistentCache is not null)
+        {
+            var cached = await persistentCache.GetAsync(
+                feed.MikanId.Value,
+                cancellationToken).ConfigureAwait(false);
+            if (cached is not null)
+            {
+                return new MikanBangumiDiscovery(
+                    cached,
+                    MikanBangumiDiscoveryStates.Resolved,
+                    null);
+            }
         }
 
         var origin = feed.Items
@@ -35,8 +51,16 @@ public sealed class MikanBangumiSubjectResolver(IRssFeedHttpClient httpClient)
         try
         {
             var html = await httpClient.GetAsync(page, cancellationToken).ConfigureAwait(false);
+            var bangumiId = MikanBangumiSubjectParser.Parse(html);
+            if (persistentCache is not null)
+            {
+                await persistentCache.PutAsync(
+                    feed.MikanId.Value,
+                    bangumiId,
+                    cancellationToken).ConfigureAwait(false);
+            }
             return new MikanBangumiDiscovery(
-                MikanBangumiSubjectParser.Parse(html),
+                bangumiId,
                 MikanBangumiDiscoveryStates.Resolved,
                 null);
         }

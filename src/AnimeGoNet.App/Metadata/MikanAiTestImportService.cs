@@ -31,7 +31,8 @@ public sealed partial class MikanAiTestImportService(
     SourceProfileStore profiles,
     ITorrentStagingService staging,
     AnimeGoOptions options,
-    MikanEpisodeIdentityCache identityCache)
+    MikanEpisodeIdentityCache identityCache,
+    MikanBangumiIdentityCache bangumiIdentityCache)
 {
     public async Task<MikanAiTestImportResult> ImportAsync(
         string episodeUrl,
@@ -113,23 +114,32 @@ public sealed partial class MikanAiTestImportService(
             throw Error("ai_test_mikan_torrent_url_invalid", "Mikan RSS torrent URL is invalid.");
         }
 
-        var workUri = new Uri(
-            options.Metadata.Mikan.BaseUrl,
-            $"/Home/Bangumi/{identity.MikanId.ToString(CultureInfo.InvariantCulture)}");
-        int? bgmid = null;
-        try
+        var bgmid = await bangumiIdentityCache.GetAsync(
+            identity.MikanId,
+            cancellationToken).ConfigureAwait(false);
+        if (bgmid is null)
         {
-            var workHtml = await httpClient.GetAsync(workUri, cancellationToken).ConfigureAwait(false);
-            bgmid = MikanBangumiSubjectParser.Parse(workHtml);
-        }
-        catch (MikanBangumiSubjectException exception) when (
-            exception.Code == "mikan_bgmid_link_missing")
-        {
-        }
-        catch (Exception exception) when (
-            exception is MikanBangumiSubjectException or RssFeedException or HttpRequestException)
-        {
-            throw Error("ai_test_mikan_bgmid_fetch_failed", "Mikan work page could not be resolved safely.", exception);
+            var workUri = new Uri(
+                options.Metadata.Mikan.BaseUrl,
+                $"/Home/Bangumi/{identity.MikanId.ToString(CultureInfo.InvariantCulture)}");
+            try
+            {
+                var workHtml = await httpClient.GetAsync(workUri, cancellationToken).ConfigureAwait(false);
+                bgmid = MikanBangumiSubjectParser.Parse(workHtml);
+                await bangumiIdentityCache.PutAsync(
+                    identity.MikanId,
+                    bgmid.Value,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (MikanBangumiSubjectException exception) when (
+                exception.Code == "mikan_bgmid_link_missing")
+            {
+            }
+            catch (Exception exception) when (
+                exception is MikanBangumiSubjectException or RssFeedException or HttpRequestException)
+            {
+                throw Error("ai_test_mikan_bgmid_fetch_failed", "Mikan work page could not be resolved safely.", exception);
+            }
         }
 
         var rewrittenTorrent = MikanEndpointRewriter.Rewrite(torrentUri, options.Metadata.Mikan);

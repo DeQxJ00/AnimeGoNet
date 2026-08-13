@@ -308,6 +308,8 @@ bucket/key ID 和当前删除 token；服务端事务内确认 token 仍对应�
 整 bucket 删除、任意业务表修改或文件操作；业务记录和媒体删除继续只走四类删除中心。
 
 成功解析过的 Mikan Episode URL 会作为 `bolt/mikan_episode_identity` 长期缓存，页面显示
-原始 Episode URL key 与仅含 `mikanid/groupid` 的 JSON。该 bucket 没有自动 TTL：后续 RSS
-刷新和进程重启都会直接复用，只有用户在此处精确删除后才重新读取对应 Episode 页面。
-解析失败、网络异常、缺少 groupid，以及带查询参数或凭据的 URL 均不写入长期缓存。
+原始 Episode URL key 与仅含 `mikanid/groupid` 的 JSON；其后成功解析的 `mikanid→bgmid`
+写入 `bolt/mikan_bangumi_identity`。两项在“设置与备份”中独立配置，默认均为 8760 小时
+（1 年），填 `0` 表示永久。后续 RSS 刷新和进程重启会复用未过期条目，用户也可在此处
+精确删除后强制重新解析。解析失败、网络异常、缺少完整 ID，以及带查询参数或凭据的
+Episode URL 均不写入长期缓存。

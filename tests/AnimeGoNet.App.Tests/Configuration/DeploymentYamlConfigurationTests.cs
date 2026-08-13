@@ -42,6 +42,12 @@ public sealed class DeploymentYamlConfigurationTests
                 defaults.Metadata.Mikan.BaseUrl.AbsoluteUri,
                 snapshot.Values["metadata:mikan:base_url"]);
             Assert.Equal(
+                "8760",
+                snapshot.Values["metadata:mikan:episode_identity_cache_hours"]);
+            Assert.Equal(
+                "8760",
+                snapshot.Values["metadata:mikan:bangumi_identity_cache_hours"]);
+            Assert.Equal(
                 defaults.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri,
                 snapshot.Values["metadata:tmdb:image_base_url"]);
 

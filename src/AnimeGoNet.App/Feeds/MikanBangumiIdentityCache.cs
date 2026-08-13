@@ -1,30 +1,25 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AnimeGoNet.Core.Configuration;
-using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Data.Cache;
 
 namespace AnimeGoNet.App.Feeds;
 
-public sealed class MikanEpisodeIdentityCache
+public sealed class MikanBangumiIdentityCache
 {
     public const string DatabaseName = "bolt";
-    public const string BucketName = "mikan_episode_identity";
+    public const string BucketName = "mikan_bangumi_identity";
     private readonly SqliteJsonCacheStore _store;
     private readonly TimeSpan _cacheTtl;
     private readonly TimeProvider _timeProvider;
 
-    public MikanEpisodeIdentityCache(SqliteJsonCacheStore store)
-        : this(store, new MikanClientOptions().EpisodeIdentityCacheTtl, TimeProvider.System)
+    public MikanBangumiIdentityCache(SqliteJsonCacheStore store)
+        : this(store, new MikanClientOptions().BangumiIdentityCacheTtl, TimeProvider.System)
     {
     }
 
-    public MikanEpisodeIdentityCache(SqliteJsonCacheStore store, TimeProvider timeProvider)
-        : this(store, new MikanClientOptions().EpisodeIdentityCacheTtl, timeProvider)
-    {
-    }
-
-    public MikanEpisodeIdentityCache(
+    public MikanBangumiIdentityCache(
         SqliteJsonCacheStore store,
         TimeSpan cacheTtl,
         TimeProvider? timeProvider = null)
@@ -36,17 +31,12 @@ public sealed class MikanEpisodeIdentityCache
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<MikanEpisodeIdentity?> GetAsync(
-        Uri episodeUri,
+    public async Task<int?> GetAsync(
+        int mikanId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(episodeUri);
-        var key = TryNormalizeKey(episodeUri);
-        if (key is null)
-        {
-            return null;
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThan(mikanId, 1);
+        var key = Key(mikanId);
         try
         {
             var entry = await _store.GetJsonAsync(
@@ -62,10 +52,11 @@ public sealed class MikanEpisodeIdentityCache
 
             var value = JsonSerializer.Deserialize(
                 entry.ValueJson,
-                MikanIdentityCacheJsonContext.Default.MikanEpisodeIdentityCacheValue);
-            if (value is { SchemaVersion: 1, MikanId: > 0, GroupId: > 0 })
+                MikanBangumiIdentityCacheJsonContext.Default.MikanBangumiIdentityCacheValue);
+            if (value is { SchemaVersion: 1, MikanId: > 0, BangumiId: > 0 }
+                && value.MikanId == mikanId)
             {
-                return new MikanEpisodeIdentity(value.MikanId, value.GroupId);
+                return value.BangumiId;
             }
 
             await TryDeleteAsync(key, cancellationToken).ConfigureAwait(false);
@@ -83,39 +74,23 @@ public sealed class MikanEpisodeIdentityCache
     }
 
     public async Task PutAsync(
-        Uri episodeUri,
-        MikanEpisodeIdentity identity,
+        int mikanId,
+        int bangumiId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(episodeUri);
-        ArgumentNullException.ThrowIfNull(identity);
-        if (identity.MikanId <= 0 || identity.SubGroupId <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(identity),
-                "Mikan identity must contain a positive mikanid and groupid.");
-        }
-
-        var key = TryNormalizeKey(episodeUri);
-        if (key is null)
-        {
-            return;
-        }
-
+        ArgumentOutOfRangeException.ThrowIfLessThan(mikanId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(bangumiId, 1);
         try
         {
             var json = JsonSerializer.Serialize(
-                new MikanEpisodeIdentityCacheValue(
-                    1,
-                    identity.MikanId,
-                    identity.SubGroupId),
-                MikanIdentityCacheJsonContext.Default.MikanEpisodeIdentityCacheValue);
+                new MikanBangumiIdentityCacheValue(1, mikanId, bangumiId),
+                MikanBangumiIdentityCacheJsonContext.Default.MikanBangumiIdentityCacheValue);
             await _store.PutJsonAsync(
                 DatabaseName,
                 BucketName,
-                key,
+                Key(mikanId),
                 json,
-                ttl: _cacheTtl == TimeSpan.Zero ? null : _cacheTtl,
+                _cacheTtl == TimeSpan.Zero ? null : _cacheTtl,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
         }
@@ -125,7 +100,7 @@ public sealed class MikanEpisodeIdentityCache
         }
         catch (Exception exception) when (IsRecoverableCacheFailure(exception))
         {
-            // A successful authoritative page parse wins even if cache persistence is unavailable.
+            // Successful page discovery remains authoritative when cache persistence is unavailable.
         }
     }
 
@@ -145,21 +120,8 @@ public sealed class MikanEpisodeIdentityCache
         }
     }
 
-    private static string? TryNormalizeKey(Uri episodeUri)
-    {
-        if (!episodeUri.IsAbsoluteUri
-            || episodeUri.Scheme is not ("http" or "https")
-            || !string.IsNullOrEmpty(episodeUri.UserInfo)
-            || !string.IsNullOrEmpty(episodeUri.Query)
-            || !string.IsNullOrEmpty(episodeUri.Fragment))
-        {
-            return null;
-        }
-
-        return episodeUri.GetComponents(
-            UriComponents.SchemeAndServer | UriComponents.Path,
-            UriFormat.UriEscaped);
-    }
+    private static string Key(int mikanId) =>
+        mikanId.ToString(CultureInfo.InvariantCulture);
 
     private static bool IsRecoverableCacheFailure(Exception exception) =>
         exception is JsonException
@@ -170,11 +132,11 @@ public sealed class MikanEpisodeIdentityCache
             or Microsoft.Data.Sqlite.SqliteException;
 }
 
-internal sealed record MikanEpisodeIdentityCacheValue(
+internal sealed record MikanBangumiIdentityCacheValue(
     [property: JsonPropertyName("schema_version")] int SchemaVersion,
     [property: JsonPropertyName("mikanid")] int MikanId,
-    [property: JsonPropertyName("groupid")] int GroupId);
+    [property: JsonPropertyName("bgmid")] int BangumiId);
 
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Default)]
-[JsonSerializable(typeof(MikanEpisodeIdentityCacheValue))]
-internal sealed partial class MikanIdentityCacheJsonContext : JsonSerializerContext;
+[JsonSerializable(typeof(MikanBangumiIdentityCacheValue))]
+internal sealed partial class MikanBangumiIdentityCacheJsonContext : JsonSerializerContext;

@@ -57,7 +57,9 @@ public sealed record ApplicationOverrideEntry(
     string? AiTmdbMcpUrl = null,
     string? AiBangumiMcpUrl = null,
     bool? WriteBangumiIdWhenTmdbMatched = null,
-    string? AiPromptTemplate = null);
+    string? AiPromptTemplate = null,
+    double? MikanEpisodeIdentityCacheHours = null,
+    double? MikanBangumiIdentityCacheHours = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -269,6 +271,18 @@ public sealed class ApplicationOverrideStore : IDisposable
                 Mikan = options.Metadata.Mikan with
                 {
                     BaseUrl = mikanBaseUrl,
+                    EpisodeIdentityCacheTtl = inheritedFields.Contains(
+                        "mikan_episode_identity_cache_hours")
+                        ? options.Metadata.Mikan.EpisodeIdentityCacheTtl
+                        : settings.MikanEpisodeIdentityCacheHours is { } episodeCacheHours
+                        ? TimeSpan.FromHours(episodeCacheHours)
+                        : options.Metadata.Mikan.EpisodeIdentityCacheTtl,
+                    BangumiIdentityCacheTtl = inheritedFields.Contains(
+                        "mikan_bangumi_identity_cache_hours")
+                        ? options.Metadata.Mikan.BangumiIdentityCacheTtl
+                        : settings.MikanBangumiIdentityCacheHours is { } bangumiCacheHours
+                        ? TimeSpan.FromHours(bangumiCacheHours)
+                        : options.Metadata.Mikan.BangumiIdentityCacheTtl,
                 },
                 Tmdb = options.Metadata.Tmdb with
                 {

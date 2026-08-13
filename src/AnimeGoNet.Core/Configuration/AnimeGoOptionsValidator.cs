@@ -276,6 +276,15 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("Mikan base URL must be an absolute HTTP(S) origin ending in '/' without credentials, query or fragment.");
         }
 
+        ValidateMikanIdentityCacheTtl(
+            "Mikan Episode identity",
+            options.Metadata.Mikan.EpisodeIdentityCacheTtl,
+            errors);
+        ValidateMikanIdentityCacheTtl(
+            "Mikan Bangumi identity",
+            options.Metadata.Mikan.BangumiIdentityCacheTtl,
+            errors);
+
         if (!IsMetadataApiBaseUrl(options.Metadata.Tmdb.BaseUrl))
         {
             errors.Add("TMDB base URL must be an absolute HTTP(S) URL ending in '/' without credentials, query or fragment.");
@@ -398,6 +407,17 @@ public static partial class AnimeGoOptionsValidator
         if (retryDelay < TimeSpan.Zero || retryDelay > TimeSpan.FromMinutes(5))
         {
             errors.Add($"{name} retry delay must be between 0 and 300 seconds.");
+        }
+    }
+
+    private static void ValidateMikanIdentityCacheTtl(
+        string name,
+        TimeSpan ttl,
+        List<string> errors)
+    {
+        if (ttl < TimeSpan.Zero || ttl > TimeSpan.FromDays(3650))
+        {
+            errors.Add($"{name} cache TTL must be zero (permanent) or at most 3650 days.");
         }
     }
 

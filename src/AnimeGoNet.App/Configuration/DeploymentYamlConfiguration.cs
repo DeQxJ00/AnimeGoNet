@@ -635,6 +635,8 @@ internal static class DeploymentYamlConfiguration
             metadata:
               mikan:
                 base_url: {{Scalar(Configured(values, "metadata:mikan:base_url", defaults.Metadata.Mikan.BaseUrl.AbsoluteUri))}}
+                episode_identity_cache_hours: {{Number(values, "metadata:mikan:episode_identity_cache_hours", defaults.Metadata.Mikan.EpisodeIdentityCacheTtl.TotalHours)}}
+                bangumi_identity_cache_hours: {{Number(values, "metadata:mikan:bangumi_identity_cache_hours", defaults.Metadata.Mikan.BangumiIdentityCacheTtl.TotalHours)}}
               tmdb:
                 base_url: {{Scalar(Configured(values, "metadata:tmdb:base_url", defaults.Metadata.Tmdb.BaseUrl.AbsoluteUri))}}
                 image_base_url: {{Scalar(Configured(values, "metadata:tmdb:image_base_url", defaults.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri))}}
@@ -850,6 +852,8 @@ internal static class DeploymentYamlConfiguration
             metadata:
               mikan:
                 base_url: {{Scalar(options.Metadata.Mikan.BaseUrl.AbsoluteUri)}}
+                episode_identity_cache_hours: {{options.Metadata.Mikan.EpisodeIdentityCacheTtl.TotalHours.ToString(CultureInfo.InvariantCulture)}}
+                bangumi_identity_cache_hours: {{options.Metadata.Mikan.BangumiIdentityCacheTtl.TotalHours.ToString(CultureInfo.InvariantCulture)}}
               tmdb:
                 base_url: https://api.themoviedb.org/
                 image_base_url: https://image.tmdb.org/t/p/

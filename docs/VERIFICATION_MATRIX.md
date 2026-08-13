@@ -113,9 +113,10 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 2. 同批次再次处理复用已解析 `bgmid`，不重复抓取作品页；不同 `mikanid` 即使候选 URL 相同也不得共用批次身份。
 3. 链接位于目标段落外、伪造子域名、非 Subject、非正整数、多个冲突 Subject、非法 UTF-8、超限响应和网络失败均返回稳定失败码。
 4. 发现失败时 winner 不进入 Torrent staging；相同批次再次显式处理可重新发现并在成功后继续统一导入。
-5. Episode URL 仅在成功取得有效 `mikanid+groupid` 后写入 `bolt/mikan_episode_identity`，
-   条目无自动过期并可跨 resolver/进程生命周期复用；失败与缺 groupid 不 negative cache，
-   带查询参数 URL 旁路长期缓存但仍正常解析。系统缓存可查看完整明文 JSON 并精确删除。
+5. Episode URL 仅在成功取得有效 `mikanid+groupid` 后写入 `bolt/mikan_episode_identity`；
+   作品页仅在成功取得 bgmid 后写入 `bolt/mikan_bangumi_identity`。两者默认 8760 小时、
+   可独立配置且 `0` 表示永久，并可跨 resolver/进程生命周期复用；失败不 negative cache，
+   带查询参数 Episode URL 旁路长期缓存但仍正常解析。系统缓存可查看明文 JSON 并精确删除。
 
 1. 使用四组预设构造同mikanid/EP的简体H.264、繁体H.265两项，断言第一组后只剩简体并立即短路，封装/编码/分辨率组均未执行。
 2. 构造第一组无法淘汰、第二组外挂命中后剩一项的候选，断言只执行前两组；全部组仍并列时按原RSS顺序稳定选择。

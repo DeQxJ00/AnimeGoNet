@@ -27,6 +27,8 @@ public sealed class ConfigurationApiTests
                     Mikan = new MikanClientOptions
                     {
                         BaseUrl = new Uri("http://mikan.local/"),
+                        EpisodeIdentityCacheTtl = TimeSpan.Zero,
+                        BangumiIdentityCacheTtl = TimeSpan.FromHours(72),
                     },
                     Tmdb = options.Metadata.Tmdb with
                     {
@@ -98,6 +100,14 @@ public sealed class ConfigurationApiTests
         Assert.Equal(
             "http://mikan.local/",
             metadata.GetProperty("mikan").GetProperty("base_url").GetString());
+        Assert.Equal(
+            0,
+            metadata.GetProperty("mikan").GetProperty(
+                "episode_identity_cache_hours").GetDouble());
+        Assert.Equal(
+            72,
+            metadata.GetProperty("mikan").GetProperty(
+                "bangumi_identity_cache_hours").GetDouble());
         var tmdb = metadata.GetProperty("tmdb");
         Assert.Equal("ja-JP", tmdb.GetProperty("language").GetString());
         Assert.Equal(
@@ -163,6 +173,34 @@ public sealed class ConfigurationApiTests
             "tmdb-bearer-secret",
             editable.GetProperty("tmdb_read_access_token").GetString());
         Assert.Equal("ai-api-secret", editable.GetProperty("ai_api_key").GetString());
+    }
+
+    [Fact]
+    public async Task MikanIdentityCacheHoursAreEditableAndPersisted()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                mikanEpisodeIdentityCacheHours: 0,
+                mikanBangumiIdentityCacheHours: 4320));
+
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+        using var response = await app.Client.GetAsync("/api/v1/config");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var editable = json.RootElement.GetProperty("editable");
+        Assert.Equal(0, editable.GetProperty(
+            "mikan_episode_identity_cache_hours").GetDouble());
+        Assert.Equal(4320, editable.GetProperty(
+            "mikan_bangumi_identity_cache_hours").GetDouble());
+
+        var stored = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.Equal(0, stored.Settings?.MikanEpisodeIdentityCacheHours);
+        Assert.Equal(4320, stored.Settings?.MikanBangumiIdentityCacheHours);
     }
 
     [Fact]
@@ -1086,12 +1124,16 @@ public sealed class ConfigurationApiTests
         int tmdbRetryCount = 3,
         double tmdbRetryDelaySeconds = 5,
         int bangumiRetryCount = 3,
-        double bangumiRetryDelaySeconds = 5)
+        double bangumiRetryDelaySeconds = 5,
+        double? mikanEpisodeIdentityCacheHours = null,
+        double? mikanBangumiIdentityCacheHours = null)
     {
         var json = JsonSerializer.Serialize(new
         {
             outbound_proxy_url = outboundProxy,
             outbound_proxy_hosts = outboundHosts ?? [],
+            mikan_episode_identity_cache_hours = mikanEpisodeIdentityCacheHours,
+            mikan_bangumi_identity_cache_hours = mikanBangumiIdentityCacheHours,
             tmdb_base_url = baseUrl,
             tmdb_language = "zh-CN",
             tmdb_http_timeout_seconds = 30,
