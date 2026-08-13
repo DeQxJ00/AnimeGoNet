@@ -60,7 +60,9 @@ public sealed record ApplicationOverrideEntry(
     string? AiPromptTemplate = null,
     double? MikanEpisodeIdentityCacheHours = null,
     double? MikanBangumiIdentityCacheHours = null,
-    bool? AiDebugMode = null);
+    bool? AiDebugMode = null,
+    bool? AiReasoningEffortOverridden = null,
+    string? AiReasoningEffort = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -366,6 +368,10 @@ public sealed class ApplicationOverrideStore : IDisposable
                         && settings.AiModelOverridden == true
                         ? settings.AiModel
                         : options.Metadata.Ai.Model,
+                    ReasoningEffort = !inheritedFields.Contains("ai_reasoning_effort")
+                        && settings.AiReasoningEffortOverridden == true
+                        ? settings.AiReasoningEffort
+                        : options.Metadata.Ai.ReasoningEffort,
                     PromptTemplate = !inheritedFields.Contains("ai_prompt_template")
                         && settings.AiPromptTemplate is not null
                         ? settings.AiPromptTemplate

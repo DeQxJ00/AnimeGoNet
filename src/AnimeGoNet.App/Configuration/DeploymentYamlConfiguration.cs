@@ -666,6 +666,7 @@ internal static class DeploymentYamlConfiguration
                 base_url: ''
                 api_key: ''
                 model: ''
+                reasoning_effort: none
                 # 留空使用程序内置 Prompt；多行自定义值建议通过 WebUI 私有配置保存。
                 prompt_template: ''
                 use_metadata_match: false
@@ -883,6 +884,7 @@ internal static class DeploymentYamlConfiguration
                 base_url: ''
                 api_key: ''
                 model: ''
+                reasoning_effort: none
                 # 留空使用程序内置 Prompt；多行自定义值建议通过 WebUI 私有配置保存。
                 prompt_template: ''
                 use_metadata_match: false

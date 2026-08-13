@@ -383,7 +383,8 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("data_update_auto_import")] bool DataUpdateAutoImport,
     [property: JsonPropertyName("data_update_keep_versions")] int DataUpdateKeepVersions,
     [property: JsonPropertyName("data_update_http_timeout_seconds")] double DataUpdateHttpTimeoutSeconds,
-    [property: JsonPropertyName("locked_fields")] IReadOnlyList<ConfigurationFieldLockResponse> LockedFields);
+    [property: JsonPropertyName("locked_fields")] IReadOnlyList<ConfigurationFieldLockResponse> LockedFields,
+    [property: JsonPropertyName("ai_reasoning_effort")] string AiReasoningEffort = "none");
 
 public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -444,7 +445,8 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("ai_bangumi_mcp_url")] string? AiBangumiMcpUrl = null,
     [property: JsonPropertyName("ai_prompt_template")] string? AiPromptTemplate = null,
     [property: JsonPropertyName("mikan_episode_identity_cache_hours")] double? MikanEpisodeIdentityCacheHours = null,
-    [property: JsonPropertyName("mikan_bangumi_identity_cache_hours")] double? MikanBangumiIdentityCacheHours = null);
+    [property: JsonPropertyName("mikan_bangumi_identity_cache_hours")] double? MikanBangumiIdentityCacheHours = null,
+    [property: JsonPropertyName("ai_reasoning_effort")] string? AiReasoningEffort = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -540,7 +542,8 @@ public sealed record AiConfigurationResponse(
     [property: JsonPropertyName("retry_count")] int RetryCount,
     [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
     [property: JsonPropertyName("tmdb_mcp_url")] string TmdbMcpUrl,
-    [property: JsonPropertyName("bangumi_mcp_url")] string BangumiMcpUrl);
+    [property: JsonPropertyName("bangumi_mcp_url")] string BangumiMcpUrl,
+    [property: JsonPropertyName("reasoning_effort")] string ReasoningEffort = "none");
 
 public sealed record TorrentFetchConfigurationResponse(
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,

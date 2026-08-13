@@ -1911,7 +1911,8 @@ public static class ApiEndpoints
                     ai.RetryCount,
                     ai.UseBangumiPubDateFirst,
                     ai.TmdbMcpUrl.AbsoluteUri,
-                    ai.BangumiMcpUrl.AbsoluteUri),
+                    ai.BangumiMcpUrl.AbsoluteUri,
+                    ai.ReasoningEffort ?? "none"),
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.WriteBangumiIdWhenTmdbMatched,
                 options.Metadata.MikanTrustedOffsetCacheEnabled),
@@ -2002,7 +2003,8 @@ public static class ApiEndpoints
                 item.Source,
                 item.EnvironmentVariables,
                 item.CommandLineArguments,
-                item.ControllingKeys)).ToArray());
+                item.ControllingKeys)).ToArray(),
+            AiReasoningEffort: ai.ReasoningEffort ?? "none");
     }
 
     private static string SecretState(bool overridden, string? value) =>
@@ -2204,6 +2206,10 @@ public static class ApiEndpoints
             afterSeason.UseFirstSeason);
         Add("ai_base_url", beforeAi.BaseUrl?.AbsoluteUri, afterAi.BaseUrl?.AbsoluteUri);
         Add("ai_model", beforeAi.Model, afterAi.Model);
+        Add(
+            "ai_reasoning_effort",
+            beforeAi.ReasoningEffort ?? "none",
+            afterAi.ReasoningEffort ?? "none");
         Add(
             "ai_prompt_template",
             PromptSummary(beforeAi.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate()),
@@ -2443,6 +2449,15 @@ public static class ApiEndpoints
         {
             throw new ArgumentException("ai_model must contain at most 256 characters.");
         }
+        if (!IsOptionalReasoningEffort(request.AiReasoningEffort))
+        {
+            throw new ArgumentException(
+                "ai_reasoning_effort must be none, low, medium or high.");
+        }
+        var aiReasoningEffortSpecified = HasValue(request.AiReasoningEffort);
+        var aiReasoningEffort = aiReasoningEffortSpecified
+            ? ParseReasoningEffort(request.AiReasoningEffort, inherited: null)
+            : current?.AiReasoningEffort;
         var aiPromptTemplate = string.IsNullOrWhiteSpace(request.AiPromptTemplate)
             ? current?.AiPromptTemplate
             : request.AiPromptTemplate.Replace("\r\n", "\n", StringComparison.Ordinal);
@@ -2607,6 +2622,10 @@ public static class ApiEndpoints
             AiApiKey: request.ClearAiApiKey ? null : aiApiKey ?? current?.AiApiKey,
             AiModelOverridden: true,
             AiModel: aiModel,
+            AiReasoningEffortOverridden:
+                aiReasoningEffortSpecified
+                || current?.AiReasoningEffortOverridden == true,
+            AiReasoningEffort: aiReasoningEffort,
             AiTmdbMcpUrl: aiTmdbMcpUrl,
             AiBangumiMcpUrl: aiBangumiMcpUrl,
             WriteBangumiIdWhenTmdbMatched:

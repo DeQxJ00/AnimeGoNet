@@ -23,6 +23,7 @@ public sealed class AiDeploymentConfigurationTests
                     "--ai_base_url=https://ai.test.invalid/compatible/",
                     "--ai_api_key=deployment-secret",
                     "--ai_model=test-model",
+                    "--ai_reasoning_effort=high",
                     $"--ai_prompt_template={prompt}",
                     "--ai_use_metadata_match=true",
                     "--ai_debug_mode=true",
@@ -38,6 +39,7 @@ public sealed class AiDeploymentConfigurationTests
             Assert.Equal(new Uri("https://ai.test.invalid/compatible/"), ai.BaseUrl);
             Assert.Equal("deployment-secret", ai.ApiKey);
             Assert.Equal("test-model", ai.Model);
+            Assert.Equal("high", ai.ReasoningEffort);
             Assert.Equal(prompt, ai.PromptTemplate);
             Assert.True(ai.UseMetadataMatch);
             Assert.True(ai.DebugMode);
@@ -73,6 +75,32 @@ public sealed class AiDeploymentConfigurationTests
 
             Assert.Contains("ai_use_metadata_match", exception.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("deployment-secret", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvalidReasoningEffortFailsWithSafeConfigurationName()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "animegonet-ai-deployment-config",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => AnimeGoApplication.BuildAsync(
+                    Args(root, "--ai_reasoning_effort=ultra"),
+                    runningInContainer: false,
+                    startBackgroundWorkers: false));
+
+            Assert.Contains("ai_reasoning_effort", exception.Message, StringComparison.Ordinal);
         }
         finally
         {

@@ -55,14 +55,44 @@ public sealed class DeploymentConfigurationLocksTests
             "ai_base_url",
             "ai_api_key",
             "ai_model",
+            "ai_reasoning_effort",
             "ai_prompt_template",
             "ai_tmdb_mcp_url",
             "ai_bangumi_mcp_url",
         ]);
 
         Assert.Equal(
-            ["ai_api_key", "ai_bangumi_mcp_url", "ai_base_url", "ai_model", "ai_prompt_template", "ai_tmdb_mcp_url"],
+            ["ai_api_key", "ai_bangumi_mcp_url", "ai_base_url", "ai_model", "ai_prompt_template", "ai_reasoning_effort", "ai_tmdb_mcp_url"],
             locks.Items.Select(item => item.Field).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void ReasoningEffortLockReappliesDeploymentValue()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var deployment = defaults with
+        {
+            Metadata = defaults.Metadata with
+            {
+                Ai = defaults.Metadata.Ai with { ReasoningEffort = "high" },
+            },
+        };
+        var candidate = deployment with
+        {
+            Metadata = deployment.Metadata with
+            {
+                Ai = deployment.Metadata.Ai with { ReasoningEffort = "low" },
+            },
+        };
+        var locks = DeploymentConfigurationLocks.FromVariableNames(
+            ["metadata__ai__reasoning_effort"]);
+
+        var result = locks.Reapply(deployment, candidate);
+
+        Assert.Equal("high", result.Metadata.Ai.ReasoningEffort);
+        Assert.Equal(
+            ["ai_reasoning_effort"],
+            locks.FindChangedLockedFields(deployment, candidate));
     }
 
     [Fact]

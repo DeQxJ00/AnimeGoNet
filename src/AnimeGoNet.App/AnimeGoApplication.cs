@@ -795,6 +795,11 @@ public static class AnimeGoApplication
                         configuration,
                         "ai_model",
                         "metadata:ai:model")),
+                    ReasoningEffort = ParseOptionalReasoningEffort(
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_reasoning_effort",
+                            "metadata:ai:reasoning_effort")),
                     PromptTemplate = NormalizeOptional(FirstConfigurationValue(
                         configuration,
                         "ai_prompt_template",
@@ -1355,6 +1360,18 @@ public static class AnimeGoApplication
         }
 
         return parsed;
+    }
+
+    private static string? ParseOptionalReasoningEffort(string? value)
+    {
+        var normalized = NormalizeOptional(value)?.ToLowerInvariant();
+        return normalized switch
+        {
+            null or "none" => null,
+            "low" or "medium" or "high" => normalized,
+            _ => throw new InvalidOperationException(
+                "ai_reasoning_effort must be none, low, medium or high."),
+        };
     }
 
     private static HttpClient CreateAiReferenceHttpClient()

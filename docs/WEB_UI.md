@@ -117,7 +117,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进入同一个配置编辑器。Mikan 内网反向代理只对明确配置的 host 放宽私网 DNS 门禁，不会把其它 Torrent host 一并设为可信；TMDB 图片 Base URL 保留 `/t/p/` 等路径前缀。
 
-“AI 与 MCP”分区可修改 OpenAI-compatible Base URL、模型、AI API Key、TMDB MCP、Bangumi MCP 和唯一正式 Prompt。后台 Worker 与“AI 匹配测试工具”默认使用同一份有效 Prompt；模板保存前必须保留生产契约的全部占位符和条件区块，最大 128 KiB，可一键载入程序内置默认模板。保存前差异只显示 Prompt 版本、字符数和短 SHA-256，完整模板不进入差异响应。配置编辑器会回填当前有效的 TMDB API Key、Read Token 与 AI API Key；未修改时请求仍按“保留现值”提交，勾选后才明确清除。上述字段都进入部署字段锁，环境变量或命令行已控制时 WebUI 只读且服务端拒绝改写。
+“AI 与 MCP”分区可修改 OpenAI-compatible Base URL、模型、推理程度、AI API Key、TMDB MCP、Bangumi MCP 和唯一正式 Prompt。推理程度与测试工具统一为 `none / low / medium / high`，其中 `none` 不发送 reasoning，其余值保存到私有配置、重启后用于正式后台 AI 请求。后台 Worker 与“AI 匹配测试工具”默认使用同一份有效 Prompt；模板保存前必须保留生产契约的全部占位符和条件区块，最大 128 KiB，可一键载入程序内置默认模板。保存前差异只显示 Prompt 版本、字符数和短 SHA-256，完整模板不进入差异响应。配置编辑器会回填当前有效的 TMDB API Key、Read Token 与 AI API Key；未修改时请求仍按“保留现值”提交，勾选后才明确清除。上述字段都进入部署字段锁，环境变量或命令行已控制时 WebUI 只读且服务端拒绝改写。
 
 运行配置摘要和编辑对话框都从受统一 API 鉴权保护的 `editable` 对象读取并直接显示 TMDB/AI 当前有效凭据；`api_key_configured` 与 `read_access_token_configured` 仍保留作机器状态字段。应用自己的 Access Key 不回传，避免已认证页面把认证钥匙本身再暴露。目录标明修改需要重启。页面提供带 revision 的私密覆盖编辑和恢复部署默认操作，未修改的密钥保持原值，另有明确清除选项；保存后持续显示 saved/applied revision 差异。
 

@@ -1258,6 +1258,14 @@
           <div class="configuration-data-update-grid">
             <label class="wide">OpenAI-compatible Base URL（可选）<input id="configuration-ai-base-url" type="url" maxlength="2048" placeholder="http://openai.local/"></label>
             <label>模型<input id="configuration-ai-model" maxlength="256" placeholder="gpt-5.4-mini"></label>
+            <label>推理程度
+              <select id="configuration-ai-reasoning-effort">
+                <option value="none">none（不发送 reasoning）</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
             <label>AI API Key<input id="configuration-ai-key" autocomplete="off" spellcheck="false"></label>
             <label class="configuration-clear"><input id="configuration-ai-key-clear" type="checkbox">明确清除 AI API Key</label>
             <p id="configuration-ai-key-state" class="configuration-secret-state wide"></p>

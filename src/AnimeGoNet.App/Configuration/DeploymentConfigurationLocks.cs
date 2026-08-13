@@ -55,6 +55,7 @@ public sealed class DeploymentConfigurationLocks
         new("ai_base_url", ["ai_base_url", "metadata:ai:base_url"]),
         new("ai_api_key", ["ai_api_key", "metadata:ai:api_key"]),
         new("ai_model", ["ai_model", "metadata:ai:model"]),
+        new("ai_reasoning_effort", ["ai_reasoning_effort", "metadata:ai:reasoning_effort"]),
         new("ai_prompt_template", ["ai_prompt_template", "metadata:ai:prompt_template"]),
         new("ai_tmdb_mcp_url", ["ai_tmdb_mcp_url", "metadata:ai:tmdb_mcp_url"]),
         new("ai_bangumi_mcp_url", ["ai_bangumi_mcp_url", "metadata:ai:bangumi_mcp_url"]),
@@ -333,6 +334,14 @@ public sealed class DeploymentConfigurationLocks
                     current.AiModelOverridden,
                     candidate.AiModelOverridden),
                 AiModel = Preserve("ai_model", current.AiModel, candidate.AiModel),
+                AiReasoningEffortOverridden = Preserve(
+                    "ai_reasoning_effort",
+                    current.AiReasoningEffortOverridden,
+                    candidate.AiReasoningEffortOverridden),
+                AiReasoningEffort = Preserve(
+                    "ai_reasoning_effort",
+                    current.AiReasoningEffort,
+                    candidate.AiReasoningEffort),
                 AiPromptTemplate = Preserve(
                     "ai_prompt_template",
                     current.AiPromptTemplate,
@@ -577,6 +586,10 @@ public sealed class DeploymentConfigurationLocks
         {
             ai = ai with { Model = deployment.Metadata.Ai.Model };
         }
+        if (IsLocked("ai_reasoning_effort"))
+        {
+            ai = ai with { ReasoningEffort = deployment.Metadata.Ai.ReasoningEffort };
+        }
         if (IsLocked("ai_prompt_template"))
         {
             ai = ai with { PromptTemplate = deployment.Metadata.Ai.PromptTemplate };
@@ -798,6 +811,10 @@ public sealed class DeploymentConfigurationLocks
             "ai_model",
             deployment.Metadata.Ai.Model,
             candidate.Metadata.Ai.Model);
+        AddIfChanged(
+            "ai_reasoning_effort",
+            deployment.Metadata.Ai.ReasoningEffort,
+            candidate.Metadata.Ai.ReasoningEffort);
         AddIfChanged(
             "ai_prompt_template",
             deployment.Metadata.Ai.PromptTemplate,

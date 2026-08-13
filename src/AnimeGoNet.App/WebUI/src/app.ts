@@ -340,6 +340,7 @@ interface RuntimeConfiguration {
       provider: string;
       base_url: string | null;
       model: string | null;
+      reasoning_effort: "none" | "low" | "medium" | "high";
       prompt_version: string;
       prompt_customized: boolean;
       api_key_configured: boolean;
@@ -400,6 +401,7 @@ interface RuntimeConfiguration {
     season_failure_use_first_season: boolean;
     ai_base_url: string | null;
     ai_model: string | null;
+    ai_reasoning_effort: "none" | "low" | "medium" | "high";
     ai_prompt_template: string;
     ai_api_key_state: "inherit" | "configured" | "cleared";
     ai_api_key: string | null;
@@ -469,6 +471,7 @@ interface ConfigurationUpdatePayload {
   season_failure_use_first_season: boolean;
   ai_base_url: string | null;
   ai_model: string | null;
+  ai_reasoning_effort: "none" | "low" | "medium" | "high";
   ai_prompt_template: string;
   ai_api_key: string | null;
   clear_ai_api_key: boolean;
@@ -5180,6 +5183,7 @@ const configurationLockSelectors: Record<string, string[]> = {
   bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
   ai_base_url: ["#configuration-ai-base-url"],
   ai_model: ["#configuration-ai-model"],
+  ai_reasoning_effort: ["#configuration-ai-reasoning-effort"],
   ai_prompt_template: ["#configuration-ai-prompt-template", "#configuration-ai-prompt-reset"],
   ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
   ai_tmdb_mcp_url: ["#configuration-ai-tmdb-mcp-url"],
@@ -5288,6 +5292,10 @@ function openConfigurationEditor(): void {
   setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
   setConfigurationValue("#configuration-ai-base-url", editable.ai_base_url ?? "");
   setConfigurationValue("#configuration-ai-model", editable.ai_model ?? "");
+  setConfigurationValue(
+    "#configuration-ai-reasoning-effort",
+    editable.ai_reasoning_effort,
+  );
   element<HTMLTextAreaElement>("#configuration-ai-prompt-template").value =
     editable.ai_prompt_template;
   element<HTMLElement>("#configuration-ai-prompt-status").textContent =
@@ -5371,6 +5379,7 @@ const configurationFieldLabels: Record<string, string> = {
   season_failure_use_first_season: "TMDBFailUseFirstSeason",
   ai_base_url: "OpenAI-compatible API 地址",
   ai_model: "AI 模型",
+  ai_reasoning_effort: "AI 推理程度",
   ai_prompt_template: "正式 AI Prompt",
   ai_api_key: "AI API Key",
   ai_tmdb_mcp_url: "TMDB MCP 地址",
@@ -5456,6 +5465,9 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-ai-base-url").value || null,
     ai_model:
       element<HTMLInputElement>("#configuration-ai-model").value || null,
+    ai_reasoning_effort:
+      element<HTMLSelectElement>("#configuration-ai-reasoning-effort").value as
+        ConfigurationUpdatePayload["ai_reasoning_effort"],
     ai_prompt_template:
       element<HTMLTextAreaElement>("#configuration-ai-prompt-template").value,
     ai_api_key: configurationSecretUpdateValue(

@@ -37,6 +37,7 @@ public sealed class DeploymentYamlConfigurationTests
                 string.Empty,
                 snapshot.Values["sources:mikan:mikan_identity_cookie"]);
             Assert.Equal("false", snapshot.Values["metadata:ai:use_metadata_match"]);
+            Assert.Equal("none", snapshot.Values["metadata:ai:reasoning_effort"]);
             Assert.Equal("600", snapshot.Values["metadata:ai:timeout_seconds"]);
             Assert.Equal(
                 defaults.Metadata.Mikan.BaseUrl.AbsoluteUri,

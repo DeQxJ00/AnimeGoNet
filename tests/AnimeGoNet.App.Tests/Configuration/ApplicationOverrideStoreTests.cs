@@ -28,6 +28,8 @@ public sealed class ApplicationOverrideStoreTests
             Assert.Equal(1, saved.Revision);
             Assert.Equal("private-api-key", reloaded.Settings?.TmdbApiKey);
             Assert.Equal("private-read-token", reloaded.Settings?.TmdbReadAccessToken);
+            Assert.True(reloaded.Settings?.AiReasoningEffortOverridden);
+            Assert.Equal("medium", reloaded.Settings?.AiReasoningEffort);
             Assert.True(reloaded.Settings?.DataUpdateEnabled);
             Assert.Equal("0 15 4 * * ?", reloaded.Settings?.DataUpdateCron);
             Assert.Equal(
@@ -355,6 +357,24 @@ public sealed class ApplicationOverrideStoreTests
         Assert.Equal(deployment.TorrentFetch, applied.TorrentFetch);
     }
 
+    [Fact]
+    public void ReasoningEffortOverrideSupportsConfiguredLevelAndExplicitNone()
+    {
+        var defaults = AnimeGoDefaults.CreateNative(Path.GetTempPath());
+        var medium = ApplicationOverrideStore.Apply(
+            defaults,
+            new ApplicationOverrideSnapshot(1, 1, Entry()));
+        var none = ApplicationOverrideStore.Apply(
+            defaults,
+            new ApplicationOverrideSnapshot(
+                1,
+                2,
+                Entry() with { AiReasoningEffort = null }));
+
+        Assert.Equal("medium", medium.Metadata.Ai.ReasoningEffort);
+        Assert.Null(none.Metadata.Ai.ReasoningEffort);
+    }
+
     private static ApplicationOverrideEntry Entry() => new(
         "https://tmdb.test.invalid/",
         "en-US",
@@ -394,5 +414,7 @@ public sealed class ApplicationOverrideStoreTests
         OutboundProxyHosts: ["tmdb.test.invalid", "*.mikanime.tv"],
         WriteBangumiIdWhenTmdbMatched: true,
         AiPromptTemplate: AiMetadataPromptRenderer.LoadTemplate()
-            .Replace("你是一个动画", "PRIVATE-PROMPT 你是一个动画", StringComparison.Ordinal));
+            .Replace("你是一个动画", "PRIVATE-PROMPT 你是一个动画", StringComparison.Ordinal),
+        AiReasoningEffortOverridden: true,
+        AiReasoningEffort: "medium");
 }

@@ -244,6 +244,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-ai-metadata\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-base-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-model\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-reasoning-effort\"", html, StringComparison.Ordinal);
+        Assert.Contains("none（不发送 reasoning）", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-key\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-tmdb-mcp-url\"", html, StringComparison.Ordinal);
@@ -579,6 +581,7 @@ public sealed class ConfigurationApiTests
                 readToken: "new-read-secret",
                 aiBaseUrl: "http://openai.test.invalid/",
                 aiModel: "test-live-model",
+                aiReasoningEffort: "high",
                 aiPromptTemplate: customPrompt,
                 aiApiKey: "new-ai-secret",
                 aiTmdbMcpUrl: "http://tmdb-mcp.test.invalid/mcp",
@@ -613,6 +616,7 @@ public sealed class ConfigurationApiTests
                 editable.GetProperty("tmdb_read_access_token").GetString());
             Assert.Equal("http://openai.test.invalid/", editable.GetProperty("ai_base_url").GetString());
             Assert.Equal("test-live-model", editable.GetProperty("ai_model").GetString());
+            Assert.Equal("high", editable.GetProperty("ai_reasoning_effort").GetString());
             Assert.Equal(customPrompt, editable.GetProperty("ai_prompt_template").GetString());
             Assert.Equal("configured", editable.GetProperty("ai_api_key_state").GetString());
             Assert.Equal("new-ai-secret", editable.GetProperty("ai_api_key").GetString());
@@ -630,6 +634,8 @@ public sealed class ConfigurationApiTests
         Assert.Equal("new-read-secret", saved.Settings?.TmdbReadAccessToken);
         Assert.Equal("http://openai.test.invalid/", saved.Settings?.AiBaseUrl);
         Assert.Equal("test-live-model", saved.Settings?.AiModel);
+        Assert.True(saved.Settings?.AiReasoningEffortOverridden);
+        Assert.Equal("high", saved.Settings?.AiReasoningEffort);
         Assert.Equal(customPrompt, saved.Settings?.AiPromptTemplate);
         Assert.Equal("new-ai-secret", saved.Settings?.AiApiKey);
         Assert.Equal("http://tmdb-mcp.test.invalid/mcp", saved.Settings?.AiTmdbMcpUrl);
@@ -664,6 +670,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal("new-api-secret", preserved.Settings?.TmdbApiKey);
         Assert.Equal("new-read-secret", preserved.Settings?.TmdbReadAccessToken);
         Assert.Equal("new-ai-secret", preserved.Settings?.AiApiKey);
+        Assert.Equal("high", preserved.Settings?.AiReasoningEffort);
         Assert.True(preserved.Settings?.AiUseMetadataMatch);
         using (var desiredResponse = await app.Client.GetAsync("/api/v1/config"))
         using (var desired = JsonDocument.Parse(await desiredResponse.Content.ReadAsStreamAsync()))
@@ -760,6 +767,57 @@ public sealed class ConfigurationApiTests
         Assert.True(saved.Settings?.AiUseMetadataMatch);
         Assert.True(saved.Settings?.AiUseSeasonMatch);
         Assert.True(saved.Settings?.AiUseEpisodeMatch);
+    }
+
+    [Fact]
+    public async Task ReasoningEffortCanBeExplicitlyDisabled()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var response = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(expectedRevision: 0, aiReasoningEffort: "none"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.True(saved.Settings?.AiReasoningEffortOverridden);
+        Assert.Null(saved.Settings?.AiReasoningEffort);
+        using var currentResponse = await app.Client.GetAsync("/api/v1/config");
+        using var current = JsonDocument.Parse(
+            await currentResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(
+            "none",
+            current.RootElement.GetProperty("editable")
+                .GetProperty("ai_reasoning_effort").GetString());
+    }
+
+    [Fact]
+    public async Task ReasoningEffortPreviewIsReviewableAndInvalidValueIsRejected()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var previewResponse = await app.Client.PostAsync(
+            "/api/v1/config/preview",
+            Payload(expectedRevision: 0, aiReasoningEffort: "high"));
+        using var preview = JsonDocument.Parse(
+            await previewResponse.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
+        var change = Assert.Single(
+            preview.RootElement.GetProperty("changes").EnumerateArray(),
+            item => item.GetProperty("field").GetString() == "ai_reasoning_effort");
+        Assert.Equal("none", change.GetProperty("before").GetString());
+        Assert.Equal("high", change.GetProperty("after").GetString());
+        Assert.Equal("restart", change.GetProperty("effect").GetString());
+
+        using var invalid = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(expectedRevision: 0, aiReasoningEffort: "ultra"));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Contains(
+            "ai_reasoning_effort",
+            await invalid.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1126,7 +1184,8 @@ public sealed class ConfigurationApiTests
         int bangumiRetryCount = 3,
         double bangumiRetryDelaySeconds = 5,
         double? mikanEpisodeIdentityCacheHours = null,
-        double? mikanBangumiIdentityCacheHours = null)
+        double? mikanBangumiIdentityCacheHours = null,
+        string? aiReasoningEffort = null)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -1150,6 +1209,7 @@ public sealed class ConfigurationApiTests
             bangumi_retry_delay_seconds = bangumiRetryDelaySeconds,
             ai_base_url = aiBaseUrl,
             ai_model = aiModel,
+            ai_reasoning_effort = aiReasoningEffort,
             ai_prompt_template = aiPromptTemplate,
             ai_api_key = aiApiKey,
             clear_ai_api_key = clearAiApiKey,

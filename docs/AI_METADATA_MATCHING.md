@@ -52,6 +52,12 @@ WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Test
 
 模型连接字段与原 Tester 一致：Base URL、API Key、Model、Responses/Chat Completions、reasoning effort、Responses Web Search、600 秒默认超时、单次测试 HTTP 代理、TMDB/BGM MCP 地址和 AniDB URL 模板。API Key 只存在于当前请求和内存，不进入浏览器持久化、Prompt、执行日志或响应。Mikan URL 导入继续使用主程序全局“域名匹配代理”，不使用该测试代理。
 
+主程序“设置与备份 / AI 与 MCP”提供正式模型的推理程度：`none`、`low`、`medium`、
+`high`。`none` 表示不向 OpenAI-compatible 请求写入 `reasoning`；其余值以
+`reasoning: { effort }` 发送，保存到私有配置并在编辑器中回填，重启后用于后台 AI 匹配。
+部署 YAML/命令行也可使用 `metadata.ai.reasoning_effort` / `ai_reasoning_effort`，部署键
+存在时 WebUI 只读。该设置不改变 Prompt。
+
 该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。`run-stream` 逐行返回 `progress/result/stopped/error`；结果包含原始 Provider 响应、提取后的模型 JSON、结构校验、`request_identity`、累计 Token、每轮脱敏 AI 请求、工具顺序与脱敏 Request/Response Content、本地 offset 及主程序 TMDB 二次验证。密钥、Authorization、Cookie、passkey 和宿主机路径不得出现在审计内容。
 
 `GET /api/v1/ai-test/prompt` 返回当前进程实际使用的 `tmdb-ai-match-v16` 生产模板、程序内置默认模板、是否自定义及长度上限。WebUI“编辑应用配置 / AI 与 MCP”可持久化正式 Prompt 私有覆盖，保存前验证全部必需占位符和条件区块，预览只显示版本、字符数和短 SHA-256，不回显完整差异；保存后重启生效。测试页的高级 Prompt 仍可临时修改并按版本保存浏览器草稿，但只影响当次测试；“恢复默认”恢复当前进程的有效生产模板，不写配置。

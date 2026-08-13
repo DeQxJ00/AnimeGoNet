@@ -67,7 +67,7 @@ Provider 内的兼容别名。因此更高层的 `--data_path`、
 并返回 `command_line_arguments`、统一的 `controlling_keys` 以及
 `environment` / `command_line` / `environment_and_command_line` 来源。命令行只
 投影参数名，不投影 `=` 后的 URL 或 secret。当前全部可编辑字段均参与部署锁：
-Mikan 地址、TMDB API/图片地址、TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时/正式 Prompt、Bangumi 完全兜底、
+Mikan 地址、TMDB API/图片地址、TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时/推理程度/正式 Prompt、Bangumi 完全兜底、
 可信 offset 缓存、Torrent HTTP/容量/redirect/staging 以及数据更新设置。锁定值
 在读取 `application.private.json` 后重新应用；保存其他字段不会把部署值固化到
 私有文件。
@@ -128,7 +128,7 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `mikan_base_url`、`tmdb_base_url`、`tmdb_image_base_url`、`tmdb_api_key`、`tmdb_cache_hour`、
 `ANIMEGO_THEMOVIEDB_KEY`、`bangumi_base_url`、`outbound_proxy_url`、
 `outbound_proxy_hosts`、`ANIMEGO_OUTBOUND_PROXY_URL`、`ANIMEGO_OUTBOUND_PROXY_HOSTS`、
-`ai_base_url`、`ai_api_key`、`ai_model`、`ai_prompt_template`、`ai_tmdb_mcp_url`、`ai_bangumi_mcp_url`、
+`ai_base_url`、`ai_api_key`、`ai_model`、`ai_reasoning_effort`、`ai_prompt_template`、`ai_tmdb_mcp_url`、`ai_bangumi_mcp_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
 `ANIMEGO_WEB_HOST`、
