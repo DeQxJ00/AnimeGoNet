@@ -39,6 +39,29 @@ public sealed class RequestJsonTests
     }
 
     [Fact]
+    public async Task ChatFinalResponseAllowsNullToolCalls()
+    {
+        var config = new TesterConfig(
+            "https://example.test/",
+            "key",
+            "model-x",
+            ApiMode.ChatCompletions,
+            null,
+            false,
+            30,
+            null);
+        const string response =
+            """{"choices":[{"message":{"content":"{\"matched\":false}","tool_calls":null}}]}""";
+        using var client = new HttpClient(new StubHandler(HttpStatusCode.OK, response));
+        var api = new OpenAiCompatibleClient(client, config);
+
+        ApiCallResult result = await api.SendAsync("prompt", CancellationToken.None);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal("{\"matched\":false}", result.ModelJson);
+    }
+
+    [Fact]
     public void BaseUrlPathPrefixIsPreserved()
     {
         var config = new TesterConfig("https://zenmux.ai/api/", "key", "model-x", ApiMode.Responses, "medium", false, 30, null);

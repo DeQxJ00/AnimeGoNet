@@ -497,7 +497,12 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, TesterConfig c
         if (!document.RootElement.TryGetProperty("choices", out JsonElement choices) || choices.ValueKind != JsonValueKind.Array) return calls;
         foreach (JsonElement choice in choices.EnumerateArray())
         {
-            if (!choice.TryGetProperty("message", out JsonElement message) || !message.TryGetProperty("tool_calls", out JsonElement toolCalls)) continue;
+            if (!choice.TryGetProperty("message", out JsonElement message)
+                || !message.TryGetProperty("tool_calls", out JsonElement toolCalls)
+                || toolCalls.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
             foreach (JsonElement toolCall in toolCalls.EnumerateArray())
             {
                 string id = toolCall.GetProperty("id").GetString() ?? Guid.NewGuid().ToString("N");
