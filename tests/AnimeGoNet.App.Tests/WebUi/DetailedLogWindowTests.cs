@@ -16,6 +16,9 @@ public sealed class DetailedLogWindowTests
             "live-log-search",
             "live-log-category",
             "live-log-event-id",
+            "live-log-from",
+            "live-log-to",
+            "live-log-exception-only",
             "live-log-auto-scroll",
             "live-log-wrap",
             "live-log-copy",
@@ -24,6 +27,11 @@ public sealed class DetailedLogWindowTests
             Assert.Contains($"id=\"{id}\"", html, StringComparison.Ordinal);
         }
         Assert.Contains("详细日志筛选", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"ai-log-filters\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"ai-log-list\"", html, StringComparison.Ordinal);
+        Assert.Contains("AI 调用日志", html, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/logs/ai-invocations", script, StringComparison.Ordinal);
+        Assert.Contains("loadAiInvocationLogs", script, StringComparison.Ordinal);
         Assert.Contains("copyVisibleLiveLogs", script, StringComparison.Ordinal);
         Assert.Contains("maximumRenderedLogs = 500", script, StringComparison.Ordinal);
         Assert.Contains("parseLiveLogEntry", parser, StringComparison.Ordinal);

@@ -24,6 +24,7 @@
         <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
+        <button type="button" data-workspace-target="logs"><span aria-hidden="true">≡</span>日志</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统缓存</button>
       </nav>
       <p class="sidebar-footnote">配置编辑页直接回填本机已保存值；日志与运行轨迹继续脱敏。</p>
@@ -355,11 +356,11 @@
       </div>
     </section>
 
-    <section id="live-logs" aria-labelledby="live-logs-title" data-workspace="tasks" data-subview="logs" data-nav-label="详细日志">
+    <section id="live-logs" aria-labelledby="live-logs-title" data-workspace="logs" data-subview="runtime" data-nav-label="运行日志">
       <div class="section-heading live-log-heading">
         <div>
           <p class="eyebrow">Realtime diagnostics</p>
-          <h2 id="live-logs-title">实时日志</h2>
+          <h2 id="live-logs-title">运行日志</h2>
         </div>
         <div class="live-log-actions">
           <label>最低级别
@@ -379,6 +380,22 @@
           <button id="live-log-clear" type="button" class="secondary-button">清空本页</button>
         </div>
       </div>
+      <div id="live-log-summary" class="log-summary-grid" aria-label="当前运行日志摘要">
+        <article><span>已接收</span><strong id="live-log-total">0</strong></article>
+        <article><span>警告</span><strong id="live-log-warning-count">0</strong></article>
+        <article><span>错误</span><strong id="live-log-error-count">0</strong></article>
+        <article><span>AI 相关</span><strong id="live-log-ai-count">0</strong></article>
+      </div>
+      <div id="live-log-domain-filter" class="log-quick-filters" aria-label="运行日志快速分类">
+        <button type="button" class="secondary-button active" data-log-domain="all">全部</button>
+        <button type="button" class="secondary-button" data-log-domain="ai">AI</button>
+        <button type="button" class="secondary-button" data-log-domain="tmdb">TMDB</button>
+        <button type="button" class="secondary-button" data-log-domain="metadata">匹配</button>
+        <button type="button" class="secondary-button" data-log-domain="download">下载 / qB</button>
+        <button type="button" class="secondary-button" data-log-domain="rss">Mikan / RSS</button>
+        <button type="button" class="secondary-button" data-log-domain="organize">整理</button>
+        <button type="button" class="secondary-button" data-log-domain="system">系统</button>
+      </div>
       <form id="live-log-filters" class="live-log-filters" aria-label="详细日志筛选">
         <label class="wide">关键词
           <input id="live-log-search" type="search" maxlength="200" placeholder="任务标题、阶段、错误码或消息">
@@ -389,6 +406,13 @@
         <label>Event ID
           <input id="live-log-event-id" type="number" min="0" step="1" placeholder="例如 4301">
         </label>
+        <label>开始时间
+          <input id="live-log-from" type="datetime-local" step="1">
+        </label>
+        <label>结束时间
+          <input id="live-log-to" type="datetime-local" step="1">
+        </label>
+        <label class="live-log-switch"><input id="live-log-exception-only" type="checkbox">仅异常</label>
         <label class="live-log-switch"><input id="live-log-auto-scroll" type="checkbox" checked>自动滚动</label>
         <label class="live-log-switch"><input id="live-log-wrap" type="checkbox" checked>长行换行</label>
       </form>
@@ -400,6 +424,54 @@
       <div id="live-log-stream" class="live-log-stream" role="log" aria-label="实时日志输出">
         <p class="muted empty">等待日志…</p>
       </div>
+    </section>
+
+    <section id="ai-invocation-logs" aria-labelledby="ai-invocation-logs-title" data-workspace="logs" data-subview="ai-invocations" data-nav-label="AI 调用日志">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Persistent AI audit</p>
+          <h2 id="ai-invocation-logs-title">AI 调用日志</h2>
+        </div>
+        <button id="ai-log-reload" type="button" class="secondary-button">刷新</button>
+      </div>
+      <p class="muted">按实际 AI 调用跨任务汇总模型、阶段、结果、耗时、HTTP 请求、工具调用和 Token。Prompt、响应正文、API Key 与私密 URL 不进入此审计。</p>
+      <div id="ai-log-summary" class="log-summary-grid" aria-label="AI 调用汇总">
+        <article><span>调用记录</span><strong id="ai-log-total">—</strong></article>
+        <article><span>成功 / 失败</span><strong id="ai-log-result-total">—</strong></article>
+        <article><span>Token</span><strong id="ai-log-token-total">—</strong></article>
+        <article><span>HTTP / 工具</span><strong id="ai-log-request-total">—</strong></article>
+      </div>
+      <form id="ai-log-filters" class="ai-log-filters" aria-label="AI 调用日志筛选">
+        <label class="wide">搜索
+          <input id="ai-log-search" type="search" maxlength="200" placeholder="任务标题、ID、来源、策略、错误码或原因">
+        </label>
+        <label>阶段
+          <select id="ai-log-stage"><option value="">全部阶段</option><option value="series">Series</option><option value="season">Season</option><option value="episode">Episode</option></select>
+        </label>
+        <label>结果
+          <select id="ai-log-result"><option value="">全部结果</option><option value="matched">成功</option><option value="not_matched">未匹配</option><option value="error">调用 / 验证错误</option><option value="failed">历史失败</option><option value="skipped">跳过</option><option value="not_applicable">不适用</option></select>
+        </label>
+        <label>模型
+          <input id="ai-log-model" type="search" maxlength="256" placeholder="例如 gpt-5.6-luna">
+        </label>
+        <label>开始时间
+          <input id="ai-log-from" type="datetime-local" step="1">
+        </label>
+        <label>结束时间
+          <input id="ai-log-to" type="datetime-local" step="1">
+        </label>
+        <label>每页
+          <select id="ai-log-page-size"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select>
+        </label>
+        <div class="form-actions"><button type="submit">查询</button><button id="ai-log-reset" type="button" class="secondary-button">重置</button></div>
+      </form>
+      <p id="ai-log-status" class="muted" role="status">正在读取 AI 调用记录…</p>
+      <div id="ai-log-list" class="ai-log-list" aria-live="polite" aria-busy="true"><p class="ui-state ui-state--loading muted empty">正在读取…</p></div>
+      <nav class="cache-pagination" aria-label="AI 调用日志分页">
+        <button id="ai-log-previous" type="button" class="secondary-button" disabled>上一页</button>
+        <span id="ai-log-page-label">第 1 页</span>
+        <button id="ai-log-next" type="button" class="secondary-button" disabled>下一页</button>
+      </nav>
     </section>
 
     <section id="metadata-tasks-workspace" aria-labelledby="metadata-title" data-workspace="tasks" data-subview="metadata" data-nav-label="匹配与整理">

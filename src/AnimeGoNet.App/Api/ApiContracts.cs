@@ -922,6 +922,48 @@ public sealed record MetadataAttemptItemResponse(
     [property: JsonPropertyName("ai_request_count")] int? AiRequestCount,
     [property: JsonPropertyName("ai_tool_call_count")] int? AiToolCallCount);
 
+public sealed record AiInvocationLogListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] int TotalItems,
+    [property: JsonPropertyName("summary")] AiInvocationLogSummaryResponse Summary,
+    [property: JsonPropertyName("items")] IReadOnlyList<AiInvocationLogItemResponse> Items);
+
+public sealed record AiInvocationLogSummaryResponse(
+    [property: JsonPropertyName("matched_items")] int MatchedItems,
+    [property: JsonPropertyName("failed_items")] int FailedItems,
+    [property: JsonPropertyName("prompt_tokens")] long PromptTokens,
+    [property: JsonPropertyName("completion_tokens")] long CompletionTokens,
+    [property: JsonPropertyName("total_tokens")] long TotalTokens,
+    [property: JsonPropertyName("request_count")] long RequestCount,
+    [property: JsonPropertyName("tool_call_count")] long ToolCallCount);
+
+public sealed record AiInvocationLogItemResponse(
+    [property: JsonPropertyName("attempt_id")] string AttemptId,
+    [property: JsonPropertyName("run_id")] string RunId,
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("source_id")] string SourceId,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("run_status")] string RunStatus,
+    [property: JsonPropertyName("stage")] string Stage,
+    [property: JsonPropertyName("strategy")] string Strategy,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("retryable")] bool Retryable,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("model")] string Model,
+    [property: JsonPropertyName("prompt_tokens")] long? PromptTokens,
+    [property: JsonPropertyName("completion_tokens")] long? CompletionTokens,
+    [property: JsonPropertyName("total_tokens")] long? TotalTokens,
+    [property: JsonPropertyName("request_count")] int RequestCount,
+    [property: JsonPropertyName("tool_call_count")] int ToolCallCount);
+
 public sealed record AnimeSeasonListResponse(
     [property: JsonPropertyName("page")] int Page,
     [property: JsonPropertyName("page_size")] int PageSize,

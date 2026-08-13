@@ -5,9 +5,11 @@ import {
   setRegionState,
 } from "./ui-state.js";
 import {
+  classifyLiveLogEntry,
   filterLiveLogEntries,
   parseLiveLogEntry,
   type LiveLogFilter,
+  type LiveLogDomain,
   type LiveLogLevel,
   type ParsedLiveLogEntry,
 } from "./log-view.js";
@@ -789,6 +791,49 @@ interface MetadataAttemptItem {
   ai_tool_call_count: number | null;
 }
 
+interface AiInvocationLogItem {
+  attempt_id: string;
+  run_id: string;
+  task_id: string;
+  title: string;
+  source_id: string;
+  mikanid: number | null;
+  bgmid: number | null;
+  tmdb_series_id: number | null;
+  tmdb_season_number: number | null;
+  run_status: string;
+  stage: string;
+  strategy: string;
+  result: string;
+  error_code: string | null;
+  reason: string | null;
+  retryable: boolean;
+  duration_ms: number;
+  created_at_utc: string;
+  model: string;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  request_count: number;
+  tool_call_count: number;
+}
+
+interface AiInvocationLogList {
+  page: number;
+  page_size: number;
+  total_items: number;
+  summary: {
+    matched_items: number;
+    failed_items: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    request_count: number;
+    tool_call_count: number;
+  };
+  items: AiInvocationLogItem[];
+}
+
 type AnimeLibrarySort = "last_updated" | "name" | "air_date" | "added_at";
 type AnimeLibraryDirection = "asc" | "desc";
 type AnimeEpisodeFilter = "all" | "downloaded" | "not_downloaded";
@@ -1428,6 +1473,11 @@ let liveLogShouldReconnect = true;
 let liveLogPaused = false;
 let liveLogControlPending = false;
 let liveLogEntries: ParsedLiveLogEntry[] = [];
+let liveLogDomain: LiveLogDomain | "all" = "all";
+let aiLogPage = 1;
+let aiLogPageSize = 25;
+let aiLogTotalItems = 0;
+let aiLogRequestSequence = 0;
 let aiTestDefaultPrompt: AiMetadataTestPrompt | null = null;
 const aiTestPromptDraftKey = "animegonet.ai-test-prompt.v1";
 
@@ -1440,6 +1490,7 @@ type WorkspaceId =
   | "download-tools"
   | "connections"
   | "tools"
+  | "logs"
   | "system";
 
 interface AiTesterUsage {
@@ -1609,12 +1660,11 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
   },
   tasks: {
     title: "任务中心",
-    description: "查看下载、匹配、整理、失败原因和实时诊断。",
+    description: "查看下载、匹配、整理和失败原因。",
     defaultSubview: "downloads",
     tabs: [
       { id: "downloads", label: "下载任务" },
       { id: "metadata", label: "匹配与整理" },
-      { id: "logs", label: "详细日志" },
     ],
   },
   mikan: {
@@ -1662,6 +1712,15 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     defaultSubview: "ai-metadata",
     tabs: [
       { id: "ai-metadata", label: "AI 元数据测试" },
+    ],
+  },
+  logs: {
+    title: "日志",
+    description: "筛选运行诊断，并跨任务查询持久化的 AI 调用审计。",
+    defaultSubview: "runtime",
+    tabs: [
+      { id: "runtime", label: "运行日志" },
+      { id: "ai-invocations", label: "AI 调用日志" },
     ],
   },
   system: {
@@ -1736,6 +1795,7 @@ function selectWorkspace(
     if (window.location.hash !== nextHash) history.pushState(null, "", nextHash);
   }
   if (workspace === "bangumi-cache") void loadBangumiArchiveUsage(true);
+  if (workspace === "logs" && selectedSubview === "ai-invocations") void loadAiInvocationLogs();
   closeMobileSidebar();
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -2928,6 +2988,10 @@ function liveLogFilter(): LiveLogFilter {
     query: element<HTMLInputElement>("#live-log-search").value,
     category: element<HTMLInputElement>("#live-log-category").value,
     eventId: element<HTMLInputElement>("#live-log-event-id").value,
+    domain: liveLogDomain,
+    fromUtc: localDateTimeToUtc("#live-log-from"),
+    toUtc: localDateTimeToUtc("#live-log-to"),
+    exceptionOnly: element<HTMLInputElement>("#live-log-exception-only").checked,
   };
 }
 
@@ -3015,6 +3079,167 @@ function renderLiveLogs(): void {
   element<HTMLElement>("#live-log-count").textContent =
     `本页 ${liveLogEntries.length} / ${maximumRenderedLogs} 条`
     + (visible.length === liveLogEntries.length ? "" : ` · 显示 ${visible.length}`);
+  element<HTMLElement>("#live-log-total").textContent = String(liveLogEntries.length);
+  element<HTMLElement>("#live-log-warning-count").textContent = String(
+    liveLogEntries.filter(entry => entry.level === "warning").length,
+  );
+  element<HTMLElement>("#live-log-error-count").textContent = String(
+    liveLogEntries.filter(entry => entry.level === "error" || entry.level === "critical").length,
+  );
+  element<HTMLElement>("#live-log-ai-count").textContent = String(
+    liveLogEntries.filter(entry => classifyLiveLogEntry(entry) === "ai").length,
+  );
+}
+
+function localDateTimeToUtc(selector: string): string | undefined {
+  const value = element<HTMLInputElement>(selector).value;
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.valueOf()) ? undefined : parsed.toISOString();
+}
+
+function setLiveLogDomain(domain: LiveLogDomain | "all"): void {
+  liveLogDomain = domain;
+  document.querySelectorAll<HTMLButtonElement>("[data-log-domain]").forEach(button => {
+    button.classList.toggle("active", button.dataset.logDomain === domain);
+  });
+  renderLiveLogs();
+}
+
+function aiLogResultLabel(value: string): string {
+  return ({
+    matched: "成功",
+    not_matched: "未匹配",
+    error: "调用 / 验证错误",
+    failed: "失败",
+    skipped: "跳过",
+    not_applicable: "不适用",
+  } as Record<string, string>)[value] ?? value;
+}
+
+function aiLogNumber(value: number | null): string {
+  return value === null ? "—" : value.toLocaleString("zh-CN");
+}
+
+function renderAiInvocationLogSummary(result: AiInvocationLogList): void {
+  element<HTMLElement>("#ai-log-total").textContent = result.total_items.toLocaleString("zh-CN");
+  element<HTMLElement>("#ai-log-result-total").textContent =
+    `${result.summary.matched_items.toLocaleString("zh-CN")} / ${result.summary.failed_items.toLocaleString("zh-CN")}`;
+  element<HTMLElement>("#ai-log-token-total").textContent =
+    result.summary.total_tokens.toLocaleString("zh-CN");
+  element<HTMLElement>("#ai-log-request-total").textContent =
+    `${result.summary.request_count.toLocaleString("zh-CN")} / ${result.summary.tool_call_count.toLocaleString("zh-CN")}`;
+}
+
+function openAiLogTask(item: AiInvocationLogItem): void {
+  metadataState.search = item.task_id;
+  metadataState.page = 1;
+  element<HTMLInputElement>("#metadata-search").value = item.task_id;
+  saveMetadataState();
+  selectWorkspace("tasks", "metadata");
+  void loadMetadataTasks();
+}
+
+function renderAiInvocationLogs(result: AiInvocationLogList): void {
+  const list = element<HTMLElement>("#ai-log-list");
+  if (result.items.length === 0) {
+    renderRegionMessage(list, "empty", "当前筛选下没有 AI 调用记录。");
+  } else {
+    const entries = result.items.map(item => {
+      const entry = document.createElement("details");
+      entry.className = `ai-log-entry ${item.result}`;
+      const summary = document.createElement("summary");
+      const time = document.createElement("time");
+      time.dateTime = item.created_at_utc;
+      time.textContent = dataUpdateTime(item.created_at_utc);
+      const resultBadge = document.createElement("strong");
+      resultBadge.className = `badge ${item.result === "matched" ? "ok" : ["error", "not_matched", "failed"].includes(item.result) ? "error" : "pending"}`;
+      resultBadge.textContent = aiLogResultLabel(item.result);
+      const title = document.createElement("span");
+      title.className = "ai-log-title";
+      title.textContent = item.title;
+      const stage = document.createElement("span");
+      stage.className = "ai-log-stage";
+      stage.textContent = `${item.stage} · ${item.strategy}`;
+      const model = document.createElement("span");
+      model.className = "ai-log-model";
+      model.textContent = item.model;
+      summary.append(time, resultBadge, title, stage, model);
+
+      const details = document.createElement("dl");
+      details.className = "live-log-detail ai-log-detail";
+      details.append(
+        liveLogDetail("任务 ID", item.task_id),
+        liveLogDetail("Run / Attempt", `${item.run_id} / ${item.attempt_id}`),
+        liveLogDetail("来源", item.source_id),
+        liveLogDetail("作品参考", `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`),
+        liveLogDetail("TMDB 验证", item.tmdb_series_id === null
+          ? "未确认"
+          : `${item.tmdb_series_id} / S${String(item.tmdb_season_number ?? 0).padStart(2, "0")}`),
+        liveLogDetail("运行状态", `${item.run_status} · ${item.retryable ? "可重试" : "不可重试"}`),
+        liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`),
+        liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`),
+        liveLogDetail("请求", `HTTP ${item.request_count} · 工具 ${item.tool_call_count}`),
+        liveLogDetail("错误码", textOrDash(item.error_code)),
+        liveLogDetail("结果原因", textOrDash(item.reason)),
+      );
+      const actions = document.createElement("div");
+      actions.className = "ai-log-entry-actions";
+      const taskButton = document.createElement("button");
+      taskButton.type = "button";
+      taskButton.className = "secondary-button";
+      taskButton.textContent = "打开任务详情";
+      taskButton.addEventListener("click", event => {
+        event.preventDefault();
+        openAiLogTask(item);
+      });
+      actions.append(taskButton);
+      entry.append(summary, details, actions);
+      return entry;
+    });
+    list.replaceChildren(...entries);
+    setRegionState(list, "ready");
+  }
+  aiLogPage = result.page;
+  aiLogPageSize = result.page_size;
+  aiLogTotalItems = result.total_items;
+  const lastPage = Math.max(1, Math.ceil(result.total_items / result.page_size));
+  element<HTMLElement>("#ai-log-page-label").textContent =
+    `第 ${result.page} / ${lastPage} 页 · ${result.total_items.toLocaleString("zh-CN")} 条`;
+  element<HTMLButtonElement>("#ai-log-previous").disabled = result.page <= 1;
+  element<HTMLButtonElement>("#ai-log-next").disabled = result.page >= lastPage;
+  element<HTMLElement>("#ai-log-status").textContent =
+    `已读取 ${result.items.length} 条；汇总基于当前全部筛选结果。`;
+  renderAiInvocationLogSummary(result);
+}
+
+async function loadAiInvocationLogs(): Promise<void> {
+  const sequence = ++aiLogRequestSequence;
+  const list = element<HTMLElement>("#ai-log-list");
+  setRegionState(list, "loading");
+  element<HTMLElement>("#ai-log-status").textContent = "正在读取 AI 调用记录…";
+  const query = new URLSearchParams({
+    page: String(aiLogPage),
+    page_size: String(aiLogPageSize),
+  });
+  const values: Array<[string, string]> = [
+    ["search", element<HTMLInputElement>("#ai-log-search").value.trim()],
+    ["stage", element<HTMLSelectElement>("#ai-log-stage").value],
+    ["result", element<HTMLSelectElement>("#ai-log-result").value],
+    ["model", element<HTMLInputElement>("#ai-log-model").value.trim()],
+    ["from_utc", localDateTimeToUtc("#ai-log-from") ?? ""],
+    ["to_utc", localDateTimeToUtc("#ai-log-to") ?? ""],
+  ];
+  for (const [key, value] of values) if (value) query.set(key, value);
+  try {
+    const result = await api.get<AiInvocationLogList>(`/api/v1/logs/ai-invocations?${query}`);
+    if (sequence !== aiLogRequestSequence) return;
+    renderAiInvocationLogs(result);
+  } catch (error) {
+    if (sequence !== aiLogRequestSequence) return;
+    renderRegionMessage(list, "error", errorMessage(error, "AI 调用日志读取失败"));
+    element<HTMLElement>("#ai-log-status").textContent = "AI 调用日志读取失败。";
+  }
 }
 
 function appendLiveLogs(lines: string[]): void {
@@ -9420,9 +9645,23 @@ for (const selector of [
   "#live-log-search",
   "#live-log-category",
   "#live-log-event-id",
+  "#live-log-from",
+  "#live-log-to",
 ]) {
   element<HTMLInputElement>(selector).addEventListener("input", renderLiveLogs);
 }
+element<HTMLInputElement>("#live-log-exception-only").addEventListener(
+  "change",
+  renderLiveLogs,
+);
+document.querySelectorAll<HTMLButtonElement>("[data-log-domain]").forEach(button => {
+  button.addEventListener("click", () => {
+    const domain = button.dataset.logDomain ?? "all";
+    if (domain === "all" || ["ai", "tmdb", "metadata", "download", "rss", "organize", "system"].includes(domain)) {
+      setLiveLogDomain(domain as LiveLogDomain | "all");
+    }
+  });
+});
 element<HTMLInputElement>("#live-log-auto-scroll").addEventListener(
   "change",
   renderLiveLogs,
@@ -9446,6 +9685,33 @@ element<HTMLButtonElement>("#live-log-copy").addEventListener(
 element<HTMLButtonElement>("#live-log-clear").addEventListener("click", () => {
   liveLogEntries = [];
   renderLiveLogs();
+});
+element<HTMLFormElement>("#ai-log-filters").addEventListener("submit", event => {
+  event.preventDefault();
+  aiLogPage = 1;
+  aiLogPageSize = Number(element<HTMLSelectElement>("#ai-log-page-size").value);
+  void loadAiInvocationLogs();
+});
+element<HTMLButtonElement>("#ai-log-reset").addEventListener("click", () => {
+  element<HTMLFormElement>("#ai-log-filters").reset();
+  element<HTMLSelectElement>("#ai-log-page-size").value = "25";
+  aiLogPage = 1;
+  aiLogPageSize = 25;
+  void loadAiInvocationLogs();
+});
+element<HTMLButtonElement>("#ai-log-reload").addEventListener(
+  "click",
+  () => void loadAiInvocationLogs(),
+);
+element<HTMLButtonElement>("#ai-log-previous").addEventListener("click", () => {
+  if (aiLogPage <= 1) return;
+  aiLogPage--;
+  void loadAiInvocationLogs();
+});
+element<HTMLButtonElement>("#ai-log-next").addEventListener("click", () => {
+  if (aiLogPage * aiLogPageSize >= aiLogTotalItems) return;
+  aiLogPage++;
+  void loadAiInvocationLogs();
 });
 window.addEventListener("beforeunload", () => {
   liveLogShouldReconnect = false;

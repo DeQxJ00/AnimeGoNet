@@ -34,6 +34,16 @@ public sealed class WorkspaceNavigationTests
         Assert.DoesNotContain(">连接与配置</button>", html, StringComparison.Ordinal);
         Assert.Contains(">AI 匹配测试工具</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"AI 匹配测试工具\"", script, StringComparison.Ordinal);
+        Assert.Contains(">日志</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"日志\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"logs\" data-subview=\"runtime\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"logs\" data-subview=\"ai-invocations\"",
+            html,
+            StringComparison.Ordinal);
         Assert.Contains(">系统缓存</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"系统缓存\"", script, StringComparison.Ordinal);
         Assert.Contains("查看完整内容", script, StringComparison.Ordinal);
@@ -49,6 +59,7 @@ public sealed class WorkspaceNavigationTests
             "download-tools",
             "connections",
             "tools",
+            "logs",
             "system",
         })
         {

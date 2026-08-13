@@ -1939,6 +1939,174 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         return attempts;
     }
 
+    public async Task<MetadataAiInvocationLogPage> ListAiInvocationLogsAsync(
+        MetadataAiInvocationLogFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentOutOfRangeException.ThrowIfLessThan(filter.Page, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(filter.PageSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(filter.PageSize, 100);
+
+        var search = NormalizeLogFilter(filter.Search);
+        var stage = NormalizeLogFilter(filter.Stage);
+        var result = NormalizeLogFilter(filter.Result);
+        var model = NormalizeLogFilter(filter.Model);
+        var fromUtc = filter.FromUtc?.ToUniversalTime();
+        var toUtc = filter.ToUtc?.ToUniversalTime();
+        if (fromUtc is not null && toUtc is not null && fromUtc > toUtc)
+        {
+            throw new ArgumentException("AI invocation log time range is invalid.", nameof(filter));
+        }
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var summaryCommand = connection.CreateCommand();
+        summaryCommand.CommandText = AiInvocationLogFilterSql + """
+            SELECT COUNT(*),
+                   COALESCE(SUM(CASE WHEN result = 'matched' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN result <> 'matched' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(ai_prompt_tokens), 0),
+                   COALESCE(SUM(ai_completion_tokens), 0),
+                   COALESCE(SUM(ai_total_tokens), 0),
+                   COALESCE(SUM(ai_request_count), 0),
+                   COALESCE(SUM(ai_tool_call_count), 0)
+            FROM filtered;
+            """;
+        AddAiInvocationLogParameters(summaryCommand, search, stage, result, model, fromUtc, toUtc);
+        MetadataAiInvocationLogSummary summary;
+        await using (var reader = await summaryCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            summary = new MetadataAiInvocationLogSummary(
+                checked((int)reader.GetInt64(0)),
+                checked((int)reader.GetInt64(1)),
+                checked((int)reader.GetInt64(2)),
+                reader.GetInt64(3),
+                reader.GetInt64(4),
+                reader.GetInt64(5),
+                reader.GetInt64(6),
+                reader.GetInt64(7));
+        }
+
+        await using var itemCommand = connection.CreateCommand();
+        itemCommand.CommandText = AiInvocationLogFilterSql + """
+            SELECT attempt_id, run_id, task_id, title, source_id, mikanid,
+                   bangumi_subject_id, tmdb_series_id, tmdb_season_number,
+                   run_status, stage, strategy, result, error_code, reason,
+                   retryable, duration_ms, created_at_utc, ai_model,
+                   ai_prompt_tokens, ai_completion_tokens, ai_total_tokens,
+                   ai_request_count, ai_tool_call_count
+            FROM filtered
+            ORDER BY created_at_utc DESC, attempt_id DESC
+            LIMIT $page_size OFFSET $offset;
+            """;
+        AddAiInvocationLogParameters(itemCommand, search, stage, result, model, fromUtc, toUtc);
+        itemCommand.Parameters.AddWithValue("$page_size", filter.PageSize);
+        itemCommand.Parameters.AddWithValue("$offset", checked((filter.Page - 1) * filter.PageSize));
+        var items = new List<MetadataAiInvocationLogProjection>();
+        await using (var reader = await itemCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                items.Add(new MetadataAiInvocationLogProjection(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                    reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                    reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                    reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    reader.GetString(9),
+                    reader.GetString(10),
+                    reader.GetString(11),
+                    reader.GetString(12),
+                    reader.IsDBNull(13) ? null : reader.GetString(13),
+                    reader.IsDBNull(14) ? null : reader.GetString(14),
+                    reader.GetInt64(15) != 0,
+                    reader.GetInt64(16),
+                    DateTimeOffset.Parse(
+                        reader.GetString(17),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind),
+                    new AiMetadataProviderUsage(
+                        reader.GetString(18),
+                        reader.IsDBNull(19) ? null : reader.GetInt64(19),
+                        reader.IsDBNull(20) ? null : reader.GetInt64(20),
+                        reader.IsDBNull(21) ? null : reader.GetInt64(21),
+                        reader.IsDBNull(22) ? 0 : reader.GetInt32(22),
+                        reader.IsDBNull(23) ? 0 : reader.GetInt32(23))));
+            }
+        }
+
+        return new MetadataAiInvocationLogPage(
+            filter with
+            {
+                Search = search,
+                Stage = stage,
+                Result = result,
+                Model = model,
+                FromUtc = fromUtc,
+                ToUtc = toUtc,
+            },
+            summary,
+            items);
+    }
+
+    private const string AiInvocationLogFilterSql = """
+        WITH filtered AS (
+            SELECT attempt.id AS attempt_id, run.id AS run_id, task.id AS task_id,
+                   task.title, task.source_id, task.mikanid, task.bangumi_subject_id,
+                   run.tmdb_series_id, run.tmdb_season_number, run.status AS run_status,
+                   attempt.stage, attempt.strategy, attempt.result,
+                   attempt.error_code, attempt.reason, attempt.retryable,
+                   attempt.duration_ms, attempt.created_at_utc, attempt.ai_model,
+                   attempt.ai_prompt_tokens, attempt.ai_completion_tokens,
+                   attempt.ai_total_tokens, attempt.ai_request_count,
+                   attempt.ai_tool_call_count
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            JOIN ingest_tasks AS task ON task.id = run.task_id
+            WHERE attempt.ai_model IS NOT NULL
+              AND ($stage IS NULL OR attempt.stage = $stage)
+              AND ($result IS NULL OR attempt.result = $result)
+              AND ($model IS NULL OR instr(lower(attempt.ai_model), $model) > 0)
+              AND ($from_utc IS NULL OR attempt.created_at_utc >= $from_utc)
+              AND ($to_utc IS NULL OR attempt.created_at_utc <= $to_utc)
+              AND ($search IS NULL
+                   OR instr(lower(task.title), $search) > 0
+                   OR instr(lower(task.id), $search) > 0
+                   OR instr(lower(task.source_id), $search) > 0
+                   OR instr(lower(attempt.strategy), $search) > 0
+                   OR instr(lower(COALESCE(attempt.error_code, '')), $search) > 0
+                   OR instr(lower(COALESCE(attempt.reason, '')), $search) > 0)
+        )
+        """;
+
+    private static void AddAiInvocationLogParameters(
+        SqliteCommand command,
+        string? search,
+        string? stage,
+        string? result,
+        string? model,
+        DateTimeOffset? fromUtc,
+        DateTimeOffset? toUtc)
+    {
+        command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
+        command.Parameters.AddWithValue("$stage", (object?)stage ?? DBNull.Value);
+        command.Parameters.AddWithValue("$result", (object?)result ?? DBNull.Value);
+        command.Parameters.AddWithValue("$model", (object?)model ?? DBNull.Value);
+        command.Parameters.AddWithValue("$from_utc", fromUtc is null ? DBNull.Value : Format(fromUtc.Value));
+        command.Parameters.AddWithValue("$to_utc", toUtc is null ? DBNull.Value : Format(toUtc.Value));
+    }
+
+    private static string? NormalizeLogFilter(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return string.IsNullOrEmpty(normalized) ? null : normalized;
+    }
+
     public async Task<IReadOnlyList<MetadataTaskListProjection>> ListTasksAsync(
         int limit = 100,
         CancellationToken cancellationToken = default)

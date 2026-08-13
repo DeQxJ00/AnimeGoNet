@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  classifyLiveLogEntry,
   filterLiveLogEntries,
   parseLiveLogEntry,
 } from "../../src/AnimeGoNet.App/wwwroot/log-view.js";
@@ -16,6 +17,30 @@ test("formatted log lines split into safe diagnostic fields", () => {
   assert.equal(parsed.eventId, 4301);
   assert.equal(parsed.message, "Duplicate skipped");
   assert.equal(parsed.exception, "InvalidOperationException: safe failure");
+});
+
+test("domain, time, and exception filters expose useful runtime diagnostics", () => {
+  const entries = [
+    parseLiveLogEntry("2026-08-09T09:15:21Z [INF] AnimeGoNet.App.Ai (4400): ai_metadata request completed"),
+    parseLiveLogEntry("2026-08-09T09:15:22Z [ERR] AnimeGoNet.App.Download (4200): qBittorrent failed | HttpRequestException: refused"),
+    parseLiveLogEntry("legacy safe line"),
+  ];
+
+  assert.equal(classifyLiveLogEntry(entries[0]), "ai");
+  assert.equal(classifyLiveLogEntry(entries[1]), "download");
+  const filtered = filterLiveLogEntries(entries, {
+    minimumLevel: "all",
+    query: "",
+    category: "",
+    eventId: "",
+    domain: "download",
+    fromUtc: "2026-08-09T09:15:21.500Z",
+    toUtc: "2026-08-09T09:15:23Z",
+    exceptionOnly: true,
+  });
+
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].eventId, 4200);
 });
 
 test("unstructured compatibility lines remain visible without inventing fields", () => {

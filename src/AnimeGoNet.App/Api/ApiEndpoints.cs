@@ -108,6 +108,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
+        app.MapGet("/api/v1/logs/ai-invocations", AiInvocationLogs);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
@@ -4720,6 +4721,113 @@ public static class ApiEndpoints
                 attempt.AiUsage?.TotalTokens,
                 attempt.AiUsage?.RequestCount,
                 attempt.AiUsage?.ToolCallCount)).ToArray()));
+    }
+
+    private static async Task<IResult> AiInvocationLogs(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? search,
+        [FromQuery] string? stage,
+        [FromQuery] string? result,
+        [FromQuery] string? model,
+        [FromQuery(Name = "from_utc")] DateTimeOffset? fromUtc,
+        [FromQuery(Name = "to_utc")] DateTimeOffset? toUtc,
+        MetadataResolutionStore resolutions,
+        CancellationToken cancellationToken)
+    {
+        var resolvedPage = page ?? 1;
+        var resolvedPageSize = pageSize ?? 25;
+        if (resolvedPage < 1 || resolvedPageSize is < 1 or > 100)
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_log_paging_invalid",
+                "AI log page must be positive and page_size must be between 1 and 100."));
+        }
+
+        if (search?.Trim().Length > 200 || model?.Trim().Length > 256)
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_log_filter_too_long",
+                "AI log search must be at most 200 characters and model at most 256 characters."));
+        }
+
+        var normalizedStage = string.IsNullOrWhiteSpace(stage)
+            ? null
+            : stage.Trim().ToLowerInvariant();
+        if (normalizedStage is not null && normalizedStage is not ("series" or "season" or "episode"))
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_log_stage_invalid",
+                "AI log stage must be series, season, or episode."));
+        }
+
+        var normalizedResult = string.IsNullOrWhiteSpace(result)
+            ? null
+            : result.Trim().ToLowerInvariant();
+        if (normalizedResult is not null
+            && normalizedResult is not (
+                "matched" or "not_matched" or "error" or "failed" or "skipped" or "not_applicable"))
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_log_result_invalid",
+                "AI log result filter is invalid."));
+        }
+
+        if (fromUtc is not null && toUtc is not null && fromUtc > toUtc)
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_log_time_range_invalid",
+                "AI log from_utc must not be after to_utc."));
+        }
+
+        var log = await resolutions.ListAiInvocationLogsAsync(
+            new MetadataAiInvocationLogFilter(
+                resolvedPage,
+                resolvedPageSize,
+                search,
+                normalizedStage,
+                normalizedResult,
+                model,
+                fromUtc,
+                toUtc),
+            cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new AiInvocationLogListResponse(
+            log.Filter.Page,
+            log.Filter.PageSize,
+            log.Summary.TotalItems,
+            new AiInvocationLogSummaryResponse(
+                log.Summary.MatchedItems,
+                log.Summary.FailedItems,
+                log.Summary.PromptTokens,
+                log.Summary.CompletionTokens,
+                log.Summary.TotalTokens,
+                log.Summary.RequestCount,
+                log.Summary.ToolCallCount),
+            log.Items.Select(item => new AiInvocationLogItemResponse(
+                item.AttemptId,
+                item.RunId,
+                item.TaskId,
+                item.Title,
+                item.SourceId,
+                item.MikanId,
+                item.BangumiSubjectId,
+                item.TmdbSeriesId,
+                item.TmdbSeasonNumber,
+                item.RunStatus,
+                item.Stage,
+                item.Strategy,
+                item.Result,
+                item.ErrorCode,
+                item.Reason,
+                item.Retryable,
+                item.DurationMilliseconds,
+                item.CreatedAtUtc,
+                item.Usage.Model,
+                item.Usage.PromptTokens,
+                item.Usage.CompletionTokens,
+                item.Usage.TotalTokens,
+                item.Usage.RequestCount,
+                item.Usage.ToolCallCount)).ToArray()));
     }
 
     private static async Task<IResult> MetadataTaskDetail(

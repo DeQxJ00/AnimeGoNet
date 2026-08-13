@@ -53,6 +53,52 @@ public sealed record MetadataAttemptProjection(
     DateTimeOffset? RunCompletedAtUtc,
     AiMetadataProviderUsage? AiUsage);
 
+public sealed record MetadataAiInvocationLogFilter(
+    int Page,
+    int PageSize,
+    string? Search = null,
+    string? Stage = null,
+    string? Result = null,
+    string? Model = null,
+    DateTimeOffset? FromUtc = null,
+    DateTimeOffset? ToUtc = null);
+
+public sealed record MetadataAiInvocationLogProjection(
+    string AttemptId,
+    string RunId,
+    string TaskId,
+    string Title,
+    string SourceId,
+    int? MikanId,
+    int? BangumiSubjectId,
+    int? TmdbSeriesId,
+    int? TmdbSeasonNumber,
+    string RunStatus,
+    string Stage,
+    string Strategy,
+    string Result,
+    string? ErrorCode,
+    string? Reason,
+    bool Retryable,
+    long DurationMilliseconds,
+    DateTimeOffset CreatedAtUtc,
+    AiMetadataProviderUsage Usage);
+
+public sealed record MetadataAiInvocationLogSummary(
+    int TotalItems,
+    int MatchedItems,
+    int FailedItems,
+    long PromptTokens,
+    long CompletionTokens,
+    long TotalTokens,
+    long RequestCount,
+    long ToolCallCount);
+
+public sealed record MetadataAiInvocationLogPage(
+    MetadataAiInvocationLogFilter Filter,
+    MetadataAiInvocationLogSummary Summary,
+    IReadOnlyList<MetadataAiInvocationLogProjection> Items);
+
 public sealed record MetadataRunProjection(
     string RunId,
     string TaskId,

@@ -175,7 +175,7 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 ## 12. 一级/二级导航
 
 静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
-“总览、动画库、任务中心、Mikan 手动设置、Bangumi缓存、下载工具配置、设置与备份、AI 匹配测试工具、系统缓存”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“Bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统缓存 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“设置与备份 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
+“总览、动画库、任务中心、Mikan 手动设置、Bangumi缓存、下载工具配置、设置与备份、AI 匹配测试工具、日志、系统缓存”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“Bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统缓存 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“设置与备份 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
 提供二级标签。URL hash 采用 `#/一级/二级`，可收藏并支持浏览器前进/后退，不会把
 Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域，既有轮询、WebSocket、
 表单 revision 和对话框仍复用同一份状态，不创建第二套业务请求。
@@ -184,9 +184,9 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
 `aria-expanded`，一级和二级当前项均使用 `aria-current=page`。二级菜单允许横向滚动，
 主内容继续保留 skip link 和焦点边界。
 
-## 13. 实时日志
+## 13. 日志工作区
 
-首页通过同源 `/websocket/log` 接收服务端已脱敏日志。协议保留上游
+日志已从任务中心独立为一级菜单，下分“运行日志”和“AI 调用日志”。运行日志通过同源 `/websocket/log` 接收服务端已脱敏日志。协议保留上游
 `{"type":"log","count":N}\n\n<line>...` 帧，因此旧客户端仍可消费；新增
 `control` 确认帧只用于静态 WebUI，旧客户端可按既有逻辑忽略。
 
@@ -196,7 +196,9 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
   1000 条，溢出丢弃最旧；恢复时按一个兼容 log 帧补发。
 - 浏览器只保存最新 500 条，并从兼容文本行解析 UTC 时间、Trace～Critical 级别、
   category、Event ID、消息与异常；无法识别的旧行仍以 `unknown` 显示，不虚构字段。
-  可按最低级别、关键词、类别和 Event ID 组合筛选；筛选只改变显示，不改变服务端采集。
+  可按最低级别、关键词、类别、Event ID、开始/结束时间和“仅异常”组合筛选；AI、TMDB、
+  匹配、下载/qB、Mikan/RSS、整理和系统快速分类由浏览器从脱敏 category/message 提取，
+  只改变显示，不改变服务端采集。
 - 单条日志使用可展开详情展示解析字段与脱敏原文；自动滚动和长行换行可独立关闭。
   “复制筛选结果”只复制当前可见的服务端脱敏文本，剪贴板被浏览器拒绝时不降级到
   未脱敏来源。所有渲染继续只使用 `textContent`。
@@ -205,6 +207,16 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
   passkey、api key、access key 和 token；异常只输出类型与脱敏后的 message。
 - 非预期断开使用 1～30 秒指数退避自动重连；“重新连接”按钮立即重建连接。
   页面重连时会恢复原暂停意图；关闭页面会取消重连并关闭 socket。
+
+“AI 调用日志”读取 `GET /api/v1/logs/ai-invocations`，不是从文本日志猜测。它跨任务查询
+`metadata_resolution_attempts` 中已经持久化的实际 AI provider usage，可按标题/任务/来源/
+策略/错误码搜索，并按 Series/Season/Episode、结果、模型及 UTC 时间范围过滤和分页；页面
+汇总当前完整筛选结果的成功/失败数、Prompt/Completion/Total Token、HTTP 请求和 MCP 工具
+调用数。单条展开显示任务、Run/Attempt、mikanid/bgmid、最终 TMDB Series/Season、耗时、
+稳定错误码和安全原因，并可跳到对应任务。只有 `ai_model` 非空、即 provider 确实发出请求的
+Attempt 才进入列表；确定性规则、仅计划调用但未发出请求的失败不伪造成 AI 调用。
+Prompt、工具正文、模型原始响应、API Key、Cookie、passkey URL 和下载绝对路径不入库也不由
+该接口返回。配置归档仍排除这些运行审计。
 
 ## 14. 外部 C# 插件运行状态
 
