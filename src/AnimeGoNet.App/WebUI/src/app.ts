@@ -673,6 +673,7 @@ interface MetadataItem {
   other_file_count: number;
   duplicate_file_count: number;
   pending_file_count: number;
+  readaptation_review_state: "not_required" | "pending" | "approved";
 }
 
 interface MetadataTaskListPage {
@@ -1172,8 +1173,9 @@ type DeleteFlag =
   | "delete_business_record"
   | "delete_downloader_task"
   | "delete_source_files"
-  | "delete_media_files";
-type DeleteCollection = "business_records" | "downloader_tasks" | "source_files" | "media_files";
+  | "delete_media_files"
+  | "delete_task_record";
+type DeleteCollection = "business_records" | "downloader_tasks" | "source_files" | "media_files" | "task_records";
 
 interface DeletePreview {
   task_id: string;
@@ -1184,6 +1186,9 @@ interface DeletePreview {
   downloader_tasks: DeleteTarget[];
   source_files: DeleteTarget[];
   media_files: DeleteTarget[];
+  task_records: DeleteTarget[];
+  task_record_deletion_allowed: boolean;
+  task_record_deletion_denial_reason: string | null;
 }
 
 interface DeleteCreateResponse {
@@ -1994,6 +1999,7 @@ const deleteGroups: DeleteGroup[] = [
   { flag: "delete_downloader_task", label: "qBittorrent 任务", collection: "downloader_tasks", help: "只删除任务，永不让 qB 删除文件" },
   { flag: "delete_source_files", label: "下载源文件", collection: "source_files", help: "精确删除捕获下载根目录内的文件" },
   { flag: "delete_media_files", label: "媒体库文件", collection: "media_files", help: "精确删除捕获媒体库根目录内的文件" },
+  { flag: "delete_task_record", label: "AnimeGoNet 任务记录", collection: "task_records", help: "删除任务及其内部审计链；Other 重新适配必须先完成人工审核" },
 ];
 
 const externalPluginStateLabels: Record<ExternalPluginRuntime["state"], string> = {
@@ -6319,13 +6325,24 @@ async function openDeletePreview(taskId: string): Promise<void> {
       const input = document.createElement("input");
       input.type = "checkbox";
       input.name = group.flag;
-      input.disabled = groupTargets.length === 0;
-      input.addEventListener("change", updateDeleteConfirm);
+      input.disabled = groupTargets.length === 0
+        || (group.flag === "delete_task_record" && !activeDeletePreview.task_record_deletion_allowed);
+      input.addEventListener("change", () => {
+        if (group.flag === "delete_task_record" && input.checked
+          && activeDeletePreview?.downloader_tasks.length) {
+          const downloader = selectedDeleteInput("delete_downloader_task");
+          if (downloader && !downloader.disabled) downloader.checked = true;
+        }
+        updateDeleteConfirm();
+      });
       const text = document.createElement("span");
       const strong = document.createElement("strong");
       strong.textContent = `${group.label} · ${groupTargets.length} 项`;
       const small = document.createElement("small");
-      small.textContent = group.help;
+      small.textContent = group.flag === "delete_task_record"
+        && !activeDeletePreview.task_record_deletion_allowed
+        ? activeDeletePreview.task_record_deletion_denial_reason ?? group.help
+        : group.help;
       text.append(strong, small);
       option.append(input, text);
       options.append(option);
@@ -6362,6 +6379,7 @@ deleteConfirm.addEventListener("click", async () => {
     delete_downloader_task: false,
     delete_source_files: false,
     delete_media_files: false,
+    delete_task_record: false,
   };
   for (const { flag } of deleteGroups) request[flag] = Boolean(selectedDeleteInput(flag)?.checked);
   try {
@@ -6461,11 +6479,15 @@ async function readaptOtherFiles(taskId: string, button: HTMLButtonElement): Pro
     }
 
     const files = preview.files
-      .map((file) => `• ${file.source_name}\n  当前原因：${file.other_reason}`)
+      .map((file) => `• ${file.source_name}\n  当前原因：${file.other_reason}`
+        + (file.shared_path_reference_count > 1
+          ? `\n  与 ${file.shared_path_reference_count} 个任务共享：本次将复制文件，不移动源文件`
+          : ""))
       .join("\n");
     if (!window.confirm(
       `将重新适配 ${preview.files.length} 个 Other 文件。\n\n`
-      + "保留历史任务和 AI 日志；沿用已确认的 TMDB Series / Season；不重新下载、不操作 qBittorrent。\n\n"
+      + "从保存的 Mikan Episode 来源页重新解析 mikanid / groupid / bgmid；跳过旧的 Mikan、Bangumi、TMDB 匹配缓存，重新执行 Series、Season、Episode。需要 AI 时会真实调用 AI。\n\n"
+      + "仅复用已经下载或整理的实体文件，不重复下载、不操作 qBittorrent；历史任务、策略时间线和 AI 日志保留。完成后必须人工审核，才能删除任务记录。\n\n"
       + files,
     )) {
       button.disabled = false;
@@ -6486,6 +6508,23 @@ async function readaptOtherFiles(taskId: string, button: HTMLButtonElement): Pro
     window.setTimeout(() => {
       if (button.isConnected) button.textContent = defaultLabel;
     }, 5000);
+  }
+}
+
+async function approveOtherReadaptation(taskId: string, button: HTMLButtonElement): Promise<void> {
+  if (!window.confirm("确认已人工检查重新适配后的 Series、Season、Episode 和整理结果？确认后才允许删除任务记录。")) return;
+  button.disabled = true;
+  button.textContent = "确认中…";
+  try {
+    const response = await fetch(
+      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/review`,
+      { method: "POST", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    await loadMetadataTasks();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = errorMessage(error, "审核确认失败");
   }
 }
 
@@ -6937,6 +6976,19 @@ async function loadMetadataTasks(background = false): Promise<void> {
       files.className = "metadata-files";
       files.textContent = `已确认 ${item.episode_file_count} · 已跳过重复 ${item.duplicate_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
       card.append(heading, handling, identity, stages, files);
+      if (item.readaptation_review_state === "pending") {
+        const review = document.createElement("p");
+        review.className = "metadata-failure";
+        review.textContent = item.status === "organized"
+          ? "Other 重新适配已完成，等待人工审核"
+          : "Other 重新适配执行中；完成后需人工审核";
+        card.append(review);
+      } else if (item.readaptation_review_state === "approved") {
+        const review = document.createElement("p");
+        review.className = "metadata-handling resolved";
+        review.textContent = "Other 重新适配已人工审核";
+        card.append(review);
+      }
       if (item.failure_kind || item.failure_reason) {
         const failure = document.createElement("p");
         failure.className = "metadata-failure";
@@ -6985,6 +7037,20 @@ async function loadMetadataTasks(background = false): Promise<void> {
         readapt.addEventListener("click", () => void readaptOtherFiles(item.task_id, readapt));
         actions.append(readapt);
       }
+      if (item.status === "organized" && item.readaptation_review_state === "pending") {
+        const approve = document.createElement("button");
+        approve.type = "button";
+        approve.className = "retry-button";
+        approve.textContent = "确认人工审核";
+        approve.addEventListener("click", () => void approveOtherReadaptation(item.task_id, approve));
+        actions.append(approve);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "delete-button";
+      remove.textContent = "删除…";
+      remove.addEventListener("click", () => void openDeletePreview(item.task_id));
+      actions.append(remove);
       card.append(actions, detailTarget, attemptList);
       if (expandedMetadataDetailIds.has(item.task_id)) {
         void loadMetadataDetail(item.task_id, detailTarget, detailButton);
