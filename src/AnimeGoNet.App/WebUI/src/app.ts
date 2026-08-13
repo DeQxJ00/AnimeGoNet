@@ -6435,6 +6435,9 @@ async function loadDownloaders(): Promise<void> {
       const edit = button("配置", () => openDownloaderConfig(instance));
       const test = button("测试连接", () => void testDownloader(instance.id, test));
       const probe = button("探测路径", () => void probeDownloaderPath(instance.id, probe));
+      edit.className = "secondary-button";
+      test.className = "secondary-button";
+      probe.className = "secondary-button";
       test.disabled = !instance.enabled;
       probe.disabled = !instance.enabled;
       actions.append(edit, test, probe);
