@@ -26,11 +26,15 @@ const configurationDialog = element("#configuration-dialog");
 const cacheEntryDialog = element("#cache-entry-dialog");
 const aiDebugDialog = element("#ai-debug-dialog");
 const otherReadaptationReviewDialog = element("#other-readaptation-review-dialog");
+const otherReadaptationReviewPanel = element("#other-readaptation-review-files");
+const otherReadaptationReviewScrollbar = element("#other-readaptation-review-scrollbar");
+const otherReadaptationReviewScrollbarThumb = element("#other-readaptation-review-scrollbar-thumb");
 const otherReadaptationReviewConfirm = element("#other-readaptation-review-confirm");
 const otherReadaptationReviewCancel = element("#other-readaptation-review-cancel");
 let activeDeletePreview = null;
 let activeOtherReadaptationReview = null;
 let otherReadaptationReviewSubmitting = false;
+let otherReadaptationScrollbarDrag = null;
 let currentConfiguration = null;
 let pendingConfigurationArchive = null;
 let pendingConfigurationArchivePreview = null;
@@ -4463,6 +4467,32 @@ function appendReadaptationRow(body, label, before, after, code = false) {
     row.append(heading, readaptationCell(before, code), readaptationCell(after, code));
     body.append(row);
 }
+function updateOtherReadaptationReviewScrollbar() {
+    const maximumScroll = Math.max(0, otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight);
+    const trackHeight = otherReadaptationReviewScrollbar.clientHeight;
+    const thumbHeight = maximumScroll === 0
+        ? trackHeight
+        : Math.max(58, Math.round(trackHeight
+            * otherReadaptationReviewPanel.clientHeight
+            / otherReadaptationReviewPanel.scrollHeight));
+    const maximumThumbOffset = Math.max(0, trackHeight - thumbHeight);
+    const thumbOffset = maximumScroll === 0
+        ? 0
+        : maximumThumbOffset * otherReadaptationReviewPanel.scrollTop / maximumScroll;
+    otherReadaptationReviewScrollbarThumb.style.height = `${thumbHeight}px`;
+    otherReadaptationReviewScrollbarThumb.style.transform = `translateY(${thumbOffset}px)`;
+    otherReadaptationReviewScrollbar.classList.toggle("inactive", maximumScroll === 0);
+    otherReadaptationReviewScrollbar.setAttribute("aria-valuemax", String(Math.round(maximumScroll)));
+    otherReadaptationReviewScrollbar.setAttribute("aria-valuenow", String(Math.round(otherReadaptationReviewPanel.scrollTop)));
+}
+function scrollOtherReadaptationReviewTo(value) {
+    const maximumScroll = Math.max(0, otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight);
+    otherReadaptationReviewPanel.scrollTop = Math.max(0, Math.min(maximumScroll, value));
+    updateOtherReadaptationReviewScrollbar();
+}
+function scrollOtherReadaptationReviewBy(value) {
+    scrollOtherReadaptationReviewTo(otherReadaptationReviewPanel.scrollTop + value);
+}
 function readaptationOtherAction(file) {
     if (file.after_disposition === "episode") {
         return file.preserved_shared_source
@@ -4633,6 +4663,7 @@ function renderOtherReadaptationReview(preview) {
     });
     files.replaceChildren(...cards);
     element("#other-readaptation-review-message").textContent = "";
+    window.requestAnimationFrame(updateOtherReadaptationReviewScrollbar);
 }
 async function approveOtherReadaptation(taskId, button) {
     const defaultLabel = button.textContent ?? "确认人工审核";
@@ -4651,6 +4682,8 @@ async function approveOtherReadaptation(taskId, button) {
         otherReadaptationReviewCancel.disabled = false;
         otherReadaptationReviewCancel.textContent = preview.review_state === "pending" ? "返回检查" : "关闭";
         otherReadaptationReviewDialog.showModal();
+        otherReadaptationReviewPanel.scrollTop = 0;
+        window.requestAnimationFrame(updateOtherReadaptationReviewScrollbar);
     }
     catch (error) {
         button.disabled = false;
@@ -8017,6 +8050,73 @@ otherReadaptationReviewCancel.addEventListener("click", () => {
         otherReadaptationReviewDialog.close();
 });
 otherReadaptationReviewConfirm.addEventListener("click", () => void confirmOtherReadaptationReview());
+otherReadaptationReviewPanel.addEventListener("scroll", updateOtherReadaptationReviewScrollbar, { passive: true });
+otherReadaptationReviewScrollbar.addEventListener("click", event => {
+    if (event.target === otherReadaptationReviewScrollbarThumb)
+        return;
+    const maximumScroll = Math.max(0, otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight);
+    const track = otherReadaptationReviewScrollbar.getBoundingClientRect();
+    const thumbHeight = otherReadaptationReviewScrollbarThumb.getBoundingClientRect().height;
+    const availableTrack = Math.max(1, track.height - thumbHeight);
+    const ratio = Math.max(0, Math.min(1, (event.clientY - track.top - thumbHeight / 2) / availableTrack));
+    scrollOtherReadaptationReviewTo(maximumScroll * ratio);
+});
+otherReadaptationReviewScrollbarThumb.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    otherReadaptationScrollbarDrag = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startScrollTop: otherReadaptationReviewPanel.scrollTop,
+    };
+    otherReadaptationReviewScrollbarThumb.setPointerCapture(event.pointerId);
+});
+otherReadaptationReviewScrollbarThumb.addEventListener("pointermove", event => {
+    const drag = otherReadaptationScrollbarDrag;
+    if (drag === null || drag.pointerId !== event.pointerId)
+        return;
+    const maximumScroll = Math.max(0, otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight);
+    const availableTrack = Math.max(1, otherReadaptationReviewScrollbar.clientHeight
+        - otherReadaptationReviewScrollbarThumb.clientHeight);
+    scrollOtherReadaptationReviewTo(drag.startScrollTop + (event.clientY - drag.startY) * maximumScroll / availableTrack);
+});
+for (const eventName of ["pointerup", "pointercancel"]) {
+    otherReadaptationReviewScrollbarThumb.addEventListener(eventName, event => {
+        if (otherReadaptationScrollbarDrag?.pointerId !== event.pointerId)
+            return;
+        otherReadaptationScrollbarDrag = null;
+        if (otherReadaptationReviewScrollbarThumb.hasPointerCapture(event.pointerId)) {
+            otherReadaptationReviewScrollbarThumb.releasePointerCapture(event.pointerId);
+        }
+    });
+}
+otherReadaptationReviewScrollbar.addEventListener("keydown", event => {
+    const page = Math.max(80, otherReadaptationReviewPanel.clientHeight * .8);
+    switch (event.key) {
+        case "ArrowUp":
+            scrollOtherReadaptationReviewBy(-48);
+            break;
+        case "ArrowDown":
+            scrollOtherReadaptationReviewBy(48);
+            break;
+        case "PageUp":
+            scrollOtherReadaptationReviewBy(-page);
+            break;
+        case "PageDown":
+            scrollOtherReadaptationReviewBy(page);
+            break;
+        case "Home":
+            scrollOtherReadaptationReviewTo(0);
+            break;
+        case "End":
+            scrollOtherReadaptationReviewTo(Number.MAX_SAFE_INTEGER);
+            break;
+        default:
+            return;
+    }
+    event.preventDefault();
+});
+new ResizeObserver(updateOtherReadaptationReviewScrollbar).observe(otherReadaptationReviewPanel);
 otherReadaptationReviewDialog.addEventListener("cancel", event => {
     if (otherReadaptationReviewSubmitting)
         event.preventDefault();
@@ -8036,6 +8136,8 @@ otherReadaptationReviewDialog.addEventListener("close", () => {
     otherReadaptationReviewCancel.disabled = false;
     otherReadaptationReviewCancel.textContent = "返回检查";
     otherReadaptationReviewConfirm.textContent = "确认审核通过";
+    otherReadaptationReviewPanel.scrollTop = 0;
+    updateOtherReadaptationReviewScrollbar();
 });
 element("#cache-previous").addEventListener("click", () => {
     if (cachePage <= 1)

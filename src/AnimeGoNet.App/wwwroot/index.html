@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260814-readaptation-dialog-scroll">
+  <link rel="stylesheet" href="/styles.css?v=20260814-readaptation-middle-scrollbar">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1360,7 +1360,7 @@
   </dialog>
 
   <dialog id="other-readaptation-review-dialog" aria-labelledby="other-readaptation-review-title">
-    <article class="readaptation-review-panel">
+    <article id="other-readaptation-review-panel" class="readaptation-review-panel">
       <div class="delete-heading">
         <div>
           <p class="eyebrow">Other readaptation review</p>
@@ -1369,7 +1369,22 @@
         <button id="other-readaptation-review-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
       <dl id="other-readaptation-review-summary" class="readaptation-review-summary"></dl>
-      <div id="other-readaptation-review-files" class="readaptation-review-files"></div>
+      <div class="readaptation-review-files-shell">
+        <div id="other-readaptation-review-files" class="readaptation-review-files"></div>
+        <div id="other-readaptation-review-scrollbar"
+             class="readaptation-review-scrollbar"
+             role="scrollbar"
+             tabindex="0"
+             aria-label="滚动文件审核内容"
+             aria-controls="other-readaptation-review-files"
+             aria-orientation="vertical"
+             aria-valuemin="0"
+             aria-valuemax="0"
+             aria-valuenow="0">
+          <div id="other-readaptation-review-scrollbar-thumb"
+               class="readaptation-review-scrollbar-thumb"></div>
+        </div>
+      </div>
       <p id="other-readaptation-review-message" class="delete-message" aria-live="polite"></p>
       <div class="delete-actions readaptation-review-actions">
         <span class="muted">确认后记录人工审核通过，随后才允许删除任务记录。</span>
@@ -1407,6 +1422,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-readaptation-manual-review"></script>
+    <script type="module" src="/app.js?v=20260814-readaptation-middle-scrollbar"></script>
 </body>
 </html>

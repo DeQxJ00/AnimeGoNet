@@ -1570,11 +1570,19 @@ const configurationDialog = element<HTMLDialogElement>("#configuration-dialog");
 const cacheEntryDialog = element<HTMLDialogElement>("#cache-entry-dialog");
 const aiDebugDialog = element<HTMLDialogElement>("#ai-debug-dialog");
 const otherReadaptationReviewDialog = element<HTMLDialogElement>("#other-readaptation-review-dialog");
+const otherReadaptationReviewPanel = element<HTMLElement>("#other-readaptation-review-files");
+const otherReadaptationReviewScrollbar = element<HTMLElement>("#other-readaptation-review-scrollbar");
+const otherReadaptationReviewScrollbarThumb = element<HTMLElement>("#other-readaptation-review-scrollbar-thumb");
 const otherReadaptationReviewConfirm = element<HTMLButtonElement>("#other-readaptation-review-confirm");
 const otherReadaptationReviewCancel = element<HTMLButtonElement>("#other-readaptation-review-cancel");
 let activeDeletePreview: DeletePreview | null = null;
 let activeOtherReadaptationReview: ActiveOtherFileReadaptationReview | null = null;
 let otherReadaptationReviewSubmitting = false;
+let otherReadaptationScrollbarDrag: {
+  pointerId: number;
+  startY: number;
+  startScrollTop: number;
+} | null = null;
 let currentConfiguration: RuntimeConfiguration | null = null;
 let pendingConfigurationArchive: File | null = null;
 let pendingConfigurationArchivePreview: ConfigurationArchivePreview | null = null;
@@ -6618,6 +6626,47 @@ function appendReadaptationRow(
   body.append(row);
 }
 
+function updateOtherReadaptationReviewScrollbar(): void {
+  const maximumScroll = Math.max(
+    0,
+    otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight,
+  );
+  const trackHeight = otherReadaptationReviewScrollbar.clientHeight;
+  const thumbHeight = maximumScroll === 0
+    ? trackHeight
+    : Math.max(
+      58,
+      Math.round(trackHeight
+        * otherReadaptationReviewPanel.clientHeight
+        / otherReadaptationReviewPanel.scrollHeight),
+    );
+  const maximumThumbOffset = Math.max(0, trackHeight - thumbHeight);
+  const thumbOffset = maximumScroll === 0
+    ? 0
+    : maximumThumbOffset * otherReadaptationReviewPanel.scrollTop / maximumScroll;
+  otherReadaptationReviewScrollbarThumb.style.height = `${thumbHeight}px`;
+  otherReadaptationReviewScrollbarThumb.style.transform = `translateY(${thumbOffset}px)`;
+  otherReadaptationReviewScrollbar.classList.toggle("inactive", maximumScroll === 0);
+  otherReadaptationReviewScrollbar.setAttribute("aria-valuemax", String(Math.round(maximumScroll)));
+  otherReadaptationReviewScrollbar.setAttribute(
+    "aria-valuenow",
+    String(Math.round(otherReadaptationReviewPanel.scrollTop)),
+  );
+}
+
+function scrollOtherReadaptationReviewTo(value: number): void {
+  const maximumScroll = Math.max(
+    0,
+    otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight,
+  );
+  otherReadaptationReviewPanel.scrollTop = Math.max(0, Math.min(maximumScroll, value));
+  updateOtherReadaptationReviewScrollbar();
+}
+
+function scrollOtherReadaptationReviewBy(value: number): void {
+  scrollOtherReadaptationReviewTo(otherReadaptationReviewPanel.scrollTop + value);
+}
+
 function readaptationOtherAction(
   file: OtherFileReadaptationReviewPreview["files"][number],
 ): string {
@@ -6835,6 +6884,7 @@ function renderOtherReadaptationReview(preview: OtherFileReadaptationReviewPrevi
   });
   files.replaceChildren(...cards);
   element<HTMLElement>("#other-readaptation-review-message").textContent = "";
+  window.requestAnimationFrame(updateOtherReadaptationReviewScrollbar);
 }
 
 async function approveOtherReadaptation(taskId: string, button: HTMLButtonElement): Promise<void> {
@@ -6856,6 +6906,8 @@ async function approveOtherReadaptation(taskId: string, button: HTMLButtonElemen
     otherReadaptationReviewCancel.disabled = false;
     otherReadaptationReviewCancel.textContent = preview.review_state === "pending" ? "返回检查" : "关闭";
     otherReadaptationReviewDialog.showModal();
+    otherReadaptationReviewPanel.scrollTop = 0;
+    window.requestAnimationFrame(updateOtherReadaptationReviewScrollbar);
   } catch (error) {
     button.disabled = false;
     button.textContent = errorMessage(error, "审核对照读取失败");
@@ -10624,6 +10676,88 @@ otherReadaptationReviewConfirm.addEventListener(
   "click",
   () => void confirmOtherReadaptationReview(),
 );
+otherReadaptationReviewPanel.addEventListener(
+  "scroll",
+  updateOtherReadaptationReviewScrollbar,
+  { passive: true },
+);
+otherReadaptationReviewScrollbar.addEventListener("click", event => {
+  if (event.target === otherReadaptationReviewScrollbarThumb) return;
+  const maximumScroll = Math.max(
+    0,
+    otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight,
+  );
+  const track = otherReadaptationReviewScrollbar.getBoundingClientRect();
+  const thumbHeight = otherReadaptationReviewScrollbarThumb.getBoundingClientRect().height;
+  const availableTrack = Math.max(1, track.height - thumbHeight);
+  const ratio = Math.max(
+    0,
+    Math.min(1, (event.clientY - track.top - thumbHeight / 2) / availableTrack),
+  );
+  scrollOtherReadaptationReviewTo(maximumScroll * ratio);
+});
+otherReadaptationReviewScrollbarThumb.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  otherReadaptationScrollbarDrag = {
+    pointerId: event.pointerId,
+    startY: event.clientY,
+    startScrollTop: otherReadaptationReviewPanel.scrollTop,
+  };
+  otherReadaptationReviewScrollbarThumb.setPointerCapture(event.pointerId);
+});
+otherReadaptationReviewScrollbarThumb.addEventListener("pointermove", event => {
+  const drag = otherReadaptationScrollbarDrag;
+  if (drag === null || drag.pointerId !== event.pointerId) return;
+  const maximumScroll = Math.max(
+    0,
+    otherReadaptationReviewPanel.scrollHeight - otherReadaptationReviewPanel.clientHeight,
+  );
+  const availableTrack = Math.max(
+    1,
+    otherReadaptationReviewScrollbar.clientHeight
+      - otherReadaptationReviewScrollbarThumb.clientHeight,
+  );
+  scrollOtherReadaptationReviewTo(
+    drag.startScrollTop + (event.clientY - drag.startY) * maximumScroll / availableTrack,
+  );
+});
+for (const eventName of ["pointerup", "pointercancel"] as const) {
+  otherReadaptationReviewScrollbarThumb.addEventListener(eventName, event => {
+    if (otherReadaptationScrollbarDrag?.pointerId !== event.pointerId) return;
+    otherReadaptationScrollbarDrag = null;
+    if (otherReadaptationReviewScrollbarThumb.hasPointerCapture(event.pointerId)) {
+      otherReadaptationReviewScrollbarThumb.releasePointerCapture(event.pointerId);
+    }
+  });
+}
+otherReadaptationReviewScrollbar.addEventListener("keydown", event => {
+  const page = Math.max(80, otherReadaptationReviewPanel.clientHeight * .8);
+  switch (event.key) {
+    case "ArrowUp":
+      scrollOtherReadaptationReviewBy(-48);
+      break;
+    case "ArrowDown":
+      scrollOtherReadaptationReviewBy(48);
+      break;
+    case "PageUp":
+      scrollOtherReadaptationReviewBy(-page);
+      break;
+    case "PageDown":
+      scrollOtherReadaptationReviewBy(page);
+      break;
+    case "Home":
+      scrollOtherReadaptationReviewTo(0);
+      break;
+    case "End":
+      scrollOtherReadaptationReviewTo(Number.MAX_SAFE_INTEGER);
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+});
+new ResizeObserver(updateOtherReadaptationReviewScrollbar).observe(otherReadaptationReviewPanel);
 otherReadaptationReviewDialog.addEventListener("cancel", event => {
   if (otherReadaptationReviewSubmitting) event.preventDefault();
 });
@@ -10642,6 +10776,8 @@ otherReadaptationReviewDialog.addEventListener("close", () => {
   otherReadaptationReviewCancel.disabled = false;
   otherReadaptationReviewCancel.textContent = "返回检查";
   otherReadaptationReviewConfirm.textContent = "确认审核通过";
+  otherReadaptationReviewPanel.scrollTop = 0;
+  updateOtherReadaptationReviewScrollbar();
 });
 element<HTMLButtonElement>("#cache-previous").addEventListener("click", () => {
   if (cachePage <= 1) return;

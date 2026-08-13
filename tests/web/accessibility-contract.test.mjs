@@ -103,6 +103,10 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.equal(dialog.getAttribute("aria-labelledby"), "other-readaptation-review-title");
   assert.ok(dialog.querySelector("#other-readaptation-review-confirm"));
   assert.ok(dialog.querySelector("#other-readaptation-review-cancel"));
+  const scrollbar = dialog.querySelector("#other-readaptation-review-scrollbar");
+  assert.ok(scrollbar);
+  assert.equal(scrollbar.getAttribute("role"), "scrollbar");
+  assert.equal(scrollbar.getAttribute("aria-controls"), "other-readaptation-review-files");
   assert.match(app, /other-readaptation\/review/);
   assert.match(app, /readaptation-review-table/);
   assert.match(app, /\["信息项", "适配前", "适配后"\]/);
@@ -123,10 +127,19 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(css, /\.readaptation-review-table\s*\{/);
   assert.match(css, /\.readaptation-manual-fields\s*\{/);
   assert.match(css, /#other-readaptation-review-dialog\s*\{[^}]*height:\s*min\(/s);
-  assert.match(css, /\.readaptation-review-panel\s*\{[^}]*overflow-y:\s*scroll/s);
-  assert.match(css, /\.readaptation-review-panel\s*\{[^}]*scrollbar-gutter:\s*stable/s);
+  assert.match(css, /\.readaptation-review-panel\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0,1fr\) auto auto/s);
+  assert.match(css, /\.readaptation-review-panel\s*\{[^}]*overflow:\s*hidden/s);
   assert.match(css, /\.readaptation-review-panel\s*>\s*\.delete-heading\s*\{[^}]*position:\s*sticky/s);
+  assert.match(css, /\.readaptation-review-files-shell\s*\{[^}]*position:\s*relative/s);
+  assert.match(css, /\.readaptation-review-files\s*\{[^}]*overflow-y:\s*scroll/s);
+  assert.match(css, /\.readaptation-review-files\s*\{[^}]*scrollbar-width:\s*none/s);
+  assert.match(css, /\.readaptation-review-files\s*\{[^}]*display:\s*flex/s);
+  assert.match(css, /\.readaptation-review-file\s*\{[^}]*flex:\s*0 0 auto/s);
   assert.match(css, /\.readaptation-review-actions\s*\{[^}]*position:\s*sticky/s);
+  assert.match(css, /\.readaptation-review-scrollbar\s*\{[^}]*position:\s*absolute/s);
+  assert.match(css, /\.readaptation-review-scrollbar-thumb\s*\{[^}]*min-height:\s*58px/s);
+  assert.match(app, /updateOtherReadaptationReviewScrollbar/);
+  assert.match(app, /otherReadaptationReviewScrollbar\.addEventListener\("keydown"/);
 });
 
 test("AI test page exposes verified Responses compatibility controls and usage", async () => {

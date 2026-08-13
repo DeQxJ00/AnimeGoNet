@@ -6,7 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
-    [InlineData("/", "text/html", "/styles.css?v=20260814-readaptation-dialog-scroll")]
+    [InlineData("/", "text/html", "/styles.css?v=20260814-readaptation-middle-scrollbar")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]
@@ -121,7 +121,7 @@ public sealed class StaticWebUiTests
     [InlineData("/", "text/html", "configuration-mikan-bangumi-cache-hours")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260814-readaptation-manual-review")]
+    [InlineData("/", "text/html", "/app.js?v=20260814-readaptation-middle-scrollbar")]
     [InlineData("/", "text/html", "ai-test-mikan-import")]
     [InlineData("/", "text/html", "ai-test-enable-tmdb-mcp")]
     [InlineData("/app.js", "text/javascript", "enable_bgm_mcp")]
