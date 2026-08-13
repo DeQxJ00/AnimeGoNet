@@ -34,6 +34,7 @@ public sealed class SchemaMigrationTests
             "cache_entries",
             "bangumi_archive_episodes",
             "bangumi_archive_subjects",
+            "bangumi_archive_usage",
             "completion_aliases",
             "completion_records",
             "data_update_runs",

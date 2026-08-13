@@ -93,12 +93,17 @@ public sealed class SchemaReliabilityTests
         "DELETE FROM schema_migrations WHERE version = 20;",
         SchemaMigrationException.HistoryInvalidCode)]
     [InlineData(
-        "INSERT INTO schema_migrations(version, name, applied_at_utc) VALUES (45, 'future', '2026-08-08T00:00:00Z');",
+        "INSERT INTO schema_migrations(version, name, applied_at_utc) VALUES ({future}, 'future', '2026-08-08T00:00:00Z');",
         SchemaMigrationException.DatabaseNewerCode)]
     public async Task InvalidOrNewerMigrationHistoryFailsClosed(
         string mutation,
         string expectedCode)
     {
+        mutation = mutation.Replace(
+            "{future}",
+            (DatabaseSchema.CurrentVersion + 1).ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            StringComparison.Ordinal);
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
         await using (var connection = await fixture.Database.OpenConnectionAsync())
         await using (var command = connection.CreateCommand())

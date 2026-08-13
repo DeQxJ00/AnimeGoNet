@@ -154,6 +154,13 @@ interface DataUpdateStatus {
   downloads: DataUpdateDownload[];
   last_package_run: DataUpdateRun | null;
   last_transfer_run: DataUpdateTransferRun | null;
+  archive_usage: {
+    total_hits: number;
+    subject_hits: number;
+    episode_hits: number;
+    relation_hits: number;
+    last_hit_at_utc: string | null;
+  };
 }
 
 interface DataUpdateActionResult {
@@ -1571,7 +1578,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     ],
   },
   "bangumi-cache": {
-    title: "bangumi缓存",
+    title: "Bangumi缓存",
     description: "管理 AnimeGoNetData 离线 Bangumi Subject、Episode 与前传关系档案。",
     defaultSubview: "versions",
     tabs: [
@@ -2404,6 +2411,13 @@ async function loadDataUpdate(silent = false): Promise<void> {
                 ? ` · ${status.last_package_run.failure_code}` : ""}`
             : "无",
         ],
+      ]),
+      configurationCard("AnimeGoNetData 本地缓存使用记录", [
+        ["累计命中", `${status.archive_usage.total_hits} 次`],
+        ["Subject 命中", `${status.archive_usage.subject_hits} 次`],
+        ["完整 Episode 集命中", `${status.archive_usage.episode_hits} 次`],
+        ["前传关系命中", `${status.archive_usage.relation_hits} 次`],
+        ["最近命中", dataUpdateTime(status.archive_usage.last_hit_at_utc)],
       ]),
     );
     renderDataUpdateTransfer(status);

@@ -136,4 +136,27 @@ public sealed class BangumiArchiveStoreTests
         Assert.Null(await new BangumiArchiveStore(fixture.Database)
             .GetRelatedSubjectsAsync(51));
     }
+
+    [Fact]
+    public async Task UsageAuditPersistsCountsAcrossVersions()
+    {
+        await using var fixture = await DataPackageTestFixture.CreateAsync();
+        var store = new BangumiArchiveStore(fixture.Database);
+        var firstHit = new DateTimeOffset(2026, 8, 13, 1, 2, 3, TimeSpan.Zero);
+        var lastHit = firstHit.AddMinutes(2);
+
+        await store.RecordSubjectHitAsync("2026.07.29.1", firstHit);
+        await store.RecordSubjectHitAsync("2026.07.29.1", firstHit.AddMinutes(1));
+        await store.RecordEpisodeHitAsync("2026.07.29.1", firstHit.AddMinutes(1));
+        await store.RecordRelationHitAsync("2026.08.05.1", lastHit);
+        await store.RecordEpisodeHitAsync("2026.07.29.1", firstHit);
+
+        var usage = await store.GetUsageAsync();
+
+        Assert.Equal(5, usage.TotalHits);
+        Assert.Equal(2, usage.SubjectHits);
+        Assert.Equal(2, usage.EpisodeHits);
+        Assert.Equal(1, usage.RelationHits);
+        Assert.Equal(lastHit, usage.LastHitAtUtc);
+    }
 }

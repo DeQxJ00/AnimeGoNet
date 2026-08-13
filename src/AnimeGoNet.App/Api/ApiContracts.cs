@@ -1546,6 +1546,13 @@ public sealed record DataUpdateTransferRunResponse(
     [property: JsonPropertyName("started_at_utc")] DateTimeOffset StartedAtUtc,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc);
 
+public sealed record BangumiArchiveUsageResponse(
+    [property: JsonPropertyName("total_hits")] long TotalHits,
+    [property: JsonPropertyName("subject_hits")] long SubjectHits,
+    [property: JsonPropertyName("episode_hits")] long EpisodeHits,
+    [property: JsonPropertyName("relation_hits")] long RelationHits,
+    [property: JsonPropertyName("last_hit_at_utc")] DateTimeOffset? LastHitAtUtc);
+
 public sealed record DataUpdateStatusResponse(
     [property: JsonPropertyName("scheduled_enabled")] bool ScheduledEnabled,
     [property: JsonPropertyName("cron")] string Cron,
@@ -1559,7 +1566,8 @@ public sealed record DataUpdateStatusResponse(
     [property: JsonPropertyName("versions")] IReadOnlyList<DataUpdateVersionResponse> Versions,
     [property: JsonPropertyName("downloads")] IReadOnlyList<DataUpdateDownloadResponse> Downloads,
     [property: JsonPropertyName("last_package_run")] DataUpdatePackageRunResponse? LastPackageRun,
-    [property: JsonPropertyName("last_transfer_run")] DataUpdateTransferRunResponse? LastTransferRun);
+    [property: JsonPropertyName("last_transfer_run")] DataUpdateTransferRunResponse? LastTransferRun,
+    [property: JsonPropertyName("archive_usage")] BangumiArchiveUsageResponse ArchiveUsage);
 
 public sealed record DataUpdateActionResponse(
     [property: JsonPropertyName("run_id")] string RunId,

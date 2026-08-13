@@ -717,11 +717,13 @@ public static class ApiEndpoints
         DataUpdateRuntimeState runtimeOptions,
         DataPackageStore packages,
         DataUpdateTransferStore transfers,
+        BangumiArchiveStore bangumiArchive,
         CancellationToken cancellationToken)
     {
         var package = await packages.GetStatusAsync(cancellationToken).ConfigureAwait(false);
         var downloads = await transfers.ListDownloadsAsync(cancellationToken).ConfigureAwait(false);
         var transfer = await transfers.GetLastRunAsync(cancellationToken).ConfigureAwait(false);
+        var usage = await bangumiArchive.GetUsageAsync(cancellationToken).ConfigureAwait(false);
         var options = runtimeOptions.Value;
         return TypedResults.Ok(new DataUpdateStatusResponse(
             options.Enabled,
@@ -769,7 +771,13 @@ public static class ApiEndpoints
                     transfer.DownloadedBytes,
                     transfer.TotalBytes,
                     transfer.StartedAtUtc,
-                    transfer.CompletedAtUtc)));
+                    transfer.CompletedAtUtc),
+            new BangumiArchiveUsageResponse(
+                usage.TotalHits,
+                usage.SubjectHits,
+                usage.EpisodeHits,
+                usage.RelationHits,
+                usage.LastHitAtUtc)));
     }
 
     private static Task<IResult> CheckDataUpdate(

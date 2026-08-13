@@ -27,6 +27,12 @@ public sealed class DataUpdateApiTests
         Assert.Equal(JsonValueKind.Null, root.GetProperty("active_version").ValueKind);
         Assert.Empty(root.GetProperty("versions").EnumerateArray());
         Assert.Empty(root.GetProperty("downloads").EnumerateArray());
+        var usage = root.GetProperty("archive_usage");
+        Assert.Equal(0, usage.GetProperty("total_hits").GetInt64());
+        Assert.Equal(0, usage.GetProperty("subject_hits").GetInt64());
+        Assert.Equal(0, usage.GetProperty("episode_hits").GetInt64());
+        Assert.Equal(0, usage.GetProperty("relation_hits").GetInt64());
+        Assert.Equal(JsonValueKind.Null, usage.GetProperty("last_hit_at_utc").ValueKind);
     }
 
     [Fact]

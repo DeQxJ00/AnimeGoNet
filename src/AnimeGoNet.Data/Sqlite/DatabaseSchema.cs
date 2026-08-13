@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 44;
+    public const int CurrentVersion = 45;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -62,7 +62,24 @@ public static class DatabaseSchema
             44,
             "recover_completed_metadata_organization",
             RecoverCompletedMetadataOrganization),
+        new SchemaMigration(
+            45,
+            "bangumi_archive_usage_audit",
+            BangumiArchiveUsageAudit),
     ];
+
+    private const string BangumiArchiveUsageAudit = """
+        CREATE TABLE bangumi_archive_usage (
+            data_version TEXT NOT NULL PRIMARY KEY,
+            subject_hit_count INTEGER NOT NULL DEFAULT 0
+                CHECK (subject_hit_count >= 0),
+            episode_hit_count INTEGER NOT NULL DEFAULT 0
+                CHECK (episode_hit_count >= 0),
+            relation_hit_count INTEGER NOT NULL DEFAULT 0
+                CHECK (relation_hit_count >= 0),
+            last_hit_at_utc TEXT NOT NULL
+        ) STRICT;
+        """;
 
     private const string RecoverCompletedMetadataOrganization = """
         UPDATE ingest_tasks

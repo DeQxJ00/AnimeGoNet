@@ -16,6 +16,19 @@ public sealed record BangumiArchiveSnapshot(
             || Episodes.Count >= Subject.EpisodeCount);
 }
 
+public sealed record BangumiArchiveRelationsSnapshot(
+    string DataVersion,
+    IReadOnlyList<BangumiSubjectRelation> Relations);
+
+public sealed record BangumiArchiveUsage(
+    long SubjectHits,
+    long EpisodeHits,
+    long RelationHits,
+    DateTimeOffset? LastHitAtUtc)
+{
+    public long TotalHits => SubjectHits + EpisodeHits + RelationHits;
+}
+
 public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
 {
     public async Task<BangumiArchiveSnapshot?> GetAsync(
@@ -61,6 +74,16 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
     }
 
     public async Task<IReadOnlyList<BangumiSubjectRelation>?> GetRelatedSubjectsAsync(
+        int subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetRelatedSubjectsSnapshotAsync(
+            subjectId,
+            cancellationToken).ConfigureAwait(false);
+        return snapshot?.Relations;
+    }
+
+    public async Task<BangumiArchiveRelationsSnapshot?> GetRelatedSubjectsSnapshotAsync(
         int subjectId,
         CancellationToken cancellationToken = default)
     {
@@ -133,7 +156,109 @@ public sealed class BangumiArchiveStore(AnimeGoSqliteDatabase database)
             }
         }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return relations;
+        return new BangumiArchiveRelationsSnapshot(dataVersion, relations);
+    }
+
+    public Task RecordSubjectHitAsync(
+        string dataVersion,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        RecordHitAsync(
+            dataVersion,
+            "subject_hit_count",
+            utcNow,
+            cancellationToken);
+
+    public Task RecordEpisodeHitAsync(
+        string dataVersion,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        RecordHitAsync(
+            dataVersion,
+            "episode_hit_count",
+            utcNow,
+            cancellationToken);
+
+    public Task RecordRelationHitAsync(
+        string dataVersion,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        RecordHitAsync(
+            dataVersion,
+            "relation_hit_count",
+            utcNow,
+            cancellationToken);
+
+    public async Task<BangumiArchiveUsage> GetUsageAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database
+            .OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COALESCE(SUM(subject_hit_count), 0),
+                   COALESCE(SUM(episode_hit_count), 0),
+                   COALESCE(SUM(relation_hit_count), 0),
+                   MAX(last_hit_at_utc)
+            FROM bangumi_archive_usage;
+            """;
+        await using var reader = await command
+            .ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        return new BangumiArchiveUsage(
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.IsDBNull(3)
+                ? null
+                : DateTimeOffset.Parse(
+                    reader.GetString(3),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind));
+    }
+
+    private async Task RecordHitAsync(
+        string dataVersion,
+        string counterColumn,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataVersion);
+        if (counterColumn is not (
+            "subject_hit_count" or
+            "episode_hit_count" or
+            "relation_hit_count"))
+        {
+            throw new ArgumentOutOfRangeException(nameof(counterColumn));
+        }
+
+        await using var connection = await database
+            .OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO bangumi_archive_usage (
+                data_version, subject_hit_count, episode_hit_count,
+                relation_hit_count, last_hit_at_utc)
+            VALUES (
+                $data_version,
+                {(counterColumn == "subject_hit_count" ? 1 : 0)},
+                {(counterColumn == "episode_hit_count" ? 1 : 0)},
+                {(counterColumn == "relation_hit_count" ? 1 : 0)},
+                $last_hit_at_utc)
+            ON CONFLICT(data_version) DO UPDATE SET
+                {counterColumn} = {counterColumn} + 1,
+                last_hit_at_utc = MAX(
+                    last_hit_at_utc,
+                    excluded.last_hit_at_utc);
+            """;
+        command.Parameters.AddWithValue("$data_version", dataVersion);
+        command.Parameters.AddWithValue(
+            "$last_hit_at_utc",
+            utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<(string DataVersion, BangumiSubject Subject)?>

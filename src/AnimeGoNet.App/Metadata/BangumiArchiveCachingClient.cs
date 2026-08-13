@@ -19,10 +19,18 @@ public sealed class BangumiArchiveCachingClient(
         var cached = await archive
             .GetAsync(subjectId, cancellationToken)
             .ConfigureAwait(false);
-        return cached?.Subject
-            ?? await subjects
-                .GetSubjectAsync(subjectId, cancellationToken)
-                .ConfigureAwait(false);
+        if (cached is not null)
+        {
+            await archive.RecordSubjectHitAsync(
+                cached.DataVersion,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return cached.Subject;
+        }
+
+        return await subjects
+            .GetSubjectAsync(subjectId, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<BangumiSubjectRelation>>
@@ -31,12 +39,20 @@ public sealed class BangumiArchiveCachingClient(
         CancellationToken cancellationToken = default)
     {
         var cached = await archive
+            .GetRelatedSubjectsSnapshotAsync(subjectId, cancellationToken)
+            .ConfigureAwait(false);
+        if (cached is not null)
+        {
+            await archive.RecordRelationHitAsync(
+                cached.DataVersion,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return cached.Relations;
+        }
+
+        return await subjects
             .GetRelatedSubjectsAsync(subjectId, cancellationToken)
             .ConfigureAwait(false);
-        return cached
-            ?? await subjects
-                .GetRelatedSubjectsAsync(subjectId, cancellationToken)
-                .ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
@@ -48,6 +64,10 @@ public sealed class BangumiArchiveCachingClient(
             .ConfigureAwait(false);
         if (cached is { HasCompleteEpisodeSet: true })
         {
+            await archive.RecordEpisodeHitAsync(
+                cached.DataVersion,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
             return cached.Episodes;
         }
 

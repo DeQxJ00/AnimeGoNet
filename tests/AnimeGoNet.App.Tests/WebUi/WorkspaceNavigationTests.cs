@@ -16,8 +16,9 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("id=\"sidebar-toggle\"", html, StringComparison.Ordinal);
         Assert.Contains(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"Mikan 手动设置\"", script, StringComparison.Ordinal);
-        Assert.Contains(">bangumi缓存</button>", html, StringComparison.Ordinal);
-        Assert.Contains("title: \"bangumi缓存\"", script, StringComparison.Ordinal);
+        Assert.Contains(">Bangumi缓存</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"Bangumi缓存\"", script, StringComparison.Ordinal);
+        Assert.Contains("AnimeGoNetData 本地缓存使用记录", script, StringComparison.Ordinal);
         Assert.Contains(
             "data-workspace=\"bangumi-cache\" data-subview=\"versions\"",
             html,

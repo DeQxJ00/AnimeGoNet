@@ -29,6 +29,12 @@ public sealed class BangumiArchiveCachingClientTests
             (await subjects.GetSubjectAsync(51))?.Name);
         Assert.Equal(1001, Assert.Single(
             await episodes.GetEpisodesAsync(51)).Id);
+
+        var usage = await new BangumiArchiveStore(database).GetUsageAsync();
+        Assert.Equal(2, usage.TotalHits);
+        Assert.Equal(1, usage.SubjectHits);
+        Assert.Equal(1, usage.EpisodeHits);
+        Assert.Equal(0, usage.RelationHits);
     }
 
     [Fact]
@@ -76,6 +82,8 @@ public sealed class BangumiArchiveCachingClientTests
         Assert.Equal(52, prequel.Id);
         Assert.Equal("前传", prequel.Relation);
         Assert.Equal(0, upstream.RelationCalls);
+        var usage = await fixture.Store.GetUsageAsync();
+        Assert.Equal(1, usage.RelationHits);
     }
 
     [Fact]
@@ -127,6 +135,7 @@ public sealed class BangumiArchiveCachingClientTests
         Assert.Equal(8001, Assert.Single(episodes).Id);
         Assert.Equal(1, upstream.SubjectCalls);
         Assert.Equal(1, upstream.EpisodeCalls);
+        Assert.Equal(0, (await fixture.Store.GetUsageAsync()).TotalHits);
     }
 
     [Fact]
@@ -149,6 +158,9 @@ public sealed class BangumiArchiveCachingClientTests
         Assert.Equal(8001, Assert.Single(episodes).Id);
         Assert.Equal(0, upstream.SubjectCalls);
         Assert.Equal(1, upstream.EpisodeCalls);
+        var usage = await fixture.Store.GetUsageAsync();
+        Assert.Equal(1, usage.SubjectHits);
+        Assert.Equal(0, usage.EpisodeHits);
     }
 
     [Fact]
