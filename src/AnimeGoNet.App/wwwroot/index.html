@@ -266,12 +266,19 @@
       </form>
       <p id="data-update-status" class="muted" role="status">正在读取数据版本…</p>
       <div id="data-update-summary" class="data-update-summary" aria-live="polite"></div>
-      <article class="data-update-usage-detail" aria-labelledby="data-update-usage-title">
-        <div class="data-update-usage-heading">
+      <details id="data-update-usage-detail" class="data-update-usage-detail">
+        <summary class="data-update-usage-heading">
           <div>
             <h3 id="data-update-usage-title">本地缓存逐条命中明细</h3>
             <p class="muted">记录由 AnimeGoNetData 直接返回的每次读取；旧版本升级前的历史明细不会推测补造。</p>
           </div>
+          <span id="data-update-usage-status" class="data-update-usage-status" role="status">正在读取命中明细…</span>
+          <span class="data-update-usage-toggle" aria-hidden="true">
+            <span class="data-update-usage-toggle-open">展开明细</span>
+            <span class="data-update-usage-toggle-close">收起明细</span>
+          </span>
+        </summary>
+        <div class="data-update-usage-content">
           <div class="data-update-usage-filters">
             <label>类型
               <select id="data-update-usage-kind">
@@ -289,17 +296,30 @@
               </select>
             </label>
           </div>
+          <div class="data-update-usage-table-wrap">
+            <table class="data-update-usage-table">
+              <thead>
+                <tr>
+                  <th scope="col">命中类型</th>
+                  <th scope="col">bgmid</th>
+                  <th scope="col">返回数</th>
+                  <th scope="col">数据版本</th>
+                  <th scope="col">命中时间</th>
+                  <th scope="col">序号</th>
+                </tr>
+              </thead>
+              <tbody id="data-update-usage-list" aria-live="polite">
+                <tr><td class="muted empty" colspan="6">暂无本地缓存命中明细。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <nav class="data-update-usage-pagination" aria-label="本地缓存命中明细分页">
+            <button id="data-update-usage-previous" type="button" class="secondary-button" disabled>上一页</button>
+            <span id="data-update-usage-page">第 1 / 1 页</span>
+            <button id="data-update-usage-next" type="button" class="secondary-button" disabled>下一页</button>
+          </nav>
         </div>
-        <p id="data-update-usage-status" class="muted" role="status">正在读取命中明细…</p>
-        <div id="data-update-usage-list" class="data-update-usage-list" aria-live="polite">
-          <p class="muted empty">暂无本地缓存命中明细。</p>
-        </div>
-        <nav class="data-update-usage-pagination" aria-label="本地缓存命中明细分页">
-          <button id="data-update-usage-previous" type="button" class="secondary-button" disabled>上一页</button>
-          <span id="data-update-usage-page">第 1 / 1 页</span>
-          <button id="data-update-usage-next" type="button" class="secondary-button" disabled>下一页</button>
-        </nav>
-      </article>
+      </details>
       <article id="data-update-transfer" class="data-update-transfer" aria-live="polite">
         <p class="muted empty">暂无检查或下载记录。</p>
       </article>

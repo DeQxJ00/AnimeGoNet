@@ -985,28 +985,73 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 
 .data-update-usage-detail {
   margin-bottom: 1rem;
-  padding: 1rem;
   border: 1px solid #27334c;
   border-radius: 1rem;
   background: rgba(16,22,37,.88);
+  overflow: hidden;
 }
 
 .data-update-usage-heading {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto auto;
+  align-items: center;
   gap: 1rem;
+  padding: 1rem;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color .16s ease;
 }
+
+.data-update-usage-heading::-webkit-details-marker { display: none; }
+.data-update-usage-heading:hover { background: rgba(43,58,91,.28); }
 
 .data-update-usage-heading h3,
 .data-update-usage-heading p { margin: 0; }
 .data-update-usage-heading p { margin-top: .35rem; }
+
+.data-update-usage-status {
+  color: var(--muted);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.data-update-usage-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: #b9cbec;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.data-update-usage-toggle::after {
+  content: "";
+  width: .48rem;
+  height: .48rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-.12rem);
+  transition: transform .16s ease;
+}
+
+.data-update-usage-toggle-close { display: none; }
+.data-update-usage-detail[open] .data-update-usage-toggle-open { display: none; }
+.data-update-usage-detail[open] .data-update-usage-toggle-close { display: inline; }
+.data-update-usage-detail[open] .data-update-usage-toggle::after {
+  transform: rotate(225deg) translate(-.12rem,-.12rem);
+}
+
+.data-update-usage-content {
+  padding: .85rem 1rem 1rem;
+  border-top: 1px solid rgba(52,66,96,.72);
+}
 
 .data-update-usage-filters {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: .65rem;
+  margin-bottom: .7rem;
 }
 
 .data-update-usage-filters label {
@@ -1016,31 +1061,51 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   font-size: .76rem;
 }
 
-.data-update-usage-list { display: grid; gap: .7rem; }
-
-.data-update-usage-item {
-  display: grid;
-  grid-template-columns: minmax(8rem, .7fr) minmax(11rem, 1fr) minmax(8rem, .7fr) minmax(10rem, 1fr);
-  gap: .45rem .9rem;
-  align-items: center;
-  padding: .8rem;
+.data-update-usage-table-wrap {
+  max-height: 31rem;
+  overflow: auto;
   border: 1px solid #344260;
   border-radius: .75rem;
   background: rgba(5,8,16,.52);
 }
 
-.data-update-usage-item dt {
-  color: var(--muted);
-  font-size: .72rem;
+.data-update-usage-table {
+  width: 100%;
+  min-width: 47rem;
+  border-collapse: collapse;
+  font-size: .78rem;
 }
 
-.data-update-usage-item dd {
-  min-width: 0;
-  margin: .15rem 0 0;
-  overflow-wrap: anywhere;
-  color: #edf2ff;
-  font-size: .84rem;
+.data-update-usage-table th,
+.data-update-usage-table td {
+  padding: .52rem .68rem;
+  border-bottom: 1px solid rgba(52,66,96,.62);
+  text-align: left;
+  vertical-align: middle;
 }
+
+.data-update-usage-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #11192a;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.data-update-usage-table td {
+  color: #edf2ff;
+  white-space: nowrap;
+}
+
+.data-update-usage-table tbody tr:last-child td { border-bottom: 0; }
+.data-update-usage-table tbody tr:hover td { background: rgba(43,58,91,.22); }
+.data-update-usage-table td.empty { padding: 1.2rem; text-align: center; }
+
+.data-update-usage-kind { color: #b9d3ff !important; font-weight: 700; }
+.data-update-usage-number { font-variant-numeric: tabular-nums; }
 
 .data-update-usage-pagination {
   display: flex;
@@ -1140,9 +1205,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .data-update-offline { grid-template-columns: 1fr; }
   .data-update-offline small { grid-column: 1; }
   .data-update-columns { grid-template-columns: 1fr; }
-  .data-update-usage-heading { flex-direction: column; }
+  .data-update-usage-heading { grid-template-columns: minmax(0,1fr) auto; }
+  .data-update-usage-status { grid-column: 1 / -1; grid-row: 2; white-space: normal; }
+  .data-update-usage-toggle { grid-column: 2; grid-row: 1; }
   .data-update-usage-filters { justify-content: flex-start; }
-  .data-update-usage-item { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .live-log-heading {

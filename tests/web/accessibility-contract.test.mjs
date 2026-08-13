@@ -138,6 +138,31 @@ test("anime library exposes auditable task and file deletion without merging pro
   assert.match(css, /\.library-audit-actions\s*\{/);
 });
 
+test("Bangumi archive hit details are collapsed by default and use a compact table", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  const details = document.querySelector("#data-update-usage-detail");
+  assert.ok(details);
+  assert.equal(details.tagName, "DETAILS");
+  assert.equal(details.hasAttribute("open"), false);
+  assert.ok(details.querySelector("summary.data-update-usage-heading"));
+  const table = details.querySelector("table.data-update-usage-table");
+  assert.ok(table);
+  assert.deepEqual(
+    [...table.querySelectorAll("thead th")].map(cell => cell.textContent?.trim()),
+    ["命中类型", "bgmid", "返回数", "数据版本", "命中时间", "序号"],
+  );
+  assert.equal(table.querySelector("tbody")?.id, "data-update-usage-list");
+  assert.match(app, /document\.createElement\("tr"\)/);
+  assert.match(app, /data-update-usage-kind/);
+  assert.match(css, /\.data-update-usage-table-wrap\s*\{[^}]*max-height:\s*31rem/s);
+  assert.match(css, /\.data-update-usage-table\s*\{[^}]*border-collapse:\s*collapse/s);
+  assert.match(css, /\.data-update-usage-detail\[open\]/);
+});
+
 test("Other readaptation review confirms a server-provided before and after comparison", async () => {
   const [document, app, css] = await Promise.all([
     page(),

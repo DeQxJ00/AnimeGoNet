@@ -916,12 +916,15 @@ function renderDataUpdateDownloads(status) {
     }));
 }
 function bangumiArchiveUsageMessage(text, alert = false) {
-    const message = document.createElement("p");
+    const row = document.createElement("tr");
+    const message = document.createElement("td");
     message.className = "muted empty";
+    message.colSpan = 6;
     message.textContent = text;
     if (alert)
         message.setAttribute("role", "alert");
-    return message;
+    row.append(message);
+    return row;
 }
 function renderBangumiArchiveUsage(page) {
     const target = element("#data-update-usage-list");
@@ -932,26 +935,25 @@ function renderBangumiArchiveUsage(page) {
     }
     else {
         target.replaceChildren(...page.items.map(item => {
-            const card = document.createElement("dl");
-            card.className = "data-update-usage-item";
-            const fields = [
-                ["命中类型", bangumiArchiveHitKindLabels[item.hit_kind]],
-                ["Bangumi Subject ID", String(item.subject_id)],
-                ["返回记录数", `${item.result_count} 条`],
-                ["AnimeGoNetData 版本", item.data_version],
-                ["命中时间", dataUpdateTime(item.hit_at_utc)],
-                ["明细序号", String(item.id)],
+            const row = document.createElement("tr");
+            const values = [
+                bangumiArchiveHitKindLabels[item.hit_kind],
+                String(item.subject_id),
+                String(item.result_count),
+                item.data_version,
+                dataUpdateTime(item.hit_at_utc),
+                String(item.id),
             ];
-            for (const [label, value] of fields) {
-                const field = document.createElement("div");
-                const term = document.createElement("dt");
-                term.textContent = label;
-                const description = document.createElement("dd");
-                description.textContent = value;
-                field.append(term, description);
-                card.append(field);
+            for (const [index, value] of values.entries()) {
+                const cell = document.createElement("td");
+                cell.textContent = value;
+                if (index === 0)
+                    cell.className = "data-update-usage-kind";
+                if (index === 1 || index === 2 || index === 5)
+                    cell.classList.add("data-update-usage-number");
+                row.append(cell);
             }
-            return card;
+            return row;
         }));
     }
     const totalPages = Math.max(1, Math.ceil(page.total_items / page.page_size));
