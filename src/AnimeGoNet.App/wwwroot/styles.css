@@ -414,14 +414,17 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .delete-button:hover, .danger-button:hover { border-color: #c35c69; }
 #delete-dialog { width: min(760px, calc(100% - 28px)); max-height: calc(100vh - 40px); padding: 0; color: #edf2ff; border: 1px solid #813f49; border-radius: 22px; background: #101625; box-shadow: 0 30px 100px rgba(0,0,0,.65); }
 #delete-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
-#other-readaptation-review-dialog { width: min(1180px, calc(100% - 28px)); max-height: calc(100vh - 34px); padding: 0; color: #edf2ff; border: 1px solid #405f8d; border-radius: 22px; background: #101625; box-shadow: 0 30px 100px rgba(0,0,0,.65); }
+#other-readaptation-review-dialog { width: min(1180px, calc(100% - 28px)); height: min(900px, calc(100dvh - 34px)); max-height: calc(100vh - 34px); padding: 0; overflow: hidden; color: #edf2ff; border: 1px solid #405f8d; border-radius: 22px; background: #101625; box-shadow: 0 30px 100px rgba(0,0,0,.65); }
 #other-readaptation-review-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
-.readaptation-review-panel { display: grid; grid-template-rows: auto auto minmax(180px,1fr) auto auto; gap: 16px; box-sizing: border-box; max-height: calc(100vh - 36px); padding: 24px; }
+.readaptation-review-panel { display: grid; grid-template-rows: auto auto minmax(0,1fr) auto auto; gap: 16px; box-sizing: border-box; height: 100%; min-height: 0; padding: 24px; overflow: hidden; }
 .readaptation-review-summary { display: grid; grid-template-columns: minmax(240px,2fr) repeat(3,minmax(150px,1fr)); gap: 10px; margin: 0; }
 .readaptation-review-summary > div { min-width: 0; padding: 10px 12px; border: 1px solid #344260; border-radius: 12px; background: rgba(5,8,16,.45); }
 .readaptation-review-summary dt { color: #8094b7; font-size: .68rem; }
 .readaptation-review-summary dd { margin: 4px 0 0; color: #dce7fb; font-size: .76rem; overflow-wrap: anywhere; }
-.readaptation-review-files { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 14px; padding-right: 4px; }
+.readaptation-review-files { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #526585 #151d2f; display: grid; align-content: start; gap: 14px; padding-right: 8px; }
+.readaptation-review-files::-webkit-scrollbar { width: 10px; }
+.readaptation-review-files::-webkit-scrollbar-track { border-radius: 999px; background: #151d2f; }
+.readaptation-review-files::-webkit-scrollbar-thumb { border: 2px solid #151d2f; border-radius: 999px; background: #526585; }
 .readaptation-review-file { min-width: 0; border: 1px solid #344260; border-radius: 15px; overflow: hidden; background: rgba(5,8,16,.5); }
 .readaptation-review-file > h3 { margin: 0; padding: 12px 14px; border-bottom: 1px solid #344260; color: #e8efff; background: rgba(28,39,62,.72); font-size: .82rem; overflow-wrap: anywhere; }
 .readaptation-review-table-wrap { overflow-x: auto; }
