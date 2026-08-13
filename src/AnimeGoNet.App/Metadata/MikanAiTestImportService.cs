@@ -20,6 +20,15 @@ public sealed record MikanAiTestImportResult(
     int TorrentFileCount,
     IReadOnlyList<AiMetadataFileInput> VideoFiles);
 
+public sealed record MikanEpisodeResolveResult(
+    string Title,
+    Uri EpisodeUrl,
+    Uri TorrentUrl,
+    int MikanId,
+    int GroupId,
+    int? BangumiSubjectId,
+    DateTimeOffset? PublishedAt);
+
 public sealed class MikanAiTestImportException(string code, string message, Exception? inner = null)
     : Exception(message, inner)
 {
@@ -38,12 +47,73 @@ public sealed partial class MikanAiTestImportService(
         string episodeUrl,
         CancellationToken cancellationToken = default)
     {
-        var episodeUri = ValidateEpisodeUri(episodeUrl, options.Metadata.Mikan.BaseUrl);
+        var resolved = await ResolveAsync(episodeUrl, "mikan", cancellationToken).ConfigureAwait(false);
         var profile = await profiles.GetEnabledAsync("mikan", cancellationToken).ConfigureAwait(false)
             ?? throw Error("ai_test_mikan_profile_missing", "Enabled Mikan source profile was not found.");
+
+        var allowedHosts = profile.AllowedTorrentHosts
+            .Append(resolved.TorrentUrl.IdnHost)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var trustedPrivateHosts = string.Equals(
+                resolved.TorrentUrl.IdnHost,
+                options.Metadata.Mikan.BaseUrl.IdnHost,
+                StringComparison.OrdinalIgnoreCase)
+            ? new[] { resolved.TorrentUrl.IdnHost }
+            : [];
+        try
+        {
+            await using var staged = await staging.StageAsync(
+                resolved.TorrentUrl,
+                new TorrentSourcePolicy(
+                    profile.Id,
+                    allowedHosts,
+                    profile.MikanIdentityCookie,
+                    trustedPrivateHosts),
+                cancellationToken).ConfigureAwait(false);
+            var videos = staged.Metadata.Files
+                .Where(file => !file.IsPadding && SubtitleAssociationResolver.IsVideo(file.RelativePath))
+                .Select(file => new AiMetadataFileInput(file.RelativePath, file.Size))
+                .ToArray();
+            if (videos.Length == 0)
+            {
+                throw Error("ai_test_mikan_video_missing", "Torrent contains no supported video files.");
+            }
+
+            return new MikanAiTestImportResult(
+                resolved.Title,
+                resolved.MikanId,
+                resolved.GroupId,
+                resolved.BangumiSubjectId,
+                resolved.PublishedAt,
+                staged.Metadata.Files.Count,
+                videos);
+        }
+        catch (TorrentStagingException exception)
+        {
+            throw Error(
+                $"ai_test_mikan_torrent_{exception.Code.ToString().ToLowerInvariant()}",
+                "Mikan torrent could not be downloaded or parsed.",
+                exception);
+        }
+    }
+
+    public async Task<MikanEpisodeResolveResult> ResolveAsync(
+        string episodeUrl,
+        string sourceProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        var episodeUri = ValidateEpisodeUri(episodeUrl, options.Metadata.Mikan.BaseUrl);
+        var normalizedProfileId = sourceProfileId?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalizedProfileId))
+        {
+            throw Error("mikan_episode_source_profile_required", "Mikan source profile is required.");
+        }
+        var profile = await profiles.GetEnabledAsync(normalizedProfileId, cancellationToken).ConfigureAwait(false)
+            ?? throw Error("mikan_episode_source_profile_missing", "Enabled Mikan source profile was not found.");
         if (!string.Equals(profile.Adapter, "mikan", StringComparison.OrdinalIgnoreCase))
         {
-            throw Error("ai_test_mikan_profile_invalid", "The default Mikan source profile is invalid.");
+            throw Error("mikan_episode_source_profile_invalid", "Source profile must use the Mikan adapter.");
         }
 
         var identity = await identityCache.GetAsync(episodeUri, cancellationToken)
@@ -53,10 +123,7 @@ public sealed partial class MikanAiTestImportService(
             ReadOnlyMemory<byte> episodeHtml;
             try
             {
-                episodeHtml = httpClient is ISourceProfileRssFeedHttpClient profileClient
-                    ? await profileClient.GetAsync(episodeUri, profile.Id, cancellationToken)
-                        .ConfigureAwait(false)
-                    : await httpClient.GetAsync(episodeUri, cancellationToken).ConfigureAwait(false);
+                episodeHtml = await FetchAsync(episodeUri, profile.Id, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is RssFeedException or HttpRequestException)
             {
@@ -89,7 +156,7 @@ public sealed partial class MikanAiTestImportService(
         RssFeedDocument feed;
         try
         {
-            var rss = await httpClient.GetAsync(rssUri, cancellationToken).ConfigureAwait(false);
+            var rss = await FetchAsync(rssUri, profile.Id, cancellationToken).ConfigureAwait(false);
             feed = RssFeedParser.Parse(rss, rssUri.AbsoluteUri);
         }
         catch (Exception exception) when (exception is RssFeedException or HttpRequestException)
@@ -124,7 +191,7 @@ public sealed partial class MikanAiTestImportService(
                 $"/Home/Bangumi/{identity.MikanId.ToString(CultureInfo.InvariantCulture)}");
             try
             {
-                var workHtml = await httpClient.GetAsync(workUri, cancellationToken).ConfigureAwait(false);
+                var workHtml = await FetchAsync(workUri, profile.Id, cancellationToken).ConfigureAwait(false);
                 bgmid = MikanBangumiSubjectParser.Parse(workHtml);
                 await bangumiIdentityCache.PutAsync(
                     identity.MikanId,
@@ -142,53 +209,23 @@ public sealed partial class MikanAiTestImportService(
             }
         }
 
-        var rewrittenTorrent = MikanEndpointRewriter.Rewrite(torrentUri, options.Metadata.Mikan);
-        var allowedHosts = profile.AllowedTorrentHosts
-            .Append(rewrittenTorrent.IdnHost)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var trustedPrivateHosts = string.Equals(
-                rewrittenTorrent.IdnHost,
-                options.Metadata.Mikan.BaseUrl.IdnHost,
-                StringComparison.OrdinalIgnoreCase)
-            ? new[] { rewrittenTorrent.IdnHost }
-            : [];
-        try
-        {
-            await using var staged = await staging.StageAsync(
-                rewrittenTorrent,
-                new TorrentSourcePolicy(
-                    profile.Id,
-                    allowedHosts,
-                    profile.MikanIdentityCookie,
-                    trustedPrivateHosts),
-                cancellationToken).ConfigureAwait(false);
-            var videos = staged.Metadata.Files
-                .Where(file => !file.IsPadding && SubtitleAssociationResolver.IsVideo(file.RelativePath))
-                .Select(file => new AiMetadataFileInput(file.RelativePath, file.Size))
-                .ToArray();
-            if (videos.Length == 0)
-            {
-                throw Error("ai_test_mikan_video_missing", "Torrent contains no supported video files.");
-            }
-
-            return new MikanAiTestImportResult(
-                item.Title.Trim(),
-                identity.MikanId,
-                identity.SubGroupId,
-                bgmid,
-                MikanPublishedAtParser.Parse(item.PublishedDate),
-                staged.Metadata.Files.Count,
-                videos);
-        }
-        catch (TorrentStagingException exception)
-        {
-            throw Error(
-                $"ai_test_mikan_torrent_{exception.Code.ToString().ToLowerInvariant()}",
-                "Mikan torrent could not be downloaded or parsed.",
-                exception);
-        }
+        return new MikanEpisodeResolveResult(
+            item.Title.Trim(),
+            episodeUri,
+            MikanEndpointRewriter.Rewrite(torrentUri, options.Metadata.Mikan),
+            identity.MikanId,
+            identity.SubGroupId,
+            bgmid,
+            MikanPublishedAtParser.Parse(item.PublishedDate));
     }
+
+    private Task<ReadOnlyMemory<byte>> FetchAsync(
+        Uri uri,
+        string sourceProfileId,
+        CancellationToken cancellationToken) =>
+        httpClient is ISourceProfileRssFeedHttpClient profileClient
+            ? profileClient.GetAsync(uri, sourceProfileId, cancellationToken)
+            : httpClient.GetAsync(uri, cancellationToken);
 
     public static Uri ValidateEpisodeUri(string value, Uri configuredBaseUrl)
     {

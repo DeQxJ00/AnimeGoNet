@@ -227,7 +227,7 @@
 - [x] 实现暂停、恢复和 AnimeGoNet 业务重试；写操作校验 job revision，成功/失败均写入 schema v24 审计事件，任务卡片的删除操作仍只进入四类删除中心执行预览/确认。首版不复刻 Tracker/Peer 明细、piece 图、限速、强制校验/汇报和 qB 全局设置。
 - [x] 实现多下载器页面：原生 TypeScript 展示命名实例、脱敏端点、路径、凭据状态、连接/失败、引用与任务数量；连接测试显示 qB 客户端版本、默认保存路径、延迟和任务数，路径探测显示 download/save 路径可见性与硬链接能力；支持 revision 安全的凭据只写新建/更新/移除与重启提示。
 - [x] 实现输入源页面：原生 TypeScript 已接入 SourceProfile CRUD、内置及已发现 external source adapter 下拉（未启用/缺包明确禁用）、完整启用下载器实例下拉、Host 白名单、规则开关、文件策略、category、静态/动态 tags、做种分钟、Mikan Cookie 只写设置、revision 冲突、move 提示，以及复用真实 adapter 且无副作用的路由预览。schema v38 增加默认开启的来源级重复命中通知开关并固化进任务路由快照；RSS 来源 alias/并发 winner 与规范 TMDB Episode 重复会通过事件 4301 写入脱敏实时日志，关闭仅抑制通知且不改变全局去重。
-- [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；带 passkey 的 URL 使用密码输入、请求发出后立即清空且不进本地存储，结果只显示任务、规则、下载器和不可逆指纹。
+- [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；单条 Mikan 导入可输入 `/Home/Episode/{40位ID}`，按所选 SourceProfile/Cookie 复用长期身份缓存并解析分组 RSS，自动填充 title、Torrent URL、source item/work ID、`mikanid`、`groupid` 和 `bgmid`，解析动作本身不暂存 Torrent、不访问 qB。带 passkey 的 URL 请求发出后立即清空且不进本地存储，最终导入结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
 - [x] 实现总配置归档：版本化 JSON 覆盖应用私有配置、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则和外部插件；WebUI 支持导出、SHA-256 预检、确认导入、手动备份、下载、恢复和删除。导入/恢复前自动创建安全备份并采用同 ID 覆盖、包外项目保留的安全合并；归档明确包含凭据与 qB 实例路径，但排除部署根目录、运行任务、下载历史、可信 offset、缓存、日志及媒体文件。API 流程、错误摘要、4 MiB 上限与 NativeAOT 均纳入验收。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥及保存前 diff 直接回填明文，环境锁、即时生效和需重启字段均可见。

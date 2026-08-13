@@ -835,6 +835,13 @@
             <label class="wide">任务 title
               <input id="manual-download-title" required maxlength="512" autocomplete="off">
             </label>
+            <label class="wide">Mikan Episode 地址（可选，解析后自动填充）
+              <input id="manual-download-mikan-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://mikanime.tv/Home/Episode/40位ID">
+            </label>
+            <div class="wide manual-submit-actions">
+              <button id="manual-download-mikan-resolve" type="button" class="secondary-button">解析并填充</button>
+              <span id="manual-download-mikan-resolve-status" class="muted" aria-live="polite">选择 Mikan 输入源后可用。</span>
+            </div>
             <label class="wide">Torrent URL（直接显示）
               <input id="manual-download-url" type="url" required inputmode="url" autocomplete="off" spellcheck="false">
             </label>
@@ -1469,6 +1476,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-library-delete-entry"></script>
+    <script type="module" src="/app.js?v=20260814-mikan-episode-resolve"></script>
 </body>
 </html>

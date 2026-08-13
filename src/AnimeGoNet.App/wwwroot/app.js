@@ -6186,14 +6186,69 @@ function updateManualDownloadHint() {
     const mikanId = element("#manual-download-mikanid");
     const bangumiId = element("#manual-download-bgmid");
     const submit = element("#manual-download-submit");
+    const resolve = element("#manual-download-mikan-resolve");
+    const mikanUrl = element("#manual-download-mikan-url");
+    const isMikan = profile?.adapter === "mikan";
     mikanId.required = profile?.adapter === "mikan";
     bangumiId.required = profile?.adapter === "mikan";
     submit.disabled = profile === undefined;
+    mikanUrl.disabled = !isMikan;
+    resolve.disabled = !isMikan || mikanUrl.value.trim().length === 0;
+    resolve.title = isMikan
+        ? "读取 Episode 页面及分组 RSS，自动填充导入字段；此操作不会提交下载。"
+        : "请先选择一个已启用的 Mikan 输入源。";
+    if (!isMikan) {
+        element("#manual-download-mikan-resolve-status").textContent =
+            "选择 Mikan 输入源后可用。";
+    }
     element("#manual-download-hint").textContent = profile === undefined
         ? "请先启用一个输入源。"
         : profile.adapter === "mikan"
             ? `Mikan 手动导入必须提供 mikanid 与 bgmid；将路由到 ${profile.downloader_id}，使用 ${profile.file_strategy}。`
             : `${profile.adapter.toUpperCase()} 的作品级参考 ID 可选；将路由到 ${profile.downloader_id}，使用 ${profile.file_strategy}。`;
+}
+async function resolveManualMikanEpisode() {
+    const sourceId = element("#manual-download-source").value;
+    const mikanUrl = element("#manual-download-mikan-url");
+    const resolve = element("#manual-download-mikan-resolve");
+    const status = element("#manual-download-mikan-resolve-status");
+    const episodeUrl = mikanUrl.value.trim();
+    if (!episodeUrl) {
+        status.textContent = "请先输入 Mikan Episode 地址。";
+        return;
+    }
+    resolve.disabled = true;
+    status.textContent = "正在解析 Episode 页面、分组 RSS 与作品 ID……";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await fetch("/api/v1/ingest/mikan/resolve", {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({ source_profile_id: sourceId, episode_url: episodeUrl }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        element("#manual-download-title").value = body.title;
+        element("#manual-download-url").value = body.torrent_url;
+        element("#manual-download-item-id").value = body.source_item_id;
+        element("#manual-download-work-id").value = body.source_work_id;
+        element("#manual-download-mikanid").value = String(body.mikanid);
+        element("#manual-download-bgmid").value = body.bgmid === null
+            ? ""
+            : String(body.bgmid);
+        mikanUrl.value = body.mikan_url;
+        status.textContent = body.bgmid === null
+            ? `解析完成：mikanid ${body.mikanid} · groupid ${body.groupid} · 未取得 bgmid`
+            : `解析完成：mikanid ${body.mikanid} · groupid ${body.groupid} · bgmid ${body.bgmid}`;
+    }
+    catch (error) {
+        status.textContent = `解析失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        updateManualDownloadHint();
+    }
 }
 function manualResultItem(title, detail, rejected) {
     const row = document.createElement("div");
@@ -6209,6 +6264,7 @@ async function submitManualDownload(event) {
     event.preventDefault();
     const sourceId = element("#manual-download-source").value;
     const url = element("#manual-download-url");
+    const mikanUrl = element("#manual-download-mikan-url");
     const submit = element("#manual-download-submit");
     const result = element("#manual-download-result");
     let requestBody = "";
@@ -6223,6 +6279,7 @@ async function submitManualDownload(event) {
                         title: element("#manual-download-title").value.trim(),
                         source_item_id: element("#manual-download-item-id").value.trim() || null,
                         source_work_id: element("#manual-download-work-id").value.trim() || null,
+                        mikan_url: mikanUrl.value.trim() || null,
                         mikanid: optionalPositiveNumber("#manual-download-mikanid"),
                         bgmid: optionalPositiveNumber("#manual-download-bgmid"),
                         anidbid: optionalPositiveNumber("#manual-download-anidbid"),
@@ -6231,6 +6288,7 @@ async function submitManualDownload(event) {
                 }],
         });
         url.value = "";
+        mikanUrl.value = "";
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
         const responsePromise = fetch("/api/v1/ingest", {
@@ -8078,6 +8136,8 @@ element("#source-delete").addEventListener("click", () => void deleteSource());
 element("#source-strategy").addEventListener("change", updateSourceWarning);
 element("#route-preview-run").addEventListener("click", () => void previewSourceRoute());
 element("#manual-download-source").addEventListener("change", updateManualDownloadHint);
+element("#manual-download-mikan-url").addEventListener("input", updateManualDownloadHint);
+element("#manual-download-mikan-resolve").addEventListener("click", () => void resolveManualMikanEpisode());
 element("#manual-download-form").addEventListener("submit", (event) => void submitManualDownload(event));
 element("#manual-rss-form").addEventListener("submit", (event) => void submitManualRss(event));
 element("#manual-rss-source").addEventListener("change", updateSavedRssRunState);

@@ -71,6 +71,34 @@ public sealed class AiMetadataTestApiTests
     }
 
     [Fact]
+    public async Task ResolvesMikanEpisodeForManualIngestWithoutStagingTorrent()
+    {
+        var staging = new ImportStagingService();
+        var transport = new MikanImportTransport();
+        await using var app = await RunningApp.StartAsync(
+            stagingService: staging,
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
+
+        using var response = await app.Client.PostAsJsonAsync("/api/v1/ingest/mikan/resolve", new
+        {
+            source_profile_id = "mikan",
+            episode_url = $"https://mikanime.tv/Home/Episode/{EpisodeId}",
+        });
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("[Group] Imported Show - 06", json.GetProperty("title").GetString());
+        Assert.Equal(EpisodeId, json.GetProperty("source_item_id").GetString());
+        Assert.Equal("4028", json.GetProperty("source_work_id").GetString());
+        Assert.Equal(4028, json.GetProperty("mikanid").GetInt32());
+        Assert.Equal(123, json.GetProperty("groupid").GetInt32());
+        Assert.Equal(590786, json.GetProperty("bgmid").GetInt32());
+        Assert.Contains("passkey=secret", json.GetProperty("torrent_url").GetString(), StringComparison.Ordinal);
+        Assert.Null(staging.LastUrl);
+    }
+
+    [Fact]
     public async Task ImportsMikanIntoTrustedTesterSnapshotWithoutReturningPasskeyUrl()
     {
         var staging = new ImportStagingService();

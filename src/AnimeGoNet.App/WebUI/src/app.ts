@@ -1345,6 +1345,18 @@ interface ManualIngestResponse {
   items: ManualIngestItem[];
 }
 
+interface MikanEpisodeResolveResponse {
+  title: string;
+  torrent_url: string;
+  source_item_id: string;
+  source_work_id: string;
+  mikan_url: string;
+  mikanid: number;
+  groupid: number;
+  bgmid: number | null;
+  published_at: string | null;
+}
+
 interface ManualRssItem {
   decision_kind: string;
   decision_reason: string;
@@ -8538,14 +8550,68 @@ function updateManualDownloadHint(): void {
   const mikanId = element<HTMLInputElement>("#manual-download-mikanid");
   const bangumiId = element<HTMLInputElement>("#manual-download-bgmid");
   const submit = element<HTMLButtonElement>("#manual-download-submit");
+  const resolve = element<HTMLButtonElement>("#manual-download-mikan-resolve");
+  const mikanUrl = element<HTMLInputElement>("#manual-download-mikan-url");
+  const isMikan = profile?.adapter === "mikan";
   mikanId.required = profile?.adapter === "mikan";
   bangumiId.required = profile?.adapter === "mikan";
   submit.disabled = profile === undefined;
+  mikanUrl.disabled = !isMikan;
+  resolve.disabled = !isMikan || mikanUrl.value.trim().length === 0;
+  resolve.title = isMikan
+    ? "读取 Episode 页面及分组 RSS，自动填充导入字段；此操作不会提交下载。"
+    : "请先选择一个已启用的 Mikan 输入源。";
+  if (!isMikan) {
+    element<HTMLElement>("#manual-download-mikan-resolve-status").textContent =
+      "选择 Mikan 输入源后可用。";
+  }
   element<HTMLElement>("#manual-download-hint").textContent = profile === undefined
     ? "请先启用一个输入源。"
     : profile.adapter === "mikan"
       ? `Mikan 手动导入必须提供 mikanid 与 bgmid；将路由到 ${profile.downloader_id}，使用 ${profile.file_strategy}。`
       : `${profile.adapter.toUpperCase()} 的作品级参考 ID 可选；将路由到 ${profile.downloader_id}，使用 ${profile.file_strategy}。`;
+}
+
+async function resolveManualMikanEpisode(): Promise<void> {
+  const sourceId = element<HTMLSelectElement>("#manual-download-source").value;
+  const mikanUrl = element<HTMLInputElement>("#manual-download-mikan-url");
+  const resolve = element<HTMLButtonElement>("#manual-download-mikan-resolve");
+  const status = element<HTMLElement>("#manual-download-mikan-resolve-status");
+  const episodeUrl = mikanUrl.value.trim();
+  if (!episodeUrl) {
+    status.textContent = "请先输入 Mikan Episode 地址。";
+    return;
+  }
+
+  resolve.disabled = true;
+  status.textContent = "正在解析 Episode 页面、分组 RSS 与作品 ID……";
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/v1/ingest/mikan/resolve", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({ source_profile_id: sourceId, episode_url: episodeUrl }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as MikanEpisodeResolveResponse;
+    element<HTMLInputElement>("#manual-download-title").value = body.title;
+    element<HTMLInputElement>("#manual-download-url").value = body.torrent_url;
+    element<HTMLInputElement>("#manual-download-item-id").value = body.source_item_id;
+    element<HTMLInputElement>("#manual-download-work-id").value = body.source_work_id;
+    element<HTMLInputElement>("#manual-download-mikanid").value = String(body.mikanid);
+    element<HTMLInputElement>("#manual-download-bgmid").value = body.bgmid === null
+      ? ""
+      : String(body.bgmid);
+    mikanUrl.value = body.mikan_url;
+    status.textContent = body.bgmid === null
+      ? `解析完成：mikanid ${body.mikanid} · groupid ${body.groupid} · 未取得 bgmid`
+      : `解析完成：mikanid ${body.mikanid} · groupid ${body.groupid} · bgmid ${body.bgmid}`;
+  } catch (error) {
+    status.textContent = `解析失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    updateManualDownloadHint();
+  }
 }
 
 function manualResultItem(
@@ -8567,6 +8633,7 @@ async function submitManualDownload(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const sourceId = element<HTMLSelectElement>("#manual-download-source").value;
   const url = element<HTMLInputElement>("#manual-download-url");
+  const mikanUrl = element<HTMLInputElement>("#manual-download-mikan-url");
   const submit = element<HTMLButtonElement>("#manual-download-submit");
   const result = element<HTMLElement>("#manual-download-result");
   let requestBody = "";
@@ -8583,6 +8650,7 @@ async function submitManualDownload(event: SubmitEvent): Promise<void> {
             element<HTMLInputElement>("#manual-download-item-id").value.trim() || null,
           source_work_id:
             element<HTMLInputElement>("#manual-download-work-id").value.trim() || null,
+          mikan_url: mikanUrl.value.trim() || null,
           mikanid: optionalPositiveNumber("#manual-download-mikanid"),
           bgmid: optionalPositiveNumber("#manual-download-bgmid"),
           anidbid: optionalPositiveNumber("#manual-download-anidbid"),
@@ -8591,6 +8659,7 @@ async function submitManualDownload(event: SubmitEvent): Promise<void> {
       }],
     });
     url.value = "";
+    mikanUrl.value = "";
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
     const responsePromise = fetch("/api/v1/ingest", {
@@ -10648,6 +10717,14 @@ element<HTMLButtonElement>("#route-preview-run").addEventListener("click", () =>
 element<HTMLSelectElement>("#manual-download-source").addEventListener(
   "change",
   updateManualDownloadHint,
+);
+element<HTMLInputElement>("#manual-download-mikan-url").addEventListener(
+  "input",
+  updateManualDownloadHint,
+);
+element<HTMLButtonElement>("#manual-download-mikan-resolve").addEventListener(
+  "click",
+  () => void resolveManualMikanEpisode(),
 );
 element<HTMLFormElement>("#manual-download-form").addEventListener(
   "submit",

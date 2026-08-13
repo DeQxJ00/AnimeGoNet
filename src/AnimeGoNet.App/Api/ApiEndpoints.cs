@@ -164,6 +164,7 @@ public static class ApiEndpoints
             "/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}/recover",
             RecoverPendingTmdb);
         app.MapPost("/api/v1/ingest", Ingest);
+        app.MapPost("/api/v1/ingest/mikan/resolve", ResolveMikanEpisode);
         app.MapPost("/api/v1/rss/ingest", RssIngest);
         app.MapPost("/api/rss", LegacyRss);
         app.MapPost("/api/download/manager", LegacyDownloadManager);
@@ -6306,6 +6307,54 @@ public static class ApiEndpoints
             requireModernMetadata: true,
             cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<
+        Ok<MikanEpisodeResolveResponse>,
+        BadRequest<ApiErrorResponse>>> ResolveMikanEpisode(
+        MikanEpisodeResolveRequest request,
+        MikanAiTestImportService resolver,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.EpisodeUrl)
+            || request.EpisodeUrl.Length > 2048)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_episode_url_invalid",
+                "Mikan Episode URL is required."));
+        }
+        if (string.IsNullOrWhiteSpace(request.SourceProfileId)
+            || request.SourceProfileId.Length > 128)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_episode_source_profile_required",
+                "source_profile_id is required."));
+        }
+
+        try
+        {
+            var result = await resolver.ResolveAsync(
+                request.EpisodeUrl,
+                request.SourceProfileId,
+                cancellationToken).ConfigureAwait(false);
+            var sourceItemId = result.EpisodeUrl.AbsolutePath
+                .TrimEnd('/')
+                .Split('/')[^1];
+            return TypedResults.Ok(new MikanEpisodeResolveResponse(
+                result.Title,
+                result.TorrentUrl.AbsoluteUri,
+                sourceItemId,
+                result.MikanId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                result.EpisodeUrl.AbsoluteUri,
+                result.MikanId,
+                result.GroupId,
+                result.BangumiSubjectId,
+                result.PublishedAt));
+        }
+        catch (MikanAiTestImportException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.Code, exception.Message));
+        }
     }
 
     private static async Task<Results<

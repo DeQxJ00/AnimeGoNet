@@ -46,6 +46,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(ConfigurationPreviewResponse))]
 [JsonSerializable(typeof(ConfigurationWriteResponse))]
 [JsonSerializable(typeof(IngestBatchRequest))]
+[JsonSerializable(typeof(MikanEpisodeResolveRequest))]
+[JsonSerializable(typeof(MikanEpisodeResolveResponse))]
 [JsonSerializable(typeof(RssIngestRequest))]
 [JsonSerializable(typeof(MikanRssIngestResult))]
 [JsonSerializable(typeof(LegacyRssRequest))]

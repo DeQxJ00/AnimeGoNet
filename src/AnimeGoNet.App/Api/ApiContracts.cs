@@ -555,6 +555,21 @@ public sealed record IngestBatchRequest(
     [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("data")] IReadOnlyList<IngestItemRequest?>? Data);
 
+public sealed record MikanEpisodeResolveRequest(
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("episode_url")] string? EpisodeUrl);
+
+public sealed record MikanEpisodeResolveResponse(
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("torrent_url")] string TorrentUrl,
+    [property: JsonPropertyName("source_item_id")] string SourceItemId,
+    [property: JsonPropertyName("source_work_id")] string SourceWorkId,
+    [property: JsonPropertyName("mikan_url")] string MikanUrl,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
+    [property: JsonPropertyName("published_at")] DateTimeOffset? PublishedAt);
+
 public sealed record IngestItemRequest(
     [property: JsonPropertyName("torrent")] string? Torrent,
     [property: JsonPropertyName("info")] IngestItemInfoRequest? Info);
