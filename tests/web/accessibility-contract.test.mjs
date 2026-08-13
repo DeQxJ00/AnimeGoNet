@@ -123,7 +123,7 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(css, /\.readaptation-review-table\s*\{/);
   assert.match(css, /\.readaptation-manual-fields\s*\{/);
   assert.match(css, /#other-readaptation-review-dialog\s*\{[^}]*height:\s*min\(/s);
-  assert.match(css, /\.readaptation-review-files\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /\.readaptation-review-files\s*\{[^}]*overflow-y:\s*scroll/s);
   assert.match(css, /\.readaptation-review-files\s*\{[^}]*scrollbar-gutter:\s*stable/s);
 });
 
