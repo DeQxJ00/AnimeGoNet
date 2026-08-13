@@ -735,6 +735,12 @@ interface OtherFileReadaptationReviewPreview {
   }>;
 }
 
+interface ActiveOtherFileReadaptationReview {
+  preview: OtherFileReadaptationReviewPreview;
+  triggerButton: HTMLButtonElement;
+  defaultLabel: string;
+}
+
 interface MetadataUiState {
   page: number;
   page_size: 10 | 25 | 50;
@@ -1561,7 +1567,12 @@ const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-di
 const configurationDialog = element<HTMLDialogElement>("#configuration-dialog");
 const cacheEntryDialog = element<HTMLDialogElement>("#cache-entry-dialog");
 const aiDebugDialog = element<HTMLDialogElement>("#ai-debug-dialog");
+const otherReadaptationReviewDialog = element<HTMLDialogElement>("#other-readaptation-review-dialog");
+const otherReadaptationReviewConfirm = element<HTMLButtonElement>("#other-readaptation-review-confirm");
+const otherReadaptationReviewCancel = element<HTMLButtonElement>("#other-readaptation-review-cancel");
 let activeDeletePreview: DeletePreview | null = null;
+let activeOtherReadaptationReview: ActiveOtherFileReadaptationReview | null = null;
+let otherReadaptationReviewSubmitting = false;
 let currentConfiguration: RuntimeConfiguration | null = null;
 let pendingConfigurationArchive: File | null = null;
 let pendingConfigurationArchivePreview: ConfigurationArchivePreview | null = null;
@@ -6544,6 +6555,148 @@ async function readaptOtherFiles(taskId: string, button: HTMLButtonElement): Pro
   }
 }
 
+const readaptationDispositionLabels: Record<string, string> = {
+  episode: "正片",
+  duplicate: "重复跳过",
+  other: "Other",
+  pending: "待处理",
+  ignored: "忽略",
+  subtitle: "字幕",
+};
+
+function readaptationDisposition(value: string): string {
+  return readaptationDispositionLabels[value] ?? value;
+}
+
+function readaptationIdentity(
+  prefix: "TMDB" | "S" | "E",
+  value: number | null,
+  name: string | null,
+): string {
+  if (value === null) return "未知（旧批次可能未固化）";
+  const number = prefix === "TMDB" ? String(value) : String(value).padStart(2, "0");
+  return `${prefix} ${number}${name ? ` · ${name}` : ""}`;
+}
+
+function readaptationSummaryItem(label: string, value: string): HTMLDivElement {
+  const item = document.createElement("div");
+  const term = document.createElement("dt");
+  const detail = document.createElement("dd");
+  term.textContent = label;
+  detail.textContent = value;
+  item.append(term, detail);
+  return item;
+}
+
+function readaptationCell(value: string, code = false): HTMLTableCellElement {
+  const cell = document.createElement("td");
+  if (code) {
+    const content = document.createElement("code");
+    content.textContent = value;
+    cell.append(content);
+  } else {
+    cell.textContent = value;
+  }
+  return cell;
+}
+
+function appendReadaptationRow(
+  body: HTMLTableSectionElement,
+  label: string,
+  before: string,
+  after: string,
+  code = false,
+): void {
+  const row = document.createElement("tr");
+  const heading = document.createElement("th");
+  heading.scope = "row";
+  heading.textContent = label;
+  row.append(heading, readaptationCell(before, code), readaptationCell(after, code));
+  body.append(row);
+}
+
+function renderOtherReadaptationReview(preview: OtherFileReadaptationReviewPreview): void {
+  const summary = element<HTMLDListElement>("#other-readaptation-review-summary");
+  summary.replaceChildren(
+    readaptationSummaryItem("任务", preview.title),
+    readaptationSummaryItem("任务 ID", preview.task_id),
+    readaptationSummaryItem("开始", libraryDate(preview.requested_at_utc, true)),
+    readaptationSummaryItem("完成", libraryDate(preview.completed_at_utc, true)),
+  );
+
+  const files = element<HTMLDivElement>("#other-readaptation-review-files");
+  const cards = preview.files.map((file, index) => {
+    const card = document.createElement("section");
+    card.className = "readaptation-review-file";
+    const title = document.createElement("h3");
+    title.textContent = `文件 ${index + 1} / ${preview.files.length} · ${file.source_name}`;
+    const wrapper = document.createElement("div");
+    wrapper.className = "readaptation-review-table-wrap";
+    const table = document.createElement("table");
+    table.className = "readaptation-review-table";
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    for (const label of ["信息项", "适配前", "适配后"]) {
+      const heading = document.createElement("th");
+      heading.scope = "col";
+      heading.textContent = label;
+      headRow.append(heading);
+    }
+    head.append(headRow);
+    const body = document.createElement("tbody");
+
+    const dispositionRow = document.createElement("tr");
+    const dispositionHeading = document.createElement("th");
+    dispositionHeading.scope = "row";
+    dispositionHeading.textContent = "归类";
+    const beforeDisposition = document.createElement("td");
+    const beforeBadge = document.createElement("span");
+    beforeBadge.className = `readaptation-review-disposition ${file.before_disposition}`;
+    beforeBadge.textContent = readaptationDisposition(file.before_disposition);
+    beforeDisposition.append(beforeBadge);
+    const afterDisposition = document.createElement("td");
+    const afterBadge = document.createElement("span");
+    afterBadge.className = `readaptation-review-disposition ${file.after_disposition}`;
+    afterBadge.textContent = readaptationDisposition(file.after_disposition);
+    afterDisposition.append(afterBadge);
+    dispositionRow.append(dispositionHeading, beforeDisposition, afterDisposition);
+    body.append(dispositionRow);
+
+    appendReadaptationRow(body, "TMDB Series",
+      readaptationIdentity("TMDB", file.before_tmdb_series_id, file.before_series_name),
+      readaptationIdentity("TMDB", file.after_tmdb_series_id, file.after_series_name));
+    appendReadaptationRow(body, "Season",
+      readaptationIdentity("S", file.before_tmdb_season_number, file.before_season_name),
+      readaptationIdentity("S", file.after_tmdb_season_number, file.after_season_name));
+    appendReadaptationRow(body, "Episode",
+      readaptationIdentity("E", file.before_tmdb_episode_number, file.before_episode_name),
+      readaptationIdentity("E", file.after_tmdb_episode_number, file.after_episode_name));
+    appendReadaptationRow(body, "原因",
+      file.before_other_reason || "未记录",
+      file.after_other_reason || "无",
+      true);
+    appendReadaptationRow(body, "媒体位置",
+      file.before_media_path,
+      file.after_media_path || "未生成新的整理目标",
+      true);
+    appendReadaptationRow(body, "Episode 取得",
+      "原 Other，未取得",
+      libraryStrategy(file.after_episode_strategy));
+    appendReadaptationRow(body, "共享文件",
+      file.preserved_shared_source ? "是" : "否",
+      file.preserved_shared_source
+        ? "复制整理并保留共享源文件"
+        : "不需要共享复制");
+
+    table.append(head, body);
+    wrapper.append(table);
+    card.append(title, wrapper);
+    return card;
+  });
+  files.replaceChildren(...cards);
+  element<HTMLElement>("#other-readaptation-review-message").textContent = "";
+}
+
 async function approveOtherReadaptation(taskId: string, button: HTMLButtonElement): Promise<void> {
   const defaultLabel = button.textContent ?? "确认人工审核";
   button.disabled = true;
@@ -6555,95 +6708,46 @@ async function approveOtherReadaptation(taskId: string, button: HTMLButtonElemen
     );
     if (!previewResponse.ok) throw new Error(await responseError(previewResponse));
     const preview = await previewResponse.json() as OtherFileReadaptationReviewPreview;
-    const dispositionLabels: Record<string, string> = {
-      episode: "正片",
-      duplicate: "重复跳过",
-      other: "Other",
-      pending: "待处理",
-      ignored: "忽略",
-      subtitle: "字幕",
-    };
-    const disposition = (value: string): string => dispositionLabels[value] ?? value;
-    const identity = (
-      seriesId: number | null,
-      seriesName: string | null,
-      seasonNumber: number | null,
-      seasonName: string | null,
-      episodeNumber: number | null,
-      episodeName: string | null,
-    ): string => {
-      const series = seriesId === null
-        ? "TMDB Series 未知"
-        : `TMDB ${seriesId}${seriesName ? ` ${seriesName}` : ""}`;
-      const season = seasonNumber === null
-        ? "Season 未知"
-        : `S${String(seasonNumber).padStart(2, "0")}${seasonName ? ` ${seasonName}` : ""}`;
-      const episode = episodeNumber === null
-        ? "Episode 未知"
-        : `E${String(episodeNumber).padStart(2, "0")}${episodeName ? ` ${episodeName}` : ""}`;
-      return `${series} / ${season} / ${episode}`;
-    };
-    const comparisons = preview.files.map((file, index) => {
-      const before = identity(
-        file.before_tmdb_series_id,
-        file.before_series_name,
-        file.before_tmdb_season_number,
-        file.before_season_name,
-        file.before_tmdb_episode_number,
-        file.before_episode_name,
-      );
-      const after = identity(
-        file.after_tmdb_series_id,
-        file.after_series_name,
-        file.after_tmdb_season_number,
-        file.after_season_name,
-        file.after_tmdb_episode_number,
-        file.after_episode_name,
-      );
-      const shared = file.preserved_shared_source ? "\n共享文件：已保留原文件并复制整理，避免多任务冲突" : "";
-      return [
-        `${index + 1}. ${file.source_name}`,
-        `适配前：${disposition(file.before_disposition)} · ${before}`,
-        `原原因：${file.before_other_reason || "未记录"}`,
-        `原位置：${file.before_media_path}`,
-        `适配后：${disposition(file.after_disposition)} · ${after}`,
-        `新原因：${file.after_other_reason || "无"}`,
-        `新位置：${file.after_media_path || "未生成新的整理目标"}`,
-        `Episode 取得：${libraryStrategy(file.after_episode_strategy)}${shared}`,
-      ].join("\n");
-    }).join("\n\n");
-    const requested = libraryDate(preview.requested_at_utc, true);
-    const completed = libraryDate(preview.completed_at_utc, true);
-    const confirmed = window.confirm([
-      "Other 重新适配人工审核",
-      `任务：${preview.title}`,
-      `任务 ID：${preview.task_id}`,
-      `重新适配：${requested} → ${completed}`,
-      "",
-      comparisons,
-      "",
-      "请核对以上适配前后 Series、Season、Episode、归类和原因。",
-      "确认后会记录人工审核通过，随后才允许删除任务记录。",
-    ].join("\n"));
-    if (!confirmed) {
-      button.disabled = false;
-      button.textContent = defaultLabel;
-      return;
-    }
-
-    button.textContent = "确认中…";
-    const response = await fetch(
-      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/review`,
-      { method: "POST", headers },
-    );
-    if (!response.ok) throw new Error(await responseError(response));
-    await loadMetadataTasks();
+    activeOtherReadaptationReview = { preview, triggerButton: button, defaultLabel };
+    renderOtherReadaptationReview(preview);
+    button.textContent = "审核窗口已打开";
+    otherReadaptationReviewConfirm.disabled = false;
+    otherReadaptationReviewCancel.disabled = false;
+    otherReadaptationReviewDialog.showModal();
   } catch (error) {
     button.disabled = false;
-    button.textContent = errorMessage(error, "审核确认失败");
+    button.textContent = errorMessage(error, "审核对照读取失败");
     window.setTimeout(() => {
       if (button.isConnected) button.textContent = defaultLabel;
     }, 5000);
+  }
+}
+
+async function confirmOtherReadaptationReview(): Promise<void> {
+  const active = activeOtherReadaptationReview;
+  if (active === null || otherReadaptationReviewSubmitting) return;
+  otherReadaptationReviewSubmitting = true;
+  otherReadaptationReviewConfirm.disabled = true;
+  otherReadaptationReviewCancel.disabled = true;
+  otherReadaptationReviewConfirm.textContent = "确认中…";
+  const message = element<HTMLElement>("#other-readaptation-review-message");
+  message.textContent = "正在写入人工审核结果…";
+  try {
+    const response = await fetch(
+      `/api/v1/metadata/tasks/${encodeURIComponent(active.preview.task_id)}/other-readaptation/review`,
+      { method: "POST", headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    message.textContent = "人工审核已确认。";
+    otherReadaptationReviewDialog.close();
+    await loadMetadataTasks();
+  } catch (error) {
+    message.textContent = errorMessage(error, "审核确认失败");
+    otherReadaptationReviewConfirm.disabled = false;
+    otherReadaptationReviewCancel.disabled = false;
+  } finally {
+    otherReadaptationReviewSubmitting = false;
+    otherReadaptationReviewConfirm.textContent = "确认审核通过";
   }
 }
 
@@ -10350,6 +10454,36 @@ element<HTMLButtonElement>("#cache-entry-dialog-close").addEventListener(
   "click",
   () => cacheEntryDialog.close(),
 );
+element<HTMLButtonElement>("#other-readaptation-review-close").addEventListener(
+  "click",
+  () => {
+    if (!otherReadaptationReviewSubmitting) otherReadaptationReviewDialog.close();
+  },
+);
+otherReadaptationReviewCancel.addEventListener("click", () => {
+  if (!otherReadaptationReviewSubmitting) otherReadaptationReviewDialog.close();
+});
+otherReadaptationReviewConfirm.addEventListener(
+  "click",
+  () => void confirmOtherReadaptationReview(),
+);
+otherReadaptationReviewDialog.addEventListener("cancel", event => {
+  if (otherReadaptationReviewSubmitting) event.preventDefault();
+});
+otherReadaptationReviewDialog.addEventListener("close", () => {
+  const active = activeOtherReadaptationReview;
+  if (active?.triggerButton.isConnected) {
+    active.triggerButton.disabled = false;
+    active.triggerButton.textContent = active.defaultLabel;
+  }
+  activeOtherReadaptationReview = null;
+  element<HTMLElement>("#other-readaptation-review-summary").replaceChildren();
+  element<HTMLElement>("#other-readaptation-review-files").replaceChildren();
+  element<HTMLElement>("#other-readaptation-review-message").textContent = "";
+  otherReadaptationReviewConfirm.disabled = false;
+  otherReadaptationReviewCancel.disabled = false;
+  otherReadaptationReviewConfirm.textContent = "确认审核通过";
+});
 element<HTMLButtonElement>("#cache-previous").addEventListener("click", () => {
   if (cachePage <= 1) return;
   cachePage--;

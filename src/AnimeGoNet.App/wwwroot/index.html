@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260813-ai-reasoning-align">
+  <link rel="stylesheet" href="/styles.css?v=20260814-readaptation-review-table-fit">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1359,6 +1359,28 @@
     </form>
   </dialog>
 
+  <dialog id="other-readaptation-review-dialog" aria-labelledby="other-readaptation-review-title">
+    <article class="readaptation-review-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Other readaptation review</p>
+          <h2 id="other-readaptation-review-title">人工审核前后对照</h2>
+        </div>
+        <button id="other-readaptation-review-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <dl id="other-readaptation-review-summary" class="readaptation-review-summary"></dl>
+      <div id="other-readaptation-review-files" class="readaptation-review-files"></div>
+      <p id="other-readaptation-review-message" class="delete-message" aria-live="polite"></p>
+      <div class="delete-actions readaptation-review-actions">
+        <span class="muted">确认后记录人工审核通过，随后才允许删除任务记录。</span>
+        <div>
+          <button id="other-readaptation-review-cancel" type="button" class="secondary-button">返回检查</button>
+          <button id="other-readaptation-review-confirm" type="button" class="primary-button">确认审核通过</button>
+        </div>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="downloader-config-dialog" aria-labelledby="downloader-config-title">
     <form id="downloader-config-form" class="downloader-config-panel">
       <div class="delete-heading">
@@ -1385,6 +1407,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-stable-background-refresh"></script>
+    <script type="module" src="/app.js?v=20260814-readaptation-review-table"></script>
 </body>
 </html>

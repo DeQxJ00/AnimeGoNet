@@ -93,15 +93,25 @@ test("metadata detail visibly separates source evidence from TMDB authority", as
 });
 
 test("Other readaptation review confirms a server-provided before and after comparison", async () => {
-  const app = await readFile(appPath, "utf8");
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  const dialog = document.querySelector("#other-readaptation-review-dialog");
+  assert.ok(dialog);
+  assert.equal(dialog.getAttribute("aria-labelledby"), "other-readaptation-review-title");
+  assert.ok(dialog.querySelector("#other-readaptation-review-confirm"));
+  assert.ok(dialog.querySelector("#other-readaptation-review-cancel"));
   assert.match(app, /other-readaptation\/review/);
-  assert.match(app, /适配前：/);
-  assert.match(app, /适配后：/);
-  assert.match(app, /原原因：/);
-  assert.match(app, /新原因：/);
-  assert.match(app, /原位置：/);
-  assert.match(app, /新位置：/);
-  assert.match(app, /共享文件：已保留原文件并复制整理/);
+  assert.match(app, /readaptation-review-table/);
+  assert.match(app, /\["信息项", "适配前", "适配后"\]/);
+  assert.match(app, /"TMDB Series"/);
+  assert.match(app, /"媒体位置"/);
+  assert.match(app, /"Episode 取得"/);
+  assert.match(app, /复制整理并保留共享源文件/);
+  assert.match(app, /otherReadaptationReviewDialog\.showModal\(\)/);
+  assert.match(css, /\.readaptation-review-table\s*\{/);
 });
 
 test("AI test page exposes verified Responses compatibility controls and usage", async () => {
