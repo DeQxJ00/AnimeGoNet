@@ -1437,6 +1437,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .log-summary-grid strong { color: #edf4ff; font-size: 1.08rem; overflow-wrap: anywhere; }
 .log-quick-filters { display: flex; flex-wrap: wrap; gap: 7px; margin: 4px 0 12px; }
 .log-quick-filters button.active { border-color: #59d3a5; color: #dffff3; background: rgba(36,111,89,.35); }
+.log-quick-filters .log-http-quick-filter { margin-left: auto; border-color: #3f5f8d; }
 .live-log-filters { display: grid; grid-template-columns: repeat(12,minmax(0,1fr)); gap: 10px; align-items: end; margin: 14px 0 8px; }
 .live-log-filters label { display: grid; gap: 6px; color: #8da2c9; font-size: .72rem; }
 .live-log-filters label:not(.live-log-switch) { grid-column: span 2; }

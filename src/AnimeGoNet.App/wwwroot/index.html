@@ -406,7 +406,7 @@
         <article><span>警告</span><strong id="live-log-warning-count">0</strong></article>
         <article><span>错误</span><strong id="live-log-error-count">0</strong></article>
         <article><span>AI 相关</span><strong id="live-log-ai-count">0</strong></article>
-        <article><span>HTTP 外连 / 入站</span><strong id="live-log-http-count">0 / 0</strong></article>
+        <article><span>外部 HTTP / 入站</span><strong id="live-log-http-count">0 / 0</strong></article>
       </div>
       <div id="live-log-domain-filter" class="log-quick-filters" aria-label="运行日志快速分类">
         <button type="button" class="secondary-button active" data-log-domain="all">全部</button>
@@ -417,6 +417,7 @@
         <button type="button" class="secondary-button" data-log-domain="rss">Mikan / RSS</button>
         <button type="button" class="secondary-button" data-log-domain="organize">整理</button>
         <button type="button" class="secondary-button" data-log-domain="system">系统</button>
+        <button id="live-log-outbound-quick" type="button" class="secondary-button log-http-quick-filter" data-log-http-scope="outbound" aria-pressed="false">外部 HTTP（Mikan / TMDB / Bangumi 等）</button>
       </div>
       <form id="live-log-filters" class="live-log-filters" aria-label="详细日志筛选">
         <label class="wide">关键词
@@ -425,10 +426,10 @@
         <label>类别
           <input id="live-log-category" type="search" maxlength="200" placeholder="AnimeGoNet.App.Metadata">
         </label>
-        <label>HTTP 连接
+        <label>HTTP 请求类型
           <select id="live-log-http-scope">
             <option value="all">全部日志</option>
-            <option value="outbound">仅程序外连</option>
+            <option value="outbound">仅外部 HTTP 请求（Mikan / TMDB / Bangumi 等）</option>
             <option value="inbound">仅 WebUI / API 入站</option>
             <option value="non-http">排除 HTTP 连接日志</option>
           </select>

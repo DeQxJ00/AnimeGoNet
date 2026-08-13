@@ -16,6 +16,7 @@ public sealed class DetailedLogWindowTests
             "live-log-search",
             "live-log-category",
             "live-log-http-scope",
+            "live-log-outbound-quick",
             "live-log-event-id",
             "live-log-from",
             "live-log-to",
@@ -44,6 +45,10 @@ public sealed class DetailedLogWindowTests
         Assert.Contains("parseLiveLogEntry", parser, StringComparison.Ordinal);
         Assert.Contains("filterLiveLogEntries", parser, StringComparison.Ordinal);
         Assert.Contains("classifyLiveLogHttpDirection", parser, StringComparison.Ordinal);
+        Assert.Contains("外部 HTTP（Mikan / TMDB / Bangumi 等）", html, StringComparison.Ordinal);
+        Assert.Contains("仅外部 HTTP 请求（Mikan / TMDB / Bangumi 等）", html, StringComparison.Ordinal);
+        Assert.Contains("data-log-http-scope=\"outbound\"", html, StringComparison.Ordinal);
+        Assert.Contains("outboundQuick.setAttribute(\"aria-pressed\"", script, StringComparison.Ordinal);
         Assert.Contains("仅 WebUI / API 入站", html, StringComparison.Ordinal);
         Assert.Contains("排除 HTTP 连接日志", html, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);

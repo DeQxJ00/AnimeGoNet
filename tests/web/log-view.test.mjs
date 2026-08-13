@@ -25,11 +25,17 @@ test("HTTP direction filter separates outbound services from inbound WebUI traff
     parseLiveLogEntry("2026-08-13T10:00:00Z [INF] System.Net.Http.HttpClient.tmdb (100): Sending HTTP request GET http://api.tmdb.local/3/tv/65942"),
     parseLiveLogEntry("2026-08-13T10:00:01Z [INF] Microsoft.AspNetCore.Hosting.Diagnostics (1): Request starting HTTP/1.1 GET http://127.0.0.1:6180/api/v1/configuration"),
     parseLiveLogEntry("2026-08-13T10:00:02Z [INF] AnimeGoNet.App.Metadata (4301): metadata task completed"),
+    parseLiveLogEntry("2026-08-13T10:00:03Z [INF] System.Net.Http.HttpClient.mikan (100): Sending HTTP request GET http://mikan.local/RSS/MyBangumi"),
+    parseLiveLogEntry("2026-08-13T10:00:04Z [INF] System.Net.Http.HttpClient.bangumi (101): Received HTTP response headers after 25ms - 200"),
+    parseLiveLogEntry("2026-08-13T10:00:05Z [INF] Microsoft.Hosting.Lifetime (14): Now listening on: http://127.0.0.1:6180"),
   ];
 
   assert.equal(classifyLiveLogHttpDirection(entries[0]), "outbound");
   assert.equal(classifyLiveLogHttpDirection(entries[1]), "inbound");
   assert.equal(classifyLiveLogHttpDirection(entries[2]), "none");
+  assert.equal(classifyLiveLogHttpDirection(entries[3]), "outbound");
+  assert.equal(classifyLiveLogHttpDirection(entries[4]), "outbound");
+  assert.equal(classifyLiveLogHttpDirection(entries[5]), "none");
   assert.deepEqual(
     filterLiveLogEntries(entries, {
       minimumLevel: "all",
@@ -38,7 +44,11 @@ test("HTTP direction filter separates outbound services from inbound WebUI traff
       eventId: "",
       httpScope: "outbound",
     }).map(entry => entry.category),
-    ["System.Net.Http.HttpClient.tmdb"],
+    [
+      "System.Net.Http.HttpClient.tmdb",
+      "System.Net.Http.HttpClient.mikan",
+      "System.Net.Http.HttpClient.bangumi",
+    ],
   );
   assert.deepEqual(
     filterLiveLogEntries(entries, {
@@ -48,7 +58,7 @@ test("HTTP direction filter separates outbound services from inbound WebUI traff
       eventId: "",
       httpScope: "non-http",
     }).map(entry => entry.category),
-    ["AnimeGoNet.App.Metadata"],
+    ["AnimeGoNet.App.Metadata", "Microsoft.Hosting.Lifetime"],
   );
 });
 

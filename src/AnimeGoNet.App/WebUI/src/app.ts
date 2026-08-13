@@ -3227,6 +3227,11 @@ function liveLogDetail(label: string, value: string): HTMLDivElement {
 function renderLiveLogs(): void {
   const visible = visibleLiveLogEntries();
   const stream = element<HTMLElement>("#live-log-stream");
+  const outboundQuick = element<HTMLButtonElement>("#live-log-outbound-quick");
+  const outboundQuickActive =
+    element<HTMLSelectElement>("#live-log-http-scope").value === "outbound";
+  outboundQuick.classList.toggle("active", outboundQuickActive);
+  outboundQuick.setAttribute("aria-pressed", String(outboundQuickActive));
   stream.classList.toggle(
     "nowrap",
     !element<HTMLInputElement>("#live-log-wrap").checked,
@@ -10941,6 +10946,11 @@ document.querySelectorAll<HTMLButtonElement>("[data-log-domain]").forEach(button
       setLiveLogDomain(domain as LiveLogDomain | "all");
     }
   });
+});
+element<HTMLButtonElement>("#live-log-outbound-quick").addEventListener("click", () => {
+  const select = element<HTMLSelectElement>("#live-log-http-scope");
+  select.value = select.value === "outbound" ? "all" : "outbound";
+  renderLiveLogs();
 });
 element<HTMLInputElement>("#live-log-auto-scroll").addEventListener(
   "change",

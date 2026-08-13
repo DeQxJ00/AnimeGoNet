@@ -99,8 +99,10 @@ export function classifyLiveLogHttpDirection(entry) {
     }
     if (category.startsWith("system.net.http")
         || category.startsWith("microsoft.extensions.http")
-        || message.includes("http://")
-        || message.includes("https://")) {
+        || message.startsWith("start processing http request")
+        || message.startsWith("sending http request")
+        || message.startsWith("received http response headers")
+        || message.startsWith("end processing http request")) {
         return "outbound";
     }
     return "none";

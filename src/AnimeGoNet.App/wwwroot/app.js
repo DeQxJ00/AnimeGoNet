@@ -1414,6 +1414,10 @@ function liveLogDetail(label, value) {
 function renderLiveLogs() {
     const visible = visibleLiveLogEntries();
     const stream = element("#live-log-stream");
+    const outboundQuick = element("#live-log-outbound-quick");
+    const outboundQuickActive = element("#live-log-http-scope").value === "outbound";
+    outboundQuick.classList.toggle("active", outboundQuickActive);
+    outboundQuick.setAttribute("aria-pressed", String(outboundQuickActive));
     stream.classList.toggle("nowrap", !element("#live-log-wrap").checked);
     if (visible.length === 0) {
         stream.replaceChildren(Object.assign(document.createElement("p"), {
@@ -8259,6 +8263,11 @@ document.querySelectorAll("[data-log-domain]").forEach(button => {
             setLiveLogDomain(domain);
         }
     });
+});
+element("#live-log-outbound-quick").addEventListener("click", () => {
+    const select = element("#live-log-http-scope");
+    select.value = select.value === "outbound" ? "all" : "outbound";
+    renderLiveLogs();
 });
 element("#live-log-auto-scroll").addEventListener("change", renderLiveLogs);
 element("#live-log-wrap").addEventListener("change", renderLiveLogs);
