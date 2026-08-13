@@ -52,3 +52,20 @@
 
 三份新 Debug 文件均包含 `tools/call` 202 与对应 `tools/call/sse` 200，未再出现旧的
 `tool_protocol_error`。
+
+## 清空隔离记录后的再次回放
+
+经用户许可，只清除 `TestSpace/ai-debug-replay-20260813-1715` 隔离库内这三条样本的
+任务结果、metadata run/attempt、claim、completion 与旧 Debug 文件；6180 主实例、正式
+数据和真实下载任务均未改动。为避免测试 RSS 调度抢占 SQLite 写锁，再次回放前仅在隔离库
+关闭全部 SourceProfile RSS schedule，随后逐条走主程序原生链路。
+
+| 样本 | 模型最终候选 | 主程序最终结果 | Token | AI HTTP | MCP tools/call | MCP SSE |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| Re:0 样本一 | TMDB 65942 / S01 / E78 | `ai_file_identity_mismatch`，模型把真实 `.mp4` 文件名末尾改写成 `[MP4]`；落入已确认季度 Other | 73,326 | 5 | 6 | 6 |
+| Re:0 样本二 | TMDB 65942 / S01 / E78 | 本地 TMDB Series/Season/Episode 与文件身份验证通过，写入 S01E78 | 41,612 | 4 | 8 | 8 |
+| 名侦探柯南 | TMDB 30983 / S01 / E118 | 清除既有 completion 后重新验证通过，写入 S01E118 | 51,057 | 6 | 8 | 8 |
+
+本轮合计 165,995 tokens、15 次 AI HTTP、22 次 MCP `tools/call` 和 22 条对应 SSE；
+TMDB MCP 与 Bangumi MCP 均未发生连接、协议或工具错误。Prompt 仍未修改。隔离回放完成后
+6181/6182 临时实例均已停止，RSS schedule 的关闭也只存在于该隔离数据库。
