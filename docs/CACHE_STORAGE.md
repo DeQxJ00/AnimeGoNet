@@ -24,15 +24,16 @@ AnimeGoNet 使用 SQLite schema v22 的 `cache_buckets` 与 `cache_entries` 取�
 
 兼容删除只操作 cache entry，不级联删除 AnimeGoNet 的规范作品、下载或完成记录。缓存 value 不应写入 passkey、Cookie、下载器密码或 API key。
 
-## 现代安全浏览 API
+## 现代缓存浏览 API
 
-本地管理页不调用会返回原始 key/value 的兼容读取接口，而使用 Access-Key 保护的：
+本地管理页不复用旧兼容读取接口，而使用 Access-Key 保护的：
 
 - `GET /api/v1/cache/buckets?database=bolt|bolt_sub`
 - `GET /api/v1/cache/entries?database=...&bucket_id=...&page=1&page_size=25`
+- `GET /api/v1/cache/entries/{entry_id}?database=...&bucket_id=...`
 - `DELETE /api/v1/cache/entries/{entry_id}`
 
-响应只包含 bucket/key 的不可逆 SHA-256 ID、条目数、`value_json` UTF-8 字节数、过期和更新时间。原始 bucket、key、JSON value、SQLite 文件路径及配置凭据都不会进入浏览器响应或 DOM。页面因此是受限缓存视图，不是任意 SQL/业务表浏览器。
+bucket 列表直接返回真实 bucket 名；条目列表直接返回真实 key、`value_json` UTF-8 字节数、过期和更新时间。完整 JSON value 只通过单条详情接口按需读取，不进入分页列表响应；详情返回数据库命名空间、bucket、key、未截断 `value_json` 和时间信息。页面使用 `textContent` 写入 DOM，不把缓存内容解释为 HTML。数据库文件路径和任意业务表仍不开放。
 
 删除请求体携带 database、opaque bucket ID 和删除 token。token 绑定当前原始 key、value、TTL 与更新时间；服务端在单个 SQLite 事务内重新解析 ID、固定时间比较 token，并使用全部原值做条件删除。条目在列表读取后发生任何变化会返回 `cache_entry_changed`，不存在返回 `cache_entry_not_found`。只有 `bolt` 可删除；`bolt_sub` 固定返回 `cache_namespace_read_only`。所有删除都只影响一条 `cache_entries` 记录，不级联业务表、文件或下载器任务。
 

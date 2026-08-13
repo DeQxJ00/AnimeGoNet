@@ -5,7 +5,7 @@
 - 左侧新增一级 `Bangumi缓存`，URL 为 `#/bangumi-cache/versions`。
 - 既有 AnimeGoNetData 版本状态、检查更新、仅下载、下载并导入、离线 ZIP 导入、已下载包导入和回滚操作原样迁入该工作区，不建立第二套 API 或状态。
 - 页面管理的是版本化 `bangumi_archive_subjects`、`bangumi_archive_episodes` 与 `bangumi_archive_subject_relations` 数据。
-- `系统 / 缓存管理` 继续管理通用 `bolt`/`bolt_sub` JSON 缓存；`bolt/themoviedb` 不归入 Bangumi 工作区。
+- `系统缓存 / 缓存管理` 继续管理通用 `bolt`/`bolt_sub` JSON 缓存；`bolt/themoviedb` 不归入 Bangumi 工作区。
 
 ## 验收
 

@@ -111,7 +111,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 ## 8. 当前生效配置投影
 
-首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、唯一全局选择性代理、TMDB/Bangumi API 地址、季度失败链、一个任务级 AI 元数据开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 纵向显示；P3 明确标注需要 `bgmid`，并说明当前联合匹配失败后会逐层回溯前作，以每个前作的日文名、中文名和开播日期重新验证完整 `tmdbid + Season`，而不是锁定当前 tmdbid 只换季度。P2 在前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器，解析成功即使用该本地季度，不验证 TMDB Season；解析不到时继续 P1。P1 直接使用本地 `S01`，同样不验证 TMDB Season。P4、P3 和统一 AI 使用的远端结果仍执行 TMDB 验证。AI 在实际执行位置以“独立 AI”标记，明确不占确定性优先级且默认关闭；其一个开关和一个 Prompt 同时处理 Series/Season/全部 Episode，每任务最多调用一次。Bangumi 完全兜底明确标为“一般不启用”：仅在 TMDB 完全失败且已有 `bgmid` 时使用 Bangumi，季度固定为 `S01`，页面不提供有效 TMDB ID；内部既有 `tmdbid=0` 写入与待补全逻辑保持不变。编辑器允许分别修改 Mikan、TMDB API、TMDB 图片和 Bangumi API 地址；代理只在独立的“全局选择性代理”区域设置一个 URL 与域名列表，支持精确域名和 `*.example.com`，未命中保持直连。TMDB 卡片同时显示并允许修改验证成功响应的缓存小时数，默认 336 小时；修改需要重启，部署环境或命令行设置后该字段只读。缓存浏览页只显示 opaque bucket/key 标识，可精确清除 `bolt/themoviedb` 条目，不展示原始请求、响应或凭据。
+首页通过 `GET /api/v1/config` 展示当前进程实际使用的三目录、容器/后台 worker/Access-Key 状态、唯一全局选择性代理、TMDB/Bangumi API 地址、季度失败链、一个任务级 AI 元数据开关和 600 秒默认超时、Bangumi 完全兜底、Mikan 可信 offset 缓存以及 Torrent HTTP/暂存限制。季度失败链按 P4 `TMDBFailSkip` → P3 `TMDBFailBacktrace` → P2 `TMDBFailUseTitleSeason` → P1 `TMDBFailUseFirstSeason` 纵向显示；P3 明确标注需要 `bgmid`，并说明当前联合匹配失败后会逐层回溯前作，以每个前作的日文名、中文名和开播日期重新验证完整 `tmdbid + Season`，而不是锁定当前 tmdbid 只换季度。P2 在前面策略全部失败后，只把统一导入任务的 `title` 交给本地标题解析器，解析成功即使用该本地季度，不验证 TMDB Season；解析不到时继续 P1。P1 直接使用本地 `S01`，同样不验证 TMDB Season。P4、P3 和统一 AI 使用的远端结果仍执行 TMDB 验证。AI 在实际执行位置以“独立 AI”标记，明确不占确定性优先级且默认关闭；其一个开关和一个 Prompt 同时处理 Series/Season/全部 Episode，每任务最多调用一次。Bangumi 完全兜底明确标为“一般不启用”：仅在 TMDB 完全失败且已有 `bgmid` 时使用 Bangumi，季度固定为 `S01`，页面不提供有效 TMDB ID；内部既有 `tmdbid=0` 写入与待补全逻辑保持不变。编辑器允许分别修改 Mikan、TMDB API、TMDB 图片和 Bangumi API 地址；代理只在独立的“全局选择性代理”区域设置一个 URL 与域名列表，支持精确域名和 `*.example.com`，未命中保持直连。TMDB 卡片同时显示并允许修改验证成功响应的缓存小时数，默认 336 小时；修改需要重启，部署环境或命令行设置后该字段只读。“系统缓存”页显示真实 bucket/key，并可按需查看未截断的完整 JSON；`bolt/themoviedb` 条目仍可精确删除。
 
 Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进入同一个配置编辑器。Mikan 内网反向代理只对明确配置的 host 放宽私网 DNS 门禁，不会把其它 Torrent host 一并设为可信；TMDB 图片 Base URL 保留 `/t/p/` 等路径前缀。
 
@@ -171,7 +171,7 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 ## 12. 一级/二级导航
 
 静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
-“总览、动画库、任务中心、Mikan 手动设置、Bangumi缓存、下载工具配置、连接与配置、AI 匹配测试工具、系统”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“Bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“连接与配置 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
+“总览、动画库、任务中心、Mikan 手动设置、Bangumi缓存、下载工具配置、连接与配置、AI 匹配测试工具、系统缓存”；AnimeGoNetData 的活动/上一版本、在线更新、离线导入和回滚统一归入“Bangumi缓存”，通用 `bolt/themoviedb` 缓存仍留在“系统缓存 / 缓存管理”；现有 qBittorrent 实例管理归入“下载工具配置”，总配置归档归入“连接与配置 / 导入导出与备份”，不复制第二套下载器或应用配置页面；每个工作区在内容头部
 提供二级标签。URL hash 采用 `#/一级/二级`，可收藏并支持浏览器前进/后退，不会把
 Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域，既有轮询、WebSocket、
 表单 revision 和对话框仍复用同一份状态，不创建第二套业务请求。
@@ -279,10 +279,11 @@ TMDB、下载器、来源、可信 offset、模块和外部插件均使用该边
 
 ## 16. 缓存浏览与精确删除
 
-“缓存浏览”只展示 SQLite `cache_buckets/cache_entries` 的安全管理投影。用户可在
-`bolt` 与只读 `bolt_sub` 之间切换、选择 opaque bucket、分页查看 opaque key、JSON
-字节数、更新时间和过期时间。原始 bucket/key/value、数据库文件路径、业务表字段和
-凭据都不进入 API 响应，因此页面也无法显示或复制这些值。
+“系统缓存 / 缓存管理”展示 SQLite `cache_buckets/cache_entries`。用户可在 `bolt` 与
+只读 `bolt_sub` 之间切换，直接查看真实 bucket 和分页后的真实 key、JSON 字节数、
+更新时间与过期时间。每条的“查看完整内容”按钮按需调用单条详情 API，在弹窗内原样
+显示未截断 `value_json`；最大 8 MiB 的内容不会塞入列表响应。所有值通过纯文本 DOM
+渲染，不解释为 HTML；页面仍不提供 SQLite 文件路径、任意 SQL 或业务表访问。
 
 `bolt` 条目提供“删除此缓存项”，点击后还需浏览器明确二次确认。请求只携带 opaque
 bucket/key ID 和当前删除 token；服务端事务内确认 token 仍对应同一个 key/value/TTL/

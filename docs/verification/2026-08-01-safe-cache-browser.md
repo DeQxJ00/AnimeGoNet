@@ -1,5 +1,7 @@
 # Safe cache browser verification
 
+> Superseded for presentation by the 2026-08-13 plaintext cache browser change. Opaque IDs and delete tokens remain targeting/concurrency controls, but the current user-authorized WebUI exposes bucket/key and on-demand full JSON values.
+
 ## Scope
 
 The modern cache browser exposes only opaque SHA-256 bucket/key IDs, entry counts, JSON

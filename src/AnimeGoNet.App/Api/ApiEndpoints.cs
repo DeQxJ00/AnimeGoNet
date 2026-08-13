@@ -64,6 +64,7 @@ public static class ApiEndpoints
         app.MapDelete("/api/v1/config", DeleteConfigurationOverride);
         app.MapGet("/api/v1/cache/buckets", CacheBrowserBuckets);
         app.MapGet("/api/v1/cache/entries", CacheBrowserEntries);
+        app.MapGet("/api/v1/cache/entries/{entryId}", GetCacheBrowserEntry);
         app.MapDelete("/api/v1/cache/entries/{entryId}", DeleteCacheBrowserEntry);
         app.MapGet("/api/v1/downloads", Downloads);
         app.MapGet("/api/v1/downloads/{jobId}", DownloadDetail);
@@ -1254,6 +1255,7 @@ public static class ApiEndpoints
                 string.Equals(normalizedDatabase, "bolt_sub", StringComparison.Ordinal),
                 buckets.Select(static bucket => new CacheBrowserBucketResponse(
                     bucket.BucketId,
+                    bucket.BucketName,
                     bucket.EntryCount)).ToArray()));
         }
         catch (ArgumentException exception)
@@ -1300,10 +1302,57 @@ public static class ApiEndpoints
                 result.TotalCount,
                 result.Items.Select(static item => new CacheBrowserEntryResponse(
                     item.EntryId,
+                    item.Key,
                     item.DeleteToken,
                     item.ValueBytes,
                     item.ExpiresAtUtc,
                     item.UpdatedAtUtc)).ToArray()));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("cache_query_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<Results<
+        Ok<CacheBrowserEntryDetailResponse>,
+        BadRequest<ApiErrorResponse>,
+        NotFound<ApiErrorResponse>>> GetCacheBrowserEntry(
+        string entryId,
+        [FromQuery] string? database,
+        [FromQuery(Name = "bucket_id")] string? bucketId,
+        SqliteJsonCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        var normalizedDatabase = string.IsNullOrWhiteSpace(database)
+            ? "bolt"
+            : database.Trim().ToLowerInvariant();
+        try
+        {
+            var result = await store.GetBrowserEntryAsync(
+                normalizedDatabase,
+                bucketId ?? string.Empty,
+                entryId,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            if (result is null)
+            {
+                return TypedResults.NotFound(Error(
+                    "cache_entry_not_found",
+                    "Cache entry does not exist."));
+            }
+
+            return TypedResults.Ok(new CacheBrowserEntryDetailResponse(
+                normalizedDatabase,
+                string.Equals(normalizedDatabase, "bolt_sub", StringComparison.Ordinal),
+                result.BucketId,
+                result.BucketName,
+                result.EntryId,
+                result.Key,
+                result.ValueJson,
+                result.ValueBytes,
+                result.ExpiresAtUtc,
+                result.UpdatedAtUtc));
         }
         catch (ArgumentException exception)
         {

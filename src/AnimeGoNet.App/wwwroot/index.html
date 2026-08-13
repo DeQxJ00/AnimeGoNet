@@ -24,7 +24,7 @@
         <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>连接与配置</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
-        <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统</button>
+        <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统缓存</button>
       </nav>
       <p class="sidebar-footnote">配置编辑页直接回填本机已保存值；日志与运行轨迹继续脱敏。</p>
     </aside>
@@ -327,7 +327,7 @@
           <button id="cache-reload" type="button" class="secondary-button">刷新缓存</button>
         </div>
       </div>
-      <p class="muted">页面只显示 bucket/key 的不可逆 SHA-256 标识、大小和时间；不会返回原始 key、JSON value、数据库路径或凭据。删除必须二次确认且条目变化后旧令牌立即失效。</p>
+      <p class="muted">直接显示真实 bucket 与 key；点击“查看完整内容”可按需读取未截断的原始 JSON。bolt 可精确删除单条缓存，bolt_sub 只读；删除仍需二次确认且条目变化后旧令牌立即失效。</p>
       <p id="cache-status" class="muted" role="status">正在读取缓存…</p>
       <div class="cache-browser-layout">
         <aside aria-labelledby="cache-buckets-title">
@@ -1054,6 +1054,28 @@
   </main>
     </div>
   </div>
+
+  <dialog id="cache-entry-dialog" aria-labelledby="cache-entry-dialog-title">
+    <article class="cache-entry-detail-dialog">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">SQLite JSON cache</p>
+          <h2 id="cache-entry-dialog-title">缓存完整内容</h2>
+        </div>
+        <button id="cache-entry-dialog-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <dl class="cache-entry-detail-metadata">
+        <div><dt>命名空间</dt><dd id="cache-entry-detail-database">—</dd></div>
+        <div><dt>Bucket</dt><dd><code id="cache-entry-detail-bucket">—</code></dd></div>
+        <div><dt>Key</dt><dd><code id="cache-entry-detail-key">—</code></dd></div>
+        <div><dt>内容大小</dt><dd id="cache-entry-detail-size">—</dd></div>
+        <div><dt>更新时间</dt><dd id="cache-entry-detail-updated">—</dd></div>
+        <div><dt>过期时间</dt><dd id="cache-entry-detail-expiry">—</dd></div>
+      </dl>
+      <p id="cache-entry-detail-status" class="muted" role="status">正在读取完整内容…</p>
+      <pre class="cache-entry-detail-value"><code id="cache-entry-detail-value"></code></pre>
+    </article>
+  </dialog>
 
   <dialog id="configuration-dialog" aria-labelledby="configuration-dialog-title">
     <form id="configuration-form" class="configuration-form">

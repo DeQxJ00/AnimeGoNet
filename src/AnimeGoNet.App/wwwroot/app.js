@@ -23,6 +23,7 @@ const deleteDialog = element("#delete-dialog");
 const deleteConfirm = element("#delete-confirm");
 const downloaderConfigDialog = element("#downloader-config-dialog");
 const configurationDialog = element("#configuration-dialog");
+const cacheEntryDialog = element("#cache-entry-dialog");
 let activeDeletePreview = null;
 let currentConfiguration = null;
 let pendingConfigurationArchive = null;
@@ -146,7 +147,7 @@ const workspaceDefinitions = {
         ],
     },
     system: {
-        title: "系统",
+        title: "系统缓存",
         description: "维护通用 HTTP 缓存和后台基础设施。",
         defaultSubview: "cache",
         tabs: [
@@ -1042,9 +1043,6 @@ async function importOfflineDataPackage(event) {
         await loadDataUpdate(true);
     }
 }
-function cacheDigestLabel(kind, digest) {
-    return `${kind} sha256:${digest.slice(0, 12)}…`;
-}
 function setCacheBusy(busy) {
     element("#cache-database").disabled = busy;
     element("#cache-reload").disabled = busy;
@@ -1072,7 +1070,7 @@ function renderCacheBuckets() {
         button.className = "secondary-button cache-bucket-button";
         button.setAttribute("aria-current", String(bucket.bucket_id === activeCacheBucketId));
         const label = document.createElement("code");
-        label.textContent = cacheDigestLabel("bucket", bucket.bucket_id);
+        label.textContent = bucket.bucket_name;
         const count = document.createElement("span");
         count.textContent = `${bucket.entry_count} 项`;
         button.append(label, count);
@@ -1100,27 +1098,36 @@ function renderCacheEntries(page) {
             card.className = "cache-entry";
             const details = document.createElement("div");
             const identity = document.createElement("code");
-            identity.textContent = cacheDigestLabel("key", item.entry_id);
+            identity.textContent = item.key;
             const metadata = document.createElement("p");
             metadata.className = "muted";
             metadata.textContent = `${formatBytes(item.value_bytes)} · 更新 ${dataUpdateTime(item.updated_at_utc)}`
                 + ` · ${item.expires_at_utc ? `过期 ${dataUpdateTime(item.expires_at_utc)}` : "永久"}`;
             details.append(identity, metadata);
             card.append(details);
+            const actions = document.createElement("div");
+            actions.className = "cache-entry-actions";
+            const view = document.createElement("button");
+            view.type = "button";
+            view.className = "secondary-button";
+            view.textContent = "查看完整内容";
+            view.addEventListener("click", () => void openCacheEntry(item, view));
+            actions.append(view);
             if (!page.read_only) {
                 const remove = document.createElement("button");
                 remove.type = "button";
                 remove.className = "danger-button";
                 remove.textContent = "删除此缓存项";
                 remove.addEventListener("click", () => void deleteCacheEntry(item, remove));
-                card.append(remove);
+                actions.append(remove);
             }
             else {
                 const state = document.createElement("span");
                 state.className = "badge pending";
                 state.textContent = "只读";
-                card.append(state);
+                actions.append(state);
             }
+            card.append(actions);
             return card;
         }));
     }
@@ -1130,6 +1137,49 @@ function renderCacheEntries(page) {
         `第 ${page.page} / ${totalPages} 页 · ${page.total_count} 项`;
     element("#cache-previous").disabled = page.page <= 1;
     element("#cache-next").disabled = page.page >= totalPages;
+}
+async function openCacheEntry(item, button) {
+    if (!activeCacheBucketId)
+        return;
+    button.disabled = true;
+    element("#cache-entry-detail-database").textContent = cacheDatabase;
+    element("#cache-entry-detail-bucket").textContent = "正在读取…";
+    element("#cache-entry-detail-key").textContent = item.key;
+    element("#cache-entry-detail-size").textContent = formatBytes(item.value_bytes);
+    element("#cache-entry-detail-updated").textContent = dataUpdateTime(item.updated_at_utc);
+    element("#cache-entry-detail-expiry").textContent = item.expires_at_utc
+        ? dataUpdateTime(item.expires_at_utc)
+        : "永久";
+    element("#cache-entry-detail-status").textContent = "正在读取未截断的完整内容…";
+    element("#cache-entry-detail-value").textContent = "";
+    cacheEntryDialog.showModal();
+    try {
+        const query = new URLSearchParams({
+            database: cacheDatabase,
+            bucket_id: activeCacheBucketId,
+        });
+        const detail = await api.get(`/api/v1/cache/entries/${encodeURIComponent(item.entry_id)}?${query}`);
+        element("#cache-entry-detail-database").textContent =
+            `${detail.database}${detail.read_only ? "（只读）" : ""}`;
+        element("#cache-entry-detail-bucket").textContent = detail.bucket_name;
+        element("#cache-entry-detail-key").textContent = detail.key;
+        element("#cache-entry-detail-size").textContent = formatBytes(detail.value_bytes);
+        element("#cache-entry-detail-updated").textContent = dataUpdateTime(detail.updated_at_utc);
+        element("#cache-entry-detail-expiry").textContent = detail.expires_at_utc
+            ? dataUpdateTime(detail.expires_at_utc)
+            : "永久";
+        element("#cache-entry-detail-value").textContent = detail.value_json;
+        element("#cache-entry-detail-status").textContent =
+            `完整原始 JSON · ${formatBytes(detail.value_bytes)} · 未截断`;
+    }
+    catch (error) {
+        element("#cache-entry-detail-status").textContent =
+            errorMessage(error, "缓存完整内容读取失败");
+        element("#cache-entry-detail-value").textContent = "";
+    }
+    finally {
+        button.disabled = false;
+    }
 }
 async function loadCacheBuckets() {
     const sequence = ++cacheRequestSequence;
@@ -1214,7 +1264,7 @@ async function loadCacheEntries(parentSequence) {
 async function deleteCacheEntry(item, button) {
     if (!activeCacheBucketId || cacheReadOnly)
         return;
-    const label = cacheDigestLabel("key", item.entry_id);
+    const label = `key ${item.key}`;
     if (!window.confirm(`确认删除 ${label}？只删除这一条 bolt 缓存，不删除业务记录或文件。`))
         return;
     button.disabled = true;
@@ -6905,6 +6955,7 @@ element("#cache-database").addEventListener("change", event => {
     void loadCacheBuckets();
 });
 element("#cache-reload").addEventListener("click", () => void loadCacheBuckets());
+element("#cache-entry-dialog-close").addEventListener("click", () => cacheEntryDialog.close());
 element("#cache-previous").addEventListener("click", () => {
     if (cachePage <= 1)
         return;

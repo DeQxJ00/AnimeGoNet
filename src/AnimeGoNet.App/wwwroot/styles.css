@@ -1212,7 +1212,44 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 
 .cache-entry code { overflow-wrap: anywhere; }
 .cache-entry p { margin: .25rem 0 0; }
+.cache-entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 .cache-pagination { justify-content: center; margin-top: .8rem; }
+
+#cache-entry-dialog {
+  width: min(980px, calc(100% - 28px));
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  color: #edf2ff;
+  border: 1px solid #344260;
+  border-radius: 18px;
+  background: #101625;
+}
+
+#cache-entry-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
+.cache-entry-detail-dialog { padding: 22px; }
+.cache-entry-detail-dialog h2 { margin-bottom: 0; }
+.cache-entry-detail-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+  margin: 1rem 0;
+}
+.cache-entry-detail-metadata > div { min-width: 0; padding: .7rem; border: 1px solid #344260; border-radius: .7rem; background: rgba(5,8,16,.52); }
+.cache-entry-detail-metadata dt { color: var(--muted); font-size: .72rem; }
+.cache-entry-detail-metadata dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
+.cache-entry-detail-value {
+  max-height: min(58vh, 700px);
+  overflow: auto;
+  margin: .75rem 0 0;
+  padding: 1rem;
+  border: 1px solid #344260;
+  border-radius: .75rem;
+  color: #d9e4f8;
+  background: #070b13;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: .78rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
 
 .live-log-actions,
 .live-log-meta {
@@ -1307,6 +1344,9 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .cache-browser-layout { grid-template-columns: 1fr; }
   .cache-browser-heading { align-items: flex-start; }
   .cache-browser-actions { justify-content: flex-start; }
+  .cache-entry { grid-template-columns: 1fr; }
+  .cache-entry-actions { justify-content: flex-start; }
+  .cache-entry-detail-metadata { grid-template-columns: 1fr; }
   .live-log-heading { align-items: flex-start; }
   .live-log-actions { justify-content: flex-start; }
   .live-log-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -1357,14 +1397,16 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   dialog,
   #configuration-dialog,
   #delete-dialog,
-  #downloader-config-dialog {
+  #downloader-config-dialog,
+  #cache-entry-dialog {
     width: calc(100% - 12px);
     max-height: calc(100dvh - 12px);
     border-radius: 14px;
   }
   .configuration-form,
   .delete-panel,
-  .downloader-config-panel { padding: 18px 14px; }
+  .downloader-config-panel,
+  .cache-entry-detail-dialog { padding: 18px 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

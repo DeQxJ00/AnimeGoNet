@@ -29,6 +29,10 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("title: \"下载工具配置\"", script, StringComparison.Ordinal);
         Assert.Contains(">AI 匹配测试工具</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"AI 匹配测试工具\"", script, StringComparison.Ordinal);
+        Assert.Contains(">系统缓存</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"系统缓存\"", script, StringComparison.Ordinal);
+        Assert.Contains("查看完整内容", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"cache-entry-dialog\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Mikan 自动化", html + script, StringComparison.Ordinal);
         foreach (var workspace in new[]
         {

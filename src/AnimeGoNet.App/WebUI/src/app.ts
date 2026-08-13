@@ -225,6 +225,7 @@ type CacheDatabase = "bolt" | "bolt_sub";
 
 interface CacheBrowserBucket {
   bucket_id: string;
+  bucket_name: string;
   entry_count: number;
 }
 
@@ -236,6 +237,7 @@ interface CacheBrowserBucketList {
 
 interface CacheBrowserEntry {
   entry_id: string;
+  key: string;
   delete_token: string;
   value_bytes: number;
   expires_at_utc: string | null;
@@ -250,6 +252,19 @@ interface CacheBrowserEntryList {
   page_size: number;
   total_count: number;
   items: CacheBrowserEntry[];
+}
+
+interface CacheBrowserEntryDetail {
+  database: CacheDatabase;
+  read_only: boolean;
+  bucket_id: string;
+  bucket_name: string;
+  entry_id: string;
+  key: string;
+  value_json: string;
+  value_bytes: number;
+  expires_at_utc: string | null;
+  updated_at_utc: string;
 }
 
 interface CacheBrowserDeleteResponse {
@@ -1349,6 +1364,7 @@ const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
 const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-dialog");
 const configurationDialog = element<HTMLDialogElement>("#configuration-dialog");
+const cacheEntryDialog = element<HTMLDialogElement>("#cache-entry-dialog");
 let activeDeletePreview: DeletePreview | null = null;
 let currentConfiguration: RuntimeConfiguration | null = null;
 let pendingConfigurationArchive: File | null = null;
@@ -1630,7 +1646,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     ],
   },
   system: {
-    title: "系统",
+    title: "系统缓存",
     description: "维护通用 HTTP 缓存和后台基础设施。",
     defaultSubview: "cache",
     tabs: [
@@ -2608,10 +2624,6 @@ async function importOfflineDataPackage(event: SubmitEvent): Promise<void> {
   }
 }
 
-function cacheDigestLabel(kind: "bucket" | "key", digest: string): string {
-  return `${kind} sha256:${digest.slice(0, 12)}…`;
-}
-
 function setCacheBusy(busy: boolean): void {
   element<HTMLSelectElement>("#cache-database").disabled = busy;
   element<HTMLButtonElement>("#cache-reload").disabled = busy;
@@ -2639,7 +2651,7 @@ function renderCacheBuckets(): void {
     button.className = "secondary-button cache-bucket-button";
     button.setAttribute("aria-current", String(bucket.bucket_id === activeCacheBucketId));
     const label = document.createElement("code");
-    label.textContent = cacheDigestLabel("bucket", bucket.bucket_id);
+    label.textContent = bucket.bucket_name;
     const count = document.createElement("span");
     count.textContent = `${bucket.entry_count} 项`;
     button.append(label, count);
@@ -2670,26 +2682,35 @@ function renderCacheEntries(page: CacheBrowserEntryList): void {
       card.className = "cache-entry";
       const details = document.createElement("div");
       const identity = document.createElement("code");
-      identity.textContent = cacheDigestLabel("key", item.entry_id);
+      identity.textContent = item.key;
       const metadata = document.createElement("p");
       metadata.className = "muted";
       metadata.textContent = `${formatBytes(item.value_bytes)} · 更新 ${dataUpdateTime(item.updated_at_utc)}`
         + ` · ${item.expires_at_utc ? `过期 ${dataUpdateTime(item.expires_at_utc)}` : "永久"}`;
       details.append(identity, metadata);
       card.append(details);
+      const actions = document.createElement("div");
+      actions.className = "cache-entry-actions";
+      const view = document.createElement("button");
+      view.type = "button";
+      view.className = "secondary-button";
+      view.textContent = "查看完整内容";
+      view.addEventListener("click", () => void openCacheEntry(item, view));
+      actions.append(view);
       if (!page.read_only) {
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "danger-button";
         remove.textContent = "删除此缓存项";
         remove.addEventListener("click", () => void deleteCacheEntry(item, remove));
-        card.append(remove);
+        actions.append(remove);
       } else {
         const state = document.createElement("span");
         state.className = "badge pending";
         state.textContent = "只读";
-        card.append(state);
+        actions.append(state);
       }
+      card.append(actions);
       return card;
     }));
   }
@@ -2699,6 +2720,52 @@ function renderCacheEntries(page: CacheBrowserEntryList): void {
     `第 ${page.page} / ${totalPages} 页 · ${page.total_count} 项`;
   element<HTMLButtonElement>("#cache-previous").disabled = page.page <= 1;
   element<HTMLButtonElement>("#cache-next").disabled = page.page >= totalPages;
+}
+
+async function openCacheEntry(
+  item: CacheBrowserEntry,
+  button: HTMLButtonElement,
+): Promise<void> {
+  if (!activeCacheBucketId) return;
+  button.disabled = true;
+  element<HTMLElement>("#cache-entry-detail-database").textContent = cacheDatabase;
+  element<HTMLElement>("#cache-entry-detail-bucket").textContent = "正在读取…";
+  element<HTMLElement>("#cache-entry-detail-key").textContent = item.key;
+  element<HTMLElement>("#cache-entry-detail-size").textContent = formatBytes(item.value_bytes);
+  element<HTMLElement>("#cache-entry-detail-updated").textContent = dataUpdateTime(item.updated_at_utc);
+  element<HTMLElement>("#cache-entry-detail-expiry").textContent = item.expires_at_utc
+    ? dataUpdateTime(item.expires_at_utc)
+    : "永久";
+  element<HTMLElement>("#cache-entry-detail-status").textContent = "正在读取未截断的完整内容…";
+  element<HTMLElement>("#cache-entry-detail-value").textContent = "";
+  cacheEntryDialog.showModal();
+  try {
+    const query = new URLSearchParams({
+      database: cacheDatabase,
+      bucket_id: activeCacheBucketId,
+    });
+    const detail = await api.get<CacheBrowserEntryDetail>(
+      `/api/v1/cache/entries/${encodeURIComponent(item.entry_id)}?${query}`,
+    );
+    element<HTMLElement>("#cache-entry-detail-database").textContent =
+      `${detail.database}${detail.read_only ? "（只读）" : ""}`;
+    element<HTMLElement>("#cache-entry-detail-bucket").textContent = detail.bucket_name;
+    element<HTMLElement>("#cache-entry-detail-key").textContent = detail.key;
+    element<HTMLElement>("#cache-entry-detail-size").textContent = formatBytes(detail.value_bytes);
+    element<HTMLElement>("#cache-entry-detail-updated").textContent = dataUpdateTime(detail.updated_at_utc);
+    element<HTMLElement>("#cache-entry-detail-expiry").textContent = detail.expires_at_utc
+      ? dataUpdateTime(detail.expires_at_utc)
+      : "永久";
+    element<HTMLElement>("#cache-entry-detail-value").textContent = detail.value_json;
+    element<HTMLElement>("#cache-entry-detail-status").textContent =
+      `完整原始 JSON · ${formatBytes(detail.value_bytes)} · 未截断`;
+  } catch (error) {
+    element<HTMLElement>("#cache-entry-detail-status").textContent =
+      errorMessage(error, "缓存完整内容读取失败");
+    element<HTMLElement>("#cache-entry-detail-value").textContent = "";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function loadCacheBuckets(): Promise<void> {
@@ -2787,7 +2854,7 @@ async function deleteCacheEntry(
   button: HTMLButtonElement,
 ): Promise<void> {
   if (!activeCacheBucketId || cacheReadOnly) return;
-  const label = cacheDigestLabel("key", item.entry_id);
+  const label = `key ${item.key}`;
   if (!window.confirm(`确认删除 ${label}？只删除这一条 bolt 缓存，不删除业务记录或文件。`)) return;
   button.disabled = true;
   const status = element<HTMLElement>("#cache-status");
@@ -9115,6 +9182,10 @@ element<HTMLSelectElement>("#cache-database").addEventListener("change", event =
 element<HTMLButtonElement>("#cache-reload").addEventListener(
   "click",
   () => void loadCacheBuckets(),
+);
+element<HTMLButtonElement>("#cache-entry-dialog-close").addEventListener(
+  "click",
+  () => cacheEntryDialog.close(),
 );
 element<HTMLButtonElement>("#cache-previous").addEventListener("click", () => {
   if (cachePage <= 1) return;

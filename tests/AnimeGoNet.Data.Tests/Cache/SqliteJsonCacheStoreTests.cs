@@ -146,7 +146,7 @@ public sealed class SqliteJsonCacheStoreTests
     }
 
     [Fact]
-    public async Task BrowserProjectionUsesOpaqueIdsAndNeverReturnsKeysOrValues()
+    public async Task BrowserProjectionListsPlainNamesAndLoadsFullValueOnDemand()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
         var store = new SqliteJsonCacheStore(fixture.Database);
@@ -156,17 +156,25 @@ public sealed class SqliteJsonCacheStoreTests
 
         var bucket = Assert.Single(await store.ListBrowserBucketsAsync("bolt", Now));
         Assert.Equal(64, bucket.BucketId.Length);
+        Assert.Equal("private-cache", bucket.BucketName);
         Assert.Equal(1, bucket.EntryCount);
-        Assert.DoesNotContain("private-cache", bucket.ToString(), StringComparison.Ordinal);
 
         var page = await store.ListBrowserEntriesAsync("bolt", bucket.BucketId, 1, 25, Now);
         Assert.NotNull(page);
         var entry = Assert.Single(page.Items);
         Assert.Equal(64, entry.EntryId.Length);
+        Assert.Equal(secretKey, entry.Key);
         Assert.Equal(64, entry.DeleteToken.Length);
         Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(secretValue), entry.ValueBytes);
-        Assert.DoesNotContain(secretKey, page.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("never-return-this", page.ToString(), StringComparison.Ordinal);
+
+        var detail = Assert.IsType<CacheBrowserEntryDetail>(
+            await store.GetBrowserEntryAsync(
+                "bolt", bucket.BucketId, entry.EntryId, Now));
+        Assert.Equal("private-cache", detail.BucketName);
+        Assert.Equal(secretKey, detail.Key);
+        Assert.Equal(secretValue, detail.ValueJson);
+        Assert.Equal(entry.ValueBytes, detail.ValueBytes);
     }
 
     [Fact]

@@ -21,6 +21,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(LegacyApiResponse<LegacyBoltDeleteResponse?>))]
 [JsonSerializable(typeof(CacheBrowserBucketListResponse))]
 [JsonSerializable(typeof(CacheBrowserEntryListResponse))]
+[JsonSerializable(typeof(CacheBrowserEntryDetailResponse))]
 [JsonSerializable(typeof(CacheBrowserDeleteRequest))]
 [JsonSerializable(typeof(CacheBrowserDeleteResponse))]
 [JsonSerializable(typeof(RuntimeStatus))]

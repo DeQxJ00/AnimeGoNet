@@ -19,10 +19,12 @@ public sealed record CacheJsonValue(
 
 public sealed record CacheBrowserBucket(
     string BucketId,
+    string BucketName,
     int EntryCount);
 
 public sealed record CacheBrowserEntry(
     string EntryId,
+    string Key,
     string DeleteToken,
     int ValueBytes,
     DateTimeOffset? ExpiresAtUtc,
@@ -34,6 +36,16 @@ public sealed record CacheBrowserEntryPage(
     int PageSize,
     int TotalCount,
     IReadOnlyList<CacheBrowserEntry> Items);
+
+public sealed record CacheBrowserEntryDetail(
+    string BucketId,
+    string BucketName,
+    string EntryId,
+    string Key,
+    string ValueJson,
+    int ValueBytes,
+    DateTimeOffset? ExpiresAtUtc,
+    DateTimeOffset UpdatedAtUtc);
 
 public enum CacheBrowserDeleteResult
 {
@@ -341,6 +353,7 @@ public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
             {
                 result.Add(new CacheBrowserBucket(
                     BucketId(normalizedDatabase, reader.GetString(0)),
+                    reader.GetString(0),
                     reader.GetInt32(1)));
             }
         }
@@ -421,6 +434,7 @@ public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
                 var updated = reader.GetString(3);
                 items.Add(new CacheBrowserEntry(
                     EntryId(normalizedDatabase, bucket, key),
+                    key,
                     DeleteToken(normalizedDatabase, bucket, key, valueJson, expires, updated),
                     Encoding.UTF8.GetByteCount(valueJson),
                     expires is null ? null : Parse(expires),
@@ -434,6 +448,84 @@ public sealed class SqliteJsonCacheStore(AnimeGoSqliteDatabase database)
             pageSize,
             totalCount,
             items);
+    }
+
+    public async Task<CacheBrowserEntryDetail?> GetBrowserEntryAsync(
+        string databaseName,
+        string bucketId,
+        string entryId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedDatabase = NormalizeDatabaseName(databaseName);
+        var normalizedBucketId = NormalizeDigest(bucketId, nameof(bucketId));
+        var normalizedEntryId = NormalizeDigest(entryId, nameof(entryId));
+        await using var connection = await database
+            .OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var bucket = await ResolveBucketAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            normalizedBucketId,
+            cancellationToken).ConfigureAwait(false);
+        if (bucket is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        await PurgeExpiredAsync(
+            connection,
+            transaction,
+            normalizedDatabase,
+            bucket,
+            Format(utcNow),
+            cancellationToken).ConfigureAwait(false);
+        CacheBrowserEntryDetail? result = null;
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT key, value_json, expires_at_utc, updated_at_utc
+                FROM cache_entries
+                WHERE database_name = $database
+                  AND bucket_name = $bucket;
+                """;
+            command.Parameters.AddWithValue("$database", normalizedDatabase);
+            command.Parameters.AddWithValue("$bucket", bucket);
+            await using var reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var key = reader.GetString(0);
+                if (!FixedTimeEquals(
+                    normalizedEntryId,
+                    EntryId(normalizedDatabase, bucket, key)))
+                {
+                    continue;
+                }
+
+                var valueJson = reader.GetString(1);
+                result = new CacheBrowserEntryDetail(
+                    normalizedBucketId,
+                    bucket,
+                    normalizedEntryId,
+                    key,
+                    valueJson,
+                    Encoding.UTF8.GetByteCount(valueJson),
+                    reader.IsDBNull(2) ? null : Parse(reader.GetString(2)),
+                    Parse(reader.GetString(3)));
+                break;
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     public async Task<CacheBrowserDeleteResult> DeleteBrowserEntryAsync(

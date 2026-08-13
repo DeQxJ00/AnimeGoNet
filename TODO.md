@@ -241,7 +241,7 @@
 - [x] 对当前应用配置环境变量覆盖字段显示最终有效值、环境变量来源和只读锁定状态；API 拒绝改写被锁字段和凭据，保存其他字段时保留锁字段原有底层覆盖/继承语义，避免环境变量移除后遗留伪覆盖。
 - [x] 实现插件分类、启停、args/vars 和校验视图：外部包分类/版本/RID/能力、逐包校验错误、运行/退避/自动禁用/reset、revision 持久启停、args JSON 与 schema vars 表单均已接入响应式页面；配置 API/WebUI 直接回填 `writeOnly` 值并保留显式清除，运行状态、错误和日志不返回原值。
 - [x] 完成本机配置敏感值全局直显：主配置密钥及保存前差异、qB 用户名/密码、Mikan Cookie/RSS URL、AI Tester API Key、手动 Torrent/RSS URL 和外部插件 `writeOnly` 值均可直接查看；186 个定向 App/API/WebUI 测试验证回填与日志/运行状态脱敏边界。
-- [x] 实现缓存/数据库浏览和安全删除：现代 `/api/v1/cache` 只投影 `bolt`/`bolt_sub` 的不可逆 bucket/key SHA-256 ID、条目数、JSON 字节数和时间，不返回原始 key/value、SQLite 路径或凭据；分页读取惰性清理过期项，`bolt_sub` 永久只读，`bolt` 单项删除需要二次确认及绑定当前 key/value/TTL/更新时间的 opaque token，预览后变化返回冲突。静态 TypeScript 页面、Access-Key、Kestrel/OpenAPI 和 NativeAOT smoke 均已接入；不开放任意 SQL 或业务表删除。
+- [x] 实现“系统缓存”浏览和安全删除：现代 `/api/v1/cache` 分页显示 `bolt`/`bolt_sub` 的真实 bucket 与 key，并通过单条详情接口按需返回未截断的完整 `value_json`；最大 8 MiB 的 value 不进入列表响应，避免整页放大。分页读取惰性清理过期项，`bolt_sub` 永久只读，`bolt` 单项删除需要二次确认及绑定当前 key/value/TTL/更新时间的 opaque token，预览后变化返回冲突。静态 TypeScript 页面使用纯文本 DOM 展示、Access-Key、Kestrel/OpenAPI 和 NativeAOT 均已接入；不开放任意 SQL、整 bucket 删除或业务表删除。
 - [x] 实现实时日志过滤、暂停、恢复和断线重连：静态 TypeScript 页面按级别筛选，安全 DOM 渲染并保留最新 500 条；浏览器隔离验收已覆盖暂停不增长、恢复补发、过滤、手动重连和零 console error。
 - [x] 完成响应式布局、统一空/错/加载状态和基本可访问性：主异步区域共享显式状态机与安全文本节点，loading/empty/error 使用对应 busy/status/alert 语义；提供首个键盘跳转入口、全局可见焦点、44px 控件目标、reduced-motion 和 620px 移动端收敛布局；静态 DOM 契约自动检查唯一 ID、section/dialog/控件名称、非正 tabindex 与初始状态，390×844 / 1280×800 本机 Kestrel 验收均无横向溢出和 console error。
 - [x] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2，Ubuntu CT linux-x64 发布镜像完整链路 Playwright 1/1 通过。

@@ -11,7 +11,7 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class CacheBrowserApiTests
 {
     [Fact]
-    public async Task ListsOpaqueBucketsAndEntriesWithoutReturningKeyOrValue()
+    public async Task ListsPlainBucketAndKeyAndLoadsFullValueOnDemand()
     {
         await using var app = await RunningApp.StartAsync();
         var store = app.App.Services.GetRequiredService<SqliteJsonCacheStore>();
@@ -24,28 +24,37 @@ public sealed class CacheBrowserApiTests
         using var bucketResponse = await app.Client.GetAsync("/api/v1/cache/buckets?database=bolt");
         var bucketJson = await bucketResponse.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, bucketResponse.StatusCode);
-        Assert.DoesNotContain(secretBucket, bucketJson, StringComparison.Ordinal);
-        Assert.DoesNotContain(secretKey, bucketJson, StringComparison.Ordinal);
         using var bucketDocument = JsonDocument.Parse(bucketJson);
         var bucket = Assert.Single(bucketDocument.RootElement.GetProperty("items").EnumerateArray());
         var bucketId = bucket.GetProperty("bucket_id").GetString();
         Assert.Equal(64, bucketId?.Length);
+        Assert.Equal(secretBucket, bucket.GetProperty("bucket_name").GetString());
         Assert.Equal(1, bucket.GetProperty("entry_count").GetInt32());
 
         using var entriesResponse = await app.Client.GetAsync(
             $"/api/v1/cache/entries?database=bolt&bucket_id={bucketId}&page=1&page_size=25");
         var entriesJson = await entriesResponse.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, entriesResponse.StatusCode);
-        Assert.DoesNotContain(secretBucket, entriesJson, StringComparison.Ordinal);
-        Assert.DoesNotContain(secretKey, entriesJson, StringComparison.Ordinal);
         Assert.DoesNotContain("not-for-the-browser", entriesJson, StringComparison.Ordinal);
         using var entriesDocument = JsonDocument.Parse(entriesJson);
         var entry = Assert.Single(entriesDocument.RootElement.GetProperty("items").EnumerateArray());
         Assert.Equal(64, entry.GetProperty("entry_id").GetString()?.Length);
         Assert.Equal(64, entry.GetProperty("delete_token").GetString()?.Length);
+        Assert.Equal(secretKey, entry.GetProperty("key").GetString());
         Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(secretValue), entry.GetProperty("value_bytes").GetInt32());
-        Assert.False(entry.TryGetProperty("key", out _));
-        Assert.False(entry.TryGetProperty("value", out _));
+
+        var entryId = entry.GetProperty("entry_id").GetString();
+        using var detailResponse = await app.Client.GetAsync(
+            $"/api/v1/cache/entries/{entryId}?database=bolt&bucket_id={bucketId}");
+        using var detail = JsonDocument.Parse(
+            await detailResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        Assert.Equal(secretBucket, detail.RootElement.GetProperty("bucket_name").GetString());
+        Assert.Equal(secretKey, detail.RootElement.GetProperty("key").GetString());
+        Assert.Equal(secretValue, detail.RootElement.GetProperty("value_json").GetString());
+        Assert.Equal(
+            System.Text.Encoding.UTF8.GetByteCount(secretValue),
+            detail.RootElement.GetProperty("value_bytes").GetInt32());
     }
 
     [Fact]
@@ -58,6 +67,17 @@ public sealed class CacheBrowserApiTests
         await store.PutJsonAsync("bolt_sub", "archive", "key", "1", null, now);
         var mutable = await ReadSingleEntryAsync(app, "bolt");
         var archive = await ReadSingleEntryAsync(app, "bolt_sub");
+
+        using var archiveDetailResponse = await app.Client.GetAsync(
+            $"/api/v1/cache/entries/{archive.EntryId}"
+            + $"?database=bolt_sub&bucket_id={archive.BucketId}");
+        using var archiveDetail = JsonDocument.Parse(
+            await archiveDetailResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, archiveDetailResponse.StatusCode);
+        Assert.True(archiveDetail.RootElement.GetProperty("read_only").GetBoolean());
+        Assert.Equal("archive", archiveDetail.RootElement.GetProperty("bucket_name").GetString());
+        Assert.Equal("key", archiveDetail.RootElement.GetProperty("key").GetString());
+        Assert.Equal("1", archiveDetail.RootElement.GetProperty("value_json").GetString());
 
         await store.PutJsonAsync("bolt", "mutable", "key", "2", null, now.AddSeconds(1));
         using var staleResponse = await DeleteAsync(app, "bolt", mutable);
