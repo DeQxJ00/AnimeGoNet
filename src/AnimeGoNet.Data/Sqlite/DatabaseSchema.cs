@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 43;
+    public const int CurrentVersion = 44;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -58,7 +58,39 @@ public static class DatabaseSchema
             43,
             "tmdb_episode_nearest_date_evidence",
             TmdbEpisodeNearestDateEvidence),
+        new SchemaMigration(
+            44,
+            "recover_completed_metadata_organization",
+            RecoverCompletedMetadataOrganization),
     ];
+
+    private const string RecoverCompletedMetadataOrganization = """
+        UPDATE ingest_tasks
+        SET status = 'downloaded', failure_kind = NULL, failure_reason = NULL
+        WHERE status = 'metadata_season_resolved'
+          AND EXISTS (
+              SELECT 1
+              FROM download_jobs AS job
+              WHERE job.task_id = ingest_tasks.id
+                AND job.preparation_state = 'completed'
+                AND job.organization_state = 'pending'
+                AND (job.state IN ('seeding', 'complete') OR job.progress >= 1)
+          )
+          AND EXISTS (
+              SELECT 1 FROM task_files AS file
+              WHERE file.task_id = ingest_tasks.id
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM task_files AS file
+              WHERE file.task_id = ingest_tasks.id
+                AND file.disposition = 'pending'
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM metadata_resolution_runs AS run
+              WHERE run.task_id = ingest_tasks.id
+                AND run.status = 'running'
+          );
+        """;
 
     private const string TmdbEpisodeNearestDateEvidence = """
         DROP TRIGGER tr_task_files_episode_evidence_insert;

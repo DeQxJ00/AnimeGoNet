@@ -362,7 +362,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        (SELECT COUNT(*) FROM task_files AS all_file WHERE all_file.task_id = task.id)
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
-                WHERE task.status IN ('download_preparing', 'downloaded')
+                WHERE (
+                        task.status = 'download_preparing'
+                        OR (
+                            task.status = 'downloaded'
+                            AND EXISTS (
+                                SELECT 1
+                                FROM download_jobs AS claim_job
+                                WHERE claim_job.task_id = task.id
+                                  AND claim_job.preparation_state IN ('pending', 'preparing')
+                            )
+                        )
+                    )
                   AND NOT EXISTS (
                     SELECT 1 FROM metadata_resolution_runs
                     WHERE metadata_resolution_runs.task_id = task.id
@@ -444,7 +455,19 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 UPDATE ingest_tasks
                 SET status = 'metadata_resolving', failure_kind = NULL,
                     failure_reason = NULL, updated_at_utc = $now
-                WHERE id = $task_id AND status IN ('download_preparing', 'downloaded');
+                WHERE id = $task_id
+                  AND (
+                        status = 'download_preparing'
+                        OR (
+                            status = 'downloaded'
+                            AND EXISTS (
+                                SELECT 1
+                                FROM download_jobs AS claim_job
+                                WHERE claim_job.task_id = ingest_tasks.id
+                                  AND claim_job.preparation_state IN ('pending', 'preparing')
+                            )
+                        )
+                    );
                 """;
             update.Parameters.AddWithValue("$task_id", taskId);
             update.Parameters.AddWithValue("$now", now);

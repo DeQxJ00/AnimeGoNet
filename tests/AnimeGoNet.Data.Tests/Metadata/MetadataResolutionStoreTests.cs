@@ -59,6 +59,37 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
+    public async Task CompletedDownloadPreparationCannotStartASecondMetadataRun()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE download_jobs
+                SET preparation_state = 'completed'
+                WHERE task_id = $task_id;
+
+                UPDATE ingest_tasks
+                SET status = 'downloaded'
+                WHERE id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", fixture.TaskId);
+            Assert.Equal(2, await command.ExecuteNonQueryAsync());
+        }
+
+        Assert.Null(await fixture.Store.TryClaimNextDownloadedAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+
+        await using var verify = await fixture.Database.OpenConnectionAsync();
+        await using var count = verify.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM metadata_resolution_runs WHERE task_id = $task_id;";
+        count.Parameters.AddWithValue("$task_id", fixture.TaskId);
+        Assert.Equal(0L, (long)(await count.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
     public async Task ClaimCountsEveryTorrentFileNotOnlyPendingMetadataFiles()
     {
         await using var fixture = await MetadataFixture.CreateAsync();

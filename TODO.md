@@ -170,6 +170,7 @@
 ## P8 — 下载、重命名、刮削
 
 - [x] 移植下载管理状态机和 notifier：staged→dispatching→download_preparing→metadata_resolved→download_queued/skip→downloading/downloaded 已接入；后台 qB 快照同步把不可变做种目标、单调累计秒数和 waiting/seeding/completed 写入 schema v33，整理 worker 只按该持久化门禁推进，准备、整理和 cleanup 均有独立租约与安全重试。
+- [x] 修复 qB 完成快照触发重复元数据 Run 的竞态：元数据领取仅接受 `download_preparing` 或准备尚未完成的旧 `downloaded` 任务，`preparation_state=completed` 后只能进入整理；schema v44 自动恢复“文件均已解析、qB 已完成、整理仍 pending”却卡在 `metadata_season_resolved` 的既有任务。
 - [x] 移植重启恢复、去重、失败重试和删除 callback：dispatch lease 恢复、qB 同 hash 幂等、按实例+hash 运行快照恢复、离线 stale/实例 circuit breaker/健康探测与退避重试、每 job 不可变 download/save root 均已实现。上游重命名完成 callback 直接执行 `DeleteFile:true`；新程序按安全语义替换为持久化 `organizing_cleanup` 租约，固定 `deleteFiles=false`。qB 故障时已落盘媒体和 completion 保持不变，Store cleanup 租约可释放重领，健康探测关闭 circuit 后只重试 qB 任务清理。
 - [x] 完成记录仅在下载、文件策略、重命名和必要 NFO/目录库写入全部成功后原子写入：worker 在所有文件、原子 `tvshow.nfo`、上游兼容目录 JSON 及 schema v27 索引全部成功后才于同一事务写 completion、来源 alias 并完成 episode claim，qB cleanup 独立在后；RSS winner 在 Bangumi 页面和 Torrent 网络访问前以 SQLite IMMEDIATE 事务复查同 `mikanid+来源EP` alias，并在 staging 前再次事务复查以关闭并发窗口。命中即返回 `already_completed`，删除业务完成记录后可重新进入。
 - [x] 移植 `link`/`link_delete`/`move`/`wait_move`：四种策略均使用不可变路由快照和持久化逐文件操作；link 保留源文件，link_delete 在目标校验及业务完成后删除源文件，move 立即暂停并移动，wait_move 等做种完成后再暂停移动；失败可恢复且 qB 清理固定 `deleteFiles=false`。

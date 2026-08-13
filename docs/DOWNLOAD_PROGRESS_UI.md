@@ -13,6 +13,8 @@ AnimeGoNet ：等待解析 → TMDB匹配 → 等待下载 → 移动/整理 →
 
 下载完成记录仍只在下载、文件策略、重命名、必要 NFO 和目录数据库全部成功后原子写入。qB 100% 但 `move`、NFO 或数据库失败时，作品库 EP 仍是未下载完成，任务页面显示明确的整理失败阶段。
 
+元数据解析与下载完成快照之间存在明确的单向门禁：任务在 `download_preparing`（或兼容旧数据时处于 `downloaded` 且准备仍为 pending/preparing）才可启动元数据 Run；准备完成后 qB 进入 100% 只能把业务状态推进到 `downloaded` 并交给整理 Worker，不能重新启动元数据解析。schema v44 会把早期版本因该竞态卡在 `metadata_season_resolved`、但文件已全部解析且整理仍 pending 的已完成下载恢复到 `downloaded`。
+
 下载器规范状态至少包括 `Metadata`、`Queued`、`Downloading`、`Paused`、`Stalled`、`Checking`、`Downloaded`、`Error`、`Offline`。adapter 显式映射 qB 的 `metaDL/forcedMetaDL/queuedDL/downloading/forcedDL/stalledDL/pausedDL/stoppedDL/checkingDL/checkingResumeData/moving/error/missingFiles/unknown` 等版本差异，未知值保留原始状态并显示 `Unknown`，不能当作完成。
 
 业务阶段至少包括 `Ingested`、`Filtering`、`ResolvingMetadata`、`WaitingDownload`、`Downloading`、`Organizing`、`Moving`、`Renaming`、`BindingSubtitles`、`WritingNfo`、`Persisting`、`Completed`、`Failed`、`Cancelled`、`Suppressed`。

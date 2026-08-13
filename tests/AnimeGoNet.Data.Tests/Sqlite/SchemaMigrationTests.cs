@@ -159,6 +159,74 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task CompletedMetadataOrganizationRecoveryOnlyRepairsResolvedDownloadedTasks()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES ('repair', 'Repair', 'mikan', 'bt', 'move', 0, 0, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                    status, created_at_utc, updated_at_utc)
+                VALUES
+                    ('repairable', 'repair', 1, 'mikan', 'Repairable', $fingerprint_a,
+                     'bt', '{"file_strategy":"move"}', 'metadata_season_resolved', $now, $now),
+                    ('pending-file', 'repair', 1, 'mikan', 'Pending', $fingerprint_b,
+                     'bt', '{"file_strategy":"move"}', 'metadata_season_resolved', $now, $now);
+
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, disposition, other_reason)
+                VALUES
+                    ('repairable-file', 'repairable', 'done.nfo', 1, 'ignored', 'not_media'),
+                    ('pending-file-row', 'pending-file', 'pending.mkv', 1, 'pending', NULL);
+
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, info_hash, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    created_at_utc, updated_at_utc, preparation_state,
+                    organization_state)
+                VALUES
+                    ('repairable-job', 'repairable', 'bt', $hash_a, 'complete', 1,
+                     1, 1, 0, $now, $now, 'completed', 'pending'),
+                    ('pending-job', 'pending-file', 'bt', $hash_b, 'complete', 1,
+                     1, 1, 0, $now, $now, 'completed', 'pending');
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-08-13T00:00:00.0000000+00:00");
+            seed.Parameters.AddWithValue("$fingerprint_a", new string('a', 64));
+            seed.Parameters.AddWithValue("$fingerprint_b", new string('b', 64));
+            seed.Parameters.AddWithValue("$hash_a", new string('a', 40));
+            seed.Parameters.AddWithValue("$hash_b", new string('b', 40));
+            Assert.Equal(7, await seed.ExecuteNonQueryAsync());
+        }
+
+        var migration = Assert.Single(DatabaseSchema.Migrations, item => item.Version == 44);
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = migration.Sql;
+            Assert.Equal(1, await migrate.ExecuteNonQueryAsync());
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = "SELECT id, status FROM ingest_tasks ORDER BY id;";
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("pending-file", reader.GetString(0));
+        Assert.Equal("metadata_season_resolved", reader.GetString(1));
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("repairable", reader.GetString(0));
+        Assert.Equal("downloaded", reader.GetString(1));
+        Assert.False(await reader.ReadAsync());
+    }
+
+    [Fact]
     public async Task MediaOrganizationProgressMigrationBackfillsDurableStages()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
