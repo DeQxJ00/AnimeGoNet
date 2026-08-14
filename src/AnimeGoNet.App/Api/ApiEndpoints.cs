@@ -8,6 +8,7 @@ using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.DataUpdate;
+using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
@@ -89,6 +90,7 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/rss-rules/{sourceProfileId}/rollback", RollbackRssRules);
         app.MapGet("/api/v1/delete/tasks/{taskId}/preview", DeletePreview);
         app.MapPost("/api/v1/delete/tasks/{taskId}", CreateDeleteExecution);
+        app.MapPost("/api/v1/delete/tasks/{taskId}/execute", ExecuteDeleteAndWait);
         app.MapGet("/api/v1/delete/executions/{executionId}", DeleteExecutionStatus);
         app.MapGet("/api/v1/mikan/work-rules/{mikanId:int}", GetMikanWorkRule);
         app.MapPut("/api/v1/mikan/work-rules/{mikanId:int}", PutMikanWorkRule);
@@ -4140,13 +4142,115 @@ public static class ApiEndpoints
         var execution = await executions.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
         return execution is null
             ? TypedResults.NotFound(Error("delete_execution_not_found", "Delete execution was not found."))
-            : TypedResults.Ok(new DeleteExecutionStatusResponse(
-                execution.ExecutionId, execution.TaskId, execution.State, execution.FailureReason,
-                execution.AttemptCount, execution.CreatedAtUtc, execution.CompletedAtUtc,
-                execution.Items.Select(item => new DeleteTargetResponse(
-                    item.ItemKind, item.TargetKey, item.RootPath, item.DownloaderId,
-                    item.DisplayValue, item.State)).ToArray()));
+            : TypedResults.Ok(ToResponse(execution));
     }
+
+    private static async Task<IResult> ExecuteDeleteAndWait(
+        string taskId,
+        CreateDeleteExecutionRequest request,
+        DeletePlanStore plans,
+        DeleteExecutionStore executions,
+        DeleteExecutionProcessor processor,
+        IHostApplicationLifetime applicationLifetime,
+        CancellationToken cancellationToken)
+    {
+        DeleteExecutionStatus? execution = null;
+        var reusedExistingExecution = false;
+        try
+        {
+            var plan = await plans.CreateAsync(
+                taskId,
+                request.Fingerprint ?? string.Empty,
+                new DeleteSelection(
+                    request.DeleteBusinessRecord,
+                    request.DeleteDownloaderTask,
+                    request.DeleteSourceFiles,
+                    request.DeleteMediaFiles,
+                    request.DeleteTaskRecord),
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            execution = await executions.GetAsync(plan.ExecutionId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            reusedExistingExecution = true;
+            execution = await executions.GetActiveForTaskAsync(taskId, cancellationToken)
+                .ConfigureAwait(false);
+            if (execution is null)
+            {
+                return TypedResults.Conflict(Error(
+                    "delete_execution_active_missing",
+                    "The active delete execution could not be loaded."));
+            }
+        }
+        catch (KeyNotFoundException)
+        {
+            return TypedResults.NotFound(Error("delete_task_not_found", "Delete task was not found."));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return TypedResults.Conflict(Error("delete_preview_stale", exception.Message));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("delete_request_invalid", exception.Message));
+        }
+
+        if (execution is null)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "delete_execution_missing");
+        }
+
+        var executionCancellationToken = applicationLifetime.ApplicationStopping;
+        var deadline = DateTimeOffset.UtcNow.AddMinutes(2);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (execution.State == "completed")
+            {
+                return TypedResults.Ok(ToResponse(execution, reusedExistingExecution));
+            }
+
+            if (execution.State == "pending")
+            {
+                var result = await processor.RunExecutionOnceAsync(
+                    execution.ExecutionId, executionCancellationToken).ConfigureAwait(false);
+                execution = await executions.GetAsync(
+                    execution.ExecutionId, executionCancellationToken)
+                    .ConfigureAwait(false) ?? execution;
+                if (result == DeleteExecutionResult.RetryScheduled
+                    || (result == DeleteExecutionResult.NoWork
+                        && execution.State == "pending"
+                        && execution.FailureReason is not null))
+                {
+                    return TypedResults.Ok(ToResponse(execution, reusedExistingExecution));
+                }
+
+                continue;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(150), executionCancellationToken)
+                .ConfigureAwait(false);
+            execution = await executions.GetAsync(
+                execution.ExecutionId, executionCancellationToken)
+                .ConfigureAwait(false) ?? execution;
+        }
+
+        return TypedResults.Ok(ToResponse(execution, reusedExistingExecution));
+    }
+
+    private static DeleteExecutionStatusResponse ToResponse(
+        DeleteExecutionStatus execution,
+        bool reusedExistingExecution = false) =>
+        new(
+            execution.ExecutionId, execution.TaskId, execution.State, execution.FailureReason,
+            execution.AttemptCount, execution.CreatedAtUtc, execution.CompletedAtUtc,
+            execution.Items.Select(item => new DeleteTargetResponse(
+                item.ItemKind, item.TargetKey, item.RootPath, item.DownloaderId,
+                item.DisplayValue, item.State)).ToArray(),
+            reusedExistingExecution);
 
     private static async Task<IResult> GetMikanWorkRule(
         int mikanId,

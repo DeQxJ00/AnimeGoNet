@@ -29,6 +29,25 @@ public sealed class DeleteExecutionProcessor(
             return DeleteExecutionResult.NoWork;
         }
 
+        return await ExecuteClaimAsync(claim, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<DeleteExecutionResult> RunExecutionOnceAsync(
+        string executionId,
+        CancellationToken cancellationToken = default)
+    {
+        var claim = await store.TryClaimAsync(
+            executionId, _timeProvider.GetUtcNow(), LeaseDuration, cancellationToken)
+            .ConfigureAwait(false);
+        return claim is null
+            ? DeleteExecutionResult.NoWork
+            : await ExecuteClaimAsync(claim, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<DeleteExecutionResult> ExecuteClaimAsync(
+        DeleteExecutionClaim claim,
+        CancellationToken cancellationToken)
+    {
         foreach (var item in claim.Items)
         {
             try

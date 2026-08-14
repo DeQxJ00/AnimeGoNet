@@ -1362,7 +1362,9 @@ public sealed record DeleteExecutionStatusResponse(
     [property: JsonPropertyName("attempt_count")] int AttemptCount,
     [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
-    [property: JsonPropertyName("items")] IReadOnlyList<DeleteTargetResponse> Items);
+    [property: JsonPropertyName("items")] IReadOnlyList<DeleteTargetResponse> Items,
+    [property: JsonPropertyName("reused_existing_execution")]
+    bool ReusedExistingExecution = false);
 
 public sealed record RssNamedArrayRequest(
     [property: JsonPropertyName("id")] string? Id,

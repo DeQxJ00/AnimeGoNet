@@ -159,6 +159,20 @@ test("anime library exposes auditable task and file deletion without merging pro
   assert.match(css, /\.library-audit-actions\s*\{/);
 });
 
+test("task deletion waits for a durable execution result and reports item states", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  assert.match(document.querySelector("#delete-confirm")?.textContent ?? "", /确认删除并等待结果/);
+  assert.match(app, /delete\/tasks\/.*\/execute/);
+  assert.match(app, /正在删除，请等待/);
+  assert.match(app, /删除完成/);
+  assert.match(app, /重试并等待结果/);
+  assert.match(app, /已接管已有执行/);
+  assert.match(app, /body\.items\.filter\(item => item\.state === "failed"\)/);
+});
+
 test("Bangumi archive hit details are collapsed by default and use a compact table", async () => {
   const [document, app, css] = await Promise.all([
     page(),

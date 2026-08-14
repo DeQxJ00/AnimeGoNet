@@ -4394,7 +4394,7 @@ async function openDeletePreview(taskId) {
                 targets.append(section);
             }
         }
-        message.textContent = "目标已冻结预览。勾选动作后才可确认；执行结果可按 execution ID 查询。";
+        message.textContent = "目标已冻结预览。确认后页面会同步等待本次删除结果；已有执行会直接接管，不会重复创建。";
         updateDeleteConfirm();
     }
     catch (error) {
@@ -4406,7 +4406,7 @@ deleteConfirm.addEventListener("click", async () => {
     if (!activeDeletePreview)
         return;
     deleteConfirm.disabled = true;
-    deleteConfirm.textContent = "正在创建…";
+    deleteConfirm.textContent = "正在删除，请等待…";
     const request = {
         fingerprint: activeDeletePreview.fingerprint,
         delete_business_record: false,
@@ -4420,7 +4420,7 @@ deleteConfirm.addEventListener("click", async () => {
     try {
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
-        const response = await fetch(`/api/v1/delete/tasks/${encodeURIComponent(activeDeletePreview.task_id)}`, {
+        const response = await fetch(`/api/v1/delete/tasks/${encodeURIComponent(activeDeletePreview.task_id)}/execute`, {
             method: "POST",
             headers: requestHeaders,
             body: JSON.stringify(request),
@@ -4428,19 +4428,37 @@ deleteConfirm.addEventListener("click", async () => {
         if (!response.ok)
             throw new Error(await responseError(response));
         const body = await response.json();
-        element("#delete-message").textContent = `删除任务已创建：${body.execution_id}（${body.selected_target_count} 项）`;
-        deleteConfirm.textContent = "已创建";
-        window.setTimeout(() => deleteDialog.close(), 1600);
+        const completed = body.items.filter(item => item.state === "completed").length;
+        const skipped = body.items.filter(item => item.state === "skipped").length;
+        const failed = body.items.filter(item => item.state === "failed").length;
+        const pending = body.items.filter(item => item.state === "pending").length;
+        const executionOrigin = body.reused_existing_execution ? "已接管已有执行" : "已创建并执行";
+        const summary = `${executionOrigin} ${body.execution_id} · 尝试 ${body.attempt_count} 次 · 完成 ${completed} · 已不存在 ${skipped} · 失败 ${failed} · 待处理 ${pending}`;
+        if (body.state === "completed") {
+            element("#delete-message").textContent = `删除完成。${summary}`;
+            deleteConfirm.textContent = "删除完成";
+            void loadMetadataTasks();
+            void loadDownloads();
+            void loadLibrary();
+            void loadPendingTmdb();
+            void loadOverviewMetadataAttention();
+        }
+        else {
+            element("#delete-message").textContent =
+                `删除未完成：${body.failure_reason ?? body.state}。${summary}`;
+            deleteConfirm.textContent = "重试并等待结果";
+            deleteConfirm.disabled = false;
+        }
     }
     catch (error) {
-        element("#delete-message").textContent = errorMessage(error, "创建失败");
-        deleteConfirm.textContent = "确认创建删除任务";
+        element("#delete-message").textContent = errorMessage(error, "删除失败");
+        deleteConfirm.textContent = "重试并等待结果";
         updateDeleteConfirm();
     }
 });
 deleteDialog.addEventListener("close", () => {
     activeDeletePreview = null;
-    deleteConfirm.textContent = "确认创建删除任务";
+    deleteConfirm.textContent = "确认删除并等待结果";
 });
 function textOrDash(value) {
     return value === null || value === undefined || value === "" ? "—" : String(value);

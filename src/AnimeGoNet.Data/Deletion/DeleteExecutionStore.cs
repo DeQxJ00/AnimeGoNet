@@ -64,10 +64,47 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
             executionId, taskId, state, failureReason, attemptCount, createdAt, completedAt, items);
     }
 
+    public async Task<DeleteExecutionStatus?> GetActiveForTaskAsync(
+        string taskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id FROM delete_executions
+            WHERE task_id = $task_id AND state IN ('pending', 'executing')
+            ORDER BY created_at_utc, id LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        var executionId = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        return executionId is null
+            ? null
+            : await GetAsync(executionId, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<DeleteExecutionClaim?> TryClaimNextAsync(
         DateTimeOffset utcNow,
         TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default) =>
+        await TryClaimCoreAsync(null, utcNow, leaseDuration, cancellationToken).ConfigureAwait(false);
+
+    public async Task<DeleteExecutionClaim?> TryClaimAsync(
+        string executionId,
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executionId);
+        return await TryClaimCoreAsync(
+            (string?)executionId, utcNow, leaseDuration, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<DeleteExecutionClaim?> TryClaimCoreAsync(
+        string? requestedExecutionId,
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
         var now = Format(utcNow);
@@ -95,10 +132,14 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
             candidate.CommandText = """
                 SELECT id, task_id FROM delete_executions
                 WHERE state = 'pending'
-                  AND (next_attempt_at_utc IS NULL OR next_attempt_at_utc <= $now)
+                  AND ($requested_id IS NOT NULL
+                       OR next_attempt_at_utc IS NULL OR next_attempt_at_utc <= $now)
+                  AND ($requested_id IS NULL OR id = $requested_id)
                 ORDER BY created_at_utc, id LIMIT 1;
                 """;
             candidate.Parameters.AddWithValue("$now", now);
+            candidate.Parameters.AddWithValue(
+                "$requested_id", (object?)requestedExecutionId ?? DBNull.Value);
             await using var reader = await candidate.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {

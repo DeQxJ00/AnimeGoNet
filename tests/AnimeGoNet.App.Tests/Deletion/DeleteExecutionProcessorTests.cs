@@ -34,6 +34,20 @@ public sealed class DeleteExecutionProcessorTests
     }
 
     [Fact]
+    public async Task ExplicitExecutionRunsTheRequestedPersistentPlanSynchronously()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var prepared = await PreparePlanAsync(app, new DeleteSelection(true, true, true, true));
+
+        var result = await app.App.Services.GetRequiredService<DeleteExecutionProcessor>()
+            .RunExecutionOnceAsync(prepared.ExecutionId);
+
+        Assert.Equal(DeleteExecutionResult.Completed, result);
+        Assert.Equal("completed", (await ReadStateAsync(app, prepared.ExecutionId)).ExecutionState);
+    }
+
+    [Fact]
     public async Task DownloaderFailureRetriesBeforeFilesOrBusinessRecordAreDeleted()
     {
         var client = new FakeDownloadClient { FailDelete = true };
