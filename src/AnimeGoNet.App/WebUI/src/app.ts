@@ -439,6 +439,14 @@ interface RuntimeConfiguration {
   };
 }
 
+interface LegacyApiEnvelope<T> {
+  code: number;
+  msg: string;
+  data: T;
+}
+
+type JsonObject = Record<string, unknown>;
+
 interface ConfigurationMigrationDiagnostic {
   code: string;
   source: string;
@@ -1590,6 +1598,13 @@ function element<T extends Element>(selector: string): T {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function jsonObject(value: unknown, name: string): JsonObject {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${name} 不是有效对象`);
+  }
+  return value as JsonObject;
 }
 
 async function responseError(response: Response): Promise<string> {
@@ -5092,7 +5107,9 @@ async function loadConfiguration(): Promise<void> {
       configurationCard("部署与安全", [
         ["容器模式", enabledLabel(config.deployment.running_in_container)],
         ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
-        ["Access-Key", config.deployment.access_key_configured ? "已配置（值已隐藏）" : "未配置"],
+        ["Access-Key", config.deployment.access_key_configured
+          ? "已配置；明文见上方 Web API / AnimeGoHelper"
+          : "未配置；可在上方设置"],
       ]),
       configurationCard("全局选择性代理", [
         ["代理地址", config.outbound_proxy.url ?? "未配置（全部直连）"],
@@ -5172,6 +5189,95 @@ async function loadConfiguration(): Promise<void> {
     currentConfiguration = null;
     container.replaceChildren();
     status.textContent = `配置读取失败：${errorMessage(error, "未知错误")}`;
+  }
+}
+
+function animeGoHelperApiUrl(): string {
+  return new URL("/api", window.location.origin).href.replace(/\/$/, "");
+}
+
+async function readDeploymentConfiguration(): Promise<JsonObject> {
+  const response = await fetch("/api/config?key=all", { headers });
+  if (!response.ok) throw new Error(await responseError(response));
+  const envelope = await response.json() as LegacyApiEnvelope<unknown>;
+  if (envelope.code !== 200) {
+    throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
+  }
+  return jsonObject(envelope.data, "部署配置");
+}
+
+async function loadWebApiCompatibility(): Promise<void> {
+  const status = element<HTMLElement>("#web-api-compatibility-status");
+  const keyInput = element<HTMLInputElement>("#web-api-compatibility-access-key");
+  const reload = element<HTMLButtonElement>("#web-api-compatibility-reload");
+  const save = element<HTMLButtonElement>("#web-api-compatibility-save");
+  element<HTMLInputElement>("#web-api-compatibility-url").value = animeGoHelperApiUrl();
+  element<HTMLInputElement>("#web-api-compatibility-plugin-name").value =
+    "filter/mikan_tool.py";
+  status.textContent = "正在读取部署配置中的 AccessKey…";
+  reload.disabled = true;
+  save.disabled = true;
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const web = jsonObject(configuration.web, "web 配置");
+    const configuredKey = web.access_key;
+    if (configuredKey !== undefined && typeof configuredKey !== "string") {
+      throw new Error("web.access_key 不是字符串");
+    }
+    keyInput.value = configuredKey ?? "";
+    status.textContent = configuredKey
+      ? "已回填当前部署 AccessKey。修改后保存会自动备份 animego.yaml，重启后生效。"
+      : "当前未配置 AccessKey；原生本机模式可以留空，Docker 模式必须填写。";
+  } catch (error) {
+    keyInput.value = "";
+    status.textContent = `AccessKey 读取失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
+}
+
+async function saveWebApiCompatibility(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const status = element<HTMLElement>("#web-api-compatibility-status");
+  const reload = element<HTMLButtonElement>("#web-api-compatibility-reload");
+  const save = element<HTMLButtonElement>("#web-api-compatibility-save");
+  const requestedKey = element<HTMLInputElement>(
+    "#web-api-compatibility-access-key",
+  ).value;
+  if (currentConfiguration?.deployment.running_in_container && requestedKey.length === 0) {
+    status.textContent = "Docker 模式要求 AccessKey 非空，未保存。";
+    return;
+  }
+  reload.disabled = true;
+  save.disabled = true;
+  status.textContent = "正在重新读取、校验并备份部署配置…";
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const web = jsonObject(configuration.web, "web 配置");
+    if (web.access_key === requestedKey) {
+      status.textContent = "AccessKey 没有变化，无需保存。";
+      return;
+    }
+    web.access_key = requestedKey;
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/config?key=all&backup=true", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({ key: "all", backup: true, config: configuration }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const envelope = await response.json() as LegacyApiEnvelope<unknown>;
+    if (envelope.code !== 200) {
+      throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
+    }
+    status.textContent = "AccessKey 已写入并备份部署配置；请重启 AnimeGoNet。油猴插件填写这里的同一明文值，PluginName 保持 filter/mikan_tool.py。";
+  } catch (error) {
+    status.textContent = `AccessKey 保存失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
   }
 }
 
@@ -10711,7 +10817,17 @@ element<HTMLButtonElement>("#pending-tmdb-reload").addEventListener(
   "click",
   () => void loadPendingTmdb(true),
 );
-element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => void loadConfiguration());
+element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => {
+  void Promise.all([loadConfiguration(), loadWebApiCompatibility()]);
+});
+element<HTMLButtonElement>("#web-api-compatibility-reload").addEventListener(
+  "click",
+  () => void loadWebApiCompatibility(),
+);
+element<HTMLFormElement>("#web-api-compatibility-form").addEventListener(
+  "submit",
+  (event) => void saveWebApiCompatibility(event),
+);
 element<HTMLButtonElement>("#configuration-edit").addEventListener("click", openConfigurationEditor);
 element<HTMLButtonElement>("#configuration-reset").addEventListener("click", () => void resetConfiguration());
 element<HTMLButtonElement>("#configuration-archive-export").addEventListener("click", () => {
@@ -11260,6 +11376,7 @@ void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
 void loadConfiguration();
+void loadWebApiCompatibility();
 void loadConfigurationBackups();
 void loadDownloads();
 void loadMetadataTasks();

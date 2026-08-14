@@ -137,6 +137,7 @@ public sealed class LegacyConfigurationApiTests
         var envelope = JsonNode.Parse(await all.Content.ReadAsStringAsync())!.AsObject();
         var configuration = envelope["data"]!.AsObject();
         configuration["metadata"]!["tmdb"]!["language"] = "ja-JP";
+        configuration["web"]!["access_key"] = "webui-animegohelper-access";
         var request = new JsonObject
         {
             ["key"] = "raw",
@@ -157,6 +158,10 @@ public sealed class LegacyConfigurationApiTests
             "ja-JP",
             rereadJson.RootElement.GetProperty("data").GetProperty("metadata")
                 .GetProperty("tmdb").GetProperty("language").GetString());
+        Assert.Equal(
+            "webui-animegohelper-access",
+            rereadJson.RootElement.GetProperty("data").GetProperty("web")
+                .GetProperty("access_key").GetString());
         Assert.Empty(Directory.GetFiles(
             Path.Combine(app.RootPath, "data"),
             "animego-api-*.yaml"));
