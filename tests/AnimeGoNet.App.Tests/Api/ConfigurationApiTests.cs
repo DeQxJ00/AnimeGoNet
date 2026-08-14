@@ -78,7 +78,7 @@ public sealed class ConfigurationApiTests
             HttpStatusCode.Unauthorized,
             (await app.Client.GetAsync("/api/v1/config")).StatusCode);
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/config");
-        request.Headers.Add("X-AnimeGo-Access-Key", "local-access-secret");
+        request.Headers.Add("X-AnimeGo-WebUI-Access-Key", "local-access-secret");
         using var response = await app.Client.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(text);

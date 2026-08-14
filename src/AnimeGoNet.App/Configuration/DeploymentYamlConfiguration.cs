@@ -600,6 +600,7 @@ internal static class DeploymentYamlConfiguration
               host: {{Scalar(Configured(values, "web:host", defaults.Web.Host))}}
               port: {{Integer(values, "web:port", defaults.Web.Port)}}
               access_key: {{Scalar(Configured(values, "web:access_key", string.Empty))}}
+              webui_access_key: {{Scalar(Configured(values, "web:webui_access_key", string.Empty))}}
               background_workers_enabled: true
 
             outbound_proxy:
@@ -807,10 +808,11 @@ internal static class DeploymentYamlConfiguration
               save_path: {{Scalar(options.Paths.SavePath)}}
 
             web:
-              # 原生默认 127.0.0.1:7991；Docker 默认 0.0.0.0:7991。首次生成使用本机便利默认 AccessKey。
+              # access_key 仅用于外部插件/API；webui_access_key 独立保护 WebUI 管理接口。
               host: {{Scalar(options.Web.Host)}}
               port: {{options.Web.Port}}
               access_key: '123456'
+              webui_access_key: ''
               background_workers_enabled: true
 
             # 唯一出站代理。仅匹配 hosts 的目标使用代理；其余保持直连。

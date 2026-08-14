@@ -114,7 +114,7 @@ public sealed class LegacyBoltApiTests
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/bolt?type=bucket");
-        request.Headers.Add("X-AnimeGo-Access-Key", accessKey);
+        request.Headers.Add("X-AnimeGo-WebUI-Access-Key", accessKey);
         using var authorized = await app.Client.SendAsync(request);
         using var json = JsonDocument.Parse(await authorized.Content.ReadAsStreamAsync());
         Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);

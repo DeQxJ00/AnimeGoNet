@@ -105,7 +105,7 @@ public sealed class CacheBrowserApiTests
         using var invalid = new HttpRequestMessage(
             HttpMethod.Get,
             "/api/v1/cache/entries?database=other&bucket_id=bad&page=-1&page_size=500");
-        invalid.Headers.Add("X-AnimeGo-Access-Key", "cache-test-key");
+        invalid.Headers.Add("X-AnimeGo-WebUI-Access-Key", "cache-test-key");
         using var invalidResponse = await app.Client.SendAsync(invalid);
         Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
         Assert.Equal("cache_query_invalid", await ReadErrorCodeAsync(invalidResponse));

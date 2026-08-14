@@ -13,7 +13,7 @@ AnimeGoNet 使用 SQLite schema v22 的 `cache_buckets` 与 `cache_entries` 取�
 
 ## 兼容 API
 
-以下端点保持上游 HTTP 200 + `code/msg/data` envelope，并受统一 Access-Key 中间件保护：
+以下端点保持上游 HTTP 200 + `code/msg/data` envelope；作为 WebUI 管理面，受独立 WebUI AccessKey 中间件保护：
 
 - `GET /api/bolt?db=bolt&type=bucket`
 - `GET /api/bolt?db=bolt&type=key&bucket={bucket}`
@@ -26,7 +26,7 @@ AnimeGoNet 使用 SQLite schema v22 的 `cache_buckets` 与 `cache_entries` 取�
 
 ## 现代缓存浏览 API
 
-本地管理页不复用旧兼容读取接口，而使用 Access-Key 保护的：
+本地管理页不复用旧兼容读取接口，而使用 WebUI AccessKey 保护的：
 
 - `GET /api/v1/cache/buckets?database=bolt|bolt_sub`
 - `GET /api/v1/cache/entries?database=...&bucket_id=...&page=1&page_size=25`

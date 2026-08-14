@@ -63,7 +63,7 @@ public sealed class WebSocketLogApiTests
 
         using (var direct = new ClientWebSocket())
         {
-            direct.Options.SetRequestHeader("X-AnimeGo-Access-Key", accessKey);
+            direct.Options.SetRequestHeader("X-AnimeGo-WebUI-Access-Key", accessKey);
             await direct.ConnectAsync(endpoint, CancellationToken.None);
             Assert.Equal(WebSocketState.Open, direct.State);
             await direct.CloseAsync(
@@ -76,7 +76,7 @@ public sealed class WebSocketLogApiTests
             SHA256.HashData(Encoding.UTF8.GetBytes(accessKey)));
         using var legacy = new ClientWebSocket();
         await legacy.ConnectAsync(
-            WebSocketUri(app, $"access_key={hash}"),
+            WebSocketUri(app, $"webui_access_key={hash}"),
             CancellationToken.None);
         Assert.Equal(WebSocketState.Open, legacy.State);
         await legacy.CloseAsync(

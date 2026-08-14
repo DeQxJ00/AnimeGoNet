@@ -38,6 +38,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
         Assert.Contains("- /tmp", compose, StringComparison.Ordinal);
         Assert.Contains("no-new-privileges:true", compose, StringComparison.Ordinal);
+        Assert.Contains(
+            "webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}",
+            compose,
+            StringComparison.Ordinal);
 
         Assert.Contains("--user \"$test_uid:$test_gid\"", smoke, StringComparison.Ordinal);
         Assert.Contains("--read-only", smoke, StringComparison.Ordinal);
@@ -87,6 +91,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("data_path: /data", compose, StringComparison.Ordinal);
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
         Assert.Contains("no-new-privileges:true", compose, StringComparison.Ordinal);
+        Assert.Contains(
+            "webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}",
+            compose,
+            StringComparison.Ordinal);
 
         Assert.Contains("mktemp -d", smoke, StringComparison.Ordinal);
         Assert.Contains("compose down --volumes --remove-orphans", smoke, StringComparison.Ordinal);

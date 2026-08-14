@@ -57,6 +57,8 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 
 ```powershell
 $env:ANIMEGONET_ACCESS_KEY = '<strong-local-secret>'
+# 可选：单独保护 WebUI；留空时裸 WebUI 可直接访问。
+$env:ANIMEGONET_WEBUI_ACCESS_KEY = '<different-webui-secret>'
 docker compose -f docker-compose.animegonet.yml up --build
 ```
 
@@ -68,7 +70,7 @@ docker compose -f docker-compose.animegonet.yml up --build
 
 Compose 将 `./data` 挂载到 `/data`，将同一个 `./download` 同时挂载给
 AnimeGoNet 和两个 qB 容器；首次启动生成的 `/data/animego.yaml` 因此可持久化。
-容器模式必须设置 Access Key。
+容器模式必须设置外部插件/API Access Key；WebUI AccessKey 独立且可选。
 
 已有独立或远程 qBittorrent 时，使用
 [`docker-compose.external-qbittorrent.yml`](docker-compose.external-qbittorrent.yml)，

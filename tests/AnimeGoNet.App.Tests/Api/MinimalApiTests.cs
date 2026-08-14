@@ -410,7 +410,7 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
-    public async Task ProtectedApiAcceptsDirectAndLegacyHashedAccessKeys()
+    public async Task ProtectedWebUiApiAcceptsDirectAndHashedWebUiAccessKeys()
     {
         const string accessKey = "test-secret";
         await using var app = await RunningApp.StartAsync(accessKey);
@@ -419,15 +419,79 @@ public sealed class MinimalApiTests
         Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
 
         using var directRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/status");
-        directRequest.Headers.Add("X-AnimeGo-Access-Key", accessKey);
+        directRequest.Headers.Add("X-AnimeGo-WebUI-Access-Key", accessKey);
         using var direct = await app.Client.SendAsync(directRequest);
         Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
 
         var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(accessKey)));
         using var legacyRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/status");
-        legacyRequest.Headers.Add("Access-Key", hash);
+        legacyRequest.Headers.Add("WebUI-Access-Key", hash);
         using var legacy = await app.Client.SendAsync(legacyRequest);
         Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
+    }
+
+    [Fact]
+    public async Task WebUiAndPluginAccessKeysProtectSeparateRouteBoundaries()
+    {
+        const string pluginAccessKey = "plugin-secret";
+        const string webUiAccessKey = "webui-secret";
+        await using var app = await RunningApp.StartAsync(
+            accessKey: pluginAccessKey,
+            webUiAccessKey: webUiAccessKey);
+
+        using var statusWithoutKey = await app.Client.GetAsync("/api/v1/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, statusWithoutKey.StatusCode);
+        using var statusWithPluginKey = new HttpRequestMessage(HttpMethod.Get, "/api/v1/status");
+        statusWithPluginKey.Headers.Add("X-AnimeGo-Access-Key", pluginAccessKey);
+        using var pluginDeniedFromWebUi = await app.Client.SendAsync(statusWithPluginKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, pluginDeniedFromWebUi.StatusCode);
+        using var statusWithWebUiKey = new HttpRequestMessage(HttpMethod.Get, "/api/v1/status");
+        statusWithWebUiKey.Headers.Add("X-AnimeGo-WebUI-Access-Key", webUiAccessKey);
+        using var webUiAccepted = await app.Client.SendAsync(statusWithWebUiKey);
+        Assert.Equal(HttpStatusCode.OK, webUiAccepted.StatusCode);
+
+        const string pluginPath = "/api/plugin/config?name=inner_plugin_mikan";
+        using var pluginWithoutKey = await app.Client.GetAsync(pluginPath);
+        Assert.Equal(HttpStatusCode.Unauthorized, pluginWithoutKey.StatusCode);
+        using var pluginWithWebUiKey = new HttpRequestMessage(HttpMethod.Get, pluginPath);
+        pluginWithWebUiKey.Headers.Add("X-AnimeGo-WebUI-Access-Key", webUiAccessKey);
+        using var webUiDeniedFromPlugin = await app.Client.SendAsync(pluginWithWebUiKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, webUiDeniedFromPlugin.StatusCode);
+        using var pluginWithKey = new HttpRequestMessage(HttpMethod.Get, pluginPath);
+        pluginWithKey.Headers.Add("X-AnimeGo-Access-Key", pluginAccessKey);
+        using var pluginAccepted = await app.Client.SendAsync(pluginWithKey);
+        Assert.Equal(HttpStatusCode.OK, pluginAccepted.StatusCode);
+
+        using var ingestWithWebUiKey = new HttpRequestMessage(HttpMethod.Post, "/api/v1/ingest")
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        ingestWithWebUiKey.Headers.Add("X-AnimeGo-WebUI-Access-Key", webUiAccessKey);
+        using var webUiDeniedFromIngest = await app.Client.SendAsync(ingestWithWebUiKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, webUiDeniedFromIngest.StatusCode);
+        using var ingestWithPluginKey = new HttpRequestMessage(HttpMethod.Post, "/api/v1/ingest")
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        ingestWithPluginKey.Headers.Add("X-AnimeGo-Access-Key", pluginAccessKey);
+        using var pluginAcceptedByIngest = await app.Client.SendAsync(ingestWithPluginKey);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, pluginAcceptedByIngest.StatusCode);
+
+        const string resolvePath = "/api/v1/ingest/mikan/resolve";
+        using var resolveWithPluginKey = new HttpRequestMessage(HttpMethod.Post, resolvePath)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        resolveWithPluginKey.Headers.Add("X-AnimeGo-Access-Key", pluginAccessKey);
+        using var pluginDeniedFromWebUiResolve = await app.Client.SendAsync(resolveWithPluginKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, pluginDeniedFromWebUiResolve.StatusCode);
+        using var resolveWithWebUiKey = new HttpRequestMessage(HttpMethod.Post, resolvePath)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        resolveWithWebUiKey.Headers.Add("X-AnimeGo-WebUI-Access-Key", webUiAccessKey);
+        using var webUiAcceptedByResolve = await app.Client.SendAsync(resolveWithWebUiKey);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, webUiAcceptedByResolve.StatusCode);
     }
 
     [Fact]

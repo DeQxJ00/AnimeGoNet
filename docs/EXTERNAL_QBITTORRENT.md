@@ -54,6 +54,7 @@ Key。`QBITTORRENT_*_URL` 必须是 AnimeGoNet 容器内可访问的 HTTP(S) 地
 
 ```powershell
 $env:ANIMEGONET_ACCESS_KEY = '<strong-random-secret>'
+$env:ANIMEGONET_WEBUI_ACCESS_KEY = '<different-webui-secret>'
 $env:ANIMEGONET_DATA_ROOT = 'D:\AnimeGoNet\data'
 $env:ANIMEGONET_SHARED_DOWNLOAD_ROOT = 'D:\AnimeGoNet\download'
 
@@ -77,7 +78,7 @@ docker compose -f docker-compose.external-qbittorrent.yml up -d --build
 先在 WebUI 的下载器页面分别执行“连接测试”和“路径探测”，也可以调用：
 
 ```powershell
-$headers = @{ 'X-AnimeGo-Access-Key' = $env:ANIMEGONET_ACCESS_KEY }
+$headers = @{ 'X-AnimeGo-WebUI-Access-Key' = $env:ANIMEGONET_WEBUI_ACCESS_KEY }
 Invoke-RestMethod -Method Post -Headers $headers `
   http://127.0.0.1:7991/api/v1/downloaders/bt/test
 Invoke-RestMethod -Method Post -Headers $headers `

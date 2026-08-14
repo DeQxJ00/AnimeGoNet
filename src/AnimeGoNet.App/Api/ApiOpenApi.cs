@@ -9,6 +9,9 @@ internal static class ApiOpenApi
     private const string ModernHeaderScheme = "AnimeGoAccessKey";
     private const string LegacyHeaderScheme = "LegacyAccessKey";
     private const string LegacyQueryScheme = "LegacyAccessKeyQuery";
+    private const string WebUiModernHeaderScheme = "AnimeGoWebUiAccessKey";
+    private const string WebUiHashedHeaderScheme = "WebUiAccessKey";
+    private const string WebUiQueryScheme = "WebUiAccessKeyQuery";
     private static readonly string[] DocumentTags =
     [
         "compatibility",
@@ -64,7 +67,7 @@ internal static class ApiOpenApi
                             Type = SecuritySchemeType.ApiKey,
                             Name = "X-AnimeGo-Access-Key",
                             In = ParameterLocation.Header,
-                            Description = "Configured AnimeGoNet access key in plaintext.",
+                            Description = "Configured external plugin/API access key in plaintext.",
                         },
                         [LegacyHeaderScheme] = new OpenApiSecurityScheme
                         {
@@ -78,7 +81,28 @@ internal static class ApiOpenApi
                             Type = SecuritySchemeType.ApiKey,
                             Name = "access_key",
                             In = ParameterLocation.Query,
-                            Description = "Lowercase SHA-256 of the configured access key.",
+                            Description = "Lowercase SHA-256 of the configured external plugin/API access key.",
+                        },
+                        [WebUiModernHeaderScheme] = new OpenApiSecurityScheme
+                        {
+                            Type = SecuritySchemeType.ApiKey,
+                            Name = "X-AnimeGo-WebUI-Access-Key",
+                            In = ParameterLocation.Header,
+                            Description = "Configured WebUI access key in plaintext.",
+                        },
+                        [WebUiHashedHeaderScheme] = new OpenApiSecurityScheme
+                        {
+                            Type = SecuritySchemeType.ApiKey,
+                            Name = "WebUI-Access-Key",
+                            In = ParameterLocation.Header,
+                            Description = "Lowercase SHA-256 of the configured WebUI access key.",
+                        },
+                        [WebUiQueryScheme] = new OpenApiSecurityScheme
+                        {
+                            Type = SecuritySchemeType.ApiKey,
+                            Name = "webui_access_key",
+                            In = ParameterLocation.Query,
+                            Description = "Lowercase SHA-256 of the configured WebUI access key.",
                         },
                     };
                 document.Tags = DocumentTags
@@ -103,13 +127,19 @@ internal static class ApiOpenApi
                 };
                 if (RequiresAccessKey(context.Description.RelativePath))
                 {
-                    operation.Security =
-                    [
-                        new OpenApiSecurityRequirement(),
-                        Requirement(ModernHeaderScheme, document),
-                        Requirement(LegacyHeaderScheme, document),
-                        Requirement(LegacyQueryScheme, document),
-                    ];
+                    operation.Security = IsPluginApiPath(context.Description.RelativePath)
+                        ? [
+                            new OpenApiSecurityRequirement(),
+                            Requirement(ModernHeaderScheme, document),
+                            Requirement(LegacyHeaderScheme, document),
+                            Requirement(LegacyQueryScheme, document),
+                        ]
+                        : [
+                            new OpenApiSecurityRequirement(),
+                            Requirement(WebUiModernHeaderScheme, document),
+                            Requirement(WebUiHashedHeaderScheme, document),
+                            Requirement(WebUiQueryScheme, document),
+                        ];
                 }
                 return Task.CompletedTask;
             });
@@ -129,6 +159,19 @@ internal static class ApiOpenApi
         relativePath is not null
         && (relativePath.StartsWith("api/", StringComparison.Ordinal)
             || relativePath.StartsWith("websocket/", StringComparison.Ordinal));
+
+    private static bool IsPluginApiPath(string? relativePath)
+    {
+        var path = relativePath?.Split('?', 2)[0];
+        return path is not null
+            && (path.StartsWith("api/plugin/", StringComparison.Ordinal)
+                || path.Equals("api/plugin", StringComparison.Ordinal)
+                || path.StartsWith("api/rss/", StringComparison.Ordinal)
+                || path.Equals("api/rss", StringComparison.Ordinal)
+                || path.StartsWith("api/download/manager/", StringComparison.Ordinal)
+                || path.Equals("api/download/manager", StringComparison.Ordinal)
+                || path.Equals("api/v1/ingest", StringComparison.Ordinal));
+    }
 
     private static string TagForPath(string? relativePath)
     {

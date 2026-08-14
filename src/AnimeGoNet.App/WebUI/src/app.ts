@@ -302,6 +302,7 @@ interface RuntimeConfiguration {
     running_in_container: boolean;
     background_workers_enabled: boolean;
     access_key_configured: boolean;
+    webui_access_key_configured: boolean;
     paths_restart_required: boolean;
   };
   outbound_proxy: {
@@ -1612,10 +1613,11 @@ async function responseError(response: Response): Promise<string> {
   return body?.message ?? `HTTP ${response.status}`;
 }
 
-const accessKey = new URLSearchParams(window.location.search).get("access_key");
-const api = new ApiClient(accessKey);
+const webUiAccessKey = new URLSearchParams(window.location.search)
+  .get("webui_access_key");
+const api = new ApiClient(webUiAccessKey);
 const headers = new Headers();
-if (accessKey) headers.set("Access-Key", accessKey);
+if (webUiAccessKey) headers.set("WebUI-Access-Key", webUiAccessKey);
 const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
 const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-dialog");
@@ -3238,7 +3240,7 @@ function liveLogWebSocketUrl(): string {
   const url = new URL("/websocket/log", window.location.href);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   url.search = "";
-  if (accessKey) url.searchParams.set("access_key", accessKey);
+  if (webUiAccessKey) url.searchParams.set("webui_access_key", webUiAccessKey);
   return url.toString();
 }
 
@@ -4066,9 +4068,9 @@ function saveMetadataState(): void {
 }
 
 function authorizedAssetUrl(path: string): string {
-  if (!accessKey) return path;
+  if (!webUiAccessKey) return path;
   const url = new URL(path, window.location.origin);
-  url.searchParams.set("access_key", accessKey);
+  url.searchParams.set("webui_access_key", webUiAccessKey);
   return `${url.pathname}${url.search}`;
 }
 
@@ -5111,6 +5113,9 @@ async function loadConfiguration(): Promise<void> {
         ["Access-Key", config.deployment.access_key_configured
           ? "已配置；明文见 插件 → 内部插件"
           : "未配置；可在 插件 → 内部插件 设置"],
+        ["WebUI AccessKey", config.deployment.webui_access_key_configured
+          ? "已配置；明文见本页 WebUI 鉴权"
+          : "未配置；本机页面无需鉴权"],
       ]),
       configurationCard("全局选择性代理", [
         ["代理地址", config.outbound_proxy.url ?? "未配置（全部直连）"],
@@ -5195,6 +5200,93 @@ async function loadConfiguration(): Promise<void> {
 
 function animeGoHelperApiUrl(): string {
   return new URL("/api", window.location.origin).href.replace(/\/$/, "");
+}
+
+async function sha256LowerHex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function webUiAuthenticatedUrl(key: string): Promise<string> {
+  const url = new URL("/", window.location.origin);
+  if (key) url.searchParams.set("webui_access_key", await sha256LowerHex(key));
+  url.hash = "#/overview/status";
+  return url.href;
+}
+
+async function loadWebUiAuthentication(): Promise<void> {
+  const status = element<HTMLElement>("#webui-authentication-status");
+  const keyInput = element<HTMLInputElement>("#webui-authentication-access-key");
+  const urlInput = element<HTMLInputElement>("#webui-authentication-url");
+  const reload = element<HTMLButtonElement>("#webui-authentication-reload");
+  const save = element<HTMLButtonElement>("#webui-authentication-save");
+  status.textContent = "正在读取 WebUI 独立鉴权配置…";
+  reload.disabled = true;
+  save.disabled = true;
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const web = jsonObject(configuration.web, "web 配置");
+    const configuredKey = web.webui_access_key;
+    if (configuredKey !== undefined && typeof configuredKey !== "string") {
+      throw new Error("web.webui_access_key 不是字符串");
+    }
+    keyInput.value = configuredKey ?? "";
+    urlInput.value = await webUiAuthenticatedUrl(keyInput.value);
+    status.textContent = keyInput.value
+      ? "WebUI 鉴权已配置；重启后请使用上方专用地址。"
+      : "WebUI 鉴权未配置；裸地址可直接使用，不受插件 AccessKey 影响。";
+  } catch (error) {
+    keyInput.value = "";
+    urlInput.value = await webUiAuthenticatedUrl("");
+    status.textContent = `WebUI 鉴权读取失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
+}
+
+async function saveWebUiAuthentication(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const status = element<HTMLElement>("#webui-authentication-status");
+  const keyInput = element<HTMLInputElement>("#webui-authentication-access-key");
+  const urlInput = element<HTMLInputElement>("#webui-authentication-url");
+  const reload = element<HTMLButtonElement>("#webui-authentication-reload");
+  const save = element<HTMLButtonElement>("#webui-authentication-save");
+  const requestedKey = keyInput.value;
+  reload.disabled = true;
+  save.disabled = true;
+  status.textContent = "正在重新读取、校验并备份部署配置…";
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const web = jsonObject(configuration.web, "web 配置");
+    if (web.webui_access_key === requestedKey) {
+      status.textContent = "WebUI AccessKey 没有变化，无需保存。";
+      return;
+    }
+    web.webui_access_key = requestedKey;
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await fetch("/api/config?key=all&backup=true", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({ key: "all", backup: true, config: configuration }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const envelope = await response.json() as LegacyApiEnvelope<unknown>;
+    if (envelope.code !== 200) {
+      throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
+    }
+    urlInput.value = await webUiAuthenticatedUrl(requestedKey);
+    status.textContent = requestedKey
+      ? "WebUI AccessKey 已保存并备份；重启后使用上方专用地址。插件 AccessKey 不受影响。"
+      : "WebUI AccessKey 已清空并备份；重启后裸地址可直接使用。插件 AccessKey 不受影响。";
+  } catch (error) {
+    status.textContent = `WebUI AccessKey 保存失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
 }
 
 async function readDeploymentConfiguration(): Promise<JsonObject> {
@@ -10819,8 +10911,20 @@ element<HTMLButtonElement>("#pending-tmdb-reload").addEventListener(
   () => void loadPendingTmdb(true),
 );
 element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => {
-  void Promise.all([loadConfiguration(), loadWebApiCompatibility()]);
+  void Promise.all([
+    loadConfiguration(),
+    loadWebApiCompatibility(),
+    loadWebUiAuthentication(),
+  ]);
 });
+element<HTMLButtonElement>("#webui-authentication-reload").addEventListener(
+  "click",
+  () => void loadWebUiAuthentication(),
+);
+element<HTMLFormElement>("#webui-authentication-form").addEventListener(
+  "submit",
+  (event) => void saveWebUiAuthentication(event),
+);
 element<HTMLButtonElement>("#web-api-compatibility-reload").addEventListener(
   "click",
   () => void loadWebApiCompatibility(),
@@ -11377,6 +11481,7 @@ void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
 void loadConfiguration();
+void loadWebUiAuthentication();
 void loadWebApiCompatibility();
 void loadConfigurationBackups();
 void loadDownloads();

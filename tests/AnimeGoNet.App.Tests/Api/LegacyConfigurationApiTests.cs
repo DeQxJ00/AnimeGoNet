@@ -205,7 +205,7 @@ public sealed class LegacyConfigurationApiTests
         string accessKey)
     {
         var request = new HttpRequestMessage(method, path);
-        request.Headers.Add("X-AnimeGo-Access-Key", accessKey);
+        request.Headers.Add("X-AnimeGo-WebUI-Access-Key", accessKey);
         return app.Client.SendAsync(request);
     }
 }

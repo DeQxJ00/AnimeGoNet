@@ -9,6 +9,7 @@ fixture_pt_base64="$repository_root/tests/fixtures/animegonet-ci-pt.torrent.b64"
 integration_root="$(mktemp -d)"
 project_name="animegonet-qbt-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
 access_key="animegonet-compose-smoke"
+webui_access_key="animegonet-compose-webui-smoke"
 test_uid="$(id -u)"
 test_gid="$(id -g)"
 container_e2e_fixture_image="animegonet-container-e2e-fixture:${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
@@ -23,6 +24,7 @@ fi
 export ANIMEGONET_IMAGE="$image"
 export ANIMEGONET_INTEGRATION_ROOT="$integration_root"
 export ANIMEGONET_ACCESS_KEY="$access_key"
+export ANIMEGONET_WEBUI_ACCESS_KEY="$webui_access_key"
 export ANIMEGONET_UID="$test_uid"
 export ANIMEGONET_GID="$test_gid"
 export ANIMEGONET_CONTAINER_E2E_FIXTURE_IMAGE="$container_e2e_fixture_image"
@@ -423,11 +425,15 @@ done
 animegonet_post() {
   local endpoint="$1"
   local json="${2:-}"
+  local auth_header="X-AnimeGo-WebUI-Access-Key: $webui_access_key"
+  if [[ "$endpoint" == "/api/v1/ingest" ]]; then
+    auth_header="X-AnimeGo-Access-Key: $access_key"
+  fi
   local arguments=(
     --fail-with-body
     --silent
     --show-error
-    --header "X-AnimeGo-Access-Key: $access_key"
+    --header "$auth_header"
   )
   if [[ -n "$json" ]]; then
     arguments+=(--header "Content-Type: application/json" --data "$json")
@@ -444,7 +450,7 @@ animegonet_post() {
 animegonet_get() {
   local endpoint="$1"
   curl --fail-with-body --silent --show-error \
-    --header "X-AnimeGo-Access-Key: $access_key" \
+    --header "X-AnimeGo-WebUI-Access-Key: $webui_access_key" \
     "$animegonet_url$endpoint" || {
       local exit_code=$?
       echo "AnimeGoNet GET failed: endpoint=$endpoint curl_exit=$exit_code" >&2
@@ -457,7 +463,7 @@ animegonet_put() {
   local json="$2"
   curl --fail-with-body --silent --show-error \
     --request PUT \
-    --header "X-AnimeGo-Access-Key: $access_key" \
+    --header "X-AnimeGo-WebUI-Access-Key: $webui_access_key" \
     --header "Content-Type: application/json" \
     --data "$json" \
     "$animegonet_url$endpoint" || {
@@ -1184,6 +1190,6 @@ done
 if [[ "${ANIMEGONET_FULL_CHAIN_WEBUI:-0}" == "1" ]]; then
   stage "verify full-chain result in Chromium WebUI"
   export ANIMEGONET_WEBUI_BASE_URL="$animegonet_url"
-  export ANIMEGONET_WEBUI_ACCESS_KEY="$access_key"
+  export ANIMEGONET_WEBUI_ACCESS_KEY="$webui_access_key"
   run_full_chain_webui
 fi

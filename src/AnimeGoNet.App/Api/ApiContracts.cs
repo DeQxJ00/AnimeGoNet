@@ -476,6 +476,7 @@ public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("running_in_container")] bool RunningInContainer,
     [property: JsonPropertyName("background_workers_enabled")] bool BackgroundWorkersEnabled,
     [property: JsonPropertyName("access_key_configured")] bool AccessKeyConfigured,
+    [property: JsonPropertyName("webui_access_key_configured")] bool WebUiAccessKeyConfigured,
     [property: JsonPropertyName("paths_restart_required")] bool PathsRestartRequired);
 
 public sealed record DataUpdateConfigurationResponse(

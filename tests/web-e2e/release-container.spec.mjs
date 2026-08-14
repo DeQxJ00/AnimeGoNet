@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 
 const baseUrl = required("ANIMEGONET_WEBUI_BASE_URL").replace(/\/$/, "");
 const accessKey = required("ANIMEGONET_WEBUI_ACCESS_KEY");
-const legacyAccessKeyHash = createHash("sha256").update(accessKey, "utf8").digest("hex");
+const webUiAccessKeyHash = createHash("sha256").update(accessKey, "utf8").digest("hex");
 
 function required(name) {
   const value = process.env[name];
@@ -13,7 +13,7 @@ function required(name) {
 
 function authenticatedUrl(path = "/") {
   const url = new URL(path, `${baseUrl}/`);
-  url.searchParams.set("access_key", legacyAccessKeyHash);
+  url.searchParams.set("webui_access_key", webUiAccessKeyHash);
   const authenticated = url.toString();
   expect(authenticated).not.toContain(accessKey);
   return authenticated;
@@ -31,7 +31,7 @@ function collectBrowserErrors(page) {
 test("NativeAOT release renders live dashboard and explicit TMDB fallback order", async ({ page }) => {
   const browserErrors = collectBrowserErrors(page);
   const response = await page.request.get(`${baseUrl}/api/v1/status`, {
-    headers: { "X-AnimeGo-Access-Key": accessKey },
+    headers: { "X-AnimeGo-WebUI-Access-Key": accessKey },
   });
   expect(response.ok()).toBeTruthy();
   const status = await response.json();

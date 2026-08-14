@@ -50,6 +50,7 @@ public static class AnimeGoApplication
         string[] args,
         AnimeGoOptions? options = null,
         string? accessKey = null,
+        string? webUiAccessKey = null,
         bool? runningInContainer = null,
         ITorrentStagingService? torrentStagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
@@ -231,9 +232,15 @@ public static class AnimeGoApplication
         options = downloaderLocks.Reapply(deploymentOptions, options);
         accessKey ??= FirstConfigurationValue(
             builder.Configuration,
+            "ANIMEGO_PLUGIN_ACCESS_KEY",
             "ANIMEGO_WEB_ACCESS_KEY",
             "access_key",
             "web:access_key");
+        webUiAccessKey ??= FirstConfigurationValue(
+            builder.Configuration,
+            "ANIMEGO_WEBUI_ACCESS_KEY",
+            "webui_access_key",
+            "web:webui_access_key");
         if (runningInContainer.Value && string.IsNullOrWhiteSpace(accessKey))
         {
             throw new InvalidOperationException("Docker mode requires a non-empty access_key.");
@@ -347,7 +354,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(new RuntimeConfigurationState(
             runningInContainer.Value,
             startBackgroundWorkers.Value,
-            !string.IsNullOrWhiteSpace(accessKey)));
+            !string.IsNullOrWhiteSpace(accessKey),
+            !string.IsNullOrWhiteSpace(webUiAccessKey)));
         builder.Services.AddSingleton(legacyDownloaderMigrationState);
         builder.Services.AddSingleton(externalPluginLoader);
         builder.Services.AddSingleton(externalPluginDiscovery);
@@ -573,10 +581,21 @@ public static class AnimeGoApplication
         app.UseStaticFiles();
         app.Use(async (context, next) =>
         {
-            if ((context.Request.Path.StartsWithSegments("/api")
-                    || context.Request.Path.StartsWithSegments("/websocket"))
+            var path = context.Request.Path;
+            var isPluginApi = IsPluginApiPath(path);
+            var isWebUiApi = !isPluginApi
+                && (path.StartsWithSegments("/api")
+                    || path.StartsWithSegments("/websocket"));
+            if (isPluginApi
                 && !string.IsNullOrWhiteSpace(accessKey)
-                && !HasValidAccessKey(context.Request, accessKey))
+                && !HasValidPluginAccessKey(context.Request, accessKey))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+            if (isWebUiApi
+                && !string.IsNullOrWhiteSpace(webUiAccessKey)
+                && !HasValidWebUiAccessKey(context.Request, webUiAccessKey))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return;
@@ -1570,18 +1589,49 @@ public static class AnimeGoApplication
         return options with { Downloaders = downloaders };
     }
 
-    private static bool HasValidAccessKey(HttpRequest request, string configuredKey)
+    private static bool IsPluginApiPath(PathString path) =>
+        path.StartsWithSegments("/api/plugin")
+        || path.StartsWithSegments("/api/rss")
+        || path.StartsWithSegments("/api/download/manager")
+        || path.Equals("/api/v1/ingest");
+
+    private static bool HasValidPluginAccessKey(
+        HttpRequest request,
+        string configuredKey) =>
+        HasValidAccessKey(
+            request,
+            configuredKey,
+            "X-AnimeGo-Access-Key",
+            "Access-Key",
+            "access_key");
+
+    private static bool HasValidWebUiAccessKey(
+        HttpRequest request,
+        string configuredKey) =>
+        HasValidAccessKey(
+            request,
+            configuredKey,
+            "X-AnimeGo-WebUI-Access-Key",
+            "WebUI-Access-Key",
+            "webui_access_key");
+
+    private static bool HasValidAccessKey(
+        HttpRequest request,
+        string configuredKey,
+        string directHeaderName,
+        string hashedHeaderName,
+        string queryName)
     {
-        if (request.Headers.TryGetValue("X-AnimeGo-Access-Key", out var directKey)
+        if (request.Headers.TryGetValue(directHeaderName, out var directKey)
             && FixedTimeEquals(directKey.ToString(), configuredKey))
         {
             return true;
         }
 
-        var suppliedHash = request.Query["access_key"].ToString();
+        var suppliedHash = request.Query[queryName].ToString();
         if (string.IsNullOrWhiteSpace(suppliedHash))
         {
-            suppliedHash = request.Headers["Access-Key"].ToString();
+            suppliedHash = request.Headers[hashedHeaderName].ToString();
         }
 
         var expectedHash = StableHash.Sha256LowerHex(configuredKey);

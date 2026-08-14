@@ -229,7 +229,9 @@ public sealed class ExternalPluginConfigurationApiTests
         };
         if (includeAccessKey)
         {
-            request.Headers.TryAddWithoutValidation("Access-Key", "plugin-configuration-key");
+            request.Headers.TryAddWithoutValidation(
+                "X-AnimeGo-WebUI-Access-Key",
+                "plugin-configuration-key");
         }
         return await app.Client.SendAsync(request);
     }

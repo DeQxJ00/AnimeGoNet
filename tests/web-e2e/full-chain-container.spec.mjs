@@ -6,7 +6,7 @@ const accessKey = required("ANIMEGONET_WEBUI_ACCESS_KEY");
 const taskId = required("ANIMEGONET_FULL_CHAIN_TASK_ID");
 const title = required("ANIMEGONET_FULL_CHAIN_TITLE");
 const tmdbSeriesId = Number(required("ANIMEGONET_FULL_CHAIN_TMDB_SERIES_ID"));
-const legacyAccessKeyHash = createHash("sha256").update(accessKey, "utf8").digest("hex");
+const webUiAccessKeyHash = createHash("sha256").update(accessKey, "utf8").digest("hex");
 
 function required(name) {
   const value = process.env[name];
@@ -16,7 +16,7 @@ function required(name) {
 
 function authenticatedUrl(path = "/") {
   const url = new URL(path, `${baseUrl}/`);
-  url.searchParams.set("access_key", legacyAccessKeyHash);
+  url.searchParams.set("webui_access_key", webUiAccessKeyHash);
   const value = url.toString();
   expect(value).not.toContain(accessKey);
   return value;
@@ -33,7 +33,7 @@ function collectBrowserErrors(page) {
 
 async function apiJson(request, path) {
   const response = await request.get(`${baseUrl}${path}`, {
-    headers: { "X-AnimeGo-Access-Key": accessKey },
+    headers: { "X-AnimeGo-WebUI-Access-Key": accessKey },
   });
   expect(response.ok(), `${path}: ${response.status()}`).toBeTruthy();
   return response.json();

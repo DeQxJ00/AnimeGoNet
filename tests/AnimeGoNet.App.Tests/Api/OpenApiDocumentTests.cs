@@ -61,17 +61,24 @@ public sealed partial class OpenApiDocumentTests
         AssertScheme(schemes, "AnimeGoAccessKey", "X-AnimeGo-Access-Key", "header");
         AssertScheme(schemes, "LegacyAccessKey", "Access-Key", "header");
         AssertScheme(schemes, "LegacyAccessKeyQuery", "access_key", "query");
+        AssertScheme(schemes, "AnimeGoWebUiAccessKey", "X-AnimeGo-WebUI-Access-Key", "header");
+        AssertScheme(schemes, "WebUiAccessKey", "WebUI-Access-Key", "header");
+        AssertScheme(schemes, "WebUiAccessKeyQuery", "webui_access_key", "query");
 
         var status = Operation(root, "/api/v1/status", "get");
         var security = status.GetProperty("security").EnumerateArray().ToArray();
         Assert.Equal(4, security.Length);
         Assert.Empty(security[0].EnumerateObject());
         Assert.Equal(
-            ["AnimeGoAccessKey", "LegacyAccessKey", "LegacyAccessKeyQuery"],
+            ["AnimeGoWebUiAccessKey", "WebUiAccessKey", "WebUiAccessKeyQuery"],
             security.Skip(1).Select(item => Assert.Single(item.EnumerateObject()).Name));
         Assert.False(Operation(root, "/ping", "get").TryGetProperty("security", out _));
 
         var ingest = Operation(root, "/api/v1/ingest", "post");
+        Assert.Equal(
+            ["AnimeGoAccessKey", "LegacyAccessKey", "LegacyAccessKeyQuery"],
+            ingest.GetProperty("security").EnumerateArray().Skip(1)
+                .Select(item => Assert.Single(item.EnumerateObject()).Name));
         var requestBody = ingest.GetProperty("requestBody");
         Assert.True(requestBody.GetProperty("required").GetBoolean());
         Assert.Equal(
@@ -92,7 +99,7 @@ public sealed partial class OpenApiDocumentTests
         var unauthorized = await app.Client.GetAsync("/api/v1/status");
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/status");
-        request.Headers.Add("X-AnimeGo-Access-Key", "synthetic-access-key");
+        request.Headers.Add("X-AnimeGo-WebUI-Access-Key", "synthetic-access-key");
         using var authorized = await app.Client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
     }

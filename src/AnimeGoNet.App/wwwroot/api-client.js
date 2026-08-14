@@ -21,11 +21,11 @@ export class ApiProtocolError extends Error {
 export class ApiClient {
     #fetch;
     #defaultHeaders;
-    constructor(accessKey, fetchImplementation = globalThis.fetch.bind(globalThis)) {
+    constructor(webUiAccessKey, fetchImplementation = globalThis.fetch.bind(globalThis)) {
         this.#fetch = fetchImplementation;
         this.#defaultHeaders = new Headers({ Accept: "application/json" });
-        if (accessKey)
-            this.#defaultHeaders.set("Access-Key", accessKey);
+        if (webUiAccessKey)
+            this.#defaultHeaders.set("WebUI-Access-Key", webUiAccessKey);
     }
     get(path, options = {}) {
         return this.request(path, { ...options, method: "GET" });

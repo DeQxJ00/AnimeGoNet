@@ -274,6 +274,33 @@
       </div>
       <p id="configuration-status" class="muted">正在读取包含已保存凭据的生效配置…</p>
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
+      <article class="configuration-card web-api-compatibility-card" aria-labelledby="webui-authentication-title">
+        <div class="web-api-compatibility-heading">
+          <div>
+            <p class="eyebrow">Independent WebUI authentication</p>
+            <h3 id="webui-authentication-title">WebUI 鉴权</h3>
+          </div>
+          <span>修改后需重启</span>
+        </div>
+        <p class="muted">只保护 WebUI 管理接口和实时日志，与“插件 → 内部插件”中的外部插件/API AccessKey 完全分开。留空时本机 WebUI 可直接打开。</p>
+        <form id="webui-authentication-form">
+          <div class="source-form-grid">
+            <label class="source-hosts">WebUI 专用地址
+              <input id="webui-authentication-url" type="url" readonly>
+              <small>设置密钥后请收藏此地址；URL 只包含密钥的 SHA-256，不包含明文。</small>
+            </label>
+            <label>WebUI AccessKey（明文）
+              <input id="webui-authentication-access-key" type="text" maxlength="512" autocomplete="off" spellcheck="false">
+              <small>默认留空。仅用于 WebUI，不会传给 AnimeGoHelper 或统一导入 API。</small>
+            </label>
+          </div>
+          <p id="webui-authentication-status" class="muted" role="status">正在读取 WebUI 鉴权配置…</p>
+          <div class="source-form-actions">
+            <button id="webui-authentication-reload" type="button" class="secondary-button">重新读取</button>
+            <button id="webui-authentication-save" type="submit" class="primary-button">保存 WebUI AccessKey 并备份</button>
+          </div>
+        </form>
+      </article>
     </section>
 
     <section id="configuration-archive" aria-labelledby="configuration-archive-title" data-workspace="connections" data-subview="archive" data-nav-label="导入导出与备份">
@@ -1576,6 +1603,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-internal-plugins"></script>
+    <script type="module" src="/app.js?v=20260814-split-auth"></script>
 </body>
 </html>

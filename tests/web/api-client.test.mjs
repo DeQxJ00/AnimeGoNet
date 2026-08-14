@@ -17,7 +17,7 @@ test("GET sends the configured access key only to a same-origin path", async () 
   assert.equal(requests.length, 1);
   assert.equal(requests[0].input, "/api/v1/status");
   assert.equal(requests[0].init.method, "GET");
-  assert.equal(requests[0].init.headers.get("Access-Key"), "local-key");
+  assert.equal(requests[0].init.headers.get("WebUI-Access-Key"), "local-key");
   assert.equal(requests[0].init.headers.get("Accept"), "application/json");
   assert.equal(requests[0].init.headers.has("Content-Type"), false);
 

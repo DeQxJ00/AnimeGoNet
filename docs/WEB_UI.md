@@ -184,6 +184,8 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 
 一级“插件”菜单分为“内部插件 / 外部插件”。“内部插件”当前提供“Web API / AnimeGoHelper (Mikan) 油猴插件”卡片，并为后续站点内部插件保留同级扩展位置；“外部插件”继续管理进程外 C# 包。Mikan 卡片通过既有强类型部署配置接口读取并明文回填 `web.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`；旧 `filter/mikan_tool.py` 继续作为后端兼容别名。新部署 AccessKey 默认 `123456`。保存前重新读取完整部署文档，只修改 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
 
+“设置与备份 / 应用配置”另提供独立“WebUI 鉴权”卡片，明文回填并修改 `web.webui_access_key`。该值只保护 WebUI 管理 API 与实时日志 WebSocket，默认留空；`web.access_key` 只保护 AnimeGoHelper、兼容插件接口和统一导入端点。两把密钥不能交叉授权。设置 WebUI 密钥后，页面生成只携带小写 SHA-256 的 `webui_access_key` 专用地址；清空后裸地址恢复可用。保存同样原子备份部署 YAML，并在重启后生效。
+
 ## 12. 一级/二级导航
 
 静态控制台使用固定左侧一级菜单，不再把全部管理区纵向堆在同一页。一级工作区为
@@ -263,15 +265,15 @@ plugin-data。
 
 WebUI 使用 TypeScript 7 strict 编译为浏览器原生 ES module，不引入 React、Vue、
 Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共享边界：调用点声明
-响应与请求体类型，client 统一序列化 JSON、传播 `AbortSignal`、携带页面已有的旧
-`Access-Key`，并把结构化失败投影为稳定的 `ApiHttpError`。
+响应与请求体类型，client 统一序列化 JSON、传播 `AbortSignal`、携带页面已有的
+`WebUI-Access-Key`，并把结构化失败投影为稳定的 `ApiHttpError`。
 
 ## 发布态浏览器 E2E
 
 仓库使用固定 `@playwright/test` 与 Chromium 运行 `npm run web:e2e`。测试目标由
 `ANIMEGONET_WEBUI_BASE_URL` 指定，`ANIMEGONET_WEBUI_ACCESS_KEY` 只作为进程环境值：
-直连 API 使用明文 `X-AnimeGo-Access-Key`，页面 URL 与 WebSocket 使用同一 key 的
-lowercase SHA-256 `access_key`，不会把明文 key 放入 URL。
+直连管理 API 使用明文 `X-AnimeGo-WebUI-Access-Key`，页面 URL 与 WebSocket 使用同一
+key 的 lowercase SHA-256 `webui_access_key`，不会把明文 key 放入 URL。
 
 `eng/smoke-webui-container.sh IMAGE` 会用随机回环端口、非 root UID/GID、只读根
 文件系统、`no-new-privileges` 和独立临时 `/data`/`/download` 启动发布镜像，再运行

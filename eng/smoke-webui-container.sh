@@ -4,7 +4,8 @@ set -euo pipefail
 image="${1:?usage: smoke-webui-container.sh IMAGE}"
 container_name="animegonet-webui-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}"
 smoke_root="$(mktemp -d)"
-access_key="animegonet-webui-e2e-key"
+plugin_access_key="animegonet-plugin-e2e-key"
+webui_access_key="animegonet-webui-e2e-key"
 test_uid="$(id -u)"
 test_gid="$(id -g)"
 if [[ "$test_uid" == 0 ]]; then
@@ -34,7 +35,8 @@ docker run --detach \
   --read-only \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
   --security-opt no-new-privileges:true \
-  --env "access_key=$access_key" \
+  --env "access_key=$plugin_access_key" \
+  --env "webui_access_key=$webui_access_key" \
   --volume "$smoke_root/data:/data" \
   --volume "$smoke_root/download:/download" \
   "$image" >/dev/null
@@ -51,7 +53,7 @@ for attempt in $(seq 1 160); do
 done
 
 export ANIMEGONET_WEBUI_BASE_URL="http://127.0.0.1:${host_port}"
-export ANIMEGONET_WEBUI_ACCESS_KEY="$access_key"
+export ANIMEGONET_WEBUI_ACCESS_KEY="$webui_access_key"
 npm run web:e2e
 
 docker stop --signal SIGTERM --time 7 "$container_name" >/dev/null

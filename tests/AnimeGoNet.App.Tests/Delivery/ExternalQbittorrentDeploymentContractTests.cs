@@ -25,6 +25,10 @@ public sealed class ExternalQbittorrentDeploymentContractTests
         AssertScalar(environment, "downloaders__bt__download_path", "/download/incomplete/bt");
         AssertScalar(environment, "downloaders__pt__download_path", "/download/incomplete/pt");
         AssertRequiredVariable(environment, "access_key", "ANIMEGONET_ACCESS_KEY");
+        AssertScalar(
+            environment,
+            "webui_access_key",
+            "${ANIMEGONET_WEBUI_ACCESS_KEY:-}");
         AssertRequiredVariable(environment, "downloaders__bt__base_url", "QBITTORRENT_BT_URL");
         AssertRequiredVariable(environment, "downloaders__bt__username", "QBITTORRENT_BT_USERNAME");
         AssertRequiredVariable(environment, "downloaders__bt__password", "QBITTORRENT_BT_PASSWORD");

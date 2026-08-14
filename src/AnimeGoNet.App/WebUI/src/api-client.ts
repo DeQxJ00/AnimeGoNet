@@ -43,12 +43,12 @@ export class ApiClient {
   readonly #defaultHeaders: Headers;
 
   constructor(
-    accessKey: string | null,
+    webUiAccessKey: string | null,
     fetchImplementation: ApiFetch = globalThis.fetch.bind(globalThis),
   ) {
     this.#fetch = fetchImplementation;
     this.#defaultHeaders = new Headers({ Accept: "application/json" });
-    if (accessKey) this.#defaultHeaders.set("Access-Key", accessKey);
+    if (webUiAccessKey) this.#defaultHeaders.set("WebUI-Access-Key", webUiAccessKey);
   }
 
   get<TResponse>(path: string, options: JsonRequestOptions = {}): Promise<TResponse> {

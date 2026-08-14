@@ -131,7 +131,8 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `ai_base_url`、`ai_api_key`、`ai_model`、`ai_reasoning_effort`、`ai_prompt_template`、`ai_tmdb_mcp_url`、`ai_bangumi_mcp_url`、
 `ANIMEGO_CLIENT_URL/USERNAME/PASSWORD/DOWNLOAD_PATH` 和
 `ANIMEGO_CATEGORY`、`ANIMEGO_TAG`、`ANIMEGO_MIKAN_COOKIE`、
-`ANIMEGO_WEB_HOST`、
+`ANIMEGO_PLUGIN_ACCESS_KEY`、`ANIMEGO_WEB_ACCESS_KEY`（旧环境别名）、
+`ANIMEGO_WEBUI_ACCESS_KEY`、`ANIMEGO_WEB_HOST`、
 `ANIMEGO_WEB_PORT`。标准 ASP.NET Core
 `--urls` / `ASPNETCORE_URLS` 覆盖 `web.host` / `web.port`；推荐新部署优先使用
 规范嵌套键。
@@ -166,7 +167,10 @@ paths:
 web:
   host: 127.0.0.1
   port: 7991
+  # 外部插件、AnimeGoHelper 与统一导入 API；新部署默认 123456。
   access_key: '123456'
+  # WebUI 管理接口与实时日志的独立密钥；默认留空，可直接打开本机页面。
+  webui_access_key: ''
   background_workers_enabled: true
 
 outbound_proxy:

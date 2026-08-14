@@ -4,7 +4,8 @@ set -euo pipefail
 image="${1:?usage: smoke-container.sh IMAGE}"
 container_name="animegonet-smoke-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}"
 smoke_root="$(mktemp -d)"
-access_key="container-smoke-key"
+plugin_access_key="container-plugin-smoke-key"
+webui_access_key="container-webui-smoke-key"
 test_uid="$(id -u)"
 test_gid="$(id -g)"
 if [[ "$test_uid" == 0 ]]; then
@@ -29,7 +30,8 @@ docker run --detach \
   --read-only \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
   --security-opt no-new-privileges:true \
-  --env "access_key=$access_key" \
+  --env "access_key=$plugin_access_key" \
+  --env "webui_access_key=$webui_access_key" \
   --volume "$smoke_root/data:/data" \
   --volume "$smoke_root/download:/download" \
   "$image" >/dev/null
@@ -77,7 +79,7 @@ for attempt in $(seq 1 160); do
 done
 
 curl --fail --silent \
-  --header "X-AnimeGo-Access-Key: $access_key" \
+  --header "X-AnimeGo-WebUI-Access-Key: $webui_access_key" \
   "http://127.0.0.1:${host_port}/api/v1/status" \
   | grep --fixed-strings '"native_aot":true' >/dev/null
 
