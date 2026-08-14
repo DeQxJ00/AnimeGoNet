@@ -143,7 +143,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 Mikan RSS 的临时 URL 测试调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。页面另提供“执行已保存 RSS”，调用 `POST /api/v1/sources/{source_profile_id}/rss/run`，直接读取该来源服务端保存的地址，不要求开启自动 Cron；它仍写入最近运行状态/batch，并与自动调度互斥，避免同一来源重叠执行。服务端必须先确认该 profile 已启用、adapter 为 Mikan 且已保存 RSS 地址，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。两种入口共用 batch、mikanid、规则 revision、候选决策和实际任务 ID 展示。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
 
-同一卡片的“管理来源与 Cookie”会打开“设置与备份 / 输入源”，并选中当前 Mikan SourceProfile。Mikan 登录 Cookie 字段直接回填服务端已保存值；修改仍经完整 SourceProfile revision 保存，不创建第二套 Cookie 配置。
+同一卡片的“管理来源与 Cookie”会打开“设置与备份 / 输入源”，并选中当前 Mikan SourceProfile。Mikan 登录 Cookie 字段只填写 `.AspNetCore.Identity.Application=` 后面的内容：例如浏览器中显示 `.AspNetCore.Identity.Application=ABC...`，输入框只填 `ABC...`，不要填写 Cookie 名、分号或整段 `Cookie` Header。字段会直接回填服务端已保存的纯 value；修改仍经完整 SourceProfile revision 保存，不创建第二套 Cookie 配置。
 
 Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接显示，便于核对；仍不写入 `localStorage`，构造请求后立即清空输入框，并在请求建立后主动丢弃临时 JSON 字符串引用。结果节点只用 `textContent` 创建；后端稳定错误响应不得包含请求 URL、passkey、Cookie 或下载器凭据。
 

@@ -8302,12 +8302,12 @@ function updateSourceCredentialInputs(): void {
   clear.disabled = !isMikan || current === null || cookieLock !== undefined;
   if (!isMikan || clear.checked) input.value = "";
   element<HTMLElement>("#source-mikan-cookie-state").textContent = cookieLock
-    ? `部署锁只读（${cookieLock.controlling_keys.join(" / ")}），当前有效值已回填。`
+    ? `部署锁只读（${cookieLock.controlling_keys.join(" / ")}），当前有效值已回填；字段内容是 .AspNetCore.Identity.Application= 后面的值。`
     : !isMikan
-    ? "仅 Mikan 适配器可配置登录 Cookie。"
+    ? "仅 Mikan 适配器可配置；只填写 .AspNetCore.Identity.Application= 后面的值。"
     : current?.mikan_identity_cookie_configured
-    ? "已配置并已回填；可直接查看或修改。"
-    : "未配置；可粘贴 Cookie 值或完整 Cookie。";
+    ? "已配置并已回填；此处只显示并填写 .AspNetCore.Identity.Application= 后面的值。"
+    : "未配置；只填写 .AspNetCore.Identity.Application= 后面的值，不填写 Cookie 名、分号或整段 Cookie Header。";
 
   const rssUrl = element<HTMLInputElement>("#source-rss-url");
   const clearRssUrl = element<HTMLInputElement>("#source-rss-url-clear");

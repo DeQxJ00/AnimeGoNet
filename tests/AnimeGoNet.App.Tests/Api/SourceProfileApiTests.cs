@@ -500,6 +500,8 @@ public sealed class SourceProfileApiTests
         Assert.Contains("id=\"source-seeding-time\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-mikan-cookie-clear\"", html, StringComparison.Ordinal);
+        Assert.Contains("只粘贴等号后的内容", html, StringComparison.Ordinal);
+        Assert.Contains(".AspNetCore.Identity.Application=</code> 后面的内容", html, StringComparison.Ordinal);
         Assert.Contains("Cookie 位置：设置与备份", html, StringComparison.Ordinal);
         Assert.Contains("管理来源与 Cookie", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url\"", html, StringComparison.Ordinal);
@@ -513,6 +515,7 @@ public sealed class SourceProfileApiTests
         Assert.Contains("rss_feed_url_configured", script, StringComparison.Ordinal);
         Assert.Contains("rss_schedule_registered", script, StringComparison.Ordinal);
         Assert.Contains("已配置并已回填", script, StringComparison.Ordinal);
+        Assert.Contains("不填写 Cookie 名、分号或整段 Cookie Header", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);

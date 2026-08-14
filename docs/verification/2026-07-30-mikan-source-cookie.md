@@ -7,8 +7,10 @@
   `advanced.anidata.mikan.cookie`。
 - 凭据属于单个 `SourceProfile`。默认 `mikan` 与自定义
   `adapter: mikan` 来源相互隔离，不读取或复用其他来源的值。
-- 配置可接受纯 Cookie value 或完整的
-  `.AspNetCore.Identity.Application=<value>`，入 SQLite 前统一只保存 value。
+- WebUI 的输入契约是只填写 `.AspNetCore.Identity.Application=` 后面的纯
+  Cookie value，不填写 Cookie 名、分号或整段 `Cookie` Header。服务端继续兼容
+  旧配置中的完整 `.AspNetCore.Identity.Application=<value>` 格式，入 SQLite
+  前仍统一只保存 value。
 - 仅允许 RFC 6265 cookie-octet 子集，最大 8 KiB；分号、空白、引号和
   CR/LF 注入在启动、API 与数据层边界拒绝，诊断不包含输入值。
 - RSS 与 Torrent staging 只在当前请求 Host 等于原始 URL Host 时添加
@@ -24,8 +26,9 @@
   `mikan_identity_cookie`，迁移保留现有 profile revision 和业务字段。
 - YAML、扁平环境变量 `ANIMEGO_MIKAN_COOKIE`、SourceProfile seed、CRUD、
   RSS 插件、统一导入 Torrent staging 使用同一模型。
-- 输入源页面仅在 Mikan adapter 下启用密码框，显示“未配置/已配置”，提交后
-  立即清空，支持独立“清除已保存 Cookie”操作。
+- 输入源页面仅在 Mikan adapter 下启用 Cookie 输入框，明确提示只填
+  `.AspNetCore.Identity.Application=` 后面的内容，直接回填已保存的纯 value，
+  并支持独立“明确清除 Mikan Cookie”操作。
 
 ## 验证
 

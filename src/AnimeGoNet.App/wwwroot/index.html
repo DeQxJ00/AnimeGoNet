@@ -787,9 +787,9 @@
             <label class="source-hosts">允许的 Torrent Host
               <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
             </label>
-            <label class="source-hosts">Mikan 登录 Cookie
-              <input id="source-mikan-cookie" autocomplete="off" spellcheck="false" placeholder=".AspNetCore.Identity.Application=...">
-              <small id="source-mikan-cookie-state">仅 Mikan 适配器可配置。</small>
+            <label class="source-hosts">Mikan 登录 Cookie 值
+              <input id="source-mikan-cookie" autocomplete="off" spellcheck="false" placeholder="只粘贴等号后的内容">
+              <small id="source-mikan-cookie-state">只填写 <code>.AspNetCore.Identity.Application=</code> 后面的内容，不填写 Cookie 名或整段 Cookie Header。</small>
             </label>
             <label class="configuration-clear"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
             <label class="source-hosts">Mikan RSS URL（可能包含 passkey）
