@@ -2020,6 +2020,9 @@ function selectWorkspace(
   if (workspace === "tasks" && selectedSubview === "metadata") {
     void loadMetadataTasks(true);
   }
+  if (workspace === "overview" && selectedSubview === "status") {
+    void loadOverviewMetadataAttention();
+  }
   if (workspace === "library" && selectedSubview === "seasons"
     && activeLibraryDetail === null) {
     void loadLibrary();
@@ -7425,6 +7428,12 @@ function syncMetadataFilterControls(): void {
 function renderMetadataAttentionSummary(
   attention: MetadataTaskListPage["attention"],
 ): void {
+  element<HTMLElement>("#overview-attention-other-count").textContent =
+    attention.other_items.toLocaleString("zh-CN");
+  element<HTMLElement>("#overview-attention-failed-count").textContent =
+    attention.failed_items.toLocaleString("zh-CN");
+  element<HTMLElement>("#overview-attention-review-count").textContent =
+    attention.review_pending_items.toLocaleString("zh-CN");
   element<HTMLElement>("#metadata-attention-other-count").textContent =
     attention.other_items.toLocaleString("zh-CN");
   element<HTMLElement>("#metadata-attention-failed-count").textContent =
@@ -7451,7 +7460,7 @@ function renderMetadataAttentionSummary(
   );
 }
 
-function applyMetadataAttentionFilter(filter: "other" | "failed" | "review"): void {
+function setMetadataAttentionFilter(filter: "other" | "failed" | "review"): void {
   metadataState.search = "";
   metadataState.status = filter === "failed" ? "metadata_failed" : "";
   metadataState.handling = "all";
@@ -7463,7 +7472,33 @@ function applyMetadataAttentionFilter(filter: "other" | "failed" | "review"): vo
   metadataState.page = 1;
   syncMetadataFilterControls();
   saveMetadataState();
+}
+
+function applyMetadataAttentionFilter(filter: "other" | "failed" | "review"): void {
+  setMetadataAttentionFilter(filter);
   void loadMetadataTasks();
+}
+
+function openMetadataAttentionFromOverview(filter: "other" | "failed" | "review"): void {
+  setMetadataAttentionFilter(filter);
+  selectWorkspace("tasks", "metadata");
+}
+
+async function loadOverviewMetadataAttention(): Promise<void> {
+  try {
+    const response = await fetch("/api/v1/metadata/tasks?page=1&page_size=10", { headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const body = await response.json() as MetadataTaskListPage;
+    renderMetadataAttentionSummary(body.attention);
+  } catch {
+    for (const id of [
+      "overview-attention-other-count",
+      "overview-attention-failed-count",
+      "overview-attention-review-count",
+    ]) {
+      element<HTMLElement>(`#${id}`).textContent = "!";
+    }
+  }
 }
 
 async function loadMetadataTasks(background = false): Promise<void> {
@@ -10494,6 +10529,18 @@ element<HTMLButtonElement>("#metadata-attention-review").addEventListener(
   "click",
   () => applyMetadataAttentionFilter("review"),
 );
+element<HTMLButtonElement>("#overview-attention-other").addEventListener(
+  "click",
+  () => openMetadataAttentionFromOverview("other"),
+);
+element<HTMLButtonElement>("#overview-attention-failed").addEventListener(
+  "click",
+  () => openMetadataAttentionFromOverview("failed"),
+);
+element<HTMLButtonElement>("#overview-attention-review").addEventListener(
+  "click",
+  () => openMetadataAttentionFromOverview("review"),
+);
 element<HTMLButtonElement>("#metadata-previous").addEventListener("click", () => {
   if (metadataState.page <= 1) return;
   metadataState.page--;
@@ -11200,6 +11247,9 @@ window.setInterval(() => {
 }, 5000);
 window.setInterval(() => {
   if (isSubviewVisible("tasks", "metadata")) void loadMetadataTasks(true);
+}, 5000);
+window.setInterval(() => {
+  if (isSubviewVisible("overview", "status")) void loadOverviewMetadataAttention();
 }, 5000);
 window.setInterval(() => {
   if (isSubviewVisible("library", "pending")

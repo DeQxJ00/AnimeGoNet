@@ -119,6 +119,27 @@ test("metadata attention counters are prominent buttons with direct filters", as
   assert.match(css, /\.metadata-attention-card strong\s*\{[^}]*font-size:\s*clamp\(2rem/s);
 });
 
+test("overview repeats metadata attention counts as direct task filters", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  const summary = document.querySelector("#overview-metadata-attention-summary");
+  assert.ok(summary);
+  for (const id of [
+    "overview-attention-other",
+    "overview-attention-failed",
+    "overview-attention-review",
+  ]) {
+    assert.equal(summary.querySelector(`#${id}`)?.tagName, "BUTTON");
+  }
+  assert.match(app, /openMetadataAttentionFromOverview/);
+  assert.match(app, /selectWorkspace\("tasks", "metadata"\)/);
+  assert.match(app, /loadOverviewMetadataAttention/);
+  assert.match(css, /\.overview-attention-summary \.metadata-attention-card\s*\{[^}]*min-height:\s*96px/s);
+});
+
 test("anime library exposes auditable task and file deletion without merging projection deletion", async () => {
   const [document, app, css] = await Promise.all([
     page(),
