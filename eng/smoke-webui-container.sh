@@ -35,7 +35,7 @@ docker run --detach \
   --read-only \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
   --security-opt no-new-privileges:true \
-  --env "access_key=$plugin_access_key" \
+  --env "inner_plugin_mikan__access_key=$plugin_access_key" \
   --env "webui_access_key=$webui_access_key" \
   --volume "$smoke_root/data:/data" \
   --volume "$smoke_root/download:/download" \

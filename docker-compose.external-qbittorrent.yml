@@ -12,7 +12,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Container
       DOTNET_RUNNING_IN_CONTAINER: "true"
-      access_key: ${ANIMEGONET_ACCESS_KEY:?ANIMEGONET_ACCESS_KEY is required}
+      inner_plugin_mikan__access_key: ${ANIMEGONET_ACCESS_KEY:?ANIMEGONET_ACCESS_KEY is required}
       webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}
       data_path: /data
       download_path: /download/incomplete

@@ -232,8 +232,11 @@ public static class AnimeGoApplication
         options = downloaderLocks.Reapply(deploymentOptions, options);
         accessKey ??= FirstConfigurationValue(
             builder.Configuration,
+            "ANIMEGO_INNER_PLUGIN_MIKAN_ACCESS_KEY",
             "ANIMEGO_PLUGIN_ACCESS_KEY",
             "ANIMEGO_WEB_ACCESS_KEY",
+            "inner_plugin_mikan_access_key",
+            "inner_plugin_mikan:access_key",
             "access_key",
             "web:access_key");
         webUiAccessKey ??= FirstConfigurationValue(

@@ -279,7 +279,7 @@ internal static class DeploymentYamlConfiguration
         Alias(values, "setting:data_path", "paths:data_path");
         Alias(values, "setting:download_path", "paths:download_path");
         Alias(values, "setting:save_path", "paths:save_path");
-        Alias(values, "setting:webapi:access_key", "web:access_key");
+        Alias(values, "setting:webapi:access_key", "inner_plugin_mikan:access_key");
         Alias(values, "setting:webapi:host", "web:host");
         Alias(values, "setting:webapi:port", "web:port");
         Alias(values, "advanced:database:refresh_database_cron", "schedule:refresh_database_cron");
@@ -599,9 +599,11 @@ internal static class DeploymentYamlConfiguration
             web:
               host: {{Scalar(Configured(values, "web:host", defaults.Web.Host))}}
               port: {{Integer(values, "web:port", defaults.Web.Port)}}
-              access_key: {{Scalar(Configured(values, "web:access_key", string.Empty))}}
               webui_access_key: {{Scalar(Configured(values, "web:webui_access_key", string.Empty))}}
               background_workers_enabled: true
+
+            inner_plugin_mikan:
+              access_key: {{Scalar(Configured(values, "inner_plugin_mikan:access_key", string.Empty))}}
 
             outbound_proxy:
               url: ''
@@ -808,12 +810,15 @@ internal static class DeploymentYamlConfiguration
               save_path: {{Scalar(options.Paths.SavePath)}}
 
             web:
-              # access_key 仅用于外部插件/API；webui_access_key 独立保护 WebUI 管理接口。
+              # webui_access_key 独立保护 WebUI 管理接口；默认留空。
               host: {{Scalar(options.Web.Host)}}
               port: {{options.Web.Port}}
-              access_key: '123456'
               webui_access_key: ''
               background_workers_enabled: true
+
+            # 内置 Mikan 插件、AnimeGoHelper 与统一导入 API 的独立鉴权。
+            inner_plugin_mikan:
+              access_key: '123456'
 
             # 唯一出站代理。仅匹配 hosts 的目标使用代理；其余保持直连。
             outbound_proxy:

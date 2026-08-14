@@ -24,7 +24,10 @@ public sealed class ExternalQbittorrentDeploymentContractTests
         AssertScalar(environment, "save_path", "/download/anime");
         AssertScalar(environment, "downloaders__bt__download_path", "/download/incomplete/bt");
         AssertScalar(environment, "downloaders__pt__download_path", "/download/incomplete/pt");
-        AssertRequiredVariable(environment, "access_key", "ANIMEGONET_ACCESS_KEY");
+        AssertRequiredVariable(
+            environment,
+            "inner_plugin_mikan__access_key",
+            "ANIMEGONET_ACCESS_KEY");
         AssertScalar(
             environment,
             "webui_access_key",

@@ -475,7 +475,7 @@ public sealed record ConfigurationChangeResponse(
 public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("running_in_container")] bool RunningInContainer,
     [property: JsonPropertyName("background_workers_enabled")] bool BackgroundWorkersEnabled,
-    [property: JsonPropertyName("access_key_configured")] bool AccessKeyConfigured,
+    [property: JsonPropertyName("inner_plugin_mikan_access_key_configured")] bool InnerPluginMikanAccessKeyConfigured,
     [property: JsonPropertyName("webui_access_key_configured")] bool WebUiAccessKeyConfigured,
     [property: JsonPropertyName("paths_restart_required")] bool PathsRestartRequired);
 

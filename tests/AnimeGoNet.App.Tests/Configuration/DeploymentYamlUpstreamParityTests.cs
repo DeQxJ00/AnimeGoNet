@@ -72,7 +72,8 @@ public sealed class DeploymentYamlUpstreamParityTests
             Assert.Equal("AnimeGo", snapshot.Values["sources:mikan:category"]);
             Assert.Equal("{year}年{quarter}月新番", snapshot.Values["sources:mikan:dynamic_tag_template"]);
             Assert.Equal("1", snapshot.Values["sources:mikan:seeding_time_minutes"]);
-            Assert.Equal("animego123", snapshot.Values["web:access_key"]);
+            Assert.Equal("animego123", snapshot.Values["inner_plugin_mikan:access_key"]);
+            Assert.False(snapshot.Values.ContainsKey("web:access_key"));
             Assert.Equal("5", snapshot.Values["metadata:tmdb:timeout_seconds"]);
             Assert.Equal("3", snapshot.Values["metadata:tmdb:retry_count"]);
             Assert.Equal("5", snapshot.Values["metadata:tmdb:retry_wait_seconds"]);

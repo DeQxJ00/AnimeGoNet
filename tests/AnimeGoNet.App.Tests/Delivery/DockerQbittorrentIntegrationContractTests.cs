@@ -42,6 +42,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
             "webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}",
             compose,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "inner_plugin_mikan__access_key: ${ANIMEGONET_ACCESS_KEY:?",
+            compose,
+            StringComparison.Ordinal);
 
         Assert.Contains("--user \"$test_uid:$test_gid\"", smoke, StringComparison.Ordinal);
         Assert.Contains("--read-only", smoke, StringComparison.Ordinal);
@@ -93,6 +97,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("no-new-privileges:true", compose, StringComparison.Ordinal);
         Assert.Contains(
             "webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}",
+            compose,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "inner_plugin_mikan__access_key: ${ANIMEGONET_ACCESS_KEY:?",
             compose,
             StringComparison.Ordinal);
 

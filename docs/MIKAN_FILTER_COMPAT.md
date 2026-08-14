@@ -66,7 +66,7 @@ GET  /api/plugin/config?name=filter/mikan_tool.py
 - GET 重建同构的 `Filiter0`～`Filiter4` JSON 后 Base64 返回。
 - 兼容层不创建、查找或执行 `.py` 文件；旧名称只映射到内置 C# `MikanToolFilter`。
 
-WebUI 的“插件 → 内部插件 → Web API / AnimeGoHelper (Mikan) 油猴插件”直接显示并修改部署 `web.access_key`，同时给出当前浏览器可用的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`。新部署插件 AccessKey 默认 `123456`；页面和油猴脚本中填写同一明文值，AnimeGoHelper 自行发送其小写 SHA-256。该密钥只授权插件兼容接口和统一导入端点，不授权 WebUI 管理接口；后者使用独立、默认留空的 `web.webui_access_key`。保存会备份部署 YAML，重启主程序后应用新的鉴权边界。
+WebUI 的“插件 → 内部插件 → Web API / AnimeGoHelper (Mikan) 油猴插件”直接显示并修改部署 `inner_plugin_mikan.access_key`，同时给出当前浏览器可用的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`。新部署插件 AccessKey 默认 `123456`；页面和油猴脚本中填写同一明文值，AnimeGoHelper 自行发送其小写 SHA-256。该密钥只授权插件兼容接口和统一导入端点，不授权 WebUI 管理接口；后者使用独立的 `web.webui_access_key`。旧 `web.access_key` 仅作启动兼容读取，下一次从 WebUI 保存时迁入新节点并删除旧字段。保存会备份部署 YAML，重启主程序后应用新的鉴权边界。
 
 内部使用 SQLite 事务保存强类型规则、tier、legacy key、legacy order、启用状态、关键词、revision 和审计信息。一次旧 API 上传按上游语义视为完整配置替换，保存前创建可回滚快照；因为旧脚本没有 revision 字段，只能保持最后一次完整上传生效，但必须记录来源和时间。新 Web API 使用 revision/ETag，拒绝覆盖已经被油猴脚本更新的旧版本。
 

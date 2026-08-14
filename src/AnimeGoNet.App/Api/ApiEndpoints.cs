@@ -698,8 +698,10 @@ public static class ApiEndpoints
             "save_path": "整理后的媒体库目录"
           },
           "web": {
-            "access_key": "外部插件/API 访问密钥",
             "webui_access_key": "WebUI 管理接口访问密钥；可留空"
+          },
+          "inner_plugin_mikan": {
+            "access_key": "AnimeGoHelper (Mikan) 与统一导入 API 访问密钥"
           },
           "downloaders": "按稳定 ID 配置 qBittorrent 实例",
           "sources": "按输入源绑定下载器、规则与文件策略",
@@ -1884,7 +1886,7 @@ public static class ApiEndpoints
             new DeploymentConfigurationResponse(
                 runtime.RunningInContainer,
                 runtime.BackgroundWorkersEnabled,
-                runtime.AccessKeyConfigured,
+                runtime.InnerPluginMikanAccessKeyConfigured,
                 runtime.WebUiAccessKeyConfigured,
                 PathsRestartRequired: true),
             new OutboundProxyConfigurationResponse(

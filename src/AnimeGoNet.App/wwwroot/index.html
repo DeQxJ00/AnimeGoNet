@@ -126,7 +126,7 @@
           </div>
           <span>修改后需重启</span>
         </div>
-        <p class="muted">AccessKey 直接写入部署配置并明文回填；油猴脚本填写同一个明文值，由脚本自动计算 SHA-256。PluginName 是内部插件名称，不会加载 Python。</p>
+        <p class="muted">AccessKey 直接写入 <code>inner_plugin_mikan.access_key</code> 并明文回填；油猴脚本填写同一个明文值，由脚本自动计算 SHA-256。PluginName 是内部插件名称，不会加载 Python。</p>
         <form id="web-api-compatibility-form">
           <div class="source-form-grid">
             <label class="source-hosts">油猴 API 地址
@@ -1603,6 +1603,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-split-auth"></script>
+    <script type="module" src="/app.js?v=20260814-inner-plugin-config"></script>
 </body>
 </html>

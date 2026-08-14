@@ -2,10 +2,12 @@
 
 ## Boundary
 
-- `web.access_key` protects AnimeGoHelper compatibility routes and exact unified import
+- `inner_plugin_mikan.access_key` protects AnimeGoHelper compatibility routes and exact unified import
   `POST /api/v1/ingest`.
 - `web.webui_access_key` independently protects the remaining WebUI management APIs and
   `/websocket`; it is empty by default.
+- Old `web.access_key` is accepted only as a startup compatibility alias; generated and
+  WebUI-saved configuration uses `inner_plugin_mikan.access_key`.
 - Plugin and WebUI credentials use different direct headers, hashed headers and query
   names and cannot authorize the other boundary.
 - WebUI-only Mikan URL resolution and manual RSS ingestion remain on the WebUI boundary.

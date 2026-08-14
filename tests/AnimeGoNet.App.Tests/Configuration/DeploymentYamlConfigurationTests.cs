@@ -27,7 +27,8 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(defaults.Paths.DataPath, snapshot.Values["paths:data_path"]);
             Assert.Equal("127.0.0.1", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
-            Assert.Equal("123456", snapshot.Values["web:access_key"]);
+            Assert.Equal("123456", snapshot.Values["inner_plugin_mikan:access_key"]);
+            Assert.False(snapshot.Values.ContainsKey("web:access_key"));
             Assert.Equal(string.Empty, snapshot.Values["web:webui_access_key"]);
             Assert.Equal("move", snapshot.Values["sources:mikan:file_strategy"]);
             Assert.Equal(string.Empty, snapshot.Values["sources:mikan:rss_feed_url"]);
@@ -201,7 +202,8 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("/download/anime", snapshot.Values["paths:save_path"]);
             Assert.Equal("0.0.0.0", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
-            Assert.Equal("123456", snapshot.Values["web:access_key"]);
+            Assert.Equal("123456", snapshot.Values["inner_plugin_mikan:access_key"]);
+            Assert.False(snapshot.Values.ContainsKey("web:access_key"));
             Assert.Equal(string.Empty, snapshot.Values["web:webui_access_key"]);
             Assert.Equal(
                 "/download/incomplete/bt",

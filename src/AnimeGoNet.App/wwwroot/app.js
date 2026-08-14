@@ -3073,7 +3073,7 @@ async function loadConfiguration() {
             configurationCard("部署与安全", [
                 ["容器模式", enabledLabel(config.deployment.running_in_container)],
                 ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
-                ["Access-Key", config.deployment.access_key_configured
+                ["inner_plugin_mikan AccessKey", config.deployment.inner_plugin_mikan_access_key_configured
                         ? "已配置；明文见 插件 → 内部插件"
                         : "未配置；可在 插件 → 内部插件 设置"],
                 ["WebUI AccessKey", config.deployment.webui_access_key_configured
@@ -3272,13 +3272,18 @@ async function loadWebApiCompatibility() {
     try {
         const configuration = await readDeploymentConfiguration();
         const web = jsonObject(configuration.web, "web 配置");
-        const configuredKey = web.access_key;
+        const plugin = configuration.inner_plugin_mikan === undefined
+            ? {}
+            : jsonObject(configuration.inner_plugin_mikan, "inner_plugin_mikan 配置");
+        const configuredKey = plugin.access_key ?? web.access_key;
         if (configuredKey !== undefined && typeof configuredKey !== "string") {
-            throw new Error("web.access_key 不是字符串");
+            throw new Error("inner_plugin_mikan.access_key 不是字符串");
         }
         keyInput.value = configuredKey ?? "";
         status.textContent = configuredKey
-            ? "已回填当前部署 AccessKey。修改后保存会自动备份 animego.yaml，重启后生效。"
+            ? plugin.access_key === undefined
+                ? "已读取旧 web.access_key；保存后会迁移到 inner_plugin_mikan.access_key。"
+                : "已回填 inner_plugin_mikan.access_key。修改后保存会自动备份 animego.yaml，重启后生效。"
             : "当前未配置 AccessKey；新部署默认使用 123456，当前文件可保存后重启应用。";
     }
     catch (error) {
@@ -3306,11 +3311,16 @@ async function saveWebApiCompatibility(event) {
     try {
         const configuration = await readDeploymentConfiguration();
         const web = jsonObject(configuration.web, "web 配置");
-        if (web.access_key === requestedKey) {
+        const plugin = configuration.inner_plugin_mikan === undefined
+            ? {}
+            : jsonObject(configuration.inner_plugin_mikan, "inner_plugin_mikan 配置");
+        if (plugin.access_key === requestedKey && web.access_key === undefined) {
             status.textContent = "AccessKey 没有变化，无需保存。";
             return;
         }
-        web.access_key = requestedKey;
+        plugin.access_key = requestedKey;
+        configuration.inner_plugin_mikan = plugin;
+        delete web.access_key;
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
         const response = await fetch("/api/config?key=all&backup=true", {

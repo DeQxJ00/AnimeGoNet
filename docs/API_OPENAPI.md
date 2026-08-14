@@ -16,7 +16,7 @@ middleware.
 Authentication is split into two independently configured boundaries:
 
 - external plugin/API routes (`/api/plugin/*`, `/api/rss`, `/api/download/manager`,
-  exact `POST /api/v1/ingest`) use `web.access_key`. They accept plaintext
+  exact `POST /api/v1/ingest`) use `inner_plugin_mikan.access_key`. They accept plaintext
   `X-AnimeGo-Access-Key`, or its lowercase SHA-256 through `Access-Key` / `access_key`;
 - WebUI management routes and `/websocket` use `web.webui_access_key`. They accept
   plaintext `X-AnimeGo-WebUI-Access-Key`, or its lowercase SHA-256 through

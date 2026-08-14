@@ -90,7 +90,7 @@ public sealed class ConfigurationApiTests
         var deployment = json.RootElement.GetProperty("deployment");
         Assert.False(deployment.GetProperty("running_in_container").GetBoolean());
         Assert.False(deployment.GetProperty("background_workers_enabled").GetBoolean());
-        Assert.True(deployment.GetProperty("access_key_configured").GetBoolean());
+        Assert.True(deployment.GetProperty("inner_plugin_mikan_access_key_configured").GetBoolean());
         Assert.True(deployment.GetProperty("paths_restart_required").GetBoolean());
         var outboundProxy = json.RootElement.GetProperty("outbound_proxy");
         Assert.Equal("http://127.0.0.1:7890/", outboundProxy.GetProperty("url").GetString());

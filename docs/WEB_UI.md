@@ -182,9 +182,9 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 
 “编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前显示包含密钥明文的字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
 
-一级“插件”菜单分为“内部插件 / 外部插件”。“内部插件”当前提供“Web API / AnimeGoHelper (Mikan) 油猴插件”卡片，并为后续站点内部插件保留同级扩展位置；“外部插件”继续管理进程外 C# 包。Mikan 卡片通过既有强类型部署配置接口读取并明文回填 `web.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`；旧 `filter/mikan_tool.py` 继续作为后端兼容别名。新部署 AccessKey 默认 `123456`。保存前重新读取完整部署文档，只修改 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
+一级“插件”菜单分为“内部插件 / 外部插件”。“内部插件”当前提供“Web API / AnimeGoHelper (Mikan) 油猴插件”卡片，并为后续站点内部插件保留同级扩展位置；“外部插件”继续管理进程外 C# 包。Mikan 卡片通过既有强类型部署配置接口读取并明文回填 `inner_plugin_mikan.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`；旧 `filter/mikan_tool.py` 继续作为后端兼容别名。新部署 AccessKey 默认 `123456`。保存前重新读取完整部署文档，只修改 `inner_plugin_mikan.access_key` 并移除旧 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
 
-“设置与备份 / 应用配置”另提供独立“WebUI 鉴权”卡片，明文回填并修改 `web.webui_access_key`。该值只保护 WebUI 管理 API 与实时日志 WebSocket，默认留空；`web.access_key` 只保护 AnimeGoHelper、兼容插件接口和统一导入端点。两把密钥不能交叉授权。设置 WebUI 密钥后，页面生成只携带小写 SHA-256 的 `webui_access_key` 专用地址；清空后裸地址恢复可用。保存同样原子备份部署 YAML，并在重启后生效。
+“设置与备份 / 应用配置”另提供独立“WebUI 鉴权”卡片，明文回填并修改 `web.webui_access_key`。该值只保护 WebUI 管理 API 与实时日志 WebSocket；`inner_plugin_mikan.access_key` 只保护 AnimeGoHelper、兼容插件接口和统一导入端点。两把密钥不能交叉授权。设置 WebUI 密钥后，页面生成只携带小写 SHA-256 的 `webui_access_key` 专用地址；清空后裸地址恢复可用。保存同样原子备份部署 YAML，并在重启后生效。
 
 ## 12. 一级/二级导航
 
