@@ -61,6 +61,7 @@ public sealed record MetadataAiInvocationLogFilter(
     string? Stage = null,
     string? Result = null,
     string? Model = null,
+    string? ErrorCategory = null,
     DateTimeOffset? FromUtc = null,
     DateTimeOffset? ToUtc = null);
 
@@ -79,6 +80,7 @@ public sealed record MetadataAiInvocationLogProjection(
     string Strategy,
     string Result,
     string? ErrorCode,
+    string ErrorCategory,
     string? Reason,
     bool Retryable,
     long DurationMilliseconds,
@@ -89,6 +91,7 @@ public sealed record MetadataAiInvocationLogSummary(
     int TotalItems,
     int MatchedItems,
     int FailedItems,
+    int OutputFormatFailedItems,
     long PromptTokens,
     long CompletionTokens,
     long TotalTokens,

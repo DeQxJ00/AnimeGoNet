@@ -892,6 +892,7 @@ interface AiInvocationLogItem {
   strategy: string;
   result: string;
   error_code: string | null;
+  error_category: "none" | "output_format" | "other";
   reason: string | null;
   retryable: boolean;
   duration_ms: number;
@@ -972,6 +973,7 @@ interface AiInvocationLogList {
   summary: {
     matched_items: number;
     failed_items: number;
+    output_format_failed_items: number;
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
@@ -3366,6 +3368,14 @@ function aiLogResultLabel(value: string): string {
   } as Record<string, string>)[value] ?? value;
 }
 
+function aiLogErrorCategoryLabel(value: AiInvocationLogItem["error_category"]): string {
+  return ({
+    none: "无",
+    output_format: "AI 返回 JSON / 结构错误",
+    other: "其他错误",
+  } as Record<AiInvocationLogItem["error_category"], string>)[value];
+}
+
 function aiLogNumber(value: number | null): string {
   return value === null ? "—" : value.toLocaleString("zh-CN");
 }
@@ -3374,6 +3384,8 @@ function renderAiInvocationLogSummary(result: AiInvocationLogList): void {
   element<HTMLElement>("#ai-log-total").textContent = result.total_items.toLocaleString("zh-CN");
   element<HTMLElement>("#ai-log-result-total").textContent =
     `${result.summary.matched_items.toLocaleString("zh-CN")} / ${result.summary.failed_items.toLocaleString("zh-CN")}`;
+  element<HTMLElement>("#ai-log-output-format-total").textContent =
+    result.summary.output_format_failed_items.toLocaleString("zh-CN");
   element<HTMLElement>("#ai-log-token-total").textContent =
     result.summary.total_tokens.toLocaleString("zh-CN");
   element<HTMLElement>("#ai-log-request-total").textContent =
@@ -3589,6 +3601,13 @@ function renderAiInvocationLogs(result: AiInvocationLogList): void {
       const resultBadge = document.createElement("strong");
       resultBadge.className = `badge ${item.result === "matched" ? "ok" : ["error", "not_matched", "failed"].includes(item.result) ? "error" : "pending"}`;
       resultBadge.textContent = aiLogResultLabel(item.result);
+      const outputFormatBadge = item.error_category === "output_format"
+        ? document.createElement("strong")
+        : null;
+      if (outputFormatBadge !== null) {
+        outputFormatBadge.className = "badge error";
+        outputFormatBadge.textContent = "JSON / 结构错误";
+      }
       const title = document.createElement("span");
       title.className = "ai-log-title";
       title.textContent = item.title;
@@ -3598,7 +3617,9 @@ function renderAiInvocationLogs(result: AiInvocationLogList): void {
       const model = document.createElement("span");
       model.className = "ai-log-model";
       model.textContent = item.model;
-      summary.append(time, resultBadge, title, stage, model);
+      summary.append(time, resultBadge);
+      if (outputFormatBadge !== null) summary.append(outputFormatBadge);
+      summary.append(title, stage, model);
 
       const details = document.createElement("dl");
       details.className = "live-log-detail ai-log-detail";
@@ -3614,6 +3635,7 @@ function renderAiInvocationLogs(result: AiInvocationLogList): void {
         liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`),
         liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`),
         liveLogDetail("请求", `HTTP ${item.request_count} · 工具 ${item.tool_call_count}`),
+        liveLogDetail("错误分类", aiLogErrorCategoryLabel(item.error_category)),
         liveLogDetail("错误码", textOrDash(item.error_code)),
         liveLogDetail("结果原因", textOrDash(item.reason)),
       );
@@ -3671,6 +3693,7 @@ async function loadAiInvocationLogs(): Promise<void> {
     ["search", element<HTMLInputElement>("#ai-log-search").value.trim()],
     ["stage", element<HTMLSelectElement>("#ai-log-stage").value],
     ["result", element<HTMLSelectElement>("#ai-log-result").value],
+    ["error_category", element<HTMLSelectElement>("#ai-log-error-category").value],
     ["model", element<HTMLInputElement>("#ai-log-model").value.trim()],
     ["from_utc", localDateTimeToUtc("#ai-log-from") ?? ""],
     ["to_utc", localDateTimeToUtc("#ai-log-to") ?? ""],

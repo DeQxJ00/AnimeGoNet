@@ -1047,6 +1047,7 @@ public sealed record AiInvocationLogListResponse(
 public sealed record AiInvocationLogSummaryResponse(
     [property: JsonPropertyName("matched_items")] int MatchedItems,
     [property: JsonPropertyName("failed_items")] int FailedItems,
+    [property: JsonPropertyName("output_format_failed_items")] int OutputFormatFailedItems,
     [property: JsonPropertyName("prompt_tokens")] long PromptTokens,
     [property: JsonPropertyName("completion_tokens")] long CompletionTokens,
     [property: JsonPropertyName("total_tokens")] long TotalTokens,
@@ -1068,6 +1069,7 @@ public sealed record AiInvocationLogItemResponse(
     [property: JsonPropertyName("strategy")] string Strategy,
     [property: JsonPropertyName("result")] string Result,
     [property: JsonPropertyName("error_code")] string? ErrorCode,
+    [property: JsonPropertyName("error_category")] string ErrorCategory,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("retryable")] bool Retryable,
     [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,

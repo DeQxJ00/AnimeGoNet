@@ -5163,6 +5163,7 @@ public static class ApiEndpoints
         [FromQuery] string? stage,
         [FromQuery] string? result,
         [FromQuery] string? model,
+        [FromQuery(Name = "error_category")] string? errorCategory,
         [FromQuery(Name = "from_utc")] DateTimeOffset? fromUtc,
         [FromQuery(Name = "to_utc")] DateTimeOffset? toUtc,
         MetadataResolutionStore resolutions,
@@ -5207,6 +5208,17 @@ public static class ApiEndpoints
                 "AI log result filter is invalid."));
         }
 
+        var normalizedErrorCategory = string.IsNullOrWhiteSpace(errorCategory)
+            ? null
+            : errorCategory.Trim().ToLowerInvariant();
+        if (normalizedErrorCategory is not null
+            && normalizedErrorCategory is not ("output_format" or "other"))
+        {
+            return TypedResults.BadRequest(Error(
+                "ai_log_error_category_invalid",
+                "AI log error_category must be output_format or other."));
+        }
+
         if (fromUtc is not null && toUtc is not null && fromUtc > toUtc)
         {
             return TypedResults.BadRequest(Error(
@@ -5222,6 +5234,7 @@ public static class ApiEndpoints
                 normalizedStage,
                 normalizedResult,
                 model,
+                normalizedErrorCategory,
                 fromUtc,
                 toUtc),
             cancellationToken).ConfigureAwait(false);
@@ -5232,6 +5245,7 @@ public static class ApiEndpoints
             new AiInvocationLogSummaryResponse(
                 log.Summary.MatchedItems,
                 log.Summary.FailedItems,
+                log.Summary.OutputFormatFailedItems,
                 log.Summary.PromptTokens,
                 log.Summary.CompletionTokens,
                 log.Summary.TotalTokens,
@@ -5252,6 +5266,7 @@ public static class ApiEndpoints
                 item.Strategy,
                 item.Result,
                 item.ErrorCode,
+                item.ErrorCategory,
                 item.Reason,
                 item.Retryable,
                 item.DurationMilliseconds,

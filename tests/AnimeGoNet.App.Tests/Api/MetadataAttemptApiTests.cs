@@ -82,7 +82,7 @@ public sealed class MetadataAttemptApiTests
                 "ai_metadata",
                 null,
                 "error",
-                "ai_tmdb_season_changed",
+                "ai_episode_match_invalid",
                 false,
                 claim.AttemptNumber,
                 60,
@@ -153,7 +153,7 @@ public sealed class MetadataAttemptApiTests
         Assert.Equal(1, items[0].GetProperty("ai_request_count").GetInt32());
         Assert.Equal(0, items[0].GetProperty("ai_tool_call_count").GetInt32());
         Assert.Equal("error", items[1].GetProperty("result").GetString());
-        Assert.Equal("ai_tmdb_season_changed", items[1].GetProperty("error_code").GetString());
+        Assert.Equal("ai_episode_match_invalid", items[1].GetProperty("error_code").GetString());
         Assert.Equal("season", items[2].GetProperty("stage").GetString());
         Assert.Equal("local S01 selected", items[2].GetProperty("reason").GetString());
         Assert.Equal("series", items[3].GetProperty("stage").GetString());
@@ -200,6 +200,7 @@ public sealed class MetadataAttemptApiTests
         Assert.Equal(2, allAiLog.RootElement.GetProperty("total_items").GetInt32());
         Assert.Equal(1, allSummary.GetProperty("matched_items").GetInt32());
         Assert.Equal(1, allSummary.GetProperty("failed_items").GetInt32());
+        Assert.Equal(1, allSummary.GetProperty("output_format_failed_items").GetInt32());
         Assert.Equal(130, allSummary.GetProperty("total_tokens").GetInt64());
 
         using var errorResponse = await app.Client.GetAsync(
@@ -207,8 +208,26 @@ public sealed class MetadataAttemptApiTests
         using var errorLog = JsonDocument.Parse(await errorResponse.Content.ReadAsStreamAsync());
         Assert.Equal(1, errorLog.RootElement.GetProperty("total_items").GetInt32());
         Assert.Equal(
-            "ai_tmdb_season_changed",
+            "ai_episode_match_invalid",
             errorLog.RootElement.GetProperty("items")[0].GetProperty("error_code").GetString());
+        Assert.Equal(
+            "output_format",
+            errorLog.RootElement.GetProperty("items")[0].GetProperty("error_category").GetString());
+
+        using var outputFormatResponse = await app.Client.GetAsync(
+            "/api/v1/logs/ai-invocations?error_category=output_format");
+        using var outputFormatLog = JsonDocument.Parse(
+            await outputFormatResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(1, outputFormatLog.RootElement.GetProperty("total_items").GetInt32());
+        Assert.Equal(
+            "ai_episode_match_invalid",
+            outputFormatLog.RootElement.GetProperty("items")[0].GetProperty("error_code").GetString());
+
+        using var otherErrorResponse = await app.Client.GetAsync(
+            "/api/v1/logs/ai-invocations?error_category=other");
+        using var otherErrorLog = JsonDocument.Parse(
+            await otherErrorResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(0, otherErrorLog.RootElement.GetProperty("total_items").GetInt32());
 
         using var noMatchResponse = await app.Client.GetAsync(
             "/api/v1/logs/ai-invocations?result=failed");
@@ -249,9 +268,13 @@ public sealed class MetadataAttemptApiTests
             + "&to_utc=2026-08-13T09%3A00%3A00Z");
         using var tooLong = await app.Client.GetAsync(
             $"/api/v1/logs/ai-invocations?search={new string('a', 201)}");
+        using var invalidErrorCategory = await app.Client.GetAsync(
+            "/api/v1/logs/ai-invocations?error_category=network");
         using var invalidStageJson = JsonDocument.Parse(await invalidStage.Content.ReadAsStreamAsync());
         using var invalidRangeJson = JsonDocument.Parse(await invalidRange.Content.ReadAsStreamAsync());
         using var tooLongJson = JsonDocument.Parse(await tooLong.Content.ReadAsStreamAsync());
+        using var invalidErrorCategoryJson = JsonDocument.Parse(
+            await invalidErrorCategory.Content.ReadAsStreamAsync());
 
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         Assert.Equal(
@@ -273,5 +296,9 @@ public sealed class MetadataAttemptApiTests
         Assert.Equal(
             "ai_log_filter_too_long",
             tooLongJson.RootElement.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, invalidErrorCategory.StatusCode);
+        Assert.Equal(
+            "ai_log_error_category_invalid",
+            invalidErrorCategoryJson.RootElement.GetProperty("code").GetString());
     }
 }

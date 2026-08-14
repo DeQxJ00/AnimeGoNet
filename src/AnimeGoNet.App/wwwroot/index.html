@@ -471,6 +471,7 @@
       <div id="ai-log-summary" class="log-summary-grid" aria-label="AI 调用汇总">
         <article><span>调用记录</span><strong id="ai-log-total">—</strong></article>
         <article><span>成功 / 失败</span><strong id="ai-log-result-total">—</strong></article>
+        <article><span>JSON / 结构错误</span><strong id="ai-log-output-format-total">—</strong></article>
         <article><span>Token</span><strong id="ai-log-token-total">—</strong></article>
         <article><span>HTTP / 工具</span><strong id="ai-log-request-total">—</strong></article>
       </div>
@@ -483,6 +484,9 @@
         </label>
         <label>结果
           <select id="ai-log-result"><option value="">全部结果</option><option value="matched">成功</option><option value="not_matched">未匹配</option><option value="error">调用 / 验证错误</option><option value="failed">历史失败</option><option value="skipped">跳过</option><option value="not_applicable">不适用</option></select>
+        </label>
+        <label>错误分类
+          <select id="ai-log-error-category"><option value="">全部错误分类</option><option value="output_format">AI 返回 JSON / 结构错误</option><option value="other">其他错误</option></select>
         </label>
         <label>模型
           <input id="ai-log-model" type="search" maxlength="256" placeholder="例如 gpt-5.6-luna">

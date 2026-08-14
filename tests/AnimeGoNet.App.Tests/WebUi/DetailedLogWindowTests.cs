@@ -31,9 +31,14 @@ public sealed class DetailedLogWindowTests
         Assert.Contains("详细日志筛选", html, StringComparison.Ordinal);
         Assert.Contains("id=\"ai-log-filters\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"ai-log-list\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"ai-log-error-category\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"ai-log-output-format-total\"", html, StringComparison.Ordinal);
+        Assert.Contains("AI 返回 JSON / 结构错误", html, StringComparison.Ordinal);
         Assert.Contains("AI 调用日志", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/logs/ai-invocations", script, StringComparison.Ordinal);
         Assert.Contains("loadAiInvocationLogs", script, StringComparison.Ordinal);
+        Assert.Contains("aiLogErrorCategoryLabel", script, StringComparison.Ordinal);
+        Assert.Contains("error_category", script, StringComparison.Ordinal);
         Assert.Contains("id=\"ai-debug-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-debug\"", html, StringComparison.Ordinal);
         Assert.Contains("openAiDebugChain", script, StringComparison.Ordinal);

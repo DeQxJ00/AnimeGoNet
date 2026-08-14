@@ -1516,6 +1516,13 @@ function aiLogResultLabel(value) {
         not_applicable: "不适用",
     }[value] ?? value;
 }
+function aiLogErrorCategoryLabel(value) {
+    return {
+        none: "无",
+        output_format: "AI 返回 JSON / 结构错误",
+        other: "其他错误",
+    }[value];
+}
 function aiLogNumber(value) {
     return value === null ? "—" : value.toLocaleString("zh-CN");
 }
@@ -1523,6 +1530,8 @@ function renderAiInvocationLogSummary(result) {
     element("#ai-log-total").textContent = result.total_items.toLocaleString("zh-CN");
     element("#ai-log-result-total").textContent =
         `${result.summary.matched_items.toLocaleString("zh-CN")} / ${result.summary.failed_items.toLocaleString("zh-CN")}`;
+    element("#ai-log-output-format-total").textContent =
+        result.summary.output_format_failed_items.toLocaleString("zh-CN");
     element("#ai-log-token-total").textContent =
         result.summary.total_tokens.toLocaleString("zh-CN");
     element("#ai-log-request-total").textContent =
@@ -1710,6 +1719,13 @@ function renderAiInvocationLogs(result) {
             const resultBadge = document.createElement("strong");
             resultBadge.className = `badge ${item.result === "matched" ? "ok" : ["error", "not_matched", "failed"].includes(item.result) ? "error" : "pending"}`;
             resultBadge.textContent = aiLogResultLabel(item.result);
+            const outputFormatBadge = item.error_category === "output_format"
+                ? document.createElement("strong")
+                : null;
+            if (outputFormatBadge !== null) {
+                outputFormatBadge.className = "badge error";
+                outputFormatBadge.textContent = "JSON / 结构错误";
+            }
             const title = document.createElement("span");
             title.className = "ai-log-title";
             title.textContent = item.title;
@@ -1719,12 +1735,15 @@ function renderAiInvocationLogs(result) {
             const model = document.createElement("span");
             model.className = "ai-log-model";
             model.textContent = item.model;
-            summary.append(time, resultBadge, title, stage, model);
+            summary.append(time, resultBadge);
+            if (outputFormatBadge !== null)
+                summary.append(outputFormatBadge);
+            summary.append(title, stage, model);
             const details = document.createElement("dl");
             details.className = "live-log-detail ai-log-detail";
             details.append(liveLogDetail("任务 ID", item.task_id), liveLogDetail("Run / Attempt", `${item.run_id} / ${item.attempt_id}`), liveLogDetail("来源", item.source_id), liveLogDetail("作品参考", `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`), liveLogDetail("TMDB 验证", item.tmdb_series_id === null
                 ? "未确认"
-                : `${item.tmdb_series_id} / S${String(item.tmdb_season_number ?? 0).padStart(2, "0")}`), liveLogDetail("运行状态", `${item.run_status} · ${item.retryable ? "可重试" : "不可重试"}`), liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`), liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`), liveLogDetail("请求", `HTTP ${item.request_count} · 工具 ${item.tool_call_count}`), liveLogDetail("错误码", textOrDash(item.error_code)), liveLogDetail("结果原因", textOrDash(item.reason)));
+                : `${item.tmdb_series_id} / S${String(item.tmdb_season_number ?? 0).padStart(2, "0")}`), liveLogDetail("运行状态", `${item.run_status} · ${item.retryable ? "可重试" : "不可重试"}`), liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`), liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`), liveLogDetail("请求", `HTTP ${item.request_count} · 工具 ${item.tool_call_count}`), liveLogDetail("错误分类", aiLogErrorCategoryLabel(item.error_category)), liveLogDetail("错误码", textOrDash(item.error_code)), liveLogDetail("结果原因", textOrDash(item.reason)));
             const actions = document.createElement("div");
             actions.className = "ai-log-entry-actions";
             const taskButton = document.createElement("button");
@@ -1778,6 +1797,7 @@ async function loadAiInvocationLogs() {
         ["search", element("#ai-log-search").value.trim()],
         ["stage", element("#ai-log-stage").value],
         ["result", element("#ai-log-result").value],
+        ["error_category", element("#ai-log-error-category").value],
         ["model", element("#ai-log-model").value.trim()],
         ["from_utc", localDateTimeToUtc("#ai-log-from") ?? ""],
         ["to_utc", localDateTimeToUtc("#ai-log-to") ?? ""],
