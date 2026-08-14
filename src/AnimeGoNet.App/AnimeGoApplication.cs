@@ -910,6 +910,15 @@ public static class AnimeGoApplication
                         "metadata:mikan_trusted_offset_cache_enabled"),
                     defaults.Metadata.MikanTrustedOffsetCacheEnabled,
                     "mikan_trusted_offset_cache_enabled"),
+                MikanTrustedOffsetRequiredEpisodes = ParseOptionalIntInRange(
+                    FirstConfigurationValue(
+                        configuration,
+                        "mikan_trusted_offset_required_episodes",
+                        "metadata:mikan_trusted_offset_required_episodes"),
+                    defaults.Metadata.MikanTrustedOffsetRequiredEpisodes,
+                    "mikan_trusted_offset_required_episodes",
+                    1,
+                    100),
             },
             Schedule = defaults.Schedule with
             {
@@ -1333,6 +1342,20 @@ public static class AnimeGoApplication
         }
 
         return parsed;
+    }
+
+    private static int ParseOptionalIntInRange(
+        string? value,
+        int defaultValue,
+        string name,
+        int minimum,
+        int maximum)
+    {
+        var parsed = ParseOptionalInt(value, defaultValue, name);
+        return parsed >= minimum && parsed <= maximum
+            ? parsed
+            : throw new InvalidOperationException(
+                $"{name} must be between {minimum} and {maximum}.");
     }
 
     private static long ParseOptionalLong(string? value, long defaultValue, string name)

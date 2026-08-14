@@ -215,7 +215,7 @@ docs/
 - 季度由确定性策略确认后，若一个或多个来源 EP 无法对应且任务从未尝试过 AI，则由同一 `ai_use_metadata_match` 开关首次触发共享任务级匹配；模型返回的 `tmdb_id` 和已确认季度必须与上下文一致，否则拒绝。季度阶段无论成功或失败尝试过 AI，Episode 阶段都不得再次调用。
 - 实现 Mikan 单文件 `pubDate` Prompt门禁和显式开关：无偏移时间按SourceProfile时区（默认 `Asia/Shanghai`）规范化；严格按Torrent实际文件条目数判断。条件满足时主程序先计算最近普通EP并写入 `bgm_episode_candidate`，候选成功后Prompt结合文件名EP查询TMDB；失败后继续通用流程。独立测试程序允许手工输入候选验证同一门禁和Prompt。
 - 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 移植为 C# 内置解析器。Mikan RSS SourceProfile 在本地为每个文件重算 `file_episode_candidate`，但不把它或偏移发送给 AI。主程序在逐文件 TMDB 验证后计算 `episode_offset=TMDB EP-file candidate`，只有同一普通季度内结果统一才写缓存学习证据，详见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
-- 增加默认关闭且只在主程序中实现的 `(mikanid,groupid)` 可信偏移缓存：三个不同来源 EP 的已验证 `tmdb_id+season+offset` 完全一致才升级为可信；重复 EP 不计数，任一冲突重置学习/撤销可信。主程序在 AI 调用前命中包含有效 `tmdb_id`、普通 `season` 和偏移的可信记录后，直接本地计算目标 EP 并跳过 AI，不为该次命中再逐集请求 TMDB。
+- 增加默认关闭且只在主程序中实现的 `(mikanid,groupid)` 可信偏移缓存：来源 EP 是 Torrent 视频文件名解析出的 EP，不同文件名 EP 的已验证 `tmdb_id+season+offset` 完全一致并达到可配置门槛（默认 3）才升级为可信；重复 EP 不计数，任一冲突重置学习/撤销可信。主程序在 AI 调用前命中包含有效 `tmdb_id`、普通 `season` 和偏移的可信记录后，直接本地计算目标 EP 并跳过 AI，不为该次命中再逐集请求 TMDB。
 - AI 返回值不直接进入领域模型。主程序查询 TMDB `tv/{id}`、`tv/{id}/season/{season}` 和目标 Episode 验证存在性、TV 类型、日期/标题对应关系后，才生成规范字段。
 - 元数据入口先应用启用的 Mikan 作品级人工规则；命中后统一使用规则中的 Bgm/TMDB Series/Season，并按 `TmdbEpisodeNumber = SourceEpisodeNumber + EpisodeOffset` 映射普通正片。人工规则高于所有自动策略，无效时显式报 `ManualOverrideInvalid`，不能静默回退覆盖。
 - 每个最终 Series/Season/Episode 写入值同时保存取得阶段和不可变的解析 Run/Attempt 引用。Series/Season 证据保存在完成的 `metadata_resolution_runs`；Episode 证据按 `task_files` 逐文件保存，字幕关联使用自己的 `subtitle_association` Attempt，不能借用视频或同策略最后一次 Attempt。SQLite schema v32 触发器验证 Attempt 属于同一任务/Run、正确 stage、相同 strategy 且结果为 `matched`；失败分类和具体原因继续在 Web UI 中可见。

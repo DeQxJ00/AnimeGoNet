@@ -65,6 +65,7 @@ public sealed class ConfigurationApiTests
                     TmdbFailureUseBangumi = true,
                     WriteBangumiIdWhenTmdbMatched = true,
                     MikanTrustedOffsetCacheEnabled = true,
+                    MikanTrustedOffsetRequiredEpisodes = 5,
                 },
                 TorrentFetch = options.TorrentFetch with
                 {
@@ -153,6 +154,9 @@ public sealed class ConfigurationApiTests
             "http://bgm.mcp.local/mcp",
             metadata.GetProperty("ai").GetProperty("bangumi_mcp_url").GetString());
         Assert.True(metadata.GetProperty("write_bangumi_id_when_tmdb_matched").GetBoolean());
+        Assert.Equal(
+            5,
+            metadata.GetProperty("mikan_trusted_offset_required_episodes").GetInt32());
         Assert.True(json.RootElement.GetProperty("editable")
             .GetProperty("write_bangumi_id_when_tmdb_matched").GetBoolean());
         Assert.Equal(
@@ -180,12 +184,20 @@ public sealed class ConfigurationApiTests
     {
         await using var app = await RunningApp.StartAsync();
 
+        using var invalid = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                mikanTrustedOffsetRequiredEpisodes: 0));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
         using var write = await app.Client.PutAsync(
             "/api/v1/config",
             Payload(
                 expectedRevision: 0,
                 mikanEpisodeIdentityCacheHours: 0,
-                mikanBangumiIdentityCacheHours: 4320));
+                mikanBangumiIdentityCacheHours: 4320,
+                mikanTrustedOffsetRequiredEpisodes: 5));
 
         Assert.Equal(HttpStatusCode.OK, write.StatusCode);
         using var response = await app.Client.GetAsync("/api/v1/config");
@@ -195,12 +207,15 @@ public sealed class ConfigurationApiTests
             "mikan_episode_identity_cache_hours").GetDouble());
         Assert.Equal(4320, editable.GetProperty(
             "mikan_bangumi_identity_cache_hours").GetDouble());
+        Assert.Equal(5, editable.GetProperty(
+            "mikan_trusted_offset_required_episodes").GetInt32());
 
         var stored = await app.App.Services
             .GetRequiredService<ApplicationOverrideStore>()
             .LoadAsync();
         Assert.Equal(0, stored.Settings?.MikanEpisodeIdentityCacheHours);
         Assert.Equal(4320, stored.Settings?.MikanBangumiIdentityCacheHours);
+        Assert.Equal(5, stored.Settings?.MikanTrustedOffsetRequiredEpisodes);
     }
 
     [Fact]
@@ -1185,7 +1200,8 @@ public sealed class ConfigurationApiTests
         double bangumiRetryDelaySeconds = 5,
         double? mikanEpisodeIdentityCacheHours = null,
         double? mikanBangumiIdentityCacheHours = null,
-        string? aiReasoningEffort = null)
+        string? aiReasoningEffort = null,
+        int? mikanTrustedOffsetRequiredEpisodes = null)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -1225,6 +1241,7 @@ public sealed class ConfigurationApiTests
             ai_http_timeout_seconds = 600,
             tmdb_failure_use_bangumi = false,
             mikan_trusted_offset_cache_enabled = false,
+            mikan_trusted_offset_required_episodes = mikanTrustedOffsetRequiredEpisodes,
             torrent_http_timeout_seconds = 30,
             torrent_max_response_bytes = 16 * 1024 * 1024,
             torrent_max_redirects = 3,

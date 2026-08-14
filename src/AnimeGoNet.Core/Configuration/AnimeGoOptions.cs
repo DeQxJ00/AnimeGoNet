@@ -111,6 +111,8 @@ public sealed record MetadataMatchingOptions
     public bool WriteBangumiIdWhenTmdbMatched { get; init; }
 
     public bool MikanTrustedOffsetCacheEnabled { get; init; }
+
+    public int MikanTrustedOffsetRequiredEpisodes { get; init; } = 3;
 }
 
 public sealed record MikanClientOptions

@@ -223,6 +223,7 @@ metadata:
   tmdb_failure_use_bangumi: false
   write_bangumi_id_when_tmdb_matched: false
   mikan_trusted_offset_cache_enabled: false
+  mikan_trusted_offset_required_episodes: 3
   ai:
     provider: openai_compatible
     base_url: ''

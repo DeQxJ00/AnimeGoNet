@@ -3075,7 +3075,7 @@ async function loadConfiguration() {
                 ["匹配规则", "精确域名或 *.example.com；未命中的地址保持直连"],
             ]),
             metadataConfigurationCard(config),
-            configurationCard("AI、偏移与 Torrent", [
+            configurationCard("AI 与 Torrent", [
                 ["OpenAI API", config.metadata.ai.base_url ?? "未配置"],
                 ["模型", config.metadata.ai.model ?? "未配置"],
                 ["API Key", config.editable.ai_api_key ?? "未配置"],
@@ -3090,7 +3090,6 @@ async function loadConfiguration() {
                     "AI Debug",
                     `${enabledLabel(config.metadata.ai.debug_mode)} · 完整链路写入 data_path/ai-debug`,
                 ],
-                ["可信 offset 缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
                 [
                     "Torrent HTTP",
                     `${config.torrent_fetch.http_timeout_seconds} 秒 · `
@@ -3098,6 +3097,11 @@ async function loadConfiguration() {
                         + `${config.torrent_fetch.max_response_bytes} bytes`,
                 ],
                 ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
+            ]),
+            configurationCard("可信 EP Offset", [
+                ["缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
+                ["可信次数", `${config.metadata.mikan_trusted_offset_required_episodes} 个不同文件名 EP`],
+                ["计算基准", "来源 EP = 文件名解析 EP；目标 TMDB EP = 来源 EP + Offset"],
             ]),
             configurationCard("AnimeGoNetData 更新", [
                 ["定时更新", enabledLabel(config.data_update.enabled)],
@@ -3512,6 +3516,7 @@ function openConfigurationEditor() {
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
     setConfigurationChecked("#configuration-write-bangumi-with-tmdb", editable.write_bangumi_id_when_tmdb_matched);
     setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
+    setConfigurationValue("#configuration-offset-required-episodes", editable.mikan_trusted_offset_required_episodes);
     setConfigurationValue("#configuration-ai-timeout", editable.ai_http_timeout_seconds);
     setConfigurationValue("#configuration-torrent-timeout", editable.torrent_http_timeout_seconds);
     setConfigurationValue("#configuration-torrent-bytes", editable.torrent_max_response_bytes);
@@ -3566,6 +3571,7 @@ const configurationFieldLabels = {
     tmdb_failure_use_bangumi: "Bangumi 完全兜底",
     write_bangumi_id_when_tmdb_matched: "TMDB 成功时写 Bangumi ID",
     mikan_trusted_offset_cache_enabled: "可信 offset 缓存",
+    mikan_trusted_offset_required_episodes: "可信 Offset 所需不同文件名 EP 次数",
     torrent_http_timeout_seconds: "Torrent HTTP 超时（秒）",
     torrent_max_response_bytes: "Torrent 最大响应（bytes）",
     torrent_max_redirects: "Torrent 最大跳转",
@@ -3624,6 +3630,7 @@ function configurationRequest() {
         tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
         write_bangumi_id_when_tmdb_matched: element("#configuration-write-bangumi-with-tmdb").checked,
         mikan_trusted_offset_cache_enabled: element("#configuration-offset-cache").checked,
+        mikan_trusted_offset_required_episodes: element("#configuration-offset-required-episodes").valueAsNumber,
         torrent_http_timeout_seconds: element("#configuration-torrent-timeout").valueAsNumber,
         torrent_max_response_bytes: element("#configuration-torrent-bytes").valueAsNumber,
         torrent_max_redirects: element("#configuration-torrent-redirects").valueAsNumber,

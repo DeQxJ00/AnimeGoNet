@@ -8,6 +8,28 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class MikanTrustedOffsetApiTests
 {
     [Fact]
+    public async Task ConfiguredThresholdControlsEffectiveStateAndProgress()
+    {
+        await using var app = await RunningApp.StartAsync(configure: options => options with
+        {
+            Metadata = options.Metadata with
+            {
+                MikanTrustedOffsetRequiredEpisodes = 2,
+            },
+        });
+        var offsets = app.App.Services.GetRequiredService<MikanTrustedOffsetStore>();
+        var now = DateTimeOffset.UtcNow;
+        await offsets.ObserveAsync(Observation(1), now, 2);
+        await offsets.ObserveAsync(Observation(2), now.AddMinutes(1), 2);
+
+        using var response = await app.Client.GetAsync("/api/v1/mikan/trusted-offsets");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("trusted", item.GetProperty("state").GetString());
+        Assert.Equal(2, item.GetProperty("required_episode_count").GetInt32());
+    }
+
+    [Fact]
     public async Task ListsLearningAndTrustedProgressThenClearsOnlyRequestedAutomaticState()
     {
         await using var app = await RunningApp.StartAsync();
@@ -71,7 +93,11 @@ public sealed class MikanTrustedOffsetApiTests
         var script = await app.Client.GetStringAsync("/app.js");
 
         Assert.Contains("id=\"trusted-offsets\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-offset-required-episodes\"", html, StringComparison.Ordinal);
+        Assert.Contains("来源 EP 专指从 Torrent 视频文件名解析出的 EP", html, StringComparison.Ordinal);
+        Assert.Contains("默认 3", html, StringComparison.Ordinal);
         Assert.Contains("loadTrustedOffsets", script, StringComparison.Ordinal);
+        Assert.Contains("mikan_trusted_offset_required_episodes", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/trusted-offsets", script, StringComparison.Ordinal);
         Assert.Contains("人工规则、完成记录和媒体文件不会删除", script, StringComparison.Ordinal);
     }

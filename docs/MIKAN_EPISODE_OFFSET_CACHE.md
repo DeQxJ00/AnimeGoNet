@@ -50,12 +50,12 @@ Mikan URL `https://mikanani.me/Home/Bangumi/3951#583` 中：
 ## 5. 配置与默认值
 
 ```yaml
-sources:
-  mikan:
-    trusted_episode_offset_cache_enabled: false
+metadata:
+  mikan_trusted_offset_cache_enabled: false
+  mikan_trusted_offset_required_episodes: 3
 ```
 
-默认关闭。关闭时既不读取缓存跳过 AI，也不写入或累计样本。所需可信样本数固定为 3，不作为首版可调参数，避免用户误设为 1 后把单次误匹配升级为可信规则。
+默认关闭。关闭时既不读取缓存跳过 AI，也不写入或累计样本。所需可信样本数可配置为 1～100，默认 3；这里计数的是不同的 `file_episode_candidate`，也就是从 Torrent 视频文件名解析出的 EP，同一个文件名 EP 重复出现不增加计数。设置为 1 会让一次已验证映射立即成为可信，适合明确理解风险的测试场景。
 
 ## 6. 证据和状态模型
 
@@ -69,12 +69,12 @@ sources:
 
 缓存签名为 `(tmdb_id, season, episode_offset)`。没有有效 `tmdb_id` 或普通 `season` 的证据不得入库、不得升级为 Trusted，也不得用于 AI 短路。状态为：
 
-- `Learning`：已有 1～2 个不同来源 EP 的一致证据；
-- `Trusted`：已有至少 3 个不同来源 EP 的一致证据；
+- `Learning`：一致证据尚未达到当前配置的可信次数；
+- `Trusted`：不同文件名 EP 的一致证据已达到当前配置的可信次数；
 - `ConflictReset`：发现已验证冲突，旧证据归档后从当前新证据重新学习；
 - `Disabled`：配置关闭，不读取和写入。
 
-同一 `file_episode_candidate` 重复出现不增加计数。`tmdb_id`、`season` 或 `episode_offset` 任一不同都视为签名冲突：未可信时清空当前连续样本并以本次成功证据作为 `1/3`；已可信时立即撤销可信状态、记录旧/新签名和原因，再以本次成功证据重新开始。不能使用多数投票，也不能静默保留旧缓存。
+同一 `file_episode_candidate` 重复出现不增加计数。`tmdb_id`、`season` 或 `episode_offset` 任一不同都视为签名冲突：未可信时清空当前连续样本并以本次成功证据作为 `1/设定次数`；已可信时立即撤销可信状态、记录旧/新签名和原因，再以本次成功证据重新开始。不能使用多数投票，也不能静默保留旧缓存。
 
 SQLite 必须以 `(mikanid, groupid, file_episode_candidate)` 建立证据唯一约束，并在同一事务中完成去重、冲突归档和状态升级，防止并发任务把重复 EP 计为多次。
 
@@ -91,7 +91,7 @@ SQLite 必须以 `(mikanid, groupid, file_episode_candidate)` 建立证据唯一
 7. 采用映射并记录 Episode 获取方式 `TrustedMikanGroupOffsetCache`、缓存签名和计算过程，本任务 AI 请求数为 0；可明确识别的特别篇、Menu、PV、NCOP、NCED、Logo 等仍按既定 `Other` 规则处理，不参与偏移计算；
 8. 缺少候选、计算结果非正数、缓存字段无效、签名冲突或普通文件存在歧义时，不使用部分推导值，转回正常 AI/确定性流程。
 
-可信状态来自前三个不同来源 EP 的成功 TMDB 验证，因此后续命中不因“新 Episode 尚未出现在 TMDB”而逐集联网，也不会仅凭一次本地推导撤销可信。只有后续正常 AI/TMDB 流程成功产生不同的已验证签名时，才执行冲突重置。
+可信状态来自达到当前设定次数的不同文件名 EP 的成功 TMDB 验证，因此后续命中不因“新 Episode 尚未出现在 TMDB”而逐集联网，也不会仅凭一次本地推导撤销可信。只有后续正常 AI/TMDB 流程成功产生不同的已验证签名时，才执行冲突重置。调高阈值后，证据数不足的新旧记录立即按 Learning 处理且不再命中；不需要删除历史证据。
 
 主程序现已在自动元数据 worker 中执行这条旁路。命中前必须同时找到本地已验证过的 `anime_series + anime_seasons` canonical projection；投影缺失时记录 `trusted_offset_projection_missing` 并完整回退，不能联网补一半后仍称为缓存命中。命中后的本地 Episode 不伪造 `tmdb_episode_id`，但仍使用 `(tmdb_id, season, episode)` 参与全局 claim/completion 去重。Episode worker 完成正常 TMDB 验证后，只对同一任务内签名一致、具有正整数本地候选的正片写学习证据；跨季度、候选缺失、偏移不一致以及缓存推导出来的结果不会自我强化。
 
@@ -102,7 +102,7 @@ SQLite 必须以 `(mikanid, groupid, file_episode_candidate)` 建立证据唯一
 - 是否为 Mikan RSS 来源；
 - `mikanid`、`groupid` 和缓存键；
 - 缓存开关（默认关闭）；
-- 当前签名、不同 EP 样本进度 `0/3`～`3/3`；
+- 当前签名、不同文件名 EP 样本进度 `0/设定次数`～`设定次数/设定次数`；
 - `Learning/Trusted/ConflictReset/Disabled`；
 - 本次是命中、未命中、本地计算条件不满足还是签名冲突；
 - AI 是否被跳过，以及命中后生成的本地 TMDB Series/Season/Episode 映射。
@@ -111,15 +111,15 @@ SQLite 必须以 `(mikanid, groupid, file_episode_candidate)` 建立证据唯一
 
 删除缓存只删除自动证据/状态，不删除下载完成记录、人工规则或媒体文件。API Key、passkey、Torrent URL、announce 和 Cookie 不得进入证据表或日志。
 
-管理端点为 `GET /api/v1/mikan/trusted-offsets`（支持可选 `mikanid/groupid` 正整数过滤）以及 `DELETE /api/v1/mikan/trusted-offsets/{mikanid}/{groupid}`。列表按候选签名显示 `Learning/Trusted/ConflictReset`、当前不同 EP 数和固定门槛 `3`；删除在一个 SQLite 事务内仅清理目标键的 `mikan_offset_evidence` 与 `mikan_trusted_offsets`。静态 WebUI 使用同一端点展示进度，删除前明确提示不会影响人工规则、完成记录和媒体文件。
+管理端点为 `GET /api/v1/mikan/trusted-offsets`（支持可选 `mikanid/groupid` 正整数过滤）以及 `DELETE /api/v1/mikan/trusted-offsets/{mikanid}/{groupid}`。列表按候选签名显示 `Learning/Trusted/ConflictReset`、当前不同文件名 EP 数和当前配置门槛；删除在一个 SQLite 事务内仅清理目标键的 `mikan_offset_evidence` 与 `mikan_trusted_offsets`。静态 WebUI 使用同一端点展示进度，删除前明确提示不会影响人工规则、完成记录和媒体文件。
 
 ## 9. 验收重点
 
 1. 所有来源的 AI Prompt、请求和响应都没有文件名候选或偏移字段。
 2. Mikan 候选由后端重新计算，调用方伪造无效。
 3. AI 返回后本地计算的正、零、负偏移均通过；未验证 Episode 不参与计算，多个偏移或跨季度只禁止缓存学习，不否定已验证的文件映射。
-4. 同键相同签名的 3 个不同来源 EP 升级为可信；重复 EP 不计数。
-5. 不同 `mikanid/groupid` 隔离；未满 3 次不命中。
+4. 同键相同签名的不同文件名 EP 达到配置次数后升级为可信；重复 EP 不计数，默认门槛为 3。
+5. 不同 `mikanid/groupid` 隔离；未达到当前配置次数不命中。
 6. 学习期冲突重置，可信后冲突立即撤销并保存审计。
 7. 默认关闭且关闭时零读写；多文件中的普通视频缺候选或存在歧义时不旁路，明确识别的附属文件按 `Other` 处理。
 8. Trusted 记录必须包含有效 `tmdb_id`、普通 `season` 和偏移；命中后本地计算且不产生 AI/TMDB Episode 请求。字段无效或计算结果非正数时回退正常流程。

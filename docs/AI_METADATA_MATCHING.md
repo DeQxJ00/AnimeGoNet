@@ -194,7 +194,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/Episode 二次验证，再对每个“已匹配正片且存在文件名候选”的文件计算 `episode_offset = TmdbEpisodeNumber - file_episode_candidate`。同一任务的偏移和普通季度均统一时才产生缓存学习证据；没有候选、偏移不一致或跨多个 TMDB 季度时不学习，但不因此否定已经验证成功的逐文件映射。
 
-可选的 `(mikanid,groupid)` 可信偏移缓存默认关闭，并且只由主程序管理，不属于 AI 测试程序。只有三个不同来源 EP 得到完全相同且已由 TMDB 验证的 `tmdb_id+season+episode_offset` 才可信；重复 EP 不计数，冲突重置或撤销可信。主程序在 AI 调用前命中有效可信记录时，直接用 `file_episode_candidate + episode_offset` 本地构造目标 Episode 映射并把本次 AI 请求数降为零，不再为该次命中逐集请求 TMDB。完整状态机、WebUI 和验收规则见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
+可选的 `(mikanid,groupid)` 可信偏移缓存默认关闭，并且只由主程序管理，不属于 AI 测试程序。来源 EP 专指从 Torrent 视频文件名解析出的 `file_episode_candidate`；不同文件名 EP 得到完全相同且已由 TMDB 验证的 `tmdb_id+season+episode_offset`，达到可配置门槛后才可信（1～100，默认 3）。重复 EP 不计数，冲突重置或撤销可信。主程序在 AI 调用前命中有效可信记录时，直接用 `file_episode_candidate + episode_offset` 本地构造目标 Episode 映射并把本次 AI 请求数降为零，不再为该次命中逐集请求 TMDB。完整状态机、WebUI 和验收规则见 [`MIKAN_EPISODE_OFFSET_CACHE.md`](MIKAN_EPISODE_OFFSET_CACHE.md)。
 
 ## 9. 单次任务级调用与阶段复用
 

@@ -78,6 +78,7 @@ public static class AnimeGoDefaults
                 },
                 TmdbFailureUseBangumi = false,
                 MikanTrustedOffsetCacheEnabled = false,
+                MikanTrustedOffsetRequiredEpisodes = 3,
             },
             TorrentFetch = new TorrentFetchOptions(),
             Schedule = new ScheduleOptions(),

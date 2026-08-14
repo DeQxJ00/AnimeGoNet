@@ -65,6 +65,7 @@ public sealed class DeploymentConfigurationLocks
             "write_bangumi_id_when_tmdb_matched",
             ["write_bangumi_id_when_tmdb_matched", "metadata:write_bangumi_id_when_tmdb_matched"]),
         new("mikan_trusted_offset_cache_enabled", ["mikan_trusted_offset_cache_enabled", "metadata:mikan_trusted_offset_cache_enabled"]),
+        new("mikan_trusted_offset_required_episodes", ["mikan_trusted_offset_required_episodes", "metadata:mikan_trusted_offset_required_episodes"]),
         new("torrent_http_timeout_seconds", ["torrent_http_timeout_seconds", "torrent_fetch:timeout_seconds"]),
         new("torrent_max_response_bytes", ["torrent_max_response_bytes", "torrent_fetch:max_response_bytes"]),
         new("torrent_max_redirects", ["torrent_max_redirects", "torrent_fetch:max_redirects"]),
@@ -370,6 +371,10 @@ public sealed class DeploymentConfigurationLocks
                     "mikan_trusted_offset_cache_enabled",
                     current.MikanTrustedOffsetCacheEnabled,
                     candidate.MikanTrustedOffsetCacheEnabled),
+                MikanTrustedOffsetRequiredEpisodes = Preserve(
+                    "mikan_trusted_offset_required_episodes",
+                    current.MikanTrustedOffsetRequiredEpisodes,
+                    candidate.MikanTrustedOffsetRequiredEpisodes),
                 TorrentHttpTimeoutSeconds = Preserve(
                     "torrent_http_timeout_seconds",
                     current.TorrentHttpTimeoutSeconds,
@@ -629,6 +634,10 @@ public sealed class DeploymentConfigurationLocks
             "mikan_trusted_offset_cache_enabled")
             ? deployment.Metadata.MikanTrustedOffsetCacheEnabled
             : candidate.Metadata.MikanTrustedOffsetCacheEnabled;
+        var mikanTrustedOffsetRequiredEpisodes = IsLocked(
+            "mikan_trusted_offset_required_episodes")
+            ? deployment.Metadata.MikanTrustedOffsetRequiredEpisodes
+            : candidate.Metadata.MikanTrustedOffsetRequiredEpisodes;
 
         var torrentFetch = candidate.TorrentFetch;
         if (IsLocked("torrent_http_timeout_seconds"))
@@ -706,6 +715,7 @@ public sealed class DeploymentConfigurationLocks
                 TmdbFailureUseBangumi = tmdbFailureUseBangumi,
                 WriteBangumiIdWhenTmdbMatched = writeBangumiIdWhenTmdbMatched,
                 MikanTrustedOffsetCacheEnabled = mikanTrustedOffsetCacheEnabled,
+                MikanTrustedOffsetRequiredEpisodes = mikanTrustedOffsetRequiredEpisodes,
             },
             TorrentFetch = torrentFetch,
             DataUpdate = dataUpdate,
@@ -851,6 +861,10 @@ public sealed class DeploymentConfigurationLocks
             "mikan_trusted_offset_cache_enabled",
             deployment.Metadata.MikanTrustedOffsetCacheEnabled,
             candidate.Metadata.MikanTrustedOffsetCacheEnabled);
+        AddIfChanged(
+            "mikan_trusted_offset_required_episodes",
+            deployment.Metadata.MikanTrustedOffsetRequiredEpisodes,
+            candidate.Metadata.MikanTrustedOffsetRequiredEpisodes);
         AddIfChanged(
             "torrent_http_timeout_seconds",
             deployment.TorrentFetch.Timeout,

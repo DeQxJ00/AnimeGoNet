@@ -26,7 +26,7 @@ U2/TTG 已由所有者明确暂缓，不属于首版正式输入源。
 | Docker 三路径与共享挂载一致 | `/data`、`/download/incomplete`、`/download/anime` 固定配置和 Compose 卷 | Ubuntu CT NativeAOT 与双 qB 共享映射、真实下载和 move 整理通过 |
 | 统一导入与旧 Mikan API 兼容 | `/api/v1/ingest`、`/api/v1/rss/ingest`、`/api/download/manager`、`/api/rss` 共用 staging/路由 | OpenAPI/Kestrel/AnimeGoHelper 浏览器契约与 29 条真实 Mikan 输入 |
 | 不同来源绑定不同 qB 与规则 | revision 化 SourceProfile 保存 downloader、规则开关、策略/category/tags/做种 | CRUD、route preview、双实例隔离与快照测试；U2/TTG 首版暂缓 |
-| `mikanid` 人工覆盖与可信 offset | mikanid 规则最高优先；`mikanid+groupid` 三个不同 EP 学习且默认关闭 | SQLite 状态机、冲突撤销、WebUI、重匹配和 Episode worker tests |
+| `mikanid` 人工覆盖与可信 offset | mikanid 规则最高优先；`mikanid+groupid` 按不同文件名 EP 学习、门槛可配置且默认 3，缓存默认关闭 | SQLite 状态机、冲突撤销、WebUI、重匹配和 Episode worker tests |
 | RSS 黑白名单与有序优选 | 前置资格过滤后，仅多候选执行有序组；小写规范化 | 真实 RSS fixture、批次审计、历史回滚、WebUI CRUD/preview |
 | TMDB 权威 Series/Season/Episode 与 Other | P4/P3/AI 远端结果逐级验证；小数/特别篇不冒充整数 EP | 多轮搜索、P3 回溯、Episode/字幕/Other 与真实 loopback tests |
 | P4→P3→AI→P2→P1 失败链 | P3 需要 bgmid 且逐前作联合找 Series+Season；P2 只读任务 title；P1 本地 S01 | 决策顺序、失败分类、UI 说明与审计时间线 tests |

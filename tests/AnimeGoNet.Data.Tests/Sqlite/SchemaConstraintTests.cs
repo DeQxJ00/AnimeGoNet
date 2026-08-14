@@ -53,7 +53,7 @@ public sealed class SchemaConstraintTests
     }
 
     [Fact]
-    public async Task TrustedOffsetRequiresThreeDistinctEpisodeEvidenceCount()
+    public async Task TrustedOffsetRequiresAtLeastOneDistinctEpisodeEvidence()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
         await using var connection = await fixture.Database.OpenConnectionAsync();
@@ -62,7 +62,7 @@ public sealed class SchemaConstraintTests
             INSERT INTO mikan_trusted_offsets(
                 mikanid, groupid, tmdb_series_id, tmdb_season_number,
                 episode_offset, distinct_episode_count, state, updated_at_utc)
-            VALUES (10, 20, 30, 1, 2, 2, 'trusted', '2026-07-19T00:00:00Z');
+            VALUES (10, 20, 30, 1, 2, 0, 'trusted', '2026-07-19T00:00:00Z');
             """;
 
         await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());

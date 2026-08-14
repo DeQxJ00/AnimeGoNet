@@ -115,7 +115,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 `GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}` 依次读取 Season poster、Series poster、本地 SVG 占位图。远端图片使用 TMDB 的无密钥图片地址并按全局域名代理规则选择直连/代理，限制 5 MiB、校验 JPEG/PNG/WebP 魔数、合并同一 poster 的并发下载，并缓存到 `data_path/cache/covers`。上游超时、不可用或返回非图片时均返回短缓存占位图；响应头标明来源、缓存命中和安全警告码。浏览器请求、URL 和响应中都没有 TMDB API key。
 
-可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同 EP 进度。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
+可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同文件名 EP 进度。设置编辑器将“可信 EP Offset”放在独立配置框中，不混入“匹配与兜底”；说明明确规定来源 EP 是 Torrent 视频文件名解析出的 EP、目标 TMDB EP = 文件名 EP + Offset，并可设置 1～100 的可信次数（默认 3）。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
 
 ## 8. 当前生效配置投影
 

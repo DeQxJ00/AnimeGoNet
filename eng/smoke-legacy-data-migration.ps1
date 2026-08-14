@@ -1,7 +1,7 @@
 param(
     [string]$Application = "src/AnimeGoNet.App/bin/Release/net10.0/AnimeGoNet.App.dll",
     [string]$Importer = "tools/AnimeGoNet.LegacyCacheImporter/bin/Release/net10.0/AnimeGoNet.LegacyCacheImporter.dll",
-    [int]$ExpectedSchemaVersion = 50,
+    [int]$ExpectedSchemaVersion = 51,
     [int]$Port = 0
 )
 

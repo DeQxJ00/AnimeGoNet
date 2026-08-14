@@ -6,15 +6,29 @@ namespace AnimeGoNet.Data.Mikan;
 
 public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
 {
-    public const int RequiredDistinctEpisodes = 3;
+    public const int DefaultRequiredDistinctEpisodes = 3;
+    public const int MinimumRequiredDistinctEpisodes = 1;
+    public const int MaximumRequiredDistinctEpisodes = 100;
+
+    public Task<MikanTrustedOffset?> ObserveAsync(
+        MikanOffsetEvidenceObservation observation,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        ObserveAsync(
+            observation,
+            utcNow,
+            DefaultRequiredDistinctEpisodes,
+            cancellationToken);
 
     public async Task<MikanTrustedOffset?> ObserveAsync(
         MikanOffsetEvidenceObservation observation,
         DateTimeOffset utcNow,
+        int requiredDistinctEpisodes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(observation);
         Validate(observation);
+        ValidateRequiredDistinctEpisodes(requiredDistinctEpisodes);
         var now = Format(utcNow);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -24,6 +38,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             observation.MikanId,
             observation.GroupId,
             trustedOnly: false,
+            requiredDistinctEpisodes,
             cancellationToken).ConfigureAwait(false);
         var trustedConflict = previous?.IsTrusted == true
             && (previous.TmdbSeriesId != observation.TmdbSeriesId
@@ -107,7 +122,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                 """;
             select.Parameters.AddWithValue("$mikanid", observation.MikanId);
             select.Parameters.AddWithValue("$groupid", observation.GroupId);
-            select.Parameters.AddWithValue("$required_count", RequiredDistinctEpisodes);
+            select.Parameters.AddWithValue("$required_count", requiredDistinctEpisodes);
             await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -169,17 +184,30 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             observation.MikanId,
             observation.GroupId,
             trustedOnly: false,
+            requiredDistinctEpisodes,
             cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return result;
     }
 
+    public Task<MikanTrustedOffset?> GetTrustedAsync(
+        int mikanId,
+        int groupId,
+        CancellationToken cancellationToken = default) =>
+        GetTrustedAsync(
+            mikanId,
+            groupId,
+            DefaultRequiredDistinctEpisodes,
+            cancellationToken);
+
     public async Task<MikanTrustedOffset?> GetTrustedAsync(
         int mikanId,
         int groupId,
+        int requiredDistinctEpisodes,
         CancellationToken cancellationToken = default)
     {
         ValidateKey(mikanId, groupId);
+        ValidateRequiredDistinctEpisodes(requiredDistinctEpisodes);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await ReadAsync(
             connection,
@@ -187,14 +215,27 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             mikanId,
             groupId,
             trustedOnly: true,
+            requiredDistinctEpisodes,
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<MikanOffsetCandidateState>> ListAsync(
+    public Task<IReadOnlyList<MikanOffsetCandidateState>> ListAsync(
         int? mikanId = null,
         int? groupId = null,
+        CancellationToken cancellationToken = default) =>
+        ListAsync(
+            mikanId,
+            groupId,
+            DefaultRequiredDistinctEpisodes,
+            cancellationToken);
+
+    public async Task<IReadOnlyList<MikanOffsetCandidateState>> ListAsync(
+        int? mikanId,
+        int? groupId,
+        int requiredDistinctEpisodes,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredDistinctEpisodes(requiredDistinctEpisodes);
         if (mikanId is not null)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(mikanId.Value, 1);
@@ -213,6 +254,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                    COUNT(DISTINCT evidence.source_episode),
                    CASE
                      WHEN trusted.state = 'trusted'
+                      AND COUNT(DISTINCT evidence.source_episode) >= $required_count
                       AND trusted.tmdb_series_id = evidence.tmdb_series_id
                       AND trusted.tmdb_season_number = evidence.tmdb_season_number
                       AND trusted.episode_offset = evidence.episode_offset
@@ -238,6 +280,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             """;
         command.Parameters.AddWithValue("$mikanid", (object?)mikanId ?? DBNull.Value);
         command.Parameters.AddWithValue("$groupid", (object?)groupId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$required_count", requiredDistinctEpisodes);
         var result = new List<MikanOffsetCandidateState>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -297,11 +340,26 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         return affected > 0;
     }
 
+    public Task<MikanTrustedEpisodeResolution?> TryResolveEpisodeAsync(
+        int mikanId,
+        int groupId,
+        int? sourceEpisode,
+        bool enabled,
+        CancellationToken cancellationToken = default) =>
+        TryResolveEpisodeAsync(
+            mikanId,
+            groupId,
+            sourceEpisode,
+            enabled,
+            DefaultRequiredDistinctEpisodes,
+            cancellationToken);
+
     public async Task<MikanTrustedEpisodeResolution?> TryResolveEpisodeAsync(
         int mikanId,
         int groupId,
         int? sourceEpisode,
         bool enabled,
+        int requiredDistinctEpisodes,
         CancellationToken cancellationToken = default)
     {
         ValidateKey(mikanId, groupId);
@@ -310,11 +368,15 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             return null;
         }
 
-        var trusted = await GetTrustedAsync(mikanId, groupId, cancellationToken).ConfigureAwait(false);
+        var trusted = await GetTrustedAsync(
+            mikanId,
+            groupId,
+            requiredDistinctEpisodes,
+            cancellationToken).ConfigureAwait(false);
         if (trusted is null
             || trusted.TmdbSeriesId <= 0
             || trusted.TmdbSeasonNumber <= 0
-            || trusted.DistinctEpisodeCount < RequiredDistinctEpisodes)
+            || trusted.DistinctEpisodeCount < requiredDistinctEpisodes)
         {
             return null;
         }
@@ -347,6 +409,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         int mikanId,
         int groupId,
         bool trustedOnly,
+        int requiredDistinctEpisodes,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -356,11 +419,13 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                    episode_offset, distinct_episode_count, state, updated_at_utc
             FROM mikan_trusted_offsets
             WHERE mikanid = $mikanid AND groupid = $groupid
-              AND ($trusted_only = 0 OR state = 'trusted');
+              AND ($trusted_only = 0 OR (state = 'trusted'
+                   AND distinct_episode_count >= $required_count));
             """;
         command.Parameters.AddWithValue("$mikanid", mikanId);
         command.Parameters.AddWithValue("$groupid", groupId);
         command.Parameters.AddWithValue("$trusted_only", trustedOnly ? 1 : 0);
+        command.Parameters.AddWithValue("$required_count", requiredDistinctEpisodes);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -390,6 +455,17 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(mikanId, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(groupId, 1);
+    }
+
+    private static void ValidateRequiredDistinctEpisodes(int value)
+    {
+        if (value is < MinimumRequiredDistinctEpisodes or > MaximumRequiredDistinctEpisodes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                value,
+                $"Required distinct episodes must be between {MinimumRequiredDistinctEpisodes} and {MaximumRequiredDistinctEpisodes}.");
+        }
     }
 
     private static string FormatEpisode(int episode) =>

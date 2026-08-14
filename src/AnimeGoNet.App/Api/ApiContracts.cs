@@ -384,7 +384,9 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("data_update_keep_versions")] int DataUpdateKeepVersions,
     [property: JsonPropertyName("data_update_http_timeout_seconds")] double DataUpdateHttpTimeoutSeconds,
     [property: JsonPropertyName("locked_fields")] IReadOnlyList<ConfigurationFieldLockResponse> LockedFields,
-    [property: JsonPropertyName("ai_reasoning_effort")] string AiReasoningEffort = "none");
+    [property: JsonPropertyName("ai_reasoning_effort")] string AiReasoningEffort = "none",
+    [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
+    int MikanTrustedOffsetRequiredEpisodes = 3);
 
 public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -446,7 +448,9 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("ai_prompt_template")] string? AiPromptTemplate = null,
     [property: JsonPropertyName("mikan_episode_identity_cache_hours")] double? MikanEpisodeIdentityCacheHours = null,
     [property: JsonPropertyName("mikan_bangumi_identity_cache_hours")] double? MikanBangumiIdentityCacheHours = null,
-    [property: JsonPropertyName("ai_reasoning_effort")] string? AiReasoningEffort = null);
+    [property: JsonPropertyName("ai_reasoning_effort")] string? AiReasoningEffort = null,
+    [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
+    int? MikanTrustedOffsetRequiredEpisodes = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -493,7 +497,9 @@ public sealed record MetadataConfigurationResponse(
     [property: JsonPropertyName("tmdb_failure_use_bangumi")] bool TmdbFailureUseBangumi,
     [property: JsonPropertyName("write_bangumi_id_when_tmdb_matched")]
     bool WriteBangumiIdWhenTmdbMatched,
-    [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled);
+    [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
+    [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
+    int MikanTrustedOffsetRequiredEpisodes);
 
 public sealed record MikanConfigurationResponse(
     [property: JsonPropertyName("base_url")] string BaseUrl,

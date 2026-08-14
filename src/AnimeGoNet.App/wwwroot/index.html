@@ -985,7 +985,7 @@
         </div>
         <button id="trusted-offsets-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
-      <p class="muted">按 mikanid + groupid 隔离；清理只删除自动学习证据与缓存，不影响人工规则、下载记录或媒体文件。</p>
+      <p class="muted">按 mikanid + groupid 隔离。Offset 的来源 EP 是从 Torrent 视频文件名解析出的 EP，目标 TMDB EP = 文件名 EP + Offset；只有不同文件名 EP 得到相同且已验证的映射达到设定次数后才可信。清理只删除自动学习证据与缓存，不影响人工规则、下载记录或媒体文件。</p>
       <div id="trusted-offsets" class="offset-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
         <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取可信 offset 状态…</p>
       </div>
@@ -1371,7 +1371,20 @@
             <input id="configuration-write-bangumi-with-tmdb" type="checkbox">
             <span><strong>TMDB 成功时也写 Bangumi ID</strong><small>默认关闭。关闭时仅 tmdbid=0 的 Bangumi 完全兜底写入 bangumiid；开启后正常 TMDB 作品也写入。多个 bgmid 共用同一 TMDB 作品目录时，后续任务可能覆盖根目录 NFO 中的 bangumiid。</small></span>
           </label>
-          <label><input id="configuration-offset-cache" type="checkbox">可信 offset 缓存</label>
+        </fieldset>
+        <fieldset class="wide configuration-data-update-editor">
+          <legend>可信 EP Offset</legend>
+          <p class="configuration-data-update-caption">独立于 TMDB 匹配与兜底策略。这里的来源 EP 专指从 Torrent 视频文件名解析出的 EP；程序按“目标 TMDB EP = 文件名 EP + Offset”计算。相同 mikanid + groupid 下，只有不同文件名 EP 产生相同且已通过 TMDB 验证的 tmdbid、Season 和 Offset，达到设定次数后才会成为可信缓存。</p>
+          <div class="configuration-data-update-grid">
+            <label class="configuration-guided-option wide">
+              <input id="configuration-offset-cache" type="checkbox">
+              <span><strong>启用可信 EP Offset 缓存</strong><small>默认关闭；命中后在 AI 前直接按文件名 EP + Offset 计算目标 EP。</small></span>
+            </label>
+            <label>成为可信所需的不同文件名 EP 次数
+              <input id="configuration-offset-required-episodes" type="number" min="1" max="100" step="1" required>
+              <small>默认 3；重复的同一个文件名 EP 不重复计数，冲突会撤销并重新学习。</small>
+            </label>
+          </div>
         </fieldset>
         <label>AI 超时（秒）<input id="configuration-ai-timeout" type="number" min="1" max="86400" required></label>
         <label>Torrent HTTP 超时（秒）<input id="configuration-torrent-timeout" type="number" min="1" max="86400" required></label>

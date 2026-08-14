@@ -63,7 +63,7 @@ HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 re
 
 - `MikanWorkMetadataRule`：以 `mikanid` 唯一，保存人工 bgmid、TMDB Series/Season、EP offset、版本和审计；人工值优先级最高，非法值显式失败，自动流程不得覆盖。
 - `MikanOffsetEvidence`：唯一键 `(mikanid, groupid, source_episode)`；只接受已有有效 tmdbid、普通 season 和已验证 TMDB Episode 形成的 offset。
-- `MikanTrustedOffsetCache`：默认关闭；同键域三个不同来源 EP 产生相同 `(tmdbid, season, offset)` 才 Trusted，重复 EP 不计数，冲突立即重置或撤销。
+- `MikanTrustedOffsetCache`：默认关闭；来源 EP 是 Torrent 视频文件名解析出的 EP，同键域不同文件名 EP 产生相同 `(tmdbid, season, offset)` 并达到可配置门槛后才 Trusted（默认 3），重复 EP 不计数，冲突立即重置或撤销。
 
 ### 动画与 TMDB 规范身份
 

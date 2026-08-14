@@ -1931,7 +1931,8 @@ public static class ApiEndpoints
                     ai.ReasoningEffort ?? "none"),
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.WriteBangumiIdWhenTmdbMatched,
-                options.Metadata.MikanTrustedOffsetCacheEnabled),
+                options.Metadata.MikanTrustedOffsetCacheEnabled,
+                options.Metadata.MikanTrustedOffsetRequiredEpisodes),
             new TorrentFetchConfigurationResponse(
                 fetch.Timeout.TotalSeconds,
                 fetch.MaxResponseBytes,
@@ -2020,7 +2021,9 @@ public static class ApiEndpoints
                 item.EnvironmentVariables,
                 item.CommandLineArguments,
                 item.ControllingKeys)).ToArray(),
-            AiReasoningEffort: ai.ReasoningEffort ?? "none");
+            AiReasoningEffort: ai.ReasoningEffort ?? "none",
+            MikanTrustedOffsetRequiredEpisodes:
+                desired.Metadata.MikanTrustedOffsetRequiredEpisodes);
     }
 
     private static string SecretState(bool overridden, string? value) =>
@@ -2271,6 +2274,10 @@ public static class ApiEndpoints
             "mikan_trusted_offset_cache_enabled",
             current.Metadata.MikanTrustedOffsetCacheEnabled,
             candidate.Metadata.MikanTrustedOffsetCacheEnabled);
+        Add(
+            "mikan_trusted_offset_required_episodes",
+            current.Metadata.MikanTrustedOffsetRequiredEpisodes.ToString(invariant),
+            candidate.Metadata.MikanTrustedOffsetRequiredEpisodes.ToString(invariant));
         AddSeconds(
             "torrent_http_timeout_seconds",
             beforeTorrent.Timeout,
@@ -2568,6 +2575,16 @@ public static class ApiEndpoints
             throw new ArgumentException("torrent_max_redirects must be between 0 and 10.");
         }
 
+        var mikanTrustedOffsetRequiredEpisodes =
+            request.MikanTrustedOffsetRequiredEpisodes
+            ?? current?.MikanTrustedOffsetRequiredEpisodes
+            ?? 3;
+        if (mikanTrustedOffsetRequiredEpisodes is < 1 or > 100)
+        {
+            throw new ArgumentException(
+                "mikan_trusted_offset_required_episodes must be between 1 and 100.");
+        }
+
         var apiKey = NormalizeSecret(request.TmdbApiKey, "tmdb_api_key");
         var readToken = NormalizeSecret(
             request.TmdbReadAccessToken,
@@ -2649,7 +2666,8 @@ public static class ApiEndpoints
             AiPromptTemplate: aiPromptTemplate,
             MikanEpisodeIdentityCacheHours: mikanEpisodeIdentityCacheHours,
             MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours,
-            AiDebugMode: request.AiDebugMode ?? current?.AiDebugMode ?? false);
+            AiDebugMode: request.AiDebugMode ?? current?.AiDebugMode ?? false,
+            MikanTrustedOffsetRequiredEpisodes: mikanTrustedOffsetRequiredEpisodes);
     }
 
     private static string PromptSummary(string template) =>
@@ -4388,11 +4406,17 @@ public static class ApiEndpoints
         [FromQuery(Name = "mikanid")] int? mikanId,
         [FromQuery(Name = "groupid")] int? groupId,
         MikanTrustedOffsetStore offsets,
+        AnimeGoOptions options,
         CancellationToken cancellationToken)
     {
         try
         {
-            var values = await offsets.ListAsync(mikanId, groupId, cancellationToken).ConfigureAwait(false);
+            var requiredEpisodes = options.Metadata.MikanTrustedOffsetRequiredEpisodes;
+            var values = await offsets.ListAsync(
+                mikanId,
+                groupId,
+                requiredEpisodes,
+                cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new MikanTrustedOffsetListResponse(
                 values.Select(value => new MikanTrustedOffsetItemResponse(
                     value.MikanId,
@@ -4401,7 +4425,7 @@ public static class ApiEndpoints
                     value.TmdbSeasonNumber,
                     value.EpisodeOffset,
                     value.DistinctEpisodeCount,
-                    MikanTrustedOffsetStore.RequiredDistinctEpisodes,
+                    requiredEpisodes,
                     value.State,
                     value.UpdatedAtUtc)).ToArray()));
         }

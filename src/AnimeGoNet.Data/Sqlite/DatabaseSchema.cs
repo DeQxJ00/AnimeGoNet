@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 50;
+    public const int CurrentVersion = 51;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -86,7 +86,36 @@ public static class DatabaseSchema
             50,
             "readaptation_manual_tmdb_override",
             ReadaptationManualTmdbOverride),
+        new SchemaMigration(
+            51,
+            "configurable_trusted_offset_threshold",
+            ConfigurableTrustedOffsetThreshold),
     ];
+
+    private const string ConfigurableTrustedOffsetThreshold = """
+        ALTER TABLE mikan_trusted_offsets RENAME TO mikan_trusted_offsets_legacy;
+
+        CREATE TABLE mikan_trusted_offsets (
+            mikanid INTEGER NOT NULL CHECK (mikanid > 0),
+            groupid INTEGER NOT NULL CHECK (groupid > 0),
+            tmdb_series_id INTEGER NOT NULL CHECK (tmdb_series_id > 0),
+            tmdb_season_number INTEGER NOT NULL CHECK (tmdb_season_number > 0),
+            episode_offset INTEGER NOT NULL,
+            distinct_episode_count INTEGER NOT NULL CHECK (distinct_episode_count >= 1),
+            state TEXT NOT NULL CHECK (state IN ('trusted', 'revoked')),
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (mikanid, groupid)
+        ) STRICT;
+
+        INSERT INTO mikan_trusted_offsets (
+            mikanid, groupid, tmdb_series_id, tmdb_season_number,
+            episode_offset, distinct_episode_count, state, updated_at_utc)
+        SELECT mikanid, groupid, tmdb_series_id, tmdb_season_number,
+               episode_offset, distinct_episode_count, state, updated_at_utc
+        FROM mikan_trusted_offsets_legacy;
+
+        DROP TABLE mikan_trusted_offsets_legacy;
+        """;
 
     private const string ReadaptationManualTmdbOverride = """
         ALTER TABLE other_file_readaptation_jobs ADD COLUMN resolution_source_override TEXT

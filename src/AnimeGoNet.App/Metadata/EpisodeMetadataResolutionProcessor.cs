@@ -522,6 +522,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             await trustedOffsets.ObserveAsync(
                 observation,
                 _timeProvider.GetUtcNow(),
+                options.Metadata.MikanTrustedOffsetRequiredEpisodes,
                 cancellationToken).ConfigureAwait(false);
         }
     }

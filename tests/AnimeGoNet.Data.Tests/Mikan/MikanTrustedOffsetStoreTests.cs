@@ -5,6 +5,32 @@ namespace AnimeGoNet.Data.Tests.Mikan;
 public sealed class MikanTrustedOffsetStoreTests
 {
     [Fact]
+    public async Task UsesConfiguredDistinctEpisodeThreshold()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new MikanTrustedOffsetStore(fixture.Database);
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.Null(await store.ObserveAsync(
+            Observation(1, 13),
+            now,
+            2));
+        var trusted = Assert.IsType<MikanTrustedOffset>(await store.ObserveAsync(
+            Observation(2, 13),
+            now.AddMinutes(1),
+            2));
+        Assert.True(trusted.IsTrusted);
+        Assert.Null(await store.GetTrustedAsync(
+            3951,
+            7,
+            3));
+        Assert.NotNull(await store.GetTrustedAsync(
+            3951,
+            7,
+            2));
+    }
+
+    [Fact]
     public async Task RequiresThreeDifferentEpisodesWithTheSameVerifiedOffset()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

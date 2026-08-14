@@ -376,6 +376,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
         var trusted = await trustedOffsets.GetTrustedAsync(
             claim.MikanId.Value,
             claim.GroupId.Value,
+            options.Metadata.MikanTrustedOffsetRequiredEpisodes,
             cancellationToken).ConfigureAwait(false);
         if (trusted is null)
         {

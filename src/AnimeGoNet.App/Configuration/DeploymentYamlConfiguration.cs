@@ -306,6 +306,10 @@ internal static class DeploymentYamlConfiguration
             "metadata:mikan_trusted_offset_cache_enabled");
         Alias(
             values,
+            "advanced:default:mikan_trusted_offset_required_episodes",
+            "metadata:mikan_trusted_offset_required_episodes");
+        Alias(
+            values,
             "advanced:source:themoviedb:api_key",
             "metadata:tmdb:api_key");
         Alias(values, "setting:key:themoviedb", "metadata:tmdb:api_key");
@@ -661,6 +665,7 @@ internal static class DeploymentYamlConfiguration
               tmdb_failure_use_bangumi: {{Boolean(values, "metadata:tmdb_failure_use_bangumi", false)}}
               write_bangumi_id_when_tmdb_matched: {{Boolean(values, "metadata:write_bangumi_id_when_tmdb_matched", false)}}
               mikan_trusted_offset_cache_enabled: {{Boolean(values, "metadata:mikan_trusted_offset_cache_enabled", false)}}
+              mikan_trusted_offset_required_episodes: {{Integer(values, "metadata:mikan_trusted_offset_required_episodes", 3)}}
               ai:
                 provider: openai_compatible
                 base_url: ''
@@ -879,6 +884,7 @@ internal static class DeploymentYamlConfiguration
               tmdb_failure_use_bangumi: false
               write_bangumi_id_when_tmdb_matched: false
               mikan_trusted_offset_cache_enabled: false
+              mikan_trusted_offset_required_episodes: 3
               ai:
                 provider: openai_compatible
                 base_url: ''

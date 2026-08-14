@@ -62,7 +62,8 @@ public sealed record ApplicationOverrideEntry(
     double? MikanBangumiIdentityCacheHours = null,
     bool? AiDebugMode = null,
     bool? AiReasoningEffortOverridden = null,
-    string? AiReasoningEffort = null);
+    string? AiReasoningEffort = null,
+    int? MikanTrustedOffsetRequiredEpisodes = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -408,6 +409,12 @@ public sealed class ApplicationOverrideStore : IDisposable
                     "mikan_trusted_offset_cache_enabled")
                     ? options.Metadata.MikanTrustedOffsetCacheEnabled
                     : settings.MikanTrustedOffsetCacheEnabled,
+                MikanTrustedOffsetRequiredEpisodes = inheritedFields.Contains(
+                    "mikan_trusted_offset_required_episodes")
+                    ? options.Metadata.MikanTrustedOffsetRequiredEpisodes
+                    : TrustedOffsetRequiredEpisodes(
+                        settings.MikanTrustedOffsetRequiredEpisodes,
+                        options.Metadata.MikanTrustedOffsetRequiredEpisodes),
             },
             TorrentFetch = options.TorrentFetch with
             {
@@ -436,6 +443,15 @@ public sealed class ApplicationOverrideStore : IDisposable
 
     private static Uri? ParseOptionalUri(string? value, string name) =>
         string.IsNullOrWhiteSpace(value) ? null : ParseRequiredUri(value, name);
+
+    private static int TrustedOffsetRequiredEpisodes(int? value, int fallback)
+    {
+        var resolved = value ?? fallback;
+        return resolved is >= 1 and <= 100
+            ? resolved
+            : throw new InvalidOperationException(
+                "Application private configuration trusted offset threshold must be between 1 and 100.");
+    }
 
     private async Task<ApplicationOverrideSnapshot> LoadCoreAsync(
         CancellationToken cancellationToken)
