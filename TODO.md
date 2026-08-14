@@ -260,7 +260,7 @@
 - [x] 完成响应式布局、统一空/错/加载状态和基本可访问性：主异步区域共享显式状态机与安全文本节点，loading/empty/error 使用对应 busy/status/alert 语义；提供首个键盘跳转入口、全局可见焦点、44px 控件目标、reduced-motion 和 620px 移动端收敛布局；静态 DOM 契约自动检查唯一 ID、section/dialog/控件名称、非正 tabindex 与初始状态，390×844 / 1280×800 本机 Kestrel 验收均无横向溢出和 console error。
 - [x] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2，Ubuntu CT linux-x64 发布镜像完整链路 Playwright 1/1 通过。
 - [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
-- [x] 在 WebUI“设置与备份 → 应用配置”补齐 AnimeGoHelper 连接设置：明文回填/修改部署 AccessKey、自动显示 `/api` 地址、固定 `PluginName=filter/mikan_tool.py`，写入前强类型校验并备份 YAML，重启后生效。
+- [x] 一级“插件”拆分“内部插件 / 外部插件”；内部插件页提供 `Web API / AnimeGoHelper (Mikan) 油猴插件`，明文回填/修改部署 AccessKey（新部署默认 `123456`）、自动显示 `/api` 地址、固定 `PluginName=inner_plugin_mikan`，并保留旧 `filter/mikan_tool.py` 后端别名。
 
 ## P10 — 组合与发布
 

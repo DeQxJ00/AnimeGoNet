@@ -27,6 +27,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(defaults.Paths.DataPath, snapshot.Values["paths:data_path"]);
             Assert.Equal("127.0.0.1", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
+            Assert.Equal("123456", snapshot.Values["web:access_key"]);
             Assert.Equal("move", snapshot.Values["sources:mikan:file_strategy"]);
             Assert.Equal(string.Empty, snapshot.Values["sources:mikan:rss_feed_url"]);
             Assert.Equal("false", snapshot.Values["sources:mikan:rss_schedule_enabled"]);
@@ -199,6 +200,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("/download/anime", snapshot.Values["paths:save_path"]);
             Assert.Equal("0.0.0.0", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
+            Assert.Equal("123456", snapshot.Values["web:access_key"]);
             Assert.Equal(
                 "/download/incomplete/bt",
                 snapshot.Values["downloaders:bt:download_path"]);

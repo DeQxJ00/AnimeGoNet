@@ -807,10 +807,10 @@ internal static class DeploymentYamlConfiguration
               save_path: {{Scalar(options.Paths.SavePath)}}
 
             web:
-              # 原生默认 127.0.0.1:7991；Docker 默认 0.0.0.0:7991 且必须设置 access_key。
+              # 原生默认 127.0.0.1:7991；Docker 默认 0.0.0.0:7991。首次生成使用本机便利默认 AccessKey。
               host: {{Scalar(options.Web.Host)}}
               port: {{options.Web.Port}}
-              access_key: ''
+              access_key: '123456'
               background_workers_enabled: true
 
             # 唯一出站代理。仅匹配 hosts 的目标使用代理；其余保持直连。

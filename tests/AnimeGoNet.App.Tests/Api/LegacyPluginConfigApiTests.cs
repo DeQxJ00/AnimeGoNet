@@ -72,6 +72,7 @@ public sealed class LegacyPluginConfigApiTests
     }
 
     [Theory]
+    [InlineData("inner_plugin_mikan")]
     [InlineData("filter/mikan_tool")]
     [InlineData("mikan_tool.py")]
     [InlineData("mikan_tool")]

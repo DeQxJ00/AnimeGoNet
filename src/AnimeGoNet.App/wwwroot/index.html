@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260814-web-api-helper">
+  <link rel="stylesheet" href="/styles.css?v=20260814-internal-plugins">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -23,7 +23,7 @@
         <button type="button" data-workspace-target="sources"><span aria-hidden="true">⇄</span>输入源</button>
         <button type="button" data-workspace-target="bangumi-cache"><span aria-hidden="true">▤</span>Bangumi缓存</button>
         <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
-        <button type="button" data-workspace-target="plugins"><span aria-hidden="true">⊞</span>外部插件</button>
+        <button type="button" data-workspace-target="plugins"><span aria-hidden="true">⊞</span>插件</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
         <button type="button" data-workspace-target="logs"><span aria-hidden="true">≡</span>日志</button>
@@ -110,7 +110,48 @@
       </div>
     </section>
 
-    <section id="external-plugins" aria-labelledby="external-plugins-title" data-workspace="plugins" data-subview="manage" data-nav-label="插件管理">
+    <section id="internal-plugins" aria-labelledby="internal-plugins-title" data-workspace="plugins" data-subview="internal" data-nav-label="内部插件">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Built-in integrations</p>
+          <h2 id="internal-plugins-title">内部插件</h2>
+        </div>
+      </div>
+      <p class="muted">由 AnimeGoNet 编译期注册并随主程序发布的内置集成。后续内部插件会继续在此独立管理。</p>
+      <article class="configuration-card web-api-compatibility-card" aria-labelledby="web-api-compatibility-title">
+        <div class="web-api-compatibility-heading">
+          <div>
+            <p class="eyebrow">Mikan userscript compatibility</p>
+            <h3 id="web-api-compatibility-title">Web API / AnimeGoHelper (Mikan) 油猴插件</h3>
+          </div>
+          <span>修改后需重启</span>
+        </div>
+        <p class="muted">AccessKey 直接写入部署配置并明文回填；油猴脚本填写同一个明文值，由脚本自动计算 SHA-256。PluginName 是内部插件名称，不会加载 Python。</p>
+        <form id="web-api-compatibility-form">
+          <div class="source-form-grid">
+            <label class="source-hosts">油猴 API 地址
+              <input id="web-api-compatibility-url" type="url" readonly>
+              <small>同一台电脑使用当前地址；脚本要求地址以 <code>/api</code> 结尾。</small>
+            </label>
+            <label>AccessKey（明文）
+              <input id="web-api-compatibility-access-key" type="text" maxlength="512" autocomplete="off" spellcheck="false">
+              <small>默认 123456；必须与 AnimeGoHelper 设置中的 AccessKey 完全相同，不要手工填写 SHA-256。</small>
+            </label>
+            <label>PluginName
+              <input id="web-api-compatibility-plugin-name" type="text" value="inner_plugin_mikan" readonly>
+              <small>固定内部插件名；旧 filter/mikan_tool.py 仍作为兼容别名接受。</small>
+            </label>
+          </div>
+          <p id="web-api-compatibility-status" class="muted" role="status">正在读取部署配置…</p>
+          <div class="source-form-actions">
+            <button id="web-api-compatibility-reload" type="button" class="secondary-button">重新读取</button>
+            <button id="web-api-compatibility-save" type="submit" class="primary-button">保存 AccessKey 并备份</button>
+          </div>
+        </form>
+      </article>
+    </section>
+
+    <section id="external-plugins" aria-labelledby="external-plugins-title" data-workspace="plugins" data-subview="external" data-nav-label="外部插件">
       <div class="section-heading external-plugin-heading">
         <div>
           <p class="eyebrow">Out-of-process C# extensions</p>
@@ -232,37 +273,6 @@
         </div>
       </div>
       <p id="configuration-status" class="muted">正在读取包含已保存凭据的生效配置…</p>
-      <article class="configuration-card web-api-compatibility-card" aria-labelledby="web-api-compatibility-title">
-        <div class="web-api-compatibility-heading">
-          <div>
-            <p class="eyebrow">Legacy client compatibility</p>
-            <h3 id="web-api-compatibility-title">Web API / AnimeGoHelper 油猴插件</h3>
-          </div>
-          <span>修改后需重启</span>
-        </div>
-        <p class="muted">AccessKey 直接写入部署配置并明文回填；油猴脚本填写同一个明文值，由脚本自动计算 SHA-256。PluginName 是兼容名称，不会加载 Python。</p>
-        <form id="web-api-compatibility-form">
-          <div class="source-form-grid">
-            <label class="source-hosts">油猴 API 地址
-              <input id="web-api-compatibility-url" type="url" readonly>
-              <small>同一台电脑使用当前地址；脚本要求地址以 <code>/api</code> 结尾。</small>
-            </label>
-            <label>AccessKey（明文）
-              <input id="web-api-compatibility-access-key" type="text" maxlength="512" autocomplete="off" spellcheck="false">
-              <small>必须与 AnimeGoHelper 设置中的 AccessKey 完全相同，不要手工填写 SHA-256。</small>
-            </label>
-            <label>PluginName
-              <input id="web-api-compatibility-plugin-name" type="text" value="filter/mikan_tool.py" readonly>
-              <small>固定兼容值；只映射到内置 C# Mikan 过滤器。</small>
-            </label>
-          </div>
-          <p id="web-api-compatibility-status" class="muted" role="status">正在读取部署配置…</p>
-          <div class="source-form-actions">
-            <button id="web-api-compatibility-reload" type="button" class="secondary-button">重新读取</button>
-            <button id="web-api-compatibility-save" type="submit" class="primary-button">保存 AccessKey 并备份</button>
-          </div>
-        </form>
-      </article>
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
     </section>
 
@@ -1566,6 +1576,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-web-api-helper"></script>
+    <script type="module" src="/app.js?v=20260814-internal-plugins"></script>
 </body>
 </html>

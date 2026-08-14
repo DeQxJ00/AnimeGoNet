@@ -1112,7 +1112,8 @@ public static class ApiEndpoints
         {
             normalized = normalized["plugin/".Length..];
         }
-        return normalized is "filter/mikan_tool.py" or "filter/mikan_tool"
+        return normalized is "inner_plugin_mikan"
+            or "filter/mikan_tool.py" or "filter/mikan_tool"
             or "mikan_tool.py" or "mikan_tool";
     }
 

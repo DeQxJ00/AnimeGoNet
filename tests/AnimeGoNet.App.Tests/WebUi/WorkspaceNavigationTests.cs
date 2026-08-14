@@ -33,20 +33,32 @@ public sealed class WorkspaceNavigationTests
             "data-workspace=\"sources\" data-subview=\"manage\"",
             html,
             StringComparison.Ordinal);
-        Assert.Contains(">外部插件</button>", html, StringComparison.Ordinal);
-        Assert.Contains("title: \"外部插件\"", script, StringComparison.Ordinal);
+        Assert.Contains(">插件</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"插件\"", script, StringComparison.Ordinal);
         Assert.Contains(
-            "data-workspace=\"plugins\" data-subview=\"manage\"",
+            "data-workspace=\"plugins\" data-subview=\"internal\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"plugins\" data-subview=\"external\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "{ id: \"internal\", label: \"内部插件\" }",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "{ id: \"external\", label: \"外部插件\" }",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Web API / AnimeGoHelper (Mikan) 油猴插件",
             html,
             StringComparison.Ordinal);
         Assert.Contains(">设置与备份</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"设置与备份\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "{ id: \"sources\", label: \"输入源\" }",
-            script,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "{ id: \"plugins\", label: \"外部插件\" }",
             script,
             StringComparison.Ordinal);
         Assert.Contains("id=\"manual-rss-manage-source\"", html, StringComparison.Ordinal);

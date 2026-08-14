@@ -162,11 +162,12 @@ const workspaceDefinitions = {
         ],
     },
     plugins: {
-        title: "外部插件",
-        description: "管理进程外 C# 插件包、运行状态和配置。",
-        defaultSubview: "manage",
+        title: "插件",
+        description: "管理编译期注册的内部插件和进程外 C# 插件包。",
+        defaultSubview: "internal",
         tabs: [
-            { id: "manage", label: "插件管理" },
+            { id: "internal", label: "内部插件" },
+            { id: "external", label: "外部插件" },
         ],
     },
     connections: {
@@ -3072,8 +3073,8 @@ async function loadConfiguration() {
                 ["容器模式", enabledLabel(config.deployment.running_in_container)],
                 ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
                 ["Access-Key", config.deployment.access_key_configured
-                        ? "已配置；明文见上方 Web API / AnimeGoHelper"
-                        : "未配置；可在上方设置"],
+                        ? "已配置；明文见 插件 → 内部插件"
+                        : "未配置；可在 插件 → 内部插件 设置"],
             ]),
             configurationCard("全局选择性代理", [
                 ["代理地址", config.outbound_proxy.url ?? "未配置（全部直连）"],
@@ -3171,7 +3172,7 @@ async function loadWebApiCompatibility() {
     const save = element("#web-api-compatibility-save");
     element("#web-api-compatibility-url").value = animeGoHelperApiUrl();
     element("#web-api-compatibility-plugin-name").value =
-        "filter/mikan_tool.py";
+        "inner_plugin_mikan";
     status.textContent = "正在读取部署配置中的 AccessKey…";
     reload.disabled = true;
     save.disabled = true;
@@ -3185,7 +3186,7 @@ async function loadWebApiCompatibility() {
         keyInput.value = configuredKey ?? "";
         status.textContent = configuredKey
             ? "已回填当前部署 AccessKey。修改后保存会自动备份 animego.yaml，重启后生效。"
-            : "当前未配置 AccessKey；原生本机模式可以留空，Docker 模式必须填写。";
+            : "当前未配置 AccessKey；新部署默认使用 123456，当前文件可保存后重启应用。";
     }
     catch (error) {
         keyInput.value = "";
@@ -3230,7 +3231,7 @@ async function saveWebApiCompatibility(event) {
         if (envelope.code !== 200) {
             throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
         }
-        status.textContent = "AccessKey 已写入并备份部署配置；请重启 AnimeGoNet。油猴插件填写这里的同一明文值，PluginName 保持 filter/mikan_tool.py。";
+        status.textContent = "AccessKey 已写入并备份部署配置；请重启 AnimeGoNet。油猴插件填写这里的同一明文值，PluginName 保持 inner_plugin_mikan。";
     }
     catch (error) {
         status.textContent = `AccessKey 保存失败：${errorMessage(error, "未知错误")}`;

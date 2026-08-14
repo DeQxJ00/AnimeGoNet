@@ -77,7 +77,7 @@ services.AddSingleton<IScheduledPlugin, MetadataRefreshTask>();
 
 需要固定 Cron 的 schedule 插件由 `PluginScheduleCoordinator` 显式注册，不从插件文件读取或扫描。Cron 是含秒的六字段格式，支持 `?`、列表、范围、步长、英文月份/星期和标准 descriptor；`StartRun=true` 在注册完成后立即执行一次，`NextTime` 始终由同一已验证表达式与指定时区计算。失败沿用上游三次、每次间隔三秒的重试约定，并在每次调用参数中写入 `__retry_count__=0/1/2`。任务快照只记录稳定插件 ID、Cron、运行数、下一次/最近执行时间和安全失败码。
 
-默认目录不注册 Python 名称，不读取或执行 `.py` 文件；旧 `filter/mikan_tool.py` 只保留为 API 配置别名并映射到 SQLite/C# 实现。
+内置 Mikan 插件规范名为 `inner_plugin_mikan`。默认目录不注册 Python 名称，不读取或执行 `.py` 文件；旧 `filter/mikan_tool.py` 只保留为 API 配置别名并映射到 SQLite/C# 实现。
 
 `TitleParserManager` 保留上游 `cmd/animego/main.go` 的选择语义：未指定 ID 时使用目录顺序中的第一个 parser；显式 ID 只执行该 parser。一次返回无匹配或错误不会隐式尝试下一个 parser，避免改变解析优先级。
 
@@ -179,7 +179,7 @@ data/plugins/com.example.animego.filter-resolution/
 ## 6. 兼容旧配置
 
 - `builtin_mikan_rss.py`、`builtin_parser.py`、`builtin_rename.py` 和已知默认插件名映射到对应 C# 内置 ID。
-- `filter/mikan_tool.py` 映射到内置 MikanTool，并保留 AnimeGoHelper 的配置读写 API。
+- `inner_plugin_mikan` 映射到内置 MikanTool；旧 `filter/mikan_tool.py` 作为兼容别名，并保留 AnimeGoHelper 的配置读写 API。
 - 未知 `type: py/python` 配置在迁移报告中列出并明确报不支持；不执行、不静默丢弃。
 - 新配置只写 C# 插件稳定 ID，不再写 `.py` 文件名。
 

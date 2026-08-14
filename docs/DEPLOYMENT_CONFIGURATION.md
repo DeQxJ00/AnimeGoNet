@@ -166,7 +166,7 @@ paths:
 web:
   host: 127.0.0.1
   port: 7991
-  access_key: ''
+  access_key: '123456'
   background_workers_enabled: true
 
 outbound_proxy:

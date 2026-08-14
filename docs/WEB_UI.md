@@ -182,7 +182,7 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 
 “编辑应用配置”对话框同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时。保存前显示包含密钥明文的字段 diff 与“即时生效/重启生效”，明确确认后才写 `data_path/config/application.private.json` 的 revision 私有覆盖并备份旧 revision，不直接改写部署 YAML；被环境变量覆盖的输入禁用并显示变量名。服务端校验通过后立即替换共享运行策略和 `animegonet-data-update` 调度：启用时 Manifest URL 必填，修改 Cron 立即重新计算下一次执行，禁用立即移除任务，恢复部署默认值也立即生效。若同次还修改 TMDB 等非热加载字段，响应保持 `restart_required=true`，但 data update 部分仍已即时生效，页面会明确区分两者。
 
-应用配置页另有“Web API / AnimeGoHelper 油猴插件”卡片。该卡片通过既有强类型部署配置接口读取并明文回填 `web.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=filter/mikan_tool.py`；保存前重新读取完整部署文档，只修改 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
+一级“插件”菜单分为“内部插件 / 外部插件”。“内部插件”当前提供“Web API / AnimeGoHelper (Mikan) 油猴插件”卡片，并为后续站点内部插件保留同级扩展位置；“外部插件”继续管理进程外 C# 包。Mikan 卡片通过既有强类型部署配置接口读取并明文回填 `web.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`；旧 `filter/mikan_tool.py` 继续作为后端兼容别名。新部署 AccessKey 默认 `123456`。保存前重新读取完整部署文档，只修改 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
 
 ## 12. 一级/二级导航
 

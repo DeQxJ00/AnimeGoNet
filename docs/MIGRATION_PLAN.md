@@ -257,7 +257,7 @@ docs/
 - 兼容 `DeQxJ00/AnimeGoHelper` 油猴脚本的现有调用：
   - `POST /api/rss` 用于全集或指定集订阅，进入 RSS → MikanTool filter → parser → download 流水线。
   - `POST /api/download/manager` 用于已取得 torrent URL 的单集快速下载，按上游语义跳过 filter，但仍解析并进入下载管理器。
-  - `GET/POST /api/plugin/config` 接受旧插件名 `filter/mikan_tool.py`、Base64 JSON 和原响应 envelope；内部映射到 SQLite 规则，不写 Python 插件文件。
+  - `GET/POST /api/plugin/config` 使用规范插件名 `inner_plugin_mikan`，同时接受旧插件名 `filter/mikan_tool.py`、Base64 JSON 和原响应 envelope；内部映射到 SQLite 规则，不写 Python 插件文件。
   - 保留 `/ping`、SHA-256 `Access-Key`、Tampermonkey 跨域请求和 Mikan 来源的最小 CORS 兼容。
 - 生成 OpenAPI，并新增独立版本的 UI 查询/命令 API，避免改变旧接口。
 - 新增 `POST /api/v1/ingest`，沿用并强类型化 Mikan 的 `source + data[].torrent + data[].info` 批量格式，统一接收标题、Torrent、source item/work ID 和可空 bgmid/anidbid/imdbid；旧 Mikan API 转换到同一 command。新增下载器实例/SourceProfile CRUD、连接测试、路由预览和引用保护 API。
