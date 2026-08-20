@@ -68,6 +68,30 @@ public sealed class SchemaConstraintTests
         await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
     }
 
+    [Theory]
+    [InlineData("mikanid", 10, 20)]
+    [InlineData("groupid", 10, 20)]
+    [InlineData("pair", 10, 0)]
+    public async Task TrustedOffsetBlacklistScopeRequiresMatchingKeyShape(
+        string scope,
+        int mikanId,
+        int groupId)
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO mikan_trusted_offset_blacklist(
+                scope, mikanid, groupid, created_at_utc)
+            VALUES ($scope, $mikanid, $groupid, '2026-08-20T00:00:00Z');
+            """;
+        command.Parameters.AddWithValue("$scope", scope);
+        command.Parameters.AddWithValue("$mikanid", mikanId);
+        command.Parameters.AddWithValue("$groupid", groupId);
+
+        await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
+    }
+
     [Fact]
     public async Task SameMikanGroupAndSourceEpisodeCannotCountTwice()
     {

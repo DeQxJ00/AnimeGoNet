@@ -4635,6 +4635,91 @@ async function loadTrustedOffsets() {
         renderRegionMessage(container, "error", `可信 offset 读取失败：${errorMessage(error, "未知错误")}`);
     }
 }
+function trustedOffsetBlacklistPayload() {
+    const scope = element("#trusted-offset-blacklist-scope").value;
+    const mikanId = element("#trusted-offset-blacklist-mikanid").valueAsNumber;
+    const groupId = element("#trusted-offset-blacklist-groupid").valueAsNumber;
+    return {
+        scope,
+        mikanid: scope === "groupid" ? null : mikanId,
+        groupid: scope === "mikanid" ? null : groupId,
+    };
+}
+function updateTrustedOffsetBlacklistFields() {
+    const scope = element("#trusted-offset-blacklist-scope").value;
+    const mikanField = element("#trusted-offset-blacklist-mikan-field");
+    const groupField = element("#trusted-offset-blacklist-group-field");
+    const mikanInput = element("#trusted-offset-blacklist-mikanid");
+    const groupInput = element("#trusted-offset-blacklist-groupid");
+    mikanField.hidden = scope === "groupid";
+    groupField.hidden = scope === "mikanid";
+    mikanInput.required = scope !== "groupid";
+    groupInput.required = scope !== "mikanid";
+}
+function trustedOffsetBlacklistLabel(item) {
+    if (item.scope === "mikanid") return `整个 mikanid ${item.mikanid}`;
+    if (item.scope === "groupid") return `整个 groupid ${item.groupid}`;
+    return `Mikan ${item.mikanid} + Group ${item.groupid}`;
+}
+async function loadTrustedOffsetBlacklist() {
+    const container = element("#trusted-offset-blacklist");
+    setRegionState(container, "loading");
+    try {
+        const response = await authenticatedFetch("/api/v1/mikan/trusted-offset-blacklist", { headers });
+        if (!response.ok) throw new Error(await responseError(response));
+        const body = await response.json();
+        if (body.items.length === 0) {
+            renderRegionMessage(container, "empty", "当前没有可信 Offset 黑名单");
+            return;
+        }
+        renderRegionContent(container, ...body.items.map((item) => {
+            const row = document.createElement("article");
+            row.className = "offset-blacklist-entry";
+            const text = document.createElement("p");
+            text.textContent = trustedOffsetBlacklistLabel(item);
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "delete-button";
+            remove.textContent = "移出黑名单";
+            remove.addEventListener("click", () => void removeTrustedOffsetBlacklist(item));
+            row.append(text, remove);
+            return row;
+        }));
+    }
+    catch (error) {
+        renderRegionMessage(container, "error", `黑名单读取失败：${errorMessage(error, "未知错误")}`);
+    }
+}
+async function addTrustedOffsetBlacklist(event) {
+    event.preventDefault();
+    const payload = trustedOffsetBlacklistPayload();
+    try {
+        const response = await authenticatedFetch("/api/v1/mikan/trusted-offset-blacklist", {
+            method: "POST",
+            headers: jsonHeaders(),
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error(await responseError(response));
+        await Promise.all([loadTrustedOffsetBlacklist(), loadTrustedOffsets()]);
+    }
+    catch (error) {
+        window.alert(`加入黑名单失败：${errorMessage(error, "未知错误")}`);
+    }
+}
+async function removeTrustedOffsetBlacklist(item) {
+    if (!window.confirm(`将 ${trustedOffsetBlacklistLabel(item)} 移出可信 Offset 黑名单？以后可以重新开始学习，但已清除的旧证据不会恢复。`)) return;
+    const query = new URLSearchParams({ scope: item.scope });
+    if (item.mikanid) query.set("mikanid", item.mikanid);
+    if (item.groupid) query.set("groupid", item.groupid);
+    try {
+        const response = await authenticatedFetch(`/api/v1/mikan/trusted-offset-blacklist?${query}`, { method: "DELETE", headers });
+        if (!response.ok) throw new Error(await responseError(response));
+        await loadTrustedOffsetBlacklist();
+    }
+    catch (error) {
+        window.alert(`移出黑名单失败：${errorMessage(error, "未知错误")}`);
+    }
+}
 async function clearTrustedOffset(item) {
     if (!window.confirm(`清理 Mikan ${item.mikanid} / Group ${item.groupid} 的自动证据与缓存？人工规则、完成记录和媒体文件不会删除。`))
         return;
@@ -8484,6 +8569,9 @@ element("#library-episode-filter").addEventListener("change", () => {
         renderLibraryEpisodes(activeLibraryDetail);
 });
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsets());
+element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsetBlacklist());
+element("#trusted-offset-blacklist-scope").addEventListener("change", updateTrustedOffsetBlacklistFields);
+element("#trusted-offset-blacklist-form").addEventListener("submit", (event) => void addTrustedOffsetBlacklist(event));
 element("#pending-tmdb-reload").addEventListener("click", () => void loadPendingTmdb(true));
 element("#configuration-reload").addEventListener("click", () => {
     void Promise.all([
@@ -8867,6 +8955,8 @@ void loadSources();
 void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
+updateTrustedOffsetBlacklistFields();
+void loadTrustedOffsetBlacklist();
 window.setInterval(() => {
     if (isSubviewVisible("tasks", "downloads"))
         void loadDownloads(true);

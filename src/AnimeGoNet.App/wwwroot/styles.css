@@ -386,7 +386,17 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .offset-card p { margin: 5px 0 0; }
 .offset-card .badge.learning { border-color: #7c6835; color: #ffe09a; }
 .offset-card .badge.conflict_reset { border-color: #813f49; color: #ffb4b4; }
+.offset-blacklist-panel { display: grid; gap: 14px; margin: 18px 0; padding: 16px 18px; border: 1px solid #4a3858; border-radius: 16px; background: rgba(35,22,42,.55); }
+.offset-blacklist-panel h3 { margin: 0 0 6px; }
+.offset-blacklist-panel p { margin: 0; }
+.offset-blacklist-form { display: grid; grid-template-columns: minmax(210px,1.5fr) repeat(2,minmax(130px,1fr)) auto; gap: 10px; align-items: end; }
+.offset-blacklist-form label { display: grid; gap: 6px; color: #aebcda; font-size: .78rem; }
+.offset-blacklist-form input, .offset-blacklist-form select { min-width: 0; border: 1px solid var(--control-border); border-radius: var(--control-radius); padding: 9px 11px; color: var(--control-text); background: var(--control-background); font: inherit; }
+.offset-blacklist-list { display: grid; gap: 8px; }
+.offset-blacklist-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #594365; border-radius: 12px; background: rgba(12,15,25,.58); }
+.offset-blacklist-entry p { color: #d9c7e4; }
 @media (max-width: 720px) { .offset-card { align-items: stretch; flex-direction: column; } }
+@media (max-width: 860px) { .offset-blacklist-form { grid-template-columns: 1fr 1fr; } .offset-blacklist-form > :first-child, .offset-blacklist-form button { grid-column: 1 / -1; } }
 .download-card.stale { border-color: #813f49; }
 .download-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .download-heading strong { overflow-wrap: anywhere; }

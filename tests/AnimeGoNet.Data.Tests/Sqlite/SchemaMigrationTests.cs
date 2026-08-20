@@ -78,6 +78,7 @@ public sealed class SchemaMigrationTests
             "mikan_rss_snapshot_match_values",
             "mikan_rss_snapshot_priority_groups",
             "mikan_trusted_offsets",
+            "mikan_trusted_offset_blacklist",
             "mikan_work_rules",
             "pending_tmdb_nfo_rewrite_jobs",
             "schema_migrations",

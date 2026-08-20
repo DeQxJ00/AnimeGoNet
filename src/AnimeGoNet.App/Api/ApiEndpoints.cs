@@ -101,6 +101,15 @@ public static class ApiEndpoints
         app.MapDelete(
             "/api/v1/mikan/trusted-offsets/{mikanId:int}/{groupId:int}",
             ClearMikanTrustedOffset);
+        app.MapGet(
+            "/api/v1/mikan/trusted-offset-blacklist",
+            ListMikanTrustedOffsetBlacklist);
+        app.MapPost(
+            "/api/v1/mikan/trusted-offset-blacklist",
+            AddMikanTrustedOffsetBlacklist);
+        app.MapDelete(
+            "/api/v1/mikan/trusted-offset-blacklist",
+            RemoveMikanTrustedOffsetBlacklist);
         app.MapGet("/api/v1/mikan/legacy-filter", GetLegacyMikanFilter);
         app.MapPut("/api/v1/mikan/legacy-filter", PutLegacyMikanFilter);
         app.MapPost("/api/v1/mikan/legacy-filter/import", ImportLegacyMikanFilter);
@@ -4569,6 +4578,65 @@ public static class ApiEndpoints
             return TypedResults.BadRequest(Error("mikan_offset_key_invalid", exception.Message));
         }
     }
+
+    private static async Task<IResult> ListMikanTrustedOffsetBlacklist(
+        MikanTrustedOffsetStore offsets,
+        CancellationToken cancellationToken)
+    {
+        var values = await offsets.ListBlacklistAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new MikanTrustedOffsetBlacklistListResponse(
+            values.Select(ToBlacklistResponse).ToArray()));
+    }
+
+    private static async Task<IResult> AddMikanTrustedOffsetBlacklist(
+        MikanTrustedOffsetBlacklistWriteRequest request,
+        MikanTrustedOffsetStore offsets,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var value = await offsets.AddBlacklistAsync(
+                request.Scope,
+                request.MikanId,
+                request.GroupId,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToBlacklistResponse(value));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_offset_blacklist_key_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> RemoveMikanTrustedOffsetBlacklist(
+        [FromQuery(Name = "scope")] string scope,
+        [FromQuery(Name = "mikanid")] int? mikanId,
+        [FromQuery(Name = "groupid")] int? groupId,
+        MikanTrustedOffsetStore offsets,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await offsets.RemoveBlacklistAsync(
+                    scope,
+                    mikanId,
+                    groupId,
+                    cancellationToken).ConfigureAwait(false)
+                ? TypedResults.NoContent()
+                : TypedResults.NotFound(Error(
+                    "mikan_offset_blacklist_not_found",
+                    "Mikan trusted offset blacklist entry was not found."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("mikan_offset_blacklist_key_invalid", exception.Message));
+        }
+    }
+
+    private static MikanTrustedOffsetBlacklistItemResponse ToBlacklistResponse(
+        MikanTrustedOffsetBlacklistEntry value) =>
+        new(value.Scope, value.MikanId, value.GroupId, value.CreatedAtUtc);
 
     private static async Task<IResult> GetLegacyMikanFilter(
         LegacyMikanFilterStore store,

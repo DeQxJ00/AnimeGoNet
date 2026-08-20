@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using AnimeGoNet.Data.Mikan;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,6 +87,48 @@ public sealed class MikanTrustedOffsetApiTests
     }
 
     [Fact]
+    public async Task ManagesBlacklistAndPurgesMatchingAutomaticOffsets()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var offsets = app.App.Services.GetRequiredService<MikanTrustedOffsetStore>();
+        await offsets.ObserveAsync(Observation(1), DateTimeOffset.UtcNow, 1);
+
+        using var added = await app.Client.PostAsJsonAsync(
+            "/api/v1/mikan/trusted-offset-blacklist",
+            new { scope = "pair", mikanid = 3951, groupid = 7 });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        Assert.Null(await offsets.GetTrustedAsync(3951, 7, 1));
+        Assert.Empty(await offsets.ListAsync());
+
+        using var listed = await app.Client.GetAsync("/api/v1/mikan/trusted-offset-blacklist");
+        using var json = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("pair", item.GetProperty("scope").GetString());
+        Assert.Equal(3951, item.GetProperty("mikanid").GetInt32());
+        Assert.Equal(7, item.GetProperty("groupid").GetInt32());
+
+        using var removed = await app.Client.DeleteAsync(
+            "/api/v1/mikan/trusted-offset-blacklist?scope=pair&mikanid=3951&groupid=7");
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+        Assert.False(await offsets.IsBlacklistedAsync(3951, 7));
+    }
+
+    [Fact]
+    public async Task RejectsBlacklistScopeWithWrongKeyShape()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var response = await app.Client.PostAsJsonAsync(
+            "/api/v1/mikan/trusted-offset-blacklist",
+            new { scope = "mikanid", mikanid = 3951, groupid = 7 });
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(
+            "mikan_offset_blacklist_key_invalid",
+            json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task StaticWebUiShowsProgressAndExplicitAutomaticOnlyCleanup()
     {
         await using var app = await RunningApp.StartAsync();
@@ -97,6 +140,9 @@ public sealed class MikanTrustedOffsetApiTests
         Assert.Contains("来源 EP 专指从 Torrent 视频文件名解析出的 EP", html, StringComparison.Ordinal);
         Assert.Contains("默认 3", html, StringComparison.Ordinal);
         Assert.Contains("loadTrustedOffsets", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"trusted-offset-blacklist-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("loadTrustedOffsetBlacklist", script, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/mikan/trusted-offset-blacklist", script, StringComparison.Ordinal);
         Assert.Contains("mikan_trusted_offset_required_episodes", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/trusted-offsets", script, StringComparison.Ordinal);
         Assert.Contains("人工规则、完成记录和媒体文件不会删除", script, StringComparison.Ordinal);

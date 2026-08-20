@@ -76,6 +76,7 @@
 - [x] 将上游 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 1:1 移植为 NativeAOT 友好的 C# 内置解析器：19 组由 develop 分支 Python 产出的 golden fixture 已逐字段覆盖标题、季度、集号、字幕、发布组、分辨率和来源，并明确保留不识别 E04/EP04 等原始语义。独立 `FileEpisodeCandidateResolver` 才拒绝年份/分辨率占位、歧义和非正片，只对 Mikan SourceProfile 落逐文件候选；AI/TMDB 验证后的本地统一偏移计算及“不一致只禁止学习”已在 Episode worker 完成。
 - [x] 已建立 NativeAOT-safe Torrent 文件和 Mikan RSS title EP 安全分类层：兼容上游 Go `ParseEp` 的 `[04]`/`[04v2]`/` - 11`/`EP12`/`第12话`，RSS title 另支持不受扩展名截断的最后可靠标记；小数集与 SP/OVA/OAD/PV/NCOP/NCED/Menu/S00E 均不形成普通整数。入库的 Mikan `file_episode_candidate` 由 raw_parser.py 兼容层与独立安全层决定，其他 adapter 固定不写；确认 Season 后仍逐文件经 TMDB Episode API 验证。统一任务详情现通过持久关联展示一个任务来自哪些 RSS batch/entry、规则与 Legacy revision、实际决策/有序组和入口来源 EP，并与逐文件候选并列审计；不返回原始 Mikan/Torrent URL、candidate ID 或其指纹。
 - [x] 增加 `MikanOffsetEvidence`/`MikanTrustedOffsetCache` SQLite 模型、事务状态机和默认关闭配置；按 `(mikanid,groupid,来源EP)` 唯一约束累计三个不同正整数 EP，并在冲突/歧义时撤销可信状态；命中后在 AI/TMDB Episode 调用前本地计算并验证目标 EP，API/WebUI 显示 Learning/Trusted/ConflictReset。
+- [x] 可信 EP Offset 支持按整个 `mikanid`、整个 `groupid` 或精确 `(mikanid,groupid)` 建黑名单；命中后禁止读取与学习，新增时事务清理已有自动证据/缓存，WebUI支持增删。
 - [x] 增加 Series/Season/Episode 三层 `TmdbResolutionSource` 和解析运行/策略尝试引用：schema v32 在解析完成事务中固化 Series/Season 的 Run+Attempt，并为每个 Episode/字幕文件保存精确 Attempt；API、任务面板和作品库均显示权威来源及证据引用，混合文件明确下钻到逐文件详情。
 - [x] 通过全部配置/模型 parity tests：`UPSTREAM_CONFIGURATION_CONTRACTS.psv`/`UPSTREAM_CONFIGURATION_TESTS.psv` 锁定上游配置面，12 份历史 YAML 继续锁定 SHA-256 和保留字段；领域模型、枚举和错误另由 `UPSTREAM_DOMAIN_CONTRACTS.psv` 穷尽校验，目标文件与替代测试必须真实存在。
 

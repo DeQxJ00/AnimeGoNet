@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 52;
+    public const int CurrentVersion = 53;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -94,7 +94,33 @@ public static class DatabaseSchema
             52,
             "ai_validated_episode_audit",
             AiValidatedEpisodeAudit),
+        new SchemaMigration(
+            53,
+            "trusted_offset_blacklist",
+            TrustedOffsetBlacklist),
     ];
+
+    private const string TrustedOffsetBlacklist = """
+        CREATE TABLE mikan_trusted_offset_blacklist (
+            scope TEXT NOT NULL CHECK (scope IN ('mikanid', 'groupid', 'pair')),
+            mikanid INTEGER NOT NULL DEFAULT 0 CHECK (mikanid >= 0),
+            groupid INTEGER NOT NULL DEFAULT 0 CHECK (groupid >= 0),
+            created_at_utc TEXT NOT NULL,
+            CHECK (
+                (scope = 'mikanid' AND mikanid > 0 AND groupid = 0)
+                OR (scope = 'groupid' AND mikanid = 0 AND groupid > 0)
+                OR (scope = 'pair' AND mikanid > 0 AND groupid > 0)),
+            PRIMARY KEY (scope, mikanid, groupid)
+        ) STRICT;
+
+        CREATE INDEX ix_mikan_trusted_offset_blacklist_mikanid
+        ON mikan_trusted_offset_blacklist(mikanid)
+        WHERE mikanid > 0;
+
+        CREATE INDEX ix_mikan_trusted_offset_blacklist_groupid
+        ON mikan_trusted_offset_blacklist(groupid)
+        WHERE groupid > 0;
+        """;
 
     private const string AiValidatedEpisodeAudit = """
         CREATE TABLE metadata_ai_validated_episodes (

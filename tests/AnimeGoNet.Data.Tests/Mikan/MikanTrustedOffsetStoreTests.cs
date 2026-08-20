@@ -4,6 +4,58 @@ namespace AnimeGoNet.Data.Tests.Mikan;
 
 public sealed class MikanTrustedOffsetStoreTests
 {
+    [Theory]
+    [InlineData("mikanid", 3951, null, 3951, 7, true)]
+    [InlineData("mikanid", 3951, null, 3952, 7, false)]
+    [InlineData("groupid", null, 7, 3951, 7, true)]
+    [InlineData("groupid", null, 7, 3951, 8, false)]
+    [InlineData("pair", 3951, 7, 3951, 7, true)]
+    [InlineData("pair", 3951, 7, 3951, 8, false)]
+    public async Task BlacklistScopesBlockOnlyMatchingKeys(
+        string scope,
+        int? blockedMikanId,
+        int? blockedGroupId,
+        int candidateMikanId,
+        int candidateGroupId,
+        bool expected)
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new MikanTrustedOffsetStore(fixture.Database);
+
+        await store.AddBlacklistAsync(
+            scope,
+            blockedMikanId,
+            blockedGroupId,
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(expected, await store.IsBlacklistedAsync(candidateMikanId, candidateGroupId));
+    }
+
+    [Fact]
+    public async Task AddingBlacklistPurgesExistingStateAndPreventsFurtherLearning()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new MikanTrustedOffsetStore(fixture.Database);
+        var now = DateTimeOffset.UtcNow;
+        await store.ObserveAsync(Observation(1, 13), now, requiredDistinctEpisodes: 1);
+        Assert.NotNull(await store.GetTrustedAsync(3951, 7, requiredDistinctEpisodes: 1));
+
+        await store.AddBlacklistAsync("pair", 3951, 7, now.AddMinutes(1));
+
+        Assert.Null(await store.GetTrustedAsync(3951, 7, requiredDistinctEpisodes: 1));
+        Assert.Empty(await store.ListAsync());
+        Assert.Null(await store.ObserveAsync(
+            Observation(2, 13),
+            now.AddMinutes(2),
+            requiredDistinctEpisodes: 1));
+        Assert.Empty(await store.ListAsync());
+
+        Assert.True(await store.RemoveBlacklistAsync("pair", 3951, 7));
+        Assert.NotNull(await store.ObserveAsync(
+            Observation(3, 13),
+            now.AddMinutes(3),
+            requiredDistinctEpisodes: 1));
+    }
     [Fact]
     public async Task UsesConfiguredDistinctEpisodeThreshold()
     {

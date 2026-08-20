@@ -1089,6 +1089,31 @@
         <button id="trusted-offsets-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
       <p class="muted">按 mikanid + groupid 隔离。Offset 的来源 EP 是从 Torrent 视频文件名解析出的 EP，目标 TMDB EP = 文件名 EP + Offset；只有不同文件名 EP 得到相同且已验证的映射达到设定次数后才可信。清理只删除自动学习证据与缓存，不影响人工规则、下载记录或媒体文件。</p>
+      <section class="offset-blacklist-panel" aria-labelledby="trusted-offset-blacklist-title">
+        <div>
+          <h3 id="trusted-offset-blacklist-title">可信 Offset 黑名单</h3>
+          <p class="muted">可屏蔽整个 mikanid、整个字幕组 groupid，或只屏蔽精确的 mikanid + groupid。命中后不读取、不学习且不写入可信 Offset；新增黑名单时会清除其已有自动证据与缓存。</p>
+        </div>
+        <form id="trusted-offset-blacklist-form" class="offset-blacklist-form">
+          <label>屏蔽范围
+            <select id="trusted-offset-blacklist-scope">
+              <option value="pair">精确 mikanid + groupid</option>
+              <option value="mikanid">整个 mikanid</option>
+              <option value="groupid">整个 groupid</option>
+            </select>
+          </label>
+          <label id="trusted-offset-blacklist-mikan-field">mikanid
+            <input id="trusted-offset-blacklist-mikanid" type="number" min="1" step="1">
+          </label>
+          <label id="trusted-offset-blacklist-group-field">groupid
+            <input id="trusted-offset-blacklist-groupid" type="number" min="1" step="1">
+          </label>
+          <button type="submit" class="primary-button">加入黑名单</button>
+        </form>
+        <div id="trusted-offset-blacklist" class="offset-blacklist-list" aria-live="polite" aria-busy="true">
+          <p class="ui-state ui-state--loading muted empty" role="status">正在读取黑名单…</p>
+        </div>
+      </section>
       <div id="trusted-offsets" class="offset-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
         <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取可信 offset 状态…</p>
       </div>

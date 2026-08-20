@@ -32,6 +32,17 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         var now = Format(utcNow);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        if (await IsBlacklistedAsync(
+                connection,
+                transaction,
+                observation.MikanId,
+                observation.GroupId,
+                cancellationToken).ConfigureAwait(false))
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
         var previous = await ReadAsync(
             connection,
             transaction,
@@ -188,6 +199,117 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return result;
+    }
+
+    public async Task<IReadOnlyList<MikanTrustedOffsetBlacklistEntry>> ListBlacklistAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT scope, mikanid, groupid, created_at_utc
+            FROM mikan_trusted_offset_blacklist
+            ORDER BY CASE scope WHEN 'mikanid' THEN 0 WHEN 'groupid' THEN 1 ELSE 2 END,
+                     mikanid, groupid;
+            """;
+        var result = new List<MikanTrustedOffsetBlacklistEntry>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var mikanId = reader.GetInt32(1);
+            var groupId = reader.GetInt32(2);
+            result.Add(new MikanTrustedOffsetBlacklistEntry(
+                reader.GetString(0),
+                mikanId == 0 ? null : mikanId,
+                groupId == 0 ? null : groupId,
+                DateTimeOffset.Parse(
+                    reader.GetString(3),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind)));
+        }
+
+        return result;
+    }
+
+    public async Task<MikanTrustedOffsetBlacklistEntry> AddBlacklistAsync(
+        string scope,
+        int? mikanId,
+        int? groupId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var key = ValidateBlacklistKey(scope, mikanId, groupId);
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO mikan_trusted_offset_blacklist (
+                    scope, mikanid, groupid, created_at_utc)
+                VALUES ($scope, $mikanid, $groupid, $created_at_utc)
+                ON CONFLICT(scope, mikanid, groupid) DO UPDATE SET
+                    created_at_utc = excluded.created_at_utc;
+                """;
+            AddBlacklistKeyParameters(insert, key);
+            insert.Parameters.AddWithValue("$created_at_utc", now);
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var table in new[] { "mikan_offset_evidence", "mikan_trusted_offsets" })
+        {
+            await using var purge = connection.CreateCommand();
+            purge.Transaction = transaction;
+            purge.CommandText = $"""
+                DELETE FROM {table}
+                WHERE ($scope = 'mikanid' AND mikanid = $mikanid)
+                   OR ($scope = 'groupid' AND groupid = $groupid)
+                   OR ($scope = 'pair' AND mikanid = $mikanid AND groupid = $groupid);
+                """;
+            AddBlacklistKeyParameters(purge, key);
+            await purge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new MikanTrustedOffsetBlacklistEntry(
+            key.Scope,
+            key.MikanId == 0 ? null : key.MikanId,
+            key.GroupId == 0 ? null : key.GroupId,
+            utcNow.ToUniversalTime());
+    }
+
+    public async Task<bool> RemoveBlacklistAsync(
+        string scope,
+        int? mikanId,
+        int? groupId,
+        CancellationToken cancellationToken = default)
+    {
+        var key = ValidateBlacklistKey(scope, mikanId, groupId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            DELETE FROM mikan_trusted_offset_blacklist
+            WHERE scope = $scope AND mikanid = $mikanid AND groupid = $groupid;
+            """;
+        AddBlacklistKeyParameters(command, key);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) > 0;
+    }
+
+    public async Task<bool> IsBlacklistedAsync(
+        int mikanId,
+        int groupId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateKey(mikanId, groupId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await IsBlacklistedAsync(
+            connection,
+            null,
+            mikanId,
+            groupId,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public Task<MikanTrustedOffset?> GetTrustedAsync(
@@ -420,7 +542,15 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
             FROM mikan_trusted_offsets
             WHERE mikanid = $mikanid AND groupid = $groupid
               AND ($trusted_only = 0 OR (state = 'trusted'
-                   AND distinct_episode_count >= $required_count));
+                   AND distinct_episode_count >= $required_count))
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM mikan_trusted_offset_blacklist AS blacklist
+                  WHERE (blacklist.scope = 'mikanid' AND blacklist.mikanid = $mikanid)
+                     OR (blacklist.scope = 'groupid' AND blacklist.groupid = $groupid)
+                     OR (blacklist.scope = 'pair'
+                         AND blacklist.mikanid = $mikanid
+                         AND blacklist.groupid = $groupid));
             """;
         command.Parameters.AddWithValue("$mikanid", mikanId);
         command.Parameters.AddWithValue("$groupid", groupId);
@@ -468,6 +598,67 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         }
     }
 
+    private static async Task<bool> IsBlacklistedAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        int mikanId,
+        int groupId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM mikan_trusted_offset_blacklist
+                WHERE (scope = 'mikanid' AND mikanid = $mikanid)
+                   OR (scope = 'groupid' AND groupid = $groupid)
+                   OR (scope = 'pair' AND mikanid = $mikanid AND groupid = $groupid));
+            """;
+        command.Parameters.AddWithValue("$mikanid", mikanId);
+        command.Parameters.AddWithValue("$groupid", groupId);
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture) == 1;
+    }
+
+    private static BlacklistKey ValidateBlacklistKey(
+        string scope,
+        int? mikanId,
+        int? groupId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scope);
+        scope = scope.Trim().ToLowerInvariant();
+        if (!MikanTrustedOffsetBlacklistScope.IsValid(scope))
+        {
+            throw new ArgumentException("Blacklist scope must be mikanid, groupid or pair.", nameof(scope));
+        }
+
+        var normalizedMikanId = mikanId ?? 0;
+        var normalizedGroupId = groupId ?? 0;
+        var valid = scope switch
+        {
+            MikanTrustedOffsetBlacklistScope.MikanId => normalizedMikanId > 0 && normalizedGroupId == 0,
+            MikanTrustedOffsetBlacklistScope.GroupId => normalizedMikanId == 0 && normalizedGroupId > 0,
+            MikanTrustedOffsetBlacklistScope.Pair => normalizedMikanId > 0 && normalizedGroupId > 0,
+            _ => false,
+        };
+        if (!valid)
+        {
+            throw new ArgumentException(
+                "Blacklist key does not match its scope. Single scopes require one positive ID; pair requires both.");
+        }
+
+        return new BlacklistKey(scope, normalizedMikanId, normalizedGroupId);
+    }
+
+    private static void AddBlacklistKeyParameters(SqliteCommand command, BlacklistKey key)
+    {
+        command.Parameters.AddWithValue("$scope", key.Scope);
+        command.Parameters.AddWithValue("$mikanid", key.MikanId);
+        command.Parameters.AddWithValue("$groupid", key.GroupId);
+    }
+
     private static string FormatEpisode(int episode) =>
         episode.ToString(CultureInfo.InvariantCulture);
 
@@ -479,4 +670,6 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         int TmdbSeasonNumber,
         int EpisodeOffset,
         int DistinctEpisodeCount);
+
+    private sealed record BlacklistKey(string Scope, int MikanId, int GroupId);
 }

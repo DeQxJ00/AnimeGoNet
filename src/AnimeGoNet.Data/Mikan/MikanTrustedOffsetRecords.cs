@@ -36,3 +36,19 @@ public sealed record MikanOffsetCandidateState(
     int DistinctEpisodeCount,
     string State,
     DateTimeOffset UpdatedAtUtc);
+
+public static class MikanTrustedOffsetBlacklistScope
+{
+    public const string MikanId = "mikanid";
+    public const string GroupId = "groupid";
+    public const string Pair = "pair";
+
+    public static bool IsValid(string value) =>
+        value is MikanId or GroupId or Pair;
+}
+
+public sealed record MikanTrustedOffsetBlacklistEntry(
+    string Scope,
+    int? MikanId,
+    int? GroupId,
+    DateTimeOffset CreatedAtUtc);

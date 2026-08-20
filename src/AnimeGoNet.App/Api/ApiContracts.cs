@@ -794,6 +794,21 @@ public sealed record MikanTrustedOffsetItemResponse(
     [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MikanTrustedOffsetBlacklistListResponse(
+    [property: JsonPropertyName("items")]
+    IReadOnlyList<MikanTrustedOffsetBlacklistItemResponse> Items);
+
+public sealed record MikanTrustedOffsetBlacklistItemResponse(
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("groupid")] int? GroupId,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc);
+
+public sealed record MikanTrustedOffsetBlacklistWriteRequest(
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("groupid")] int? GroupId);
+
 public sealed record MetadataRetryResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("status")] string Status);
