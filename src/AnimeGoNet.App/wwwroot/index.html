@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260820-skipped-duplicate-summary">
+  <link rel="stylesheet" href="/styles.css?v=20260821-ai-tester-nested-disclosures">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1370,7 +1370,7 @@
       <form id="ai-test-form" class="ai-test-workbench">
         <div class="ai-test-input-stack">
           <article class="configuration-card ai-test-region" data-testid="common-input-region">
-            <div class="section-heading"><div><h3>公共区域</h3><p class="muted">Torrent 文件、任务标题、模型连接和 TMDB MCP。</p></div><span id="ai-test-tmdb-state" class="badge pending">TMDB MCP</span></div>
+            <div class="section-heading"><div><h3>公共区域</h3><p class="muted">Torrent 文件、任务标题、模型连接和 TMDB MCP。</p></div><span id="ai-test-tmdb-state" class="badge ai-test-source-state disabled">TMDB MCP</span></div>
             <div class="ai-test-fields">
               <label class="wide">任务 Title<textarea id="ai-test-title" rows="3" required placeholder="下载任务总标题"></textarea></label>
               <label class="wide">Torrent 文件<input id="ai-test-torrent-file" type="file" accept=".torrent"></label>
@@ -1395,7 +1395,7 @@
           </article>
 
           <article class="configuration-card ai-test-region" data-testid="mikan-input-region">
-            <div class="section-heading"><div><h3>Mikan / BGM</h3><p class="muted">Mikan 导入、BGM 作品上下文与单文件 pubDate 门禁。</p></div><span id="ai-test-mikan-state" class="badge pending">未启用来源</span></div>
+            <div class="section-heading"><div><h3>Mikan / BGM</h3><p class="muted">Mikan 导入、BGM 作品上下文与单文件 pubDate 门禁。</p></div><span id="ai-test-mikan-state" class="badge ai-test-source-state disabled">Mikan / BGM</span></div>
             <div class="ai-test-import">
               <label>Mikan Episode 页面 URL<input id="ai-test-mikan-url" type="url" placeholder="https://mikanime.tv/Home/Episode/..."></label>
               <button id="ai-test-mikan-import" type="button" class="secondary-button">解析并下载种子</button>
@@ -1417,7 +1417,7 @@
           </article>
 
           <article class="configuration-card ai-test-region" data-testid="u2-input-region">
-            <div class="section-heading"><div><h3>U2 / AniDB</h3><p class="muted">AniDB ID 只提供作品级候选，最终仍须 TMDB 验证。</p></div><span id="ai-test-u2-state" class="badge pending">未填写 ID</span></div>
+            <div class="section-heading"><div><h3>U2 / AniDB</h3><p class="muted">AniDB ID 只提供作品级候选，最终仍须 TMDB 验证。</p></div><span id="ai-test-u2-state" class="badge ai-test-source-state disabled">AniDB</span></div>
             <div class="ai-test-fields">
               <label>AniDB ID<input id="ai-test-anidbid" type="number" min="1"></label>
               <label class="ai-test-checkbox"><input id="ai-test-enable-anidb" type="checkbox" checked>Enable AniDB Lookup</label>
@@ -1773,6 +1773,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260820-skipped-duplicate-summary"></script>
+    <script type="module" src="/app.js?v=20260821-ai-tester-nested-disclosures"></script>
 </body>
 </html>

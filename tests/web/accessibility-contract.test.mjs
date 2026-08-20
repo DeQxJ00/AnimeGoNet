@@ -315,9 +315,10 @@ test("Other readaptation review confirms a server-provided before and after comp
 });
 
 test("AI test page exposes verified Responses compatibility controls and usage", async () => {
-  const [document, app] = await Promise.all([
+  const [document, app, css] = await Promise.all([
     page(),
     readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
   ]);
   const reasoning = document.querySelector("#ai-test-reasoning-effort");
   const webSearch = document.querySelector("#ai-test-web-search");
@@ -331,6 +332,17 @@ test("AI test page exposes verified Responses compatibility controls and usage",
   assert.match(app, /reasoning_effort:/);
   assert.match(app, /web_search_enabled:/);
   assert.match(app, /reasoning_tokens/);
+  assert.match(app, /function aiTesterPayloadDisclosure/);
+  assert.match(app, /document\.createElement\("details"\)/);
+  assert.match(app, /完整请求 Content/);
+  assert.match(css, /\.ai-test-audit-summary\s*\{[^}]*cursor:\s*pointer/s);
+  assert.match(css, /\.ai-test-payload-disclosure\s*\{/);
+  assert.match(css, /\.ai-test-payload-disclosure\s*>\s*summary\s*\{[^}]*cursor:\s*pointer/s);
+  assert.match(app, /ai-test-source-state \$\{tmdbEnabled \? "enabled" : "disabled"\}/);
+  assert.match(app, /ai-test-source-state \$\{mikan \|\| bgmEnabled \? "enabled" : "disabled"\}/);
+  assert.match(app, /ai-test-source-state \$\{anidbEnabled \? "enabled" : "disabled"\}/);
+  assert.match(css, /\.badge\.ai-test-source-state\.enabled\s*\{[^}]*color:\s*#8ff0c4/s);
+  assert.match(css, /\.badge\.ai-test-source-state\.disabled\s*\{[^}]*color:\s*#aebbd3/s);
 });
 
 test("AI test request omits Mikan pubDate when Bangumi date priority is disabled", async () => {

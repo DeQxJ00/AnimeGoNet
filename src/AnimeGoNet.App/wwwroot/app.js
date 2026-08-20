@@ -8742,13 +8742,24 @@ function renderAiTesterApiRequests(items) {
     if (!items.length)
         setAiTesterEmpty(target, "暂无请求。");
 }
+function aiTesterPayloadDisclosure(label, content) {
+    const details = document.createElement("details");
+    details.className = "ai-test-payload-disclosure";
+    const summary = document.createElement("summary");
+    summary.textContent = label;
+    const pre = document.createElement("pre");
+    pre.textContent = prettyJson(content);
+    details.append(summary, pre);
+    return details;
+}
 function appendAiTesterApiRequest(item) {
     const target = element("#ai-test-api-requests");
     if (target.querySelector(".muted"))
         target.replaceChildren();
-    const card = document.createElement("div");
+    const card = document.createElement("details");
     card.className = "ai-test-audit-card";
-    const header = document.createElement("header");
+    const header = document.createElement("summary");
+    header.className = "ai-test-audit-summary";
     const index = document.createElement("span");
     index.textContent = `#${item.step}`;
     const title = document.createElement("strong");
@@ -8756,9 +8767,7 @@ function appendAiTesterApiRequest(item) {
     const endpoint = document.createElement("span");
     endpoint.textContent = item.endpoint;
     header.append(index, title, endpoint);
-    const pre = document.createElement("pre");
-    pre.textContent = prettyJson(item.content);
-    card.append(header, pre);
+    card.append(header, aiTesterPayloadDisclosure("完整请求 Content", item.content));
     target.append(card);
 }
 function renderAiTesterTools(items) {
@@ -8773,9 +8782,10 @@ function appendAiTesterTool(item) {
     const target = element("#ai-test-tool-order");
     if (target.querySelector(".muted"))
         target.replaceChildren();
-    const card = document.createElement("div");
+    const card = document.createElement("details");
     card.className = "ai-test-audit-card";
-    const header = document.createElement("header");
+    const header = document.createElement("summary");
+    header.className = "ai-test-audit-summary";
     const source = document.createElement("span");
     source.textContent = item.source;
     const name = document.createElement("strong");
@@ -8785,14 +8795,7 @@ function appendAiTesterTool(item) {
     header.append(source, name, result);
     card.append(header);
     for (const [label, content] of [["请求 Content", item.request_content], ["返回 Content", item.response_content]]) {
-        const section = document.createElement("div");
-        section.className = "ai-test-tool-payload";
-        const strong = document.createElement("strong");
-        strong.textContent = label;
-        const pre = document.createElement("pre");
-        pre.textContent = prettyJson(content ?? "unavailable");
-        section.append(strong, pre);
-        card.append(section);
+        card.append(aiTesterPayloadDisclosure(label, content ?? "unavailable"));
     }
     target.append(card);
 }
@@ -8864,15 +8867,25 @@ function updateAiTesterSourceStates() {
     const mikan = element("#ai-test-is-mikan-source").checked;
     const anidb = element("#ai-test-anidbid").value.trim();
     const tmdbEnabled = element("#ai-test-enable-tmdb-mcp").checked;
+    const bgmEnabled = element("#ai-test-enable-bgm-mcp").checked;
+    const anidbEnabled = element("#ai-test-enable-anidb").checked;
     const tmdbState = element("#ai-test-tmdb-state");
     tmdbState.textContent = tmdbEnabled ? "TMDB MCP 已启用" : "TMDB MCP 已关闭";
-    tmdbState.className = `badge ${tmdbEnabled ? "ok" : "error"}`;
+    tmdbState.className = `badge ai-test-source-state ${tmdbEnabled ? "enabled" : "disabled"}`;
     const mikanState = element("#ai-test-mikan-state");
-    mikanState.textContent = mikan ? "Mikan RSS 来源" : "未启用来源";
-    mikanState.className = `badge ${mikan ? "ok" : "pending"}`;
+    mikanState.textContent = mikan && bgmEnabled
+        ? "Mikan / BGM MCP 已启用"
+        : mikan
+            ? "Mikan RSS 已启用"
+            : bgmEnabled
+                ? "BGM MCP 已启用"
+                : "Mikan / BGM 已关闭";
+    mikanState.className = `badge ai-test-source-state ${mikan || bgmEnabled ? "enabled" : "disabled"}`;
     const u2State = element("#ai-test-u2-state");
-    u2State.textContent = anidb ? `AniDB ${anidb}` : "未填写 ID";
-    u2State.className = `badge ${anidb ? "ok" : "pending"}`;
+    u2State.textContent = anidbEnabled
+        ? `AniDB 已启用 · ${anidb ? anidb : "待填写 ID"}`
+        : "AniDB 已关闭";
+    u2State.className = `badge ai-test-source-state ${anidbEnabled ? "enabled" : "disabled"}`;
 }
 element("#rss-reload").addEventListener("click", () => void loadRssRules());
 element("#ai-test-form").addEventListener("submit", event => void runAiMetadataTest(event));

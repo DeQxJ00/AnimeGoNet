@@ -133,6 +133,7 @@
 - [x] 持久化元数据解析运行与策略尝试记录：阶段、策略、优先级、结果、错误码、脱敏原因、可重试性、次数、耗时和时间戳；SQLite 重启后可按任务查询，版本化 API 与任务卡片策略时间线均已接入。
 - [x] 为统一 AI 元数据尝试持久化可审计用量：schema v40 在实际承载 AI 调用的单条 attempt 保存 provider 返回模型、累计 prompt/completion/total token、HTTP 请求数与工具调用数；多轮 MCP function-calling 累加且 429 重试计入请求数，任务详情/时间线 API 与 WebUI 可见，API key、Prompt、工具正文和来源 URL 不入用量表。
 - [x] 将已验证独立 AI Tester 1:1 内置到主程序：保留原 `UiRunRequest/UiRunResponse` 字段、Responses/Chat 请求格式、最多 8 轮工具调用、stateful→stateless 续轮、用量累计、`request_identity`、结果 JSON 校验、Mikan pubDate 门禁、本地文件 EP 候选/offset、完整 AI 请求审计与工具 Request/Response Content；提供 `/api/v1/ai-test/run-stream` NDJSON、按 `run_id` 停止、可信 Torrent `import_id` 和 Mikan Episode 导入，并兼容原 `/api/run*`/`/api/import-*` 路径。WebUI 只调整为主程序侧栏样式与分区布局，不再简化协议。API Key 从主配置直接回填但不写入浏览器 localStorage，passkey Torrent URL 不返回，Tester 结构校验之后额外显示主程序 TMDB Series/Season/Episode 二次验证；AI 请求审计仍脱敏。46 项 API/协议 parity 测试通过；真实模型/MCP 浏览器验收待本地配置后执行。
+- [x] AI 匹配测试工具的完整请求审计改为两层折叠：每轮 AI 请求/工具调用可展开，内部请求 Content、工具请求 Content 与返回 Content 也能分别展开收起；原始完整内容保持不变，长 JSON 默认不铺满页面。TMDB MCP、Mikan/BGM 与 AniDB 的已启用状态统一为绿色，关闭状态保持中性灰色。
 - [x] 通过 fixture parity 和受控 live smoke：纯函数/DTO/fake 覆盖标题清理、相似度、全部候选、季度日期、Bangumi Episode 与失败分类；两个随机 loopback Kestrel fixture 分别验证 name/name_cn 多轮搜索和 P3 跨两级回溯重试，不访问真实 TMDB/Bangumi 或测试密钥。
 
 ## P6 — 插件与业务流水线

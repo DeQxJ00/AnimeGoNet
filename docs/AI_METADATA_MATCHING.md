@@ -46,9 +46,9 @@ ai:
 
 ## 主程序内置 AI 测试
 
-WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Tester 为行为基准，内置相同请求/响应 DTO、Prompt 条件区块、OpenAI Responses/Chat Completions 请求格式、工具注册/缓存、最多 8 轮工具调用、Responses stateful→stateless 续轮、用量累计、结果结构校验、Mikan pubDate 门禁和本地 EP offset 计算。页面样式接入主程序侧栏，但协议和交互不再由主程序简化。
+WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Tester 为行为基准，内置相同请求/响应 DTO、Prompt 条件区块、OpenAI Responses/Chat Completions 请求格式、工具注册/缓存、最多 8 轮工具调用、Responses stateful→stateless 续轮、用量累计、结果结构校验、Mikan pubDate 门禁和本地 EP offset 计算。页面样式接入主程序侧栏，但协议和交互不再由主程序简化。“发送给 AI API 的请求”和“工具调用顺序与完整 Content”保留完整审计内容；每轮请求/工具调用是第一层折叠项，请求 Content、工具请求 Content 与返回 Content 是可分别展开的第二层折叠项，长 JSON 默认不铺满页面。
 
-测试页分为公共区域、Mikan/BGM、U2/AniDB、高级 Prompt 和结果审计区。后台 Worker 与测试页默认读取同一份有效生产 Prompt；该 Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块。被关闭或不适用的字段与说明不会发送给模型，对应工具也不会注册。Tester 原结构校验结论保持不变，随后额外显示主程序 `AiMetadataResultValidator` 的 TMDB Series/普通 Season/真实 Episode 二次验证，二者不能混为一个状态。
+测试页分为公共区域、Mikan/BGM、U2/AniDB、高级 Prompt 和结果审计区。三个来源区域的状态徽标会随表单即时更新：TMDB MCP、Mikan/BGM MCP 与 AniDB 已启用时显示绿色，关闭时显示中性灰色；状态颜色不改变实际工具注册条件。后台 Worker 与测试页默认读取同一份有效生产 Prompt；该 Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块。被关闭或不适用的字段与说明不会发送给模型，对应工具也不会注册。Tester 原结构校验结论保持不变，随后额外显示主程序 `AiMetadataResultValidator` 的 TMDB Series/普通 Season/真实 Episode 二次验证，二者不能混为一个状态。
 
 模型连接字段与原 Tester 一致：Base URL、API Key、Model、Responses/Chat Completions、reasoning effort、Responses Web Search、600 秒默认超时、单次测试 HTTP 代理、TMDB/BGM MCP 地址和 AniDB URL 模板。API Key 只存在于当前请求和内存，不进入浏览器持久化、Prompt、执行日志或响应。Mikan URL 导入继续使用主程序全局“域名匹配代理”，不使用该测试代理。
 
