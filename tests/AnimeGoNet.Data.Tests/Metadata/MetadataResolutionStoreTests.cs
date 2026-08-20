@@ -232,7 +232,7 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
-    public async Task CompletingSeasonPersistsCanonicalLibraryAndTaskProjectionAtomically()
+    public async Task CompletingSeasonDefersEpisodeSnapshotUntilEpisodeResolutionCompletes()
     {
         await using var fixture = await MetadataFixture.CreateAsync();
         var now = DateTimeOffset.UtcNow;
@@ -299,6 +299,48 @@ public sealed class MetadataResolutionStoreTests
         Assert.Equal(2, reader.GetInt32(8));
         Assert.Equal("/season-poster.jpg", reader.GetString(9));
         await reader.DisposeAsync();
+        command.CommandText = "SELECT COUNT(*) FROM tmdb_episodes;";
+        command.Parameters.Clear();
+        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
+
+        command.CommandText = """
+            INSERT INTO tmdb_episodes (
+                tmdb_episode_id, series_id, season_number, episode_number,
+                name, air_date, runtime_minutes, fetched_at_utc)
+            SELECT 310002, id, 2, 99, '旧的未来集编号', '2022-07-13', NULL, $now
+            FROM anime_series WHERE tmdb_series_id = 72517;
+            """;
+        command.Parameters.AddWithValue("$now", now.ToString("O"));
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        var episodeClaim = Assert.IsType<MetadataEpisodeTaskClaim>(
+            await fixture.Store.TryClaimNextSeasonResolvedAsync(
+                now.AddSeconds(1),
+                TimeSpan.FromMinutes(1)));
+        var episodeAttemptId = await fixture.Store.RecordAttemptAsync(
+            episodeClaim.Resolution,
+            new MetadataAttempt(
+                "episode",
+                "tmdb_episode_number",
+                null,
+                "matched",
+                null,
+                false,
+                episodeClaim.Resolution.AttemptNumber,
+                10),
+            now.AddSeconds(2));
+        await fixture.Store.CompleteEpisodesAsync(
+            episodeClaim,
+            [new MetadataEpisodeFileResolution(
+                Assert.Single(episodeClaim.Files).FileId,
+                season.Episodes![0],
+                "episode",
+                null,
+                ResolutionSource: TmdbResolutionSource.TmdbEpisodeNumber,
+                ResolutionAttemptId: episodeAttemptId)],
+            [season],
+            now.AddSeconds(3));
+
         command.CommandText = """
             SELECT tmdb_episode_id, episode_number, name, air_date
             FROM tmdb_episodes
@@ -432,8 +474,22 @@ public sealed class MetadataResolutionStoreTests
                 10),
             now);
         var series = new TmdbSeries(72517, "来自深渊", "メイドインアビス", null);
-        var seasonOne = new TmdbSeason(100001, 72517, 1, "Season 1", null, 13);
-        var seasonTwo = new TmdbSeason(204984, 72517, 2, "Season 2", null, 12);
+        var seasonOne = new TmdbSeason(
+            100001,
+            72517,
+            1,
+            "Season 1",
+            null,
+            1,
+            Episodes: [new TmdbEpisode(900001, 72517, 1, 1, "S01E01", null)]);
+        var seasonTwo = new TmdbSeason(
+            204984,
+            72517,
+            2,
+            "Season 2",
+            null,
+            1,
+            Episodes: [new TmdbEpisode(900002, 72517, 2, 1, "S02E01", null)]);
         await fixture.Store.CompleteAiSeasonsAsync(
             claim,
             series,
@@ -498,18 +554,15 @@ public sealed class MetadataResolutionStoreTests
                 var seasonNumber = file.TmdbSeasonNumber!.Value;
                 return new MetadataEpisodeFileResolution(
                     file.FileId,
-                    new TmdbEpisode(
-                        900000 + seasonNumber,
-                        series.Id,
-                        seasonNumber,
-                        1,
-                        $"S{seasonNumber:00}E01",
-                        null),
+                    seasonNumber == 1
+                        ? seasonOne.Episodes![0]
+                        : seasonTwo.Episodes![0],
                     "episode",
                     null,
                     ResolutionSource: TmdbResolutionSource.AiMetadata,
                     ResolutionAttemptId: episodeAttemptId);
             }).ToArray(),
+            [seasonOne, seasonTwo],
             now.AddSeconds(3));
 
         await using var verifyConnection = await fixture.Database.OpenConnectionAsync();

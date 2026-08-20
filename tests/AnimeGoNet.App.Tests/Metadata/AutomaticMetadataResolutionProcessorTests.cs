@@ -1796,10 +1796,13 @@ public sealed class AutomaticMetadataResolutionProcessorTests
                     ? new TmdbSeriesDetails(series, seasons)
                     : detailsFactory(seriesId));
 
-        public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
-            Task.FromResult(
-                detailsFactory?.Invoke(seriesId)?.Seasons.FirstOrDefault(value => value.SeasonNumber == seasonNumber)
-                ?? seasons.FirstOrDefault(value => value.SeasonNumber == seasonNumber));
+        public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default)
+        {
+            var season = detailsFactory?.Invoke(seriesId)?.Seasons
+                .FirstOrDefault(value => value.SeasonNumber == seasonNumber)
+                ?? seasons.FirstOrDefault(value => value.SeasonNumber == seasonNumber);
+            return Task.FromResult<TmdbSeason?>(season is null ? null : CompleteSnapshot(season));
+        }
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,
@@ -1812,6 +1815,27 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             return Task.FromResult(
                 seasonEpisodeFactory?.Invoke(seasonNumber, episodeNumber)
                 ?? episodeFactory?.Invoke(episodeNumber));
+        }
+
+        private TmdbSeason CompleteSnapshot(TmdbSeason season)
+        {
+            if (season.Episodes is not null)
+            {
+                return season;
+            }
+
+            var episodes = Enumerable.Range(1, season.EpisodeCount)
+                .Select(number => seasonEpisodeFactory?.Invoke(season.SeasonNumber, number)
+                    ?? episodeFactory?.Invoke(number)
+                    ?? new TmdbEpisode(
+                        8_000_000 + (season.SeasonNumber * 100_000) + number,
+                        season.SeriesId,
+                        season.SeasonNumber,
+                        number,
+                        $"S{season.SeasonNumber:00}E{number:00}",
+                        null))
+                .ToArray();
+            return season with { Episodes = episodes };
         }
     }
 

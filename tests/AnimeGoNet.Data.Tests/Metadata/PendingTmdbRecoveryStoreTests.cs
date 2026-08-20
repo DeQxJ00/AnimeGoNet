@@ -172,20 +172,24 @@ public sealed class PendingTmdbRecoveryStoreTests
     }
 
     [Fact]
-    public async Task ConflictingTmdbEpisodeIdRollsBackRecovery()
+    public async Task AuthoritativeSnapshotCanRenumberEpisodeWithinSameSeries()
     {
         await using var fixture = await RecoveryFixture.CreateAsync(1);
         await fixture.SeedConflictingEpisodeAsync();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Store.RecoverAsync(
+        var result = await fixture.Store.RecoverAsync(
             Request(Mapping("fallback-1", episodeId: 9007, episodeNumber: 7)),
-            RecoveredAt));
+            RecoveredAt);
 
+        Assert.False(result.HasPendingFallbackRecords);
         await using var connection = await fixture.Database.OpenConnectionAsync();
-        Assert.Equal(0, await ScalarAsync(connection, "SELECT COUNT(*) FROM completion_records;"));
-        Assert.Equal(1, await ScalarAsync(
+        Assert.Equal(1, await ScalarAsync(connection, "SELECT COUNT(*) FROM completion_records;"));
+        Assert.Equal(0, await ScalarAsync(
             connection,
             "SELECT COUNT(*) FROM fallback_completion_records WHERE resolution_state = 'pending';"));
+        Assert.Equal(1, await ScalarAsync(
+            connection,
+            "SELECT COUNT(*) FROM tmdb_episodes WHERE tmdb_episode_id = 9007 AND episode_number = 7;"));
     }
 
     [Fact]

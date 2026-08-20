@@ -1173,7 +1173,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             Task.FromResult<TmdbSeriesDetails?>(new TmdbSeriesDetails(Series, [SeasonValue]));
 
         public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeason?>(SeasonValue);
+            Task.FromResult<TmdbSeason?>(CompleteSnapshot(SeasonValue));
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,
@@ -1185,6 +1185,26 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             return EpisodeFailure is null
                 ? Task.FromResult(EpisodeFactory(episodeNumber))
                 : Task.FromException<TmdbEpisode?>(EpisodeFailure);
+        }
+
+        private TmdbSeason CompleteSnapshot(TmdbSeason season)
+        {
+            if (season.Episodes is not null)
+            {
+                return season;
+            }
+
+            var episodes = Enumerable.Range(1, season.EpisodeCount)
+                .Select(number => EpisodeFactory(number)
+                    ?? new TmdbEpisode(
+                        8_000_000 + (season.SeasonNumber * 100_000) + number,
+                        season.SeriesId,
+                        season.SeasonNumber,
+                        number,
+                        $"Episode {number}",
+                        null))
+                .ToArray();
+            return season with { Episodes = episodes };
         }
     }
 

@@ -36,6 +36,18 @@ internal static class TmdbEpisodeProjectionWriter
             throw new ArgumentException("TMDB Season Episode snapshot identity is invalid.", nameof(episodes));
         }
 
+        await using (var deleteSeason = connection.CreateCommand())
+        {
+            deleteSeason.Transaction = transaction;
+            deleteSeason.CommandText = """
+                DELETE FROM tmdb_episodes
+                WHERE series_id = $series_id AND season_number = $season_number;
+                """;
+            deleteSeason.Parameters.AddWithValue("$series_id", seriesRowId);
+            deleteSeason.Parameters.AddWithValue("$season_number", seasonNumber);
+            await deleteSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         foreach (var episode in episodes)
         {
             await EnsureEpisodeIdIdentityAsync(
@@ -53,8 +65,10 @@ internal static class TmdbEpisodeProjectionWriter
                 VALUES (
                     $tmdb_episode_id, $series_id, $season_number, $episode_number,
                     $name, $air_date, NULL, $fetched_at_utc)
-                ON CONFLICT(series_id, season_number, episode_number) DO UPDATE SET
-                    tmdb_episode_id = excluded.tmdb_episode_id,
+                ON CONFLICT(tmdb_episode_id) DO UPDATE SET
+                    series_id = excluded.series_id,
+                    season_number = excluded.season_number,
+                    episode_number = excluded.episode_number,
                     name = excluded.name,
                     air_date = excluded.air_date,
                     fetched_at_utc = excluded.fetched_at_utc;
@@ -95,12 +109,10 @@ internal static class TmdbEpisodeProjectionWriter
             return;
         }
 
-        if (!string.Equals(reader.GetString(0), seriesRowId, StringComparison.Ordinal)
-            || reader.GetInt32(1) != episode.SeasonNumber
-            || reader.GetInt32(2) != episode.EpisodeNumber)
+        if (!string.Equals(reader.GetString(0), seriesRowId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "The TMDB Episode ID is already bound to another canonical identity.");
+                "The TMDB Episode ID is already bound to another Series.");
         }
     }
 }

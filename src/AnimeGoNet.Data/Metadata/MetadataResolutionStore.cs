@@ -1015,16 +1015,6 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             upsertSeason.Parameters.AddWithValue("$episode_count", season.EpisodeCount);
             upsertSeason.Parameters.AddWithValue("$now", now);
             await upsertSeason.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            await TmdbEpisodeProjectionWriter.UpsertAsync(
-                connection,
-                transaction,
-                seriesRowId,
-                series.Id,
-                season.SeasonNumber,
-                season.EpisodeCount,
-                season.Episodes,
-                now,
-                cancellationToken).ConfigureAwait(false);
         }
 
         if (defaultSeasonNumber is not null)
@@ -1211,8 +1201,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             season.Name,
             season.AirDate,
             season.EpisodeCount,
-            season.PosterPath,
-            season.Episodes);
+            season.PosterPath);
     }
 
     private sealed record SeasonCompletion(
@@ -1220,22 +1209,44 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         string CanonicalName,
         DateOnly? AirDate = null,
         int EpisodeCount = 0,
-        string? PosterPath = null,
-        IReadOnlyList<TmdbEpisode>? Episodes = null);
+        string? PosterPath = null);
 
     public async Task<MetadataEpisodeCompletionResult> CompleteEpisodesAsync(
         MetadataEpisodeTaskClaim claim,
         IReadOnlyList<MetadataEpisodeFileResolution> fileResolutions,
+        IReadOnlyList<TmdbSeason> validatedSeasons,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(fileResolutions);
+        ArgumentNullException.ThrowIfNull(validatedSeasons);
         if (fileResolutions.Count != claim.Files.Count
             || !fileResolutions.Select(value => value.FileId).ToHashSet(StringComparer.Ordinal)
                 .SetEquals(claim.Files.Select(value => value.FileId)))
         {
             throw new ArgumentException("Every claimed task file must have exactly one Episode resolution.", nameof(fileResolutions));
+        }
+
+        var requiredSeasonNumbers = claim.Files
+            .Select(file => file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToArray();
+        if (validatedSeasons.Count != requiredSeasonNumbers.Length
+            || validatedSeasons.Select(season => season.SeasonNumber).Distinct().Count()
+                != validatedSeasons.Count
+            || !validatedSeasons.Select(season => season.SeasonNumber)
+                .OrderBy(value => value).SequenceEqual(requiredSeasonNumbers)
+            || validatedSeasons.Any(season =>
+                season.SeriesId != claim.TmdbSeriesId
+                || season.SeasonNumber <= 0
+                || season.Episodes is null
+                || season.Episodes.Count != season.EpisodeCount))
+        {
+            throw new ArgumentException(
+                "Episode completion requires one complete TMDB snapshot for every resolved Season.",
+                nameof(validatedSeasons));
         }
 
         var claimedFiles = claim.Files.ToDictionary(file => file.FileId, StringComparer.Ordinal);
@@ -1314,6 +1325,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             findSeries.Parameters.AddWithValue("$tmdb_series_id", claim.TmdbSeriesId);
             seriesRowId = (string)(await findSeries.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Resolved TMDB Series projection was not found."));
+        }
+
+        foreach (var season in validatedSeasons.OrderBy(value => value.SeasonNumber))
+        {
+            await TmdbEpisodeProjectionWriter.UpsertAsync(
+                connection,
+                transaction,
+                seriesRowId,
+                claim.TmdbSeriesId,
+                season.SeasonNumber,
+                season.EpisodeCount,
+                season.Episodes,
+                now,
+                cancellationToken).ConfigureAwait(false);
         }
 
         var episodeClaims = new Dictionary<TmdbEpisodeIdentity, EpisodeClaimDecision>();

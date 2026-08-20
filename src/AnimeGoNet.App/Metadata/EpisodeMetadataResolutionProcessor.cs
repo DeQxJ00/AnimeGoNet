@@ -436,9 +436,76 @@ public sealed class EpisodeMetadataResolutionProcessor(
             }
         }
 
+        var validatedSeasons = new List<TmdbSeason>();
+        foreach (var seasonNumber in claim.Files
+                     .Select(file => file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber)
+                     .Distinct()
+                     .OrderBy(value => value))
+        {
+            var started = _timeProvider.GetTimestamp();
+            TmdbSeason? season;
+            try
+            {
+                season = await tmdb.GetSeasonAsync(
+                    claim.TmdbSeriesId,
+                    seasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (TmdbClientException exception)
+            {
+                await RecordFailureAndStopAsync(
+                    claim,
+                    "tmdb_episode_snapshot",
+                    null,
+                    new MetadataFailure(
+                        exception.Kind,
+                        exception.SafeCode,
+                        exception.TmdbAccessConfirmed),
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            if (season is null)
+            {
+                await RecordFailureAndStopAsync(
+                    claim,
+                    "tmdb_episode_snapshot",
+                    null,
+                    new MetadataFailure(
+                        MetadataFailureKind.SemanticNoMatch,
+                        "tmdb_season_not_found",
+                        TmdbAccessConfirmed: true),
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            if (season.SeriesId != claim.TmdbSeriesId
+                || season.SeasonNumber != seasonNumber
+                || season.Episodes is null
+                || season.Episodes.Count != season.EpisodeCount)
+            {
+                await RecordFailureAndStopAsync(
+                    claim,
+                    "tmdb_episode_snapshot",
+                    null,
+                    new MetadataFailure(
+                        MetadataFailureKind.Protocol,
+                        "tmdb_season_episode_snapshot_invalid",
+                        TmdbAccessConfirmed: false),
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            validatedSeasons.Add(season);
+        }
+
         var completion = await resolutions.CompleteEpisodesAsync(
             claim,
             results,
+            validatedSeasons,
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         foreach (var duplicate in completion.DuplicateHits)
