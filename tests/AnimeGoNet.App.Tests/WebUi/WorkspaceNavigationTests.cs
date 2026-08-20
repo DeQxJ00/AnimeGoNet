@@ -14,8 +14,7 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("id=\"app-sidebar\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"workspace-tabs\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"sidebar-toggle\"", html, StringComparison.Ordinal);
-        Assert.Contains(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
-        Assert.Contains("title: \"Mikan 手动设置\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
         Assert.Contains(">Bangumi缓存</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"Bangumi缓存\"", script, StringComparison.Ordinal);
         Assert.Contains("AnimeGoNetData 本地缓存使用记录", script, StringComparison.Ordinal);
@@ -32,6 +31,14 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains(
             "data-workspace=\"sources\" data-subview=\"manage\"",
             html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "data-workspace=\"sources\" data-subview=\"mikan-ingest\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "{ id: \"mikan-offsets\", label: \"Mikan 可信 Offset\" }",
+            script,
             StringComparison.Ordinal);
         Assert.Contains(">插件</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"插件\"", script, StringComparison.Ordinal);
@@ -86,7 +93,6 @@ public sealed class WorkspaceNavigationTests
             "overview",
             "library",
             "tasks",
-            "mikan",
             "sources",
             "bangumi-cache",
             "download-tools",

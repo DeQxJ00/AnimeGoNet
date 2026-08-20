@@ -206,24 +206,17 @@ const workspaceDefinitions = {
             { id: "downloads", label: "下载任务" },
         ],
     },
-    mikan: {
-        title: "Mikan 手动设置",
-        description: "统一导入、人工覆盖、候选优选和五级过滤。",
-        defaultSubview: "ingest",
-        tabs: [
-            { id: "ingest", label: "导入任务" },
-            { id: "manual-rules", label: "人工规则" },
-            { id: "offsets", label: "可信 Offset" },
-            { id: "candidate-rules", label: "候选规则" },
-            { id: "legacy-filter", label: "五级过滤" },
-        ],
-    },
     sources: {
         title: "输入源",
-        description: "管理来源适配器、凭据、RSS、下载器路由和整理规则。",
+        description: "管理来源适配器、凭据、RSS，以及 Mikan 手动设置。",
         defaultSubview: "manage",
         tabs: [
             { id: "manage", label: "输入源管理" },
+            { id: "mikan-ingest", label: "Mikan 导入任务" },
+            { id: "mikan-manual-rules", label: "Mikan 人工规则" },
+            { id: "mikan-offsets", label: "Mikan 可信 Offset" },
+            { id: "mikan-candidate-rules", label: "Mikan 候选规则" },
+            { id: "mikan-legacy-filter", label: "Mikan 五级过滤" },
         ],
     },
     "bangumi-cache": {
