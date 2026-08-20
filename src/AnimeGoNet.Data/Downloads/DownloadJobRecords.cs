@@ -61,6 +61,7 @@ public sealed record DownloadJobDashboardSummary(
     int StaleJobs,
     int WaitingOrganizationJobs,
     int CompletedJobs,
+    int SkippedDuplicateJobs,
     int PreparationFailedJobs,
     int OrganizationFailedJobs,
     long ConnectedDownloadSpeedBytesPerSecond,

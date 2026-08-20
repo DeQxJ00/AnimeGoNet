@@ -590,6 +590,7 @@ interface DownloadListPage {
     stale_jobs: number;
     waiting_organization_jobs: number;
     completed_jobs: number;
+    skipped_duplicate_jobs: number;
     preparation_failed_jobs: number;
     organization_failed_jobs: number;
     connected_download_speed_bytes_per_second: number;
@@ -606,6 +607,7 @@ type DownloadSummaryBucket =
   | "failed"
   | "waiting_organization"
   | "completed"
+  | "skipped_duplicate"
   | "stale";
 
 interface DownloadFileDetail {
@@ -4232,6 +4234,7 @@ function readDownloadState(): DownloadUiState {
         "failed",
         "waiting_organization",
         "completed",
+        "skipped_duplicate",
         "stale",
       ].includes(stored.summary_bucket ?? "")
         ? stored.summary_bucket as DownloadSummaryBucket
@@ -6743,6 +6746,11 @@ function renderDownloadSummary(body: DownloadListPage): void {
       value: String(summary.waiting_organization_jobs),
       bucket: "waiting_organization",
     },
+    {
+      label: "重复跳过",
+      value: String(summary.skipped_duplicate_jobs),
+      bucket: "skipped_duplicate",
+    },
     { label: "已完成", value: String(summary.completed_jobs), bucket: "completed" },
     {
       label: "连接速度",
@@ -6807,6 +6815,7 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
     paused: "暂停",
     failed: "失败",
     waiting_organization: "等待整理",
+    skipped_duplicate: "重复跳过",
     completed: "已完成",
     stale: "过期快照",
   } as Record<DownloadSummaryBucket, string>)[downloadState.summary_bucket as DownloadSummaryBucket];
@@ -8510,6 +8519,7 @@ async function loadOverviewStatistics(): Promise<void> {
     setOverviewCount("overview-download-paused-count", summary.paused_jobs);
     setOverviewCount("overview-download-failed-count", summary.failed_jobs);
     setOverviewCount("overview-download-waiting-organization-count", summary.waiting_organization_jobs);
+    setOverviewCount("overview-download-skipped-duplicate-count", summary.skipped_duplicate_jobs);
     setOverviewCount("overview-download-completed-count", summary.completed_jobs);
     setOverviewCount("overview-download-stale-count", summary.stale_jobs);
     setOverviewCount("overview-downloaders-offline-count", summary.offline_instance_count);
@@ -8521,6 +8531,7 @@ async function loadOverviewStatistics(): Promise<void> {
       "overview-download-paused-count",
       "overview-download-failed-count",
       "overview-download-waiting-organization-count",
+      "overview-download-skipped-duplicate-count",
       "overview-download-completed-count",
       "overview-download-stale-count",
       "overview-downloaders-offline-count",
@@ -11614,6 +11625,7 @@ for (const [id, bucket] of [
   ["overview-download-paused", "paused"],
   ["overview-download-failed", "failed"],
   ["overview-download-waiting-organization", "waiting_organization"],
+  ["overview-download-skipped-duplicate", "skipped_duplicate"],
   ["overview-download-completed", "completed"],
   ["overview-download-stale", "stale"],
 ] as const) {

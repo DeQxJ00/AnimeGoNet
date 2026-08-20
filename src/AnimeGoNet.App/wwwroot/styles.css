@@ -580,6 +580,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .overview-stat-card.active strong, .overview-stat-card.success strong, .overview-stat-card.sources strong { color: #8ce6c5; }
 .overview-stat-card.paused, .overview-stat-card.warning, .overview-stat-card.other { border-color: #806b36; background: linear-gradient(135deg,rgba(91,67,20,.54),rgba(42,32,19,.76)); }
 .overview-stat-card.paused strong, .overview-stat-card.warning strong, .overview-stat-card.other strong { color: #ffd77d; }
+.overview-stat-card.skipped { border-color: #65568f; background: linear-gradient(135deg,rgba(67,48,102,.58),rgba(35,27,57,.78)); }
+.overview-stat-card.skipped strong { color: #cbb5ff; }
 .overview-stat-card.failed, .overview-stat-card.offline { border-color: #8c4050; background: linear-gradient(135deg,rgba(94,29,43,.58),rgba(45,20,30,.78)); }
 .overview-stat-card.failed strong, .overview-stat-card.offline strong { color: #ff9fae; }
 .overview-stat-card.review, .overview-stat-card.library, .overview-stat-card.tasks, .overview-stat-card.stale { border-color: #3d6690; background: linear-gradient(135deg,rgba(27,61,98,.58),rgba(18,35,58,.78)); }

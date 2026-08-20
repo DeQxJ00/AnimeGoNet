@@ -749,10 +749,14 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                        ELSE 0 END), 0),
                    COALESCE(SUM(job.is_stale), 0),
                    COALESCE(SUM(CASE
-                       WHEN task.status = 'downloaded'
-                         OR job.organization_state IN ('pending', 'organizing', 'cleanup') THEN 1
+                       WHEN task.status <> 'download_skipped_duplicate'
+                         AND (task.status = 'downloaded'
+                           OR job.organization_state IN ('pending', 'organizing', 'cleanup')) THEN 1
                        ELSE 0 END), 0),
                    COALESCE(SUM(CASE WHEN task.status = 'organized' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN task.status = 'download_skipped_duplicate' THEN 1
+                       ELSE 0 END), 0),
                    COALESCE(SUM(CASE
                        WHEN job.preparation_failure_code IS NOT NULL THEN 1 ELSE 0 END), 0),
                    COALESCE(SUM(CASE
@@ -801,10 +805,11 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(6),
             reader.GetInt32(7),
             reader.GetInt32(8),
-            reader.GetInt64(9),
-            reader.GetInt32(10),
-            reader.IsDBNull(11) ? null : reader.GetString(11),
-            ReadDateTimeOffset(reader, 12));
+            reader.GetInt32(9),
+            reader.GetInt64(10),
+            reader.GetInt32(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12),
+            ReadDateTimeOffset(reader, 13));
     }
 
     private static DownloadJobListItemRecord ReadListItem(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
@@ -919,6 +924,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 "failed" => "failed",
                 "waiting_organization" => "waiting_organization",
                 "completed" => "completed",
+                "skipped_duplicate" => "skipped_duplicate",
                 "stale" => "stale",
                 _ => throw new ArgumentException(
                     "Unsupported download summary bucket.",
@@ -936,10 +942,12 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
              OR download_jobs.organization_failure_code IS NOT NULL)
             """,
         "waiting_organization" => """
-            (ingest_tasks.status = 'downloaded'
-             OR download_jobs.organization_state IN ('pending', 'organizing', 'cleanup'))
+            (ingest_tasks.status <> 'download_skipped_duplicate'
+             AND (ingest_tasks.status = 'downloaded'
+               OR download_jobs.organization_state IN ('pending', 'organizing', 'cleanup')))
             """,
         "completed" => "ingest_tasks.status = 'organized'",
+        "skipped_duplicate" => "ingest_tasks.status = 'download_skipped_duplicate'",
         "stale" => "download_jobs.is_stale = 1",
         _ => throw new InvalidOperationException("Unexpected normalized download summary bucket."),
     };

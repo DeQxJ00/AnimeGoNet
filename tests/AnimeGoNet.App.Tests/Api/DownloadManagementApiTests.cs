@@ -38,6 +38,11 @@ public sealed class DownloadManagementApiTests
             1,
             json.RootElement.GetProperty("summary").GetProperty("active_jobs").GetInt32());
         Assert.Equal(
+            0,
+            json.RootElement.GetProperty("summary")
+                .GetProperty("skipped_duplicate_jobs")
+                .GetInt32());
+        Assert.Equal(
             1,
             json.RootElement.GetProperty("summary")
                 .GetProperty("connected_download_speed_bytes_per_second")
@@ -96,6 +101,40 @@ public sealed class DownloadManagementApiTests
         using var response = await fixture.App.Client.GetAsync($"/api/v1/downloads?{query}");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SkippedDuplicateHasItsOwnSummaryAndIsNotWaitingForOrganization()
+    {
+        await using var fixture = await DownloadApiFixture.CreateAsync(new FakeDownloadClient());
+        await fixture.MarkSkippedDuplicateAsync();
+
+        using var skippedResponse = await fixture.App.Client.GetAsync(
+            "/api/v1/downloads?summary_bucket=skipped_duplicate");
+        using var skippedJson = JsonDocument.Parse(
+            await skippedResponse.Content.ReadAsStreamAsync());
+        var item = Assert.Single(
+            skippedJson.RootElement.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, skippedResponse.StatusCode);
+        Assert.Equal(1, skippedJson.RootElement.GetProperty("total_items").GetInt32());
+        Assert.Equal(
+            1,
+            skippedJson.RootElement.GetProperty("summary")
+                .GetProperty("skipped_duplicate_jobs")
+                .GetInt32());
+        Assert.Equal(
+            0,
+            skippedJson.RootElement.GetProperty("summary")
+                .GetProperty("waiting_organization_jobs")
+                .GetInt32());
+        Assert.Equal("download_skipped_duplicate", item.GetProperty("business_status").GetString());
+
+        using var waitingResponse = await fixture.App.Client.GetAsync(
+            "/api/v1/downloads?summary_bucket=waiting_organization");
+        using var waitingJson = JsonDocument.Parse(
+            await waitingResponse.Content.ReadAsStreamAsync());
+        Assert.Equal(0, waitingJson.RootElement.GetProperty("total_items").GetInt32());
     }
 
     [Fact]
@@ -337,6 +376,26 @@ public sealed class DownloadManagementApiTests
                 "$later",
                 DateTimeOffset.UtcNow.AddHours(1).ToString("O"));
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task MarkSkippedDuplicateAsync()
+        {
+            await using var connection = await _database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE download_jobs
+                SET state = 'skipped_duplicate',
+                    organization_state = 'pending',
+                    preparation_failure_code = NULL,
+                    organization_failure_code = NULL
+                WHERE id = $job_id;
+                UPDATE ingest_tasks
+                SET status = 'download_skipped_duplicate',
+                    failure_kind = NULL
+                WHERE id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
+                """;
+            command.Parameters.AddWithValue("$job_id", JobId);
+            Assert.Equal(2, await command.ExecuteNonQueryAsync());
         }
 
         public async Task<string?> PreparationFailureAsync()

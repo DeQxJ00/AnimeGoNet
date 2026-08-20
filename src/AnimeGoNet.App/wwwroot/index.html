@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260820-overview-statistics">
+  <link rel="stylesheet" href="/styles.css?v=20260820-skipped-duplicate-summary">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -100,6 +100,9 @@
             </button>
             <button id="overview-download-waiting-organization" type="button" class="overview-stat-card warning">
               <span>等待整理</span><strong id="overview-download-waiting-organization-count">—</strong><small>已下载及整理队列任务</small>
+            </button>
+            <button id="overview-download-skipped-duplicate" type="button" class="overview-stat-card skipped">
+              <span>重复跳过</span><strong id="overview-download-skipped-duplicate-count">—</strong><small>整批文件均已完成，无需整理</small>
             </button>
             <button id="overview-download-completed" type="button" class="overview-stat-card success">
               <span>已完成</span><strong id="overview-download-completed-count">—</strong><small>已完成媒体入库</small>
@@ -1770,6 +1773,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260820-overview-statistics"></script>
+    <script type="module" src="/app.js?v=20260820-skipped-duplicate-summary"></script>
 </body>
 </html>

@@ -226,6 +226,16 @@ public sealed class DownloadJobStoreTests
         await fixture.SetDashboardStateAsync("complete", "downloaded", "not_required");
         Assert.Single((await fixture.ListBucketAsync("waiting_organization")).Items);
 
+        await fixture.SetDashboardStateAsync(
+            "skipped_duplicate",
+            "download_skipped_duplicate",
+            "pending");
+        var skippedDuplicate = await fixture.Jobs.ListPageAsync(
+            new DownloadJobListQuery(1, 10, null, null, null, null, null));
+        Assert.Equal(1, skippedDuplicate.Summary.SkippedDuplicateJobs);
+        Assert.Single((await fixture.ListBucketAsync("skipped_duplicate")).Items);
+        Assert.Empty((await fixture.ListBucketAsync("waiting_organization")).Items);
+
         await fixture.SetDashboardStateAsync("complete", "organized", "not_required");
         Assert.Single((await fixture.ListBucketAsync("completed")).Items);
         Assert.Empty((await fixture.ListBucketAsync("waiting_organization")).Items);

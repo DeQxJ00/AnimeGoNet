@@ -2867,6 +2867,7 @@ public static class ApiEndpoints
                     records.Summary.StaleJobs,
                     records.Summary.WaitingOrganizationJobs,
                     records.Summary.CompletedJobs,
+                    records.Summary.SkippedDuplicateJobs,
                     records.Summary.PreparationFailedJobs,
                     records.Summary.OrganizationFailedJobs,
                     records.Summary.ConnectedDownloadSpeedBytesPerSecond,

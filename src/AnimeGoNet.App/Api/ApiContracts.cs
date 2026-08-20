@@ -637,6 +637,7 @@ public sealed record DownloadDashboardSummary(
     [property: JsonPropertyName("stale_jobs")] int StaleJobs,
     [property: JsonPropertyName("waiting_organization_jobs")] int WaitingOrganizationJobs,
     [property: JsonPropertyName("completed_jobs")] int CompletedJobs,
+    [property: JsonPropertyName("skipped_duplicate_jobs")] int SkippedDuplicateJobs,
     [property: JsonPropertyName("preparation_failed_jobs")] int PreparationFailedJobs,
     [property: JsonPropertyName("organization_failed_jobs")] int OrganizationFailedJobs,
     [property: JsonPropertyName("connected_download_speed_bytes_per_second")] long ConnectedDownloadSpeedBytesPerSecond,
