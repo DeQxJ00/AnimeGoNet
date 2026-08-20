@@ -288,13 +288,9 @@
         <p class="muted">只保护 WebUI 管理接口和实时日志，与“插件 → 内部插件”中的外部插件/API AccessKey 完全分开。留空时本机 WebUI 可直接打开。</p>
         <form id="webui-authentication-form">
           <div class="source-form-grid">
-            <label class="source-hosts">WebUI 专用地址
-              <input id="webui-authentication-url" type="url" readonly>
-              <small>设置密钥后请收藏此地址；URL 只包含密钥的 SHA-256，不包含明文。</small>
-            </label>
             <label>WebUI AccessKey（明文）
               <input id="webui-authentication-access-key" type="text" maxlength="512" autocomplete="off" spellcheck="false">
-              <small>默认留空。仅用于 WebUI，不会传给 AnimeGoHelper 或统一导入 API。</small>
+              <small>默认留空。启用后直接打开 WebUI，由顶部 AccessKey 入口或自动弹出的登录窗口输入；不会传给 AnimeGoHelper 或统一导入 API。</small>
             </label>
           </div>
           <p id="webui-authentication-status" class="muted" role="status">正在读取 WebUI 鉴权配置…</p>

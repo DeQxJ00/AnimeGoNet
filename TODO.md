@@ -262,7 +262,7 @@
 - [x] TypeScript 7 strict 类型检查和确定性编译已接入独立 CI job，提交产物必须与源码一致；共享 API client 与 DOM 状态/可访问性 Node 单元测试均已接入。本机 win-x64 NativeAOT 已通过 Chromium 桌面/390px 移动端 Playwright 2/2，Ubuntu CT linux-x64 发布镜像完整链路 Playwright 1/1 通过。
 - [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
 - [x] 一级“插件”拆分“内部插件 / 外部插件”；内部插件页提供 `Web API / AnimeGoHelper (Mikan) 油猴插件`，明文回填/修改部署 AccessKey（新部署默认 `123456`）、自动显示 `/api` 地址、固定 `PluginName=inner_plugin_mikan`，并保留旧 `filter/mikan_tool.py` 后端别名。
-- [x] 将外部插件/API 与 WebUI 鉴权完全拆分：`inner_plugin_mikan.access_key` 仅保护 AnimeGoHelper、兼容插件接口和精确的统一导入端点，`web.webui_access_key` 独立保护其余管理 API/日志 WebSocket且默认留空；两把密钥使用不同 header/query、不能交叉授权，应用配置页可明文回填、保存备份并生成不含明文的 WebUI 专用地址。旧 `web.access_key` 只作启动兼容读取，WebUI 保存时迁移删除；Mikan URL 解析与 RSS 手动导入保持在 WebUI 边界。
+- [x] 将外部插件/API 与 WebUI 鉴权完全拆分：`inner_plugin_mikan.access_key` 仅保护 AnimeGoHelper、兼容插件接口和精确的统一导入端点，`web.webui_access_key` 独立保护其余管理 API/日志 WebSocket且默认留空；两把密钥使用不同 header/query、不能交叉授权。应用配置页明文回填并保存备份，不再展示专用地址；裸地址由登录窗口/顶部 AccessKey 入口完成鉴权，旧查询参数书签继续兼容。旧 `web.access_key` 只作启动兼容读取，WebUI 保存时迁移删除；Mikan URL 解析与 RSS 手动导入保持在 WebUI 边界。
 
 ## P10 — 组合与发布
 

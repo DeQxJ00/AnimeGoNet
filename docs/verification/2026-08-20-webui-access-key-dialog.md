@@ -8,6 +8,7 @@ Date: 2026-08-20
 - On a WebUI management API 401, show one credential dialog even when startup requests fail concurrently.
 - Accept the plaintext `web.webui_access_key`, hash it in the browser, validate it, and retry the original requests.
 - Keep WebUI and `inner_plugin_mikan.access_key` authentication separate.
+- Do not display or generate a dedicated authenticated URL in the configuration card; use the dialog or top AccessKey entry. Existing URL query credentials remain backward compatible.
 
 ## Deterministic checks
 

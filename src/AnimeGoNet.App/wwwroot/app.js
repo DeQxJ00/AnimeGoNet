@@ -3239,17 +3239,9 @@ async function loadConfiguration() {
 function animeGoHelperApiUrl() {
     return new URL("/api", window.location.origin).href.replace(/\/$/, "");
 }
-async function webUiAuthenticatedUrl(key) {
-    const url = new URL("/", window.location.origin);
-    if (key)
-        url.searchParams.set("webui_access_key", await sha256LowerHex(key));
-    url.hash = "#/overview/status";
-    return url.href;
-}
 async function loadWebUiAuthentication() {
     const status = element("#webui-authentication-status");
     const keyInput = element("#webui-authentication-access-key");
-    const urlInput = element("#webui-authentication-url");
     const reload = element("#webui-authentication-reload");
     const save = element("#webui-authentication-save");
     status.textContent = "正在读取 WebUI 独立鉴权配置…";
@@ -3263,14 +3255,12 @@ async function loadWebUiAuthentication() {
             throw new Error("web.webui_access_key 不是字符串");
         }
         keyInput.value = configuredKey ?? "";
-        urlInput.value = await webUiAuthenticatedUrl(keyInput.value);
         status.textContent = keyInput.value
-            ? "WebUI 鉴权已配置；重启后请使用上方专用地址。"
+            ? "WebUI 鉴权已配置；重启后直接打开 WebUI，并在登录窗口或顶部入口输入 AccessKey。"
             : "WebUI 鉴权未配置；裸地址可直接使用，不受插件 AccessKey 影响。";
     }
     catch (error) {
         keyInput.value = "";
-        urlInput.value = await webUiAuthenticatedUrl("");
         status.textContent = `WebUI 鉴权读取失败：${errorMessage(error, "未知错误")}`;
     }
     finally {
@@ -3282,7 +3272,6 @@ async function saveWebUiAuthentication(event) {
     event.preventDefault();
     const status = element("#webui-authentication-status");
     const keyInput = element("#webui-authentication-access-key");
-    const urlInput = element("#webui-authentication-url");
     const reload = element("#webui-authentication-reload");
     const save = element("#webui-authentication-save");
     const requestedKey = keyInput.value;
@@ -3310,9 +3299,8 @@ async function saveWebUiAuthentication(event) {
         if (envelope.code !== 200) {
             throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
         }
-        urlInput.value = await webUiAuthenticatedUrl(requestedKey);
         status.textContent = requestedKey
-            ? "WebUI AccessKey 已保存并备份；重启后使用上方专用地址。插件 AccessKey 不受影响。"
+            ? "WebUI AccessKey 已保存并备份；重启后直接打开 WebUI，在登录窗口或顶部入口输入。插件 AccessKey 不受影响。"
             : "WebUI AccessKey 已清空并备份；重启后裸地址可直接使用。插件 AccessKey 不受影响。";
     }
     catch (error) {

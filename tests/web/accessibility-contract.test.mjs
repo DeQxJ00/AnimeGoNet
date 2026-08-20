@@ -57,6 +57,19 @@ test("static controls have accessible names and no positive tabindex", async () 
   }
 });
 
+test("WebUI authentication uses the login dialog instead of a dedicated URL field", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  assert.ok(document.querySelector("#webui-authentication-access-key"));
+  assert.equal(document.querySelector("#webui-authentication-url"), null);
+  assert.ok(document.querySelector("#webui-access-key-open"));
+  assert.ok(document.querySelector("#webui-access-key-dialog"));
+  assert.doesNotMatch(app, /webUiAuthenticatedUrl/);
+  assert.doesNotMatch(app, /#webui-authentication-url/);
+});
+
 test("ids are unique and initial async regions expose valid state", async () => {
   const document = await page();
   const ids = [...document.querySelectorAll("[id]")].map(node => node.id);
