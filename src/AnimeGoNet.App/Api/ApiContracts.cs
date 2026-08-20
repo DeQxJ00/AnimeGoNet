@@ -591,7 +591,8 @@ public sealed record IngestItemInfoRequest(
     [property: JsonPropertyName("mikanid")] int? MikanId,
     [property: JsonPropertyName("bgmid")] int? BangumiId,
     [property: JsonPropertyName("anidbid")] int? AniDbId,
-    [property: JsonPropertyName("imdbid")] string? ImdbId);
+    [property: JsonPropertyName("imdbid")] string? ImdbId,
+    [property: JsonPropertyName("groupid")] int? GroupId = null);
 
 public sealed record IngestBatchResponse(
     [property: JsonPropertyName("source")] string Source,

@@ -64,7 +64,8 @@ public static class IngestCommandNormalizer
                 command.Info.ImdbId,
                 command.SourceEvidence?.PublishedAtRaw,
                 command.SourceEvidence?.PublishedAt,
-                requireModernMetadata),
+                requireModernMetadata,
+                command.Info.GroupId),
             cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded || result.Item is null)
         {
@@ -154,6 +155,11 @@ public static class IngestCommandNormalizer
                     errors.Add("mikan source requires a positive mikanid or resolvable source_work_id/mikan_url");
                 }
 
+                if (command.Info.GroupId is not null and <= 0)
+                {
+                    errors.Add("mikan groupid must be positive when supplied");
+                }
+
                 if (requireModernMetadata && command.Info.BangumiId is null or <= 0)
                 {
                     errors.Add("mikan source requires a positive bgmid");
@@ -184,7 +190,8 @@ public static class IngestCommandNormalizer
                 imdbId,
                 publishedAtRaw,
                 publishedAt,
-                NormalizeSafeSourcePageUrl(mikanUrl)),
+                NormalizeSafeSourcePageUrl(mikanUrl),
+                command.Info.GroupId),
             []);
     }
 
@@ -248,7 +255,8 @@ public static class IngestCommandNormalizer
                     item.ImdbId,
                     item.PublishedAtRaw,
                     item.PublishedAt,
-                    SourcePageUrl: NormalizeSafeSourcePageUrl(sourcePageUrl)),
+                    SourcePageUrl: NormalizeSafeSourcePageUrl(sourcePageUrl),
+                    GroupId: item.GroupId),
                 []);
     }
 

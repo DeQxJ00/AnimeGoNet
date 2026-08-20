@@ -23,7 +23,8 @@ public sealed record IngestItemInfo(
     int? MikanId,
     int? BangumiId,
     int? AniDbId,
-    string? ImdbId);
+    string? ImdbId,
+    int? GroupId = null);
 
 public sealed record NormalizedIngestItem(
     string Source,
@@ -38,7 +39,8 @@ public sealed record NormalizedIngestItem(
     string? ImdbId,
     string? PublishedAtRaw = null,
     DateTimeOffset? PublishedAt = null,
-    string? SourcePageUrl = null);
+    string? SourcePageUrl = null,
+    int? GroupId = null);
 
 public sealed record IngestValidationResult(NormalizedIngestItem? Item, IReadOnlyList<string> Errors)
 {

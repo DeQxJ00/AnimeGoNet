@@ -40,7 +40,8 @@ public sealed record SourceIngestContext(
     string? ImdbId,
     string? PublishedAtRaw,
     DateTimeOffset? PublishedAt,
-    bool RequireModernMetadata);
+    bool RequireModernMetadata,
+    int? GroupId = null);
 
 public sealed record SourceNormalizedItem(
     string Source,
@@ -54,7 +55,8 @@ public sealed record SourceNormalizedItem(
     int? AniDbId,
     string? ImdbId,
     string? PublishedAtRaw,
-    DateTimeOffset? PublishedAt);
+    DateTimeOffset? PublishedAt,
+    int? GroupId = null);
 
 public sealed record SourceIngestResult(
     SourceNormalizedItem? Item,

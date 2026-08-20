@@ -6,6 +6,8 @@ using System.Text.Json;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Torrents;
+using AnimeGoNet.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -96,6 +98,57 @@ public sealed class AiMetadataTestApiTests
         Assert.Equal(590786, json.GetProperty("bgmid").GetInt32());
         Assert.Contains("passkey=secret", json.GetProperty("torrent_url").GetString(), StringComparison.Ordinal);
         Assert.Null(staging.LastUrl);
+    }
+
+    [Fact]
+    public async Task UnmodifiedAnimeGoHelperResolvesEpisodeIdentityBeforeLegacyIngest()
+    {
+        var transport = new MikanImportTransport();
+        await using var app = await RunningApp.StartAsync(
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
+        var title = "[LoliHouse] Heroine - 08 [1080p]";
+
+        using var response = await app.Client.PostAsJsonAsync("/api/download/manager", new
+        {
+            source = "mikan",
+            data = new[]
+            {
+                new
+                {
+                    torrent = $"https://mikanani.me/Download/20260813/{EpisodeId}.torrent",
+                    info = new
+                    {
+                        name = title,
+                        url = $"https://mikanani.me/Home/Episode/{EpisodeId}",
+                    },
+                },
+            },
+        });
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(200, json.GetProperty("code").GetInt32());
+        Assert.Equal(1, json.GetProperty("data").GetProperty("accepted_count").GetInt32());
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT source_item_id, source_work_id, mikanid, groupid,
+                   bangumi_subject_id, title, source_page_url
+            FROM ingest_tasks
+            LIMIT 1;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(EpisodeId, reader.GetString(0));
+        Assert.Equal("4028", reader.GetString(1));
+        Assert.Equal(4028, reader.GetInt32(2));
+        Assert.Equal(123, reader.GetInt32(3));
+        Assert.Equal(590786, reader.GetInt32(4));
+        Assert.Equal(title, reader.GetString(5));
+        Assert.Equal($"https://mikanani.me/Home/Episode/{EpisodeId}", reader.GetString(6));
     }
 
     [Fact]

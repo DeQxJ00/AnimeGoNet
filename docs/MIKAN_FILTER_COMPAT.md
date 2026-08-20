@@ -44,12 +44,13 @@
 
 - Mikan `SourceProfile` 增加强类型开关 `mikan_rss_filter_enabled`，默认 `true` 以保持上游行为。旧 AnimeGoHelper `/api/rss` 固定解析到默认的 Mikan legacy profile，并读取该 profile 的开关。
 - 总开关开启时，`POST /api/rss` 的全集和 `is_select_ep=true` 指定集都会进入 MikanTool；指定集只是先缩小 RSS 项目集合，不代表跳过过滤。
-- `POST /api/download/manager` 按上游快速下载语义跳过 ordered filter，直接进入解析和下载管理器。Web UI 要明确显示“快速下载未应用 Mikan 过滤”，不能让用户误以为规则失效。
+- `POST /api/download/manager` 按上游快速下载语义跳过 ordered filter，直接进入解析和下载管理器。未经修改的 AnimeGoHelper 只提交 `info.name` 与 `/Home/Episode/{40位ID}`；服务端必须先用所选 Mikan 来源配置解析并长期缓存 Episode URL 对应的 `mikanid+groupid`，再解析 `mikanid→bgmid`，随后才进入统一导入。Web UI 要明确显示“快速下载未应用 Mikan 过滤”，不能让用户误以为规则失效。
 - 新 `/api/v1/ingest` 是否应用过滤由 `SourceProfile` 的显式入口策略决定并写入不可变路由快照；Mikan RSS profile 默认应用，直接 Torrent API profile 默认跳过。不能仅凭 `source=mikan` 猜测。
 - `mikan_rss_filter_enabled=false` 时，RSS 仍完成认证、解析、指定集选择、输入校验和基础去重，但整个 MikanTool ordered filter 步骤记为 `SkippedByConfiguration`；随后继续 TMDB 匹配和下载流水线。关闭开关不会清空、改写或禁用单条 `Filiter0`～`Filiter4` 规则，也不影响旧配置 GET/POST。
 - 开关变更只影响变更后创建的 ingest/task。已经创建或运行中的任务使用创建时保存的 SourceProfile revision 和过滤开关快照，不能在处理中途改变结果。
 - 同批次候选的具名黑白名单和通用有序优先级组不属于旧 `Filiter0`～`Filiter4`，详见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。旧 AnimeGoHelper 配置上传不能覆盖或清空新增优选规则。
 - 标题解析、Mikan URL、`mikanid` 或字幕组解析异常时保持上游“该项目不进入结果”的效果，同时在新系统中持久化 `FilterEvaluationFailed` 原因，避免静默消失。
+- 快速下载的 Episode 身份解析失败保持 legacy HTTP 200 envelope，但返回 `code=300` 以及真实稳定错误码；不得再用笼统的 `mikan_bgmid_mikanid_missing` 掩盖网络、页面或身份解析故障。
 - 过滤发生在 TMDB 匹配和提交下载器之前。被过滤项不能占用 Episode claim 或完成记录。
 
 ## 4. 旧 API 与存储

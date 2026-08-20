@@ -6791,24 +6791,64 @@ public static class ApiEndpoints
     private static async Task<Ok<LegacyApiResponse<IngestBatchResponse?>>> LegacyDownloadManager(
         IngestBatchRequest request,
         UnifiedIngestProcessor processor,
+        MikanAiTestImportService mikanResolver,
         CancellationToken cancellationToken)
     {
-        var legacyData = (request.Data ?? []).Select(item =>
+        var legacyData = new List<IngestItemRequest?>();
+        foreach (var item in request.Data ?? [])
         {
-            if (item?.Info is null
-                || !string.IsNullOrWhiteSpace(item.Info.Title)
-                || !string.IsNullOrWhiteSpace(item.Info.Name))
+            if (item?.Info is null)
             {
-                return item;
+                legacyData.Add(item);
+                continue;
             }
 
-            return item with
+            var info = item.Info;
+            if (string.IsNullOrWhiteSpace(info.Title)
+                && string.IsNullOrWhiteSpace(info.Name))
             {
-                Info = item.Info with { Title = item.Info.MikanUrl ?? item.Info.Url },
-            };
-        }).ToArray();
+                info = info with { Title = info.MikanUrl ?? info.Url };
+            }
+
+            var legacyMikanUrl = info.MikanUrl ?? info.Url;
+            if (ShouldResolveLegacyMikanEpisode(request.Source, info, legacyMikanUrl))
+            {
+                try
+                {
+                    var sourceProfileId = string.IsNullOrWhiteSpace(request.Source)
+                        ? "mikan"
+                        : request.Source.Trim().ToLowerInvariant();
+                    var resolved = await mikanResolver.ResolveAsync(
+                        legacyMikanUrl!,
+                        sourceProfileId,
+                        cancellationToken).ConfigureAwait(false);
+                    var sourceItemId = resolved.EpisodeUrl.AbsolutePath
+                        .TrimEnd('/')
+                        .Split('/')[^1];
+                    info = info with
+                    {
+                        SourceItemId = sourceItemId,
+                        SourceWorkId = resolved.MikanId.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        MikanUrl = resolved.EpisodeUrl.AbsoluteUri,
+                        MikanId = resolved.MikanId,
+                        GroupId = resolved.GroupId,
+                        BangumiId = resolved.BangumiSubjectId,
+                    };
+                }
+                catch (MikanAiTestImportException exception)
+                {
+                    return TypedResults.Ok(new LegacyApiResponse<IngestBatchResponse?>(
+                        300,
+                        $"{exception.Code}: {exception.Message}",
+                        null));
+                }
+            }
+
+            legacyData.Add(item with { Info = info });
+        }
         var response = await ProcessIngestAsync(
-            request with { Data = legacyData },
+            request with { Data = legacyData.ToArray() },
             processor,
             requireModernMetadata: false,
             cancellationToken).ConfigureAwait(false);
@@ -6820,6 +6860,22 @@ public static class ApiEndpoints
             success ? 200 : 300,
             message,
             response));
+    }
+
+    private static bool ShouldResolveLegacyMikanEpisode(
+        string? source,
+        IngestItemInfoRequest info,
+        string? mikanUrl)
+    {
+        if (!string.Equals(source?.Trim(), "mikan", StringComparison.OrdinalIgnoreCase)
+            || info.MikanId is > 0
+            || !string.IsNullOrWhiteSpace(info.SourceWorkId)
+            || !Uri.TryCreate(mikanUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.AbsolutePath.StartsWith("/Home/Episode/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<IngestBatchResponse> ProcessIngestAsync(
@@ -6871,7 +6927,8 @@ public static class ApiEndpoints
                 request.Info.MikanId,
                 request.Info.BangumiId,
                 request.Info.AniDbId,
-                request.Info.ImdbId));
+                request.Info.ImdbId,
+                request.Info.GroupId));
 
     private static IngestItemResponse Rejected(int index, IReadOnlyList<string> errors) =>
         new(index, "rejected", null, null, null, null, null, null, null, errors);

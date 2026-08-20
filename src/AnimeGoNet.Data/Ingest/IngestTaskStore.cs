@@ -36,7 +36,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 status, failure_kind, failure_reason, created_at_utc, updated_at_utc)
             VALUES (
                 $id, $source_profile_id, $source_profile_revision, $source_id,
-                $source_item_id, $source_work_id, $mikanid, NULL,
+                $source_item_id, $source_work_id, $mikanid, $groupid,
                 $bangumi_subject_id, $anidb_id, $imdb_id, $title,
                 $source_published_at_raw, $source_published_at,
                 $source_page_url,
@@ -50,6 +50,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$source_item_id", (object?)item.SourceItemId ?? DBNull.Value);
         command.Parameters.AddWithValue("$source_work_id", (object?)item.SourceWorkId ?? DBNull.Value);
         command.Parameters.AddWithValue("$mikanid", (object?)item.MikanId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$groupid", (object?)item.GroupId ?? DBNull.Value);
         command.Parameters.AddWithValue("$bangumi_subject_id", (object?)item.BangumiId ?? DBNull.Value);
         command.Parameters.AddWithValue("$anidb_id", (object?)item.AniDbId ?? DBNull.Value);
         command.Parameters.AddWithValue("$imdb_id", (object?)item.ImdbId ?? DBNull.Value);
@@ -138,7 +139,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     status, failure_kind, failure_reason, created_at_utc, updated_at_utc)
                 VALUES (
                     $id, $source_profile_id, $source_profile_revision, $source_id,
-                    $source_item_id, $source_work_id, $mikanid, NULL,
+                    $source_item_id, $source_work_id, $mikanid, $groupid,
                     $bangumi_subject_id, $anidb_id, $imdb_id, $title,
                     $source_published_at_raw, $source_published_at,
                     $source_page_url,
@@ -684,6 +685,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$source_item_id", (object?)item.SourceItemId ?? DBNull.Value);
         command.Parameters.AddWithValue("$source_work_id", (object?)item.SourceWorkId ?? DBNull.Value);
         command.Parameters.AddWithValue("$mikanid", (object?)item.MikanId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$groupid", (object?)item.GroupId ?? DBNull.Value);
         command.Parameters.AddWithValue("$bangumi_subject_id", (object?)item.BangumiId ?? DBNull.Value);
         command.Parameters.AddWithValue("$anidb_id", (object?)item.AniDbId ?? DBNull.Value);
         command.Parameters.AddWithValue("$imdb_id", (object?)item.ImdbId ?? DBNull.Value);
