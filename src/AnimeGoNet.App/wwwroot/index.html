@@ -280,23 +280,32 @@
       <article class="configuration-card web-api-compatibility-card" aria-labelledby="webui-authentication-title">
         <div class="web-api-compatibility-heading">
           <div>
-            <p class="eyebrow">Independent WebUI authentication</p>
-            <h3 id="webui-authentication-title">WebUI 鉴权</h3>
+            <p class="eyebrow">WebUI listener and authentication</p>
+            <h3 id="webui-authentication-title">WebUI 监听与鉴权</h3>
           </div>
           <span>修改后需重启</span>
         </div>
-        <p class="muted">只保护 WebUI 管理接口和实时日志，与“插件 → 内部插件”中的外部插件/API AccessKey 完全分开。留空时本机 WebUI 可直接打开。</p>
+        <p class="muted">监听地址决定哪些网络接口可访问 WebUI；AccessKey 只保护 WebUI 管理接口和实时日志，与“插件 → 内部插件”中的外部插件/API AccessKey 完全分开。</p>
         <form id="webui-authentication-form">
           <div class="source-form-grid">
+            <label>监听 IP / 主机名
+              <input id="webui-listen-host" type="text" maxlength="253" autocomplete="off" spellcheck="false" required>
+              <small><code>127.0.0.1</code> 仅本机；<code>0.0.0.0</code> 监听全部 IPv4；也支持有效 DNS 主机名或 IPv6 地址。</small>
+            </label>
+            <label>监听端口
+              <input id="webui-listen-port" type="number" min="0" max="65535" step="1" inputmode="numeric" required>
+              <small>范围 0–65535；0 表示由系统分配临时端口。常规部署建议使用固定的非零端口。</small>
+            </label>
             <label>WebUI AccessKey（明文）
               <input id="webui-authentication-access-key" type="text" maxlength="512" autocomplete="off" spellcheck="false">
               <small>默认留空。启用后直接打开 WebUI，由顶部 AccessKey 入口或自动弹出的登录窗口输入；不会传给 AnimeGoHelper 或统一导入 API。</small>
             </label>
           </div>
-          <p id="webui-authentication-status" class="muted" role="status">正在读取 WebUI 鉴权配置…</p>
+          <p class="muted"><code>ANIMEGO_WEB_HOST</code>、<code>ANIMEGO_WEB_PORT</code>、<code>--urls</code> 或 <code>ASPNETCORE_URLS</code> 的运行环境覆盖优先级更高；存在覆盖时，本页保存值不会成为实际监听地址。</p>
+          <p id="webui-authentication-status" class="muted" role="status">正在读取 WebUI 监听与鉴权配置…</p>
           <div class="source-form-actions">
             <button id="webui-authentication-reload" type="button" class="secondary-button">重新读取</button>
-            <button id="webui-authentication-save" type="submit" class="primary-button">保存 WebUI AccessKey 并备份</button>
+            <button id="webui-authentication-save" type="submit" class="primary-button">保存监听与鉴权并备份</button>
           </div>
         </form>
       </article>

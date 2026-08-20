@@ -167,6 +167,27 @@ public sealed class LegacyConfigurationApiTests
             "animego-api-*.yaml"));
     }
 
+    [Fact]
+    public async Task AllPutRejectsInvalidWebListenerWithoutReplacingConfiguration()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var all = await app.Client.GetAsync("/api/config?key=all");
+        var envelope = JsonNode.Parse(await all.Content.ReadAsStringAsync())!.AsObject();
+        var original = envelope["data"]!.AsObject();
+
+        var invalidHost = original.DeepClone().AsObject();
+        invalidHost["web"]!["host"] = "invalid host";
+        await AssertInvalidListenerAsync(app, invalidHost);
+
+        var invalidPort = original.DeepClone().AsObject();
+        invalidPort["web"]!["port"] = 65536;
+        await AssertInvalidListenerAsync(app, invalidPort);
+
+        using var reread = await app.Client.GetAsync("/api/config?key=all");
+        var rereadEnvelope = JsonNode.Parse(await reread.Content.ReadAsStringAsync())!.AsObject();
+        Assert.True(JsonNode.DeepEquals(original, rereadEnvelope["data"]));
+    }
+
     [Theory]
     [InlineData("{", "参数错误")]
     [InlineData("{\"key\":\"raw\",\"config_raw\":\"%%%\"}", "参数格式错误")]
@@ -196,6 +217,17 @@ public sealed class LegacyConfigurationApiTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
         return Encoding.UTF8.GetString(Convert.FromBase64String(
             json.RootElement.GetProperty("data").GetString()!));
+    }
+
+    private static async Task AssertInvalidListenerAsync(RunningApp app, JsonObject configuration)
+    {
+        using var response = await app.Client.PutAsJsonAsync(
+            "/api/config?key=all&backup=true",
+            new { key = "all", backup = true, config = configuration });
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(300, json.RootElement.GetProperty("code").GetInt32());
+        Assert.Equal("参数格式错误", json.RootElement.GetProperty("msg").GetString());
     }
 
     private static Task<HttpResponseMessage> SendAsync(

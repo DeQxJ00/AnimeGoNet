@@ -208,6 +208,7 @@
 - [x] 新增下载器实例和 SourceProfile 的版本化 CRUD、连接测试、路由预览及引用保护 API：SourceProfile CRUD/无副作用预览、下载器脱敏投影/连接测试、data_path 私有覆盖文件、凭据只写 create/update/remove、全局 revision、重启应用和引用保护均已完成。
 - [x] 移植 access-key、响应 envelope、参数错误：直接 key、旧 SHA-256 hash、ping/sha256、RSS/manager/plugin/config/Bolt、WebSocket 均接入统一鉴权；legacy HTTP 保持 HTTP 200 + `code=200/300`，配置畸形 JSON/Base64/YAML/强类型值在替换前失败。
 - [x] WebUI 独立鉴权提供可输入 AccessKey 的登录窗口：裸地址或凭据失效出现 401 时单实例弹出，验证 `web.webui_access_key` 后自动重试全部等待请求；明文不落浏览器存储，可选择 session 或长期记住 SHA-256，并可从顶部入口更换/清除。插件 `inner_plugin_mikan.access_key` 保持独立。
+- [x] “设置与备份”增加 WebUI 监听 IP/主机名与端口编辑：直接回填 `web.host`、`web.port`，端口 0–65535 与主机格式由前后端共同校验，保存部署 YAML 并备份、重启生效；页面明确 `ANIMEGO_WEB_HOST/PORT` 与 ASP.NET Core URLs 环境覆盖优先级更高。
 - [x] 移植 WebSocket 日志 pause/resume：保留 `/websocket/log`、旧 `type=log/count` 帧和三种控制命令；鉴权、逐连接暂停、1000 条有界缓存、慢消费者有界队列、脱敏及取消均已验证。
 - [x] 将实时日志升级为详细日志工作区：兼容旧文本帧并在浏览器拆分 UTC 时间、级别、类别、Event ID、消息、异常和脱敏原文；支持级别/关键词/类别/Event ID 组合筛选、自动滚动、长行换行、单条展开和复制当前脱敏结果，浏览器仍只保留最新 500 条。HTTP 连接另有“全部 / 仅外部 HTTP 请求（Mikan/TMDB/Bangumi 等） / 仅 WebUI/API 入站 / 排除 HTTP”独立选项和外部请求快捷按钮，ASP.NET Core 入站轮询及仅包含本机监听 URL 的启动消息不会与真实外部请求混在一起；默认 Mikan、TMDB、Bangumi、AI、Torrent、封面和数据更新客户端显式记录脱敏的开始/状态/耗时，query、Cookie、passkey、API Key、正文及异常消息不进入日志。
 - [x] 将“日志”独立为一级工作区：运行日志增加时间、仅异常、业务域快速筛选及级别统计；新增跨任务 AI 调用日志 API/页面，按任务、阶段、结果、模型和时间分页查询已持久化 provider usage，汇总成功/失败、Token、HTTP 与工具调用，并可回到任务详情。Prompt、响应正文和凭据继续不进入审计。

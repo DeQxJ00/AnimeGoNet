@@ -63,11 +63,21 @@ test("WebUI authentication uses the login dialog instead of a dedicated URL fiel
     readFile(appPath, "utf8"),
   ]);
   assert.ok(document.querySelector("#webui-authentication-access-key"));
+  const host = document.querySelector("#webui-listen-host");
+  const port = document.querySelector("#webui-listen-port");
+  assert.ok(host);
+  assert.ok(port);
+  assert.equal(host.getAttribute("maxlength"), "253");
+  assert.equal(port.getAttribute("min"), "0");
+  assert.equal(port.getAttribute("max"), "65535");
   assert.equal(document.querySelector("#webui-authentication-url"), null);
   assert.ok(document.querySelector("#webui-access-key-open"));
   assert.ok(document.querySelector("#webui-access-key-dialog"));
   assert.doesNotMatch(app, /webUiAuthenticatedUrl/);
   assert.doesNotMatch(app, /#webui-authentication-url/);
+  assert.match(app, /web\.host = requestedHost/);
+  assert.match(app, /web\.port = requestedPort/);
+  assert.match(app, /监听端口必须是 0–65535 之间的整数/);
 });
 
 test("ids are unique and initial async regions expose valid state", async () => {

@@ -698,6 +698,8 @@ public static class ApiEndpoints
             "save_path": "整理后的媒体库目录"
           },
           "web": {
+            "host": "WebUI 监听 IP、DNS 主机名或 IPv6 地址；127.0.0.1 仅本机，0.0.0.0 监听全部 IPv4",
+            "port": "WebUI 监听端口，范围 0-65535；0 由系统分配临时端口",
             "webui_access_key": "WebUI 管理接口访问密钥；可留空"
           },
           "inner_plugin_mikan": {
@@ -1888,6 +1890,8 @@ public static class ApiEndpoints
                 runtime.BackgroundWorkersEnabled,
                 runtime.InnerPluginMikanAccessKeyConfigured,
                 runtime.WebUiAccessKeyConfigured,
+                options.Web.Host,
+                options.Web.Port,
                 PathsRestartRequired: true),
             new OutboundProxyConfigurationResponse(
                 options.OutboundProxy.Url?.AbsoluteUri,

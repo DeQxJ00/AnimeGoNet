@@ -184,7 +184,7 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 
 一级“插件”菜单分为“内部插件 / 外部插件”。“内部插件”当前提供“Web API / AnimeGoHelper (Mikan) 油猴插件”卡片，并为后续站点内部插件保留同级扩展位置；“外部插件”继续管理进程外 C# 包。Mikan 卡片通过既有强类型部署配置接口读取并明文回填 `inner_plugin_mikan.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`；旧 `filter/mikan_tool.py` 继续作为后端兼容别名。新部署 AccessKey 默认 `123456`。保存前重新读取完整部署文档，只修改 `inner_plugin_mikan.access_key` 并移除旧 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
 
-“设置与备份 / 应用配置”另提供独立“WebUI 鉴权”卡片，明文回填并修改 `web.webui_access_key`。该值只保护 WebUI 管理 API 与实时日志 WebSocket；`inner_plugin_mikan.access_key` 只保护 AnimeGoHelper、兼容插件接口和统一导入端点。两把密钥不能交叉授权。启用 WebUI 密钥后仍直接打开裸地址，由自动弹出的登录窗口或顶部 AccessKey 入口输入；配置卡不再生成或展示专用地址。旧书签中的小写 SHA-256 `webui_access_key` 查询参数继续兼容。清空后裸地址恢复直接使用。保存同样原子备份部署 YAML，并在重启后生效。
+“设置与备份 / 应用配置”提供独立“WebUI 监听与鉴权”卡片，明文回填并修改 `web.host`、`web.port` 和 `web.webui_access_key`，保存时校验、原子备份部署 YAML，并在重启后生效。监听地址支持 IP、有效 DNS 主机名和 IPv6；端口范围为 0–65535，0 表示系统分配临时端口。`ANIMEGO_WEB_HOST`、`ANIMEGO_WEB_PORT`、`--urls` 与 `ASPNETCORE_URLS` 仍是更高优先级的运行环境覆盖。WebUI AccessKey 只保护管理 API 与实时日志 WebSocket；`inner_plugin_mikan.access_key` 只保护 AnimeGoHelper、兼容插件接口和统一导入端点。两把密钥不能交叉授权。启用密钥后仍直接打开裸地址，由自动弹出的登录窗口或顶部 AccessKey 入口输入；配置卡不生成专用地址。旧书签中的小写 SHA-256 `webui_access_key` 查询参数继续兼容。
 
 ## 12. 一级/二级导航
 

@@ -477,6 +477,8 @@ public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("background_workers_enabled")] bool BackgroundWorkersEnabled,
     [property: JsonPropertyName("inner_plugin_mikan_access_key_configured")] bool InnerPluginMikanAccessKeyConfigured,
     [property: JsonPropertyName("webui_access_key_configured")] bool WebUiAccessKeyConfigured,
+    [property: JsonPropertyName("web_host")] string WebHost,
+    [property: JsonPropertyName("web_port")] int WebPort,
     [property: JsonPropertyName("paths_restart_required")] bool PathsRestartRequired);
 
 public sealed record DataUpdateConfigurationResponse(

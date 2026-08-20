@@ -3153,11 +3153,12 @@ async function loadConfiguration() {
             configurationCard("部署与安全", [
                 ["容器模式", enabledLabel(config.deployment.running_in_container)],
                 ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
+                ["当前 WebUI 监听", `${config.deployment.web_host}:${config.deployment.web_port}`],
                 ["inner_plugin_mikan AccessKey", config.deployment.inner_plugin_mikan_access_key_configured
                         ? "已配置；明文见 插件 → 内部插件"
                         : "未配置；可在 插件 → 内部插件 设置"],
                 ["WebUI AccessKey", config.deployment.webui_access_key_configured
-                        ? "已配置；明文见本页 WebUI 鉴权"
+                        ? "已配置；明文见本页 WebUI 监听与鉴权"
                         : "未配置；本机页面无需鉴权"],
             ]),
             configurationCard("全局选择性代理", [
@@ -3241,27 +3242,50 @@ function animeGoHelperApiUrl() {
 }
 async function loadWebUiAuthentication() {
     const status = element("#webui-authentication-status");
+    const hostInput = element("#webui-listen-host");
+    const portInput = element("#webui-listen-port");
     const keyInput = element("#webui-authentication-access-key");
     const reload = element("#webui-authentication-reload");
     const save = element("#webui-authentication-save");
-    status.textContent = "正在读取 WebUI 独立鉴权配置…";
+    status.textContent = "正在读取 WebUI 监听与独立鉴权配置…";
     reload.disabled = true;
     save.disabled = true;
     try {
-        const configuration = await readDeploymentConfiguration();
+        const [configuration, runtimeResponse] = await Promise.all([
+            readDeploymentConfiguration(),
+            authenticatedFetch("/api/v1/config", { headers }),
+        ]);
+        if (!runtimeResponse.ok)
+            throw new Error(await responseError(runtimeResponse));
+        const runtime = await runtimeResponse.json();
         const web = jsonObject(configuration.web, "web 配置");
+        const configuredHost = web.host ?? runtime.deployment.web_host;
+        const configuredPort = web.port ?? runtime.deployment.web_port;
         const configuredKey = web.webui_access_key;
+        if (typeof configuredHost !== "string" || !configuredHost) {
+            throw new Error("web.host 不是有效字符串");
+        }
+        if (typeof configuredPort !== "number" || !Number.isInteger(configuredPort)) {
+            throw new Error("web.port 不是整数");
+        }
         if (configuredKey !== undefined && typeof configuredKey !== "string") {
             throw new Error("web.webui_access_key 不是字符串");
         }
+        hostInput.value = configuredHost;
+        portInput.value = String(configuredPort);
         keyInput.value = configuredKey ?? "";
-        status.textContent = keyInput.value
-            ? "WebUI 鉴权已配置；重启后直接打开 WebUI，并在登录窗口或顶部入口输入 AccessKey。"
-            : "WebUI 鉴权未配置；裸地址可直接使用，不受插件 AccessKey 影响。";
+        const inherited = web.host === undefined || web.port === undefined
+            ? "（旧配置未保存监听项，当前显示进程生效值；首次保存会补入）"
+            : "";
+        status.textContent = `监听 ${configuredHost}:${configuredPort}${inherited}；${keyInput.value
+            ? "WebUI 鉴权已配置，重启后在登录窗口或顶部入口输入 AccessKey。"
+            : "WebUI 鉴权未配置，重启后可直接访问。"}`;
     }
     catch (error) {
+        hostInput.value = "";
+        portInput.value = "";
         keyInput.value = "";
-        status.textContent = `WebUI 鉴权读取失败：${errorMessage(error, "未知错误")}`;
+        status.textContent = `WebUI 监听与鉴权读取失败：${errorMessage(error, "未知错误")}`;
     }
     finally {
         reload.disabled = false;
@@ -3271,20 +3295,40 @@ async function loadWebUiAuthentication() {
 async function saveWebUiAuthentication(event) {
     event.preventDefault();
     const status = element("#webui-authentication-status");
+    const hostInput = element("#webui-listen-host");
+    const portInput = element("#webui-listen-port");
     const keyInput = element("#webui-authentication-access-key");
     const reload = element("#webui-authentication-reload");
     const save = element("#webui-authentication-save");
+    const requestedHost = hostInput.value.trim();
+    const requestedPort = Number(portInput.value);
     const requestedKey = keyInput.value;
     reload.disabled = true;
     save.disabled = true;
+    if (!requestedHost || requestedHost.length > 253 || /\s/.test(requestedHost)) {
+        status.textContent = "监听 IP / 主机名不能为空、不能包含空白，且最多 253 个字符。";
+        reload.disabled = false;
+        save.disabled = false;
+        return;
+    }
+    if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
+        status.textContent = "监听端口必须是 0–65535 之间的整数。";
+        reload.disabled = false;
+        save.disabled = false;
+        return;
+    }
     status.textContent = "正在重新读取、校验并备份部署配置…";
     try {
         const configuration = await readDeploymentConfiguration();
         const web = jsonObject(configuration.web, "web 配置");
-        if (web.webui_access_key === requestedKey) {
-            status.textContent = "WebUI AccessKey 没有变化，无需保存。";
+        if (web.host === requestedHost
+            && web.port === requestedPort
+            && web.webui_access_key === requestedKey) {
+            status.textContent = "WebUI 监听与鉴权配置没有变化，无需保存。";
             return;
         }
+        web.host = requestedHost;
+        web.port = requestedPort;
         web.webui_access_key = requestedKey;
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
@@ -3300,11 +3344,11 @@ async function saveWebUiAuthentication(event) {
             throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
         }
         status.textContent = requestedKey
-            ? "WebUI AccessKey 已保存并备份；重启后直接打开 WebUI，在登录窗口或顶部入口输入。插件 AccessKey 不受影响。"
-            : "WebUI AccessKey 已清空并备份；重启后裸地址可直接使用。插件 AccessKey 不受影响。";
+            ? `监听 ${requestedHost}:${requestedPort} 与 WebUI AccessKey 已保存并备份；重启后生效。插件 AccessKey 不受影响。`
+            : `监听 ${requestedHost}:${requestedPort} 已保存并备份，WebUI AccessKey 已清空；重启后生效。插件 AccessKey 不受影响。`;
     }
     catch (error) {
-        status.textContent = `WebUI AccessKey 保存失败：${errorMessage(error, "未知错误")}`;
+        status.textContent = `WebUI 监听与鉴权保存失败：${errorMessage(error, "未知错误")}`;
     }
     finally {
         reload.disabled = false;
