@@ -4,10 +4,10 @@
 
 ## 范围
 
-- “Mikan 手动设置”从一级菜单移入“输入源”二级菜单，路由为 `#/sources/mikan-ingest`。
+- Mikan 五项功能归入“输入源 / Mikan”三级菜单；手动设置路由仍为 `#/sources/mikan-ingest`。
 - 新增通知中心、Bark 详细配置、通用 Webhook、Discord、Slack、Telegram、Server酱和 PushPlus。
 - 新增通知事件、发送记录和 SQLite schema v54。
-- 可信 EP Offset 黑名单保持在“输入源 / Mikan 可信 Offset”中。
+- 可信 EP Offset 黑名单保持在“输入源 / Mikan / 可信 Offset”中。
 
 ## 自动验证
 
@@ -23,8 +23,8 @@
 在本机 `http://127.0.0.1:6180/` 实际加载编译后的静态 WebUI：
 
 - 一级菜单不再出现独立的“Mikan 手动设置”。
-- 打开“输入源”后显示“Mikan 手动设置、Mikan 人工规则、Mikan 可信 Offset、Mikan 候选规则、Mikan 五级过滤”。
-- 点击“Mikan 手动设置”后进入 `#/sources/mikan-ingest`，单 Torrent 和 RSS 手动功能可见。
+- 打开“输入源”后二级菜单仅显示“输入源管理”和“Mikan”；点击 Mikan 后展开“手动设置、人工规则、可信 Offset、候选规则、五级过滤”。
+- 点击“手动设置”后进入 `#/sources/mikan-ingest`，单 Torrent 和 RSS 手动功能可见。
 - “通知”显示“通知渠道 / 发送记录”二级菜单；Bark 设备 Key、group、sound、icon、URL、level、badge、copy 和自动复制字段可见。
 
 本轮未配置真实通知渠道，也未发送真实 Bark/Webhook；真实网络投递由用户填写目标后点击“发送测试”显式验收。

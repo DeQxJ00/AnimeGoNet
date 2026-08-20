@@ -41,9 +41,24 @@ public sealed class WorkspaceNavigationTests
             html,
             StringComparison.Ordinal);
         Assert.Contains(
-            "{ id: \"mikan-offsets\", label: \"Mikan 可信 Offset\" }",
+            "id: \"mikan\"",
             script,
             StringComparison.Ordinal);
+        Assert.Contains("children: [", script, StringComparison.Ordinal);
+        foreach (var child in new[]
+        {
+            "mikan-ingest\", label: \"手动设置",
+            "mikan-manual-rules\", label: \"人工规则",
+            "mikan-offsets\", label: \"可信 Offset",
+            "mikan-candidate-rules\", label: \"候选规则",
+            "mikan-legacy-filter\", label: \"五级过滤",
+        })
+        {
+            Assert.Contains($"{{ id: \"{child}\" }}", script, StringComparison.Ordinal);
+        }
+        Assert.Contains("secondary-menu-group", script, StringComparison.Ordinal);
+        Assert.Contains("tertiary-navigation", script, StringComparison.Ordinal);
+        Assert.Contains("aria-expanded", script, StringComparison.Ordinal);
         Assert.Contains(">插件</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"插件\"", script, StringComparison.Ordinal);
         Assert.Contains(

@@ -216,11 +216,17 @@ const workspaceDefinitions = {
         defaultSubview: "manage",
         tabs: [
             { id: "manage", label: "输入源管理" },
-            { id: "mikan-ingest", label: "Mikan 手动设置" },
-            { id: "mikan-manual-rules", label: "Mikan 人工规则" },
-            { id: "mikan-offsets", label: "Mikan 可信 Offset" },
-            { id: "mikan-candidate-rules", label: "Mikan 候选规则" },
-            { id: "mikan-legacy-filter", label: "Mikan 五级过滤" },
+            {
+                id: "mikan",
+                label: "Mikan",
+                children: [
+                    { id: "mikan-ingest", label: "手动设置" },
+                    { id: "mikan-manual-rules", label: "人工规则" },
+                    { id: "mikan-offsets", label: "可信 Offset" },
+                    { id: "mikan-candidate-rules", label: "候选规则" },
+                    { id: "mikan-legacy-filter", label: "五级过滤" },
+                ],
+            },
         ],
     },
     "bangumi-cache": {
@@ -295,13 +301,16 @@ const workspaceDefinitions = {
 function isWorkspaceId(value) {
     return Object.hasOwn(workspaceDefinitions, value);
 }
+function workspaceLeafTabs(definition) {
+    return definition.tabs.flatMap(tab => tab.children ?? [tab]);
+}
 function workspaceFromHash() {
     const [rawWorkspace = "", rawSubview = ""] = window.location.hash
         .replace(/^#\/?/, "")
         .split("/", 2);
     const workspace = isWorkspaceId(rawWorkspace) ? rawWorkspace : "overview";
     const definition = workspaceDefinitions[workspace];
-    const subview = definition.tabs.some(tab => tab.id === rawSubview)
+    const subview = workspaceLeafTabs(definition).some(tab => tab.id === rawSubview)
         ? rawSubview
         : definition.defaultSubview;
     return { workspace, subview };
@@ -330,7 +339,7 @@ function closeMobileSidebar() {
 }
 function selectWorkspace(workspace, subview, updateHash = true) {
     const definition = workspaceDefinitions[workspace];
-    const selectedSubview = definition.tabs.some(tab => tab.id === subview)
+    const selectedSubview = workspaceLeafTabs(definition).some(tab => tab.id === subview)
         ? subview
         : definition.defaultSubview;
     document.querySelectorAll("#main-content > section[data-workspace]")
@@ -350,6 +359,36 @@ function selectWorkspace(workspace, subview, updateHash = true) {
     element("#workspace-description").textContent = definition.description;
     const tabs = element("#workspace-tabs");
     tabs.replaceChildren(...definition.tabs.map(tab => {
+        if (tab.children?.length) {
+            const group = document.createElement("div");
+            group.className = "secondary-menu-group";
+            const groupActive = tab.children.some(child => child.id === selectedSubview);
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "secondary-menu-toggle";
+            toggle.textContent = tab.label;
+            toggle.setAttribute("aria-expanded", groupActive ? "true" : "false");
+            toggle.addEventListener("click", () => {
+                if (!groupActive)
+                    selectWorkspace(workspace, tab.children[0].id);
+            });
+            const submenu = document.createElement("nav");
+            submenu.className = "tertiary-navigation";
+            submenu.setAttribute("aria-label", `${tab.label} 子菜单`);
+            submenu.hidden = !groupActive;
+            submenu.replaceChildren(...tab.children.map(child => {
+                const childButton = document.createElement("button");
+                childButton.type = "button";
+                childButton.textContent = child.label;
+                childButton.dataset.subviewTarget = child.id;
+                if (child.id === selectedSubview)
+                    childButton.setAttribute("aria-current", "page");
+                childButton.addEventListener("click", () => selectWorkspace(workspace, child.id));
+                return childButton;
+            }));
+            group.append(toggle, submenu);
+            return group;
+        }
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = tab.label;
