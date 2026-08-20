@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 53;
+    public const int CurrentVersion = 54;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -98,7 +98,120 @@ public static class DatabaseSchema
             53,
             "trusted_offset_blacklist",
             TrustedOffsetBlacklist),
+        new SchemaMigration(
+            54,
+            "webhook_notifications",
+            WebhookNotifications),
     ];
+
+    private const string WebhookNotifications = """
+        CREATE TABLE notification_channels (
+            id TEXT NOT NULL PRIMARY KEY,
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+            provider TEXT NOT NULL CHECK (provider IN (
+                'bark', 'generic', 'discord', 'slack',
+                'telegram', 'serverchan', 'pushplus')),
+            enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+            endpoint_url TEXT NOT NULL CHECK (length(endpoint_url) BETWEEN 8 AND 2048),
+            secret TEXT CHECK (secret IS NULL OR length(secret) BETWEEN 1 AND 4096),
+            target TEXT CHECK (target IS NULL OR length(target) BETWEEN 1 AND 512),
+            options_json TEXT NOT NULL CHECK (json_valid(options_json)),
+            events_json TEXT NOT NULL CHECK (json_valid(events_json)),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TABLE notification_events (
+            id TEXT NOT NULL PRIMARY KEY,
+            event_type TEXT NOT NULL CHECK (event_type IN (
+                'metadata_failed', 'metadata_other', 'download_failed',
+                'download_completed', 'organization_completed',
+                'review_required', 'test')),
+            task_id TEXT,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+            state TEXT NOT NULL CHECK (state IN ('pending', 'processing', 'completed')),
+            lease_expires_at_utc TEXT,
+            created_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT
+        ) STRICT;
+
+        CREATE INDEX ix_notification_events_pending
+        ON notification_events(state, created_at_utc);
+
+        CREATE TABLE notification_deliveries (
+            id TEXT NOT NULL PRIMARY KEY,
+            event_id TEXT REFERENCES notification_events(id) ON DELETE SET NULL,
+            channel_id TEXT REFERENCES notification_channels(id) ON DELETE SET NULL,
+            channel_name TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            task_id TEXT,
+            title TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('succeeded', 'failed', 'skipped')),
+            http_status INTEGER,
+            failure_code TEXT,
+            response_excerpt TEXT,
+            duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0),
+            created_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_notification_deliveries_created
+        ON notification_deliveries(created_at_utc DESC);
+
+        CREATE TRIGGER tr_notification_ingest_status
+        AFTER UPDATE OF status, readaptation_review_state ON ingest_tasks
+        BEGIN
+            INSERT INTO notification_events (
+                id, event_type, task_id, title, body, payload_json,
+                state, created_at_utc)
+            SELECT lower(hex(randomblob(16))),
+                   CASE NEW.status
+                     WHEN 'metadata_failed' THEN 'metadata_failed'
+                     WHEN 'download_error' THEN 'download_failed'
+                     WHEN 'downloaded' THEN 'download_completed'
+                     WHEN 'organized' THEN 'organization_completed'
+                   END,
+                   NEW.id, NEW.title,
+                   CASE NEW.status
+                     WHEN 'metadata_failed' THEN '元数据匹配失败：' || COALESCE(NEW.failure_reason, '未提供原因')
+                     WHEN 'download_error' THEN '下载失败：' || COALESCE(NEW.failure_reason, '未提供原因')
+                     WHEN 'downloaded' THEN '下载已完成，等待或正在整理媒体文件。'
+                     WHEN 'organized' THEN '媒体文件已经整理完成。'
+                   END,
+                   json_object('status', NEW.status,
+                               'failure_kind', NEW.failure_kind,
+                               'failure_reason', NEW.failure_reason),
+                   'pending', NEW.updated_at_utc
+            WHERE NEW.status <> OLD.status
+              AND NEW.status IN ('metadata_failed', 'download_error', 'downloaded', 'organized');
+
+            INSERT INTO notification_events (
+                id, event_type, task_id, title, body, payload_json,
+                state, created_at_utc)
+            SELECT lower(hex(randomblob(16))), 'metadata_other', NEW.id, NEW.title,
+                   '元数据处理完成，但存在需要检查的 Other 文件。',
+                   json_object('other_count', (
+                       SELECT COUNT(*) FROM task_files
+                       WHERE task_id = NEW.id AND disposition = 'other')),
+                   'pending', NEW.updated_at_utc
+            WHERE NEW.status <> OLD.status
+              AND NEW.status IN ('download_preparing', 'downloaded')
+              AND EXISTS (
+                  SELECT 1 FROM task_files
+                  WHERE task_id = NEW.id AND disposition = 'other');
+
+            INSERT INTO notification_events (
+                id, event_type, task_id, title, body, payload_json,
+                state, created_at_utc)
+            SELECT lower(hex(randomblob(16))), 'review_required', NEW.id, NEW.title,
+                   'Other 重新适配已经完成，等待人工审核。', '{}',
+                   'pending', NEW.updated_at_utc
+            WHERE NEW.readaptation_review_state = 'pending'
+              AND NEW.readaptation_review_state <> OLD.readaptation_review_state;
+        END;
+        """;
 
     private const string TrustedOffsetBlacklist = """
         CREATE TABLE mikan_trusted_offset_blacklist (

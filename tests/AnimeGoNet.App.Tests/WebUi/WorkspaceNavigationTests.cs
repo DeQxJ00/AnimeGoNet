@@ -37,6 +37,10 @@ public sealed class WorkspaceNavigationTests
             html,
             StringComparison.Ordinal);
         Assert.Contains(
+            "data-nav-label=\"Mikan 手动设置\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "{ id: \"mikan-offsets\", label: \"Mikan 可信 Offset\" }",
             script,
             StringComparison.Ordinal);
@@ -99,6 +103,7 @@ public sealed class WorkspaceNavigationTests
             "plugins",
             "connections",
             "tools",
+            "notifications",
             "logs",
             "system",
         })

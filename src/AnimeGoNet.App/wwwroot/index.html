@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260820-webui-access-key-dialog">
+  <link rel="stylesheet" href="/styles.css?v=20260820-notifications-offset-blacklist">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -25,6 +25,7 @@
         <button type="button" data-workspace-target="plugins"><span aria-hidden="true">⊞</span>插件</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
+        <button type="button" data-workspace-target="notifications"><span aria-hidden="true">♢</span>通知</button>
         <button type="button" data-workspace-target="logs"><span aria-hidden="true">≡</span>日志</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统缓存</button>
       </nav>
@@ -481,6 +482,63 @@
       </div>
     </section>
 
+    <section id="notification-channels" aria-labelledby="notification-channels-title" data-workspace="notifications" data-subview="channels" data-nav-label="通知渠道">
+      <div class="section-heading">
+        <div><p class="eyebrow">Webhook notifications</p><h2 id="notification-channels-title">通知渠道</h2></div>
+        <div class="form-actions"><button id="notification-new" type="button" class="secondary-button">新建渠道</button><button id="notification-reload" type="button" class="secondary-button">刷新</button></div>
+      </div>
+      <p class="muted">通知失败只写发送记录，不会回滚下载、匹配或整理。Bark 使用现代 POST `/push` 接口；设备 Key、Bot Token、SendKey 等值会直接回填，便于本地管理。</p>
+      <div class="notification-layout">
+        <div id="notification-channel-list" class="notification-channel-list" aria-live="polite"><p class="muted empty">正在读取渠道…</p></div>
+        <form id="notification-channel-form" class="notification-channel-form">
+          <input id="notification-channel-id" type="hidden">
+          <div class="notification-form-grid">
+            <label>渠道名称<input id="notification-name" maxlength="100" required placeholder="例如 iPhone Bark"></label>
+            <label>类型<select id="notification-provider"><option value="bark">Bark</option><option value="generic">通用 Webhook</option><option value="discord">Discord Webhook</option><option value="slack">Slack Incoming Webhook</option><option value="telegram">Telegram Bot</option><option value="serverchan">Server酱</option><option value="pushplus">PushPlus</option></select></label>
+            <label class="wide">服务/API 地址<input id="notification-endpoint" type="url" required></label>
+            <label id="notification-secret-field">设备 Key / Token<input id="notification-secret" autocomplete="off"></label>
+            <label id="notification-target-field">目标 / Chat ID<input id="notification-target"></label>
+            <label class="switch-row"><input id="notification-enabled" type="checkbox" checked>启用这个渠道</label>
+          </div>
+          <fieldset id="notification-bark-options" class="notification-provider-options">
+            <legend>Bark 详细选项</legend>
+            <div class="notification-form-grid">
+              <label>分组 group<input id="notification-bark-group" placeholder="AnimeGoNet"></label>
+              <label>铃声 sound<input id="notification-bark-sound" placeholder="例如 birdsong"></label>
+              <label class="wide">图标 icon URL<input id="notification-bark-icon" type="url"></label>
+              <label class="wide">点击通知打开 URL<input id="notification-bark-url" type="url"></label>
+              <label>时效级别<select id="notification-bark-level"><option value="active">active</option><option value="timeSensitive">timeSensitive</option><option value="passive">passive</option><option value="critical">critical</option></select></label>
+              <label>角标 badge<input id="notification-bark-badge" type="number" min="0" step="1"></label>
+              <label>复制内容<input id="notification-bark-copy"></label>
+              <label class="switch-row"><input id="notification-bark-auto-copy" type="checkbox">自动复制</label>
+            </div>
+          </fieldset>
+          <fieldset id="notification-generic-options" class="notification-provider-options" hidden>
+            <legend>通用 Webhook</legend>
+            <label>额外请求头（JSON对象）<textarea id="notification-generic-headers" rows="4" placeholder='{"Authorization":"Bearer ..."}'></textarea></label>
+            <label>JSON正文模板<textarea id="notification-generic-template" rows="6"></textarea></label>
+            <p class="muted">占位符：{{event_json}}、{{title_json}}、{{body_json}}、{{task_id_json}}；替换值均为安全 JSON 字面量。</p>
+          </fieldset>
+          <fieldset class="notification-events"><legend>提醒事件</legend>
+            <label><input type="checkbox" name="notification-event" value="metadata_failed" checked>元数据失败</label>
+            <label><input type="checkbox" name="notification-event" value="metadata_other" checked>出现 Other</label>
+            <label><input type="checkbox" name="notification-event" value="download_failed" checked>下载失败</label>
+            <label><input type="checkbox" name="notification-event" value="download_completed">下载完成</label>
+            <label><input type="checkbox" name="notification-event" value="organization_completed" checked>整理完成</label>
+            <label><input type="checkbox" name="notification-event" value="review_required" checked>等待人工审核</label>
+          </fieldset>
+          <p id="notification-form-status" class="muted" role="status">新建通知渠道。</p>
+          <div class="form-actions"><button id="notification-delete" type="button" class="delete-button" disabled>删除</button><button id="notification-test" type="button" class="secondary-button" disabled>发送测试</button><button type="submit" class="primary-button">保存渠道</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="notification-deliveries" aria-labelledby="notification-deliveries-title" data-workspace="notifications" data-subview="deliveries" data-nav-label="发送记录">
+      <div class="section-heading"><div><p class="eyebrow">Delivery audit</p><h2 id="notification-deliveries-title">通知发送记录</h2></div><button id="notification-deliveries-reload" type="button" class="secondary-button">刷新</button></div>
+      <p class="muted">显示最近100次实际发送，包括渠道、事件、HTTP状态、稳定错误码、耗时和响应摘要。</p>
+      <div id="notification-delivery-list" class="notification-delivery-list" aria-live="polite"><p class="muted empty">正在读取发送记录…</p></div>
+    </section>
+
     <section id="live-logs" aria-labelledby="live-logs-title" data-workspace="logs" data-subview="runtime" data-nav-label="运行日志">
       <div class="section-heading live-log-heading">
         <div>
@@ -935,7 +993,7 @@
       </div>
     </section>
 
-    <section id="manual-submit" aria-labelledby="manual-submit-title" data-workspace="sources" data-subview="mikan-ingest" data-nav-label="Mikan 导入任务">
+    <section id="manual-submit" aria-labelledby="manual-submit-title" data-workspace="sources" data-subview="mikan-ingest" data-nav-label="Mikan 手动设置">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Unified input</p>
@@ -1659,6 +1717,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260820-webui-access-key-dialog"></script>
+    <script type="module" src="/app.js?v=20260820-notifications-offset-blacklist"></script>
 </body>
 </html>

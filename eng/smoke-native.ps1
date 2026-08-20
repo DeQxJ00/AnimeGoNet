@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 53,
+    [int]$ExpectedSchemaVersion = 54,
 
     [switch]$LegacyYamlUpgrade
 )
@@ -20,6 +20,8 @@ $env:background_workers_enabled = 'false'
 $env:mikan_base_url = 'http://127.0.0.1:1/'
 $nativeCredential = 'native-aot-private-cookie'
 $env:ANIMEGO_MIKAN_COOKIE = $nativeCredential
+$nativePluginAccessKey = 'native-aot-plugin-access'
+$env:ANIMEGO_INNER_PLUGIN_MIKAN_ACCESS_KEY = $nativePluginAccessKey
 $legacyYamlHash = $null
 if ($LegacyYamlUpgrade) {
     New-Item -ItemType Directory -Path $env:data_path -Force | Out-Null
@@ -170,6 +172,7 @@ try {
         Method = 'Post'
         ContentType = 'application/json'
         Body = $ingestPayload
+        Headers = @{ 'X-AnimeGo-Access-Key' = $nativePluginAccessKey }
         TimeoutSec = 30
     }
     $ingest = Invoke-RestMethod @ingestParameters
@@ -239,9 +242,11 @@ try {
         -or $pluginConfigurationItems[0].enabled `
         -or @($pluginConfigurationItems[0].configured_write_only_paths).Count -ne 1 `
         -or $pluginConfigurationItems[0].configured_write_only_paths[0] -ne '/token' `
-        -or $null -ne $pluginConfigurationItems[0].vars.token `
-        -or ($pluginConfigurations | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)) {
-        throw 'NativeAOT external plugin configuration redaction smoke failed.'
+        -or $pluginConfigurationItems[0].vars.token -ne $pluginWriteOnlyValue `
+        -or -not ($pluginConfigurations | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)) {
+        $configuredPaths = @($pluginConfigurationItems[0].configured_write_only_paths)
+        $containsSecret = ($pluginConfigurations | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)
+        throw "NativeAOT external plugin configuration round-trip smoke failed: revision=$($pluginConfigurations.revision), items=$($pluginConfigurationItems.Count), configured_paths=$($configuredPaths.Count), token_visible=$($pluginConfigurationItems[0].vars.token -eq $pluginWriteOnlyValue), contains_secret=$containsSecret."
     }
     $pluginPutPayload = '{"expected_revision":1,"enabled":true,"args":{"smoke":true},"vars":{},"clear_write_only_paths":[]}'
     $pluginPut = Invoke-RestMethod `
@@ -253,7 +258,7 @@ try {
     if ($pluginPut.revision -ne 2 `
         -or -not $pluginPut.item.enabled `
         -or $pluginPut.item.configured_write_only_paths[0] -ne '/token' `
-        -or ($pluginPut | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)) {
+        -or -not ($pluginPut | ConvertTo-Json -Depth 12 -Compress).Contains($pluginWriteOnlyValue)) {
         throw 'NativeAOT external plugin configuration update smoke failed.'
     }
     $pluginClearPayload = '{"expected_revision":2,"enabled":true,"args":{"smoke":true},"vars":{},"clear_write_only_paths":["/token"]}'
@@ -294,9 +299,10 @@ try {
     if (
         $mikanSource.Count -ne 1 -or
         -not $mikanSource[0].mikan_identity_cookie_configured -or
-        $sourcesJson.Contains($nativeCredential)
+        $mikanSource[0].mikan_identity_cookie -ne $nativeCredential -or
+        -not $sourcesJson.Contains($nativeCredential)
     ) {
-        throw 'NativeAOT source credential redaction smoke failed.'
+        throw 'NativeAOT source credential round-trip smoke failed.'
     }
 
     if (($ingest.accepted_count -ne 0) -or ($ingest.rejected_count -ne 1) -or (-not $ingest.items[0].errors[0].Contains('NetworkFailure'))) {

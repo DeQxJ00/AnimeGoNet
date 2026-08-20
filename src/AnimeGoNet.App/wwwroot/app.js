@@ -36,6 +36,9 @@ const api = new ApiClient(null, authenticatedFetch);
 const headers = new Headers();
 if (webUiAccessKey)
     headers.set("WebUI-Access-Key", webUiAccessKey);
+function jsonRequestHeaders() {
+    return new Headers([...headers, ["Content-Type", "application/json"]]);
+}
 const webUiAccessKeyDialog = element("#webui-access-key-dialog");
 const webUiAccessKeyForm = element("#webui-access-key-form");
 const webUiAccessKeyInput = element("#webui-access-key-input");
@@ -177,6 +180,7 @@ let aiLogTotalItems = 0;
 let aiLogRequestSequence = 0;
 let activeAiDebugRunId = null;
 let aiTestDefaultPrompt = null;
+let notificationChannels = [];
 const aiTestPromptDraftKey = "animegonet.ai-test-prompt.v1";
 const workspaceDefinitions = {
     overview: {
@@ -212,7 +216,7 @@ const workspaceDefinitions = {
         defaultSubview: "manage",
         tabs: [
             { id: "manage", label: "输入源管理" },
-            { id: "mikan-ingest", label: "Mikan 导入任务" },
+            { id: "mikan-ingest", label: "Mikan 手动设置" },
             { id: "mikan-manual-rules", label: "Mikan 人工规则" },
             { id: "mikan-offsets", label: "Mikan 可信 Offset" },
             { id: "mikan-candidate-rules", label: "Mikan 候选规则" },
@@ -259,6 +263,15 @@ const workspaceDefinitions = {
         defaultSubview: "ai-metadata",
         tabs: [
             { id: "ai-metadata", label: "AI 元数据测试" },
+        ],
+    },
+    notifications: {
+        title: "通知",
+        description: "配置 Bark 和主流 Webhook提醒，并检查每次发送结果。",
+        defaultSubview: "channels",
+        tabs: [
+            { id: "channels", label: "通知渠道" },
+            { id: "deliveries", label: "发送记录" },
         ],
     },
     logs: {
@@ -4628,10 +4641,289 @@ async function loadTrustedOffsets() {
         renderRegionMessage(container, "error", `可信 offset 读取失败：${errorMessage(error, "未知错误")}`);
     }
 }
+const notificationProviderDefaults = {
+    bark: "https://api.day.app",
+    generic: "",
+    discord: "",
+    slack: "",
+    telegram: "https://api.telegram.org",
+    serverchan: "https://sctapi.ftqq.com",
+    pushplus: "https://www.pushplus.plus/send",
+};
+function notificationProviderChanged(resetEndpoint = false) {
+    const provider = element("#notification-provider")
+        .value;
+    const endpoint = element("#notification-endpoint");
+    const previous = endpoint.dataset.provider;
+    if (resetEndpoint || !endpoint.value
+        || (previous !== undefined && endpoint.value === notificationProviderDefaults[previous])) {
+        endpoint.value = notificationProviderDefaults[provider];
+    }
+    endpoint.dataset.provider = provider;
+    element("#notification-bark-options").hidden = provider !== "bark";
+    element("#notification-generic-options").hidden = provider !== "generic";
+    const secretField = element("#notification-secret-field");
+    const targetField = element("#notification-target-field");
+    secretField.hidden = ["generic", "discord", "slack"].includes(provider);
+    targetField.hidden = !["telegram", "pushplus"].includes(provider);
+    const secretLabel = provider === "bark" ? "Bark 设备 Key"
+        : provider === "telegram" ? "Bot Token"
+            : provider === "serverchan" ? "SendKey"
+                : provider === "pushplus" ? "PushPlus Token" : "密钥";
+    if (secretField.firstChild)
+        secretField.firstChild.textContent = secretLabel;
+    if (targetField.firstChild) {
+        targetField.firstChild.textContent = provider === "telegram"
+            ? "Chat ID" : "PushPlus topic（可空）";
+    }
+    element("#notification-secret").required =
+        ["bark", "telegram", "serverchan", "pushplus"].includes(provider);
+    element("#notification-target").required = provider === "telegram";
+}
+function resetNotificationForm() {
+    element("#notification-channel-form").reset();
+    element("#notification-channel-id").value = "";
+    element("#notification-provider").value = "bark";
+    element("#notification-enabled").checked = true;
+    element("#notification-bark-group").value = "AnimeGoNet";
+    element("#notification-bark-level").value = "active";
+    element("#notification-generic-template").value =
+        '{"event":{{event_json}},"title":{{title_json}},"body":{{body_json}},"task_id":{{task_id_json}}}';
+    document.querySelectorAll('input[name="notification-event"]')
+        .forEach(input => {
+        input.checked = [
+            "metadata_failed",
+            "metadata_other",
+            "download_failed",
+            "organization_completed",
+            "review_required",
+        ].includes(input.value);
+    });
+    notificationProviderChanged(true);
+    element("#notification-delete").disabled = true;
+    element("#notification-test").disabled = true;
+    element("#notification-form-status").textContent = "新建通知渠道。";
+}
+function notificationOptionsFromForm(provider) {
+    if (provider === "bark") {
+        const options = {};
+        for (const [key, selector] of Object.entries({
+            group: "#notification-bark-group",
+            sound: "#notification-bark-sound",
+            icon: "#notification-bark-icon",
+            url: "#notification-bark-url",
+            copy: "#notification-bark-copy",
+        })) {
+            const value = element(selector).value.trim();
+            if (value)
+                options[key] = value;
+        }
+        options.level = element("#notification-bark-level").value;
+        const badge = element("#notification-bark-badge").valueAsNumber;
+        if (Number.isFinite(badge))
+            options.badge = badge;
+        options.auto_copy = element("#notification-bark-auto-copy").checked;
+        return options;
+    }
+    if (provider === "generic") {
+        const headersText = element("#notification-generic-headers")
+            .value.trim();
+        return {
+            headers: headersText ? jsonObject(JSON.parse(headersText), "额外请求头") : {},
+            body_template: element("#notification-generic-template").value,
+        };
+    }
+    return {};
+}
+function notificationPayload() {
+    const provider = element("#notification-provider")
+        .value;
+    return {
+        name: element("#notification-name").value.trim(),
+        provider,
+        enabled: element("#notification-enabled").checked,
+        endpoint_url: element("#notification-endpoint").value.trim(),
+        secret: element("#notification-secret").value.trim() || null,
+        target: element("#notification-target").value.trim() || null,
+        options: notificationOptionsFromForm(provider),
+        events: [...document.querySelectorAll('input[name="notification-event"]:checked')].map(input => input.value),
+    };
+}
+function notificationOptionText(options, key) {
+    const value = options[key];
+    return typeof value === "string" ? value : "";
+}
+function selectNotificationChannel(channel) {
+    element("#notification-channel-id").value = channel.id;
+    element("#notification-name").value = channel.name;
+    element("#notification-provider").value = channel.provider;
+    notificationProviderChanged(true);
+    element("#notification-endpoint").value = channel.endpoint_url;
+    element("#notification-secret").value = channel.secret ?? "";
+    element("#notification-target").value = channel.target ?? "";
+    element("#notification-enabled").checked = channel.enabled;
+    if (channel.provider === "bark") {
+        element("#notification-bark-group").value =
+            notificationOptionText(channel.options, "group");
+        element("#notification-bark-sound").value =
+            notificationOptionText(channel.options, "sound");
+        element("#notification-bark-icon").value =
+            notificationOptionText(channel.options, "icon");
+        element("#notification-bark-url").value =
+            notificationOptionText(channel.options, "url");
+        element("#notification-bark-level").value =
+            notificationOptionText(channel.options, "level") || "active";
+        const badge = channel.options.badge;
+        element("#notification-bark-badge").value =
+            typeof badge === "number" ? String(badge) : "";
+        element("#notification-bark-copy").value =
+            notificationOptionText(channel.options, "copy");
+        element("#notification-bark-auto-copy").checked =
+            channel.options.auto_copy === true;
+    }
+    if (channel.provider === "generic") {
+        element("#notification-generic-headers").value =
+            JSON.stringify(channel.options.headers ?? {}, null, 2);
+        element("#notification-generic-template").value =
+            notificationOptionText(channel.options, "body_template");
+    }
+    document.querySelectorAll('input[name="notification-event"]')
+        .forEach(input => input.checked = channel.events.includes(input.value));
+    element("#notification-delete").disabled = false;
+    element("#notification-test").disabled = false;
+    element("#notification-form-status").textContent =
+        `正在编辑“${channel.name}”；敏感值已直接回填。`;
+}
+async function loadNotificationChannels() {
+    const container = element("#notification-channel-list");
+    setRegionState(container, "loading");
+    try {
+        const response = await authenticatedFetch("/api/v1/notifications/channels", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        notificationChannels = (await response.json()).items;
+        if (notificationChannels.length === 0) {
+            renderRegionMessage(container, "empty", "尚未配置通知渠道");
+            return;
+        }
+        renderRegionContent(container, ...notificationChannels.map(channel => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "notification-channel-card";
+            const title = document.createElement("strong");
+            title.textContent = channel.name;
+            const meta = document.createElement("span");
+            meta.textContent = `${channel.provider} · ${channel.enabled ? "已启用" : "已停用"} · ${channel.events.length} 类事件`;
+            button.append(title, meta);
+            button.addEventListener("click", () => selectNotificationChannel(channel));
+            return button;
+        }));
+    }
+    catch (error) {
+        renderRegionMessage(container, "error", `通知渠道读取失败：${errorMessage(error, "未知错误")}`);
+    }
+}
+async function saveNotificationChannel(event) {
+    event.preventDefault();
+    try {
+        const id = element("#notification-channel-id").value;
+        const response = await authenticatedFetch(id
+            ? `/api/v1/notifications/channels/${encodeURIComponent(id)}`
+            : "/api/v1/notifications/channels", {
+            method: id ? "PUT" : "POST",
+            headers: jsonRequestHeaders(),
+            body: JSON.stringify(notificationPayload()),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const channel = await response.json();
+        await loadNotificationChannels();
+        selectNotificationChannel(channel);
+    }
+    catch (error) {
+        element("#notification-form-status").textContent =
+            `保存失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function testNotificationChannel() {
+    const id = element("#notification-channel-id").value;
+    if (!id)
+        return;
+    element("#notification-form-status").textContent = "正在发送测试通知…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/notifications/channels/${encodeURIComponent(id)}/test`, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        element("#notification-form-status").textContent = result.succeeded
+            ? `测试成功：HTTP ${result.http_status ?? "—"}，${result.duration_ms} ms`
+            : `测试失败：${result.failure_code ?? "未知错误"}，HTTP ${result.http_status ?? "—"}`;
+        await loadNotificationDeliveries();
+    }
+    catch (error) {
+        element("#notification-form-status").textContent =
+            `测试失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function deleteNotificationChannel() {
+    const id = element("#notification-channel-id").value;
+    if (!id || !window.confirm("删除这个通知渠道？历史发送记录会保留渠道名称和结果。")) {
+        return;
+    }
+    const response = await authenticatedFetch(`/api/v1/notifications/channels/${encodeURIComponent(id)}`, { method: "DELETE", headers });
+    if (!response.ok) {
+        window.alert(await responseError(response));
+        return;
+    }
+    resetNotificationForm();
+    await loadNotificationChannels();
+}
+async function loadNotificationDeliveries() {
+    const container = element("#notification-delivery-list");
+    setRegionState(container, "loading");
+    try {
+        const response = await authenticatedFetch("/api/v1/notifications/deliveries?limit=100", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const items = (await response.json()).items;
+        if (items.length === 0) {
+            renderRegionMessage(container, "empty", "暂无通知发送记录");
+            return;
+        }
+        renderRegionContent(container, ...items.map(item => {
+            const card = document.createElement("article");
+            card.className = `notification-delivery-card ${item.state}`;
+            const heading = document.createElement("div");
+            heading.className = "download-heading";
+            const title = document.createElement("strong");
+            title.textContent = `${item.channel_name} · ${item.event_type}`;
+            const badge = document.createElement("span");
+            badge.className = `badge ${item.state}`;
+            badge.textContent = item.state === "succeeded" ? "成功" : "失败";
+            heading.append(title, badge);
+            const detail = document.createElement("p");
+            detail.className = "muted";
+            detail.textContent = `${new Date(item.created_at_utc).toLocaleString()} · ${item.provider} · HTTP ${item.http_status ?? "—"} · ${item.duration_ms} ms${item.failure_code ? ` · ${item.failure_code}` : ""}`;
+            card.append(heading, detail);
+            if (item.response_excerpt) {
+                const pre = document.createElement("pre");
+                pre.textContent = item.response_excerpt;
+                card.append(pre);
+            }
+            return card;
+        }));
+    }
+    catch (error) {
+        renderRegionMessage(container, "error", `发送记录读取失败：${errorMessage(error, "未知错误")}`);
+    }
+}
 function trustedOffsetBlacklistPayload() {
-    const scope = element("#trusted-offset-blacklist-scope").value;
-    const mikanId = element("#trusted-offset-blacklist-mikanid").valueAsNumber;
-    const groupId = element("#trusted-offset-blacklist-groupid").valueAsNumber;
+    const scope = element("#trusted-offset-blacklist-scope")
+        .value;
+    const mikanId = element("#trusted-offset-blacklist-mikanid")
+        .valueAsNumber;
+    const groupId = element("#trusted-offset-blacklist-groupid")
+        .valueAsNumber;
     return {
         scope,
         mikanid: scope === "groupid" ? null : mikanId,
@@ -4639,7 +4931,8 @@ function trustedOffsetBlacklistPayload() {
     };
 }
 function updateTrustedOffsetBlacklistFields() {
-    const scope = element("#trusted-offset-blacklist-scope").value;
+    const scope = element("#trusted-offset-blacklist-scope")
+        .value;
     const mikanField = element("#trusted-offset-blacklist-mikan-field");
     const groupField = element("#trusted-offset-blacklist-group-field");
     const mikanInput = element("#trusted-offset-blacklist-mikanid");
@@ -4650,8 +4943,10 @@ function updateTrustedOffsetBlacklistFields() {
     groupInput.required = scope !== "mikanid";
 }
 function trustedOffsetBlacklistLabel(item) {
-    if (item.scope === "mikanid") return `整个 mikanid ${item.mikanid}`;
-    if (item.scope === "groupid") return `整个 groupid ${item.groupid}`;
+    if (item.scope === "mikanid")
+        return `整个 mikanid ${item.mikanid}`;
+    if (item.scope === "groupid")
+        return `整个 groupid ${item.groupid}`;
     return `Mikan ${item.mikanid} + Group ${item.groupid}`;
 }
 async function loadTrustedOffsetBlacklist() {
@@ -4659,13 +4954,14 @@ async function loadTrustedOffsetBlacklist() {
     setRegionState(container, "loading");
     try {
         const response = await authenticatedFetch("/api/v1/mikan/trusted-offset-blacklist", { headers });
-        if (!response.ok) throw new Error(await responseError(response));
+        if (!response.ok)
+            throw new Error(await responseError(response));
         const body = await response.json();
         if (body.items.length === 0) {
             renderRegionMessage(container, "empty", "当前没有可信 Offset 黑名单");
             return;
         }
-        renderRegionContent(container, ...body.items.map((item) => {
+        renderRegionContent(container, ...body.items.map(item => {
             const row = document.createElement("article");
             row.className = "offset-blacklist-entry";
             const text = document.createElement("p");
@@ -4685,14 +4981,14 @@ async function loadTrustedOffsetBlacklist() {
 }
 async function addTrustedOffsetBlacklist(event) {
     event.preventDefault();
-    const payload = trustedOffsetBlacklistPayload();
     try {
         const response = await authenticatedFetch("/api/v1/mikan/trusted-offset-blacklist", {
             method: "POST",
-            headers: jsonHeaders(),
-            body: JSON.stringify(payload),
+            headers: jsonRequestHeaders(),
+            body: JSON.stringify(trustedOffsetBlacklistPayload()),
         });
-        if (!response.ok) throw new Error(await responseError(response));
+        if (!response.ok)
+            throw new Error(await responseError(response));
         await Promise.all([loadTrustedOffsetBlacklist(), loadTrustedOffsets()]);
     }
     catch (error) {
@@ -4700,13 +4996,17 @@ async function addTrustedOffsetBlacklist(event) {
     }
 }
 async function removeTrustedOffsetBlacklist(item) {
-    if (!window.confirm(`将 ${trustedOffsetBlacklistLabel(item)} 移出可信 Offset 黑名单？以后可以重新开始学习，但已清除的旧证据不会恢复。`)) return;
+    if (!window.confirm(`将 ${trustedOffsetBlacklistLabel(item)} 移出可信 Offset 黑名单？以后可以重新开始学习，但已清除的旧证据不会恢复。`))
+        return;
     const query = new URLSearchParams({ scope: item.scope });
-    if (item.mikanid) query.set("mikanid", item.mikanid);
-    if (item.groupid) query.set("groupid", item.groupid);
+    if (item.mikanid !== null)
+        query.set("mikanid", String(item.mikanid));
+    if (item.groupid !== null)
+        query.set("groupid", String(item.groupid));
     try {
         const response = await authenticatedFetch(`/api/v1/mikan/trusted-offset-blacklist?${query}`, { method: "DELETE", headers });
-        if (!response.ok) throw new Error(await responseError(response));
+        if (!response.ok)
+            throw new Error(await responseError(response));
         await loadTrustedOffsetBlacklist();
     }
     catch (error) {
@@ -8564,7 +8864,14 @@ element("#library-episode-filter").addEventListener("change", () => {
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsets());
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsetBlacklist());
 element("#trusted-offset-blacklist-scope").addEventListener("change", updateTrustedOffsetBlacklistFields);
-element("#trusted-offset-blacklist-form").addEventListener("submit", (event) => void addTrustedOffsetBlacklist(event));
+element("#trusted-offset-blacklist-form").addEventListener("submit", event => void addTrustedOffsetBlacklist(event));
+element("#notification-provider").addEventListener("change", () => notificationProviderChanged());
+element("#notification-channel-form").addEventListener("submit", event => void saveNotificationChannel(event));
+element("#notification-new").addEventListener("click", resetNotificationForm);
+element("#notification-reload").addEventListener("click", () => void loadNotificationChannels());
+element("#notification-test").addEventListener("click", () => void testNotificationChannel());
+element("#notification-delete").addEventListener("click", () => void deleteNotificationChannel());
+element("#notification-deliveries-reload").addEventListener("click", () => void loadNotificationDeliveries());
 element("#pending-tmdb-reload").addEventListener("click", () => void loadPendingTmdb(true));
 element("#configuration-reload").addEventListener("click", () => {
     void Promise.all([
@@ -8950,6 +9257,9 @@ void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 updateTrustedOffsetBlacklistFields();
 void loadTrustedOffsetBlacklist();
+resetNotificationForm();
+void loadNotificationChannels();
+void loadNotificationDeliveries();
 window.setInterval(() => {
     if (isSubviewVisible("tasks", "downloads"))
         void loadDownloads(true);

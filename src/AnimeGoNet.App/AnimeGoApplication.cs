@@ -10,6 +10,7 @@ using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Networking;
+using AnimeGoNet.App.Notifications;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Logging;
 using AnimeGoNet.App.Plugins;
@@ -35,6 +36,7 @@ using AnimeGoNet.Data.DataUpdate;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
+using AnimeGoNet.Data.Notifications;
 using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
@@ -450,6 +452,13 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<DeleteExecutionStore>();
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
+        builder.Services.AddSingleton<NotificationStore>();
+        builder.Services.AddSingleton(new WebhookNotificationSender(
+            OutboundHttpClientFactory.Create(
+                options.OutboundProxy,
+                outboundHttpLogs,
+                "Notification")));
+        builder.Services.AddSingleton<NotificationProcessor>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
         builder.Services.AddSingleton<OtherFileReadaptationStore>();
         var metadataRefreshScope = new MetadataRefreshScope();
@@ -570,6 +579,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<PendingTmdbNfoRewriteWorker>();
             builder.Services.AddHostedService<DeleteExecutionWorker>();
             builder.Services.AddHostedService<PluginScheduleHostedService>();
+            builder.Services.AddHostedService<NotificationWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

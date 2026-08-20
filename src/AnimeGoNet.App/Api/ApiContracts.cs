@@ -809,6 +809,56 @@ public sealed record MikanTrustedOffsetBlacklistWriteRequest(
     [property: JsonPropertyName("mikanid")] int? MikanId,
     [property: JsonPropertyName("groupid")] int? GroupId);
 
+public sealed record NotificationChannelListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<NotificationChannelResponse> Items);
+
+public sealed record NotificationChannelResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("provider")] string Provider,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("endpoint_url")] string EndpointUrl,
+    [property: JsonPropertyName("secret")] string? Secret,
+    [property: JsonPropertyName("target")] string? Target,
+    [property: JsonPropertyName("options")] JsonElement Options,
+    [property: JsonPropertyName("events")] IReadOnlyList<string> Events,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
+public sealed record NotificationChannelWriteRequest(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("provider")] string Provider,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("endpoint_url")] string EndpointUrl,
+    [property: JsonPropertyName("secret")] string? Secret,
+    [property: JsonPropertyName("target")] string? Target,
+    [property: JsonPropertyName("options")] JsonElement Options,
+    [property: JsonPropertyName("events")] IReadOnlyList<string> Events);
+
+public sealed record NotificationTestResponse(
+    [property: JsonPropertyName("succeeded")] bool Succeeded,
+    [property: JsonPropertyName("http_status")] int? HttpStatus,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("response_excerpt")] string? ResponseExcerpt,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds);
+
+public sealed record NotificationDeliveryListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<NotificationDeliveryResponse> Items);
+
+public sealed record NotificationDeliveryResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("channel_name")] string ChannelName,
+    [property: JsonPropertyName("provider")] string Provider,
+    [property: JsonPropertyName("event_type")] string EventType,
+    [property: JsonPropertyName("task_id")] string? TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("http_status")] int? HttpStatus,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("response_excerpt")] string? ResponseExcerpt,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("created_at_utc")] DateTimeOffset CreatedAtUtc);
+
 public sealed record MetadataRetryResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("status")] string Status);

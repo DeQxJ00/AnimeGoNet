@@ -19,6 +19,7 @@ using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
+using AnimeGoNet.App.Notifications;
 using AnimeGoNet.App.Plugins;
 using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Serialization;
@@ -32,6 +33,7 @@ using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.Data.Library;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Metadata;
+using AnimeGoNet.Data.Notifications;
 using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
@@ -137,6 +139,12 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/logs/ai-invocations", AiInvocationLogs);
         app.MapGet("/api/v1/logs/ai-invocations/{runId}/debug", AiInvocationDebug);
         app.MapDelete("/api/v1/logs/ai-invocations/{runId}/debug", DeleteAiInvocationDebug);
+        app.MapGet("/api/v1/notifications/channels", ListNotificationChannels);
+        app.MapPost("/api/v1/notifications/channels", CreateNotificationChannel);
+        app.MapPut("/api/v1/notifications/channels/{channelId}", UpdateNotificationChannel);
+        app.MapDelete("/api/v1/notifications/channels/{channelId}", DeleteNotificationChannel);
+        app.MapPost("/api/v1/notifications/channels/{channelId}/test", TestNotificationChannel);
+        app.MapGet("/api/v1/notifications/deliveries", ListNotificationDeliveries);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
@@ -4637,6 +4645,120 @@ public static class ApiEndpoints
     private static MikanTrustedOffsetBlacklistItemResponse ToBlacklistResponse(
         MikanTrustedOffsetBlacklistEntry value) =>
         new(value.Scope, value.MikanId, value.GroupId, value.CreatedAtUtc);
+
+    private static async Task<IResult> ListNotificationChannels(
+        NotificationStore store,
+        CancellationToken cancellationToken)
+    {
+        var values = await store.ListChannelsAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new NotificationChannelListResponse(
+            values.Select(ToNotificationChannelResponse).ToArray()));
+    }
+
+    private static Task<IResult> CreateNotificationChannel(
+        NotificationChannelWriteRequest request,
+        NotificationStore store,
+        CancellationToken cancellationToken) =>
+        SaveNotificationChannel(null, request, store, cancellationToken);
+
+    private static Task<IResult> UpdateNotificationChannel(
+        string channelId,
+        NotificationChannelWriteRequest request,
+        NotificationStore store,
+        CancellationToken cancellationToken) =>
+        SaveNotificationChannel(channelId, request, store, cancellationToken);
+
+    private static async Task<IResult> SaveNotificationChannel(
+        string? channelId,
+        NotificationChannelWriteRequest request,
+        NotificationStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var value = await store.SaveChannelAsync(
+                channelId,
+                new NotificationChannelWrite(
+                    request.Name,
+                    request.Provider,
+                    request.Enabled,
+                    request.EndpointUrl,
+                    request.Secret,
+                    request.Target,
+                    request.Options.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null
+                        ? "{}"
+                        : request.Options.GetRawText(),
+                    request.Events),
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToNotificationChannelResponse(value));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("notification_channel_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteNotificationChannel(
+        string channelId,
+        NotificationStore store,
+        CancellationToken cancellationToken) =>
+        await store.DeleteChannelAsync(channelId, cancellationToken).ConfigureAwait(false)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound(Error("notification_channel_not_found", "Notification channel was not found."));
+
+    private static async Task<IResult> TestNotificationChannel(
+        string channelId,
+        NotificationStore store,
+        WebhookNotificationSender sender,
+        CancellationToken cancellationToken)
+    {
+        var channel = await store.GetChannelAsync(channelId, cancellationToken).ConfigureAwait(false);
+        if (channel is null)
+            return TypedResults.NotFound(Error("notification_channel_not_found", "Notification channel was not found."));
+
+        var now = DateTimeOffset.UtcNow;
+        var value = await store.CreateTestEventAsync(
+            "AnimeGoNet 测试通知",
+            $"渠道“{channel.Name}”连接测试成功触发。时间：{now:O}",
+            now,
+            cancellationToken).ConfigureAwait(false);
+        var result = await sender.SendAsync(channel, value, cancellationToken).ConfigureAwait(false);
+        await store.RecordDeliveryAsync(value, channel, result, DateTimeOffset.UtcNow, cancellationToken)
+            .ConfigureAwait(false);
+        await store.CompleteEventAsync(value.Id, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new NotificationTestResponse(
+            result.Succeeded,
+            result.HttpStatus,
+            result.FailureCode,
+            result.ResponseExcerpt,
+            result.DurationMilliseconds));
+    }
+
+    private static async Task<IResult> ListNotificationDeliveries(
+        [FromQuery] int? limit,
+        NotificationStore store,
+        CancellationToken cancellationToken)
+    {
+        var values = await store.ListDeliveriesAsync(limit ?? 100, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new NotificationDeliveryListResponse(
+            values.Select(value => new NotificationDeliveryResponse(
+                value.Id, value.ChannelName, value.Provider, value.EventType,
+                value.TaskId, value.Title, value.State, value.HttpStatus,
+                value.FailureCode, value.ResponseExcerpt,
+                value.DurationMilliseconds, value.CreatedAtUtc)).ToArray()));
+    }
+
+    private static NotificationChannelResponse ToNotificationChannelResponse(
+        NotificationChannel value)
+    {
+        using var document = JsonDocument.Parse(value.OptionsJson);
+        return new NotificationChannelResponse(
+            value.Id, value.Name, value.Provider, value.Enabled,
+            value.EndpointUrl, value.Secret, value.Target,
+            document.RootElement.Clone(), value.Events,
+            value.CreatedAtUtc, value.UpdatedAtUtc);
+    }
 
     private static async Task<IResult> GetLegacyMikanFilter(
         LegacyMikanFilterStore store,
