@@ -625,6 +625,7 @@ public sealed record DownloadListResponse(
     [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("sort")] string Sort,
     [property: JsonPropertyName("direction")] string Direction,
+    [property: JsonPropertyName("summary_bucket")] string? SummaryBucket,
     [property: JsonPropertyName("summary")] DownloadDashboardSummary Summary,
     [property: JsonPropertyName("items")] IReadOnlyList<DownloadListItem> Items);
 

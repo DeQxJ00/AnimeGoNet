@@ -27,7 +27,7 @@ public sealed class DownloadManagementApiTests
             "/api/v1/downloads?page=1&page_size=10"
             + "&search=Download%20management&state=downloading"
             + "&business_status=downloading"
-            + "&downloader_id=bt&source=mikan");
+            + "&downloader_id=bt&source=mikan&summary_bucket=active");
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
         var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
 
@@ -49,6 +49,7 @@ public sealed class DownloadManagementApiTests
         Assert.Equal(JsonValueKind.Null, item.GetProperty("seeding_completed_at_utc").ValueKind);
         Assert.Equal("created", json.RootElement.GetProperty("sort").GetString());
         Assert.Equal("desc", json.RootElement.GetProperty("direction").GetString());
+        Assert.Equal("active", json.RootElement.GetProperty("summary_bucket").GetString());
         Assert.Equal(JsonValueKind.String, item.GetProperty("created_at_utc").ValueKind);
         Assert.Equal("pending", item.GetProperty("dynamic_tag_state").GetString());
         Assert.Empty(item.GetProperty("dynamic_tags").EnumerateArray());
@@ -87,7 +88,8 @@ public sealed class DownloadManagementApiTests
     [Theory]
     [InlineData("sort=unknown")]
     [InlineData("direction=sideways")]
-    public async Task RejectsUnknownDownloadOrdering(string query)
+    [InlineData("summary_bucket=unknown")]
+    public async Task RejectsUnknownDownloadFiltersAndOrdering(string query)
     {
         await using var fixture = await DownloadApiFixture.CreateAsync(new FakeDownloadClient());
 

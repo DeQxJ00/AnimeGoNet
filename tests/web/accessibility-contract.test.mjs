@@ -163,6 +163,27 @@ test("overview repeats metadata attention counts as direct task filters", async 
   assert.match(css, /\.overview-attention-summary \.metadata-attention-card\s*\{[^}]*min-height:\s*96px/s);
 });
 
+test("download summary cards provide direct, accessible list filters", async () => {
+  const [app, css] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  for (const bucket of [
+    "active",
+    "paused",
+    "failed",
+    "waiting_organization",
+    "completed",
+    "stale",
+  ]) {
+    assert.match(app, new RegExp(`bucket: "${bucket}"`));
+  }
+  assert.match(app, /query\.set\("summary_bucket", downloadState\.summary_bucket\)/);
+  assert.match(app, /card\.setAttribute\("aria-pressed"/);
+  assert.match(app, /快捷筛选/);
+  assert.match(css, /\.download-summary-card\.filterable\.selected\s*\{/);
+});
+
 test("anime library exposes auditable task and file deletion without merging projection deletion", async () => {
   const [document, app, css] = await Promise.all([
     page(),

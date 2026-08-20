@@ -2191,6 +2191,7 @@ function readDownloadState() {
         source: "",
         sort: "created",
         direction: "desc",
+        summary_bucket: "",
     };
     try {
         const raw = window.localStorage.getItem(downloadStorageKey);
@@ -2217,6 +2218,16 @@ function readDownloadState() {
                 ? stored.sort : defaults.sort,
             direction: stored.direction === "asc" || stored.direction === "desc"
                 ? stored.direction : defaults.direction,
+            summary_bucket: [
+                "active",
+                "paused",
+                "failed",
+                "waiting_organization",
+                "completed",
+                "stale",
+            ].includes(stored.summary_bucket ?? "")
+                ? stored.summary_bucket
+                : defaults.summary_bucket,
         };
     }
     catch {
@@ -4431,20 +4442,51 @@ function organizationPhaseLabel(phase) {
 function renderDownloadSummary(body) {
     const summary = body.summary;
     const metrics = [
-        ["活动", String(summary.active_jobs)],
-        ["暂停", String(summary.paused_jobs)],
-        ["失败", String(summary.failed_jobs), summary.latest_failure_code ?? undefined],
-        ["等待整理", String(summary.waiting_organization_jobs)],
-        ["已完成", String(summary.completed_jobs)],
-        ["连接速度", formatBytes(summary.connected_download_speed_bytes_per_second) + "/s"],
-        ["过期快照", String(summary.stale_jobs)],
-        ["离线实例", String(summary.offline_instance_count)],
+        { label: "活动", value: String(summary.active_jobs), bucket: "active" },
+        { label: "暂停", value: String(summary.paused_jobs), bucket: "paused" },
+        {
+            label: "失败",
+            value: String(summary.failed_jobs),
+            detail: summary.latest_failure_code ?? undefined,
+            bucket: "failed",
+        },
+        {
+            label: "等待整理",
+            value: String(summary.waiting_organization_jobs),
+            bucket: "waiting_organization",
+        },
+        { label: "已完成", value: String(summary.completed_jobs), bucket: "completed" },
+        {
+            label: "连接速度",
+            value: formatBytes(summary.connected_download_speed_bytes_per_second) + "/s",
+        },
+        { label: "过期快照", value: String(summary.stale_jobs), bucket: "stale" },
+        { label: "离线实例", value: String(summary.offline_instance_count) },
     ];
-    const cards = metrics.map(([label, value, detail]) => {
-        const card = document.createElement("article");
-        card.className = label === "失败" && summary.failed_jobs > 0
-            ? "download-summary-card error"
-            : "download-summary-card";
+    const cards = metrics.map(({ label, value, detail, bucket }) => {
+        const card = document.createElement(bucket ? "button" : "article");
+        card.className = "download-summary-card"
+            + (label === "失败" && summary.failed_jobs > 0 ? " error" : "")
+            + (bucket ? " filterable" : "")
+            + (bucket === downloadState.summary_bucket ? " selected" : "");
+        if (card instanceof HTMLButtonElement && bucket) {
+            card.type = "button";
+            card.setAttribute("aria-pressed", String(bucket === downloadState.summary_bucket));
+            card.setAttribute("aria-label", `${label} ${value} 项，点击筛选`);
+            card.title = bucket === downloadState.summary_bucket
+                ? `取消“${label}”快捷筛选`
+                : `只显示“${label}”任务`;
+            card.addEventListener("click", () => {
+                downloadState.summary_bucket = downloadState.summary_bucket === bucket ? "" : bucket;
+                downloadState.state = "";
+                downloadState.business_status = "";
+                downloadState.page = 1;
+                element("#download-state").value = "";
+                element("#download-business-status").value = "";
+                saveDownloadState();
+                void loadDownloads();
+            });
+        }
         const term = document.createElement("span");
         term.textContent = label;
         const strong = document.createElement("strong");
@@ -4471,8 +4513,17 @@ function renderDownloadPage(body, background = false) {
     renderDownloadSummary(body);
     const container = element("#downloads");
     const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
+    const quickFilterLabel = {
+        active: "活动",
+        paused: "暂停",
+        failed: "失败",
+        waiting_organization: "等待整理",
+        completed: "已完成",
+        stale: "过期快照",
+    }[downloadState.summary_bucket];
     element("#download-list-status").textContent =
-        `${body.total_items} 个任务 · 第 ${body.page} 页`;
+        `${body.total_items} 个任务 · 第 ${body.page} 页`
+            + (quickFilterLabel ? ` · 快捷筛选：${quickFilterLabel}` : "");
     element("#download-page-status").textContent =
         `第 ${body.page} / ${totalPages} 页`;
     element("#download-previous").disabled = body.page <= 1;
@@ -4604,6 +4655,9 @@ async function loadDownloads(background = false) {
     }
     if (downloadState.source)
         query.set("source", downloadState.source);
+    if (downloadState.summary_bucket) {
+        query.set("summary_bucket", downloadState.summary_bucket);
+    }
     try {
         const response = await authenticatedFetch(`/api/v1/downloads?${query}`, { headers });
         if (!response.ok)
@@ -8824,6 +8878,7 @@ element("#download-filters").addEventListener("submit", (event) => {
         .value;
     downloadState.page_size = Number(element("#download-page-size").value);
     downloadState.page = 1;
+    downloadState.summary_bucket = "";
     saveDownloadState();
     void loadDownloads();
 });
@@ -8838,6 +8893,7 @@ element("#download-filter-reset").addEventListener("click", () => {
         source: "",
         sort: "created",
         direction: "desc",
+        summary_bucket: "",
     };
     element("#download-search").value = "";
     element("#download-state").value = "";

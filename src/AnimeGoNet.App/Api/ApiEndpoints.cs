@@ -2813,6 +2813,7 @@ public static class ApiEndpoints
         [FromQuery] string? source,
         [FromQuery] string? sort,
         [FromQuery] string? direction,
+        [FromQuery(Name = "summary_bucket")] string? summaryBucket,
         DownloadJobStore jobs,
         CancellationToken cancellationToken)
     {
@@ -2837,7 +2838,8 @@ public static class ApiEndpoints
                     downloaderId,
                     source,
                     sort,
-                    direction),
+                    direction,
+                    summaryBucket),
                 cancellationToken).ConfigureAwait(false);
             var normalizedSort = string.IsNullOrWhiteSpace(sort)
                 ? "created"
@@ -2856,6 +2858,7 @@ public static class ApiEndpoints
                 NormalizeEcho(source),
                 normalizedSort,
                 normalizedDirection,
+                NormalizeEcho(summaryBucket),
                 new DownloadDashboardSummary(
                     records.Summary.TotalJobs,
                     records.Summary.ActiveJobs,

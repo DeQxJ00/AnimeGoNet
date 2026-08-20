@@ -581,6 +581,7 @@ interface DownloadListPage {
   source: string | null;
   sort: "created" | "updated" | "priority";
   direction: "asc" | "desc";
+  summary_bucket: DownloadSummaryBucket | null;
   summary: {
     total_jobs: number;
     active_jobs: number;
@@ -598,6 +599,14 @@ interface DownloadListPage {
   };
   items: DownloadItem[];
 }
+
+type DownloadSummaryBucket =
+  | "active"
+  | "paused"
+  | "failed"
+  | "waiting_organization"
+  | "completed"
+  | "stale";
 
 interface DownloadFileDetail {
   relative_path: string;
@@ -664,6 +673,7 @@ interface DownloadUiState {
   source: string;
   sort: "created" | "updated" | "priority";
   direction: "asc" | "desc";
+  summary_bucket: DownloadSummaryBucket | "";
 }
 
 interface MetadataItem {
@@ -4190,6 +4200,7 @@ function readDownloadState(): DownloadUiState {
     source: "",
     sort: "created",
     direction: "desc",
+    summary_bucket: "",
   };
   try {
     const raw = window.localStorage.getItem(downloadStorageKey);
@@ -4215,6 +4226,16 @@ function readDownloadState(): DownloadUiState {
         ? stored.sort as DownloadUiState["sort"] : defaults.sort,
       direction: stored.direction === "asc" || stored.direction === "desc"
         ? stored.direction : defaults.direction,
+      summary_bucket: [
+        "active",
+        "paused",
+        "failed",
+        "waiting_organization",
+        "completed",
+        "stale",
+      ].includes(stored.summary_bucket ?? "")
+        ? stored.summary_bucket as DownloadSummaryBucket
+        : defaults.summary_bucket,
     };
   } catch {
     return defaults;
@@ -6691,21 +6712,57 @@ function organizationPhaseLabel(phase: string): string {
 
 function renderDownloadSummary(body: DownloadListPage): void {
   const summary = body.summary;
-  const metrics: Array<[string, string, string?]> = [
-    ["活动", String(summary.active_jobs)],
-    ["暂停", String(summary.paused_jobs)],
-    ["失败", String(summary.failed_jobs), summary.latest_failure_code ?? undefined],
-    ["等待整理", String(summary.waiting_organization_jobs)],
-    ["已完成", String(summary.completed_jobs)],
-    ["连接速度", formatBytes(summary.connected_download_speed_bytes_per_second) + "/s"],
-    ["过期快照", String(summary.stale_jobs)],
-    ["离线实例", String(summary.offline_instance_count)],
+  const metrics: Array<{
+    label: string;
+    value: string;
+    detail?: string;
+    bucket?: DownloadSummaryBucket;
+  }> = [
+    { label: "活动", value: String(summary.active_jobs), bucket: "active" },
+    { label: "暂停", value: String(summary.paused_jobs), bucket: "paused" },
+    {
+      label: "失败",
+      value: String(summary.failed_jobs),
+      detail: summary.latest_failure_code ?? undefined,
+      bucket: "failed",
+    },
+    {
+      label: "等待整理",
+      value: String(summary.waiting_organization_jobs),
+      bucket: "waiting_organization",
+    },
+    { label: "已完成", value: String(summary.completed_jobs), bucket: "completed" },
+    {
+      label: "连接速度",
+      value: formatBytes(summary.connected_download_speed_bytes_per_second) + "/s",
+    },
+    { label: "过期快照", value: String(summary.stale_jobs), bucket: "stale" },
+    { label: "离线实例", value: String(summary.offline_instance_count) },
   ];
-  const cards = metrics.map(([label, value, detail]) => {
-    const card = document.createElement("article");
-    card.className = label === "失败" && summary.failed_jobs > 0
-      ? "download-summary-card error"
-      : "download-summary-card";
+  const cards = metrics.map(({ label, value, detail, bucket }) => {
+    const card = document.createElement(bucket ? "button" : "article");
+    card.className = "download-summary-card"
+      + (label === "失败" && summary.failed_jobs > 0 ? " error" : "")
+      + (bucket ? " filterable" : "")
+      + (bucket === downloadState.summary_bucket ? " selected" : "");
+    if (card instanceof HTMLButtonElement && bucket) {
+      card.type = "button";
+      card.setAttribute("aria-pressed", String(bucket === downloadState.summary_bucket));
+      card.setAttribute("aria-label", `${label} ${value} 项，点击筛选`);
+      card.title = bucket === downloadState.summary_bucket
+        ? `取消“${label}”快捷筛选`
+        : `只显示“${label}”任务`;
+      card.addEventListener("click", () => {
+        downloadState.summary_bucket = downloadState.summary_bucket === bucket ? "" : bucket;
+        downloadState.state = "";
+        downloadState.business_status = "";
+        downloadState.page = 1;
+        element<HTMLSelectElement>("#download-state").value = "";
+        element<HTMLSelectElement>("#download-business-status").value = "";
+        saveDownloadState();
+        void loadDownloads();
+      });
+    }
     const term = document.createElement("span");
     term.textContent = label;
     const strong = document.createElement("strong");
@@ -6733,8 +6790,17 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
   renderDownloadSummary(body);
   const container = element<HTMLElement>("#downloads");
   const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
+  const quickFilterLabel = ({
+    active: "活动",
+    paused: "暂停",
+    failed: "失败",
+    waiting_organization: "等待整理",
+    completed: "已完成",
+    stale: "过期快照",
+  } as Record<DownloadSummaryBucket, string>)[downloadState.summary_bucket as DownloadSummaryBucket];
   element<HTMLElement>("#download-list-status").textContent =
-    `${body.total_items} 个任务 · 第 ${body.page} 页`;
+    `${body.total_items} 个任务 · 第 ${body.page} 页`
+    + (quickFilterLabel ? ` · 快捷筛选：${quickFilterLabel}` : "");
   element<HTMLElement>("#download-page-status").textContent =
     `第 ${body.page} / ${totalPages} 页`;
   element<HTMLButtonElement>("#download-previous").disabled = body.page <= 1;
@@ -6871,6 +6937,9 @@ async function loadDownloads(background = false): Promise<void> {
     query.set("downloader_id", downloadState.downloader_id);
   }
   if (downloadState.source) query.set("source", downloadState.source);
+  if (downloadState.summary_bucket) {
+    query.set("summary_bucket", downloadState.summary_bucket);
+  }
   try {
     const response = await authenticatedFetch(`/api/v1/downloads?${query}`, { headers });
     if (!response.ok) throw new Error(await responseError(response));
@@ -11464,6 +11533,7 @@ element<HTMLFormElement>("#download-filters").addEventListener("submit", (event)
     element<HTMLSelectElement>("#download-page-size").value,
   ) as 10 | 25 | 50;
   downloadState.page = 1;
+  downloadState.summary_bucket = "";
   saveDownloadState();
   void loadDownloads();
 });
@@ -11478,6 +11548,7 @@ element<HTMLButtonElement>("#download-filter-reset").addEventListener("click", (
     source: "",
     sort: "created",
     direction: "desc",
+    summary_bucket: "",
   };
   element<HTMLInputElement>("#download-search").value = "";
   element<HTMLSelectElement>("#download-state").value = "";

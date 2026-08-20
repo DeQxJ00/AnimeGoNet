@@ -210,6 +210,38 @@ public sealed class DownloadJobStoreTests
     }
 
     [Fact]
+    public async Task SummaryBucketsUseTheSamePredicatesAsDashboardCounts()
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+
+        Assert.Single((await fixture.ListBucketAsync("active")).Items);
+
+        await fixture.SetDashboardStateAsync("paused", "download_queued", "not_required");
+        Assert.Single((await fixture.ListBucketAsync("paused")).Items);
+        Assert.Empty((await fixture.ListBucketAsync("active")).Items);
+
+        await fixture.SetDashboardStateAsync("error", "download_queued", "not_required");
+        Assert.Single((await fixture.ListBucketAsync("failed")).Items);
+
+        await fixture.SetDashboardStateAsync("complete", "downloaded", "not_required");
+        Assert.Single((await fixture.ListBucketAsync("waiting_organization")).Items);
+
+        await fixture.SetDashboardStateAsync("complete", "organized", "not_required");
+        Assert.Single((await fixture.ListBucketAsync("completed")).Items);
+        Assert.Empty((await fixture.ListBucketAsync("waiting_organization")).Items);
+
+        await fixture.SetDashboardStateAsync("downloading", "downloading", "not_required");
+        await fixture.Jobs.MarkInstanceUnavailableAsync(
+            "bt",
+            "qbittorrent_http_error",
+            DateTimeOffset.UtcNow);
+        Assert.Single((await fixture.ListBucketAsync("stale")).Items);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => fixture.ListBucketAsync("unknown"));
+    }
+
+    [Fact]
     public async Task RemoteControlUsesRevisionAndRecordsSuccessfulTransition()
     {
         await using var fixture = await DownloadJobFixture.CreateAsync();
@@ -319,6 +351,36 @@ public sealed class DownloadJobStoreTests
             command.Parameters.AddWithValue("$created_at_utc", createdAt.ToUniversalTime().ToString("O"));
             command.Parameters.AddWithValue("$info_hash", hash);
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public Task<DownloadJobListPage> ListBucketAsync(string bucket) =>
+            Jobs.ListPageAsync(new DownloadJobListQuery(
+                1, 10, null, null, null, null, null, null, null, bucket));
+
+        public async Task SetDashboardStateAsync(
+            string state,
+            string businessStatus,
+            string organizationState)
+        {
+            await using var connection = await _databaseFixture.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE download_jobs
+                SET state = $state,
+                    organization_state = $organization_state,
+                    preparation_failure_code = NULL,
+                    organization_failure_code = NULL
+                WHERE info_hash = $info_hash;
+                UPDATE ingest_tasks
+                SET status = $business_status,
+                    failure_kind = NULL
+                WHERE id = (SELECT task_id FROM download_jobs WHERE info_hash = $info_hash);
+                """;
+            command.Parameters.AddWithValue("$state", state);
+            command.Parameters.AddWithValue("$organization_state", organizationState);
+            command.Parameters.AddWithValue("$business_status", businessStatus);
+            command.Parameters.AddWithValue("$info_hash", InfoHash);
+            Assert.Equal(2, await command.ExecuteNonQueryAsync());
         }
 
         public async Task ConfigureSeedingAsync(int targetMinutes, string state)

@@ -249,6 +249,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         var sourceId = NormalizeFilter(query.SourceId, nameof(query.SourceId));
         var sort = NormalizeSort(query.Sort);
         var direction = NormalizeDirection(query.Direction);
+        var summaryBucket = NormalizeSummaryBucket(query.SummaryBucket);
         var where = new List<string>();
         if (search is not null)
         {
@@ -277,6 +278,11 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         if (sourceId is not null)
         {
             where.Add("ingest_tasks.source_id = $source_id");
+        }
+
+        if (summaryBucket is not null)
+        {
+            where.Add(SummaryBucketPredicate(summaryBucket));
         }
 
         var whereSql = where.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", where);
@@ -902,6 +908,41 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         ValidateStableValue(normalized, parameterName);
         return normalized;
     }
+
+    private static string? NormalizeSummaryBucket(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Trim().ToLowerInvariant() switch
+            {
+                "active" => "active",
+                "paused" => "paused",
+                "failed" => "failed",
+                "waiting_organization" => "waiting_organization",
+                "completed" => "completed",
+                "stale" => "stale",
+                _ => throw new ArgumentException(
+                    "Unsupported download summary bucket.",
+                    nameof(value)),
+            };
+
+    private static string SummaryBucketPredicate(string bucket) => bucket switch
+    {
+        "active" => "download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding')",
+        "paused" => "download_jobs.state = 'paused'",
+        "failed" => """
+            (download_jobs.state = 'error'
+             OR ingest_tasks.status = 'download_error'
+             OR download_jobs.preparation_failure_code IS NOT NULL
+             OR download_jobs.organization_failure_code IS NOT NULL)
+            """,
+        "waiting_organization" => """
+            (ingest_tasks.status = 'downloaded'
+             OR download_jobs.organization_state IN ('pending', 'organizing', 'cleanup'))
+            """,
+        "completed" => "ingest_tasks.status = 'organized'",
+        "stale" => "download_jobs.is_stale = 1",
+        _ => throw new InvalidOperationException("Unexpected normalized download summary bucket."),
+    };
 
     private static void AddListParameters(
         Microsoft.Data.Sqlite.SqliteCommand command,

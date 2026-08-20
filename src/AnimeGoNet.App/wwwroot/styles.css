@@ -377,11 +377,16 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-diff-arrow { color: #60708e; }
 .downloads { display: grid; gap: 12px; }
 .download-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin: 0 0 14px; }
-.download-summary-card { display: grid; gap: 3px; min-width: 0; padding: 11px 13px; border: 1px solid #315f58; border-radius: 11px; background: rgba(15,34,39,.52); }
+.download-summary-card { display: grid; gap: 3px; min-width: 0; padding: 11px 13px; border: 1px solid #315f58; border-radius: 11px; color: inherit; background: rgba(15,34,39,.52); font: inherit; text-align: left; }
 .download-summary-card span { color: #8da2c9; font-size: .68rem; }
 .download-summary-card strong { color: #e7fff6; font-size: 1.05rem; }
 .download-summary-card small { color: #ffb4b4; overflow-wrap: anywhere; }
 .download-summary-card.error { border-color: #813f49; background: rgba(82,28,37,.25); }
+.download-summary-card.filterable { cursor: pointer; transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.download-summary-card.filterable:hover { border-color: #69bfa7; background: rgba(25,60,61,.68); transform: translateY(-1px); }
+.download-summary-card.filterable:focus-visible { outline: 2px solid #8fcdbd; outline-offset: 2px; }
+.download-summary-card.filterable.selected { border-color: #74dfbd; background: rgba(31,91,75,.58); box-shadow: 0 0 0 2px rgba(116,223,189,.18); }
+.download-summary-card.filterable.error:hover, .download-summary-card.filterable.error.selected { border-color: #ee7883; background: rgba(105,37,49,.48); box-shadow: 0 0 0 2px rgba(238,120,131,.16); }
 .download-summary-footer { grid-column: 1 / -1; margin: 0; color: #8da2c9; font-size: .7rem; }
 .download-filters { display: grid; grid-template-columns: minmax(220px,2fr) repeat(5,minmax(120px,1fr)) auto; gap: 10px; align-items: end; margin: 0 0 12px; }
 .download-filters label { display: grid; gap: 6px; color: #8da2c9; font-size: .72rem; }

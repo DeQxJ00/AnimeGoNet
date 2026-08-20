@@ -43,7 +43,8 @@ public sealed record DownloadJobListQuery(
     string? DownloaderId,
     string? SourceId,
     string? Sort = null,
-    string? Direction = null);
+    string? Direction = null,
+    string? SummaryBucket = null);
 
 public sealed record DownloadJobListPage(
     int Page,

@@ -88,7 +88,7 @@ API、日志、DOM和导出数据不得包含qB密码、Cookie、完整Torrent U
 
 当前实现的管理契约为：
 
-- `GET /api/v1/downloads`：接受 `page`、`page_size`、`search`、qB `state`、AnimeGoNet `business_status`、`downloader_id` 和 `source`，筛选与分页在 SQLite 查询中执行。默认把失败、活动/暂停、历史完成依次排序，再按更新时间稳定排序。
+- `GET /api/v1/downloads`：接受 `page`、`page_size`、`search`、qB `state`、AnimeGoNet `business_status`、`downloader_id`、`source` 和摘要快捷筛选 `summary_bucket`，筛选与分页在 SQLite 查询中执行。`summary_bucket` 支持 `active`、`paused`、`failed`、`waiting_organization`、`completed`、`stale`，并与仪表盘聚合复用完全相同的业务谓词。默认按任务加入时间倒序稳定排序，也可选择最后更新时间或异常与活动优先。
 - `GET /api/v1/downloads/{jobId}`：返回下载/业务两层状态、准备与整理阶段、文件列表和审计时间线。文件列表按 qB 文件 index 优先、规范化相对路径其次，将实时快照与持久化分配合并；尚未写入分配表的 qB 文件仍以 `unassigned` 显示。
 - `POST /api/v1/downloads/{jobId}/pause`、`/resume`、`/retry`：请求体携带 `expected_revision`。暂停/恢复调用任务不可变路由绑定的 qB 实例；业务重试只清理允许重试阶段的安全失败码和下次执行时间，不改写路由快照。
 
@@ -96,7 +96,7 @@ schema v24 的 `download_job_events` 保存调度确认、qB 状态变化、快�
 
 静态 TypeScript 页面提供服务端筛选/翻页、做种目标/累计时间/完成门禁、动态 tag 状态/实际值/跳过原因、文件级百分比与 priority/wanted、准备/整理失败、时间线、暂停/恢复、业务重试和四类删除预览入口。生成的 `wwwroot/app.js` 必须由 `npm run web:build` 产生，并由 `npm run web:check` 校验类型。
 
-列表响应的 `summary` 始终是未套用当前筛选的全局下载仪表盘，返回任务总数、活动/暂停/失败/stale、等待整理/已完成、准备/整理失败、离线实例、最近安全失败码和最后一次下载器成功时间。汇总下载速度只计算运行快照标为已连接且任务非 stale 的实例；离线实例的历史速度不得加入。
+列表响应的 `summary` 始终是未套用当前筛选的全局下载仪表盘，返回任务总数、活动/暂停/失败/stale、等待整理/已完成、准备/整理失败、离线实例、最近安全失败码和最后一次下载器成功时间。活动、暂停、失败、等待整理、已完成与过期快照卡片是可键盘操作的原生按钮；点击后清除冲突的 qB 状态/业务阶段筛选、回到第一页并应用对应 `summary_bucket`，再次点击当前卡片恢复全部，手工提交筛选或重置也会清除快捷筛选。连接速度与离线实例是不同量纲的汇总信息，不作为任务列表筛选入口。汇总下载速度只计算运行快照标为已连接且任务非 stale 的实例；离线实例的历史速度不得加入。
 
 ## 7. 验收边界
 
