@@ -142,7 +142,7 @@ test("metadata attention counters are prominent buttons with direct filters", as
   assert.match(css, /\.metadata-attention-card strong\s*\{[^}]*font-size:\s*clamp\(2rem/s);
 });
 
-test("overview repeats metadata attention counts as direct task filters", async () => {
+test("overview exposes operational statistics as direct navigation and filters", async () => {
   const [document, app, css] = await Promise.all([
     page(),
     readFile(appPath, "utf8"),
@@ -151,16 +151,36 @@ test("overview repeats metadata attention counts as direct task filters", async 
   const summary = document.querySelector("#overview-metadata-attention-summary");
   assert.ok(summary);
   for (const id of [
+    "overview-download-active",
+    "overview-download-paused",
+    "overview-download-failed",
+    "overview-download-waiting-organization",
+    "overview-download-completed",
+    "overview-download-stale",
     "overview-attention-other",
     "overview-attention-failed",
     "overview-attention-review",
+    "overview-pending-tmdb",
+    "overview-library-seasons",
+    "overview-metadata-total",
+    "overview-sources-enabled",
+    "overview-downloaders-offline",
   ]) {
-    assert.equal(summary.querySelector(`#${id}`)?.tagName, "BUTTON");
+    assert.equal(document.querySelector(`#${id}`)?.tagName, "BUTTON");
   }
   assert.match(app, /openMetadataAttentionFromOverview/);
+  assert.match(app, /openDownloadSummaryFromOverview/);
+  assert.match(app, /openAllMetadataFromOverview/);
   assert.match(app, /selectWorkspace\("tasks", "metadata"\)/);
-  assert.match(app, /loadOverviewMetadataAttention/);
-  assert.match(css, /\.overview-attention-summary \.metadata-attention-card\s*\{[^}]*min-height:\s*96px/s);
+  assert.match(app, /selectWorkspace\("tasks", "downloads"\)/);
+  assert.match(app, /selectWorkspace\("library", "pending"\)/);
+  assert.match(app, /selectWorkspace\("library", "seasons"\)/);
+  assert.match(app, /selectWorkspace\("sources", "manage"\)/);
+  assert.match(app, /selectWorkspace\("download-tools", "qbittorrent"\)/);
+  assert.match(app, /loadOverviewStatistics/);
+  assert.match(app, /Promise\.allSettled/);
+  assert.match(css, /\.overview-statistics-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.overview-statistics-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
 test("download summary cards provide direct, accessible list filters", async () => {

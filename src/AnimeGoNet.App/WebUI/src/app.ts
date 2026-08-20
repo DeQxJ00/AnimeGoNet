@@ -2263,7 +2263,7 @@ function selectWorkspace(
     void loadMetadataTasks(true);
   }
   if (workspace === "overview" && selectedSubview === "status") {
-    void loadOverviewMetadataAttention();
+    void loadOverviewStatistics();
   }
   if (workspace === "library" && selectedSubview === "seasons"
     && activeLibraryDetail === null) {
@@ -4248,6 +4248,18 @@ function saveDownloadState(): void {
   } catch {
     // Browser storage is an optional UI preference; business state remains server-side.
   }
+}
+
+function syncDownloadFilterControls(): void {
+  element<HTMLInputElement>("#download-search").value = downloadState.search;
+  element<HTMLSelectElement>("#download-state").value = downloadState.state;
+  element<HTMLSelectElement>("#download-business-status").value =
+    downloadState.business_status;
+  element<HTMLInputElement>("#download-downloader").value = downloadState.downloader_id;
+  element<HTMLInputElement>("#download-source").value = downloadState.source;
+  element<HTMLSelectElement>("#download-sort").value = downloadState.sort;
+  element<HTMLSelectElement>("#download-direction").value = downloadState.direction;
+  element<HTMLSelectElement>("#download-page-size").value = String(downloadState.page_size);
 }
 
 function readMetadataState(): MetadataUiState {
@@ -7553,7 +7565,7 @@ deleteConfirm.addEventListener("click", async () => {
       void loadDownloads();
       void loadLibrary();
       void loadPendingTmdb();
-      void loadOverviewMetadataAttention();
+      void loadOverviewStatistics();
     } else {
       element<HTMLElement>("#delete-message").textContent =
         `删除未完成：${body.failure_reason ?? body.state}。${summary}`;
@@ -8438,20 +8450,122 @@ function openMetadataAttentionFromOverview(filter: "other" | "failed" | "review"
   selectWorkspace("tasks", "metadata");
 }
 
-async function loadOverviewMetadataAttention(): Promise<void> {
-  try {
-    const response = await authenticatedFetch("/api/v1/metadata/tasks?page=1&page_size=10", { headers });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body = await response.json() as MetadataTaskListPage;
-    renderMetadataAttentionSummary(body.attention);
-  } catch {
-    for (const id of [
+function openDownloadSummaryFromOverview(bucket: DownloadSummaryBucket): void {
+  downloadState.search = "";
+  downloadState.state = "";
+  downloadState.business_status = "";
+  downloadState.downloader_id = "";
+  downloadState.source = "";
+  downloadState.summary_bucket = bucket;
+  downloadState.page = 1;
+  syncDownloadFilterControls();
+  saveDownloadState();
+  selectWorkspace("tasks", "downloads");
+}
+
+function openAllMetadataFromOverview(): void {
+  metadataState.search = "";
+  metadataState.status = "";
+  metadataState.handling = "all";
+  metadataState.file_state = "all";
+  metadataState.review_state = "all";
+  metadataState.failure_stage = "";
+  metadataState.error_code = "";
+  metadataState.retryability = "all";
+  metadataState.page = 1;
+  syncMetadataFilterControls();
+  saveMetadataState();
+  selectWorkspace("tasks", "metadata");
+}
+
+function setOverviewCount(id: string, value: number | "!"): void {
+  element<HTMLElement>(`#${id}`).textContent = value === "!"
+    ? value
+    : value.toLocaleString("zh-CN");
+}
+
+function setOverviewFailure(ids: string[], detailId?: string): void {
+  for (const id of ids) setOverviewCount(id, "!");
+  if (detailId) element<HTMLElement>(`#${detailId}`).textContent = "读取失败，点击进入详情";
+}
+
+async function fetchOverviewJson<T>(path: string): Promise<T> {
+  const response = await authenticatedFetch(path, { headers });
+  if (!response.ok) throw new Error(await responseError(response));
+  return await response.json() as T;
+}
+
+async function loadOverviewStatistics(): Promise<void> {
+  const [downloads, metadata, library, pendingTmdb, sources] = await Promise.allSettled([
+    fetchOverviewJson<DownloadListPage>("/api/v1/downloads?page=1&page_size=10"),
+    fetchOverviewJson<MetadataTaskListPage>("/api/v1/metadata/tasks?page=1&page_size=10"),
+    fetchOverviewJson<AnimeSeasonListPage>("/api/v1/library/seasons?page=1&page_size=12"),
+    fetchOverviewJson<{ items: PendingTmdbSummary[] }>("/api/v1/metadata/pending-tmdb"),
+    fetchOverviewJson<SourceProfileList>("/api/v1/sources"),
+  ]);
+
+  if (downloads.status === "fulfilled") {
+    const summary = downloads.value.summary;
+    setOverviewCount("overview-download-active-count", summary.active_jobs);
+    setOverviewCount("overview-download-paused-count", summary.paused_jobs);
+    setOverviewCount("overview-download-failed-count", summary.failed_jobs);
+    setOverviewCount("overview-download-waiting-organization-count", summary.waiting_organization_jobs);
+    setOverviewCount("overview-download-completed-count", summary.completed_jobs);
+    setOverviewCount("overview-download-stale-count", summary.stale_jobs);
+    setOverviewCount("overview-downloaders-offline-count", summary.offline_instance_count);
+    element<HTMLElement>("#overview-download-failed-detail").textContent =
+      summary.latest_failure_code ?? "当前无失败";
+  } else {
+    setOverviewFailure([
+      "overview-download-active-count",
+      "overview-download-paused-count",
+      "overview-download-failed-count",
+      "overview-download-waiting-organization-count",
+      "overview-download-completed-count",
+      "overview-download-stale-count",
+      "overview-downloaders-offline-count",
+    ], "overview-download-failed-detail");
+  }
+
+  if (metadata.status === "fulfilled") {
+    renderMetadataAttentionSummary(metadata.value.attention);
+    setOverviewCount("overview-metadata-total-count", metadata.value.total_items);
+  } else {
+    setOverviewFailure([
       "overview-attention-other-count",
       "overview-attention-failed-count",
       "overview-attention-review-count",
-    ]) {
-      element<HTMLElement>(`#${id}`).textContent = "!";
-    }
+      "overview-metadata-total-count",
+    ]);
+  }
+
+  if (library.status === "fulfilled") {
+    setOverviewCount("overview-library-seasons-count", library.value.total_items);
+  } else {
+    setOverviewFailure(["overview-library-seasons-count"]);
+  }
+
+  if (pendingTmdb.status === "fulfilled") {
+    setOverviewCount("overview-pending-tmdb-count", pendingTmdb.value.items.length);
+    const fallbackRecords = pendingTmdb.value.items.reduce(
+      (total, item) => total + item.fallback_record_count,
+      0,
+    );
+    element<HTMLElement>("#overview-pending-tmdb-detail").textContent =
+      `${fallbackRecords.toLocaleString("zh-CN")} 条兜底记录`;
+  } else {
+    setOverviewFailure(["overview-pending-tmdb-count"], "overview-pending-tmdb-detail");
+  }
+
+  if (sources.status === "fulfilled") {
+    setOverviewCount(
+      "overview-sources-enabled-count",
+      sources.value.items.filter(source => source.enabled).length,
+    );
+    element<HTMLElement>("#overview-sources-detail").textContent =
+      `共 ${sources.value.items.length.toLocaleString("zh-CN")} 个来源`;
+  } else {
+    setOverviewFailure(["overview-sources-enabled-count"], "overview-sources-detail");
   }
 }
 
@@ -11495,6 +11609,39 @@ element<HTMLButtonElement>("#overview-attention-review").addEventListener(
   "click",
   () => openMetadataAttentionFromOverview("review"),
 );
+for (const [id, bucket] of [
+  ["overview-download-active", "active"],
+  ["overview-download-paused", "paused"],
+  ["overview-download-failed", "failed"],
+  ["overview-download-waiting-organization", "waiting_organization"],
+  ["overview-download-completed", "completed"],
+  ["overview-download-stale", "stale"],
+] as const) {
+  element<HTMLButtonElement>(`#${id}`).addEventListener(
+    "click",
+    () => openDownloadSummaryFromOverview(bucket),
+  );
+}
+element<HTMLButtonElement>("#overview-pending-tmdb").addEventListener(
+  "click",
+  () => selectWorkspace("library", "pending"),
+);
+element<HTMLButtonElement>("#overview-library-seasons").addEventListener(
+  "click",
+  () => selectWorkspace("library", "seasons"),
+);
+element<HTMLButtonElement>("#overview-metadata-total").addEventListener(
+  "click",
+  openAllMetadataFromOverview,
+);
+element<HTMLButtonElement>("#overview-sources-enabled").addEventListener(
+  "click",
+  () => selectWorkspace("sources", "manage"),
+);
+element<HTMLButtonElement>("#overview-downloaders-offline").addEventListener(
+  "click",
+  () => selectWorkspace("download-tools", "qbittorrent"),
+);
 element<HTMLButtonElement>("#metadata-previous").addEventListener("click", () => {
   if (metadataState.page <= 1) return;
   metadataState.page--;
@@ -11506,15 +11653,7 @@ element<HTMLButtonElement>("#metadata-next").addEventListener("click", () => {
   saveMetadataState();
   void loadMetadataTasks();
 });
-element<HTMLInputElement>("#download-search").value = downloadState.search;
-element<HTMLSelectElement>("#download-state").value = downloadState.state;
-element<HTMLSelectElement>("#download-business-status").value =
-  downloadState.business_status;
-element<HTMLInputElement>("#download-downloader").value = downloadState.downloader_id;
-element<HTMLInputElement>("#download-source").value = downloadState.source;
-element<HTMLSelectElement>("#download-sort").value = downloadState.sort;
-element<HTMLSelectElement>("#download-direction").value = downloadState.direction;
-element<HTMLSelectElement>("#download-page-size").value = String(downloadState.page_size);
+syncDownloadFilterControls();
 element<HTMLFormElement>("#download-filters").addEventListener("submit", (event) => {
   event.preventDefault();
   downloadState.search = element<HTMLInputElement>("#download-search").value.trim();
@@ -11550,14 +11689,7 @@ element<HTMLButtonElement>("#download-filter-reset").addEventListener("click", (
     direction: "desc",
     summary_bucket: "",
   };
-  element<HTMLInputElement>("#download-search").value = "";
-  element<HTMLSelectElement>("#download-state").value = "";
-  element<HTMLSelectElement>("#download-business-status").value = "";
-  element<HTMLInputElement>("#download-downloader").value = "";
-  element<HTMLInputElement>("#download-source").value = "";
-  element<HTMLSelectElement>("#download-sort").value = "created";
-  element<HTMLSelectElement>("#download-direction").value = "desc";
-  element<HTMLSelectElement>("#download-page-size").value = "25";
+  syncDownloadFilterControls();
   saveDownloadState();
   void loadDownloads();
 });
@@ -12301,8 +12433,8 @@ window.setInterval(() => {
   if (isSubviewVisible("tasks", "metadata")) void loadMetadataTasks(true);
 }, 5000);
 window.setInterval(() => {
-  if (isSubviewVisible("overview", "status")) void loadOverviewMetadataAttention();
-}, 5000);
+  if (isSubviewVisible("overview", "status")) void loadOverviewStatistics();
+}, 10000);
 window.setInterval(() => {
   if (isSubviewVisible("library", "pending")
     && !hasFocusedEditorWithin("#pending-tmdb") && !hasOpenDialog()) {

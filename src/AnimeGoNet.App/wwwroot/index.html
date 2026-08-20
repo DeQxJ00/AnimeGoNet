@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260820-download-summary-filters">
+  <link rel="stylesheet" href="/styles.css?v=20260820-overview-statistics">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -74,30 +74,83 @@
       </dl>
     </section>
 
-    <section id="overview-metadata-attention" aria-labelledby="overview-metadata-attention-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
+    <section id="overview-statistics" aria-labelledby="overview-statistics-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Metadata attention</p>
-          <h2 id="overview-metadata-attention-title">匹配与整理待处理</h2>
+          <p class="eyebrow">Operational overview</p>
+          <h2 id="overview-statistics-title">关键统计与处理入口</h2>
         </div>
-        <p class="muted">点击数量直接进入任务中心并应用对应筛选。</p>
+        <p class="muted">点击任意数字，直接进入对应页面并应用相关筛选。</p>
       </div>
-      <div id="overview-metadata-attention-summary" class="metadata-attention-summary overview-attention-summary" aria-label="总览中的匹配与整理待处理统计">
-        <button id="overview-attention-other" type="button" class="metadata-attention-card other">
-          <span>Other 待处理</span>
-          <strong id="overview-attention-other-count">—</strong>
-          <small>仍含 Other 文件的任务</small>
-        </button>
-        <button id="overview-attention-failed" type="button" class="metadata-attention-card failed">
-          <span>匹配错误</span>
-          <strong id="overview-attention-failed-count">—</strong>
-          <small>当前匹配失败的任务</small>
-        </button>
-        <button id="overview-attention-review" type="button" class="metadata-attention-card review">
-          <span>等待人工审核</span>
-          <strong id="overview-attention-review-count">—</strong>
-          <small>重新适配完成、等待确认的任务</small>
-        </button>
+      <div id="overview-statistics-groups" class="overview-statistics-groups" aria-live="polite">
+        <section class="overview-statistics-group" aria-labelledby="overview-download-statistics-title">
+          <div class="overview-statistics-heading">
+            <h3 id="overview-download-statistics-title">下载与整理</h3>
+            <small>数据来自全局下载仪表盘</small>
+          </div>
+          <div class="overview-statistics-grid">
+            <button id="overview-download-active" type="button" class="overview-stat-card active">
+              <span>活动下载</span><strong id="overview-download-active-count">—</strong><small>等待、下载、移动或做种</small>
+            </button>
+            <button id="overview-download-paused" type="button" class="overview-stat-card paused">
+              <span>暂停</span><strong id="overview-download-paused-count">—</strong><small>进入暂停任务筛选</small>
+            </button>
+            <button id="overview-download-failed" type="button" class="overview-stat-card failed">
+              <span>下载/整理失败</span><strong id="overview-download-failed-count">—</strong><small id="overview-download-failed-detail">等待读取失败原因</small>
+            </button>
+            <button id="overview-download-waiting-organization" type="button" class="overview-stat-card warning">
+              <span>等待整理</span><strong id="overview-download-waiting-organization-count">—</strong><small>已下载及整理队列任务</small>
+            </button>
+            <button id="overview-download-completed" type="button" class="overview-stat-card success">
+              <span>已完成</span><strong id="overview-download-completed-count">—</strong><small>已完成媒体入库</small>
+            </button>
+            <button id="overview-download-stale" type="button" class="overview-stat-card stale">
+              <span>快照过期</span><strong id="overview-download-stale-count">—</strong><small>下载器状态需要复核</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="overview-statistics-group" aria-labelledby="overview-metadata-statistics-title">
+          <div class="overview-statistics-heading">
+            <h3 id="overview-metadata-statistics-title">匹配与人工处理</h3>
+            <small>点击后自动套用任务筛选</small>
+          </div>
+          <div id="overview-metadata-attention-summary" class="overview-statistics-grid" aria-label="总览中的匹配与整理待处理统计">
+            <button id="overview-attention-other" type="button" class="overview-stat-card other">
+              <span>Other 待处理</span><strong id="overview-attention-other-count">—</strong><small>仍含 Other 文件的任务</small>
+            </button>
+            <button id="overview-attention-failed" type="button" class="overview-stat-card failed">
+              <span>匹配错误</span><strong id="overview-attention-failed-count">—</strong><small>当前匹配失败的任务</small>
+            </button>
+            <button id="overview-attention-review" type="button" class="overview-stat-card review">
+              <span>等待人工审核</span><strong id="overview-attention-review-count">—</strong><small>重新适配完成、等待确认</small>
+            </button>
+            <button id="overview-pending-tmdb" type="button" class="overview-stat-card warning">
+              <span>待补全 TMDB</span><strong id="overview-pending-tmdb-count">—</strong><small id="overview-pending-tmdb-detail">Bangumi 最终兜底作品</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="overview-statistics-group" aria-labelledby="overview-scale-statistics-title">
+          <div class="overview-statistics-heading">
+            <h3 id="overview-scale-statistics-title">资产与运行规模</h3>
+            <small>进入作品、任务、来源或下载器管理</small>
+          </div>
+          <div class="overview-statistics-grid">
+            <button id="overview-library-seasons" type="button" class="overview-stat-card library">
+              <span>动画季度</span><strong id="overview-library-seasons-count">—</strong><small>已建立 TMDB 季度投影</small>
+            </button>
+            <button id="overview-metadata-total" type="button" class="overview-stat-card tasks">
+              <span>匹配任务</span><strong id="overview-metadata-total-count">—</strong><small>统一导入后的任务总量</small>
+            </button>
+            <button id="overview-sources-enabled" type="button" class="overview-stat-card sources">
+              <span>已启用来源</span><strong id="overview-sources-enabled-count">—</strong><small id="overview-sources-detail">进入输入源管理</small>
+            </button>
+            <button id="overview-downloaders-offline" type="button" class="overview-stat-card offline">
+              <span>离线下载器</span><strong id="overview-downloaders-offline-count">—</strong><small>进入 qBittorrent 实例配置</small>
+            </button>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -1717,6 +1770,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260820-download-summary-filters"></script>
+    <script type="module" src="/app.js?v=20260820-overview-statistics"></script>
 </body>
 </html>

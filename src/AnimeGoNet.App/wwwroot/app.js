@@ -411,7 +411,7 @@ function selectWorkspace(workspace, subview, updateHash = true) {
         void loadMetadataTasks(true);
     }
     if (workspace === "overview" && selectedSubview === "status") {
-        void loadOverviewMetadataAttention();
+        void loadOverviewStatistics();
     }
     if (workspace === "library" && selectedSubview === "seasons"
         && activeLibraryDetail === null) {
@@ -2241,6 +2241,17 @@ function saveDownloadState() {
     catch {
         // Browser storage is an optional UI preference; business state remains server-side.
     }
+}
+function syncDownloadFilterControls() {
+    element("#download-search").value = downloadState.search;
+    element("#download-state").value = downloadState.state;
+    element("#download-business-status").value =
+        downloadState.business_status;
+    element("#download-downloader").value = downloadState.downloader_id;
+    element("#download-source").value = downloadState.source;
+    element("#download-sort").value = downloadState.sort;
+    element("#download-direction").value = downloadState.direction;
+    element("#download-page-size").value = String(downloadState.page_size);
 }
 function readMetadataState() {
     const defaults = {
@@ -5230,7 +5241,7 @@ deleteConfirm.addEventListener("click", async () => {
             void loadDownloads();
             void loadLibrary();
             void loadPendingTmdb();
-            void loadOverviewMetadataAttention();
+            void loadOverviewStatistics();
         }
         else {
             element("#delete-message").textContent =
@@ -5981,22 +5992,114 @@ function openMetadataAttentionFromOverview(filter) {
     setMetadataAttentionFilter(filter);
     selectWorkspace("tasks", "metadata");
 }
-async function loadOverviewMetadataAttention() {
-    try {
-        const response = await authenticatedFetch("/api/v1/metadata/tasks?page=1&page_size=10", { headers });
-        if (!response.ok)
-            throw new Error(`HTTP ${response.status}`);
-        const body = await response.json();
-        renderMetadataAttentionSummary(body.attention);
+function openDownloadSummaryFromOverview(bucket) {
+    downloadState.search = "";
+    downloadState.state = "";
+    downloadState.business_status = "";
+    downloadState.downloader_id = "";
+    downloadState.source = "";
+    downloadState.summary_bucket = bucket;
+    downloadState.page = 1;
+    syncDownloadFilterControls();
+    saveDownloadState();
+    selectWorkspace("tasks", "downloads");
+}
+function openAllMetadataFromOverview() {
+    metadataState.search = "";
+    metadataState.status = "";
+    metadataState.handling = "all";
+    metadataState.file_state = "all";
+    metadataState.review_state = "all";
+    metadataState.failure_stage = "";
+    metadataState.error_code = "";
+    metadataState.retryability = "all";
+    metadataState.page = 1;
+    syncMetadataFilterControls();
+    saveMetadataState();
+    selectWorkspace("tasks", "metadata");
+}
+function setOverviewCount(id, value) {
+    element(`#${id}`).textContent = value === "!"
+        ? value
+        : value.toLocaleString("zh-CN");
+}
+function setOverviewFailure(ids, detailId) {
+    for (const id of ids)
+        setOverviewCount(id, "!");
+    if (detailId)
+        element(`#${detailId}`).textContent = "读取失败，点击进入详情";
+}
+async function fetchOverviewJson(path) {
+    const response = await authenticatedFetch(path, { headers });
+    if (!response.ok)
+        throw new Error(await responseError(response));
+    return await response.json();
+}
+async function loadOverviewStatistics() {
+    const [downloads, metadata, library, pendingTmdb, sources] = await Promise.allSettled([
+        fetchOverviewJson("/api/v1/downloads?page=1&page_size=10"),
+        fetchOverviewJson("/api/v1/metadata/tasks?page=1&page_size=10"),
+        fetchOverviewJson("/api/v1/library/seasons?page=1&page_size=12"),
+        fetchOverviewJson("/api/v1/metadata/pending-tmdb"),
+        fetchOverviewJson("/api/v1/sources"),
+    ]);
+    if (downloads.status === "fulfilled") {
+        const summary = downloads.value.summary;
+        setOverviewCount("overview-download-active-count", summary.active_jobs);
+        setOverviewCount("overview-download-paused-count", summary.paused_jobs);
+        setOverviewCount("overview-download-failed-count", summary.failed_jobs);
+        setOverviewCount("overview-download-waiting-organization-count", summary.waiting_organization_jobs);
+        setOverviewCount("overview-download-completed-count", summary.completed_jobs);
+        setOverviewCount("overview-download-stale-count", summary.stale_jobs);
+        setOverviewCount("overview-downloaders-offline-count", summary.offline_instance_count);
+        element("#overview-download-failed-detail").textContent =
+            summary.latest_failure_code ?? "当前无失败";
     }
-    catch {
-        for (const id of [
+    else {
+        setOverviewFailure([
+            "overview-download-active-count",
+            "overview-download-paused-count",
+            "overview-download-failed-count",
+            "overview-download-waiting-organization-count",
+            "overview-download-completed-count",
+            "overview-download-stale-count",
+            "overview-downloaders-offline-count",
+        ], "overview-download-failed-detail");
+    }
+    if (metadata.status === "fulfilled") {
+        renderMetadataAttentionSummary(metadata.value.attention);
+        setOverviewCount("overview-metadata-total-count", metadata.value.total_items);
+    }
+    else {
+        setOverviewFailure([
             "overview-attention-other-count",
             "overview-attention-failed-count",
             "overview-attention-review-count",
-        ]) {
-            element(`#${id}`).textContent = "!";
-        }
+            "overview-metadata-total-count",
+        ]);
+    }
+    if (library.status === "fulfilled") {
+        setOverviewCount("overview-library-seasons-count", library.value.total_items);
+    }
+    else {
+        setOverviewFailure(["overview-library-seasons-count"]);
+    }
+    if (pendingTmdb.status === "fulfilled") {
+        setOverviewCount("overview-pending-tmdb-count", pendingTmdb.value.items.length);
+        const fallbackRecords = pendingTmdb.value.items.reduce((total, item) => total + item.fallback_record_count, 0);
+        element("#overview-pending-tmdb-detail").textContent =
+            `${fallbackRecords.toLocaleString("zh-CN")} 条兜底记录`;
+    }
+    else {
+        setOverviewFailure(["overview-pending-tmdb-count"], "overview-pending-tmdb-detail");
+    }
+    if (sources.status === "fulfilled") {
+        setOverviewCount("overview-sources-enabled-count", sources.value.items.filter(source => source.enabled).length);
+        element("#overview-sources-detail").textContent =
+            `共 ${sources.value.items.length.toLocaleString("zh-CN")} 个来源`;
+    }
+    else {
+        setOverviewFailure(["overview-sources-enabled-count"], "overview-sources-detail");
     }
 }
 async function loadMetadataTasks(background = false) {
@@ -8841,6 +8944,21 @@ element("#metadata-attention-review").addEventListener("click", () => applyMetad
 element("#overview-attention-other").addEventListener("click", () => openMetadataAttentionFromOverview("other"));
 element("#overview-attention-failed").addEventListener("click", () => openMetadataAttentionFromOverview("failed"));
 element("#overview-attention-review").addEventListener("click", () => openMetadataAttentionFromOverview("review"));
+for (const [id, bucket] of [
+    ["overview-download-active", "active"],
+    ["overview-download-paused", "paused"],
+    ["overview-download-failed", "failed"],
+    ["overview-download-waiting-organization", "waiting_organization"],
+    ["overview-download-completed", "completed"],
+    ["overview-download-stale", "stale"],
+]) {
+    element(`#${id}`).addEventListener("click", () => openDownloadSummaryFromOverview(bucket));
+}
+element("#overview-pending-tmdb").addEventListener("click", () => selectWorkspace("library", "pending"));
+element("#overview-library-seasons").addEventListener("click", () => selectWorkspace("library", "seasons"));
+element("#overview-metadata-total").addEventListener("click", openAllMetadataFromOverview);
+element("#overview-sources-enabled").addEventListener("click", () => selectWorkspace("sources", "manage"));
+element("#overview-downloaders-offline").addEventListener("click", () => selectWorkspace("download-tools", "qbittorrent"));
 element("#metadata-previous").addEventListener("click", () => {
     if (metadataState.page <= 1)
         return;
@@ -8853,15 +8971,7 @@ element("#metadata-next").addEventListener("click", () => {
     saveMetadataState();
     void loadMetadataTasks();
 });
-element("#download-search").value = downloadState.search;
-element("#download-state").value = downloadState.state;
-element("#download-business-status").value =
-    downloadState.business_status;
-element("#download-downloader").value = downloadState.downloader_id;
-element("#download-source").value = downloadState.source;
-element("#download-sort").value = downloadState.sort;
-element("#download-direction").value = downloadState.direction;
-element("#download-page-size").value = String(downloadState.page_size);
+syncDownloadFilterControls();
 element("#download-filters").addEventListener("submit", (event) => {
     event.preventDefault();
     downloadState.search = element("#download-search").value.trim();
@@ -8895,14 +9005,7 @@ element("#download-filter-reset").addEventListener("click", () => {
         direction: "desc",
         summary_bucket: "",
     };
-    element("#download-search").value = "";
-    element("#download-state").value = "";
-    element("#download-business-status").value = "";
-    element("#download-downloader").value = "";
-    element("#download-source").value = "";
-    element("#download-sort").value = "created";
-    element("#download-direction").value = "desc";
-    element("#download-page-size").value = "25";
+    syncDownloadFilterControls();
     saveDownloadState();
     void loadDownloads();
 });
@@ -9365,8 +9468,8 @@ window.setInterval(() => {
 }, 5000);
 window.setInterval(() => {
     if (isSubviewVisible("overview", "status"))
-        void loadOverviewMetadataAttention();
-}, 5000);
+        void loadOverviewStatistics();
+}, 10000);
 window.setInterval(() => {
     if (isSubviewVisible("library", "pending")
         && !hasFocusedEditorWithin("#pending-tmdb") && !hasOpenDialog()) {
