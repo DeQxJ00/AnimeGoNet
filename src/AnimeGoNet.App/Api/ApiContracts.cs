@@ -1090,7 +1090,15 @@ public sealed record AiInvocationLogItemResponse(
     [property: JsonPropertyName("total_tokens")] long? TotalTokens,
     [property: JsonPropertyName("request_count")] int RequestCount,
     [property: JsonPropertyName("tool_call_count")] int ToolCallCount,
+    [property: JsonPropertyName("validated_episodes")]
+    IReadOnlyList<AiInvocationValidatedEpisodeResponse> ValidatedEpisodes,
     [property: JsonPropertyName("debug_available")] bool DebugAvailable);
+
+public sealed record AiInvocationValidatedEpisodeResponse(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("season_number")] int SeasonNumber,
+    [property: JsonPropertyName("episode_number")] int EpisodeNumber,
+    [property: JsonPropertyName("episode_name")] string? EpisodeName);
 
 public sealed record AnimeSeasonListResponse(
     [property: JsonPropertyName("page")] int Page,

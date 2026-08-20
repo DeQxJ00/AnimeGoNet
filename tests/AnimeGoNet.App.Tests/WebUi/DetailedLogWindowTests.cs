@@ -38,6 +38,8 @@ public sealed class DetailedLogWindowTests
         Assert.Contains("/api/v1/logs/ai-invocations", script, StringComparison.Ordinal);
         Assert.Contains("loadAiInvocationLogs", script, StringComparison.Ordinal);
         Assert.Contains("aiLogErrorCategoryLabel", script, StringComparison.Ordinal);
+        Assert.Contains("validated_episodes", script, StringComparison.Ordinal);
+        Assert.Contains("TMDB 最终验证 EP", script, StringComparison.Ordinal);
         Assert.Contains("error_category", script, StringComparison.Ordinal);
         Assert.Contains("id=\"ai-debug-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-debug\"", html, StringComparison.Ordinal);

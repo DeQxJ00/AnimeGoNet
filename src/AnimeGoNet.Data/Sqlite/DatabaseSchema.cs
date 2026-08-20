@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 51;
+    public const int CurrentVersion = 52;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -90,7 +90,57 @@ public static class DatabaseSchema
             51,
             "configurable_trusted_offset_threshold",
             ConfigurableTrustedOffsetThreshold),
+        new SchemaMigration(
+            52,
+            "ai_validated_episode_audit",
+            AiValidatedEpisodeAudit),
     ];
+
+    private const string AiValidatedEpisodeAudit = """
+        CREATE TABLE metadata_ai_validated_episodes (
+            attempt_id TEXT NOT NULL
+                REFERENCES metadata_resolution_attempts(id) ON DELETE CASCADE,
+            tmdb_series_id INTEGER NOT NULL CHECK (tmdb_series_id > 0),
+            tmdb_season_number INTEGER NOT NULL CHECK (tmdb_season_number > 0),
+            tmdb_episode_number INTEGER NOT NULL CHECK (tmdb_episode_number > 0),
+            tmdb_episode_id INTEGER CHECK (tmdb_episode_id > 0),
+            episode_name TEXT,
+            validated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (
+                attempt_id, tmdb_series_id,
+                tmdb_season_number, tmdb_episode_number)
+        ) STRICT;
+
+        CREATE INDEX ix_metadata_ai_validated_episodes_identity
+        ON metadata_ai_validated_episodes(
+            tmdb_series_id, tmdb_season_number, tmdb_episode_number);
+
+        INSERT INTO metadata_ai_validated_episodes (
+            attempt_id, tmdb_series_id, tmdb_season_number,
+            tmdb_episode_number, tmdb_episode_id, episode_name,
+            validated_at_utc)
+        SELECT file.episode_resolution_attempt_id,
+               file.tmdb_series_id, file.tmdb_season_number,
+               file.tmdb_episode_number, MAX(file.tmdb_episode_id),
+               MAX(episode.name),
+               COALESCE(run.completed_at_utc, attempt.created_at_utc)
+        FROM task_files AS file
+        JOIN metadata_resolution_attempts AS attempt
+          ON attempt.id = file.episode_resolution_attempt_id
+        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+        LEFT JOIN tmdb_episodes AS episode
+          ON episode.tmdb_episode_id = file.tmdb_episode_id
+        WHERE file.episode_resolution_source = 'ai_metadata'
+          AND file.tmdb_series_id IS NOT NULL
+          AND file.tmdb_season_number IS NOT NULL
+          AND file.tmdb_episode_number IS NOT NULL
+          AND attempt.stage = 'episode'
+          AND attempt.strategy = 'ai_metadata'
+          AND attempt.result = 'matched'
+        GROUP BY file.episode_resolution_attempt_id,
+                 file.tmdb_series_id, file.tmdb_season_number,
+                 file.tmdb_episode_number;
+        """;
 
     private const string ConfigurableTrustedOffsetThreshold = """
         ALTER TABLE mikan_trusted_offsets RENAME TO mikan_trusted_offsets_legacy;

@@ -924,6 +924,12 @@ interface AiInvocationLogItem {
   total_tokens: number | null;
   request_count: number;
   tool_call_count: number;
+  validated_episodes: {
+    tmdb_series_id: number;
+    season_number: number;
+    episode_number: number;
+    episode_name: string | null;
+  }[];
   debug_available: boolean;
 }
 
@@ -3507,6 +3513,15 @@ function aiLogNumber(value: number | null): string {
   return value === null ? "—" : value.toLocaleString("zh-CN");
 }
 
+function aiLogValidatedEpisodes(item: AiInvocationLogItem): string {
+  if (item.validated_episodes.length === 0) return "未通过最终 TMDB Episode 验证";
+  return item.validated_episodes.map(episode =>
+    `TMDB ${episode.tmdb_series_id} · S${String(episode.season_number).padStart(2, "0")}`
+    + `E${String(episode.episode_number).padStart(3, "0")}`
+    + `${episode.episode_name ? ` · ${episode.episode_name}` : ""}`,
+  ).join("；");
+}
+
 function renderAiInvocationLogSummary(result: AiInvocationLogList): void {
   element<HTMLElement>("#ai-log-total").textContent = result.total_items.toLocaleString("zh-CN");
   element<HTMLElement>("#ai-log-result-total").textContent =
@@ -3744,9 +3759,12 @@ function renderAiInvocationLogs(result: AiInvocationLogList): void {
       const model = document.createElement("span");
       model.className = "ai-log-model";
       model.textContent = item.model;
+      const validatedEpisodes = document.createElement("span");
+      validatedEpisodes.className = "ai-log-episodes";
+      validatedEpisodes.textContent = `TMDB 最终验证 EP：${aiLogValidatedEpisodes(item)}`;
       summary.append(time, resultBadge);
       if (outputFormatBadge !== null) summary.append(outputFormatBadge);
-      summary.append(title, stage, model);
+      summary.append(title, stage, model, validatedEpisodes);
 
       const details = document.createElement("dl");
       details.className = "live-log-detail ai-log-detail";
@@ -3758,6 +3776,7 @@ function renderAiInvocationLogs(result: AiInvocationLogList): void {
         liveLogDetail("TMDB 验证", item.tmdb_series_id === null
           ? "未确认"
           : `${item.tmdb_series_id} / S${String(item.tmdb_season_number ?? 0).padStart(2, "0")}`),
+        liveLogDetail("TMDB 最终验证 EP", aiLogValidatedEpisodes(item)),
         liveLogDetail("运行状态", `${item.run_status} · ${item.retryable ? "可重试" : "不可重试"}`),
         liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`),
         liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`),

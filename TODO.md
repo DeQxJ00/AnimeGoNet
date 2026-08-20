@@ -212,6 +212,7 @@
 - [x] 移植 WebSocket 日志 pause/resume：保留 `/websocket/log`、旧 `type=log/count` 帧和三种控制命令；鉴权、逐连接暂停、1000 条有界缓存、慢消费者有界队列、脱敏及取消均已验证。
 - [x] 将实时日志升级为详细日志工作区：兼容旧文本帧并在浏览器拆分 UTC 时间、级别、类别、Event ID、消息、异常和脱敏原文；支持级别/关键词/类别/Event ID 组合筛选、自动滚动、长行换行、单条展开和复制当前脱敏结果，浏览器仍只保留最新 500 条。HTTP 连接另有“全部 / 仅外部 HTTP 请求（Mikan/TMDB/Bangumi 等） / 仅 WebUI/API 入站 / 排除 HTTP”独立选项和外部请求快捷按钮，ASP.NET Core 入站轮询及仅包含本机监听 URL 的启动消息不会与真实外部请求混在一起；默认 Mikan、TMDB、Bangumi、AI、Torrent、封面和数据更新客户端显式记录脱敏的开始/状态/耗时，query、Cookie、passkey、API Key、正文及异常消息不进入日志。
 - [x] 将“日志”独立为一级工作区：运行日志增加时间、仅异常、业务域快速筛选及级别统计；新增跨任务 AI 调用日志 API/页面，按任务、阶段、结果、模型和时间分页查询已持久化 provider usage，汇总成功/失败、Token、HTTP 与工具调用，并可回到任务详情。Prompt、响应正文和凭据继续不进入审计。
+- [x] AI 调用日志持久化并显示当次通过主程序 TMDB 最终验证的 Series/Season/Episode 与 Episode 名称；多文件/跨季度按唯一 EP 有序展示，失败调用明确显示未通过验证。schema v52 从现有 `episode_resolution_attempt_id` 回填历史证据，后续人工重新适配不会改写旧 AI 审计。
 - [x] 增加默认关闭的 AI Debug 完整链路：按 run_id 在 `data_path/ai-debug` 独立保存 AI 前任务输入、同一 run 已落库的确定性尝试、发布时间证据、Prompt 模板/最终渲染 Prompt、全部 AI/MCP 请求响应 Body、解析候选、TMDB 本地验证和用量；AI 调用日志提供分段时间线查看与单条删除。Authorization Header、API Key、Cookie、passkey 和 Torrent URL 不落盘，普通 SQLite AI 审计仍保持轻量。
 - [x] 移植轻量滚动文件日志：固定写入 `data_path/logs/animego.log`，仅 Information 以上，2 MiB、14 份备份、14 天保留；与 WebSocket 共用脱敏格式，宿主停止后由 DI 唯一释放句柄。
 - [x] 兼容 `DeQxJ00/AnimeGoHelper`：固定原脚本 `78a9d0d8` 与 SHA-256，不修改执行；`/ping`、`/api/rss`、`/api/download/manager`、`/api/plugin/config` 和 `Access-Key` 已覆盖。Kestrel 契约验证配置上传立即影响 RSS、快速下载仍跳过过滤；Chromium Mikan fixture 验证可见“单/全”控件、上传/获取配置和无损 Base64 往返。

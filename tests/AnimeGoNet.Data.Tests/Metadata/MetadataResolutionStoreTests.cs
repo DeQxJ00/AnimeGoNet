@@ -487,7 +487,9 @@ public sealed class MetadataResolutionStoreTests
                 null,
                 false,
                 episodeClaim.Resolution.AttemptNumber,
-                10),
+                10,
+                AiUsage: new AiMetadataProviderUsage(
+                    "gpt-5.6-luna", 100, 20, 120, 1, 0)),
             now.AddSeconds(2));
         await fixture.Store.CompleteEpisodesAsync(
             episodeClaim,
@@ -530,6 +532,26 @@ public sealed class MetadataResolutionStoreTests
         }
 
         Assert.False(await reader.ReadAsync());
+
+        var invocation = Assert.Single((await fixture.Store.ListAiInvocationLogsAsync(
+            new MetadataAiInvocationLogFilter(1, 10))).Items);
+        Assert.Equal(episodeAttemptId, invocation.AttemptId);
+        Assert.Collection(
+            invocation.ValidatedEpisodes,
+            episode =>
+            {
+                Assert.Equal(72517, episode.TmdbSeriesId);
+                Assert.Equal(1, episode.TmdbSeasonNumber);
+                Assert.Equal(1, episode.TmdbEpisodeNumber);
+                Assert.Equal("S01E01", episode.EpisodeName);
+            },
+            episode =>
+            {
+                Assert.Equal(72517, episode.TmdbSeriesId);
+                Assert.Equal(2, episode.TmdbSeasonNumber);
+                Assert.Equal(1, episode.TmdbEpisodeNumber);
+                Assert.Equal("S02E01", episode.EpisodeName);
+            });
     }
 
     [Fact]

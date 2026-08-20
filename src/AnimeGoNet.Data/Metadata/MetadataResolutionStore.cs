@@ -1460,6 +1460,56 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             {
                 throw new InvalidOperationException("Metadata Episode task file changed concurrently.");
             }
+
+            if (resolution.ResolutionSource == TmdbResolutionSource.AiMetadata
+                && resolution.ResolvedEpisodeNumber is not null)
+            {
+                await using var audit = connection.CreateCommand();
+                audit.Transaction = transaction;
+                audit.CommandText = """
+                    INSERT INTO metadata_ai_validated_episodes (
+                        attempt_id, tmdb_series_id, tmdb_season_number,
+                        tmdb_episode_number, tmdb_episode_id, episode_name,
+                        validated_at_utc)
+                    SELECT attempt.id, $tmdb_series_id, $tmdb_season_number,
+                           $tmdb_episode_number, $tmdb_episode_id, $episode_name,
+                           $validated_at_utc
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = $attempt_id
+                      AND attempt.run_id = $run_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = 'ai_metadata'
+                      AND attempt.result = 'matched'
+                    ON CONFLICT (
+                        attempt_id, tmdb_series_id,
+                        tmdb_season_number, tmdb_episode_number)
+                    DO UPDATE SET
+                        tmdb_episode_id = excluded.tmdb_episode_id,
+                        episode_name = excluded.episode_name,
+                        validated_at_utc = excluded.validated_at_utc;
+                    """;
+                audit.Parameters.AddWithValue(
+                    "$attempt_id",
+                    resolution.ResolutionAttemptId!);
+                audit.Parameters.AddWithValue("$run_id", claim.Resolution.RunId);
+                audit.Parameters.AddWithValue("$tmdb_series_id", claim.TmdbSeriesId);
+                audit.Parameters.AddWithValue("$tmdb_season_number", expectedSeasonNumber);
+                audit.Parameters.AddWithValue(
+                    "$tmdb_episode_number",
+                    resolution.ResolvedEpisodeNumber.Value);
+                audit.Parameters.AddWithValue(
+                    "$tmdb_episode_id",
+                    (object?)resolution.Episode?.Id ?? DBNull.Value);
+                audit.Parameters.AddWithValue(
+                    "$episode_name",
+                    (object?)resolution.Episode?.Name ?? DBNull.Value);
+                audit.Parameters.AddWithValue("$validated_at_utc", now);
+                if (await audit.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                {
+                    throw new InvalidOperationException(
+                        "AI Episode validation audit could not be linked to its matched attempt.");
+                }
+            }
         }
 
         await using (var finish = connection.CreateCommand())
@@ -2067,7 +2117,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                         reader.IsDBNull(21) ? null : reader.GetInt64(21),
                         reader.IsDBNull(22) ? null : reader.GetInt64(22),
                         reader.IsDBNull(23) ? 0 : reader.GetInt32(23),
-                        reader.IsDBNull(24) ? 0 : reader.GetInt32(24))));
+                        reader.IsDBNull(24) ? 0 : reader.GetInt32(24)),
+                    []));
+            }
+        }
+
+        var validatedEpisodes = await LoadAiValidatedEpisodesAsync(
+            connection,
+            items.Select(item => item.AttemptId).ToArray(),
+            cancellationToken).ConfigureAwait(false);
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (validatedEpisodes.TryGetValue(items[index].AttemptId, out var episodes))
+            {
+                items[index] = items[index] with { ValidatedEpisodes = episodes };
             }
         }
 
@@ -2084,6 +2147,58 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             },
             summary,
             items);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<MetadataAiValidatedEpisodeProjection>>>
+        LoadAiValidatedEpisodesAsync(
+            SqliteConnection connection,
+            string[] attemptIds,
+            CancellationToken cancellationToken)
+    {
+        if (attemptIds.Length == 0)
+        {
+            return new Dictionary<string, IReadOnlyList<MetadataAiValidatedEpisodeProjection>>(
+                StringComparer.Ordinal);
+        }
+
+        await using var command = connection.CreateCommand();
+        var parameterNames = new string[attemptIds.Length];
+        for (var index = 0; index < attemptIds.Length; index++)
+        {
+            parameterNames[index] = $"$attempt_{index}";
+            command.Parameters.AddWithValue(parameterNames[index], attemptIds[index]);
+        }
+        command.CommandText = $"""
+            SELECT attempt_id, tmdb_series_id, tmdb_season_number,
+                   tmdb_episode_number, episode_name
+            FROM metadata_ai_validated_episodes
+            WHERE attempt_id IN ({string.Join(", ", parameterNames)})
+            ORDER BY attempt_id, tmdb_series_id,
+                     tmdb_season_number, tmdb_episode_number;
+            """;
+        var grouped = new Dictionary<string, List<MetadataAiValidatedEpisodeProjection>>(
+            StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var attemptId = reader.GetString(0);
+            if (!grouped.TryGetValue(attemptId, out var episodes))
+            {
+                episodes = [];
+                grouped.Add(attemptId, episodes);
+            }
+            episodes.Add(new MetadataAiValidatedEpisodeProjection(
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
+        }
+
+        return grouped.ToDictionary(
+            item => item.Key,
+            item => (IReadOnlyList<MetadataAiValidatedEpisodeProjection>)item.Value,
+            StringComparer.Ordinal);
     }
 
     private const string AiInvocationLogFilterSql = """

@@ -5416,6 +5416,12 @@ public static class ApiEndpoints
                 item.Usage.TotalTokens,
                 item.Usage.RequestCount,
                 item.Usage.ToolCallCount,
+                item.ValidatedEpisodes.Select(episode =>
+                    new AiInvocationValidatedEpisodeResponse(
+                        episode.TmdbSeriesId,
+                        episode.TmdbSeasonNumber,
+                        episode.TmdbEpisodeNumber,
+                        episode.EpisodeName)).ToArray(),
                 debugTraces.Exists(item.RunId))).ToArray()));
     }
 

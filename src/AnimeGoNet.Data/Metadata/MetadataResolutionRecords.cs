@@ -85,7 +85,14 @@ public sealed record MetadataAiInvocationLogProjection(
     bool Retryable,
     long DurationMilliseconds,
     DateTimeOffset CreatedAtUtc,
-    AiMetadataProviderUsage Usage);
+    AiMetadataProviderUsage Usage,
+    IReadOnlyList<MetadataAiValidatedEpisodeProjection> ValidatedEpisodes);
+
+public sealed record MetadataAiValidatedEpisodeProjection(
+    int TmdbSeriesId,
+    int TmdbSeasonNumber,
+    int TmdbEpisodeNumber,
+    string? EpisodeName);
 
 public sealed record MetadataAiInvocationLogSummary(
     int TotalItems,

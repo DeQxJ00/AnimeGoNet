@@ -1537,6 +1537,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .ai-log-entry time { color: #91a0bb; font-size: .72rem; }
 .ai-log-title { color: #edf4ff; font-weight: 650; }
 .ai-log-stage, .ai-log-model { color: #a7b8d4; font: .72rem/1.4 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.ai-log-episodes { grid-column: 3 / -1; color: #8fd9bd; font: .76rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; }
 .ai-log-detail { padding: 4px 14px 10px; }
 .ai-log-entry-actions { display: flex; justify-content: flex-end; padding: 0 14px 12px; }
 .ai-log-entry-actions { flex-wrap: wrap; gap: 8px; }
@@ -1581,7 +1582,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .log-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .ai-log-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .ai-log-entry > summary { grid-template-columns: 130px 70px minmax(0,1fr); }
-  .ai-log-entry > summary .ai-log-stage, .ai-log-entry > summary .ai-log-model { grid-column: 1 / -1; }
+  .ai-log-entry > summary .ai-log-stage, .ai-log-entry > summary .ai-log-model, .ai-log-entry > summary .ai-log-episodes { grid-column: 1 / -1; }
   .live-log-entry > summary { grid-template-columns: 92px 76px minmax(0,1fr); }
   .live-log-entry > summary .live-log-event { display: none; }
   .live-log-entry > summary .live-log-message { grid-column: 1 / -1; }
@@ -1625,7 +1626,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
   .log-summary-grid, .ai-log-filters { grid-template-columns: 1fr; }
   .ai-log-filters label.wide { grid-column: 1; }
   .ai-log-entry > summary { grid-template-columns: 1fr auto; }
-  .ai-log-entry > summary .ai-log-title, .ai-log-entry > summary .ai-log-stage, .ai-log-entry > summary .ai-log-model { grid-column: 1 / -1; }
+  .ai-log-entry > summary .ai-log-title, .ai-log-entry > summary .ai-log-stage, .ai-log-entry > summary .ai-log-model, .ai-log-entry > summary .ai-log-episodes { grid-column: 1 / -1; }
   .ai-debug-summary, .ai-debug-evidence { grid-template-columns: 1fr; }
   .ai-debug-section-heading { align-items: flex-start; flex-direction: column; }
   .library-pagination,
