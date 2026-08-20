@@ -1,5 +1,12 @@
 import { ApiClient } from "./api-client.js";
 import {
+  clearStoredWebUiAccessKey,
+  createAuthenticatedFetch,
+  loadWebUiAccessKey,
+  sha256LowerHex,
+  storeWebUiAccessKey,
+} from "./webui-auth.js";
+import {
   renderRegionContent,
   renderRegionMessage,
   setRegionState,
@@ -1613,11 +1620,95 @@ async function responseError(response: Response): Promise<string> {
   return body?.message ?? `HTTP ${response.status}`;
 }
 
-const webUiAccessKey = new URLSearchParams(window.location.search)
-  .get("webui_access_key");
-const api = new ApiClient(webUiAccessKey);
+const webUiAccessKeyStores = {
+  session: window.sessionStorage,
+  persistent: window.localStorage,
+};
+let webUiAccessKey = loadWebUiAccessKey(window.location.search, webUiAccessKeyStores);
+const nativeFetch = globalThis.fetch.bind(globalThis);
+const authenticatedFetch = createAuthenticatedFetch({
+  fetchImplementation: nativeFetch,
+  getAccessKey: () => webUiAccessKey,
+  requestAccessKey: () => requestWebUiAccessKey("当前 WebUI AccessKey 缺失或已经失效，请重新输入。"),
+});
+const api = new ApiClient(null, authenticatedFetch);
 const headers = new Headers();
 if (webUiAccessKey) headers.set("WebUI-Access-Key", webUiAccessKey);
+const webUiAccessKeyDialog = element<HTMLDialogElement>("#webui-access-key-dialog");
+const webUiAccessKeyForm = element<HTMLFormElement>("#webui-access-key-form");
+const webUiAccessKeyInput = element<HTMLInputElement>("#webui-access-key-input");
+const webUiAccessKeyRemember = element<HTMLInputElement>("#webui-access-key-remember");
+const webUiAccessKeyMessage = element<HTMLElement>("#webui-access-key-message");
+const webUiAccessKeySubmit = element<HTMLButtonElement>("#webui-access-key-submit");
+let pendingWebUiAccessKeyRequest: {
+  promise: Promise<string | null>;
+  resolve: (value: string | null) => void;
+} | null = null;
+
+function applyWebUiAccessKey(accessKeyHash: string, remember: boolean): void {
+  webUiAccessKey = accessKeyHash;
+  headers.set("WebUI-Access-Key", accessKeyHash);
+  storeWebUiAccessKey(accessKeyHash, remember, webUiAccessKeyStores);
+}
+
+function requestWebUiAccessKey(message: string): Promise<string | null> {
+  if (pendingWebUiAccessKeyRequest) return pendingWebUiAccessKeyRequest.promise;
+
+  let resolveRequest: (value: string | null) => void = () => undefined;
+  const promise = new Promise<string | null>(resolve => {
+    resolveRequest = resolve;
+  });
+  pendingWebUiAccessKeyRequest = { promise, resolve: resolveRequest };
+  webUiAccessKeyInput.value = "";
+  webUiAccessKeyMessage.textContent = message;
+  webUiAccessKeySubmit.disabled = false;
+  if (!webUiAccessKeyDialog.open) webUiAccessKeyDialog.showModal();
+  queueMicrotask(() => webUiAccessKeyInput.focus());
+  return promise;
+}
+
+function finishWebUiAccessKeyRequest(value: string | null): void {
+  const pending = pendingWebUiAccessKeyRequest;
+  pendingWebUiAccessKeyRequest = null;
+  if (webUiAccessKeyDialog.open) webUiAccessKeyDialog.close();
+  pending?.resolve(value);
+}
+
+async function validateEnteredWebUiAccessKey(): Promise<void> {
+  const plaintext = webUiAccessKeyInput.value.trim();
+  if (!plaintext) {
+    webUiAccessKeyMessage.textContent = "请输入 web.webui_access_key。";
+    webUiAccessKeyInput.focus();
+    return;
+  }
+
+  webUiAccessKeySubmit.disabled = true;
+  webUiAccessKeyMessage.textContent = "正在验证 AccessKey…";
+  try {
+    const accessKeyHash = await sha256LowerHex(plaintext);
+    const validationHeaders = new Headers({
+      Accept: "application/json",
+      "WebUI-Access-Key": accessKeyHash,
+    });
+    const response = await nativeFetch("/api/v1/status", { headers: validationHeaders });
+    if (response.status === 401) {
+      webUiAccessKeyMessage.textContent = "AccessKey 不正确，请确认输入的是 web.webui_access_key，而不是插件 AccessKey。";
+      webUiAccessKeyInput.select();
+      return;
+    }
+    if (!response.ok) {
+      webUiAccessKeyMessage.textContent = `验证服务暂时不可用：${await responseError(response)}`;
+      return;
+    }
+
+    applyWebUiAccessKey(accessKeyHash, webUiAccessKeyRemember.checked);
+    finishWebUiAccessKeyRequest(accessKeyHash);
+  } catch (error) {
+    webUiAccessKeyMessage.textContent = `验证失败：${errorMessage(error, "连接失败")}`;
+  } finally {
+    webUiAccessKeySubmit.disabled = false;
+  }
+}
 const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
 const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-dialog");
@@ -2405,7 +2496,7 @@ async function saveExternalPluginConfiguration(
       throw new Error("args 必须是 JSON 对象。");
     }
     const collected = collectExternalPluginVars(form);
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/plugins/${encodeURIComponent(configuration.id)}/configuration`,
       {
         method: "PUT",
@@ -2436,7 +2527,7 @@ async function deleteExternalPluginConfiguration(
   if (!window.confirm(`恢复 ${configuration.id} 为未配置且默认禁用？已保存 args/vars 将被删除。`)) return;
   button.disabled = true;
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/plugins/${encodeURIComponent(configuration.id)}/configuration?expected_revision=${configurationRevision}`,
       { method: "DELETE", headers },
     );
@@ -2538,7 +2629,7 @@ async function resetExternalPlugin(pluginId: string, button: HTMLButtonElement):
   button.disabled = true;
   button.textContent = "正在清除…";
   try {
-    const response = await fetch(`/api/v1/plugins/${encodeURIComponent(pluginId)}/reset`, {
+    const response = await authenticatedFetch(`/api/v1/plugins/${encodeURIComponent(pluginId)}/reset`, {
       method: "POST",
       headers,
     });
@@ -2829,7 +2920,7 @@ async function loadBangumiArchiveUsage(silent = false): Promise<void> {
   });
   if (dataUpdateUsageKind) query.set("hit_kind", dataUpdateUsageKind);
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/data-update/archive-usage?${query.toString()}`,
       { headers },
     );
@@ -2859,7 +2950,7 @@ async function loadDataUpdate(silent = false): Promise<void> {
   const message = element<HTMLElement>("#data-update-status");
   if (!silent) message.textContent = "正在读取数据版本…";
   try {
-    const response = await fetch("/api/v1/data-update", { headers });
+    const response = await authenticatedFetch("/api/v1/data-update", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const status = await response.json() as DataUpdateStatus;
     const policy = !status.scheduled_enabled
@@ -2923,7 +3014,7 @@ async function runDataUpdateAction(
   setDataUpdateBusy(true);
   message.textContent = pendingMessage;
   try {
-    const response = await fetch(endpoint, { method: "POST", headers });
+    const response = await authenticatedFetch(endpoint, { method: "POST", headers });
     if (!response.ok) throw new Error(await responseError(response));
     const result = await response.json() as DataUpdateActionResult;
     message.textContent =
@@ -2955,7 +3046,7 @@ async function importOfflineDataPackage(event: SubmitEvent): Promise<void> {
   try {
     const uploadHeaders = new Headers(headers);
     uploadHeaders.set("Content-Type", "application/zip");
-    const response = await fetch("/api/v1/data-update/offline/import", {
+    const response = await authenticatedFetch("/api/v1/data-update/offline/import", {
       method: "POST",
       headers: uploadHeaders,
       body: file,
@@ -4614,7 +4705,7 @@ async function loadLibraryDetail(
   element<HTMLButtonElement>("#library-detail-delete").disabled = true;
   element<HTMLElement>("#library-detail-action-status").textContent = "";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/library/seasons/${tmdbSeriesId}/${seasonNumber}`,
       { headers },
     );
@@ -4645,7 +4736,7 @@ async function loadLibrary(): Promise<void> {
   });
   if (libraryState.search) query.set("search", libraryState.search);
   try {
-    const response = await fetch(`/api/v1/library/seasons?${query}`, { headers });
+    const response = await authenticatedFetch(`/api/v1/library/seasons?${query}`, { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const page = await response.json() as AnimeSeasonListPage;
     if (sequence !== libraryListRequestSequence) return;
@@ -4701,7 +4792,7 @@ async function createLibrarySeason(event: SubmitEvent): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/library/seasons", {
+    const response = await authenticatedFetch("/api/v1/library/seasons", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -4744,7 +4835,7 @@ async function refreshLibrarySeason(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}`,
       {
         method: "PUT",
@@ -4796,7 +4887,7 @@ async function importExternalMedia(scope: "all" | "season"): Promise<void> {
     const url = scope === "all"
       ? "/api/v1/library/external-media/import"
       : `/api/v1/library/seasons/${detail!.tmdb_series_id}/${detail!.tmdb_season_number}/external-media/import`;
-    const response = await fetch(url, { method: "POST", headers });
+    const response = await authenticatedFetch(url, { method: "POST", headers });
     if (!response.ok) throw new Error(await responseError(response));
     const result = await response.json() as ExternalMediaImportResult;
     renderExternalMediaImportResult(target, result);
@@ -4838,7 +4929,7 @@ async function deleteLibrarySeason(): Promise<void> {
     const query = new URLSearchParams({
       expected_revision: detail.resource_revision,
     });
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}?${query}`,
       { method: "DELETE", headers },
     );
@@ -5094,7 +5185,7 @@ async function loadConfiguration(): Promise<void> {
   const container = element<HTMLElement>("#configuration");
   status.textContent = "正在读取包含已保存凭据的生效配置…";
   try {
-    const response = await fetch("/api/v1/config", { headers });
+    const response = await authenticatedFetch("/api/v1/config", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const config = await response.json() as RuntimeConfiguration;
     currentConfiguration = config;
@@ -5202,12 +5293,6 @@ function animeGoHelperApiUrl(): string {
   return new URL("/api", window.location.origin).href.replace(/\/$/, "");
 }
 
-async function sha256LowerHex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 async function webUiAuthenticatedUrl(key: string): Promise<string> {
   const url = new URL("/", window.location.origin);
   if (key) url.searchParams.set("webui_access_key", await sha256LowerHex(key));
@@ -5267,7 +5352,7 @@ async function saveWebUiAuthentication(event: SubmitEvent): Promise<void> {
     web.webui_access_key = requestedKey;
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/config?key=all&backup=true", {
+    const response = await authenticatedFetch("/api/config?key=all&backup=true", {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({ key: "all", backup: true, config: configuration }),
@@ -5290,7 +5375,7 @@ async function saveWebUiAuthentication(event: SubmitEvent): Promise<void> {
 }
 
 async function readDeploymentConfiguration(): Promise<JsonObject> {
-  const response = await fetch("/api/config?key=all", { headers });
+  const response = await authenticatedFetch("/api/config?key=all", { headers });
   if (!response.ok) throw new Error(await responseError(response));
   const envelope = await response.json() as LegacyApiEnvelope<unknown>;
   if (envelope.code !== 200) {
@@ -5365,7 +5450,7 @@ async function saveWebApiCompatibility(event: SubmitEvent): Promise<void> {
     delete web.access_key;
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/config?key=all&backup=true", {
+    const response = await authenticatedFetch("/api/config?key=all&backup=true", {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({ key: "all", backup: true, config: configuration }),
@@ -5397,7 +5482,7 @@ function configurationArchiveCountText(counts: ConfigurationArchiveCounts): stri
 }
 
 async function downloadConfigurationArchive(path: string, fallbackName: string): Promise<void> {
-  const response = await fetch(path, { headers });
+  const response = await authenticatedFetch(path, { headers });
   if (!response.ok) throw new Error(await responseError(response));
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
@@ -5447,7 +5532,7 @@ async function previewConfigurationArchive(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/configuration-archive/import/preview", {
+    const response = await authenticatedFetch("/api/v1/configuration-archive/import/preview", {
       method: "POST",
       headers: requestHeaders,
       body: file,
@@ -5475,7 +5560,7 @@ async function importConfigurationArchive(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/configuration-archive/import?expected_sha256=${encodeURIComponent(preview.sha256)}`,
       { method: "POST", headers: requestHeaders, body: file },
     );
@@ -5496,7 +5581,7 @@ async function loadConfigurationBackups(): Promise<void> {
   const container = element<HTMLElement>("#configuration-backup-list");
   container.setAttribute("aria-busy", "true");
   try {
-    const response = await fetch("/api/v1/configuration-archive/backups", { headers });
+    const response = await authenticatedFetch("/api/v1/configuration-archive/backups", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const backups = await response.json() as ConfigurationArchiveBackup[];
     if (backups.length === 0) {
@@ -5556,7 +5641,7 @@ async function createConfigurationBackup(): Promise<void> {
   const status = element<HTMLElement>("#configuration-archive-status");
   status.textContent = "正在生成手动备份…";
   try {
-    const response = await fetch("/api/v1/configuration-archive/backups", {
+    const response = await authenticatedFetch("/api/v1/configuration-archive/backups", {
       method: "POST",
       headers,
     });
@@ -5574,7 +5659,7 @@ async function restoreConfigurationBackup(backup: ConfigurationArchiveBackup): P
   const status = element<HTMLElement>("#configuration-archive-status");
   status.textContent = "正在创建恢复前安全备份并应用配置…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/configuration-archive/backups/${encodeURIComponent(backup.id)}/restore`,
       { method: "POST", headers },
     );
@@ -5591,7 +5676,7 @@ async function deleteConfigurationBackup(backup: ConfigurationArchiveBackup): Pr
   if (!window.confirm(`确认永久删除备份 ${backup.id}？此操作不可恢复。`)) return;
   const status = element<HTMLElement>("#configuration-archive-status");
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/configuration-archive/backups/${encodeURIComponent(backup.id)}`,
       { method: "DELETE", headers },
     );
@@ -6088,7 +6173,7 @@ async function previewConfiguration(event: SubmitEvent): Promise<void> {
     const request = configurationRequest();
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/config/preview", {
+    const response = await authenticatedFetch("/api/v1/config/preview", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(request),
@@ -6125,7 +6210,7 @@ async function confirmConfiguration(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/config", {
+    const response = await authenticatedFetch("/api/v1/config", {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify(request),
@@ -6158,7 +6243,7 @@ async function resetConfiguration(): Promise<void> {
   const status = element<HTMLElement>("#configuration-status");
   status.textContent = "正在移除私密配置覆盖…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/config?expected_revision=${currentConfiguration.configuration_revision}`,
       { method: "DELETE", headers },
     );
@@ -6260,7 +6345,7 @@ async function controlDownload(
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/downloads/${encodeURIComponent(item.job_id)}/${action}`,
       {
         method: "POST",
@@ -6286,7 +6371,7 @@ async function loadDownloadDetail(
   button.textContent = "读取文件与时间线…";
   button.setAttribute("aria-expanded", "true");
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/downloads/${encodeURIComponent(item.job_id)}`,
       { headers },
     );
@@ -6630,7 +6715,7 @@ async function loadDownloads(background = false): Promise<void> {
   }
   if (downloadState.source) query.set("source", downloadState.source);
   try {
-    const response = await fetch(`/api/v1/downloads?${query}`, { headers });
+    const response = await authenticatedFetch(`/api/v1/downloads?${query}`, { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as DownloadListPage;
     if (requestSequence !== downloadListRequestSequence) return;
@@ -6665,7 +6750,7 @@ async function loadTrustedOffsets(): Promise<void> {
   const container = element<HTMLElement>("#trusted-offsets");
   setRegionState(container, "loading");
   try {
-    const response = await fetch("/api/v1/mikan/trusted-offsets", { headers });
+    const response = await authenticatedFetch("/api/v1/mikan/trusted-offsets", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as { items: MikanTrustedOffsetItem[] };
     if (body.items.length === 0) {
@@ -6715,7 +6800,7 @@ async function clearTrustedOffset(item: MikanTrustedOffsetItem): Promise<void> {
     `清理 Mikan ${item.mikanid} / Group ${item.groupid} 的自动证据与缓存？人工规则、完成记录和媒体文件不会删除。`,
   )) return;
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/mikan/trusted-offsets/${item.mikanid}/${item.groupid}`,
       { method: "DELETE", headers },
     );
@@ -6744,7 +6829,7 @@ async function openDeletePreview(taskId: string): Promise<void> {
   deleteConfirm.disabled = true;
   deleteDialog.showModal();
   try {
-    const response = await fetch(`/api/v1/delete/tasks/${encodeURIComponent(taskId)}/preview`, { headers });
+    const response = await authenticatedFetch(`/api/v1/delete/tasks/${encodeURIComponent(taskId)}/preview`, { headers });
     if (!response.ok) throw new Error(await responseError(response));
     activeDeletePreview = await response.json() as DeletePreview;
     element<HTMLElement>("#delete-summary").textContent = `${activeDeletePreview.title} · ${statusLabels[activeDeletePreview.task_status] ?? activeDeletePreview.task_status}`;
@@ -6815,7 +6900,7 @@ deleteConfirm.addEventListener("click", async () => {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(`/api/v1/delete/tasks/${encodeURIComponent(activeDeletePreview.task_id)}/execute`, {
+    const response = await authenticatedFetch(`/api/v1/delete/tasks/${encodeURIComponent(activeDeletePreview.task_id)}/execute`, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(request),
@@ -6901,7 +6986,7 @@ async function retryMetadataTask(taskId: string, button: HTMLButtonElement): Pro
   button.disabled = true;
   button.textContent = "重新入队中…";
   try {
-    const response = await fetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/retry`, { method: "POST", headers });
+    const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/retry`, { method: "POST", headers });
     if (!response.ok) throw new Error(await responseError(response));
     await loadMetadataTasks();
   } catch (error) {
@@ -6915,7 +7000,7 @@ async function readaptOtherFiles(taskId: string, button: HTMLButtonElement): Pro
   button.disabled = true;
   button.textContent = "读取预览…";
   try {
-    const previewResponse = await fetch(
+    const previewResponse = await authenticatedFetch(
       `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/preview`,
       { headers },
     );
@@ -6943,7 +7028,7 @@ async function readaptOtherFiles(taskId: string, button: HTMLButtonElement): Pro
     }
 
     button.textContent = "重新入队中…";
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation`,
       { method: "POST", headers },
     );
@@ -7130,7 +7215,7 @@ function createReadaptationManualOverride(
       try {
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/v1/metadata/tasks/${encodeURIComponent(preview.task_id)}`
             + `/other-readaptation/review/files/${encodeURIComponent(file.task_file_id)}`
             + "/manual-override",
@@ -7151,7 +7236,7 @@ function createReadaptationManualOverride(
           await loadMetadataTasks();
           return;
         }
-        const refreshedResponse = await fetch(
+        const refreshedResponse = await authenticatedFetch(
           `/api/v1/metadata/tasks/${encodeURIComponent(preview.task_id)}`
             + "/other-readaptation/review",
           { headers },
@@ -7284,7 +7369,7 @@ async function approveOtherReadaptation(taskId: string, button: HTMLButtonElemen
   button.disabled = true;
   button.textContent = "读取前后对照…";
   try {
-    const previewResponse = await fetch(
+    const previewResponse = await authenticatedFetch(
       `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-readaptation/review`,
       { headers },
     );
@@ -7319,7 +7404,7 @@ async function confirmOtherReadaptationReview(): Promise<void> {
   const message = element<HTMLElement>("#other-readaptation-review-message");
   message.textContent = "正在写入人工审核结果…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/metadata/tasks/${encodeURIComponent(active.preview.task_id)}/other-readaptation/review`,
       { method: "POST", headers },
     );
@@ -7350,7 +7435,7 @@ async function loadMetadataDetail(
   button.textContent = "读取来源 / TMDB 对照…";
   button.setAttribute("aria-expanded", "true");
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}`,
       { headers },
     );
@@ -7586,7 +7671,7 @@ async function loadMetadataAttempts(
   button.disabled = true;
   button.textContent = "读取策略时间线…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/attempts`,
       { headers },
     );
@@ -7722,7 +7807,7 @@ function openMetadataAttentionFromOverview(filter: "other" | "failed" | "review"
 
 async function loadOverviewMetadataAttention(): Promise<void> {
   try {
-    const response = await fetch("/api/v1/metadata/tasks?page=1&page_size=10", { headers });
+    const response = await authenticatedFetch("/api/v1/metadata/tasks?page=1&page_size=10", { headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = await response.json() as MetadataTaskListPage;
     renderMetadataAttentionSummary(body.attention);
@@ -7759,7 +7844,7 @@ async function loadMetadataTasks(background = false): Promise<void> {
   }
   if (metadataState.error_code) query.set("error_code", metadataState.error_code);
   try {
-    const response = await fetch(`/api/v1/metadata/tasks?${query}`, { headers });
+    const response = await authenticatedFetch(`/api/v1/metadata/tasks?${query}`, { headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = await response.json() as MetadataTaskListPage;
     if (requestSequence !== metadataListRequestSequence) return;
@@ -8114,7 +8199,7 @@ function createPendingRecoveryForm(
     try {
       const requestHeaders = new Headers(headers);
       requestHeaders.set("Content-Type", "application/json");
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/v1/metadata/pending-tmdb/${encodeURIComponent(String(bgmid))}/recover`,
         {
           method: "POST",
@@ -8146,7 +8231,7 @@ async function loadPendingTmdbDetail(
   button.disabled = true;
   button.textContent = "读取中…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/metadata/pending-tmdb/${encodeURIComponent(String(bgmid))}`,
       { headers },
     );
@@ -8211,7 +8296,7 @@ async function loadPendingTmdb(force = false): Promise<void> {
   const container = element<HTMLElement>("#pending-tmdb-list");
   setRegionState(container, "loading");
   try {
-    const response = await fetch("/api/v1/metadata/pending-tmdb", { headers });
+    const response = await authenticatedFetch("/api/v1/metadata/pending-tmdb", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as { items: PendingTmdbSummary[] };
     if (body.items.length === 0) {
@@ -8279,7 +8364,7 @@ async function testDownloader(id: string, button: HTMLButtonElement): Promise<vo
   button.disabled = true;
   button.textContent = "测试中…";
   try {
-    const response = await fetch(`/api/v1/downloaders/${encodeURIComponent(id)}/test`, {
+    const response = await authenticatedFetch(`/api/v1/downloaders/${encodeURIComponent(id)}/test`, {
       method: "POST",
       headers,
     });
@@ -8302,7 +8387,7 @@ async function probeDownloaderPath(id: string, button: HTMLButtonElement): Promi
   button.disabled = true;
   button.textContent = "探测中…";
   try {
-    const response = await fetch(`/api/v1/downloaders/${encodeURIComponent(id)}/path-probe`, {
+    const response = await authenticatedFetch(`/api/v1/downloaders/${encodeURIComponent(id)}/path-probe`, {
       method: "POST",
       headers,
     });
@@ -8398,7 +8483,7 @@ async function saveDownloaderConfig(event: SubmitEvent): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(`/api/v1/downloaders/${encodeURIComponent(id)}`, {
+    const response = await authenticatedFetch(`/api/v1/downloaders/${encodeURIComponent(id)}`, {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -8438,7 +8523,7 @@ async function deleteDownloaderOverride(): Promise<void> {
   if (!window.confirm(`移除 ${instance.id} 的私有覆盖？服务端会拒绝仍有引用的实例。`)) return;
   const message = element<HTMLElement>("#downloader-config-message");
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/downloaders/${encodeURIComponent(instance.id)}?expected_configuration_revision=${downloaderConfigurationRevision}`,
       { method: "DELETE", headers },
     );
@@ -8456,7 +8541,7 @@ async function loadDownloaders(): Promise<void> {
   setRegionState(list, "loading");
   status.textContent = "正在读取下载器实例…";
   try {
-    const response = await fetch("/api/v1/downloaders", { headers });
+    const response = await authenticatedFetch("/api/v1/downloaders", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as DownloaderInstanceList;
     downloaderInstances = body.items;
@@ -8716,7 +8801,7 @@ async function previewSourceRoute(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/sources/${encodeURIComponent(current.id)}/route-preview`,
       {
         method: "POST",
@@ -8757,7 +8842,7 @@ async function loadSources(selectedId?: string): Promise<void> {
   setRegionState(list, "loading");
   status.textContent = "正在读取来源配置…";
   try {
-    const response = await fetch("/api/v1/sources", { headers });
+    const response = await authenticatedFetch("/api/v1/sources", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as SourceProfileList;
     sourceProfiles = body.items;
@@ -8928,7 +9013,7 @@ async function resolveManualMikanEpisode(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/ingest/mikan/resolve", {
+    const response = await authenticatedFetch("/api/v1/ingest/mikan/resolve", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({ source_profile_id: sourceId, episode_url: episodeUrl }),
@@ -9002,7 +9087,7 @@ async function submitManualDownload(event: SubmitEvent): Promise<void> {
     mikanUrl.value = "";
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const responsePromise = fetch("/api/v1/ingest", {
+    const responsePromise = authenticatedFetch("/api/v1/ingest", {
       method: "POST",
       headers: requestHeaders,
       body: requestBody,
@@ -9065,7 +9150,7 @@ async function submitManualRss(event: SubmitEvent): Promise<void> {
     url.value = "";
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const responsePromise = fetch("/api/v1/rss/ingest", {
+    const responsePromise = authenticatedFetch("/api/v1/rss/ingest", {
       method: "POST",
       headers: requestHeaders,
       body: requestBody,
@@ -9148,7 +9233,7 @@ async function runSavedSourceRss(): Promise<void> {
     false,
   ));
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/sources/${encodeURIComponent(sourceId)}/rss/run`,
       { method: "POST", headers },
     );
@@ -9302,8 +9387,8 @@ async function loadMikanWorkRule(): Promise<void> {
   status.textContent = "正在读取规则 revision 与全量影响统计…";
   try {
     const [ruleResponse, impactResponse] = await Promise.all([
-      fetch(`/api/v1/mikan/work-rules/${mikanId}`, { headers }),
-      fetch(`/api/v1/mikan/work-rules/${mikanId}/impact?limit=100`, { headers }),
+      authenticatedFetch(`/api/v1/mikan/work-rules/${mikanId}`, { headers }),
+      authenticatedFetch(`/api/v1/mikan/work-rules/${mikanId}/impact?limit=100`, { headers }),
     ]);
     if (!ruleResponse.ok && ruleResponse.status !== 404) {
       throw new Error(await responseError(ruleResponse));
@@ -9342,7 +9427,7 @@ async function saveMikanWorkRule(event: SubmitEvent): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(`/api/v1/mikan/work-rules/${mikanId}`, {
+    const response = await authenticatedFetch(`/api/v1/mikan/work-rules/${mikanId}`, {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -9378,7 +9463,7 @@ async function deleteMikanWorkRule(): Promise<void> {
   const status = element<HTMLElement>("#mikan-work-rule-status");
   status.textContent = "正在清除人工规则…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/mikan/work-rules/${mikanId}?expected_revision=${rule.revision}`,
       { method: "DELETE", headers },
     );
@@ -9410,7 +9495,7 @@ async function rematchMikanWorkTasks(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(`/api/v1/mikan/work-rules/${mikanId}/rematch`, {
+    const response = await authenticatedFetch(`/api/v1/mikan/work-rules/${mikanId}/rematch`, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -9494,7 +9579,7 @@ async function saveSource(event: SubmitEvent): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch(
+    const response = await authenticatedFetch(
       current ? `/api/v1/sources/${encodeURIComponent(current.id)}` : "/api/v1/sources",
       {
         method: current ? "PUT" : "POST",
@@ -9520,7 +9605,7 @@ async function deleteSource(): Promise<void> {
   const status = element<HTMLElement>("#source-status");
   status.textContent = "正在删除来源…";
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `/api/v1/sources/${encodeURIComponent(current.id)}?expected_revision=${current.revision}`,
       { method: "DELETE", headers },
     );
@@ -9671,7 +9756,7 @@ async function loadRssRules(): Promise<void> {
   const status = element<HTMLElement>("#rss-rule-status");
   status.textContent = "正在读取 Mikan 规则…";
   try {
-    const response = await fetch("/api/v1/rss-rules/mikan", { headers });
+    const response = await authenticatedFetch("/api/v1/rss-rules/mikan", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     activeRssRules = await response.json() as RssRuleSnapshot;
     renderRssRules();
@@ -9690,7 +9775,7 @@ async function saveRssRules(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/rss-rules/mikan", {
+    const response = await authenticatedFetch("/api/v1/rss-rules/mikan", {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -9725,7 +9810,7 @@ async function rollbackRssRules(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/rss-rules/mikan/rollback", {
+    const response = await authenticatedFetch("/api/v1/rss-rules/mikan/rollback", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -9761,7 +9846,7 @@ async function previewRssRules(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/rss-rules/mikan/preview", {
+    const response = await authenticatedFetch("/api/v1/rss-rules/mikan/preview", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({ candidates: titles.map((title, index) => ({
@@ -9965,7 +10050,7 @@ async function loadLegacyMikanFilter(): Promise<void> {
   const status = element<HTMLElement>("#legacy-filter-status");
   status.textContent = "正在读取旧 Mikan 过滤规则…";
   try {
-    const response = await fetch("/api/v1/mikan/legacy-filter", { headers });
+    const response = await authenticatedFetch("/api/v1/mikan/legacy-filter", { headers });
     if (!response.ok) throw new Error(await responseError(response));
     activeLegacyMikanFilter = await response.json() as LegacyMikanFilterResponse;
     renderLegacyMikanFilter();
@@ -9985,7 +10070,7 @@ async function saveLegacyMikanFilter(): Promise<void> {
     status.textContent = "正在保存五级过滤规则…";
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/mikan/legacy-filter", {
+    const response = await authenticatedFetch("/api/v1/mikan/legacy-filter", {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -10034,7 +10119,7 @@ async function importLegacyMikanFilter(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/mikan/legacy-filter/import", {
+    const response = await authenticatedFetch("/api/v1/mikan/legacy-filter/import", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -10062,7 +10147,7 @@ async function rollbackLegacyMikanFilter(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/mikan/legacy-filter/rollback", {
+    const response = await authenticatedFetch("/api/v1/mikan/legacy-filter/rollback", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -10091,7 +10176,7 @@ async function previewLegacyMikanFilter(): Promise<void> {
     };
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/mikan/legacy-filter/preview", {
+    const response = await authenticatedFetch("/api/v1/mikan/legacy-filter/preview", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -10136,7 +10221,7 @@ async function updateLegacyFilterSwitch(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await fetch("/api/v1/sources/mikan", {
+    const response = await authenticatedFetch("/api/v1/sources/mikan", {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify({
@@ -10466,7 +10551,7 @@ function buildAiTesterRunRequest(): AiTesterRunRequest {
 async function runAiTesterStream(request: AiTesterRunRequest): Promise<AiTesterRunResult | null> {
   const requestHeaders = new Headers(headers);
   requestHeaders.set("Content-Type", "application/json");
-  const response = await fetch("/api/v1/ai-test/run-stream", {
+  const response = await authenticatedFetch("/api/v1/ai-test/run-stream", {
     method: "POST",
     headers: requestHeaders,
     body: JSON.stringify(request),
@@ -10505,7 +10590,7 @@ async function stopAiMetadataTest(): Promise<void> {
 async function aiTesterPost<T>(path: string, body: unknown): Promise<T> {
   const requestHeaders = new Headers(headers);
   requestHeaders.set("Content-Type", "application/json");
-  const response = await fetch(path, { method: "POST", headers: requestHeaders, body: JSON.stringify(body) });
+  const response = await authenticatedFetch(path, { method: "POST", headers: requestHeaders, body: JSON.stringify(body) });
   const value = await response.json() as T & { error_message?: string | null; message?: string | null };
   if (!response.ok) throw new Error(value.error_message ?? value.message ?? `HTTP ${response.status}`);
   return value;
@@ -11480,6 +11565,33 @@ window.addEventListener("beforeunload", () => {
     liveLogReconnectTimer = null;
   }
   disconnectCurrentLiveLogSocket();
+});
+
+webUiAccessKeyForm.addEventListener("submit", event => {
+  event.preventDefault();
+  void validateEnteredWebUiAccessKey();
+});
+element<HTMLButtonElement>("#webui-access-key-open").addEventListener("click", () => {
+  void requestWebUiAccessKey(
+    webUiAccessKey
+      ? "输入新的 web.webui_access_key；验证成功后立即替换当前浏览器凭据。"
+      : "输入 web.webui_access_key；验证成功后会自动加载页面数据。",
+  );
+});
+element<HTMLButtonElement>("#webui-access-key-cancel").addEventListener("click", () => {
+  finishWebUiAccessKeyRequest(null);
+});
+element<HTMLButtonElement>("#webui-access-key-clear").addEventListener("click", () => {
+  clearStoredWebUiAccessKey(webUiAccessKeyStores);
+  webUiAccessKey = null;
+  headers.delete("WebUI-Access-Key");
+  webUiAccessKeyInput.value = "";
+  webUiAccessKeyMessage.textContent = "已清除浏览器保存的 WebUI AccessKey；可立即输入新值。";
+  webUiAccessKeyInput.focus();
+});
+webUiAccessKeyDialog.addEventListener("cancel", event => {
+  event.preventDefault();
+  finishWebUiAccessKeyRequest(null);
 });
 
 initializeWorkspaceNavigation();

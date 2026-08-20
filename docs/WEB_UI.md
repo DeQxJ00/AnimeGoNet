@@ -268,6 +268,18 @@ Angular 或客户端运行时框架。`api-client.ts` 是现代 JSON API 的共�
 响应与请求体类型，client 统一序列化 JSON、传播 `AbortSignal`、携带页面已有的
 `WebUI-Access-Key`，并把结构化失败投影为稳定的 `ApiHttpError`。
 
+页面不再要求用户手工拼接鉴权 URL。裸地址启动、已保存凭据失效或管理 API 返回 401
+时，会显示唯一的“输入 WebUI AccessKey”窗口；多个并发初始化请求共享同一次输入。
+用户填写 `web.webui_access_key` 明文后，浏览器先计算 lowercase SHA-256，并直接调用
+`/api/v1/status` 验证。验证成功才关闭窗口、更新当前 API/WebSocket 凭据并自动重试
+原请求；错误值保持窗口打开并明确提示它不是 `inner_plugin_mikan.access_key`。
+顶部“WebUI AccessKey”按钮可随时更换或清除浏览器保存值。
+
+勾选“在这台浏览器中记住”时只把 SHA-256 值保存到 `localStorage`，否则仅放入
+`sessionStorage`；两种方式都不保存输入的明文。URL 中已有的 `webui_access_key` 仍作为
+兼容入口，优先级高于浏览器保存值。鉴权包装只给单 `/` 开头、非协议相对且不含
+反斜杠的同源路径附加凭据，外部 URL 不会获得 WebUI key，也不会触发登录窗口。
+
 ## 发布态浏览器 E2E
 
 仓库使用固定 `@playwright/test` 与 Chromium 运行 `npm run web:e2e`。测试目标由

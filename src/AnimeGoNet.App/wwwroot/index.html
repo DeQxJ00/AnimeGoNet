@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260814-internal-plugins">
+  <link rel="stylesheet" href="/styles.css?v=20260820-webui-access-key-dialog">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -39,7 +39,10 @@
           <p class="eyebrow">Anime library automation</p>
           <h1>AnimeGoNet</h1>
         </div>
-        <span id="health" class="badge pending" role="status" aria-live="polite" aria-atomic="true">连接中</span>
+        <div class="topbar-status-actions">
+          <button id="webui-access-key-open" type="button" class="secondary-button">WebUI AccessKey</button>
+          <span id="health" class="badge pending" role="status" aria-live="polite" aria-atomic="true">连接中</span>
+        </div>
       </header>
 
       <section class="workspace-heading" aria-labelledby="workspace-title">
@@ -1603,6 +1606,30 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260814-inner-plugin-config"></script>
+  <dialog id="webui-access-key-dialog" aria-labelledby="webui-access-key-title">
+    <form id="webui-access-key-form" class="webui-access-key-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">WebUI authentication</p>
+          <h2 id="webui-access-key-title">输入 WebUI AccessKey</h2>
+        </div>
+      </div>
+      <p class="muted">请输入部署配置中的 <code>web.webui_access_key</code> 明文。它与 <code>inner_plugin_mikan.access_key</code> 相互独立。</p>
+      <label class="webui-access-key-field">AccessKey（明文）
+        <input id="webui-access-key-input" type="text" maxlength="512" autocomplete="off" spellcheck="false" required autofocus>
+      </label>
+      <label class="webui-access-key-remember"><input id="webui-access-key-remember" type="checkbox" checked>在这台浏览器中记住</label>
+      <p id="webui-access-key-message" class="delete-message" role="status" aria-live="polite">输入后会先验证，成功后自动重试刚才的请求。</p>
+      <div class="delete-actions">
+        <button id="webui-access-key-clear" type="button" class="secondary-button">清除已保存值</button>
+        <div>
+          <button id="webui-access-key-cancel" type="button" class="secondary-button">取消</button>
+          <button id="webui-access-key-submit" type="submit" class="primary-button">验证并进入</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+    <script type="module" src="/app.js?v=20260820-webui-access-key-dialog"></script>
 </body>
 </html>

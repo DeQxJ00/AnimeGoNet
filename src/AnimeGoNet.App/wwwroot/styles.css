@@ -309,6 +309,17 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .failure-priority-step.enabled .failure-priority-state { color: #78e5b8; }
 #configuration-dialog { width: min(820px,calc(100% - 28px)); max-height: calc(100vh - 40px); padding: 0; color: #edf2ff; border: 1px solid #344260; border-radius: 22px; background: #101625; }
 #configuration-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
+.topbar-status-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+#webui-access-key-dialog { width: min(520px,calc(100% - 28px)); padding: 0; color: #edf2ff; border: 1px solid #42577a; border-radius: 20px; background: #101625; box-shadow: 0 24px 80px rgba(0,0,0,.48); }
+#webui-access-key-dialog::backdrop { background: rgba(3,5,10,.82); backdrop-filter: blur(6px); }
+.webui-access-key-panel { display: grid; gap: 17px; padding: 24px; }
+.webui-access-key-panel h2 { margin: 0; font-size: 1.55rem; }
+.webui-access-key-panel > p { margin: 0; line-height: 1.6; }
+.webui-access-key-field { display: grid; gap: 7px; color: #9fb0d0; font-size: .78rem; }
+.webui-access-key-field input { width: 100%; border: 1px solid var(--control-border); border-radius: var(--control-radius); padding: 11px 12px; color: var(--control-text); background: var(--control-background); font-family: inherit; font-size: .92rem; }
+.webui-access-key-field input:focus { border-color: #77a8ff; outline: 2px solid rgba(119,168,255,.24); outline-offset: 1px; }
+.webui-access-key-remember { display: flex; align-items: center; gap: 8px; color: #cbd6e9; font-size: .8rem; }
+.webui-access-key-remember input { accent-color: #59d3a5; }
 .configuration-form { padding: 24px; }
 .configuration-form h2 { margin-bottom: 0; font-size: 1.55rem; }
 .configuration-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
