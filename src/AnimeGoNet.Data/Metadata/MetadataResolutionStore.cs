@@ -558,6 +558,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         ArgumentOutOfRangeException.ThrowIfLessThan(attempt.AttemptNumber, 1);
         var aiUsage = NormalizeAiUsage(attempt.AiUsage);
         var reason = NormalizeAttemptReason(attempt.Reason ?? attempt.ErrorCode);
+        var aiTriggerReason = NormalizeAiTriggerReason(attempt.AiTriggerReason);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -565,11 +566,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 id, run_id, stage, strategy, priority, result, error_code,
                 reason, retryable, attempt_number, duration_ms, created_at_utc,
                 ai_model, ai_prompt_tokens, ai_completion_tokens, ai_total_tokens,
-                ai_request_count, ai_tool_call_count)
+                ai_request_count, ai_tool_call_count, ai_trigger_reason)
             SELECT $id, id, $stage, $strategy, $priority, $result, $error_code,
                    $reason, $retryable, $attempt_number, $duration_ms, $created_at_utc,
                    $ai_model, $ai_prompt_tokens, $ai_completion_tokens, $ai_total_tokens,
-                   $ai_request_count, $ai_tool_call_count
+                   $ai_request_count, $ai_tool_call_count, $ai_trigger_reason
             FROM metadata_resolution_runs
             WHERE id = $run_id AND status = 'running' AND lease_token = $lease_token;
             """;
@@ -598,6 +599,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             "$ai_request_count", (object?)aiUsage?.RequestCount ?? DBNull.Value);
         command.Parameters.AddWithValue(
             "$ai_tool_call_count", (object?)aiUsage?.ToolCallCount ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ai_trigger_reason", (object?)aiTriggerReason ?? DBNull.Value);
         if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
         {
             throw new InvalidOperationException("Metadata resolution lease is no longer active.");
@@ -2096,7 +2099,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             SELECT attempt_id, run_id, task_id, title, source_id, mikanid,
                    bangumi_subject_id, tmdb_series_id, tmdb_season_number,
                    run_status, stage, strategy, result, error_code, error_category,
-                   reason,
+                   ai_trigger_reason, reason,
                    retryable, duration_ms, created_at_utc, ai_model,
                    ai_prompt_tokens, ai_completion_tokens, ai_total_tokens,
                    ai_request_count, ai_tool_call_count
@@ -2130,19 +2133,20 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(13) ? null : reader.GetString(13),
                     reader.GetString(14),
                     reader.IsDBNull(15) ? null : reader.GetString(15),
-                    reader.GetInt64(16) != 0,
-                    reader.GetInt64(17),
+                    reader.IsDBNull(16) ? null : reader.GetString(16),
+                    reader.GetInt64(17) != 0,
+                    reader.GetInt64(18),
                     DateTimeOffset.Parse(
-                        reader.GetString(18),
+                        reader.GetString(19),
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind),
                     new AiMetadataProviderUsage(
-                        reader.GetString(19),
-                        reader.IsDBNull(20) ? null : reader.GetInt64(20),
+                        reader.GetString(20),
                         reader.IsDBNull(21) ? null : reader.GetInt64(21),
                         reader.IsDBNull(22) ? null : reader.GetInt64(22),
-                        reader.IsDBNull(23) ? 0 : reader.GetInt32(23),
-                        reader.IsDBNull(24) ? 0 : reader.GetInt32(24)),
+                        reader.IsDBNull(23) ? null : reader.GetInt64(23),
+                        reader.IsDBNull(24) ? 0 : reader.GetInt32(24),
+                        reader.IsDBNull(25) ? 0 : reader.GetInt32(25)),
                     []));
             }
         }
@@ -2232,7 +2236,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                    task.title, task.source_id, task.mikanid, task.bangumi_subject_id,
                    run.tmdb_series_id, run.tmdb_season_number, run.status AS run_status,
                    attempt.stage, attempt.strategy, attempt.result,
-                   attempt.error_code, attempt.reason, attempt.retryable,
+                   attempt.error_code, attempt.ai_trigger_reason,
+                   attempt.reason, attempt.retryable,
                    attempt.duration_ms, attempt.created_at_utc, attempt.ai_model,
                    attempt.ai_prompt_tokens, attempt.ai_completion_tokens,
                    attempt.ai_total_tokens, attempt.ai_request_count,
@@ -2281,6 +2286,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                    OR instr(lower(source_id), $search) > 0
                    OR instr(lower(strategy), $search) > 0
                    OR instr(lower(COALESCE(error_code, '')), $search) > 0
+                   OR instr(lower(COALESCE(ai_trigger_reason, '')), $search) > 0
                    OR instr(lower(COALESCE(reason, '')), $search) > 0)
         )
         """;
@@ -3157,6 +3163,25 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         {
             throw new ArgumentException(
                 "Metadata attempt reason must be at most 512 printable characters.",
+                nameof(value));
+        }
+
+        return normalized;
+    }
+
+    private static string? NormalizeAiTriggerReason(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > 1024
+            || normalized.Any(char.IsControl))
+        {
+            throw new ArgumentException(
+                "AI trigger reason must be at most 1024 printable characters.",
                 nameof(value));
         }
 

@@ -109,6 +109,21 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task AiInvocationTriggerReasonMigrationAddsAuditableColumn()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM pragma_table_info('metadata_resolution_attempts')
+            WHERE name = 'ai_trigger_reason' AND type = 'TEXT';
+            """;
+
+        Assert.Equal(1L, await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task LibraryMetadataAuditMigrationCreatesTargetedIndexes()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

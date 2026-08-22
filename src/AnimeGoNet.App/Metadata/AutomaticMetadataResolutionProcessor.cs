@@ -128,6 +128,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
 
         var details = direct.Details;
         var terminalFailure = directFailure;
+        var aiTriggerReason = $"season_unresolved:{directFailure.Code}";
         var attemptedTmdbSearchTitles = new List<string>(direct.AttemptedTitles);
         var policy = options.Metadata.SeasonFailure;
         if (policy.Skip)
@@ -179,10 +180,12 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 {
                     terminalFailure = result.Failure;
                 }
+                aiTriggerReason = $"season_unresolved:{result.Failure.Code}";
             }
             catch (BangumiClientException exception)
             {
                 terminalFailure = new MetadataFailure(exception.Kind, exception.SafeCode, false);
+                aiTriggerReason = $"season_unresolved:{exception.SafeCode}";
                 await RecordAsync(claim, "season", "backtrace", 3, "error", exception.SafeCode,
                     IsRetryable(exception.Kind), started, cancellationToken).ConfigureAwait(false);
             }
@@ -193,6 +196,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             if (await TryCompleteAiMetadataAsync(
                     claim,
                     attemptedTmdbSearchTitles,
+                    aiTriggerReason,
                     cancellationToken).ConfigureAwait(false))
             {
                 return true;
@@ -473,6 +477,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
     private async Task<bool> TryCompleteAiMetadataAsync(
         MetadataTaskClaim claim,
         IReadOnlyList<string> attemptedTmdbSearchTitles,
+        string aiTriggerReason,
         CancellationToken cancellationToken)
     {
         var started = _timeProvider.GetTimestamp();
@@ -507,7 +512,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 false,
                 started,
                 cancellationToken,
-                resolved.Usage).ConfigureAwait(false);
+                resolved.Usage,
+                aiTriggerReason).ConfigureAwait(false);
             return false;
         }
 
@@ -524,7 +530,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 IsRetryable(failure.Kind),
                 started,
                 cancellationToken,
-                resolved.Usage).ConfigureAwait(false);
+                resolved.Usage,
+                aiTriggerReason).ConfigureAwait(false);
             return false;
         }
 
@@ -604,7 +611,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                     false,
                     started,
                     cancellationToken,
-                    resolved.Usage).ConfigureAwait(false);
+                    resolved.Usage,
+                    aiTriggerReason).ConfigureAwait(false);
                 return false;
             }
 
@@ -621,7 +629,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
             false,
             started,
             cancellationToken,
-            resolved.Usage).ConfigureAwait(false);
+            resolved.Usage,
+            aiTriggerReason).ConfigureAwait(false);
         await RecordAsync(
             claim,
             "season",
@@ -667,7 +676,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
         bool retryable,
         long started,
         CancellationToken cancellationToken,
-        AiMetadataProviderUsage? aiUsage = null) =>
+        AiMetadataProviderUsage? aiUsage = null,
+        string? aiTriggerReason = null) =>
         await resolutions.RecordAttemptAsync(
             claim,
             new MetadataAttempt(
@@ -679,7 +689,8 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 retryable,
                 claim.AttemptNumber,
                 ElapsedMilliseconds(started),
-                AiUsage: aiUsage),
+                AiUsage: aiUsage,
+                AiTriggerReason: aiTriggerReason),
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
 

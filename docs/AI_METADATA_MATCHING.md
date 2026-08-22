@@ -228,6 +228,12 @@ AI 返回逐文件 `season/episode` 后，主程序先完成 TMDB Series/Season/
 - fake TMDB 覆盖真实/伪造 TV ID、普通季度、Season 0 拒绝、Episode 缺失、季度 `Other` 和重复目标。
 - NativeAOT 发布二进制以正式后台 worker 完成 fake AI 两轮 → MCP 工具 → fake TMDB Series/Season/Episode 二次验证 → SQLite/API 权威状态落库；fixture 不连接真实 AI、TMDB、qBittorrent 或用户 TestSpace。
 
+AI 调用审计另外保存调用前的 `ai_trigger_reason`，与调用后的 result/error/reason 分开。季度统一为
+`season_unresolved:<最后一次确定性失败码>`；Episode 汇总本批未决视频的原因并使用
+`episode_unresolved:<原因>`。Mikan 文件在兼容候选被拒绝后即使未保留候选值，也会重新执行同一
+纯函数解析器取得精确拒绝码，例如 `ambiguous_episode_markers`。该字段从 schema v55 开始生成，
+不对历史调用作猜测性回填。
+
 ## 11. AI Debug 完整链路
 
 `metadata.ai.debug_mode` / `ai_debug_mode` 默认 `false`。开启后，正式后台 AI 调用按 `run_id` 在 `data_path/ai-debug` 写入一份独立 JSON 调试文件；它不进入 SQLite，也不改变匹配、重试或验证结果。每份记录固定包含：

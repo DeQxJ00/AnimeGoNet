@@ -304,6 +304,48 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 app,
                 taskId,
                 "tmdb_episode_bangumi_nearest_date"));
+        Assert.Equal(
+            "episode_unresolved:tmdb_episode_bangumi_nearest_date_too_distant",
+            await ReadLatestAiTriggerReasonAsync(app, taskId));
+    }
+
+    [Fact]
+    public async Task MikanRejectedCompatibilityCandidateRecordsPreciseAiTriggerReason()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => number == 7
+                ? new TmdbEpisode(7007, 72517, 2, 7, "Episode 7", null)
+                : null,
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                [new(input.Files[0].Name, true, 2, 7, null)],
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [13335833].mkv", "7", null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        Assert.Equal(
+            "episode_unresolved:ambiguous_episode_markers",
+            await ReadLatestAiTriggerReasonAsync(app, taskId));
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal(7, file.EpisodeNumber);
+        Assert.Equal("ai_metadata", file.ResolutionSource);
     }
 
     [Fact]
@@ -1020,6 +1062,27 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
         command.Parameters.AddWithValue("$strategy", strategy);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
+    private static async Task<string?> ReadLatestAiTriggerReasonAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT attempt.ai_trigger_reason
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            WHERE run.task_id = $task_id
+              AND attempt.strategy = 'ai_metadata'
+            ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
         return await command.ExecuteScalarAsync() as string;
     }
 

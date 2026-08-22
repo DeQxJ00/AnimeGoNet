@@ -5600,6 +5600,7 @@ public static class ApiEndpoints
                 item.Result,
                 item.ErrorCode,
                 item.ErrorCategory,
+                item.AiTriggerReason,
                 item.Reason,
                 item.Retryable,
                 item.DurationMilliseconds,

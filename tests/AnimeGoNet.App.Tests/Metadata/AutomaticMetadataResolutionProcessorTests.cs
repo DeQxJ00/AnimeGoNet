@@ -681,6 +681,9 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Contains("ai_metadata", strategies);
         Assert.DoesNotContain("title_season", strategies);
         Assert.DoesNotContain("first_season", strategies);
+        Assert.Equal(
+            "season_unresolved:tmdb_season_air_date_not_matched",
+            await ReadAiTriggerReasonAsync(app, taskId));
         var request = Assert.Single(ai.Requests);
         Assert.Equal(547888, request.BangumiSubjectId);
         Assert.Equal(999, request.AniDbAnimeId);
@@ -1505,6 +1508,28 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
         command.Parameters.AddWithValue("$strategy", strategy);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
+    private static async Task<string?> ReadAiTriggerReasonAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT attempt.ai_trigger_reason
+            FROM metadata_resolution_attempts AS attempt
+            JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+            WHERE run.task_id = $task_id
+              AND attempt.strategy = 'ai_metadata'
+              AND attempt.ai_trigger_reason IS NOT NULL
+            ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
         return await command.ExecuteScalarAsync() as string;
     }
 

@@ -1878,18 +1878,21 @@ function renderAiInvocationLogs(result) {
             const model = document.createElement("span");
             model.className = "ai-log-model";
             model.textContent = item.model;
+            const triggerReason = document.createElement("span");
+            triggerReason.className = "ai-log-trigger-reason";
+            triggerReason.textContent = `AI 触发原因：${item.ai_trigger_reason ?? "历史调用未记录"}`;
             const validatedEpisodes = document.createElement("span");
             validatedEpisodes.className = "ai-log-episodes";
             validatedEpisodes.textContent = `TMDB 最终验证 EP：${aiLogValidatedEpisodes(item)}`;
             summary.append(time, resultBadge);
             if (outputFormatBadge !== null)
                 summary.append(outputFormatBadge);
-            summary.append(title, stage, model, validatedEpisodes);
+            summary.append(title, stage, model, triggerReason, validatedEpisodes);
             const details = document.createElement("dl");
             details.className = "live-log-detail ai-log-detail";
             details.append(liveLogDetail("任务 ID", item.task_id), liveLogDetail("Run / Attempt", `${item.run_id} / ${item.attempt_id}`), liveLogDetail("来源", item.source_id), liveLogDetail("作品参考", `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`), liveLogDetail("TMDB 验证", item.tmdb_series_id === null
                 ? "未确认"
-                : `${item.tmdb_series_id} / S${String(item.tmdb_season_number ?? 0).padStart(2, "0")}`), liveLogDetail("TMDB 最终验证 EP", aiLogValidatedEpisodes(item)), liveLogDetail("运行状态", `${item.run_status} · ${item.retryable ? "可重试" : "不可重试"}`), liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`), liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`), liveLogDetail("请求", `HTTP ${item.request_count} · 工具 ${item.tool_call_count}`), liveLogDetail("错误分类", aiLogErrorCategoryLabel(item.error_category)), liveLogDetail("错误码", textOrDash(item.error_code)), liveLogDetail("结果原因", textOrDash(item.reason)));
+                : `${item.tmdb_series_id} / S${String(item.tmdb_season_number ?? 0).padStart(2, "0")}`), liveLogDetail("TMDB 最终验证 EP", aiLogValidatedEpisodes(item)), liveLogDetail("运行状态", `${item.run_status} · ${item.retryable ? "可重试" : "不可重试"}`), liveLogDetail("耗时", `${item.duration_ms.toLocaleString("zh-CN")} ms`), liveLogDetail("Token", `Prompt ${aiLogNumber(item.prompt_tokens)} · Completion ${aiLogNumber(item.completion_tokens)} · Total ${aiLogNumber(item.total_tokens)}`), liveLogDetail("请求", `HTTP ${item.request_count} · 工具 ${item.tool_call_count}`), liveLogDetail("AI 触发原因", item.ai_trigger_reason ?? "历史调用未记录"), liveLogDetail("错误分类", aiLogErrorCategoryLabel(item.error_category)), liveLogDetail("错误码", textOrDash(item.error_code)), liveLogDetail("结果原因", textOrDash(item.reason)));
             const actions = document.createElement("div");
             actions.className = "ai-log-entry-actions";
             const taskButton = document.createElement("button");

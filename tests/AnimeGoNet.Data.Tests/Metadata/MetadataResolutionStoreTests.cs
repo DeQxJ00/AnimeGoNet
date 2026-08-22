@@ -193,7 +193,8 @@ public sealed class MetadataResolutionStoreTests
                 false,
                 claim.AttemptNumber,
                 250,
-                AiUsage: usage),
+                AiUsage: usage,
+                AiTriggerReason: "season_unresolved:tmdb_season_not_found"),
             now);
 
         var attempt = Assert.Single(await fixture.Store.ListAttemptsAsync(fixture.TaskId));
@@ -201,6 +202,11 @@ public sealed class MetadataResolutionStoreTests
         var detail = Assert.IsType<MetadataTaskDetailProjection>(
             await fixture.Store.GetTaskDetailAsync(fixture.TaskId));
         Assert.Equal(usage, detail.Ai!.Usage);
+        var log = await fixture.Store.ListAiInvocationLogsAsync(
+            new MetadataAiInvocationLogFilter(1, 25));
+        Assert.Equal(
+            "season_unresolved:tmdb_season_not_found",
+            Assert.Single(log.Items).AiTriggerReason);
     }
 
     [Fact]

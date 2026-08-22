@@ -389,9 +389,11 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 && claim.Files.Any(file => file.FileId == result.FileId
                     && SubtitleAssociationResolver.IsVideo(file.RelativePath))))
         {
+            var aiTriggerReason = BuildAiEpisodeTriggerReason(claim, results);
             var shouldStop = await TryApplyAiAsync(
                 claim,
                 results,
+                aiTriggerReason,
                 cancellationToken).ConfigureAwait(false);
             if (shouldStop)
             {
@@ -597,6 +599,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
     private async Task<bool> TryApplyAiAsync(
         MetadataEpisodeTaskClaim claim,
         List<MetadataEpisodeFileResolution> results,
+        string aiTriggerReason,
         CancellationToken cancellationToken)
     {
         var started = _timeProvider.GetTimestamp();
@@ -632,6 +635,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 resolved.Failure!,
                 resolved.Usage,
                 started,
+                aiTriggerReason,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -658,7 +662,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     false,
                     ElapsedMilliseconds(started),
                     cancellationToken,
-                    resolved.Usage).ConfigureAwait(false);
+                    resolved.Usage,
+                    aiTriggerReason).ConfigureAwait(false);
                 AnnotateUnresolvedAiFailure(claim, results, failure.Code);
                 return false;
             }
@@ -702,7 +707,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             false,
             ElapsedMilliseconds(started),
             cancellationToken,
-            resolved.Usage).ConfigureAwait(false);
+            resolved.Usage,
+            aiTriggerReason).ConfigureAwait(false);
         for (var index = 0; index < results.Count; index++)
         {
             if (results[index].ResolutionSource == TmdbResolutionSource.AiMetadata
@@ -723,6 +729,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         MetadataFailure failure,
         AiMetadataProviderUsage? aiUsage,
         long started,
+        string aiTriggerReason,
         CancellationToken cancellationToken)
     {
         if (IsRetryable(failure.Kind))
@@ -734,7 +741,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 failure,
                 ElapsedMilliseconds(started),
                 cancellationToken,
-                aiUsage).ConfigureAwait(false);
+                aiUsage,
+                aiTriggerReason).ConfigureAwait(false);
             return true;
         }
 
@@ -748,7 +756,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             false,
             ElapsedMilliseconds(started),
             cancellationToken,
-            aiUsage).ConfigureAwait(false);
+            aiUsage,
+            aiTriggerReason).ConfigureAwait(false);
         return false;
     }
 
@@ -780,7 +789,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
         MetadataFailure failure,
         long durationMilliseconds,
         CancellationToken cancellationToken,
-        AiMetadataProviderUsage? aiUsage = null)
+        AiMetadataProviderUsage? aiUsage = null,
+        string? aiTriggerReason = null)
     {
         await RecordAsync(
             claim,
@@ -791,7 +801,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             IsRetryable(failure.Kind),
             durationMilliseconds,
             cancellationToken,
-            aiUsage).ConfigureAwait(false);
+            aiUsage,
+            aiTriggerReason).ConfigureAwait(false);
         await resolutions.FailEpisodesAsync(
             claim,
             failure,
@@ -808,7 +819,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
         bool retryable,
         long durationMilliseconds,
         CancellationToken cancellationToken,
-        AiMetadataProviderUsage? aiUsage = null) =>
+        AiMetadataProviderUsage? aiUsage = null,
+        string? aiTriggerReason = null) =>
         resolutions.RecordAttemptAsync(
             claim.Resolution,
             new MetadataAttempt(
@@ -820,9 +832,52 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 retryable,
                 claim.Resolution.AttemptNumber,
                 durationMilliseconds,
-                AiUsage: aiUsage),
+                AiUsage: aiUsage,
+                AiTriggerReason: aiTriggerReason),
             _timeProvider.GetUtcNow(),
             cancellationToken);
+
+    private static string BuildAiEpisodeTriggerReason(
+        MetadataEpisodeTaskClaim claim,
+        IReadOnlyList<MetadataEpisodeFileResolution> results)
+    {
+        var reasons = results
+            .Where(result => result.Episode is null)
+            .Select(result => (
+                Result: result,
+                File: claim.Files.Single(file => file.FileId == result.FileId)))
+            .Where(value => SubtitleAssociationResolver.IsVideo(value.File.RelativePath))
+            .Select(value => ResolveAiEpisodeTriggerReason(claim, value.File, value.Result))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .Take(8)
+            .ToArray();
+        return $"episode_unresolved:{string.Join('+', reasons.Length == 0 ? ["unknown"] : reasons)}";
+    }
+
+    private static string ResolveAiEpisodeTriggerReason(
+        MetadataEpisodeTaskClaim claim,
+        MetadataTaskFileProjection file,
+        MetadataEpisodeFileResolution result)
+    {
+        if (string.Equals(
+                claim.Resolution.SourceAdapter,
+                "mikan",
+                StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(result.OtherReason, "episode_not_parsed", StringComparison.Ordinal)
+                || (string.Equals(result.OtherReason, "special_episode", StringComparison.Ordinal)
+                    && int.TryParse(
+                        file.SourceEpisode,
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out _)))
+            && string.IsNullOrWhiteSpace(file.FileEpisodeCandidate))
+        {
+            return FileEpisodeCandidateResolver.Resolve("mikan", file.RelativePath).Reason;
+        }
+
+        return result.OtherReason ?? "episode_unresolved";
+    }
 
     private static string OtherReason(MetadataTaskFileProjection file)
     {

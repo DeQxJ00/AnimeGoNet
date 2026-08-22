@@ -92,7 +92,8 @@ public sealed class MetadataAttemptApiTests
                     0,
                     10,
                     1,
-                    0)),
+                    0),
+                AiTriggerReason: "episode_unresolved:ai_response_invalid"),
             now.AddMilliseconds(2500));
         var matchedAttemptId = await store.RecordAttemptAsync(
             claim,
@@ -111,7 +112,8 @@ public sealed class MetadataAttemptApiTests
                     20,
                     120,
                     1,
-                    0)),
+                    0),
+                AiTriggerReason: "episode_unresolved:ambiguous_episode_markers"),
             now.AddSeconds(3));
         await using (var connection = await database.OpenConnectionAsync())
         await using (var command = connection.CreateCommand())
@@ -203,6 +205,9 @@ public sealed class MetadataAttemptApiTests
         Assert.Equal(3951, aiLogItem.GetProperty("mikanid").GetInt32());
         Assert.Equal(547888, aiLogItem.GetProperty("bgmid").GetInt32());
         Assert.Equal("gpt-5.4-mini", aiLogItem.GetProperty("model").GetString());
+        Assert.Equal(
+            "episode_unresolved:ambiguous_episode_markers",
+            aiLogItem.GetProperty("ai_trigger_reason").GetString());
         var validatedEpisode = Assert.Single(
             aiLogItem.GetProperty("validated_episodes").EnumerateArray());
         Assert.Equal(42, validatedEpisode.GetProperty("tmdb_series_id").GetInt32());

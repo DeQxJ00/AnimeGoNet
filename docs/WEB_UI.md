@@ -237,7 +237,11 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
 策略/错误码搜索，并按 Series/Season/Episode、结果、模型及 UTC 时间范围过滤和分页；页面
 汇总当前完整筛选结果的成功/失败数、Prompt/Completion/Total Token、HTTP 请求和 MCP 工具
 调用数。单条展开显示任务、Run/Attempt、mikanid/bgmid、最终 TMDB Series/Season、耗时、
-稳定错误码和安全原因，并可跳到对应任务。只有 `ai_model` 非空、即 provider 确实发出请求的
+稳定错误码、安全原因和独立的“AI 触发原因”，并可跳到对应任务。触发原因描述调用 AI 之前
+哪一步确定性匹配仍未解决：季度阶段形如 `season_unresolved:<失败码>`，Episode 阶段形如
+`episode_unresolved:<一个或多个文件原因>`；它不等同于模型返回结果或调用后的错误。schema v55
+开始持久化该字段，历史调用无法可靠反推，统一明确显示“历史调用未记录”。只有 `ai_model`
+非空、即 provider 确实发出请求的
 Attempt 才进入列表；确定性规则、仅计划调用但未发出请求的失败不伪造成 AI 调用。
 Prompt、工具正文、模型原始响应、API Key、Cookie、passkey URL 和下载绝对路径不入库也不由
 该普通列表接口返回。每条记录另显示与当次 AI attempt 精确绑定、且已由主程序完成 TMDB 最终验证的唯一 Episode 列表（TMDB Series、Season、Episode 与名称）；失败或尚未通过验证的调用明确显示“未通过最终 TMDB Episode 验证”，不采信模型自报 EP。schema v52 将该结果持久化为独立审计，避免后续人工重新适配改写旧日志。配置归档仍排除这些运行审计。配置页另有默认关闭的“AI Debug 完整链路”；开启后，新 AI 调用把前置确定性尝试、任务输入、Prompt 模板与最终渲染 Prompt、每轮 AI/MCP Body、解析结果和 TMDB 本地验证写入 `data_path/ai-debug` 的独立文件。AI 调用日志只在文件存在时显示“查看完整链路”，弹窗按四阶段时间线可视化并提供单条删除；Authorization Header、API Key、Cookie、passkey 和 Torrent URL 始终不捕获。关闭开关不会删除已有调试文件。

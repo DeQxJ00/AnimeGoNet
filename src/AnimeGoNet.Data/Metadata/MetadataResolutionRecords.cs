@@ -33,7 +33,8 @@ public sealed record MetadataAttempt(
     int AttemptNumber,
     long DurationMilliseconds,
     string? Reason = null,
-    AiMetadataProviderUsage? AiUsage = null);
+    AiMetadataProviderUsage? AiUsage = null,
+    string? AiTriggerReason = null);
 
 public sealed record MetadataAttemptProjection(
     string AttemptId,
@@ -81,6 +82,7 @@ public sealed record MetadataAiInvocationLogProjection(
     string Result,
     string? ErrorCode,
     string ErrorCategory,
+    string? AiTriggerReason,
     string? Reason,
     bool Retryable,
     long DurationMilliseconds,

@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 54;
+    public const int CurrentVersion = 55;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -102,7 +102,18 @@ public static class DatabaseSchema
             54,
             "webhook_notifications",
             WebhookNotifications),
+        new SchemaMigration(
+            55,
+            "ai_invocation_trigger_reason",
+            AiInvocationTriggerReason),
     ];
+
+    private const string AiInvocationTriggerReason = """
+        ALTER TABLE metadata_resolution_attempts
+        ADD COLUMN ai_trigger_reason TEXT CHECK (
+            ai_trigger_reason IS NULL
+            OR length(ai_trigger_reason) BETWEEN 1 AND 1024);
+        """;
 
     private const string WebhookNotifications = """
         CREATE TABLE notification_channels (

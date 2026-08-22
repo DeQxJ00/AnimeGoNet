@@ -1147,6 +1147,7 @@ public sealed record AiInvocationLogItemResponse(
     [property: JsonPropertyName("result")] string Result,
     [property: JsonPropertyName("error_code")] string? ErrorCode,
     [property: JsonPropertyName("error_category")] string ErrorCategory,
+    [property: JsonPropertyName("ai_trigger_reason")] string? AiTriggerReason,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("retryable")] bool Retryable,
     [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
