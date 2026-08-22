@@ -99,6 +99,79 @@ public sealed class TmdbCachingClientTests
     }
 
     [Fact]
+    public async Task UndatedSeasonEpisodesAndEpisodeResponsesAreNotCached()
+    {
+        await using var fixture = await CacheFixture.CreateAsync();
+        var first = new FakeTmdbClient { EpisodeAirDate = null };
+        Assert.NotNull(await fixture.Create(first).GetSeasonAsync(42, 2));
+        Assert.NotNull(await fixture.Create(first).GetEpisodeAsync(42, 2, 3));
+        Assert.Equal(1, first.SeasonCalls);
+        Assert.Equal(1, first.EpisodeCalls);
+        Assert.Empty(await fixture.Store.ListKeysAsync(
+            TmdbCachingClient.DatabaseName,
+            TmdbCachingClient.BucketName,
+            Now));
+
+        var second = new FakeTmdbClient { EpisodeAirDate = null };
+        Assert.NotNull(await fixture.Create(second).GetSeasonAsync(42, 2));
+        Assert.NotNull(await fixture.Create(second).GetEpisodeAsync(42, 2, 3));
+        Assert.Equal(1, second.SeasonCalls);
+        Assert.Equal(1, second.EpisodeCalls);
+    }
+
+    [Fact]
+    public async Task LegacyUndatedEpisodeCacheIsDeletedAndRefetched()
+    {
+        await using var fixture = await CacheFixture.CreateAsync();
+        Assert.NotNull(await fixture.Create(new FakeTmdbClient()).GetEpisodeAsync(42, 2, 3));
+        var key = Assert.Single(await fixture.Store.ListKeysAsync(
+            TmdbCachingClient.DatabaseName,
+            TmdbCachingClient.BucketName,
+            Now));
+        await fixture.Store.PutJsonAsync(
+            TmdbCachingClient.DatabaseName,
+            TmdbCachingClient.BucketName,
+            key,
+            """{"id":420203,"seriesId":42,"seasonNumber":2,"episodeNumber":3,"name":"Episode 3","airDate":null}""",
+            TimeSpan.FromDays(14),
+            Now);
+
+        var inner = new FakeTmdbClient();
+        var episode = Assert.IsType<TmdbEpisode>(
+            await fixture.Create(inner).GetEpisodeAsync(42, 2, 3));
+
+        Assert.Equal(new DateOnly(2026, 1, 3), episode.AirDate);
+        Assert.Equal(1, inner.EpisodeCalls);
+    }
+
+    [Fact]
+    public async Task LegacySeasonCacheContainingUndatedEpisodeIsDeletedAndRefetched()
+    {
+        await using var fixture = await CacheFixture.CreateAsync();
+        Assert.NotNull(await fixture.Create(new FakeTmdbClient()).GetSeasonAsync(42, 2));
+        var key = Assert.Single(await fixture.Store.ListKeysAsync(
+            TmdbCachingClient.DatabaseName,
+            TmdbCachingClient.BucketName,
+            Now));
+        await fixture.Store.PutJsonAsync(
+            TmdbCachingClient.DatabaseName,
+            TmdbCachingClient.BucketName,
+            key,
+            """
+            {"id":4202,"seriesId":42,"seasonNumber":2,"name":"Season 2","airDate":"2026-01-01","episodeCount":12,"posterPath":null,"episodes":[{"id":420203,"seriesId":42,"seasonNumber":2,"episodeNumber":3,"name":"Episode 3","airDate":null}]}
+            """,
+            TimeSpan.FromDays(14),
+            Now);
+
+        var inner = new FakeTmdbClient();
+        var season = Assert.IsType<TmdbSeason>(
+            await fixture.Create(inner).GetSeasonAsync(42, 2));
+
+        Assert.Equal(new DateOnly(2026, 1, 3), Assert.Single(season.Episodes!).AirDate);
+        Assert.Equal(1, inner.SeasonCalls);
+    }
+
+    [Fact]
     public async Task FailuresAreNeverCached()
     {
         await using var fixture = await CacheFixture.CreateAsync();
@@ -268,6 +341,8 @@ public sealed class TmdbCachingClientTests
 
         public bool ReturnNotFound { get; init; }
 
+        public DateOnly? EpisodeAirDate { get; init; } = new(2026, 1, 3);
+
         public int SearchCalls { get; private set; }
 
         public int DetailsCalls { get; private set; }
@@ -345,7 +420,7 @@ public sealed class TmdbCachingClientTests
             }
         }
 
-        private static TmdbSeason Season(int seriesId, int seasonNumber) =>
+        private TmdbSeason Season(int seriesId, int seasonNumber) =>
             new(
                 (seriesId * 100) + seasonNumber,
                 seriesId,
@@ -355,13 +430,18 @@ public sealed class TmdbCachingClientTests
                 12,
                 Episodes: [Episode(seriesId, seasonNumber, 3)]);
 
-        private static TmdbEpisode Episode(int seriesId, int seasonNumber, int episodeNumber) =>
+        private TmdbEpisode Episode(int seriesId, int seasonNumber, int episodeNumber) =>
             new(
                 (seriesId * 10_000) + (seasonNumber * 100) + episodeNumber,
                 seriesId,
                 seasonNumber,
                 episodeNumber,
                 $"Episode {episodeNumber}",
-                new DateOnly(2026, 1, episodeNumber));
+                EpisodeAirDate is null
+                    ? null
+                    : new DateOnly(
+                        EpisodeAirDate.Value.Year,
+                        EpisodeAirDate.Value.Month,
+                        episodeNumber));
     }
 }

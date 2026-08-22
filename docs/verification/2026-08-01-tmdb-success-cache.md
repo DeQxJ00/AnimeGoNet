@@ -27,6 +27,7 @@
 ## 验收
 
 - `TmdbCachingClientTests`：跨 client/重启复用、TTL 边界替换、空搜索缓存、404 不缓存、
+  无 `air_date` Episode/Season 不缓存且旧条目自动刷新、
   失败不缓存、Base URL/语言隔离、secret/query 不落库、伪造身份回源、取消传播与默认
   DI 装配。
 - 配置测试：144 小时默认值、范围校验、规范 YAML、12 份固定上游历史 YAML 的旧

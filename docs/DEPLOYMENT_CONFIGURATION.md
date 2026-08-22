@@ -321,7 +321,8 @@ SQLite profile 不会在每次重启时被 seed 覆盖，后续修改使用来�
 `metadata.tmdb.cache_hours` 只缓存已经通过协议与父子身份校验的 TMDB
 Search/Series/Season/Episode 成功响应，默认 `144` 小时（6 天），范围为大于 0
 且不超过 8760 小时。权威 404、网络、认证、限流、服务、协议和取消失败不会写入
-缓存；到期条目惰性删除。旧配置
+缓存；单集 `air_date` 为空的 Episode 响应不缓存，包含任一无 `air_date` Episode 的
+完整 Season 响应也不缓存，已有此类旧缓存会在读取时删除并在线刷新。到期条目惰性删除。旧配置
 `advanced.cache.themoviedb_cache_hour` 与扁平键 `tmdb_cache_hour` 会迁移到同一字段。
 缓存位于 SQLite `bolt/themoviedb` bucket，可在 WebUI 缓存页按 opaque 标识精确
 删除；缓存键和值都不包含 API key 或 Bearer token，原始搜索词只参与键摘要而不单独落库。

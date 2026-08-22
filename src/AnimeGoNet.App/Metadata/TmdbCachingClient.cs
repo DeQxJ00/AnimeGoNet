@@ -116,7 +116,7 @@ internal sealed class TmdbCachingClient(
         var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbSeason,
-            value => IsValidSeason(value, seriesId, seasonNumber),
+            value => IsCacheableSeason(value, seriesId, seasonNumber),
             cancellationToken).ConfigureAwait(false);
         if (cached is not null)
         {
@@ -125,7 +125,7 @@ internal sealed class TmdbCachingClient(
 
         var result = await inner.GetSeasonAsync(seriesId, seasonNumber, cancellationToken)
             .ConfigureAwait(false);
-        if (result is not null)
+        if (result is not null && IsCacheableSeason(result, seriesId, seasonNumber))
         {
             await WriteAsync(
                 key,
@@ -155,7 +155,7 @@ internal sealed class TmdbCachingClient(
         var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbEpisode,
-            value => IsValidEpisode(value, seriesId, seasonNumber, episodeNumber),
+            value => IsCacheableEpisode(value, seriesId, seasonNumber, episodeNumber),
             cancellationToken).ConfigureAwait(false);
         if (cached is not null)
         {
@@ -164,7 +164,8 @@ internal sealed class TmdbCachingClient(
 
         var result = await inner.GetEpisodeAsync(
             seriesId, seasonNumber, episodeNumber, cancellationToken).ConfigureAwait(false);
-        if (result is not null)
+        if (result is not null && IsCacheableEpisode(
+                result, seriesId, seasonNumber, episodeNumber))
         {
             await WriteAsync(
                 key,
@@ -293,6 +294,14 @@ internal sealed class TmdbCachingClient(
                 && value.Episodes.Select(episode => episode.EpisodeNumber).Distinct().Count()
                     == value.Episodes.Count));
 
+    private static bool IsCacheableSeason(
+        TmdbSeason value,
+        int seriesId,
+        int seasonNumber) =>
+        IsValidSeason(value, seriesId, seasonNumber)
+        && value.Episodes is not null
+        && value.Episodes.All(episode => episode.AirDate is not null);
+
     private static bool IsValidEpisode(
         TmdbEpisode value,
         int seriesId,
@@ -304,6 +313,14 @@ internal sealed class TmdbCachingClient(
         && value.EpisodeNumber == episodeNumber
         && value.EpisodeNumber > 0
         && value.Name is not null;
+
+    private static bool IsCacheableEpisode(
+        TmdbEpisode value,
+        int seriesId,
+        int seasonNumber,
+        int episodeNumber) =>
+        IsValidEpisode(value, seriesId, seasonNumber, episodeNumber)
+        && value.AirDate is not null;
 
     private static bool IsRecoverableCacheFailure(Exception exception) =>
         exception is JsonException
