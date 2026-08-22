@@ -221,6 +221,100 @@ public sealed class ConfigurationApiTests
     }
 
     [Fact]
+    public async Task PathsSectionMergesWithoutOverwritingUnrelatedConfiguration()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using (var initial = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                aiMetadata: true)))
+        {
+            Assert.True(
+                initial.IsSuccessStatusCode,
+                await initial.Content.ReadAsStringAsync());
+        }
+
+        var secondSave = Path.Combine(app.RootPath, "save-two");
+        string currentDownload;
+        using (var currentResponse = await app.Client.GetAsync("/api/v1/config"))
+        using (var currentJson = JsonDocument.Parse(
+            await currentResponse.Content.ReadAsStreamAsync()))
+        {
+            currentDownload = currentJson.RootElement
+                .GetProperty("editable")
+                .GetProperty("download_path")
+                .GetString()!;
+        }
+        var sectionJson = JsonSerializer.Serialize(new
+        {
+            expected_configuration_revision = 1,
+            download_path = currentDownload,
+            save_path = secondSave,
+        });
+        using (var sectionWrite = await app.Client.PutAsync(
+            "/api/v1/config/sections/paths",
+            new StringContent(sectionJson, Encoding.UTF8, "application/json")))
+        {
+            Assert.True(
+                sectionWrite.IsSuccessStatusCode,
+                await sectionWrite.Content.ReadAsStringAsync());
+        }
+
+        using (var networkWrite = await app.Client.PutAsync(
+            "/api/v1/config/sections/network",
+            Payload(
+                expectedRevision: 2,
+                outboundProxy: "http://127.0.0.1:7890/",
+                outboundHosts: ["api.themoviedb.org"])))
+        {
+            Assert.True(
+                networkWrite.IsSuccessStatusCode,
+                await networkWrite.Content.ReadAsStringAsync());
+        }
+
+        using (var aiWrite = await app.Client.PutAsync(
+            "/api/v1/config/sections/ai",
+            Payload(expectedRevision: 3, aiMetadata: false)))
+        {
+            Assert.True(
+                aiWrite.IsSuccessStatusCode,
+                await aiWrite.Content.ReadAsStringAsync());
+        }
+
+        using var response = await app.Client.GetAsync("/api/v1/config");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var editable = json.RootElement.GetProperty("editable");
+        Assert.Equal(currentDownload, editable.GetProperty("download_path").GetString());
+        Assert.Equal(secondSave, editable.GetProperty("save_path").GetString());
+        Assert.Equal(
+            "https://api.themoviedb.org/",
+            editable.GetProperty("tmdb_base_url").GetString());
+        Assert.False(editable.GetProperty("ai_use_metadata_match").GetBoolean());
+        Assert.Equal(
+            "http://127.0.0.1:7890/",
+            editable.GetProperty("outbound_proxy_url").GetString());
+    }
+
+    [Fact]
+    public async Task ConfigurationSectionRejectsUnknownSection()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            expected_configuration_revision = 0,
+        });
+
+        using var response = await app.Client.PutAsync(
+            "/api/v1/config/sections/not-a-section",
+            new StringContent(json, Encoding.UTF8, "application/json"));
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("configuration_section_invalid", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StaticWebUiLoadsPrefilledConfigurationPanel()
     {
         await using var app = await RunningApp.StartAsync();

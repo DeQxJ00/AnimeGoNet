@@ -64,6 +64,12 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/config", Configuration);
         app.MapPost("/api/v1/config/preview", PreviewConfiguration);
         app.MapPut("/api/v1/config", PutConfiguration);
+        app.MapPost(
+            "/api/v1/config/sections/{section}/preview",
+            PreviewConfigurationSection);
+        app.MapPut(
+            "/api/v1/config/sections/{section}",
+            PutConfigurationSection);
         app.MapDelete("/api/v1/config", DeleteConfigurationOverride);
         app.MapGet("/api/v1/cache/buckets", CacheBrowserBuckets);
         app.MapGet("/api/v1/cache/entries", CacheBrowserEntries);
@@ -1769,6 +1775,46 @@ public static class ApiEndpoints
         }
     }
 
+    private static async Task<IResult> PreviewConfigurationSection(
+        string section,
+        ConfigurationUpdateRequest request,
+        DeploymentConfigurationOptions deployment,
+        DeploymentConfigurationLocks locks,
+        ApplicationOverrideStore store,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var current = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (current.Revision != request.ExpectedConfigurationRevision)
+            {
+                throw new ApplicationOverrideRevisionException();
+            }
+            var currentDesired = locks.Reapply(
+                deployment.Value,
+                ApplicationOverrideStore.Apply(deployment.Value, current));
+            var merged = MergeConfigurationSectionRequest(section, request, currentDesired);
+            return await PreviewConfiguration(
+                merged,
+                deployment,
+                locks,
+                store,
+                options,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ApplicationOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "configuration_revision_conflict",
+                "Configuration changed concurrently; reload before previewing."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("configuration_section_invalid", exception.Message));
+        }
+    }
+
     private static async Task<IResult> PutConfiguration(
         ConfigurationUpdateRequest request,
         DeploymentConfigurationOptions deployment,
@@ -1830,6 +1876,52 @@ public static class ApiEndpoints
         catch (ArgumentException exception)
         {
             return TypedResults.BadRequest(Error("configuration_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> PutConfigurationSection(
+        string section,
+        ConfigurationUpdateRequest request,
+        DeploymentConfigurationOptions deployment,
+        DeploymentConfigurationLocks locks,
+        ApplicationOverrideStore store,
+        ApplicationConfigurationRuntimeState applied,
+        AnimeGoOptions options,
+        DataUpdateScheduleManager dataUpdateSchedules,
+        IHostApplicationLifetime applicationLifetime,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var current = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (current.Revision != request.ExpectedConfigurationRevision)
+            {
+                throw new ApplicationOverrideRevisionException();
+            }
+            var currentDesired = locks.Reapply(
+                deployment.Value,
+                ApplicationOverrideStore.Apply(deployment.Value, current));
+            var merged = MergeConfigurationSectionRequest(section, request, currentDesired);
+            return await PutConfiguration(
+                merged,
+                deployment,
+                locks,
+                store,
+                applied,
+                options,
+                dataUpdateSchedules,
+                applicationLifetime,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ApplicationOverrideRevisionException)
+        {
+            return TypedResults.Conflict(Error(
+                "configuration_revision_conflict",
+                "Configuration changed concurrently; reload before saving."));
+        }
+        catch (ArgumentException exception)
+        {
+            return TypedResults.BadRequest(Error("configuration_section_invalid", exception.Message));
         }
     }
 
@@ -2437,6 +2529,141 @@ public static class ApiEndpoints
                 sensitive: true,
                 force: true);
         }
+    }
+
+    private static ConfigurationUpdateRequest MergeConfigurationSectionRequest(
+        string section,
+        ConfigurationUpdateRequest request,
+        AnimeGoOptions current)
+    {
+        var mikan = current.Metadata.Mikan;
+        var tmdb = current.Metadata.Tmdb;
+        var bangumi = current.Metadata.Bangumi;
+        var season = current.Metadata.SeasonFailure;
+        var ai = current.Metadata.Ai;
+        var torrent = current.TorrentFetch;
+        var dataUpdate = current.DataUpdate;
+        var merged = new ConfigurationUpdateRequest(
+            MikanBaseUrl: mikan.BaseUrl.AbsoluteUri,
+            TmdbBaseUrl: tmdb.BaseUrl.AbsoluteUri,
+            TmdbImageBaseUrl: tmdb.ImageBaseUrl.AbsoluteUri,
+            TmdbLanguage: tmdb.Language,
+            TmdbHttpTimeoutSeconds: tmdb.HttpTimeout.TotalSeconds,
+            TmdbRetryCount: tmdb.RetryCount,
+            TmdbRetryDelaySeconds: tmdb.RetryDelay.TotalSeconds,
+            TmdbCacheHours: tmdb.CacheTtl.TotalHours,
+            TmdbApiKey: null,
+            ClearTmdbApiKey: false,
+            TmdbReadAccessToken: null,
+            ClearTmdbReadAccessToken: false,
+            BangumiBaseUrl: bangumi.BaseUrl.AbsoluteUri,
+            BangumiHttpTimeoutSeconds: bangumi.HttpTimeout.TotalSeconds,
+            BangumiRetryCount: bangumi.RetryCount,
+            BangumiRetryDelaySeconds: bangumi.RetryDelay.TotalSeconds,
+            SeasonFailureSkip: season.Skip,
+            SeasonFailureBacktrace: season.Backtrace,
+            SeasonFailureUseTitleSeason: season.UseTitleSeason,
+            SeasonFailureUseFirstSeason: season.UseFirstSeason,
+            AiUseMetadataMatch: ai.UseMetadataMatch,
+            AiUseSeasonMatch: ai.UseMetadataMatch,
+            AiUseEpisodeMatch: ai.UseMetadataMatch,
+            AiDebugMode: ai.DebugMode,
+            AiHttpTimeoutSeconds: ai.HttpTimeout.TotalSeconds,
+            TmdbFailureUseBangumi: current.Metadata.TmdbFailureUseBangumi,
+            WriteBangumiIdWhenTmdbMatched:
+                current.Metadata.WriteBangumiIdWhenTmdbMatched,
+            MikanTrustedOffsetCacheEnabled:
+                current.Metadata.MikanTrustedOffsetCacheEnabled,
+            TorrentHttpTimeoutSeconds: torrent.Timeout.TotalSeconds,
+            TorrentMaxResponseBytes: torrent.MaxResponseBytes,
+            TorrentMaxRedirects: torrent.MaxRedirects,
+            TorrentStagingTtlSeconds: torrent.StagingTtl.TotalSeconds,
+            DataUpdateEnabled: dataUpdate.Enabled,
+            DataUpdateCron: dataUpdate.Cron,
+            DataUpdateManifestUrl: dataUpdate.ManifestUrl?.AbsoluteUri,
+            DataUpdateAutoDownload: dataUpdate.AutoDownload,
+            DataUpdateAutoImport: dataUpdate.AutoImport,
+            DataUpdateKeepVersions: dataUpdate.KeepVersions,
+            DataUpdateHttpTimeoutSeconds: dataUpdate.HttpTimeout.TotalSeconds,
+            ExpectedConfigurationRevision: request.ExpectedConfigurationRevision,
+            OutboundProxyUrl: current.OutboundProxy.Url?.AbsoluteUri,
+            OutboundProxyHosts: current.OutboundProxy.HostPatterns,
+            AiBaseUrl: ai.BaseUrl?.AbsoluteUri,
+            AiModel: ai.Model,
+            AiApiKey: null,
+            ClearAiApiKey: false,
+            AiTmdbMcpUrl: ai.TmdbMcpUrl.AbsoluteUri,
+            AiBangumiMcpUrl: ai.BangumiMcpUrl.AbsoluteUri,
+            AiPromptTemplate: ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate(),
+            MikanEpisodeIdentityCacheHours: mikan.EpisodeIdentityCacheTtl.TotalHours,
+            MikanBangumiIdentityCacheHours: mikan.BangumiIdentityCacheTtl.TotalHours,
+            AiReasoningEffort: ai.ReasoningEffort ?? "none",
+            MikanTrustedOffsetRequiredEpisodes:
+                current.Metadata.MikanTrustedOffsetRequiredEpisodes,
+            DownloadPath: current.Paths.DownloadPath,
+            SavePath: current.Paths.SavePath);
+
+        return section.Trim().ToLowerInvariant() switch
+        {
+            "paths" => merged with
+            {
+                DownloadPath = request.DownloadPath,
+                SavePath = request.SavePath,
+            },
+            "network" => merged with
+            {
+                OutboundProxyUrl = request.OutboundProxyUrl,
+                OutboundProxyHosts = request.OutboundProxyHosts,
+                MikanBaseUrl = request.MikanBaseUrl,
+                MikanEpisodeIdentityCacheHours = request.MikanEpisodeIdentityCacheHours,
+                MikanBangumiIdentityCacheHours = request.MikanBangumiIdentityCacheHours,
+                TmdbBaseUrl = request.TmdbBaseUrl,
+                TmdbImageBaseUrl = request.TmdbImageBaseUrl,
+                TmdbLanguage = request.TmdbLanguage,
+                TmdbHttpTimeoutSeconds = request.TmdbHttpTimeoutSeconds,
+                TmdbRetryCount = request.TmdbRetryCount,
+                TmdbRetryDelaySeconds = request.TmdbRetryDelaySeconds,
+                TmdbCacheHours = request.TmdbCacheHours,
+                TmdbApiKey = request.TmdbApiKey,
+                ClearTmdbApiKey = request.ClearTmdbApiKey,
+                TmdbReadAccessToken = request.TmdbReadAccessToken,
+                ClearTmdbReadAccessToken = request.ClearTmdbReadAccessToken,
+                BangumiBaseUrl = request.BangumiBaseUrl,
+                BangumiHttpTimeoutSeconds = request.BangumiHttpTimeoutSeconds,
+                BangumiRetryCount = request.BangumiRetryCount,
+                BangumiRetryDelaySeconds = request.BangumiRetryDelaySeconds,
+                TorrentHttpTimeoutSeconds = request.TorrentHttpTimeoutSeconds,
+                TorrentMaxResponseBytes = request.TorrentMaxResponseBytes,
+                TorrentMaxRedirects = request.TorrentMaxRedirects,
+                TorrentStagingTtlSeconds = request.TorrentStagingTtlSeconds,
+            },
+            "ai" => merged with
+            {
+                SeasonFailureSkip = request.SeasonFailureSkip,
+                SeasonFailureBacktrace = request.SeasonFailureBacktrace,
+                SeasonFailureUseTitleSeason = request.SeasonFailureUseTitleSeason,
+                SeasonFailureUseFirstSeason = request.SeasonFailureUseFirstSeason,
+                AiBaseUrl = request.AiBaseUrl,
+                AiModel = request.AiModel,
+                AiApiKey = request.AiApiKey,
+                ClearAiApiKey = request.ClearAiApiKey,
+                AiTmdbMcpUrl = request.AiTmdbMcpUrl,
+                AiBangumiMcpUrl = request.AiBangumiMcpUrl,
+                AiPromptTemplate = request.AiPromptTemplate,
+                AiReasoningEffort = request.AiReasoningEffort,
+                AiUseMetadataMatch = request.AiUseMetadataMatch,
+                AiUseSeasonMatch = request.AiUseMetadataMatch,
+                AiUseEpisodeMatch = request.AiUseMetadataMatch,
+                AiDebugMode = request.AiDebugMode,
+                AiHttpTimeoutSeconds = request.AiHttpTimeoutSeconds,
+                TmdbFailureUseBangumi = request.TmdbFailureUseBangumi,
+                WriteBangumiIdWhenTmdbMatched =
+                    request.WriteBangumiIdWhenTmdbMatched,
+            },
+            _ => throw new ArgumentException(
+                "section must be one of: paths, network, ai.",
+                nameof(section)),
+        };
     }
 
     private static ApplicationOverrideEntry CreateApplicationOverride(
