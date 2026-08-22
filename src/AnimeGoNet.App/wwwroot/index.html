@@ -1616,6 +1616,10 @@
       </div>
       <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；AnimeGoNetData 更新策略与 Cron 即时生效，目录及其他修改仍需重启。</p>
       <p id="configuration-lock-summary" class="configuration-lock-summary muted" aria-live="polite">正在读取部署环境锁定状态…</p>
+      <div id="configuration-section-banner" class="configuration-section-banner" role="status" aria-live="polite">
+        <strong id="configuration-section-banner-title">当前分区</strong>
+        <span id="configuration-section-banner-description">只显示并保存当前分区的配置。</span>
+      </div>
       <div class="configuration-form-grid">
         <fieldset class="wide configuration-data-update-editor">
           <legend>全局目录</legend>
@@ -1881,6 +1885,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260822-stale-duplicate-retry"></script>
+    <script type="module" src="/app.js?v=20260823-settings-sections"></script>
 </body>
 </html>

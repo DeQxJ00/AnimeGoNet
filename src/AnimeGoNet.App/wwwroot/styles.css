@@ -372,6 +372,12 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-form { padding: 24px; }
 .configuration-form h2 { margin-bottom: 0; font-size: 1.55rem; }
 .configuration-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.configuration-form-grid > [hidden] { display: none !important; }
+.configuration-section-banner { display: grid; gap: 3px; margin: 12px 0 14px; padding: 11px 14px; border: 1px solid #3c5277; border-left: 4px solid #79aef2; border-radius: 11px; background: rgba(38,72,118,.22); }
+.configuration-section-banner strong { color: #dbeaff; font-size: .86rem; }
+.configuration-section-banner span { color: #9fb3d7; font-size: .76rem; line-height: 1.5; }
+#configuration-dialog[data-section="network"] .configuration-section-banner { border-color: #66518a; border-left-color: #b993ff; background: rgba(76,48,112,.22); }
+#configuration-dialog[data-section="ai"] .configuration-section-banner { border-color: #2f675b; border-left-color: #59d3a5; background: rgba(28,94,77,.2); }
 .configuration-form-grid > label { color: #8da2c9; font-size: .75rem; }
 .configuration-form-grid input:not([type="checkbox"]) { width: 100%; margin-top: 6px; border: 1px solid var(--control-border); border-radius: var(--control-radius); padding: 9px 11px; color: var(--control-text); background: var(--control-background); font-family: inherit; font-size: var(--control-font-size); }
 .configuration-form-grid .wide { grid-column: 1 / -1; }

@@ -6579,6 +6579,7 @@ const configurationSectionSelectors: Record<EditableConfigurationSection, string
 
 function configureConfigurationEditorSection(section: EditableConfigurationSection): void {
   activeConfigurationSection = section;
+  configurationDialog.dataset.section = section;
   const grid = element<HTMLElement>("#configuration-dialog .configuration-form-grid");
   const visible = new Set<HTMLElement>();
   for (const selector of configurationSectionSelectors[section]) {
@@ -6603,7 +6604,14 @@ function configureConfigurationEditorSection(section: EditableConfigurationSecti
     network: "编辑网络与代理",
     ai: "编辑 AI 与 MCP",
   };
+  const descriptions: Record<EditableConfigurationSection, string> = {
+    paths: "仅显示 data_path、download_path 与 save_path；保存时只合并目录字段。",
+    network: "仅显示代理、Mikan、TMDB、Bangumi、Torrent 与 AnimeGoNetData 更新设置。",
+    ai: "仅显示季度失败链、模型与 MCP、Prompt、匹配兜底和可信 EP Offset。",
+  };
   element<HTMLElement>("#configuration-dialog-title").textContent = titles[section];
+  element<HTMLElement>("#configuration-section-banner-title").textContent = titles[section];
+  element<HTMLElement>("#configuration-section-banner-description").textContent = descriptions[section];
   element<HTMLElement>("#configuration-message").textContent =
     `正在编辑 ${titles[section]} · revision ${currentConfiguration?.configuration_revision ?? 0}；只会合并保存本区字段。`;
 }

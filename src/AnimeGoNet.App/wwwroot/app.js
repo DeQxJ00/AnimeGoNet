@@ -4352,6 +4352,7 @@ const configurationSectionSelectors = {
 };
 function configureConfigurationEditorSection(section) {
     activeConfigurationSection = section;
+    configurationDialog.dataset.section = section;
     const grid = element("#configuration-dialog .configuration-form-grid");
     const visible = new Set();
     for (const selector of configurationSectionSelectors[section]) {
@@ -4375,7 +4376,14 @@ function configureConfigurationEditorSection(section) {
         network: "编辑网络与代理",
         ai: "编辑 AI 与 MCP",
     };
+    const descriptions = {
+        paths: "仅显示 data_path、download_path 与 save_path；保存时只合并目录字段。",
+        network: "仅显示代理、Mikan、TMDB、Bangumi、Torrent 与 AnimeGoNetData 更新设置。",
+        ai: "仅显示季度失败链、模型与 MCP、Prompt、匹配兜底和可信 EP Offset。",
+    };
     element("#configuration-dialog-title").textContent = titles[section];
+    element("#configuration-section-banner-title").textContent = titles[section];
+    element("#configuration-section-banner-description").textContent = descriptions[section];
     element("#configuration-message").textContent =
         `正在编辑 ${titles[section]} · revision ${currentConfiguration?.configuration_revision ?? 0}；只会合并保存本区字段。`;
 }

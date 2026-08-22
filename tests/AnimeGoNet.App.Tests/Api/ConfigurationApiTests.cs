@@ -321,6 +321,7 @@ public sealed class ConfigurationApiTests
 
         var html = await app.Client.GetStringAsync("/");
         var script = await app.Client.GetStringAsync("/app.js");
+        var styles = await app.Client.GetStringAsync("/styles.css");
 
         Assert.Contains("id=\"configuration\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-reload\"", html, StringComparison.Ordinal);
@@ -336,6 +337,9 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-section-banner\"", html, StringComparison.Ordinal);
+        Assert.Contains("configurationDialog.dataset.section = section", script, StringComparison.Ordinal);
+        Assert.Contains(".configuration-form-grid > [hidden]", styles, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-path\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-download-path\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-save-path\"", html, StringComparison.Ordinal);
