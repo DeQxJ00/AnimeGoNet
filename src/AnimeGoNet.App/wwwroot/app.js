@@ -5001,6 +5001,10 @@ function renderDownloadPage(body, background = false) {
         else if (item.state === "error") {
             actions.append(downloadControlButton(item, "retry", "业务重试"));
         }
+        else if (item.state === "skipped_duplicate"
+            && item.business_status === "download_skipped_duplicate") {
+            actions.append(downloadControlButton(item, "retry", "重新检查占用"));
+        }
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "delete-button";

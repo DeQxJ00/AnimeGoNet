@@ -108,7 +108,7 @@ HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 re
 
 Mikan move worker 在 qB 报告完成后再次暂停任务，恢复/建立不可变逐文件计划，逐项完成安全 move，再以原子临时文件写入系列根 `tvshow.nfo` 以及与上游兼容的系列、季度、Episode 目录 JSON；侧车同步写入 schema v27 的 SQLite 目录索引。只有这些步骤全部成功，才在 SQLite 同事务写 completion record 并完成 episode claim。随后任务进入独立 `organizing_cleanup`，另一次租约只调用 qB `deleteFiles=false`，成功后才成为 `organized`。这是对上游 `clientnotifier` 完成 callback 调用 `DeleteFile:true` 的明确安全偏差：源/媒体文件只能由受根目录约束的主程序操作，不能委托 qB 递归删除。下载器离线时 cleanup 释放为持久化重试且实例 circuit 打开；健康探测成功关闭 circuit 后只重试 qB 任务清理，不重做已完成文件，也不删除媒体库目标。
 
-下载前门禁固定为：安全暂存并解析 Torrent → qB paused add/同 hash 接管并再次显式暂停 → `download_preparing` 下完成 Series/Season/Episode 与逐集 claim → 再次暂停并精确核对 qB 文件 index/path/size → duplicate/ignored 设 priority 0、episode/other 设 priority 1 → 仅存在 wanted 文件时恢复并进入 `download_queued`。若全部文件均被逐集去重，则保持不恢复、持久化 `download_skipped_duplicate`，并仅允许 `deleteFiles=false` 清除下载器任务；核对失败按持久化租约重试，不能启动下载。
+下载前门禁固定为：安全暂存并解析 Torrent → qB paused add/同 hash 接管并再次显式暂停 → `download_preparing` 下完成 Series/Season/Episode 与逐集 claim → 再次暂停并精确核对 qB 文件 index/path/size → duplicate/ignored 设 priority 0、episode/other 设 priority 1 → 仅存在 wanted 文件时恢复并进入 `download_queued`。若全部文件均被逐集去重，则保持不恢复并持久化 `download_skipped_duplicate`：已完成 Episode 等永久重复可用 `deleteFiles=false` 清除下载器任务；仅因另一任务持有活动 claim 而跳过的 Torrent 保持 paused，以便占用释放后显式“重新检查占用”。重试在单个 SQLite 事务内重新查询 completion/claim，只有当前确实空闲才重新取得 claim、恢复文件 `episode` 归类、清空旧 priority/wanted 并重排下载准备；仍完成或仍占用返回稳定冲突，不伪恢复下载。核对失败按持久化租约重试，不能启动下载。
 
 ## 4. SQLite 规则
 

@@ -685,6 +685,205 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         return DownloadJobControlUpdateResult.Updated;
     }
 
+    public async Task<DownloadJobControlUpdateResult> RetrySkippedDuplicateAsync(
+        DownloadJobControlTarget target,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        string? currentState = null;
+        string? currentTaskStatus = null;
+        long currentRevision = 0;
+        await using (var guard = connection.CreateCommand())
+        {
+            guard.Transaction = transaction;
+            guard.CommandText = """
+                SELECT job.state, task.status, job.revision
+                FROM download_jobs AS job
+                JOIN ingest_tasks AS task ON task.id = job.task_id
+                WHERE job.id = $job_id AND job.task_id = $task_id;
+                """;
+            guard.Parameters.AddWithValue("$job_id", target.JobId);
+            guard.Parameters.AddWithValue("$task_id", target.TaskId);
+            await using var reader = await guard.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                currentState = reader.GetString(0);
+                currentTaskStatus = reader.GetString(1);
+                currentRevision = reader.GetInt64(2);
+            }
+        }
+
+        if (currentState is null)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.NotFound;
+        }
+
+        if (currentRevision != target.Revision)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.RevisionConflict;
+        }
+
+        if (currentState != "skipped_duplicate"
+            || currentTaskStatus != "download_skipped_duplicate")
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.InvalidState;
+        }
+
+        var candidates = new List<(string FileId, int SeriesId, int SeasonNumber, int EpisodeNumber)>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.Transaction = transaction;
+            query.CommandText = """
+                SELECT id, tmdb_series_id, tmdb_season_number, tmdb_episode_number
+                FROM task_files
+                WHERE task_id = $task_id
+                  AND disposition = 'duplicate'
+                  AND other_reason = 'episode_claimed_by_another_task'
+                  AND tmdb_series_id IS NOT NULL
+                  AND tmdb_season_number IS NOT NULL
+                  AND tmdb_episode_number IS NOT NULL
+                ORDER BY relative_path, id;
+                """;
+            query.Parameters.AddWithValue("$task_id", target.TaskId);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                candidates.Add((
+                    reader.GetString(0),
+                    reader.GetInt32(1),
+                    reader.GetInt32(2),
+                    reader.GetInt32(3)));
+            }
+        }
+
+        var restored = 0;
+        foreach (var candidate in candidates)
+        {
+            await using (var acquire = connection.CreateCommand())
+            {
+                acquire.Transaction = transaction;
+                acquire.CommandText = """
+                    INSERT INTO episode_claims (
+                        id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                        task_file_id, state, claimed_at_utc, expires_at_utc)
+                    SELECT $id, $series_id, $season_number, $episode_number,
+                           $task_file_id, 'active', $now, NULL
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM completion_records
+                        WHERE tmdb_series_id = $series_id
+                          AND tmdb_season_number = $season_number
+                          AND tmdb_episode_number = $episode_number)
+                    ON CONFLICT(tmdb_series_id, tmdb_season_number, tmdb_episode_number)
+                    DO UPDATE SET
+                        id = excluded.id,
+                        task_file_id = excluded.task_file_id,
+                        state = 'active',
+                        claimed_at_utc = excluded.claimed_at_utc,
+                        expires_at_utc = NULL
+                    WHERE episode_claims.state = 'released';
+                    """;
+                acquire.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+                acquire.Parameters.AddWithValue("$series_id", candidate.SeriesId);
+                acquire.Parameters.AddWithValue("$season_number", candidate.SeasonNumber);
+                acquire.Parameters.AddWithValue("$episode_number", candidate.EpisodeNumber);
+                acquire.Parameters.AddWithValue("$task_file_id", candidate.FileId);
+                acquire.Parameters.AddWithValue("$now", now);
+                if (await acquire.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                {
+                    continue;
+                }
+            }
+
+            await using var restore = connection.CreateCommand();
+            restore.Transaction = transaction;
+            restore.CommandText = """
+                UPDATE task_files
+                SET disposition = 'episode', other_reason = NULL,
+                    download_file_index = NULL, download_priority = NULL,
+                    download_wanted = NULL
+                WHERE id = $file_id AND task_id = $task_id
+                  AND disposition = 'duplicate'
+                  AND other_reason = 'episode_claimed_by_another_task';
+                """;
+            restore.Parameters.AddWithValue("$file_id", candidate.FileId);
+            restore.Parameters.AddWithValue("$task_id", target.TaskId);
+            if (await restore.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return DownloadJobControlUpdateResult.RevisionConflict;
+            }
+
+            restored++;
+        }
+
+        if (restored == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return DownloadJobControlUpdateResult.DuplicateStillOccupied;
+        }
+
+        await using (var reset = connection.CreateCommand())
+        {
+            reset.Transaction = transaction;
+            reset.CommandText = """
+                UPDATE download_jobs
+                SET state = 'waiting', preparation_state = 'pending',
+                    preparation_lease_token = NULL,
+                    preparation_lease_expires_at_utc = NULL,
+                    preparation_next_attempt_at_utc = $now,
+                    preparation_failure_code = NULL,
+                    dynamic_tags_json = '[]',
+                    dynamic_tag_state = CASE
+                        WHEN json_extract((
+                            SELECT route_snapshot_json FROM ingest_tasks WHERE id = $task_id),
+                            '$.dynamic_tag_template') IS NULL
+                        THEN 'not_configured' ELSE 'pending' END,
+                    dynamic_tag_failure_code = NULL,
+                    updated_at_utc = $now,
+                    revision = revision + 1
+                WHERE id = $job_id AND task_id = $task_id
+                  AND state = 'skipped_duplicate' AND revision = $revision;
+
+                UPDATE ingest_tasks
+                SET status = 'metadata_resolved', failure_kind = NULL,
+                    failure_reason = NULL, updated_at_utc = $now
+                WHERE id = $task_id AND status = 'download_skipped_duplicate';
+                """;
+            reset.Parameters.AddWithValue("$now", now);
+            reset.Parameters.AddWithValue("$job_id", target.JobId);
+            reset.Parameters.AddWithValue("$task_id", target.TaskId);
+            reset.Parameters.AddWithValue("$revision", target.Revision);
+            if (await reset.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return DownloadJobControlUpdateResult.RevisionConflict;
+            }
+        }
+
+        await InsertEventAsync(
+            connection,
+            transaction,
+            target.JobId,
+            "retry_stale_duplicate",
+            "succeeded",
+            currentState,
+            "waiting",
+            null,
+            now,
+            cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return DownloadJobControlUpdateResult.Updated;
+    }
+
     public async Task RecordControlFailureAsync(
         string jobId,
         string kind,

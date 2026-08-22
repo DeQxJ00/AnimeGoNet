@@ -159,7 +159,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
         {
             queryFiles.Transaction = transaction;
             queryFiles.CommandText = """
-                SELECT id, relative_path, size_bytes, disposition
+                SELECT id, relative_path, size_bytes, disposition, other_reason
                 FROM task_files
                 WHERE task_id = $task_id
                 ORDER BY relative_path, id;
@@ -172,7 +172,8 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
                     reader.GetString(0),
                     reader.GetString(1),
                     reader.GetInt64(2),
-                    reader.GetString(3)));
+                    reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4)));
             }
         }
 

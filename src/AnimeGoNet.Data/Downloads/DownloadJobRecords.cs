@@ -126,4 +126,5 @@ public enum DownloadJobControlUpdateResult
     NotFound,
     RevisionConflict,
     InvalidState,
+    DuplicateStillOccupied,
 }

@@ -75,6 +75,28 @@ public sealed class DownloadPreparationProcessorTests
     }
 
     [Fact]
+    public async Task ClaimConflictDuplicateStaysPausedSoItCanBeRecheckedLater()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files = [new DownloadFileSnapshot(0, "episode.mkv", 5, 0, 1)],
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(app, [("episode.mkv", 5L, "duplicate")]);
+        await SetOtherReasonAsync(app, taskId, "episode_claimed_by_another_task");
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.SkippedDuplicate, result);
+        Assert.Single(client.Paused);
+        Assert.Empty(client.Resumed);
+        Assert.Empty(client.Deleted);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("download_skipped_duplicate", state.TaskStatus);
+        Assert.Equal("skipped_duplicate", state.JobState);
+    }
+
+    [Fact]
     public async Task ManifestMismatchKeepsTorrentStoppedAndSchedulesSafeRetry()
     {
         var client = new FakeDownloadClient
@@ -293,6 +315,23 @@ public sealed class DownloadPreparationProcessorTests
         task.Parameters.AddWithValue("$task_id", taskId);
         task.Parameters.AddWithValue("$episode", episodeNumber);
         Assert.Equal(2, await task.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SetOtherReasonAsync(
+        RunningApp app,
+        string taskId,
+        string otherReason)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE task_files SET other_reason = $other_reason
+            WHERE task_id = $task_id;
+            """;
+        command.Parameters.AddWithValue("$other_reason", otherReason);
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task<PreparationState> ReadStateAsync(RunningApp app, string taskId)

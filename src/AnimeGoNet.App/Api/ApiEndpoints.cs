@@ -3113,6 +3113,21 @@ public static class ApiEndpoints
         }
 
         var value = target.Value!;
+        if (value.State == "skipped_duplicate"
+            && value.BusinessStatus == "download_skipped_duplicate")
+        {
+            var result = await jobs.RetrySkippedDuplicateAsync(
+                value,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return await ControlResultAsync(
+                value.JobId,
+                "retry_duplicate",
+                result,
+                jobs,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         if ((value.PreparationState == "pending"
              && value.PreparationLeaseToken is null
              && value.PreparationFailureCode is not null)
@@ -3277,6 +3292,9 @@ public static class ApiEndpoints
             DownloadJobControlUpdateResult.RevisionConflict => TypedResults.Conflict(Error(
                 "download_revision_conflict",
                 "Download job changed; reload before retrying the action.")),
+            DownloadJobControlUpdateResult.DuplicateStillOccupied => TypedResults.Conflict(Error(
+                "download_duplicate_still_occupied",
+                "The TMDB Episode is still completed or claimed by another task.")),
             _ => TypedResults.Conflict(Error(
                 "download_action_invalid_state",
                 "Download action is not allowed in the current stage.")),
@@ -7916,6 +7934,8 @@ public static class ApiEndpoints
 
     private static bool CanRetry(DownloadJobDetailRecord detail) =>
         detail.Summary.State == "error"
+        || (detail.Summary.State == "skipped_duplicate"
+            && detail.Summary.BusinessStatus == "download_skipped_duplicate")
         || (detail.PreparationState == "pending" && detail.PreparationFailureCode is not null)
         || (detail.OrganizationState is "pending" or "cleanup"
             && detail.OrganizationFailureCode is not null);

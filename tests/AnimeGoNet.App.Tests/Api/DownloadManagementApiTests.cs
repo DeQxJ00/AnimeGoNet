@@ -205,6 +205,54 @@ public sealed class DownloadManagementApiTests
     }
 
     [Fact]
+    public async Task StaleClaimDuplicateRetryReacquiresEpisodeAndReschedulesPreparation()
+    {
+        var client = new FakeDownloadClient();
+        await using var fixture = await DownloadApiFixture.CreateAsync(client);
+        await fixture.MarkSkippedDuplicateAsync();
+
+        using var detail = await fixture.App.Client.GetAsync(
+            $"/api/v1/downloads/{fixture.JobId}");
+        using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStreamAsync());
+        Assert.True(detailJson.RootElement.GetProperty("can_retry").GetBoolean());
+
+        using var response = await PostControlAsync(
+            fixture.App.Client,
+            fixture.JobId,
+            "retry",
+            await fixture.RevisionAsync());
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("retry_duplicate", json.RootElement.GetProperty("action").GetString());
+        Assert.Empty(client.ResumedHashes);
+        var state = await fixture.DuplicateRetryStateAsync();
+        Assert.Equal("metadata_resolved", state.TaskStatus);
+        Assert.Equal("pending", state.PreparationState);
+        Assert.Equal("episode", state.Disposition);
+        Assert.Null(state.OtherReason);
+        Assert.Equal("active", state.ClaimState);
+    }
+
+    [Fact]
+    public async Task DuplicateRetryRemainsBlockedWhenEpisodeWasActuallyCompleted()
+    {
+        await using var fixture = await DownloadApiFixture.CreateAsync(new FakeDownloadClient());
+        await fixture.MarkSkippedDuplicateAsync();
+        await fixture.MarkEpisodeCompletedAsync();
+
+        using var response = await PostControlAsync(
+            fixture.App.Client,
+            fixture.JobId,
+            "retry",
+            await fixture.RevisionAsync());
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("download_duplicate_still_occupied", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task OfflineDetailFallsBackToStoredFileAssignmentAndControlUsesSafeError()
     {
         var client = new FakeDownloadClient
@@ -393,9 +441,59 @@ public sealed class DownloadManagementApiTests
                 SET status = 'download_skipped_duplicate',
                     failure_kind = NULL
                 WHERE id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
+                UPDATE task_files
+                SET tmdb_series_id = 139512,
+                    tmdb_season_number = 2,
+                    tmdb_episode_number = 5,
+                    disposition = 'duplicate',
+                    other_reason = 'episode_claimed_by_another_task',
+                    download_wanted = 0,
+                    download_priority = 0
+                WHERE task_id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
                 """;
             command.Parameters.AddWithValue("$job_id", JobId);
-            Assert.Equal(2, await command.ExecuteNonQueryAsync());
+            Assert.Equal(3, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task<(string TaskStatus, string PreparationState, string Disposition, string? OtherReason, string ClaimState)>
+            DuplicateRetryStateAsync()
+        {
+            await using var connection = await _database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT task.status, job.preparation_state, file.disposition,
+                       file.other_reason, claim.state
+                FROM download_jobs AS job
+                JOIN ingest_tasks AS task ON task.id = job.task_id
+                JOIN task_files AS file ON file.task_id = task.id
+                JOIN episode_claims AS claim ON claim.task_file_id = file.id
+                WHERE job.id = $job_id;
+                """;
+            command.Parameters.AddWithValue("$job_id", JobId);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            return (
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.GetString(4));
+        }
+
+        public async Task MarkEpisodeCompletedAsync()
+        {
+            await using var connection = await _database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO completion_records (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    source_id, source_item_id, media_path, completed_at_utc)
+                VALUES (
+                    'completed-episode-5', 139512, 2, 5,
+                    'mikan', 'fixture', '/media/E005.mp4', $now);
+                """;
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public async Task<string?> PreparationFailureAsync()

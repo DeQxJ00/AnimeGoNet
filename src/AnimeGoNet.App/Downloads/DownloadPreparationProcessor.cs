@@ -46,24 +46,32 @@ public sealed class DownloadPreparationProcessor(
                 cancellationToken).ConfigureAwait(false);
             if (prepared.AllSkipped)
             {
-                try
+                var retryableClaimConflict = claim.Files.Any(file =>
+                    string.Equals(
+                        file.OtherReason,
+                        "episode_claimed_by_another_task",
+                        StringComparison.Ordinal));
+                if (!retryableClaimConflict)
                 {
-                    await clients.ExecuteAsync(
-                        claim.DownloaderId,
-                        async (client, token) =>
-                        {
-                            await client.DeleteAsync([claim.InfoHash], deleteFiles: false, token).ConfigureAwait(false);
-                            return true;
-                        },
-                        cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch
-                {
-                    // Priorities are zero and the durable task is skipped. Cleanup can be retried separately.
+                    try
+                    {
+                        await clients.ExecuteAsync(
+                            claim.DownloaderId,
+                            async (client, token) =>
+                            {
+                                await client.DeleteAsync([claim.InfoHash], deleteFiles: false, token).ConfigureAwait(false);
+                                return true;
+                            },
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        // Priorities are zero and the durable task is skipped. Cleanup can be retried separately.
+                    }
                 }
 
                 return DownloadPreparationResult.SkippedDuplicate;

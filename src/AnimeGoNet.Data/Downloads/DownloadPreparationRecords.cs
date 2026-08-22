@@ -4,7 +4,8 @@ public sealed record DownloadPreparationFile(
     string FileId,
     string RelativePath,
     long SizeBytes,
-    string Disposition);
+    string Disposition,
+    string? OtherReason);
 
 public sealed record DownloadPreparationClaim(
     string JobId,
