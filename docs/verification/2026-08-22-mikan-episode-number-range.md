@@ -12,3 +12,5 @@
 - `[Dynamis One] Kokoore - 07 ... [13335833].mkv`：排除 `13335833`，接受 EP 7。
 - `[Group] Show [13335833].mkv`：无有效 EP，返回 `episode_number_out_of_range`。
 - 两个都在范围内且不同的标记仍返回 `ambiguous_episode_markers`，可按既有流程进入 AI。
+- 隔离应用数据库以完整 Episode worker 重放 Kokoore 标题和实际文件名：落库候选 EP 7，
+  验证 TMDB 302051 S01E07，策略为 `tmdb_episode_number`，AI 请求数为 0。

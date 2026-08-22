@@ -1,5 +1,6 @@
 using System.Text;
 using System.Net.WebSockets;
+using System.Globalization;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Library;
@@ -346,6 +347,55 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         var file = Assert.Single(await ReadFilesAsync(app, taskId));
         Assert.Equal(7, file.EpisodeNumber);
         Assert.Equal("ai_metadata", file.ResolutionSource);
+    }
+
+    [Fact]
+    public async Task KokooreOversizedChecksumResolvesTmdbEpisodeWithoutAi()
+    {
+        const string title =
+            "[黒ネズミたち] 说出这边交给我你们先走以后十年过去成了传说。 / Kokoore - 07 (CR 1920x1080 AVC AAC MKV)";
+        const string fileName =
+            "[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [13335833].mkv";
+        var parsed = FileEpisodeCandidateResolver.Resolve("mikan", fileName);
+        Assert.Equal(7, parsed.Episode);
+
+        var series = new TmdbSeries(
+            302051,
+            "ここは俺に任せて先に行けと言ってから10年がたったら伝説になっていた。",
+            "ここは俺に任せて先に行けと言ってから10年がたったら伝説になっていた。",
+            null);
+        var season = new TmdbSeason(500001, 302051, 1, "第 1 季", null, 12);
+        var tmdb = new FakeTmdbClient
+        {
+            SeriesValue = series,
+            SeasonValue = season,
+            EpisodeFactory = number => number == 7
+                ? new TmdbEpisode(7007, 302051, 1, 7, "第 7 集", null)
+                : null,
+        };
+        var ai = new FakeAiMetadataMatcher();
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true,
+            tmdbSeriesId: 302051,
+            tmdbSeasonNumber: 1);
+        var taskId = await PrepareFilesAsync(
+            app,
+            (fileName, "7", parsed.Episode?.ToString(CultureInfo.InvariantCulture)));
+        await SetTaskTitleAsync(app, taskId, title);
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Empty(ai.Requests);
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(7, file.EpisodeNumber);
+        Assert.Equal("tmdb_episode_number", file.ResolutionSource);
+        Assert.Null(await ReadLatestAiTriggerReasonAsync(app, taskId));
     }
 
     [Fact]
@@ -847,7 +897,9 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         IAiMetadataMatcher? aiMatcher = null,
         bool enableEpisodeAi = false,
         IBangumiEpisodeClient? bangumiEpisodeClient = null,
-        IBangumiSubjectClient? bangumiSubjectClient = null)
+        IBangumiSubjectClient? bangumiSubjectClient = null,
+        int tmdbSeriesId = 72517,
+        int tmdbSeasonNumber = 2)
     {
         var app = await RunningApp.StartAsync(
             configure: options => options with
@@ -866,8 +918,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             new MikanWorkMetadataRuleUpdate(
                 3951,
                 bangumiEpisodeClient is null ? null : 547888,
-                72517,
-                2,
+                tmdbSeriesId,
+                tmdbSeasonNumber,
                 episodeOffset),
             expectedRevision: 0,
             DateTimeOffset.UtcNow);
@@ -955,6 +1007,18 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         }
 
         return taskId;
+    }
+
+    private static async Task SetTaskTitleAsync(RunningApp app, string taskId, string title)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE ingest_tasks SET title = $title WHERE id = $task_id;";
+        command.Parameters.AddWithValue("$title", title);
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task SetTrustedPublicationEvidenceAsync(
@@ -1218,6 +1282,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
 
     private sealed class FakeTmdbClient : ITmdbClient
     {
+        public TmdbSeries SeriesValue { get; init; } = Series;
+
         public TmdbSeason SeasonValue { get; init; } = Season;
 
         public Func<int, TmdbEpisode?> EpisodeFactory { get; init; } = _ => null;
@@ -1227,13 +1293,13 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         public List<int> EpisodeRequests { get; } = [];
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(string title, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<TmdbSeries>>([Series]);
+            Task.FromResult<IReadOnlyList<TmdbSeries>>([SeriesValue]);
 
         public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeries?>(Series);
+            Task.FromResult<TmdbSeries?>(SeriesValue);
 
         public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(int seriesId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeriesDetails?>(new TmdbSeriesDetails(Series, [SeasonValue]));
+            Task.FromResult<TmdbSeriesDetails?>(new TmdbSeriesDetails(SeriesValue, [SeasonValue]));
 
         public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
             Task.FromResult<TmdbSeason?>(CompleteSnapshot(SeasonValue));
