@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260822-ai-trigger-reason">
+  <link rel="stylesheet" href="/styles.css?v=20260823-auto-backup">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -446,6 +446,24 @@
         <article class="configuration-card">
           <h3>本机备份</h3>
           <p class="muted">确认导入和恢复前都会自动创建安全备份。恢复同样采用同 ID 覆盖、包外项目保留的安全合并方式。</p>
+          <form id="configuration-backup-automation-form" class="configuration-backup-automation">
+            <div class="configuration-backup-automation-heading">
+              <strong>每日自动备份</strong>
+              <span>本地日历日 · 每日最多一次</span>
+            </div>
+            <label class="configuration-backup-automation-toggle">
+              <input id="configuration-backup-automation-enabled" type="checkbox">
+              <span>启用每日自动备份<small>启用后后台 Worker 会在一分钟内补齐当天备份；之后跨入新的本地日期时再创建。</small></span>
+            </label>
+            <label>自动备份保留份数
+              <input id="configuration-backup-automation-retention" type="number" min="1" max="100" step="1" value="10" required>
+              <small>默认 10。只轮转每日自动备份，不删除手动备份以及导入/恢复前安全备份。</small>
+            </label>
+            <div class="configuration-backup-automation-actions">
+              <p id="configuration-backup-automation-status" class="muted" role="status">正在读取自动备份设置…</p>
+              <button id="configuration-backup-automation-save" type="submit" class="primary-button">保存自动备份设置</button>
+            </div>
+          </form>
           <div id="configuration-backup-list" class="configuration-backup-list" aria-live="polite" aria-busy="true">
             <p class="muted empty">正在读取备份…</p>
           </div>
@@ -1890,6 +1908,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260823-settings-sections"></script>
+    <script type="module" src="/app.js?v=20260823-auto-backup"></script>
 </body>
 </html>

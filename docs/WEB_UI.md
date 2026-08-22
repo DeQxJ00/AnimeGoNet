@@ -147,7 +147,9 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 确认保存仍使用预览时的 `expected_configuration_revision`；并发变化返回冲突并要求重新预览。覆盖现有私有配置或恢复部署默认前，服务端先把旧 revision 保存到 `data_path/backups/application.private.revision-{20位revision}.json`，再原子替换当前文件。响应只返回被备份的 revision，不返回备份内容或路径；首个私有 revision 没有旧文件可备份。原始部署 YAML 继续只由运维维护，Web 不展示含 secret 的原文，也不改写其注释和格式。
 
-“设置与备份 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则与外部插件；密码、Cookie、API Key、插件私有变量、全局 `download_path` / `save_path` 及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含当前 `data_path`、Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
+“设置与备份 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则、外部插件与自动备份策略；密码、Cookie、API Key、插件私有变量、全局 `download_path` / `save_path` 及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含当前 `data_path`、Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
+
+同页提供默认关闭的“每日自动备份”和保留份数设置，保留默认值为 10、有效范围 1～100。启用后后台 Worker 每分钟检查一次，以主程序所在机器的本地日历日为边界，每日最多创建一个 `automatic-*` 总配置归档；服务重启后若当天尚无自动备份会自动补齐。轮转仅删除超出保留数的每日自动备份，不影响手动备份、导入前安全备份和恢复前安全备份。自动策略原子保存到 `data_path/config/configuration-backup-automation.json`，并随总配置归档导出和恢复。
 
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 

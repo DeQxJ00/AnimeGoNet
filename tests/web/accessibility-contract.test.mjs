@@ -80,6 +80,23 @@ test("WebUI authentication uses the login dialog instead of a dedicated URL fiel
   assert.match(app, /监听端口必须是 0–65535 之间的整数/);
 });
 
+test("configuration archive exposes explicit daily backup automation", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  const form = document.querySelector("#configuration-backup-automation-form");
+  const enabled = document.querySelector("#configuration-backup-automation-enabled");
+  const retention = document.querySelector("#configuration-backup-automation-retention");
+  assert.ok(form);
+  assert.ok(enabled);
+  assert.equal(retention?.getAttribute("value"), "10");
+  assert.equal(retention?.getAttribute("min"), "1");
+  assert.equal(retention?.getAttribute("max"), "100");
+  assert.match(app, /\/api\/v1\/configuration-archive\/automation/);
+  assert.match(app, /backup\.kind === "automatic" \? "每日自动备份"/);
+});
+
 test("ids are unique and initial async regions expose valid state", async () => {
   const document = await page();
   const ids = [...document.querySelectorAll("[id]")].map(node => node.id);

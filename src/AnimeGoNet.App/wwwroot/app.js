@@ -4116,7 +4116,8 @@ async function loadConfigurationBackups() {
             const summary = document.createElement("div");
             const title = document.createElement("strong");
             title.textContent = backup.kind === "manual" ? "手动备份"
-                : backup.kind === "pre-restore" ? "恢复前安全备份" : "导入前安全备份";
+                : backup.kind === "automatic" ? "每日自动备份"
+                    : backup.kind === "pre-restore" ? "恢复前安全备份" : "导入前安全备份";
             const detail = document.createElement("small");
             detail.textContent = `${new Date(backup.created_at_utc).toLocaleString()} · ${formatBytes(backup.size_bytes)} · ${backup.sha256.slice(0, 12)}…`;
             summary.append(title, detail);
@@ -4152,6 +4153,60 @@ async function loadConfigurationBackups() {
     }
     finally {
         container.setAttribute("aria-busy", "false");
+    }
+}
+function syncConfigurationBackupAutomationControls() {
+    const enabled = element("#configuration-backup-automation-enabled").checked;
+    element("#configuration-backup-automation-retention").disabled = !enabled;
+}
+async function loadConfigurationBackupAutomation() {
+    const status = element("#configuration-backup-automation-status");
+    try {
+        const response = await authenticatedFetch("/api/v1/configuration-archive/automation", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const policy = await response.json();
+        element("#configuration-backup-automation-enabled").checked = policy.enabled;
+        element("#configuration-backup-automation-retention").value =
+            policy.retention_count.toString();
+        syncConfigurationBackupAutomationControls();
+        status.textContent = policy.enabled
+            ? `已启用：每日最多一次，保留最近 ${policy.retention_count} 份自动备份。`
+            : `未启用；启用后的默认保留数为 ${policy.retention_count} 份。`;
+    }
+    catch (error) {
+        status.textContent = `自动备份设置读取失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function saveConfigurationBackupAutomation(event) {
+    event.preventDefault();
+    const status = element("#configuration-backup-automation-status");
+    const button = element("#configuration-backup-automation-save");
+    const retention = Number.parseInt(element("#configuration-backup-automation-retention").value, 10);
+    if (!Number.isInteger(retention) || retention < 1 || retention > 100) {
+        status.textContent = "自动备份保留份数必须是 1–100 的整数。";
+        return;
+    }
+    const policy = {
+        enabled: element("#configuration-backup-automation-enabled").checked,
+        retention_count: retention,
+    };
+    button.disabled = true;
+    status.textContent = "正在保存自动备份设置…";
+    try {
+        const response = await authenticatedFetch("/api/v1/configuration-archive/automation", { method: "PUT", headers, body: JSON.stringify(policy) });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const saved = await response.json();
+        status.textContent = saved.enabled
+            ? `已启用：后台将在一分钟内检查当天备份，并保留最近 ${saved.retention_count} 份自动备份。`
+            : `已关闭每日自动备份；既有备份不会被删除。`;
+    }
+    catch (error) {
+        status.textContent = `自动备份设置保存失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
     }
 }
 async function createConfigurationBackup() {
@@ -9693,7 +9748,12 @@ element("#configuration-archive-file").addEventListener("change", event => {
 element("#configuration-archive-preview").addEventListener("click", () => void previewConfigurationArchive());
 element("#configuration-archive-import").addEventListener("click", () => void importConfigurationArchive());
 element("#configuration-backup-create").addEventListener("click", () => void createConfigurationBackup());
-element("#configuration-backup-reload").addEventListener("click", () => void loadConfigurationBackups());
+element("#configuration-backup-reload").addEventListener("click", () => void Promise.all([
+    loadConfigurationBackups(),
+    loadConfigurationBackupAutomation(),
+]));
+element("#configuration-backup-automation-enabled").addEventListener("change", syncConfigurationBackupAutomationControls);
+element("#configuration-backup-automation-form").addEventListener("submit", event => void saveConfigurationBackupAutomation(event));
 element("#configuration-close").addEventListener("click", () => configurationDialog.close());
 element("#configuration-form").addEventListener("submit", (event) => void previewConfiguration(event));
 element("#configuration-confirm").addEventListener("click", () => void confirmConfiguration());
@@ -10034,6 +10094,7 @@ void loadConfiguration().then(() => loadDeploymentDataPath());
 void loadWebUiAuthentication();
 void loadWebApiCompatibility();
 void loadConfigurationBackups();
+void loadConfigurationBackupAutomation();
 void loadDownloads();
 void loadMetadataTasks();
 void loadPendingTmdb();

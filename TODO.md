@@ -240,6 +240,7 @@
 - [x] 实现手动 RSS/下载提交与操作结果：原生 TypeScript 页面按已启用 SourceProfile 提交单个 Torrent，Mikan RSS 可选择独立来源 revision；单条 Mikan 导入可输入 `/Home/Episode/{40位ID}`，按所选 SourceProfile/Cookie 复用长期身份缓存并解析分组 RSS，自动填充 title、Torrent URL、source item/work ID、`mikanid`、`groupid` 和 `bgmid`，解析动作本身不暂存 Torrent、不访问 qB。带 passkey 的 URL 请求发出后立即清空且不进本地存储，最终导入结果只显示任务、规则、下载器和不可逆指纹。
 - [x] 实现配置表单、服务端校验、脱敏 diff 和保存备份：Web 不展示或改写含部署 secret/注释的原始 YAML，而是先 `POST /api/v1/config/preview` 验证 revision 并展示字段级生效方式，明确确认后才写 `application.private.json`；覆盖/恢复前将旧 revision 原子保存到 `data_path/backups`。
 - [x] 实现总配置归档：版本化 JSON 覆盖应用私有配置、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则和外部插件；WebUI 支持导出、SHA-256 预检、确认导入、手动备份、下载、恢复和删除。导入/恢复前自动创建安全备份并采用同 ID 覆盖、包外项目保留的安全合并；归档明确包含凭据与 qB 实例路径，但排除部署根目录、运行任务、下载历史、可信 offset、缓存、日志及媒体文件。API 流程、错误摘要、4 MiB 上限与 NativeAOT 均纳入验收。
+- [x] 总配置归档增加默认关闭的每日自动备份：按主机本地日历日每天最多一份，服务重启可补齐当天缺口；保留份数可在 WebUI 配置且默认 10，仅轮转 `automatic-*`，绝不删除手动或导入/恢复前安全备份。策略使用 AOT-safe JSON 原子保存并随总配置归档迁移。
 - [x] 配置页显式展示四个确定性季度失败开关及一个统一 AI 元数据开关，说明优先级/触发阶段和 Backtrace/AI 前置条件；AI/TMDB 密钥及保存前 diff 直接回填明文，环境锁、即时生效和需重启字段均可见。
 - [x] 唯一正式 AI Prompt 已纳入应用配置、私有覆盖、部署锁和 WebUI 编辑器：后台 Worker 与“AI 匹配测试工具”默认读取同一份有效模板；模板保留全部契约标记且限 128 KiB，预览只显示版本/长度/短哈希，保存后重启生效。
 - [x] 动画任务详情同时展示任务级 `source_evidence`、逐文件来源名称/来源 EP/本地候选和最终 TMDB 名称/Season/Episode，以及 AI 调用状态、TMDB 验证可信依据、最终失败原因和策略尝试时间线；来源 profile/revision、标题、Mikan/Bangumi/AniDB/IMDb/发布时间与不透明 ID 指纹独立成区，不采信或展示模型自报的数字置信度，也不把来源值表示成 TMDB 权威结果。

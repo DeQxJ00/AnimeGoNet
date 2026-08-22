@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -24,7 +25,8 @@ public sealed record ConfigurationArchiveDocument(
     IReadOnlyList<ConfigurationArchiveSource> Sources,
     IReadOnlyList<ConfigurationArchiveRssRules> RssRules,
     IReadOnlyList<ConfigurationArchiveLegacyFilter> LegacyMikanFilters,
-    IReadOnlyList<ConfigurationArchiveMikanWorkRule> MikanWorkRules);
+    IReadOnlyList<ConfigurationArchiveMikanWorkRule> MikanWorkRules,
+    ConfigurationBackupAutomationPolicy? BackupAutomation = null);
 
 public sealed record ConfigurationArchiveDownloader(
     string BaseUrl,
@@ -120,7 +122,8 @@ public sealed partial class ConfigurationArchiveService(
     SourceProfileStore sources,
     MikanRssRuleStore rssRules,
     LegacyMikanFilterStore legacyFilters,
-    MikanWorkMetadataRuleStore mikanWorkRules) : IDisposable
+    MikanWorkMetadataRuleStore mikanWorkRules,
+    ConfigurationBackupAutomationStore backupAutomation) : IDisposable
 {
     public const int MaximumArchiveBytes = 4 * 1024 * 1024;
     private const int CurrentFormatVersion = 1;
@@ -200,25 +203,59 @@ public sealed partial class ConfigurationArchiveService(
     public async Task<IReadOnlyList<ConfigurationArchiveBackup>> ListBackupsAsync(
         CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(_backupDirectory);
-        var result = new List<ConfigurationArchiveBackup>();
-        foreach (var path in Directory.EnumerateFiles(_backupDirectory, "*.json"))
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var name = Path.GetFileNameWithoutExtension(path);
-            if (!BackupIdPattern().IsMatch(name)) continue;
-            var info = new FileInfo(path);
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-            result.Add(new ConfigurationArchiveBackup(
-                name,
-                name.StartsWith("manual-", StringComparison.Ordinal) ? "manual"
-                    : name.StartsWith("pre-restore-", StringComparison.Ordinal) ? "pre-restore"
-                    : "pre-import",
-                info.CreationTimeUtc,
-                info.Length,
-                Hash(bytes)));
+            return (await ListBackupsCoreAsync(cancellationToken).ConfigureAwait(false))
+                .Take(100)
+                .ToArray();
         }
-        return result.OrderByDescending(item => item.CreatedAtUtc).Take(100).ToArray();
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<ConfigurationArchiveBackup?> CreateAutomaticBackupIfDueAsync(
+        DateTimeOffset nowUtc,
+        TimeZoneInfo timeZone,
+        int retentionCount,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(timeZone);
+        ConfigurationBackupAutomationPolicy.Validate(new(true, retentionCount));
+        nowUtc = nowUtc.ToUniversalTime();
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(nowUtc, timeZone).DateTime);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var backups = (await ListBackupsCoreAsync(cancellationToken).ConfigureAwait(false))
+                .Where(item => item.Kind == "automatic")
+                .ToList();
+            ConfigurationArchiveBackup? created = null;
+            if (!backups.Any(item => DateOnly.FromDateTime(
+                    TimeZoneInfo.ConvertTime(item.CreatedAtUtc, timeZone).DateTime) == localDate))
+            {
+                created = await CreateBackupCoreAsync(
+                    "automatic",
+                    cancellationToken,
+                    nowUtc).ConfigureAwait(false);
+                backups.Add(created);
+            }
+
+            foreach (var expired in backups
+                         .OrderByDescending(item => item.CreatedAtUtc)
+                         .Skip(retentionCount))
+            {
+                File.Delete(BackupPath(expired.Id));
+            }
+            return created;
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task<byte[]> ReadBackupAsync(
@@ -275,6 +312,7 @@ public sealed partial class ConfigurationArchiveService(
             if (filter is not null) legacy.Add(new(profile.Id, filter.Config));
         }
         var workRules = await mikanWorkRules.ListAsync(cancellationToken).ConfigureAwait(false);
+        var automation = await backupAutomation.LoadAsync(cancellationToken).ConfigureAwait(false);
         var document = new ConfigurationArchiveDocument(
             CurrentFormatVersion,
             ProductName,
@@ -297,22 +335,25 @@ public sealed partial class ConfigurationArchiveService(
             legacy,
             workRules.Select(item => new ConfigurationArchiveMikanWorkRule(
                 item.MikanId, item.BangumiSubjectId, item.TmdbSeriesId,
-                item.TmdbSeasonNumber, item.EpisodeOffset, item.Enabled)).ToArray());
+                item.TmdbSeasonNumber, item.EpisodeOffset, item.Enabled)).ToArray(),
+            automation);
         return JsonSerializer.SerializeToUtf8Bytes(
             document, ConfigurationArchiveJsonContext.Default.ConfigurationArchiveDocument);
     }
 
     private async Task<ConfigurationArchiveBackup> CreateBackupCoreAsync(
         string kind,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? createdAtUtc = null)
     {
         var bytes = await ExportCoreAsync(cancellationToken).ConfigureAwait(false);
         Directory.CreateDirectory(_backupDirectory);
-        var id = $"{kind}-{DateTimeOffset.UtcNow:yyyyMMddTHHmmssfffZ}-{Guid.NewGuid():N}";
+        var now = (createdAtUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
+        var id = $"{kind}-{now:yyyyMMddTHHmmssfffZ}-{Guid.NewGuid():N}";
         var path = Path.Combine(_backupDirectory, id + ".json");
         await WritePrivateFileAsync(path, bytes, cancellationToken).ConfigureAwait(false);
         return new ConfigurationArchiveBackup(
-            id, kind, DateTimeOffset.UtcNow, bytes.LongLength, Hash(bytes));
+            id, kind, now, bytes.LongLength, Hash(bytes));
     }
 
     private async Task ApplyCoreAsync(
@@ -415,6 +456,12 @@ public sealed partial class ConfigurationArchiveService(
                     entry.TmdbSeasonNumber, entry.EpisodeOffset, entry.Enabled),
                 current?.Revision ?? 0, now, cancellationToken).ConfigureAwait(false);
         }
+        if (document.BackupAutomation is not null)
+        {
+            await backupAutomation.SaveAsync(
+                document.BackupAutomation,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private ConfigurationArchiveDocument ParseAndValidate(byte[] bytes)
@@ -447,6 +494,19 @@ public sealed partial class ConfigurationArchiveService(
         {
             throw new ConfigurationArchiveException(
                 "configuration_archive_shape_invalid", "The configuration archive is incomplete.");
+        }
+        if (document.BackupAutomation is not null)
+        {
+            try
+            {
+                ConfigurationBackupAutomationPolicy.Validate(document.BackupAutomation);
+            }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                throw new ConfigurationArchiveException(
+                    "configuration_archive_backup_automation_invalid",
+                    exception.Message);
+            }
         }
         if (document.Application is not null)
         {
@@ -654,10 +714,52 @@ public sealed partial class ConfigurationArchiveService(
     private static string Hash(byte[] bytes) =>
         Convert.ToHexStringLower(SHA256.HashData(bytes));
 
+    private async Task<IReadOnlyList<ConfigurationArchiveBackup>> ListBackupsCoreAsync(
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(_backupDirectory);
+        var result = new List<ConfigurationArchiveBackup>();
+        foreach (var path in Directory.EnumerateFiles(_backupDirectory, "*.json"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var name = Path.GetFileNameWithoutExtension(path);
+            if (!BackupIdPattern().IsMatch(name)) continue;
+            var info = new FileInfo(path);
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            result.Add(new ConfigurationArchiveBackup(
+                name,
+                BackupKind(name),
+                BackupCreatedAtUtc(name, info.CreationTimeUtc),
+                info.Length,
+                Hash(bytes)));
+        }
+        return result.OrderByDescending(item => item.CreatedAtUtc).ToArray();
+    }
+
+    private static string BackupKind(string backupId) =>
+        backupId.StartsWith("manual-", StringComparison.Ordinal) ? "manual"
+            : backupId.StartsWith("automatic-", StringComparison.Ordinal) ? "automatic"
+            : backupId.StartsWith("pre-restore-", StringComparison.Ordinal) ? "pre-restore"
+            : "pre-import";
+
+    private static DateTimeOffset BackupCreatedAtUtc(string backupId, DateTime fallbackUtc)
+    {
+        var kind = BackupKind(backupId);
+        var timestamp = backupId.AsSpan(kind.Length + 1, 19);
+        return DateTimeOffset.TryParseExact(
+            timestamp,
+            "yyyyMMdd'T'HHmmssfff'Z'",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var value)
+            ? value
+            : new DateTimeOffset(DateTime.SpecifyKind(fallbackUtc, DateTimeKind.Utc));
+    }
+
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant)]
     private static partial Regex SourceIdPattern();
 
-    [GeneratedRegex("^(manual|pre-import|pre-restore)-[0-9]{8}T[0-9]{9}Z-[a-f0-9]{32}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(manual|automatic|pre-import|pre-restore)-[0-9]{8}T[0-9]{9}Z-[a-f0-9]{32}$", RegexOptions.CultureInvariant)]
     private static partial Regex BackupIdPattern();
 }
 

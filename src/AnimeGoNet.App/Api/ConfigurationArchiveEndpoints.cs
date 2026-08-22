@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.Serialization;
 
@@ -12,6 +13,8 @@ internal static class ConfigurationArchiveEndpoints
         app.MapPost("/api/v1/configuration-archive/import", Import);
         app.MapGet("/api/v1/configuration-archive/backups", ListBackups);
         app.MapPost("/api/v1/configuration-archive/backups", CreateBackup);
+        app.MapGet("/api/v1/configuration-archive/automation", GetAutomation);
+        app.MapPut("/api/v1/configuration-archive/automation", UpdateAutomation);
         app.MapGet("/api/v1/configuration-archive/backups/{backupId}/download", DownloadBackup);
         app.MapPost("/api/v1/configuration-archive/backups/{backupId}/restore", RestoreBackup);
         app.MapDelete("/api/v1/configuration-archive/backups/{backupId}", DeleteBackup);
@@ -109,6 +112,49 @@ internal static class ConfigurationArchiveEndpoints
             backup,
             ConfigurationArchiveJsonContext.Default.ConfigurationArchiveBackup,
             statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> GetAutomation(
+        ConfigurationBackupAutomationStore store,
+        CancellationToken cancellationToken)
+    {
+        var policy = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Json(
+            policy,
+            ConfigurationBackupAutomationJsonContext.Default.ConfigurationBackupAutomationPolicy);
+    }
+
+    private static async Task<IResult> UpdateAutomation(
+        HttpContext context,
+        ConfigurationBackupAutomationStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var policy = await JsonSerializer.DeserializeAsync(
+                context.Request.Body,
+                ConfigurationBackupAutomationJsonContext.Default.ConfigurationBackupAutomationPolicy,
+                cancellationToken).ConfigureAwait(false)
+                ?? throw new ArgumentException("Automatic configuration backup policy is required.");
+            var saved = await store.SaveAsync(policy, cancellationToken).ConfigureAwait(false);
+            return Results.Json(
+                saved,
+                ConfigurationBackupAutomationJsonContext.Default.ConfigurationBackupAutomationPolicy);
+        }
+        catch (JsonException exception)
+        {
+            return Results.Json(
+                new ApiErrorResponse("configuration_backup_automation_json_invalid", exception.Message),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.Json(
+                new ApiErrorResponse("configuration_backup_automation_invalid", exception.Message),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     private static async Task<IResult> DownloadBackup(

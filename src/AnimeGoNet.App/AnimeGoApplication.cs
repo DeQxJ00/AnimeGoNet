@@ -380,7 +380,9 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(downloaderOverrides);
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
+        builder.Services.AddSingleton<ConfigurationBackupAutomationStore>();
         builder.Services.AddSingleton<ConfigurationArchiveService>();
+        builder.Services.AddSingleton<ConfigurationBackupAutomationRunner>();
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(dataPackages);
         builder.Services.AddSingleton(dataUpdateTransfers);
@@ -581,6 +583,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<DeleteExecutionWorker>();
             builder.Services.AddHostedService<PluginScheduleHostedService>();
             builder.Services.AddHostedService<NotificationWorker>();
+            builder.Services.AddHostedService<ConfigurationBackupAutomationWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

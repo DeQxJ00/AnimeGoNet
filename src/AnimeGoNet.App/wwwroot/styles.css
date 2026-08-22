@@ -337,6 +337,17 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .configuration-archive-preview p { margin: 5px 0; overflow-wrap: anywhere; }
 .configuration-archive-preview ul { margin-bottom: 0; padding-left: 1.2rem; color: #d8c899; }
 .configuration-backup-list { display: grid; gap: 9px; }
+.configuration-backup-automation { display: grid; gap: 12px; margin: 14px 0; padding: 13px; border: 1px solid #315f58; border-radius: 12px; background: rgba(17,42,36,.52); }
+.configuration-backup-automation-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.configuration-backup-automation-heading strong { color: #dff8ef; font-size: .86rem; }
+.configuration-backup-automation-heading span { color: #83b9aa; font-size: .68rem; }
+.configuration-backup-automation > label { display: grid; gap: 6px; color: #aabbd7; font-size: .75rem; }
+.configuration-backup-automation > label small { color: #8296bc; line-height: 1.45; }
+.configuration-backup-automation > label input[type="number"] { width: min(180px,100%); }
+.configuration-backup-automation label.configuration-backup-automation-toggle { display: flex; align-items: flex-start; gap: 9px; color: #dbe6fa; }
+.configuration-backup-automation-toggle > span { display: grid; gap: 3px; }
+.configuration-backup-automation-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 9px; }
+.configuration-backup-automation-actions p { margin: 0; }
 .configuration-backup-item { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; align-items: center; padding: 11px; border: 1px solid #344260; border-radius: 11px; background: rgba(5,8,16,.5); }
 .configuration-backup-item strong, .configuration-backup-item small { display: block; overflow-wrap: anywhere; }
 .configuration-backup-item small { margin-top: 4px; color: #8da2c9; }

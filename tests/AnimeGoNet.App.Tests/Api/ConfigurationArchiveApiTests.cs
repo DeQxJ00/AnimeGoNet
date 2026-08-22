@@ -142,6 +142,68 @@ public sealed class ConfigurationArchiveApiTests
     }
 
     [Fact]
+    public async Task DailyAutomationDefaultsToTenAndRotatesOnlyAutomaticBackups()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var initial = await app.Client.GetAsync(
+            "/api/v1/configuration-archive/automation");
+        initial.EnsureSuccessStatusCode();
+        using (var initialJson = JsonDocument.Parse(await initial.Content.ReadAsByteArrayAsync()))
+        {
+            Assert.False(initialJson.RootElement.GetProperty("enabled").GetBoolean());
+            Assert.Equal(10, initialJson.RootElement.GetProperty("retention_count").GetInt32());
+        }
+
+        using var invalid = await app.Client.PutAsync(
+            "/api/v1/configuration-archive/automation",
+            new StringContent("{\"enabled\":true,\"retention_count\":0}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        using var saved = await app.Client.PutAsync(
+            "/api/v1/configuration-archive/automation",
+            new StringContent("{\"enabled\":true,\"retention_count\":2}", Encoding.UTF8, "application/json"));
+        saved.EnsureSuccessStatusCode();
+
+        using var manualResponse = await app.Client.PostAsync(
+            "/api/v1/configuration-archive/backups",
+            content: null);
+        manualResponse.EnsureSuccessStatusCode();
+        using var manualJson = JsonDocument.Parse(await manualResponse.Content.ReadAsByteArrayAsync());
+        var manualId = manualJson.RootElement.GetProperty("id").GetString()!;
+
+        var service = app.App.Services.GetRequiredService<ConfigurationArchiveService>();
+        var first = await service.CreateAutomaticBackupIfDueAsync(
+            new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero),
+            TimeZoneInfo.Utc,
+            2);
+        var duplicate = await service.CreateAutomaticBackupIfDueAsync(
+            new DateTimeOffset(2030, 1, 1, 23, 0, 0, TimeSpan.Zero),
+            TimeZoneInfo.Utc,
+            2);
+        var second = await service.CreateAutomaticBackupIfDueAsync(
+            new DateTimeOffset(2030, 1, 2, 12, 0, 0, TimeSpan.Zero),
+            TimeZoneInfo.Utc,
+            2);
+        var third = await service.CreateAutomaticBackupIfDueAsync(
+            new DateTimeOffset(2030, 1, 3, 12, 0, 0, TimeSpan.Zero),
+            TimeZoneInfo.Utc,
+            2);
+
+        Assert.NotNull(first);
+        Assert.Null(duplicate);
+        Assert.NotNull(second);
+        Assert.NotNull(third);
+        var backups = await service.ListBackupsAsync();
+        Assert.Contains(backups, item => item.Id == manualId && item.Kind == "manual");
+        var automatic = backups.Where(item => item.Kind == "automatic").ToArray();
+        Assert.Equal(2, automatic.Length);
+        Assert.DoesNotContain(automatic, item => item.Id == first.Id);
+        Assert.Contains(automatic, item => item.Id == second!.Id);
+        Assert.Contains(automatic, item => item.Id == third!.Id);
+    }
+
+    [Fact]
     public async Task PreviewRejectsUnknownOrOversizedArchivesWithoutChangingState()
     {
         await using var app = await RunningApp.StartAsync();
