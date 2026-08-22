@@ -326,7 +326,13 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-reload\"", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/config", script, StringComparison.Ordinal);
         Assert.Contains("loadConfiguration", script, StringComparison.Ordinal);
-        Assert.Contains("配置编辑器会回填已保存凭据", script, StringComparison.Ordinal);
+        Assert.Contains("只会合并保存本区字段", script, StringComparison.Ordinal);
+        Assert.Contains("data-subview=\"paths\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-subview=\"network\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-subview=\"ai\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-subview=\"webui\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"deployment-data-path-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/config/sections/", script, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
@@ -404,7 +410,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("previewConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("confirmConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("resetConfiguration", script, StringComparison.Ordinal);
-        Assert.Contains("/api/v1/config/preview", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "/api/v1/config/sections/${activeConfigurationSection}/preview",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-preview\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-confirm\"", html, StringComparison.Ordinal);
         Assert.Contains("保存前差异", html, StringComparison.Ordinal);

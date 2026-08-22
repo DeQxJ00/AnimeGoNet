@@ -49,7 +49,8 @@ test("NativeAOT release renders live dashboard and explicit TMDB fallback order"
   await expect(page.locator("#metadata-tasks")).not.toHaveAttribute("data-ui-state", "loading");
   await expect(page.locator("#live-log-status")).toContainText("已连接");
 
-  await page.locator("#configuration-edit").click();
+  await page.goto(authenticatedUrl("/#/connections/ai"), { waitUntil: "domcontentloaded" });
+  await page.locator("#configuration-edit-ai").click();
   await expect(page.locator("#configuration-dialog")).toBeVisible();
   const fallbackSteps = page.locator("#configuration-dialog .failure-priority-step");
   await expect(fallbackSteps).toHaveCount(5);
@@ -86,7 +87,8 @@ test("mobile viewport has no horizontal overflow and keeps keyboard entry usable
   await expect(skipLink).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#main-content")).toBeFocused();
-  await page.locator("#configuration-edit").click();
+  await page.goto(authenticatedUrl("/#/connections/paths"), { waitUntil: "domcontentloaded" });
+  await page.locator("#configuration-edit-paths").click();
   await expect(page.locator("#configuration-dialog")).toBeVisible();
   const dialogBounds = await page.locator("#configuration-dialog").evaluate(dialog => {
     const bounds = dialog.getBoundingClientRect();

@@ -1877,6 +1877,8 @@ let otherReadaptationScrollbarDrag: {
   startScrollTop: number;
 } | null = null;
 let currentConfiguration: RuntimeConfiguration | null = null;
+type EditableConfigurationSection = "paths" | "network" | "ai";
+let activeConfigurationSection: EditableConfigurationSection = "paths";
 let pendingConfigurationArchive: File | null = null;
 let pendingConfigurationArchivePreview: ConfigurationArchivePreview | null = null;
 let activeRssRules: RssRuleSnapshot | null = null;
@@ -2178,9 +2180,12 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
   connections: {
     title: "设置与备份",
     description: "管理应用设置以及总配置的导入、导出和备份。",
-    defaultSubview: "application",
+    defaultSubview: "paths",
     tabs: [
-      { id: "application", label: "应用配置" },
+      { id: "paths", label: "目录与路径" },
+      { id: "ai", label: "AI 与 MCP" },
+      { id: "network", label: "网络与代理" },
+      { id: "webui", label: "WebUI" },
       { id: "archive", label: "导入导出与备份" },
     ],
   },
@@ -5794,7 +5799,13 @@ function metadataConfigurationCard(config: RuntimeConfiguration): HTMLElement {
 async function loadConfiguration(): Promise<void> {
   const status = element<HTMLElement>("#configuration-status");
   const container = element<HTMLElement>("#configuration");
-  status.textContent = "正在读取包含已保存凭据的生效配置…";
+  const networkContainer = element<HTMLElement>("#configuration-network");
+  const aiContainer = element<HTMLElement>("#configuration-ai");
+  const networkStatus = element<HTMLElement>("#configuration-network-status");
+  const aiStatus = element<HTMLElement>("#configuration-ai-status");
+  status.textContent = "正在读取目录配置…";
+  networkStatus.textContent = "正在读取网络配置…";
+  aiStatus.textContent = "正在读取 AI 配置…";
   try {
     const response = await authenticatedFetch("/api/v1/config", { headers });
     if (!response.ok) throw new Error(await responseError(response));
@@ -5802,24 +5813,15 @@ async function loadConfiguration(): Promise<void> {
     currentConfiguration = config;
     element<HTMLButtonElement>("#configuration-reset").disabled =
       config.configuration_revision === 0;
-    const cards = [
+    const pathCards = [
       configurationCard("目录", [
         ["data_path", config.paths.data_path],
         ["download_path", config.paths.download_path],
         ["save_path", config.paths.save_path],
         ["修改生效", config.deployment.paths_restart_required ? "需要重启" : "即时生效"],
       ]),
-      configurationCard("部署与安全", [
-        ["容器模式", enabledLabel(config.deployment.running_in_container)],
-        ["后台 workers", enabledLabel(config.deployment.background_workers_enabled)],
-        ["当前 WebUI 监听", `${config.deployment.web_host}:${config.deployment.web_port}`],
-        ["inner_plugin_mikan AccessKey", config.deployment.inner_plugin_mikan_access_key_configured
-          ? "已配置；明文见 插件 → 内部插件"
-          : "未配置；可在 插件 → 内部插件 设置"],
-        ["WebUI AccessKey", config.deployment.webui_access_key_configured
-          ? "已配置；明文见本页 WebUI 监听与鉴权"
-          : "未配置；本机页面无需鉴权"],
-      ]),
+    ];
+    const networkCards = [
       configurationCard("全局选择性代理", [
         ["代理地址", config.outbound_proxy.url ?? "未配置（全部直连）"],
         [
@@ -5830,10 +5832,26 @@ async function loadConfiguration(): Promise<void> {
         ],
         ["匹配规则", "精确域名或 *.example.com；未命中的地址保持直连"],
       ]),
-      metadataConfigurationCard(config),
-      configurationCard("AI 与 Torrent", [
+      configurationCard("Mikan / TMDB / Bangumi", [
+        ["Mikan API", config.metadata.mikan.base_url],
+        ["TMDB API", config.metadata.tmdb.base_url],
+        ["TMDB 图片", config.metadata.tmdb.image_base_url],
+        ["TMDB Key", config.editable.tmdb_api_key ?? "未配置"],
+        ["TMDB 缓存", `${config.metadata.tmdb.cache_hours} 小时`],
+        ["Bangumi API", config.metadata.bangumi.base_url],
+      ]),
+      configurationCard("Torrent 与数据更新", [
+        ["Torrent HTTP 超时", `${config.torrent_fetch.http_timeout_seconds} 秒`],
+        ["Torrent 最大跳转", `${config.torrent_fetch.max_redirects} 次`],
+        ["Torrent 最大响应", `${config.torrent_fetch.max_response_bytes} bytes`],
+        ["AnimeGoNetData Manifest", config.data_update.manifest_url ?? "未配置"],
+        ["AnimeGoNetData 定时更新", enabledLabel(config.data_update.enabled)],
+      ]),
+    ];
+    const aiCard = configurationCard("AI 匹配", [
         ["OpenAI API", config.metadata.ai.base_url ?? "未配置"],
         ["模型", config.metadata.ai.model ?? "未配置"],
+        ["推理程度", config.metadata.ai.reasoning_effort],
         ["API Key", config.editable.ai_api_key ?? "未配置"],
         ["TMDB MCP", config.metadata.ai.tmdb_mcp_url],
         ["Bangumi MCP", config.metadata.ai.bangumi_mcp_url],
@@ -5848,38 +5866,18 @@ async function loadConfiguration(): Promise<void> {
           "AI Debug",
           `${enabledLabel(config.metadata.ai.debug_mode)} · 完整链路写入 data_path/ai-debug`,
         ],
-        [
-          "Torrent HTTP",
-          `${config.torrent_fetch.http_timeout_seconds} 秒 · `
-          + `${config.torrent_fetch.max_redirects} 次跳转 · `
-          + `${config.torrent_fetch.max_response_bytes} bytes`,
-        ],
-        ["Torrent 暂存 TTL", `${config.torrent_fetch.staging_ttl_seconds} 秒`],
-      ]),
+      ]);
+    aiCard.append(seasonFailurePriority(config.metadata));
+    const aiCards = [
+      aiCard,
       configurationCard("可信 EP Offset", [
         ["缓存", enabledLabel(config.metadata.mikan_trusted_offset_cache_enabled)],
         ["可信次数", `${config.metadata.mikan_trusted_offset_required_episodes} 个不同文件名 EP`],
         ["计算基准", "来源 EP = 文件名解析 EP；目标 TMDB EP = 来源 EP + Offset"],
       ]),
-      configurationCard("AnimeGoNetData 更新", [
-        ["定时更新", enabledLabel(config.data_update.enabled)],
-        ["Cron", config.data_update.cron],
-        ["Manifest", config.data_update.manifest_url ?? "未配置（仍可离线导入）"],
-        [
-          "策略",
-          !config.data_update.auto_download
-            ? "仅检查"
-            : config.data_update.auto_import
-              ? "自动下载并导入"
-              : "自动下载后等待确认",
-        ],
-        ["保留版本", `${config.data_update.keep_versions} 版`],
-        ["HTTP 超时", `${config.data_update.http_timeout_seconds} 秒`],
-        ["修改生效", config.data_update.hot_reload_supported ? "即时热重排" : "需要重启"],
-      ]),
     ];
     if (config.migration_diagnostics.length > 0) {
-      cards.unshift(configurationCard(
+      pathCards.unshift(configurationCard(
         "旧配置迁移阻断",
         config.migration_diagnostics.map((item) => [
           item.code,
@@ -5887,17 +5885,25 @@ async function loadConfiguration(): Promise<void> {
         ]),
       ));
     }
-    container.replaceChildren(...cards);
+    container.replaceChildren(...pathCards);
+    networkContainer.replaceChildren(...networkCards);
+    aiContainer.replaceChildren(...aiCards);
+    const revisionStatus = config.restart_required
+      ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · 当前应用 revision ${config.applied_configuration_revision}`
+      : `当前进程生效值 · revision ${config.configuration_revision}`;
     status.textContent = config.downloads_blocked
       ? "检测到不支持或无法安全读取的旧下载器配置；下载与后台 workers 已强制停用，请先按迁移提示修复并重启。"
-      : config.restart_required
-      ? `存在待重启配置 · 已保存 revision ${config.configuration_revision} · `
-        + `当前应用 revision ${config.applied_configuration_revision}`
-      : `当前进程的生效值 · revision ${config.configuration_revision}；配置编辑器会回填已保存凭据。`;
+      : `${revisionStatus}；目录编辑只保存 download_path 与 save_path。`;
+    networkStatus.textContent = `${revisionStatus}；本页只保存网络、代理、Torrent 与数据更新字段。`;
+    aiStatus.textContent = `${revisionStatus}；本页只保存 AI、MCP、失败链和可信 Offset 字段。`;
   } catch (error) {
     currentConfiguration = null;
     container.replaceChildren();
+    networkContainer.replaceChildren();
+    aiContainer.replaceChildren();
     status.textContent = `配置读取失败：${errorMessage(error, "未知错误")}`;
+    networkStatus.textContent = status.textContent;
+    aiStatus.textContent = status.textContent;
   }
 }
 
@@ -6024,6 +6030,91 @@ async function readDeploymentConfiguration(): Promise<JsonObject> {
     throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
   }
   return jsonObject(envelope.data, "部署配置");
+}
+
+function deploymentPaths(configuration: JsonObject): JsonObject {
+  const value = configuration.paths;
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonObject;
+  }
+  const paths: JsonObject = {};
+  configuration.paths = paths;
+  return paths;
+}
+
+function isAbsoluteConfigurationPath(value: string): boolean {
+  return value.startsWith("/")
+    || /^[a-z]:[\\/]/iu.test(value)
+    || /^\\\\[^\\]+\\[^\\]+/u.test(value);
+}
+
+async function loadDeploymentDataPath(): Promise<void> {
+  const input = element<HTMLInputElement>("#deployment-data-path");
+  const status = element<HTMLElement>("#deployment-data-path-status");
+  const reload = element<HTMLButtonElement>("#deployment-data-path-reload");
+  const save = element<HTMLButtonElement>("#deployment-data-path-save");
+  reload.disabled = true;
+  save.disabled = true;
+  status.textContent = "正在读取部署 data_path…";
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const configured = deploymentPaths(configuration).data_path;
+    if (configured !== undefined && typeof configured !== "string") {
+      throw new Error("paths.data_path 不是字符串");
+    }
+    input.value = configured ?? currentConfiguration?.paths.data_path ?? "";
+    const runtime = currentConfiguration?.paths.data_path ?? "尚未读取";
+    status.textContent = configured === undefined
+      ? `部署文件未显式设置；当前进程使用 ${runtime}。首次保存会写入 paths.data_path。`
+      : `部署文件：${configured}；当前进程：${runtime}。两者不同时需要重启。`;
+  } catch (error) {
+    input.value = currentConfiguration?.paths.data_path ?? "";
+    status.textContent = `data_path 读取失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
+}
+
+async function saveDeploymentDataPath(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const input = element<HTMLInputElement>("#deployment-data-path");
+  const status = element<HTMLElement>("#deployment-data-path-status");
+  const reload = element<HTMLButtonElement>("#deployment-data-path-reload");
+  const save = element<HTMLButtonElement>("#deployment-data-path-save");
+  const requested = input.value.trim();
+  if (!isAbsoluteConfigurationPath(requested)) {
+    status.textContent = "data_path 必须是 Windows UNC/盘符绝对路径，或以 / 开头的 Linux/macOS 绝对路径。";
+    return;
+  }
+  reload.disabled = true;
+  save.disabled = true;
+  status.textContent = "正在重新读取、合并并备份部署配置…";
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const paths = deploymentPaths(configuration);
+    if (paths.data_path === requested) {
+      status.textContent = "data_path 没有变化，无需保存。";
+      return;
+    }
+    paths.data_path = requested;
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await authenticatedFetch("/api/config?key=all&backup=true", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({ key: "all", backup: true, config: configuration }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const envelope = await response.json() as LegacyApiEnvelope<unknown>;
+    if (envelope.code !== 200) throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
+    status.textContent = `已保存并备份 paths.data_path=${requested}；未移动任何现有数据，重启前请完成目录复制。`;
+  } catch (error) {
+    status.textContent = `data_path 保存失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
 }
 
 async function loadWebApiCompatibility(): Promise<void> {
@@ -6445,7 +6536,79 @@ function applyConfigurationLocks(
   summary.className = "configuration-lock-summary active";
 }
 
-function openConfigurationEditor(): void {
+const configurationSectionSelectors: Record<EditableConfigurationSection, string[]> = {
+  paths: [
+    "#configuration-data-path",
+  ],
+  network: [
+    "#configuration-outbound-proxy-url",
+    "#configuration-mikan-url",
+    "#configuration-mikan-episode-cache-hours",
+    "#configuration-mikan-bangumi-cache-hours",
+    "#configuration-tmdb-url",
+    "#configuration-tmdb-image-url",
+    "#configuration-tmdb-language",
+    "#configuration-tmdb-timeout",
+    "#configuration-tmdb-retry-count",
+    "#configuration-tmdb-retry-delay",
+    "#configuration-tmdb-cache-hours",
+    "#configuration-tmdb-key",
+    "#configuration-tmdb-key-clear",
+    "#configuration-tmdb-key-state",
+    "#configuration-tmdb-token",
+    "#configuration-tmdb-token-clear",
+    "#configuration-tmdb-token-state",
+    "#configuration-bangumi-url",
+    "#configuration-bangumi-timeout",
+    "#configuration-bangumi-retry-count",
+    "#configuration-bangumi-retry-delay",
+    "#configuration-torrent-timeout",
+    "#configuration-torrent-bytes",
+    "#configuration-torrent-redirects",
+    "#configuration-torrent-ttl",
+    "#configuration-data-update-enabled",
+  ],
+  ai: [
+    "#configuration-fail-skip",
+    "#configuration-ai-base-url",
+    "#configuration-bangumi-fallback",
+    "#configuration-offset-cache",
+    "#configuration-ai-timeout",
+  ],
+};
+
+function configureConfigurationEditorSection(section: EditableConfigurationSection): void {
+  activeConfigurationSection = section;
+  const grid = element<HTMLElement>("#configuration-dialog .configuration-form-grid");
+  const visible = new Set<HTMLElement>();
+  for (const selector of configurationSectionSelectors[section]) {
+    let node = element<HTMLElement>(selector);
+    while (node.parentElement !== grid) {
+      const parent = node.parentElement;
+      if (parent === null) throw new Error(`配置字段不在编辑网格内：${selector}`);
+      node = parent;
+    }
+    visible.add(node);
+  }
+  for (const child of Array.from(grid.children) as HTMLElement[]) {
+    child.hidden = !visible.has(child);
+    if (child.hidden) {
+      child.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>(
+        "input, select, textarea, button",
+      ).forEach(control => { control.disabled = true; });
+    }
+  }
+  const titles: Record<EditableConfigurationSection, string> = {
+    paths: "编辑目录与路径",
+    network: "编辑网络与代理",
+    ai: "编辑 AI 与 MCP",
+  };
+  element<HTMLElement>("#configuration-dialog-title").textContent = titles[section];
+  element<HTMLElement>("#configuration-message").textContent =
+    `正在编辑 ${titles[section]} · revision ${currentConfiguration?.configuration_revision ?? 0}；只会合并保存本区字段。`;
+}
+
+function openConfigurationEditor(section: EditableConfigurationSection): void {
   if (!currentConfiguration) return;
   clearConfigurationPreview();
   const editable = currentConfiguration.editable;
@@ -6566,10 +6729,14 @@ function openConfigurationEditor(): void {
     "#configuration-data-update-timeout",
     editable.data_update_http_timeout_seconds,
   );
+  element<HTMLElement>("#configuration-dialog .configuration-form-grid")
+    .querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>(
+      "input, select, textarea, button",
+    )
+    .forEach(control => { control.disabled = false; });
   applyConfigurationLocks(editable.locked_fields);
-  element<HTMLElement>("#configuration-message").textContent =
-    `正在编辑 revision ${currentConfiguration.configuration_revision}`;
   syncConfigurationSecretInputs();
+  configureConfigurationEditorSection(section);
   configurationDialog.showModal();
 }
 
@@ -6826,11 +6993,13 @@ async function previewConfiguration(event: SubmitEvent): Promise<void> {
     const request = configurationRequest();
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await authenticatedFetch("/api/v1/config/preview", {
+    const response = await authenticatedFetch(
+      `/api/v1/config/sections/${activeConfigurationSection}/preview`, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(request),
-    });
+      },
+    );
     if (!response.ok) throw new Error(await responseError(response));
     const preview = await response.json() as ConfigurationPreview;
     renderConfigurationPreview(preview);
@@ -6863,11 +7032,13 @@ async function confirmConfiguration(): Promise<void> {
   try {
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Content-Type", "application/json");
-    const response = await authenticatedFetch("/api/v1/config", {
+    const response = await authenticatedFetch(
+      `/api/v1/config/sections/${activeConfigurationSection}`, {
       method: "PUT",
       headers: requestHeaders,
       body: JSON.stringify(request),
-    });
+      },
+    );
     if (!response.ok) throw new Error(await responseError(response));
     const saved = await response.json() as ConfigurationWriteResult;
     clearConfigurationPreview();
@@ -12343,10 +12514,19 @@ element<HTMLButtonElement>("#pending-tmdb-reload").addEventListener(
 element<HTMLButtonElement>("#configuration-reload").addEventListener("click", () => {
   void Promise.all([
     loadConfiguration(),
+    loadDeploymentDataPath(),
     loadWebApiCompatibility(),
     loadWebUiAuthentication(),
   ]);
 });
+element<HTMLButtonElement>("#deployment-data-path-reload").addEventListener(
+  "click",
+  () => void loadDeploymentDataPath(),
+);
+element<HTMLFormElement>("#deployment-data-path-form").addEventListener(
+  "submit",
+  (event) => void saveDeploymentDataPath(event),
+);
 element<HTMLButtonElement>("#webui-authentication-reload").addEventListener(
   "click",
   () => void loadWebUiAuthentication(),
@@ -12363,7 +12543,18 @@ element<HTMLFormElement>("#web-api-compatibility-form").addEventListener(
   "submit",
   (event) => void saveWebApiCompatibility(event),
 );
-element<HTMLButtonElement>("#configuration-edit").addEventListener("click", openConfigurationEditor);
+element<HTMLButtonElement>("#configuration-edit-paths").addEventListener(
+  "click",
+  () => openConfigurationEditor("paths"),
+);
+element<HTMLButtonElement>("#configuration-edit-network").addEventListener(
+  "click",
+  () => openConfigurationEditor("network"),
+);
+element<HTMLButtonElement>("#configuration-edit-ai").addEventListener(
+  "click",
+  () => openConfigurationEditor("ai"),
+);
 element<HTMLButtonElement>("#configuration-reset").addEventListener("click", () => void resetConfiguration());
 element<HTMLButtonElement>("#configuration-archive-export").addEventListener("click", () => {
   void downloadConfigurationArchive(
@@ -12937,7 +13128,7 @@ void loadDataUpdate();
 void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
-void loadConfiguration();
+void loadConfiguration().then(() => loadDeploymentDataPath());
 void loadWebUiAuthentication();
 void loadWebApiCompatibility();
 void loadConfigurationBackups();

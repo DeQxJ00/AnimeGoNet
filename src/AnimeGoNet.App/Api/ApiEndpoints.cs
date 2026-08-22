@@ -2636,6 +2636,13 @@ public static class ApiEndpoints
                 TorrentMaxResponseBytes = request.TorrentMaxResponseBytes,
                 TorrentMaxRedirects = request.TorrentMaxRedirects,
                 TorrentStagingTtlSeconds = request.TorrentStagingTtlSeconds,
+                DataUpdateEnabled = request.DataUpdateEnabled,
+                DataUpdateCron = request.DataUpdateCron,
+                DataUpdateManifestUrl = request.DataUpdateManifestUrl,
+                DataUpdateAutoDownload = request.DataUpdateAutoDownload,
+                DataUpdateAutoImport = request.DataUpdateAutoImport,
+                DataUpdateKeepVersions = request.DataUpdateKeepVersions,
+                DataUpdateHttpTimeoutSeconds = request.DataUpdateHttpTimeoutSeconds,
             },
             "ai" => merged with
             {
@@ -2659,6 +2666,10 @@ public static class ApiEndpoints
                 TmdbFailureUseBangumi = request.TmdbFailureUseBangumi,
                 WriteBangumiIdWhenTmdbMatched =
                     request.WriteBangumiIdWhenTmdbMatched,
+                MikanTrustedOffsetCacheEnabled =
+                    request.MikanTrustedOffsetCacheEnabled,
+                MikanTrustedOffsetRequiredEpisodes =
+                    request.MikanTrustedOffsetRequiredEpisodes,
             },
             _ => throw new ArgumentException(
                 "section must be one of: paths, network, ai.",

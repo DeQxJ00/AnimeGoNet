@@ -60,7 +60,7 @@ WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Test
 
 该端点是只读诊断边界：不创建统一导入、下载或元数据任务，不访问 qBittorrent，也不写 SQLite 动画库。`run-stream` 逐行返回 `progress/result/stopped/error`；结果包含原始 Provider 响应、提取后的模型 JSON、结构校验、`request_identity`、累计 Token、每轮脱敏 AI 请求、工具顺序与脱敏 Request/Response Content、本地 offset 及主程序 TMDB 二次验证。密钥、Authorization、Cookie、passkey 和宿主机路径不得出现在审计内容。
 
-`GET /api/v1/ai-test/prompt` 返回当前进程实际使用的 `tmdb-ai-match-v16` 生产模板、程序内置默认模板、是否自定义及长度上限。WebUI“编辑应用配置 / AI 与 MCP”可持久化正式 Prompt 私有覆盖，保存前验证全部必需占位符和条件区块，预览只显示版本、字符数和短 SHA-256，不回显完整差异；保存后重启生效。测试页的高级 Prompt 仍可临时修改并按版本保存浏览器草稿，但只影响当次测试；“恢复默认”恢复当前进程的有效生产模板，不写配置。
+`GET /api/v1/ai-test/prompt` 返回当前进程实际使用的 `tmdb-ai-match-v16` 生产模板、程序内置默认模板、是否自定义及长度上限。WebUI“设置与备份 / AI 与 MCP”可持久化正式 Prompt 私有覆盖，保存前验证全部必需占位符和条件区块，预览只显示版本、字符数和短 SHA-256，不回显完整差异；保存后重启生效。测试页的高级 Prompt 仍可临时修改并按版本保存浏览器草稿，但只影响当次测试；“恢复默认”恢复当前进程的有效生产模板，不写配置。
 
 `POST /api/v1/ai-test/torrent-import` 接收 Torrent base64，后端解析实际文件数并签发 4 小时有效、最多 256 条的 `import_id`；运行请求不能直接声明可信 `torrent_file_count`。`POST /api/v1/ai-test/mikan-import` 使用现有 Mikan DNS/重定向/Host/Cookie/Torrent staging 安全链，并签发同类 `import_id`。响应不返回 Torrent URL、Cookie 或 passkey；WebUI 只填表，不自动运行 AI。
 

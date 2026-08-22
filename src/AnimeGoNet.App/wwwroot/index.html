@@ -320,20 +320,69 @@
       </article>
     </section>
 
-    <section id="runtime-configuration" aria-labelledby="configuration-title" data-workspace="connections" data-subview="application" data-nav-label="应用配置">
+    <section id="runtime-configuration" aria-labelledby="configuration-title" data-workspace="connections" data-subview="paths" data-nav-label="目录与路径">
       <div class="section-heading configuration-heading">
         <div>
-          <p class="eyebrow">Effective configuration</p>
-          <h2 id="configuration-title">运行配置</h2>
+          <p class="eyebrow">Storage flow and bootstrap paths</p>
+          <h2 id="configuration-title">目录与路径</h2>
         </div>
         <div class="configuration-actions">
           <button id="configuration-reload" type="button" class="secondary-button">刷新配置</button>
-          <button id="configuration-edit" type="button" class="primary-button">编辑覆盖</button>
+          <button id="configuration-edit-paths" type="button" class="primary-button">编辑下载与媒体目录</button>
           <button id="configuration-reset" type="button" class="danger-button">恢复部署默认</button>
         </div>
       </div>
-      <p id="configuration-status" class="muted">正在读取包含已保存凭据的生效配置…</p>
+      <p id="configuration-status" class="muted">正在读取目录配置…</p>
+      <div class="path-flow" aria-label="下载与整理路径流向">
+        <span>qB 下载位置</span><b>→</b><span>路径映射</span><b>→</b><span>download_path</span><b>→</b><span>move / copy / link</span><b>→</b><span>save_path</span>
+      </div>
       <div id="configuration" class="configuration-grid" aria-live="polite"></div>
+      <article class="configuration-card data-path-card" aria-labelledby="deployment-data-path-title">
+        <div class="web-api-compatibility-heading">
+          <div><p class="eyebrow">Bootstrap path</p><h3 id="deployment-data-path-title">data_path 启动目录</h3></div>
+          <span>保存后重启</span>
+        </div>
+        <p class="muted">这里保存的是部署 YAML 中的启动引导目录。只修改配置，不会自动搬迁数据库、私有配置、日志或缓存；迁移前请自行复制完整旧目录。</p>
+        <form id="deployment-data-path-form">
+          <label>数据目录
+            <input id="deployment-data-path" type="text" required autocomplete="off" spellcheck="false">
+          </label>
+          <p id="deployment-data-path-status" class="muted" role="status">正在读取部署配置…</p>
+          <div class="source-form-actions">
+            <button id="deployment-data-path-reload" type="button" class="secondary-button">重新读取</button>
+            <button id="deployment-data-path-save" type="submit" class="primary-button">保存并备份</button>
+          </div>
+        </form>
+      </article>
+      <article class="configuration-card path-mapping-card">
+        <h3>qBittorrent 路径映射</h3>
+        <p class="muted">每个 qB 实例的下载目录必须位于全局 <code>download_path</code> 内；跨容器映射在下载工具中按实例维护。</p>
+        <a class="secondary-button inline-navigation-link" href="#/download-tools/qbittorrent">前往下载工具配置</a>
+      </article>
+    </section>
+
+    <section id="network-configuration" aria-labelledby="network-configuration-title" data-workspace="connections" data-subview="network" data-nav-label="网络与代理">
+      <div class="section-heading configuration-heading">
+        <div><p class="eyebrow">Outbound services and selective proxy</p><h2 id="network-configuration-title">网络与代理</h2></div>
+        <button id="configuration-edit-network" type="button" class="primary-button">编辑网络配置</button>
+      </div>
+      <p id="configuration-network-status" class="muted">正在读取 Mikan、TMDB、Bangumi、Torrent 和代理配置…</p>
+      <div id="configuration-network" class="configuration-grid" aria-live="polite"></div>
+    </section>
+
+    <section id="ai-configuration" aria-labelledby="ai-configuration-title" data-workspace="connections" data-subview="ai" data-nav-label="AI 与 MCP">
+      <div class="section-heading configuration-heading">
+        <div><p class="eyebrow">Unified AI metadata matching</p><h2 id="ai-configuration-title">AI 与 MCP</h2></div>
+        <button id="configuration-edit-ai" type="button" class="primary-button">编辑 AI 配置</button>
+      </div>
+      <p id="configuration-ai-status" class="muted">正在读取模型、MCP、Prompt、失败链与可信 Offset…</p>
+      <div id="configuration-ai" class="configuration-grid" aria-live="polite"></div>
+    </section>
+
+    <section id="webui-configuration" aria-labelledby="webui-configuration-title" data-workspace="connections" data-subview="webui" data-nav-label="WebUI">
+      <div class="section-heading configuration-heading">
+        <div><p class="eyebrow">Listener and independent authentication</p><h2 id="webui-configuration-title">WebUI</h2></div>
+      </div>
       <article class="configuration-card web-api-compatibility-card" aria-labelledby="webui-authentication-title">
         <div class="web-api-compatibility-heading">
           <div>

@@ -72,11 +72,17 @@ Provider 内的兼容别名。因此更高层的 `--data_path`、
 在读取 `application.private.json` 后重新应用；保存其他字段不会把部署值固化到
 私有文件。
 
-WebUI 的“设置与备份 → 应用配置”可直接修改全局 `download_path` 和
+WebUI 的“设置与备份 → 目录与路径”可直接修改全局 `download_path` 和
 `save_path`，保存前按候选配置执行绝对路径和目录边界校验，写入私有 revision 并
 备份旧 revision，重启后生效。每个下载器实例的 `download_path` 仍必须落在新的
-全局下载根目录内。`data_path` 决定当前 SQLite、私有配置和备份文件所在位置，运行
-中的 WebUI 只读展示；需要迁移时应停机修改部署配置并整体迁移原数据目录。
+全局下载根目录内。`data_path` 决定当前 SQLite、私有配置和备份文件所在位置；同页
+可单独修改部署 YAML 的 `paths.data_path` 并创建部署配置备份，但不会自动复制或
+删除旧目录中的任何内容，必须在停机迁移完整数据目录后再重启。
+
+应用覆盖按 `paths`、`network`、`ai` 三个分区提供预览和写入端点：
+`/api/v1/config/sections/{section}`。服务端先以最新 revision 重建完整候选，再只合并
+该分区拥有的字段，因此一个页面不会把其他页面的旧表单值写回；revision 冲突仍
+要求重新载入。原 `/api/v1/config` 全量接口保留兼容。
 
 下载器部署锁按实例和字段独立计算，支持 `type`、`base_url`、`username`、
 `password`、`download_path`、`enabled`。`GET /api/v1/downloaders` 的每个实例
@@ -155,8 +161,10 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `0.0.0.0:7991`，并继续强制要求非空 Access Key。host 只接受 DNS 名或 IP 地址，
 port 必须在 0～65535；`0` 只用于由操作系统分配临时测试端口。
 
-三路径和 Web 监听不属于 WebUI 可编辑配置，因此不产生表单锁；`/api/v1/status`
-始终显示最终生效的路径。它们仍严格遵循命令行→环境→YAML 顺序。
+`data_path` 与 Web 监听通过部署 YAML 编辑，不属于应用私有覆盖字段，因此不产生
+应用表单锁；`download_path` / `save_path` 继续参与应用部署锁。`/api/v1/status`
+始终显示最终生效的路径；命令行和环境变量仍高于 YAML，页面保存 YAML 不会伪装成
+已经覆盖更高优先级的运行参数。
 
 不要把密码、Access Key、TMDB/AI key、Cookie、passkey Torrent URL 或真实配置
 文件提交到 Git。仓库和 CI 只使用空 secret、fake transport 或隔离测试凭据。

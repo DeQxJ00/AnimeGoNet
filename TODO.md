@@ -263,7 +263,7 @@
 - [x] Other 人工审核支持逐文件修正 TMDB Series/Season/Episode：schema v50 以 `manual_review_override` 单独审计，服务端先执行 TMDB 三段权威验证；唯一目标复用既有文件安全重新整理，独占源迁出 Other、共享源复制保留；目标已完成/被占用时保留 Other 且不自动删除。审核通过只标记“重新适配审核完成”，任务保持真实 `organized`，删除仍必须走独立显式操作。
 - [x] Web UI 支持按失败阶段、错误码、可重试性和处理状态筛选，并提供分页与最后更新/标题/状态/失败分类排序；提供安全的“重新匹配”，明确区分“可安全重试（需显式）”、需配置修复、需人工处理、处理中、已解析、已跳过和已兜底。当前尚无自动重试编排，因此不把 `retryable=true` 误标为“已经进入自动重试队列”。
 - [x] 对当前应用配置环境变量覆盖字段显示最终有效值、环境变量来源和只读锁定状态；API 拒绝改写被锁字段和凭据，保存其他字段时保留锁字段原有底层覆盖/继承语义，避免环境变量移除后遗留伪覆盖。
-- [x] WebUI 应用配置支持直接编辑全局 `download_path` 与 `save_path`：回填当前期望值，保存前执行绝对路径、下载器目录边界和部署锁校验，进入明文差异、revision 备份及配置归档，保存后明确要求重启；`data_path` 因承载当前 SQLite 与私有配置而保持只读，迁移需停机完成。
+- [x] “设置与备份”已拆为“目录与路径 / AI 与 MCP / 网络与代理 / WebUI / 导入导出与备份”；`paths`、`network`、`ai` 分区 API 只合并各自字段并保留 revision 冲突保护，避免不同页面旧值互相覆盖。目录页直接编辑全局 `download_path` 与 `save_path`，显示 qB 路径映射到媒体库的完整流向；`data_path` 另行合并写入部署 YAML 并备份，明确不自动搬迁任何 SQLite、私有配置、日志或缓存，迁移仍需停机复制完整旧目录。
 - [x] 动画库季度详情支持“Mikan 下载全部 / EP 自动补完”：从该季度历史任务提取可审计的 `source_profile_id + mikanid` 关联，即使旧任务缺少 `groupid` 也可从 `/Home/Bangumi/{mikanid}` 的字幕组列表发现可用 groupid；已有 groupid 默认勾选，用户可改选或多选，再按配置的 Mikan Base URL 分别读取 `/RSS/Bangumi`。页面展示字幕组、来源 EP、人工/可信 Offset 推导的目标 TMDB EP、完成去重状态和可勾选列表；已有来源完成 alias 或目标 TMDB EP 默认不选，非普通 EP 默认不选，未知 Offset 明示后交给正式元数据流程。确认时重新获取作品页与 RSS、校验字幕组归属、季度 revision 与候选身份并复用现有黑白名单、有序规则、SQLite 去重和统一导入；选择超过 12 条由 WebUI 二次确认，不等待下载完成且不向响应/页面暴露 Torrent URL 或 passkey。
 - [x] 实现插件分类、启停、args/vars 和校验视图：外部包分类/版本/RID/能力、逐包校验错误、运行/退避/自动禁用/reset、revision 持久启停、args JSON 与 schema vars 表单均已接入响应式页面；配置 API/WebUI 直接回填 `writeOnly` 值并保留显式清除，运行状态、错误和日志不返回原值。
 - [x] 完成本机配置敏感值全局直显：主配置密钥及保存前差异、qB 用户名/密码、Mikan Cookie/RSS URL、AI Tester API Key、手动 Torrent/RSS URL 和外部插件 `writeOnly` 值均可直接查看；186 个定向 App/API/WebUI 测试验证回填与日志/运行状态脱敏边界。
