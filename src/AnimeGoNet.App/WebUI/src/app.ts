@@ -5840,10 +5840,12 @@ async function loadConfiguration(): Promise<void> {
         ["TMDB 缓存", `${config.metadata.tmdb.cache_hours} 小时`],
         ["Bangumi API", config.metadata.bangumi.base_url],
       ]),
-      configurationCard("Torrent 与数据更新", [
+      configurationCard("Torrent 获取", [
         ["Torrent HTTP 超时", `${config.torrent_fetch.http_timeout_seconds} 秒`],
         ["Torrent 最大跳转", `${config.torrent_fetch.max_redirects} 次`],
         ["Torrent 最大响应", `${config.torrent_fetch.max_response_bytes} bytes`],
+      ]),
+      configurationCard("AnimeGoNetData 更新", [
         ["AnimeGoNetData Manifest", config.data_update.manifest_url ?? "未配置"],
         ["AnimeGoNetData 定时更新", enabledLabel(config.data_update.enabled)],
       ]),

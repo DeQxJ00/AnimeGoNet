@@ -1740,10 +1740,15 @@
           </div>
         </fieldset>
         <label>AI 超时（秒）<input id="configuration-ai-timeout" type="number" min="1" max="86400" required></label>
-        <label>Torrent HTTP 超时（秒）<input id="configuration-torrent-timeout" type="number" min="1" max="86400" required></label>
-        <label>Torrent 最大响应（bytes）<input id="configuration-torrent-bytes" type="number" min="1" max="1073741824" required></label>
-        <label>Torrent 最大跳转<input id="configuration-torrent-redirects" type="number" min="0" max="10" required></label>
-        <label>Torrent 暂存 TTL（秒）<input id="configuration-torrent-ttl" type="number" min="1" max="604800" required></label>
+        <fieldset class="wide configuration-data-update-editor">
+          <legend>Torrent 获取</legend>
+          <div class="configuration-data-update-grid">
+            <label>Torrent HTTP 超时（秒）<input id="configuration-torrent-timeout" type="number" min="1" max="86400" required></label>
+            <label>Torrent 最大响应（bytes）<input id="configuration-torrent-bytes" type="number" min="1" max="1073741824" required></label>
+            <label>Torrent 最大跳转<input id="configuration-torrent-redirects" type="number" min="0" max="10" required></label>
+            <label>Torrent 暂存 TTL（秒）<input id="configuration-torrent-ttl" type="number" min="1" max="604800" required></label>
+          </div>
+        </fieldset>
         <fieldset class="wide configuration-data-update-editor">
           <legend>AnimeGoNetData 更新</legend>
           <p class="configuration-data-update-caption">保存后立即替换定时任务，无需重启。启用定时更新时必须填写 Manifest URL；关闭只停止定时任务，不影响手动检查、下载、导入和离线包导入。</p>

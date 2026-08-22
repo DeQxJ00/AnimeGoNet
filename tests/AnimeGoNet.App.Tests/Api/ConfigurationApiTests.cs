@@ -357,6 +357,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-bangumi-retry-count\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-bangumi-retry-delay\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-enabled\"", html, StringComparison.Ordinal);
+        Assert.Contains("<legend>Torrent 获取</legend>", html, StringComparison.Ordinal);
+        Assert.Contains("configurationCard(\"Torrent 获取\"", script, StringComparison.Ordinal);
+        Assert.Contains("configurationCard(\"AnimeGoNetData 更新\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("configurationCard(\"Torrent 与数据更新\"", script, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-cron\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-data-update-manifest\"", html, StringComparison.Ordinal);
         Assert.Contains("AnimeGoNetData 更新策略与 Cron 即时生效", html, StringComparison.Ordinal);
