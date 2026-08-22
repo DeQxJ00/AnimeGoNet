@@ -34,6 +34,39 @@ public sealed class MikanRssBatchStoreTests
     }
 
     [Fact]
+    public async Task RecreatesEntriesRemovedByOlderTaskDeletionWithoutDuplicatingBatch()
+    {
+        await using var fixture = await BatchFixture.CreateAsync();
+        var plan = Plan();
+        var now = DateTimeOffset.Parse("2026-07-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var first = await fixture.Store.SaveAsync("mikan", 3, true, plan, now);
+        var removed = first.Entries.Single(entry => entry.Decision.Kind == MikanRssDecisionKind.Winner);
+
+        await using (var connection = await fixture.Database.Database.OpenConnectionAsync())
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.CommandText = """
+                DELETE FROM mikan_rss_batch_entries
+                WHERE batch_id = $batch AND candidate_id = $candidate;
+                """;
+            delete.Parameters.AddWithValue("$batch", first.Id);
+            delete.Parameters.AddWithValue("$candidate", removed.CandidateId);
+            Assert.Equal(1, await delete.ExecuteNonQueryAsync());
+        }
+
+        var recovered = await fixture.Store.SaveAsync("mikan", 3, true, plan, now.AddMinutes(1));
+
+        Assert.Equal(first.Id, recovered.Id);
+        Assert.Equal(2, recovered.Entries.Count);
+        Assert.Equal("ready", recovered.Entries.Single(entry =>
+            entry.CandidateId == removed.CandidateId).EffectState);
+        await using var verifyConnection = await fixture.Database.Database.OpenConnectionAsync();
+        await using var verify = verifyConnection.CreateCommand();
+        verify.CommandText = "SELECT COUNT(*) FROM mikan_rss_batches;";
+        Assert.Equal(1L, (long)(await verify.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
     public async Task OnlyWinnerCanBeClaimedAndExpiredLeaseCanRecover()
     {
         await using var fixture = await BatchFixture.CreateAsync();

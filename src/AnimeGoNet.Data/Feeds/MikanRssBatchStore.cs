@@ -50,7 +50,8 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
             if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return (await GetByFingerprintAsync(fingerprint, cancellationToken).ConfigureAwait(false))!;
+                return await RestoreMissingEntriesAsync(fingerprint, plan, cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -62,6 +63,63 @@ public sealed class MikanRssBatchStore(AnimeGoSqliteDatabase database)
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return (await GetAsync(batchId, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    private async Task<MikanRssBatchRecord> RestoreMissingEntriesAsync(
+        string fingerprint,
+        MikanRssBatchPlan plan,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        string batchId;
+        await using (var findBatch = connection.CreateCommand())
+        {
+            findBatch.Transaction = transaction;
+            findBatch.CommandText = "SELECT id FROM mikan_rss_batches WHERE fingerprint = $fingerprint;";
+            findBatch.Parameters.AddWithValue("$fingerprint", fingerprint);
+            batchId = (string?)await findBatch.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Mikan RSS batch fingerprint disappeared concurrently.");
+        }
+
+        var storedOrdinals = new Dictionary<string, int>(StringComparer.Ordinal);
+        await using (var readEntries = connection.CreateCommand())
+        {
+            readEntries.Transaction = transaction;
+            readEntries.CommandText = """
+                SELECT candidate_id, ordinal
+                FROM mikan_rss_batch_entries
+                WHERE batch_id = $batch;
+                """;
+            readEntries.Parameters.AddWithValue("$batch", batchId);
+            await using var reader = await readEntries.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                storedOrdinals.Add(reader.GetString(0), reader.GetInt32(1));
+            }
+        }
+
+        var plannedOrdinals = plan.Items
+            .Select((item, ordinal) => new { item.Candidate.Id, Ordinal = ordinal })
+            .ToDictionary(item => item.Id, item => item.Ordinal, StringComparer.Ordinal);
+        if (storedOrdinals.Any(stored =>
+                !plannedOrdinals.TryGetValue(stored.Key, out var ordinal) || ordinal != stored.Value))
+        {
+            throw new InvalidOperationException("Mikan RSS batch entries do not match their persisted fingerprint.");
+        }
+
+        for (var index = 0; index < plan.Items.Count; index++)
+        {
+            if (!storedOrdinals.ContainsKey(plan.Items[index].Candidate.Id))
+            {
+                await InsertEntryAsync(connection, transaction, batchId, index, plan.Items[index], cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return await GetByFingerprintAsync(fingerprint, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Mikan RSS batch could not be read after entry recovery.");
     }
 
     public async Task<MikanRssWinnerLease?> TryClaimWinnerAsync(

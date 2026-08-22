@@ -108,6 +108,7 @@ public sealed class DeleteExecutionProcessorTests
         Assert.Equal(1, state.SkippedItems);
         Assert.False(await TaskExistsAsync(app, prepared.TaskId));
         Assert.False(await RssReferenceExistsAsync(app, prepared.TaskId));
+        Assert.True(await RssCandidateIsReadyAsync(app));
     }
 
     private static async Task<PreparedPlan> PreparePlanAsync(
@@ -253,6 +254,24 @@ public sealed class DeleteExecutionProcessorTests
                 SELECT 1 FROM mikan_rss_batch_entries WHERE ingest_task_id = $task_id);
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
+        return Convert.ToInt64(
+            await command.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
+    private static async Task<bool> RssCandidateIsReadyAsync(RunningApp app)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1 FROM mikan_rss_batch_entries
+                WHERE batch_id = 'delete-rss-batch'
+                  AND candidate_id = 'candidate'
+                  AND effect_state = 'ready'
+                  AND ingest_task_id IS NULL);
+            """;
         return Convert.ToInt64(
             await command.ExecuteScalarAsync(),
             System.Globalization.CultureInfo.InvariantCulture) == 1;
