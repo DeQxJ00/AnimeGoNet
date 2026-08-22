@@ -332,6 +332,8 @@ public sealed record ConfigurationMigrationDiagnosticResponse(
     [property: JsonPropertyName("blocks_downloads")] bool BlocksDownloads);
 
 public sealed record EditableConfigurationResponse(
+    [property: JsonPropertyName("download_path")] string DownloadPath,
+    [property: JsonPropertyName("save_path")] string SavePath,
     [property: JsonPropertyName("outbound_proxy_url")] string? OutboundProxyUrl,
     [property: JsonPropertyName("outbound_proxy_hosts")] IReadOnlyList<string> OutboundProxyHosts,
     [property: JsonPropertyName("mikan_base_url")] string MikanBaseUrl,
@@ -450,7 +452,9 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("mikan_bangumi_identity_cache_hours")] double? MikanBangumiIdentityCacheHours = null,
     [property: JsonPropertyName("ai_reasoning_effort")] string? AiReasoningEffort = null,
     [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
-    int? MikanTrustedOffsetRequiredEpisodes = null);
+    int? MikanTrustedOffsetRequiredEpisodes = null,
+    [property: JsonPropertyName("download_path")] string? DownloadPath = null,
+    [property: JsonPropertyName("save_path")] string? SavePath = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,

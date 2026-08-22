@@ -47,9 +47,11 @@ Git、上传公开工单或放入普通日志。
 `data_path/backups/configuration-archives` 创建 `pre-import-*` 或 `pre-restore-*` 安全备份；
 手动备份使用 `manual-*`。配置包最大 4 MiB，Linux/macOS 文件权限固定为当前用户读写。
 
-归档不包含 `data_path/download_path/save_path` 三个部署根目录、部署 YAML/Access Key、SQLite
+归档不包含 `data_path`、部署 YAML/Access Key、SQLite
 任务与下载记录、可信 offset 学习证据、Bangumi/TMDB 缓存、日志、媒体库文件或 qB profile。
-导入后要检查目标机的 qB 下载路径和共享挂载，再重启主程序；完整灾难恢复仍应按下述停机流程
+WebUI 私有覆盖中的全局 `download_path` / `save_path` 会随应用配置进入归档，但归档
+不包含这些目录里的任何文件；跨机器导入后必须按目标机改正路径并检查 qB 下载路径和
+共享挂载，再重启主程序。完整灾难恢复仍应按下述停机流程
 复制整个 `data_path`。
 
 一致性备份建议停机执行：

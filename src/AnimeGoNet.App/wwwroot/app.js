@@ -3791,6 +3791,8 @@ function syncConfigurationSecretInputs() {
         aiKey.value = "";
 }
 const configurationLockSelectors = {
+    download_path: ["#configuration-download-path"],
+    save_path: ["#configuration-save-path"],
     outbound_proxy_url: ["#configuration-outbound-proxy-url"],
     outbound_proxy_hosts: ["#configuration-outbound-proxy-hosts"],
     mikan_base_url: ["#configuration-mikan-url"],
@@ -3861,6 +3863,9 @@ function openConfigurationEditor() {
         return;
     clearConfigurationPreview();
     const editable = currentConfiguration.editable;
+    setConfigurationValue("#configuration-data-path", currentConfiguration.paths.data_path);
+    setConfigurationValue("#configuration-download-path", editable.download_path);
+    setConfigurationValue("#configuration-save-path", editable.save_path);
     setConfigurationValue("#configuration-outbound-proxy-url", editable.outbound_proxy_url ?? "");
     element("#configuration-outbound-proxy-hosts").value =
         editable.outbound_proxy_hosts.join("\n");
@@ -3928,6 +3933,8 @@ function openConfigurationEditor() {
     configurationDialog.showModal();
 }
 const configurationFieldLabels = {
+    download_path: "全局下载根目录",
+    save_path: "媒体库目录",
     outbound_proxy_url: "全局代理地址",
     outbound_proxy_hosts: "使用代理的域名",
     mikan_base_url: "Mikan 地址",
@@ -3981,6 +3988,8 @@ function configurationRequest() {
         throw new Error("配置尚未载入");
     }
     return {
+        download_path: element("#configuration-download-path").value,
+        save_path: element("#configuration-save-path").value,
         outbound_proxy_url: element("#configuration-outbound-proxy-url").value || null,
         outbound_proxy_hosts: element("#configuration-outbound-proxy-hosts")
             .value.split(/[,;\r\n]+/u)

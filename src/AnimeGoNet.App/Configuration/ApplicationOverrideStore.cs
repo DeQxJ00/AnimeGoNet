@@ -63,7 +63,9 @@ public sealed record ApplicationOverrideEntry(
     bool? AiDebugMode = null,
     bool? AiReasoningEffortOverridden = null,
     string? AiReasoningEffort = null,
-    int? MikanTrustedOffsetRequiredEpisodes = null);
+    int? MikanTrustedOffsetRequiredEpisodes = null,
+    string? DownloadPath = null,
+    string? SavePath = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -198,6 +200,17 @@ public sealed class ApplicationOverrideStore : IDisposable
 
         var inheritedFields = settings.InheritedFields?
             .ToHashSet(StringComparer.Ordinal) ?? [];
+        var paths = options.Paths with
+        {
+            DownloadPath = inheritedFields.Contains("download_path")
+                || settings.DownloadPath is null
+                ? options.Paths.DownloadPath
+                : Path.GetFullPath(settings.DownloadPath),
+            SavePath = inheritedFields.Contains("save_path")
+                || settings.SavePath is null
+                ? options.Paths.SavePath
+                : Path.GetFullPath(settings.SavePath),
+        };
         var mikanBaseUrl = inheritedFields.Contains("mikan_base_url")
             || settings.MikanBaseUrl is null
             ? options.Metadata.Mikan.BaseUrl
@@ -269,6 +282,7 @@ public sealed class ApplicationOverrideStore : IDisposable
 
         return options with
         {
+            Paths = paths,
             OutboundProxy = outboundProxy,
             Metadata = options.Metadata with
             {

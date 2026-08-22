@@ -236,6 +236,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-form\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-lock-summary\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-data-path\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-download-path\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-save-path\"", html, StringComparison.Ordinal);
+        Assert.Contains("每个 qBittorrent 实例的下载目录仍必须位于全局下载根目录内", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-mikan-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-image-url\"", html, StringComparison.Ordinal);
@@ -281,6 +285,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("Bangumi 完全兜底（一般不启用这个）", html, StringComparison.Ordinal);
         Assert.Contains("季度固定 S01；需要 bgmid；不输出有效 tmdbid", html, StringComparison.Ordinal);
         Assert.Contains("outbound_proxy_hosts", script, StringComparison.Ordinal);
+        Assert.Contains("configuration-download-path", script, StringComparison.Ordinal);
+        Assert.Contains("configuration-save-path", script, StringComparison.Ordinal);
         Assert.DoesNotContain("bangumi_proxy_url", script, StringComparison.Ordinal);
         Assert.Contains("mikan_base_url", script, StringComparison.Ordinal);
         Assert.Contains("tmdb_image_base_url", script, StringComparison.Ordinal);
@@ -316,6 +322,58 @@ public sealed class ConfigurationApiTests
         Assert.Contains("data_update_manifest_url", script, StringComparison.Ordinal);
         Assert.Contains("修改已即时生效", script, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GlobalDownloadAndSavePathsCanBePreviewedSavedAndRemainPendingRestart()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var downloadPath = Path.Combine(app.RootPath, "download");
+        var savePath = Path.Combine(app.RootPath, "media-library-next");
+
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/config/preview",
+            Payload(
+                expectedRevision: 0,
+                downloadPath: downloadPath,
+                savePath: savePath));
+        using var previewJson = JsonDocument.Parse(
+            await preview.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        var changes = previewJson.RootElement.GetProperty("changes")
+            .EnumerateArray()
+            .ToDictionary(item => item.GetProperty("field").GetString()!);
+        Assert.Equal(Path.GetFullPath(downloadPath), changes["download_path"]
+            .GetProperty("after").GetString());
+        Assert.Equal(Path.GetFullPath(savePath), changes["save_path"]
+            .GetProperty("after").GetString());
+        Assert.Equal("restart", changes["download_path"].GetProperty("effect").GetString());
+        Assert.True(previewJson.RootElement.GetProperty("restart_required").GetBoolean());
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                downloadPath: downloadPath,
+                savePath: savePath));
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+
+        using var response = await app.Client.GetAsync("/api/v1/config");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.NotEqual(Path.GetFullPath(downloadPath), json.RootElement
+            .GetProperty("paths").GetProperty("download_path").GetString());
+        Assert.Equal(Path.GetFullPath(downloadPath), json.RootElement
+            .GetProperty("editable").GetProperty("download_path").GetString());
+        Assert.Equal(Path.GetFullPath(savePath), json.RootElement
+            .GetProperty("editable").GetProperty("save_path").GetString());
+        Assert.True(json.RootElement.GetProperty("restart_required").GetBoolean());
+
+        var stored = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.Equal(Path.GetFullPath(downloadPath), stored.Settings?.DownloadPath);
+        Assert.Equal(Path.GetFullPath(savePath), stored.Settings?.SavePath);
     }
 
     [Fact]
@@ -1203,12 +1261,16 @@ public sealed class ConfigurationApiTests
         double? mikanEpisodeIdentityCacheHours = null,
         double? mikanBangumiIdentityCacheHours = null,
         string? aiReasoningEffort = null,
-        int? mikanTrustedOffsetRequiredEpisodes = null)
+        int? mikanTrustedOffsetRequiredEpisodes = null,
+        string? downloadPath = null,
+        string? savePath = null)
     {
         var json = JsonSerializer.Serialize(new
         {
             outbound_proxy_url = outboundProxy,
             outbound_proxy_hosts = outboundHosts ?? [],
+            download_path = downloadPath,
+            save_path = savePath,
             mikan_episode_identity_cache_hours = mikanEpisodeIdentityCacheHours,
             mikan_bangumi_identity_cache_hours = mikanBangumiIdentityCacheHours,
             tmdb_base_url = baseUrl,

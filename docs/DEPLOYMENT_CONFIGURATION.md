@@ -67,10 +67,16 @@ Provider 内的兼容别名。因此更高层的 `--data_path`、
 并返回 `command_line_arguments`、统一的 `controlling_keys` 以及
 `environment` / `command_line` / `environment_and_command_line` 来源。命令行只
 投影参数名，不投影 `=` 后的 URL 或 secret。当前全部可编辑字段均参与部署锁：
-Mikan 地址、TMDB API/图片地址、TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时/推理程度/正式 Prompt、Bangumi 完全兜底、
+全局 `download_path` / `save_path`、Mikan 地址、TMDB API/图片地址、TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时/推理程度/正式 Prompt、Bangumi 完全兜底、
 可信 offset 缓存、Torrent HTTP/容量/redirect/staging 以及数据更新设置。锁定值
 在读取 `application.private.json` 后重新应用；保存其他字段不会把部署值固化到
 私有文件。
+
+WebUI 的“设置与备份 → 应用配置”可直接修改全局 `download_path` 和
+`save_path`，保存前按候选配置执行绝对路径和目录边界校验，写入私有 revision 并
+备份旧 revision，重启后生效。每个下载器实例的 `download_path` 仍必须落在新的
+全局下载根目录内。`data_path` 决定当前 SQLite、私有配置和备份文件所在位置，运行
+中的 WebUI 只读展示；需要迁移时应停机修改部署配置并整体迁移原数据目录。
 
 下载器部署锁按实例和字段独立计算，支持 `type`、`base_url`、`username`、
 `password`、`download_path`、`enabled`。`GET /api/v1/downloaders` 的每个实例

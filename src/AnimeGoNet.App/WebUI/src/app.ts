@@ -387,6 +387,8 @@ interface RuntimeConfiguration {
     hot_reload_supported: boolean;
   };
   editable: {
+    download_path: string;
+    save_path: string;
     outbound_proxy_url: string | null;
     outbound_proxy_hosts: string[];
     mikan_base_url: string;
@@ -466,6 +468,8 @@ interface ConfigurationMigrationDiagnostic {
 }
 
 interface ConfigurationUpdatePayload {
+  download_path: string;
+  save_path: string;
   outbound_proxy_url: string | null;
   outbound_proxy_hosts: string[];
   mikan_base_url: string;
@@ -5929,6 +5933,8 @@ function syncConfigurationSecretInputs(): void {
 }
 
 const configurationLockSelectors: Record<string, string[]> = {
+  download_path: ["#configuration-download-path"],
+  save_path: ["#configuration-save-path"],
   outbound_proxy_url: ["#configuration-outbound-proxy-url"],
   outbound_proxy_hosts: ["#configuration-outbound-proxy-hosts"],
   mikan_base_url: ["#configuration-mikan-url"],
@@ -6003,6 +6009,9 @@ function openConfigurationEditor(): void {
   if (!currentConfiguration) return;
   clearConfigurationPreview();
   const editable = currentConfiguration.editable;
+  setConfigurationValue("#configuration-data-path", currentConfiguration.paths.data_path);
+  setConfigurationValue("#configuration-download-path", editable.download_path);
+  setConfigurationValue("#configuration-save-path", editable.save_path);
   setConfigurationValue(
     "#configuration-outbound-proxy-url",
     editable.outbound_proxy_url ?? "",
@@ -6125,6 +6134,8 @@ function openConfigurationEditor(): void {
 }
 
 const configurationFieldLabels: Record<string, string> = {
+  download_path: "全局下载根目录",
+  save_path: "媒体库目录",
   outbound_proxy_url: "全局代理地址",
   outbound_proxy_hosts: "使用代理的域名",
   mikan_base_url: "Mikan 地址",
@@ -6179,6 +6190,10 @@ function configurationRequest(): ConfigurationUpdatePayload {
     throw new Error("配置尚未载入");
   }
   return {
+    download_path:
+      element<HTMLInputElement>("#configuration-download-path").value,
+    save_path:
+      element<HTMLInputElement>("#configuration-save-path").value,
     outbound_proxy_url:
       element<HTMLInputElement>("#configuration-outbound-proxy-url").value || null,
     outbound_proxy_hosts:

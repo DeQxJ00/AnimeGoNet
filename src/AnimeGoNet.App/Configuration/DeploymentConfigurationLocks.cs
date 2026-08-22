@@ -26,6 +26,8 @@ public sealed class DeploymentConfigurationLocks
 {
     private static readonly LockDefinition[] Definitions =
     [
+        new("download_path", ["download_path", "paths:download_path"]),
+        new("save_path", ["save_path", "paths:save_path"]),
         new("mikan_base_url", ["mikan_base_url", "metadata:mikan:base_url"]),
         new("mikan_episode_identity_cache_hours", ["mikan_episode_identity_cache_hours", "metadata:mikan:episode_identity_cache_hours"]),
         new("mikan_bangumi_identity_cache_hours", ["mikan_bangumi_identity_cache_hours", "metadata:mikan:bangumi_identity_cache_hours"]),
@@ -204,6 +206,14 @@ public sealed class DeploymentConfigurationLocks
         {
             candidate = candidate with
             {
+                DownloadPath = Preserve(
+                    "download_path",
+                    current.DownloadPath,
+                    candidate.DownloadPath),
+                SavePath = Preserve(
+                    "save_path",
+                    current.SavePath,
+                    candidate.SavePath),
                 MikanBaseUrl = Preserve(
                     "mikan_base_url",
                     current.MikanBaseUrl,
@@ -448,6 +458,15 @@ public sealed class DeploymentConfigurationLocks
         ArgumentNullException.ThrowIfNull(candidate);
 
         var outboundProxy = candidate.OutboundProxy;
+        var paths = candidate.Paths;
+        if (IsLocked("download_path"))
+        {
+            paths = paths with { DownloadPath = deployment.Paths.DownloadPath };
+        }
+        if (IsLocked("save_path"))
+        {
+            paths = paths with { SavePath = deployment.Paths.SavePath };
+        }
         if (IsLocked("outbound_proxy_url"))
         {
             outboundProxy = outboundProxy with { Url = deployment.OutboundProxy.Url };
@@ -704,6 +723,7 @@ public sealed class DeploymentConfigurationLocks
 
         return candidate with
         {
+            Paths = paths,
             OutboundProxy = outboundProxy,
             Metadata = candidate.Metadata with
             {
@@ -729,6 +749,14 @@ public sealed class DeploymentConfigurationLocks
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(candidate);
         var changed = new List<string>();
+        AddIfChanged(
+            "download_path",
+            deployment.Paths.DownloadPath,
+            candidate.Paths.DownloadPath);
+        AddIfChanged(
+            "save_path",
+            deployment.Paths.SavePath,
+            candidate.Paths.SavePath);
         AddIfChanged(
             "outbound_proxy_url",
             deployment.OutboundProxy.Url,

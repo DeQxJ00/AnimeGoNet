@@ -9,6 +9,29 @@ namespace AnimeGoNet.App.Tests.Configuration;
 public sealed class ApplicationOverrideStoreTests
 {
     [Fact]
+    public void ApplyOverridesDownloadAndSavePathsWithoutChangingDataPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"animegonet-paths-{Guid.NewGuid():N}");
+        var defaults = AnimeGoDefaults.CreateNative(root);
+        var downloadPath = Path.Combine(root, "downloads-next");
+        var savePath = Path.Combine(root, "library-next");
+        var applied = ApplicationOverrideStore.Apply(
+            defaults,
+            new ApplicationOverrideSnapshot(
+                1,
+                1,
+                Entry() with
+                {
+                    DownloadPath = downloadPath,
+                    SavePath = savePath,
+                }));
+
+        Assert.Equal(defaults.Paths.DataPath, applied.Paths.DataPath);
+        Assert.Equal(Path.GetFullPath(downloadPath), applied.Paths.DownloadPath);
+        Assert.Equal(Path.GetFullPath(savePath), applied.Paths.SavePath);
+    }
+
+    [Fact]
     public async Task SaveReloadDeleteUseAtomicVersionedPrivateFile()
     {
         var root = Path.Combine(

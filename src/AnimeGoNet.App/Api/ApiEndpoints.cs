@@ -1993,6 +1993,8 @@ public static class ApiEndpoints
         var fetch = desired.TorrentFetch;
         var dataUpdate = desired.DataUpdate;
         return new EditableConfigurationResponse(
+            desired.Paths.DownloadPath,
+            desired.Paths.SavePath,
             desired.OutboundProxy.Url?.AbsoluteUri,
             desired.OutboundProxy.HostPatterns,
             mikan.BaseUrl.AbsoluteUri,
@@ -2091,6 +2093,8 @@ public static class ApiEndpoints
             deployment.Metadata.Mikan.BangumiIdentityCacheTtl.TotalHours,
             deployment.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri,
             deployment.Metadata.Tmdb.CacheTtl.TotalHours,
+            deployment.Paths.DownloadPath,
+            deployment.Paths.SavePath,
             DateTimeOffset.UtcNow);
         var requestedCandidate = ApplicationOverrideStore.Apply(
             deployment,
@@ -2175,6 +2179,9 @@ public static class ApiEndpoints
         var afterTorrent = candidate.TorrentFetch;
         var beforeDataUpdate = current.DataUpdate;
         var afterDataUpdate = candidate.DataUpdate;
+
+        Add("download_path", current.Paths.DownloadPath, candidate.Paths.DownloadPath);
+        Add("save_path", current.Paths.SavePath, candidate.Paths.SavePath);
 
         Add(
             "outbound_proxy_url",
@@ -2431,9 +2438,17 @@ public static class ApiEndpoints
         double deploymentMikanBangumiIdentityCacheHours,
         string deploymentTmdbImageBaseUrl,
         double deploymentTmdbCacheHours,
+        string deploymentDownloadPath,
+        string deploymentSavePath,
         DateTimeOffset utcNow)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(request.ExpectedConfigurationRevision);
+        var downloadPath = NormalizeAbsolutePath(
+            request.DownloadPath ?? current?.DownloadPath ?? deploymentDownloadPath,
+            "download_path");
+        var savePath = NormalizeAbsolutePath(
+            request.SavePath ?? current?.SavePath ?? deploymentSavePath,
+            "save_path");
         var mikanBaseUrl = request.MikanBaseUrl?.Trim()
             ?? current?.MikanBaseUrl
             ?? deploymentMikanBaseUrl;
@@ -2697,7 +2712,9 @@ public static class ApiEndpoints
             MikanEpisodeIdentityCacheHours: mikanEpisodeIdentityCacheHours,
             MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours,
             AiDebugMode: request.AiDebugMode ?? current?.AiDebugMode ?? false,
-            MikanTrustedOffsetRequiredEpisodes: mikanTrustedOffsetRequiredEpisodes);
+            MikanTrustedOffsetRequiredEpisodes: mikanTrustedOffsetRequiredEpisodes,
+            DownloadPath: downloadPath,
+            SavePath: savePath);
     }
 
     private static string PromptSummary(string template) =>
@@ -2781,6 +2798,23 @@ public static class ApiEndpoints
     private static string NormalizeRequiredUrl(string? value, string name) =>
         NormalizeOptionalUrl(value, name)
         ?? throw new ArgumentException($"{name} is required.");
+
+    private static string NormalizeAbsolutePath(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Path.IsPathFullyQualified(value.Trim()))
+        {
+            throw new ArgumentException($"{name} must be an absolute path.");
+        }
+
+        try
+        {
+            return Path.GetFullPath(value.Trim());
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+        {
+            throw new ArgumentException($"{name} must be a valid absolute path.", exception);
+        }
+    }
 
     private static string[] NormalizeHostPatterns(IEnumerable<string> values)
     {
