@@ -121,6 +121,10 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 季度详情同时返回元数据审计投影。`manual_offsets` 只显示当前仍与该规范季度或其关联 Mikan 任务有关、且确实含 EP offset 的人工规则，并同时标明启停、作用域和 revision；它是“当前配置”，不冒充某次历史 Run 实际使用的值。关联任务用规范 `task_files` 或任一解析 Run 的 `tmdb_series_id + tmdb_season_number` 建立，按最近更新时间返回最多 50 条。季度时间线再读取这些任务的全部历史 Run，按尝试时间倒序返回最多 200 条，保留阶段、策略、确定性优先级、结果、稳定错误码、脱敏原因、可重试性和耗时。响应提供总数与 `*_truncated`，页面把三类信息放在独立可展开区块，不用单个“最后成功策略”覆盖历史失败。
 
+季度详情的“下载全部 / 补全 EP”只在历史关联任务能确定 `source_profile_id + mikanid + groupid` 时启用；多个来源或字幕组按最近使用时间列为可选绑定。预览调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/mikan-completion/preview`，使用配置的 Mikan Base URL 读取对应 `/RSS/Bangumi?bangumiId=...&subgroupid=...`，显示普通来源 EP、可用人工/可信 Offset 推导的目标 TMDB EP、大小、发布日期及完成状态。来源 completion alias、目标 TMDB Episode 已完成和非普通 EP 默认不选；没有 Offset 时不伪造目标集号，明确显示“待主流程匹配”。页面不接收或展示 Torrent URL、passkey。
+
+确认调用同路径的 `POST .../mikan-completion`，提交预览的季度 `resource_revision` 与稳定候选 ID。服务端重新获取 RSS 并校验绑定、季度 revision 和候选仍存在，再把所选条目交回正式 Mikan RSS 处理器，因此来源级黑白名单、可增删有序规则、winner lease、SQLite completion 去重和统一导入均保持生效，不建立第二套“全集下载”业务链。选择超过 12 条时 WebUI 必须二次确认；成功只报告批次、已创建任务、已存在及规则拒绝/失败数量，不在弹窗内等待 qBittorrent 下载完成。
+
 `GET /api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}` 依次读取 Season poster、Series poster、本地 SVG 占位图。远端图片使用 TMDB 的无密钥图片地址并按全局域名代理规则选择直连/代理，限制 5 MiB、校验 JPEG/PNG/WebP 魔数、合并同一 poster 的并发下载，并缓存到 `data_path/cache/covers`。上游超时、不可用或返回非图片时均返回短缓存占位图；响应头标明来源、缓存命中和安全警告码。浏览器请求、URL 和响应中都没有 TMDB API key。
 
 可信 Mikan offset 面板读取 `/api/v1/mikan/trusted-offsets`，显示 `(mikanid, groupid)`、TMDB Series/Season、带符号 offset、Learning/Trusted/ConflictReset 和不同文件名 EP 进度。设置编辑器将“可信 EP Offset”放在独立配置框中，不混入“匹配与兜底”；说明明确规定来源 EP 是 Torrent 视频文件名解析出的 EP、目标 TMDB EP = 文件名 EP + Offset，并可设置 1～100 的可信次数（默认 3）。清理操作只调用目标键 DELETE，并在确认文本中明确排除人工规则、完成记录与媒体文件。
@@ -141,7 +145,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 确认保存仍使用预览时的 `expected_configuration_revision`；并发变化返回冲突并要求重新预览。覆盖现有私有配置或恢复部署默认前，服务端先把旧 revision 保存到 `data_path/backups/application.private.revision-{20位revision}.json`，再原子替换当前文件。响应只返回被备份的 revision，不返回备份内容或路径；首个私有 revision 没有旧文件可备份。原始部署 YAML 继续只由运维维护，Web 不展示含 secret 的原文，也不改写其注释和格式。
 
-“设置与备份 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则与外部插件；密码、Cookie、API Key、插件私有变量及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含部署三路径/Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
+“设置与备份 / 导入导出与备份”提供独立的总配置迁移面板。导出和本机备份覆盖应用私有覆盖、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则与外部插件；密码、Cookie、API Key、插件私有变量、全局 `download_path` / `save_path` 及 qB 实例下载路径会进入 JSON，页面明确按敏感文件警告。导入必须先调用 `/api/v1/configuration-archive/import/preview`，显示 SHA-256、导出时间、各配置类型数量和警告；只有未修改的同一文件才能带 `expected_sha256` 确认。确认导入或恢复现有备份前自动生成安全备份，完成后提示重启。备份列表可以下载、恢复和经二次确认删除；页面不把文件内容、路径或摘要写进 localStorage。归档采用同 ID 覆盖、包外项目保留的安全合并，不包含当前 `data_path`、Access Key、任务、下载历史、可信 offset、缓存、日志和媒体文件。
 
 编辑器使用单独的 `editable` 投影。服务端以未应用私密覆盖前的部署基线加当前持久化覆盖计算期望值，因此保存后未重启、或移除覆盖后再次打开编辑器，都不会把旧进程内存中的值误当成部署默认。
 

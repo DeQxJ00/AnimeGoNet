@@ -297,6 +297,7 @@
         </div>
         <div id="library-detail-summary"></div>
         <div class="library-detail-actions">
+          <button id="library-detail-mikan-completion" type="button" class="primary-button">下载全部 / 补全 EP</button>
           <button id="library-detail-external-import" type="button" class="secondary-button">扫描本季度外部媒体</button>
           <button id="library-detail-refresh" type="button" class="secondary-button">从 TMDB 刷新</button>
           <button id="library-detail-delete-content" type="button" class="danger-button">删除任务/文件…</button>
@@ -379,7 +380,7 @@
           <button id="configuration-backup-reload" type="button" class="secondary-button">刷新备份</button>
         </div>
       </div>
-      <p class="muted">归档包含应用、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则和外部插件配置。密码、Cookie、API Key 及 qB 实例下载路径也会导出；任务、下载记录、缓存、日志、媒体库文件以及本机 data/download/save 部署根目录不包含在内。</p>
+      <p class="muted">归档包含应用、下载器、输入源、RSS 规则、Mikan 五级过滤、人工作品规则和外部插件配置。密码、Cookie、API Key、全局 download/save 路径及 qB 实例下载路径也会导出；任务、下载记录、缓存、日志、媒体库文件和当前 data_path 不包含在内。</p>
       <div class="configuration-archive-grid">
         <article class="configuration-card">
           <h3>导入配置</h3>
@@ -1465,6 +1466,49 @@
   </main>
     </div>
   </div>
+
+  <dialog id="mikan-season-completion-dialog" aria-labelledby="mikan-season-completion-title">
+    <article class="mikan-season-completion-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Mikan season episode completion</p>
+          <h2 id="mikan-season-completion-title">下载全部 / EP 自动补完</h2>
+        </div>
+        <button id="mikan-season-completion-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <div class="mikan-season-completion-toolbar">
+        <label>Mikan 来源与字幕组
+          <select id="mikan-season-completion-binding"></select>
+        </label>
+        <div class="mikan-season-completion-selection-actions" aria-label="候选选择">
+          <button id="mikan-season-completion-default" type="button" class="secondary-button">恢复推荐</button>
+          <button id="mikan-season-completion-all" type="button" class="secondary-button">选择全部普通 EP</button>
+          <button id="mikan-season-completion-none" type="button" class="secondary-button">清空选择</button>
+        </div>
+      </div>
+      <p class="muted mikan-season-completion-help">列表来自该作品与字幕组的 Mikan Bangumi RSS。确认后仍会执行当前来源的黑白名单、有序规则、SQLite 去重和统一导入；已有来源完成记录或目标 TMDB EP 默认不选。</p>
+      <p id="mikan-season-completion-status" class="muted" role="status" aria-live="polite">请选择一个已知的 Mikan 来源。</p>
+      <div class="mikan-season-completion-table-wrap">
+        <table class="mikan-season-completion-table">
+          <thead>
+            <tr>
+              <th scope="col">选择</th>
+              <th scope="col">来源 EP</th>
+              <th scope="col">目标 TMDB EP</th>
+              <th scope="col">标题</th>
+              <th scope="col">大小 / 发布</th>
+              <th scope="col">状态</th>
+            </tr>
+          </thead>
+          <tbody id="mikan-season-completion-items"></tbody>
+        </table>
+      </div>
+      <div class="delete-actions">
+        <span class="muted">选择超过 12 条时会再次确认；这里只提交导入任务，不会在窗口内等待下载完成。</span>
+        <button id="mikan-season-completion-confirm" type="button" class="primary-button" disabled>确认提交所选</button>
+      </div>
+    </article>
+  </dialog>
 
   <dialog id="cache-entry-dialog" aria-labelledby="cache-entry-dialog-title">
     <article class="cache-entry-detail-dialog">

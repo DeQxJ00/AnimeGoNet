@@ -174,6 +174,12 @@ public static class ApiEndpoints
         app.MapPost(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/external-media/import",
             ImportExternalMediaSeason);
+        app.MapPost(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/mikan-completion/preview",
+            PreviewMikanSeasonCompletion);
+        app.MapPost(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/mikan-completion",
+            ConfirmMikanSeasonCompletion);
         app.MapGet(
             "/api/v1/library/covers/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibraryCover);
@@ -6160,6 +6166,12 @@ public static class ApiEndpoints
                     value.Enabled,
                     value.Revision,
                     value.UpdatedAtUtc)).ToArray(),
+            detail.Audit.MikanBindings.Select(value =>
+                new AnimeSeasonMikanBindingResponse(
+                    value.SourceProfileId,
+                    value.MikanId,
+                    value.GroupId,
+                    value.LastUsedAtUtc)).ToArray(),
             detail.Audit.RelatedTaskTotal,
             detail.Audit.RelatedTasksTruncated,
             detail.Audit.RelatedTasks.Select(value =>
@@ -6169,6 +6181,7 @@ public static class ApiEndpoints
                     value.SourceId,
                     value.Status,
                     value.MikanId,
+                    value.GroupId,
                     value.BangumiSubjectId,
                     value.LatestRunAttemptNumber,
                     value.LatestRunStatus,
@@ -6191,6 +6204,89 @@ public static class ApiEndpoints
                     value.AttemptNumber,
                     value.DurationMilliseconds,
                     value.CreatedAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> PreviewMikanSeasonCompletion(
+        int tmdbSeriesId,
+        int seasonNumber,
+        MikanSeasonCompletionPreviewRequest request,
+        MikanSeasonCompletionService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var preview = await service.PreviewAsync(
+                tmdbSeriesId,
+                seasonNumber,
+                request.SourceProfileId ?? string.Empty,
+                request.MikanId,
+                request.GroupId,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new MikanSeasonCompletionPreviewResponse(
+                preview.TmdbSeriesId,
+                preview.TmdbSeasonNumber,
+                preview.ResourceRevision,
+                preview.SourceProfileId,
+                preview.MikanId,
+                preview.GroupId,
+                preview.OffsetSource,
+                preview.EpisodeOffset,
+                preview.Items.Select(item => new MikanSeasonCompletionCandidateResponse(
+                    item.CandidateId,
+                    item.Title,
+                    item.Length,
+                    item.PublishedDate,
+                    item.SourceEpisodeKind,
+                    item.SourceEpisode,
+                    item.TargetEpisode,
+                    item.Status,
+                    item.DefaultSelected)).ToArray()));
+        }
+        catch (MikanSeasonCompletionException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.Code, exception.Message));
+        }
+        catch (RssFeedException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.Code, "Mikan RSS preview failed."));
+        }
+    }
+
+    private static async Task<IResult> ConfirmMikanSeasonCompletion(
+        int tmdbSeriesId,
+        int seasonNumber,
+        MikanSeasonCompletionConfirmRequest request,
+        MikanSeasonCompletionService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await service.ConfirmAsync(
+                tmdbSeriesId,
+                seasonNumber,
+                request.SourceProfileId ?? string.Empty,
+                request.MikanId,
+                request.GroupId,
+                request.ExpectedResourceRevision ?? string.Empty,
+                request.SelectedCandidateIds ?? [],
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(result);
+        }
+        catch (MikanSeasonCompletionException exception)
+        {
+            var status = exception.Code is "mikan_completion_library_changed"
+                or "mikan_completion_feed_changed"
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status400BadRequest;
+            return Results.Json(
+                Error(exception.Code, exception.Message),
+                ApiJsonContext.Default.ApiErrorResponse,
+                statusCode: status);
+        }
+        catch (RssFeedException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.Code, "Mikan RSS import failed."));
+        }
     }
 
     private static async Task<IResult> RefreshLibrarySeason(

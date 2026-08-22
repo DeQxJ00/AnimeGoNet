@@ -80,10 +80,17 @@ public sealed record AnimeSeasonRelatedTaskProjection(
     string SourceId,
     string Status,
     int? MikanId,
+    int? GroupId,
     int? BangumiSubjectId,
     int? LatestRunAttemptNumber,
     string? LatestRunStatus,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record AnimeSeasonMikanBindingProjection(
+    string SourceProfileId,
+    int MikanId,
+    int GroupId,
+    DateTimeOffset LastUsedAtUtc);
 
 public sealed record AnimeSeasonResolutionAttemptProjection(
     string TaskId,
@@ -103,6 +110,7 @@ public sealed record AnimeSeasonResolutionAttemptProjection(
 
 public sealed record AnimeSeasonAuditProjection(
     IReadOnlyList<AnimeSeasonManualOffsetProjection> ManualOffsets,
+    IReadOnlyList<AnimeSeasonMikanBindingProjection> MikanBindings,
     int RelatedTaskTotal,
     bool RelatedTasksTruncated,
     IReadOnlyList<AnimeSeasonRelatedTaskProjection> RelatedTasks,

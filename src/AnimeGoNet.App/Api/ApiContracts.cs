@@ -1234,6 +1234,7 @@ public sealed record AnimeSeasonDetailResponse(
     [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings,
     [property: JsonPropertyName("episodes")] IReadOnlyList<AnimeEpisodeItemResponse> Episodes,
     [property: JsonPropertyName("manual_offsets")] IReadOnlyList<AnimeSeasonManualOffsetResponse> ManualOffsets,
+    [property: JsonPropertyName("mikan_bindings")] IReadOnlyList<AnimeSeasonMikanBindingResponse> MikanBindings,
     [property: JsonPropertyName("related_task_total")] int RelatedTaskTotal,
     [property: JsonPropertyName("related_tasks_truncated")] bool RelatedTasksTruncated,
     [property: JsonPropertyName("related_tasks")] IReadOnlyList<AnimeSeasonRelatedTaskResponse> RelatedTasks,
@@ -1264,12 +1265,19 @@ public sealed record AnimeSeasonManualOffsetResponse(
     [property: JsonPropertyName("revision")] long Revision,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record AnimeSeasonMikanBindingResponse(
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("last_used_at_utc")] DateTimeOffset LastUsedAtUtc);
+
 public sealed record AnimeSeasonRelatedTaskResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("source_id")] string SourceId,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("groupid")] int? GroupId,
     [property: JsonPropertyName("bgmid")] int? BangumiSubjectId,
     [property: JsonPropertyName("latest_run_attempt_number")] int? LatestRunAttemptNumber,
     [property: JsonPropertyName("latest_run_status")] string? LatestRunStatus,
@@ -1309,6 +1317,40 @@ public sealed record AnimeSeasonDeleteResponse(
     [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
     [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
     [property: JsonPropertyName("series_removed")] bool SeriesRemoved);
+
+public sealed record MikanSeasonCompletionPreviewRequest(
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId);
+
+public sealed record MikanSeasonCompletionConfirmRequest(
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("expected_resource_revision")] string? ExpectedResourceRevision,
+    [property: JsonPropertyName("selected_candidate_ids")] IReadOnlyList<string>? SelectedCandidateIds);
+
+public sealed record MikanSeasonCompletionCandidateResponse(
+    [property: JsonPropertyName("candidate_id")] string CandidateId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("length")] long Length,
+    [property: JsonPropertyName("published_date")] string? PublishedDate,
+    [property: JsonPropertyName("source_episode_kind")] string? SourceEpisodeKind,
+    [property: JsonPropertyName("source_episode")] int? SourceEpisode,
+    [property: JsonPropertyName("target_episode")] int? TargetEpisode,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("default_selected")] bool DefaultSelected);
+
+public sealed record MikanSeasonCompletionPreviewResponse(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision,
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("offset_source")] string? OffsetSource,
+    [property: JsonPropertyName("episode_offset")] int? EpisodeOffset,
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanSeasonCompletionCandidateResponse> Items);
 
 public sealed record ExternalMediaImportResponse(
     [property: JsonPropertyName("scanned_season_count")] int ScannedSeasonCount,

@@ -225,6 +225,26 @@ test("anime library exposes auditable task and file deletion without merging pro
   assert.match(css, /\.library-audit-actions\s*\{/);
 });
 
+test("anime library exposes an accessible Mikan season completion picker", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  const open = document.querySelector("#library-detail-mikan-completion");
+  const dialog = document.querySelector("#mikan-season-completion-dialog");
+  assert.ok(open);
+  assert.ok(dialog);
+  assert.equal(dialog.getAttribute("aria-labelledby"), "mikan-season-completion-title");
+  assert.ok(dialog.querySelector("#mikan-season-completion-binding"));
+  assert.ok(dialog.querySelector("#mikan-season-completion-items"));
+  assert.match(dialog.textContent, /超过 12/);
+  assert.match(app, /previewMikanSeasonCompletion/);
+  assert.match(app, /selected\.length > 12/);
+  assert.match(app, /expected_resource_revision: preview\.resource_revision/);
+  assert.match(css, /\.mikan-season-completion-table-wrap\s*\{/);
+});
+
 test("task deletion waits for a durable execution result and reports item states", async () => {
   const [document, app] = await Promise.all([
     page(),

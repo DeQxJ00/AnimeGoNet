@@ -116,6 +116,7 @@ const configurationDialog = element("#configuration-dialog");
 const cacheEntryDialog = element("#cache-entry-dialog");
 const aiDebugDialog = element("#ai-debug-dialog");
 const otherReadaptationReviewDialog = element("#other-readaptation-review-dialog");
+const mikanSeasonCompletionDialog = element("#mikan-season-completion-dialog");
 const otherReadaptationReviewPanel = element("#other-readaptation-review-files");
 const otherReadaptationReviewScrollbar = element("#other-readaptation-review-scrollbar");
 const otherReadaptationReviewScrollbarThumb = element("#other-readaptation-review-scrollbar-thumb");
@@ -149,6 +150,8 @@ let downloadListRequestSequence = 0;
 let downloadRenderSignature = null;
 const expandedDownloadJobIds = new Set();
 let activeLibraryDetail = null;
+let activeMikanSeasonCompletion = null;
+let mikanSeasonCompletionRequestSequence = 0;
 let externalImportDetailIdentity = null;
 let libraryListRequestSequence = 0;
 let libraryDetailRequestSequence = 0;
@@ -2739,12 +2742,19 @@ function renderLibraryDetail(detail, focus) {
         content.append(renderLibraryWarnings(detail.warnings));
     layout.append(image, content);
     summary.replaceChildren(layout);
+    const completionButton = element("#library-detail-mikan-completion");
+    completionButton.disabled = detail.mikan_bindings.length === 0;
+    completionButton.title = detail.mikan_bindings.length === 0
+        ? "该季度尚无带 mikanid + groupid 的关联任务"
+        : `已识别 ${detail.mikan_bindings.length} 个 Mikan 来源/字幕组组合`;
     element("#library-detail-refresh").disabled = false;
     element("#library-detail-external-import").disabled = false;
     element("#library-detail-delete-content").disabled = false;
     element("#library-detail-delete").disabled = false;
     element("#library-detail-action-status").textContent =
-        "“删除任务/文件”进入现有四类可审计删除；“仅删除无引用投影”不处理业务记录、下载器任务或文件。";
+        detail.mikan_bindings.length === 0
+            ? "尚无可用于 EP 自动补完的 mikanid + groupid；先通过该字幕组导入至少一个任务。"
+            : `可从 ${detail.mikan_bindings.length} 个已知 Mikan 来源/字幕组读取季度 RSS；提交时仍执行现有筛选与去重。`;
     renderLibraryAudit(detail);
     renderLibraryEpisodes(detail);
     if (focus) {
@@ -2767,6 +2777,7 @@ async function loadLibraryDetail(tmdbSeriesId, seasonNumber, focus = false) {
     element("#library-audit").replaceChildren();
     element("#library-episodes").replaceChildren();
     element("#library-episode-status").textContent = "";
+    element("#library-detail-mikan-completion").disabled = true;
     element("#library-detail-refresh").disabled = true;
     element("#library-detail-external-import").disabled = true;
     element("#library-detail-delete-content").disabled = true;
@@ -2880,6 +2891,211 @@ async function createLibrarySeason(event) {
     }
     finally {
         buttonElement.disabled = false;
+    }
+}
+const mikanSeasonCompletionStatusLabels = {
+    episode_not_ordinary: "非普通 EP，默认不选",
+    completed_source_alias: "已有来源完成记录",
+    completed_target_episode: "目标 TMDB EP 已完成",
+    requires_metadata_matching: "待主流程匹配",
+    missing_target_episode: "目标 TMDB EP 未完成",
+};
+function selectedMikanSeasonCompletionBinding() {
+    const detail = activeLibraryDetail;
+    if (!detail)
+        return null;
+    const index = Number(element("#mikan-season-completion-binding").value);
+    return Number.isInteger(index) ? detail.mikan_bindings[index] ?? null : null;
+}
+function updateMikanSeasonCompletionSelectionStatus() {
+    const preview = activeMikanSeasonCompletion;
+    const selected = document.querySelectorAll("#mikan-season-completion-items input[data-mikan-completion-candidate]:checked").length;
+    const confirm = element("#mikan-season-completion-confirm");
+    confirm.disabled = preview === null || selected === 0;
+    if (!preview)
+        return;
+    const offset = preview.episode_offset === null
+        ? "无可用 EP Offset；将由主流程完成元数据匹配"
+        : `EP Offset ${preview.episode_offset >= 0 ? "+" : ""}${preview.episode_offset}（${preview.offset_source ?? "未知来源"}）`;
+    element("#mikan-season-completion-status").textContent =
+        `RSS ${preview.items.length} 条 · 已选 ${selected} 条 · ${offset}`;
+}
+function renderMikanSeasonCompletion(preview) {
+    activeMikanSeasonCompletion = preview;
+    const body = element("#mikan-season-completion-items");
+    const rows = preview.items.map((item) => {
+        const row = document.createElement("tr");
+        if (item.status.startsWith("completed_"))
+            row.className = "completed";
+        const selectionCell = document.createElement("td");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = item.default_selected;
+        checkbox.dataset.mikanCompletionCandidate = item.candidate_id;
+        checkbox.dataset.defaultSelected = String(item.default_selected);
+        checkbox.dataset.ordinary = String(item.source_episode_kind === "normal");
+        checkbox.setAttribute("aria-label", `选择 ${item.title}`);
+        checkbox.addEventListener("change", updateMikanSeasonCompletionSelectionStatus);
+        selectionCell.append(checkbox);
+        const sourceEpisode = document.createElement("td");
+        sourceEpisode.textContent = item.source_episode === null
+            ? (item.source_episode_kind ?? "未识别")
+            : `EP ${item.source_episode}`;
+        const targetEpisode = document.createElement("td");
+        targetEpisode.textContent = item.target_episode === null
+            ? "待主流程匹配"
+            : `TMDB E${item.target_episode}`;
+        const title = document.createElement("td");
+        title.textContent = item.title;
+        const metadata = document.createElement("td");
+        metadata.textContent = `${formatBytes(item.length)} · ${item.published_date ?? "无发布日期"}`;
+        const status = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "mikan-season-completion-status-badge";
+        if (item.status.startsWith("completed_"))
+            badge.classList.add("completed");
+        if (item.status === "missing_target_episode")
+            badge.classList.add("missing");
+        badge.textContent = mikanSeasonCompletionStatusLabels[item.status] ?? item.status;
+        status.append(badge);
+        row.append(selectionCell, sourceEpisode, targetEpisode, title, metadata, status);
+        return row;
+    });
+    if (rows.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 6;
+        cell.className = "muted empty";
+        cell.textContent = "该 Mikan RSS 当前没有候选条目。";
+        row.append(cell);
+        rows.push(row);
+    }
+    body.replaceChildren(...rows);
+    updateMikanSeasonCompletionSelectionStatus();
+}
+async function previewMikanSeasonCompletion() {
+    const detail = activeLibraryDetail;
+    const binding = selectedMikanSeasonCompletionBinding();
+    if (!detail || !binding)
+        return;
+    const sequence = ++mikanSeasonCompletionRequestSequence;
+    activeMikanSeasonCompletion = null;
+    element("#mikan-season-completion-confirm").disabled = true;
+    element("#mikan-season-completion-items").replaceChildren();
+    element("#mikan-season-completion-status").textContent =
+        `正在读取 mikanid ${binding.mikanid} / groupid ${binding.groupid} 的季度 RSS…`;
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await authenticatedFetch(`/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}/mikan-completion/preview`, {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({
+                source_profile_id: binding.source_profile_id,
+                mikanid: binding.mikanid,
+                groupid: binding.groupid,
+            }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const preview = await response.json();
+        if (sequence !== mikanSeasonCompletionRequestSequence || !mikanSeasonCompletionDialog.open)
+            return;
+        renderMikanSeasonCompletion(preview);
+    }
+    catch (error) {
+        if (sequence !== mikanSeasonCompletionRequestSequence)
+            return;
+        element("#mikan-season-completion-status").textContent =
+            `RSS 预览失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+function openMikanSeasonCompletion() {
+    const detail = activeLibraryDetail;
+    if (!detail)
+        return;
+    if (detail.mikan_bindings.length === 0) {
+        element("#library-detail-action-status").textContent =
+            "无法自动补完：该季度尚无包含 mikanid + groupid 的关联任务。";
+        return;
+    }
+    activeMikanSeasonCompletion = null;
+    const bindings = element("#mikan-season-completion-binding");
+    bindings.replaceChildren(...detail.mikan_bindings.map((binding, index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = `${binding.source_profile_id} · mikanid ${binding.mikanid} · groupid ${binding.groupid} · 最近 ${libraryDate(binding.last_used_at_utc, true)}`;
+        return option;
+    }));
+    element("#mikan-season-completion-title").textContent =
+        `${detail.display_name} · ${detail.season_name} · EP 自动补完`;
+    element("#mikan-season-completion-items").replaceChildren();
+    if (!mikanSeasonCompletionDialog.open)
+        mikanSeasonCompletionDialog.showModal();
+    void previewMikanSeasonCompletion();
+}
+function setMikanSeasonCompletionSelection(mode) {
+    document.querySelectorAll("#mikan-season-completion-items input[data-mikan-completion-candidate]").forEach((checkbox) => {
+        checkbox.checked = mode === "default"
+            ? checkbox.dataset.defaultSelected === "true"
+            : mode === "all" && checkbox.dataset.ordinary === "true";
+    });
+    updateMikanSeasonCompletionSelectionStatus();
+}
+function closeMikanSeasonCompletion() {
+    mikanSeasonCompletionRequestSequence++;
+    activeMikanSeasonCompletion = null;
+    if (mikanSeasonCompletionDialog.open)
+        mikanSeasonCompletionDialog.close();
+}
+async function confirmMikanSeasonCompletion() {
+    const detail = activeLibraryDetail;
+    const preview = activeMikanSeasonCompletion;
+    if (!detail || !preview)
+        return;
+    const selected = Array.from(document.querySelectorAll("#mikan-season-completion-items input[data-mikan-completion-candidate]:checked")).map((checkbox) => checkbox.dataset.mikanCompletionCandidate ?? "").filter(Boolean);
+    if (selected.length === 0) {
+        updateMikanSeasonCompletionSelectionStatus();
+        return;
+    }
+    if (selected.length > 12 && !window.confirm(`本次将提交 ${selected.length} 条 Mikan 候选，超过 12 集。确认继续？`))
+        return;
+    const confirm = element("#mikan-season-completion-confirm");
+    confirm.disabled = true;
+    element("#mikan-season-completion-status").textContent =
+        `正在重新读取 RSS 并提交 ${selected.length} 条候选…`;
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await authenticatedFetch(`/api/v1/library/seasons/${detail.tmdb_series_id}/${detail.tmdb_season_number}/mikan-completion`, {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({
+                source_profile_id: preview.source_profile_id,
+                mikanid: preview.mikanid,
+                groupid: preview.groupid,
+                expected_resource_revision: preview.resource_revision,
+                selected_candidate_ids: selected,
+            }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        const staged = result.items.filter((item) => item.ingest_task_id !== null).length;
+        const alreadyKnown = result.items.filter((item) => ["already_ingested", "already_completed"].includes(item.status)).length;
+        const rejected = result.items.length - staged - alreadyKnown;
+        closeMikanSeasonCompletion();
+        element("#library-detail-action-status").textContent =
+            `Mikan 补完批次 ${result.batch_id}：提交任务 ${staged}，已存在 ${alreadyKnown}，被规则拒绝/失败 ${rejected}。`;
+        void loadDownloads();
+        void loadMetadataTasks();
+        await loadLibrary();
+        await loadLibraryDetail(detail.tmdb_series_id, detail.tmdb_season_number);
+    }
+    catch (error) {
+        element("#mikan-season-completion-status").textContent =
+            `提交失败：${errorMessage(error, "未知错误")}；若季度或 RSS 已变化，请重新预览。`;
+        confirm.disabled = false;
     }
 }
 async function refreshLibrarySeason() {
@@ -3040,6 +3256,7 @@ function openLibraryContentDeletion() {
 }
 function closeLibraryDetail() {
     libraryDetailRequestSequence++;
+    closeMikanSeasonCompletion();
     activeLibraryDetail = null;
     externalImportDetailIdentity = null;
     libraryState.active_series_id = null;
@@ -9084,9 +9301,20 @@ element("#library-detail-close").addEventListener("click", () => {
     activeCard?.focus();
 });
 element("#library-detail-refresh").addEventListener("click", () => void refreshLibrarySeason());
+element("#library-detail-mikan-completion").addEventListener("click", openMikanSeasonCompletion);
 element("#library-detail-external-import").addEventListener("click", () => void importExternalMedia("season"));
 element("#library-detail-delete").addEventListener("click", () => void deleteLibrarySeason());
 element("#library-detail-delete-content").addEventListener("click", openLibraryContentDeletion);
+element("#mikan-season-completion-close").addEventListener("click", closeMikanSeasonCompletion);
+mikanSeasonCompletionDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeMikanSeasonCompletion();
+});
+element("#mikan-season-completion-binding").addEventListener("change", () => void previewMikanSeasonCompletion());
+element("#mikan-season-completion-default").addEventListener("click", () => setMikanSeasonCompletionSelection("default"));
+element("#mikan-season-completion-all").addEventListener("click", () => setMikanSeasonCompletionSelection("all"));
+element("#mikan-season-completion-none").addEventListener("click", () => setMikanSeasonCompletionSelection("none"));
+element("#mikan-season-completion-confirm").addEventListener("click", () => void confirmMikanSeasonCompletion());
 element("#library-episode-filter").addEventListener("change", () => {
     libraryState.episode_filter = element("#library-episode-filter")
         .value;

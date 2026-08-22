@@ -440,6 +440,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<IRssFeedHttpClient>(profileRssClient);
         builder.Services.AddSingleton<ISourceProfileRssFeedHttpClient>(profileRssClient);
         builder.Services.AddSingleton<RssFeedReader>();
+        builder.Services.AddSingleton<MikanSeasonCompletionService>();
         builder.Services.AddSingleton<MikanLegacyFilterProcessor>();
         builder.Services.AddSingleton<PluginScheduleCoordinator>();
         builder.Services.AddSingleton<DataUpdateScheduleManager>();

@@ -1,5 +1,7 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
+using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Sqlite;
 using AnimeGoNet.App.Tests.Library;
 using AnimeGoNet.Core.Configuration;
@@ -9,6 +11,9 @@ namespace AnimeGoNet.App.Tests.Api;
 
 public sealed class AnimeLibraryApiTests
 {
+    private static readonly string[] MikanCompletionAllowedHosts = ["mikanime.tv"];
+    private static readonly string[] MikanCompletionTags = ["animegonet-bulk-test"];
+
     [Fact]
     public async Task ListsCanonicalSeasonProjectionWithoutMediaPathsOrFallbackRows()
     {
@@ -138,10 +143,15 @@ public sealed class AnimeLibraryApiTests
         var manualOffset = Assert.Single(root.GetProperty("manual_offsets").EnumerateArray());
         Assert.Equal(7788, manualOffset.GetProperty("mikanid").GetInt32());
         Assert.Equal(2, manualOffset.GetProperty("episode_offset").GetInt32());
+        var binding = Assert.Single(root.GetProperty("mikan_bindings").EnumerateArray());
+        Assert.Equal("test", binding.GetProperty("source_profile_id").GetString());
+        Assert.Equal(7788, binding.GetProperty("mikanid").GetInt32());
+        Assert.Equal(583, binding.GetProperty("groupid").GetInt32());
         Assert.Equal(1, root.GetProperty("related_task_total").GetInt32());
         Assert.False(root.GetProperty("related_tasks_truncated").GetBoolean());
         var relatedTask = Assert.Single(root.GetProperty("related_tasks").EnumerateArray());
         Assert.Equal("task-alpha", relatedTask.GetProperty("task_id").GetString());
+        Assert.Equal(583, relatedTask.GetProperty("groupid").GetInt32());
         Assert.Equal(2, root.GetProperty("resolution_attempt_total").GetInt32());
         Assert.False(root.GetProperty("resolution_attempts_truncated").GetBoolean());
         var attempts = root.GetProperty("resolution_attempts").EnumerateArray().ToArray();
@@ -152,6 +162,120 @@ public sealed class AnimeLibraryApiTests
         Assert.DoesNotContain("/media/alpha.mkv", body, StringComparison.Ordinal);
         Assert.DoesNotContain("season-alpha", body, StringComparison.Ordinal);
         Assert.DoesNotContain("series-alpha", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MikanSeasonCompletionPreviewsMissingEpisodesAndConfirmsSelectedCandidate()
+    {
+        var transport = new MikanCompletionTransport();
+        await using var app = await RunningApp.StartAsync(
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await SeedAsync(database);
+        using (var source = await PostJsonAsync(
+            app,
+            "/api/v1/sources",
+            new
+            {
+                id = "mikan-bulk",
+                display_name = "Mikan bulk",
+                adapter = "mikan",
+                downloader_id = "bt",
+                file_strategy = "move",
+                allowed_torrent_hosts = MikanCompletionAllowedHosts,
+                category = "animegonet-bulk-test",
+                tags = MikanCompletionTags,
+                seeding_time_minutes = 0,
+                rss_filter_enabled = false,
+                rss_priority_enabled = false,
+                enabled = true,
+                rss_schedule_enabled = false,
+            }))
+        {
+            Assert.Equal(HttpStatusCode.Created, source.StatusCode);
+        }
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET source_profile_id = 'mikan-bulk', source_id = 'mikan', groupid = 583
+                WHERE id = 'task-alpha';
+
+                INSERT INTO completion_aliases (
+                    id, completion_id, source_id, source_work_id,
+                    source_episode, info_hash, created_at_utc)
+                VALUES (
+                    'completion-alpha-mikan', 'completion-alpha', 'mikan-bulk',
+                    '7788', '1', NULL, '2026-01-02T00:00:00.0000000+00:00');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var previewResponse = await PostJsonAsync(
+            app,
+            "/api/v1/library/seasons/100/1/mikan-completion/preview",
+            new { source_profile_id = "mikan-bulk", mikanid = 7788, groupid = 583 });
+        var previewBody = await previewResponse.Content.ReadAsStringAsync();
+        using var preview = JsonDocument.Parse(previewBody);
+
+        Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
+        Assert.DoesNotContain("/Download/", previewBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("mikanime.tv", previewBody, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("manual_offset", preview.RootElement.GetProperty("offset_source").GetString());
+        Assert.Equal(2, preview.RootElement.GetProperty("episode_offset").GetInt32());
+        var candidates = preview.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(2, candidates.Length);
+        Assert.Equal("completed_source_alias", candidates[0].GetProperty("status").GetString());
+        Assert.False(candidates[0].GetProperty("default_selected").GetBoolean());
+        Assert.Equal(4, candidates[1].GetProperty("target_episode").GetInt32());
+        Assert.True(candidates[1].GetProperty("default_selected").GetBoolean());
+
+        using (var staleResponse = await PostJsonAsync(
+            app,
+            "/api/v1/library/seasons/100/1/mikan-completion",
+            new
+            {
+                source_profile_id = "mikan-bulk",
+                mikanid = 7788,
+                groupid = 583,
+                expected_resource_revision = new string('0', 64),
+                selected_candidate_ids = new[]
+                {
+                    candidates[1].GetProperty("candidate_id").GetString(),
+                },
+            }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, staleResponse.StatusCode);
+            var staleBody = await staleResponse.Content.ReadAsStringAsync();
+            Assert.Contains("mikan_completion_library_changed", staleBody, StringComparison.Ordinal);
+            Assert.Equal(1, transport.FeedRequestCount);
+        }
+
+        using var confirmResponse = await PostJsonAsync(
+            app,
+            "/api/v1/library/seasons/100/1/mikan-completion",
+            new
+            {
+                source_profile_id = "mikan-bulk",
+                mikanid = 7788,
+                groupid = 583,
+                expected_resource_revision = preview.RootElement
+                    .GetProperty("resource_revision").GetString(),
+                selected_candidate_ids = new[]
+                {
+                    candidates[1].GetProperty("candidate_id").GetString(),
+                },
+            });
+        using var confirmed = JsonDocument.Parse(
+            await confirmResponse.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+        var result = Assert.Single(confirmed.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("staged", result.GetProperty("status").GetString());
+        Assert.NotEqual(JsonValueKind.Null, result.GetProperty("ingest_task_id").ValueKind);
+        Assert.Equal(2, transport.FeedRequestCount);
     }
 
     [Fact]
@@ -334,11 +458,11 @@ public sealed class AnimeLibraryApiTests
 
             INSERT INTO ingest_tasks (
                 id, source_profile_id, source_profile_revision, source_id,
-                mikanid, bangumi_subject_id, title, torrent_url_fingerprint,
+                mikanid, groupid, bangumi_subject_id, title, torrent_url_fingerprint,
                 downloader_id, route_snapshot_json, status,
                 created_at_utc, updated_at_utc)
             VALUES (
-                'task-alpha', 'test', 1, 'test', 7788, 42, 'Alpha release',
+                'task-alpha', 'test', 1, 'test', 7788, 583, 42, 'Alpha release',
                 'fingerprint-alpha', 'bt', '{}', 'metadata_resolved',
                 $now, '2026-01-02T00:00:00.0000000+00:00');
 
@@ -385,5 +509,75 @@ public sealed class AnimeLibraryApiTests
             """;
         command.Parameters.AddWithValue("$now", "2026-01-01T00:00:00.0000000+00:00");
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static Task<HttpResponseMessage> PostJsonAsync(
+        RunningApp app,
+        string path,
+        object value) =>
+        app.Client.PostAsync(
+            path,
+            new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json"));
+
+    private static TorrentHttpResponse Response(HttpStatusCode status, string body)
+    {
+        var bytes = Encoding.UTF8.GetBytes(body);
+        return new TorrentHttpResponse(
+            status,
+            null,
+            bytes.Length,
+            new MemoryStream(bytes, writable: false));
+    }
+
+    private sealed class PublicDnsResolver : ITorrentDnsResolver
+    {
+        public ValueTask<IReadOnlyList<IPAddress>> ResolveAsync(
+            string host,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Parse("1.1.1.1")]);
+    }
+
+    private sealed class MikanCompletionTransport : ITorrentHttpTransport
+    {
+        public int FeedRequestCount { get; private set; }
+
+        public ValueTask<TorrentHttpResponse> SendAsync(
+            Uri uri,
+            IReadOnlyList<IPAddress> validatedAddresses,
+            CancellationToken cancellationToken)
+        {
+            if (uri.AbsolutePath.Equals("/RSS/Bangumi", StringComparison.OrdinalIgnoreCase))
+            {
+                FeedRequestCount++;
+                return ValueTask.FromResult(Response(HttpStatusCode.OK, """
+                    <rss><channel>
+                      <link>https://mikanime.tv/RSS/Bangumi?bangumiId=7788&amp;subgroupid=583</link>
+                      <item><title>[Group] Alpha - 01 [1080p]</title>
+                        <link>https://mikanime.tv/Home/Episode/bulk-01</link>
+                        <pubDate>Fri, 21 Aug 2026 12:00:00 +0000</pubDate>
+                        <enclosure type="application/x-bittorrent" length="101"
+                          url="https://mikanime.tv/Download/bulk-01.torrent" /></item>
+                      <item><title>[Group] Alpha - 02 [1080p]</title>
+                        <link>https://mikanime.tv/Home/Episode/bulk-02</link>
+                        <pubDate>Fri, 21 Aug 2026 12:30:00 +0000</pubDate>
+                        <enclosure type="application/x-bittorrent" length="202"
+                          url="https://mikanime.tv/Download/bulk-02.torrent" /></item>
+                    </channel></rss>
+                    """));
+            }
+            if (uri.AbsolutePath.StartsWith("/Home/Episode/", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValueTask.FromResult(Response(HttpStatusCode.OK, """
+                    <a class="mikan-rss" href="/RSS/Bangumi?bangumiId=7788&amp;subgroupid=583">RSS</a>
+                    """));
+            }
+            if (uri.AbsolutePath.Equals("/Home/Bangumi/7788", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValueTask.FromResult(Response(HttpStatusCode.OK, """
+                    <p class="bangumi-info"><a href="https://bgm.tv/subject/42">Bangumi</a></p>
+                    """));
+            }
+            return ValueTask.FromResult(Response(HttpStatusCode.NotFound, string.Empty));
+        }
     }
 }
