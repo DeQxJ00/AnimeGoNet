@@ -81,9 +81,6 @@ public sealed class EpisodeMetadataResolutionProcessor(
             var started = _timeProvider.GetTimestamp();
             try
             {
-                var bangumiValues = await bangumiEpisodes.GetEpisodesAsync(
-                    claim.Resolution.BangumiSubjectId.Value,
-                    cancellationToken).ConfigureAwait(false);
                 var sourceCandidates = claim.Files
                     .Select(file => int.TryParse(
                         file.FileEpisodeCandidate,
@@ -95,6 +92,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     .Where(candidate => candidate > 0)
                     .Distinct()
                     .ToArray();
+                var bangumiValues = await GetBangumiEpisodesAsync(
+                    bangumiEpisodes,
+                    claim.Resolution.BangumiSubjectId.Value,
+                    sourceCandidates,
+                    refreshScope?.BypassCaches == true,
+                    cancellationToken).ConfigureAwait(false);
                 if (sourceCandidates.Any(candidate =>
                         !HasBangumiEpisodeIdentity(bangumiValues, candidate)))
                 {
@@ -110,8 +113,11 @@ public sealed class EpisodeMetadataResolutionProcessor(
                                  .OrderBy(value => value.Id)
                                  .Take(8))
                     {
-                        var sequelEpisodes = await bangumiEpisodes.GetEpisodesAsync(
+                        var sequelEpisodes = await GetBangumiEpisodesAsync(
+                            bangumiEpisodes,
                             sequel.Id,
+                            sourceCandidates,
+                            refreshScope?.BypassCaches == true,
                             cancellationToken).ConfigureAwait(false);
                         bangumiValues = bangumiValues
                             .Concat(sequelEpisodes)
@@ -533,6 +539,37 @@ public sealed class EpisodeMetadataResolutionProcessor(
         episodes.Any(value => value.Type == 0
             && (value.EpisodeNumber == sourceEpisode
                 || value.SortNumber == sourceEpisode));
+
+    private static async Task<IReadOnlyList<BangumiEpisode>> GetBangumiEpisodesAsync(
+        IBangumiEpisodeClient client,
+        int subjectId,
+        IReadOnlyCollection<int> sourceCandidates,
+        bool cacheAlreadyBypassed,
+        CancellationToken cancellationToken)
+    {
+        var values = await client.GetEpisodesAsync(subjectId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!cacheAlreadyBypassed
+            && client is IBangumiEpisodeRefreshClient refreshClient
+            && sourceCandidates.Any(candidate =>
+                HasBangumiEpisodeIdentityWithoutAirDate(values, candidate)))
+        {
+            return await refreshClient.RefreshEpisodesAsync(subjectId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return values;
+    }
+
+    private static bool HasBangumiEpisodeIdentityWithoutAirDate(
+        IReadOnlyList<BangumiEpisode> episodes,
+        int sourceEpisode)
+    {
+        var matches = episodes.Where(value => value.Type == 0
+            && (value.EpisodeNumber == sourceEpisode
+                || value.SortNumber == sourceEpisode)).ToArray();
+        return matches.Length > 0 && matches.All(value => value.AirDate is null);
+    }
 
     private async Task LearnTrustedOffsetAsync(
         MetadataEpisodeTaskClaim claim,

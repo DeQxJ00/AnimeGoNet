@@ -9,7 +9,7 @@ public sealed class BangumiArchiveCachingClient(
     IBangumiEpisodeClient episodes,
     bool ownsClients = false,
     MetadataRefreshScope? refreshScope = null)
-    : IBangumiSubjectClient, IBangumiEpisodeClient, IDisposable
+    : IBangumiSubjectClient, IBangumiEpisodeRefreshClient, IDisposable
 {
     private int _disposed;
 
@@ -81,6 +81,11 @@ public sealed class BangumiArchiveCachingClient(
             .GetEpisodesAsync(subjectId, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    public Task<IReadOnlyList<BangumiEpisode>> RefreshEpisodesAsync(
+        int subjectId,
+        CancellationToken cancellationToken = default) =>
+        episodes.GetEpisodesAsync(subjectId, cancellationToken);
 
     public void Dispose()
     {

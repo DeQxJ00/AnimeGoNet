@@ -104,6 +104,110 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task MikanMissingTargetAirDateRefreshesEpisodesBeforeDateMatching()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                100,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2024, 10, 2),
+                2,
+                Episodes:
+                [
+                    new TmdbEpisode(6, 72517, 2, 6, "Old episode", new DateOnly(2016, 5, 9)),
+                    new TmdbEpisode(56, 72517, 2, 56, "Current episode", new DateOnly(2024, 11, 6)),
+                ]),
+            EpisodeFactory = number => number == 56
+                ? new TmdbEpisode(56, 72517, 2, 56, "Current episode", new DateOnly(2024, 11, 6))
+                : null,
+        };
+        var bangumi = new RefreshingBangumiEpisodeClient(
+            cached: [new BangumiEpisode(42599806, 0, 6, null)],
+            refreshed: [new BangumiEpisode(42599806, 0, 6, new DateOnly(2024, 11, 6))]);
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(app, ("Show EP06.mkv", "6", "6"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(56, file.EpisodeNumber);
+        Assert.Equal("tmdb_episode_bangumi_date", file.ResolutionSource);
+        Assert.Equal([547888], bangumi.CachedSubjectIds);
+        Assert.Equal([547888], bangumi.RefreshedSubjectIds);
+    }
+
+    [Fact]
+    public async Task MikanAvailableTargetAirDateDoesNotRefreshEpisodes()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = new TmdbSeason(
+                100,
+                72517,
+                2,
+                "Season 2",
+                new DateOnly(2024, 10, 2),
+                1,
+                Episodes:
+                [new TmdbEpisode(56, 72517, 2, 56, "Current episode", new DateOnly(2024, 11, 6))]),
+            EpisodeFactory = number => number == 56
+                ? new TmdbEpisode(56, 72517, 2, 56, "Current episode", new DateOnly(2024, 11, 6))
+                : null,
+        };
+        var bangumi = new RefreshingBangumiEpisodeClient(
+            cached: [new BangumiEpisode(42599806, 0, 6, new DateOnly(2024, 11, 6))],
+            refreshed: []);
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(app, ("Show EP06.mkv", "6", "6"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Equal(56, Assert.Single(await ReadFilesAsync(app, taskId)).EpisodeNumber);
+        Assert.Empty(bangumi.RefreshedSubjectIds);
+    }
+
+    [Fact]
+    public async Task MikanTargetAirDateRefreshFailureRemainsRetryable()
+    {
+        var bangumi = new RefreshingBangumiEpisodeClient(
+            cached: [new BangumiEpisode(42599806, 0, 6, null)],
+            refreshed: [],
+            refreshFailure: new BangumiClientException(
+                MetadataFailureKind.Network,
+                "bangumi_network_error"));
+        await using var app = await StartSeasonResolvedTaskAsync(
+            new FakeTmdbClient(),
+            episodeOffset: null,
+            bangumiEpisodeClient: bangumi);
+        var taskId = await PrepareFilesAsync(app, ("Show EP06.mkv", "6", "6"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Equal("metadata_failed", await ReadTaskStatusAsync(app, taskId));
+        Assert.Equal("pending", Assert.Single(await ReadFilesAsync(app, taskId)).Disposition);
+        Assert.Equal(
+            "bangumi_network_error",
+            await ReadLatestAttemptErrorAsync(app, taskId, "tmdb_episode_bangumi_date"));
+        Assert.Equal([547888], bangumi.RefreshedSubjectIds);
+    }
+
+    [Fact]
     public async Task MikanDirectSequelGlobalSortMapsByEpisodeAirDate()
     {
         var tmdb = new FakeTmdbClient
@@ -1384,6 +1488,35 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             return Task.FromResult(_episodesBySubject is null
                 ? _episodes ?? []
                 : _episodesBySubject.GetValueOrDefault(subjectId) ?? []);
+        }
+    }
+
+    private sealed class RefreshingBangumiEpisodeClient(
+        IReadOnlyList<BangumiEpisode> cached,
+        IReadOnlyList<BangumiEpisode> refreshed,
+        BangumiClientException? refreshFailure = null)
+        : IBangumiEpisodeRefreshClient
+    {
+        public List<int> CachedSubjectIds { get; } = [];
+
+        public List<int> RefreshedSubjectIds { get; } = [];
+
+        public Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            CachedSubjectIds.Add(subjectId);
+            return Task.FromResult(cached);
+        }
+
+        public Task<IReadOnlyList<BangumiEpisode>> RefreshEpisodesAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default)
+        {
+            RefreshedSubjectIds.Add(subjectId);
+            return refreshFailure is null
+                ? Task.FromResult(refreshed)
+                : Task.FromException<IReadOnlyList<BangumiEpisode>>(refreshFailure);
         }
     }
 

@@ -200,6 +200,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 24. 配置开关开启、Mikan Torrent实际文件条目数为1且bgmid/pubDate有效：主程序先取得最近普通EP并写入 `bgm_episode_candidate`，候选成功时门禁才为真；Prompt直接结合文件名EP调用TMDB MCP，最终集号仍经TMDB验证。
 25. 分别用Torrent单文件模式和“根目录下仅一个文件”的fixture验证文件数均为1并触发；目录节点不能被误计为文件。实际文件条目数大于1时门禁为假。
 26. pubDate无时区按 `Asia/Shanghai` 规范化；仅 Mikan 可把该值作为 AI 辅助参数。开关关闭、缺失/非法日期、非Mikan、无bgmid、Bangumi查询失败或无普通正整数Episode时不产生日期候选并转入原通用AI流程；Torrent 发布日期不设置天数拒绝窗口。
+27. AnimeGoNetData 命中目标 Bangumi Episode 但该目标 `airdate` 为空时，仅为该 Subject 在线刷新完整 Episode 列表后继续确定性匹配；目标日期已有值时零刷新，刷新网络失败保持文件 pending 并记录可重试 Bangumi 失败。
 27. 文件名EP与Bangumi日期EP相同/不同各建fixture；两者都只是TMDB定向搜索证据，不得直接复制为最终集号。优先分支和通用分支都必须拒绝Season 0并二次验证。
 28. 记录日期优先分支的工具次数和回退原因；MCP endpoint/schema发现跨请求复用，同一bgmid缓存不得导致新播Episode永久不可见。
 29. 所有来源的 AI Prompt、请求 JSON 和响应 Schema 均不含 `file_episode_candidate/episode_offset`；Mikan 本地状态中的候选由后端重算并拒绝调用方伪造。正/零/负偏移由主程序在 TMDB 逐文件验证后本地计算；偏移不一致或跨季度时不产生缓存证据，但已验证的逐文件映射仍有效。

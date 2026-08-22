@@ -164,6 +164,23 @@ public sealed class BangumiArchiveCachingClientTests
     }
 
     [Fact]
+    public async Task ExplicitEpisodeRefreshBypassesCompleteArchive()
+    {
+        await using var fixture = await ArchiveFixture.CreateAsync(
+            episodeCount: 1,
+            storedEpisodeCount: 1);
+        var upstream = new RecordingBangumiClient();
+        using var client = new BangumiArchiveCachingClient(
+            fixture.Store,
+            upstream,
+            upstream);
+
+        Assert.Equal(1001, Assert.Single(await client.GetEpisodesAsync(51)).Id);
+        Assert.Equal(8001, Assert.Single(await client.RefreshEpisodesAsync(51)).Id);
+        Assert.Equal(1, upstream.EpisodeCalls);
+    }
+
+    [Fact]
     public async Task EmptyUnknownEpisodeCountDoesNotHideNewOnlineEpisodes()
     {
         await using var fixture = await ArchiveFixture.CreateAsync(

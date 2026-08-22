@@ -124,3 +124,10 @@ public interface IBangumiEpisodeClient
         int subjectId,
         CancellationToken cancellationToken = default);
 }
+
+public interface IBangumiEpisodeRefreshClient : IBangumiEpisodeClient
+{
+    Task<IReadOnlyList<BangumiEpisode>> RefreshEpisodesAsync(
+        int subjectId,
+        CancellationToken cancellationToken = default);
+}

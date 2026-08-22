@@ -241,7 +241,7 @@ advanced:
 确定性流程已确认 Series/Season 后，先执行普通 Episode 校验：
 
 1. 在已确认的 TMDB Season 中读取完整 Episode 列表。P4/P3 的日期候选只用于选定季度，成功前必须再请求官方 `/tv/{series}/season/{season}` endpoint。Series/Season 确认阶段只提交季度身份和 `episode_count`；完整响应可以进入 TMDB HTTP 成功缓存，但不得提前写入作品库的正式 `tmdb_episodes` 投影。Episode Worker 完成确定性判断、必要的统一 AI 匹配及最终 TMDB 验证后，才在同一事务替换正式 Episode snapshot 并提交逐文件结果。待补全 TMDB 的人工恢复同样只使用已验证 Season 响应保存 snapshot，不能用 `episode_count` 自行生成不存在的 Episode。
-2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，先用单集首播日期确定对应关系。主程序从文件名重新解析普通正整数 EP，用它匹配 Bangumi 普通 Episode 的局部 `ep` 或全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 允许 `±1` 个日历日，取距离最近且可唯一消歧的候选。
+2. Mikan 任务存在 `bgmid`、且没有命中人工 offset、可信 offset 或更高优先级预解析结果时，先用单集首播日期确定对应关系。主程序从文件名重新解析普通正整数 EP，用它匹配 Bangumi 普通 Episode 的局部 `ep` 或全局 `sort`；当前 Subject 无该集号时，只读取其直接 `续集` 关系并继续查找。若活动 AnimeGoNetData 已包含目标 Episode 身份、但该目标的 `airdate` 为空，主程序会绕过 Archive 在线刷新该 Subject 的完整 Episode 列表后再判断；其它无关 Episode 日期缺失不会触发刷新，已有目标日期也不会重复联网。Bangumi `airdate` 与已确认 TMDB Season 的普通 Episode `air_date` 允许 `±1` 个日历日，取距离最近且可唯一消歧的候选。
 3. 上一步失败且 Torrent 实际文件总数恰好为 1 时，才启用文件名补判：以文件名 EP 定位 Bangumi 普通 Episode，在已确认 TMDB Season 中寻找首播日期最近的普通 Episode。最近日期差必须不超过 7 日，并且最近候选的 TMDB Episode Number 必须与文件名 EP 一致；否则不得确定性接受。该补判成功记录为 `tmdb_episode_bangumi_nearest_date`。
 4. 超过 7 日、最近候选编号不一致、日期/身份缺失、多个最近候选无法消歧，或实际多文件任务的 `±1` 日主匹配失败，都进入同一个任务级 AI 匹配。AI 开关关闭或 AI 无法验证时，文件进入已确认季度的 `Other`。候选成功后仍须通过 TMDB Episode endpoint 验证 Series/Season/Episode 身份。
 5. Torrent `published_at` 不属于季度或 EP 的确定性日期校验，也不能替代 Bangumi 单集首播日期；它仅在 Mikan 的统一 AI 输入中保留为辅助参数。
