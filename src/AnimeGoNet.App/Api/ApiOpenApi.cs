@@ -29,6 +29,7 @@ internal static class ApiOpenApi
         "logs",
         "metadata",
         "mikan",
+        "notifications",
         "plugins",
         "rss",
         "rss-rules",
