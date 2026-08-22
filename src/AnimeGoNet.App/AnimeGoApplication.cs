@@ -202,23 +202,6 @@ public static class AnimeGoApplication
             layout.ConfigurationPath);
         await externalPluginConfigurations.LoadAsync(cancellationToken)
             .ConfigureAwait(false);
-        var rollingFileLoggerProvider = new RollingFileLoggerProvider(
-            new RollingFileLogOptions
-            {
-                FilePath = Path.Combine(
-                    layout.LogsPath,
-                    "animego.log"),
-                MinimumLevel = debugEnabled
-                    ? LogLevel.Debug
-                    : LogLevel.Information,
-            });
-        builder.Services.AddSingleton(rollingFileLoggerProvider);
-        builder.Services.AddSingleton<ILoggerProvider>(
-            static services =>
-                services.GetRequiredService<RollingFileLoggerProvider>());
-        var outboundHttpLogs = new OutboundHttpLogSink(
-            webSocketLogHub.CreateLogger("AnimeGoNet.App.Http.Outbound"),
-            rollingFileLoggerProvider.CreateLogger("AnimeGoNet.App.Http.Outbound"));
         var applicationOverrides = new ApplicationOverrideStore(
             layout.ConfigurationPath,
             layout.BackupsPath);
@@ -266,6 +249,23 @@ public static class AnimeGoApplication
         {
             throw new InvalidOperationException("Invalid AnimeGoNet configuration: " + string.Join("; ", errors));
         }
+        var rollingFileLoggerProvider = new RollingFileLoggerProvider(
+            new RollingFileLogOptions
+            {
+                FilePath = Path.Combine(
+                    layout.LogsPath,
+                    "animego.log"),
+                MinimumLevel = debugEnabled
+                    ? LogLevel.Debug
+                    : LogLevel.Information,
+            });
+        builder.Services.AddSingleton(rollingFileLoggerProvider);
+        builder.Services.AddSingleton<ILoggerProvider>(
+            static services =>
+                services.GetRequiredService<RollingFileLoggerProvider>());
+        var outboundHttpLogs = new OutboundHttpLogSink(
+            webSocketLogHub.CreateLogger("AnimeGoNet.App.Http.Outbound"),
+            rollingFileLoggerProvider.CreateLogger("AnimeGoNet.App.Http.Outbound"));
         if (!optionsWereSupplied && webEnabled)
         {
             ConfigureWebBinding(builder, options.Web);
