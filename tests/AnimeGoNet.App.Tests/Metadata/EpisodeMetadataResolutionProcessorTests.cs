@@ -310,7 +310,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
-    public async Task MikanRejectedCompatibilityCandidateRecordsPreciseAiTriggerReason()
+    public async Task MikanInRangeMarkerConflictRecordsPreciseAiTriggerReason()
     {
         var tmdb = new FakeTmdbClient
         {
@@ -333,7 +333,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             enableEpisodeAi: true);
         var taskId = await PrepareFilesAsync(
             app,
-            ("[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [13335833].mkv", "7", null));
+            ("[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [08].mkv", "7", null));
         await ResolveSeasonAsync(app);
 
         Assert.True(await app.App.Services

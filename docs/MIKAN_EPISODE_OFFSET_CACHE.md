@@ -12,7 +12,7 @@
 
 默认解析器以 AnimeGo `develop` 分支的 `assets/plugin/filter/Auto_Bangumi/raw_parser.py` 为兼容基线，完整移植为 NativeAOT 友好的 C#，不运行 Python。兼容解析层必须保留上游正则和字段语义，不能直接加入上游没有的年份保护、歧义拒绝或 `E04/EP04` 扩展；如后续确需安全收窄，必须建立独立候选策略层并分别测试。解析结果保留标题、季度、集号、字幕组文本、发布组、分辨率和来源等本地字段，不送入 AI。
 
-`file_episode_candidate` 必须由后端使用规范化后的 Torrent 内部 basename 重新计算。API、WebUI、导入清单或插件传入的同名字段不能覆盖程序计算值。独立的 `FileEpisodeCandidateResolver` 读取兼容解析结果，再拒绝年份占位、非正数和明显的非正片/歧义结果；只有通过该安全层才形成候选。特别篇、Menu、PV、NCOP、NCED、Logo 等不能为了生成偏移而额外编造普通集号。
+`file_episode_candidate` 必须由后端使用规范化后的 Torrent 内部 basename 重新计算。API、WebUI、导入清单或插件传入的同名字段不能覆盖程序计算值。独立的 `FileEpisodeCandidateResolver` 读取兼容解析结果，再拒绝年份占位、非正数和明显的非正片/歧义结果；弱数字标记只接受 `1～9999`，超范围数字按哈希/校验码排除后再做歧义判断。该范围只约束文件名弱候选，不限制最终由 TMDB 验证的 Episode。只有通过该安全层才形成候选。特别篇、Menu、PV、NCOP、NCED、Logo 等不能为了生成偏移而额外编造普通集号。
 
 当前实现严格以 SourceProfile 的 `adapter` 判断作用域：只有精确的 `mikan` 才运行候选安全层并写入 `file_episode_candidate`；U2、TTG 或自定义非 Mikan profile 即使文件名完全相同也固定不写。兼容解析仍可保留上游会产生的原始结果（例如年份或末尾分辨率数字），但这些值只用于差分证明，不会绕过安全层进入可信 offset 学习。
 

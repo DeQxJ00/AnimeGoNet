@@ -12,8 +12,8 @@
 - API 测试覆盖 `ai_trigger_reason` JSON 字段。
 - WebUI 测试覆盖摘要与详情标签。
 - 季度处理器覆盖 `season_unresolved:tmdb_season_air_date_not_matched`。
-- Episode 处理器覆盖日期差超过 7 天，以及 Kokoore 文件名中 `- 07` 与哈希式方括号数字并存时的
-  `episode_unresolved:ambiguous_episode_markers`，并确认 AI 结果仍须通过 TMDB S01E07 验证。
+- Episode 处理器覆盖日期差超过 7 天，以及两个均在有效范围内的文件名 EP 标记冲突时的
+  `episode_unresolved:ambiguous_episode_markers`，并确认 AI 结果仍须通过 TMDB Episode 验证。
 
 ## 人工验收
 

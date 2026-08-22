@@ -56,6 +56,7 @@ public sealed class AutoBangumiRawParserTests
     [InlineData("[Group] Show [04][1080p]", 4)]
     [InlineData("[Group] Show -  7 [720P]", 7)]
     [InlineData("[Group] Show [12 END][4K]", 12)]
+    [InlineData("[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [13335833].mkv", 7)]
     public void CandidatePolicyAcceptsOneUnambiguousUpstreamInteger(string path, int expected)
     {
         var result = FileEpisodeCandidateResolver.Resolve("mikan", path);
@@ -95,6 +96,7 @@ public sealed class AutoBangumiRawParserTests
     [InlineData("mikan", "[Group] Show [01][02][1080p]", "ambiguous_episode_markers")]
     [InlineData("mikan", "[Group] Show [SP01][1080p]", "upstream_episode_not_parsed")]
     [InlineData("mikan", "[Group] Show [48.5][1080p]", "upstream_episode_not_parsed")]
+    [InlineData("mikan", "[Group] Show [13335833].mkv", "episode_number_out_of_range")]
     [InlineData("mikan", "[Group] Show Menu [01][1080p]", "non_feature_episode")]
     [InlineData("mikan", "[Group] Show EP04 [1080p]", "upstream_episode_not_parsed")]
     [InlineData("mikan", "[Group(] Show [01]", "compatibility_parser_failed")]

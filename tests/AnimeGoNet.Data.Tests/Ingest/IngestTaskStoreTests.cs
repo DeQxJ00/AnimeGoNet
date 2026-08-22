@@ -181,6 +181,10 @@ public sealed class IngestTaskStoreTests
                     new TorrentFile("Show [2024].mkv", 5, false),
                     new TorrentFile("Show [01][02].mkv", 5, false),
                     new TorrentFile("Show -  7.mkv", 5, false),
+                    new TorrentFile(
+                        "[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [13335833].mkv",
+                        5,
+                        false),
                 ]),
             "mikan-policy.torrent",
             DateTimeOffset.UtcNow.AddMinutes(15));
@@ -224,6 +228,11 @@ public sealed class IngestTaskStoreTests
         Assert.Contains(rows, row =>
             row.TaskId == mikanTask.Id
             && row.Path == "Show -  7.mkv"
+            && row.SourceEpisode == "7"
+            && row.Candidate == "7");
+        Assert.Contains(rows, row =>
+            row.TaskId == mikanTask.Id
+            && row.Path == "[Dynamis One] Kokoore - 07 (CR 1920x1080 AVC AAC MKV) [13335833].mkv"
             && row.SourceEpisode == "7"
             && row.Candidate == "7");
         Assert.Contains(rows, row =>

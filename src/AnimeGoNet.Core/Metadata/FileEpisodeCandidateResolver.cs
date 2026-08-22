@@ -13,6 +13,9 @@ public sealed record FileEpisodeCandidateResolution(
 
 public static partial class FileEpisodeCandidateResolver
 {
+    private const int MinimumWeakEpisodeNumber = 1;
+    private const int MaximumWeakEpisodeNumber = 9999;
+
     public static FileEpisodeCandidateResolution Resolve(
         string sourceAdapter,
         string relativePath)
@@ -66,7 +69,7 @@ public static partial class FileEpisodeCandidateResolver
                     out var value)
                         ? value
                         : 0)
-                .Where(value => value > 0)
+                .Where(IsPlausibleWeakEpisodeNumber)
                 .ToHashSet();
             if (explicitEpisode <= 0
                 || explicitEpisode is >= 1900 and <= 2100
@@ -107,6 +110,7 @@ public static partial class FileEpisodeCandidateResolver
         }
 
         var candidates = new HashSet<int>();
+        var hasOutOfRangeMarker = false;
         foreach (Match marker in UpstreamIntegerMarker().Matches(basename))
         {
             for (var group = 1; group < marker.Groups.Count; group++)
@@ -119,19 +123,39 @@ public static partial class FileEpisodeCandidateResolver
                         out var value)
                     && value > 0)
                 {
-                    candidates.Add(value);
+                    if (IsPlausibleWeakEpisodeNumber(value))
+                    {
+                        candidates.Add(value);
+                    }
+                    else
+                    {
+                        hasOutOfRangeMarker = true;
+                    }
+
                     break;
                 }
             }
         }
 
-        if (candidates.Count != 1 || !candidates.Contains(parsed.Episode))
+        if (candidates.Count == 1)
         {
-            return new FileEpisodeCandidateResolution(null, "ambiguous_episode_markers", parsed);
+            var candidate = candidates.Single();
+            return candidate == parsed.Episode
+                || !IsPlausibleWeakEpisodeNumber(parsed.Episode)
+                    ? new FileEpisodeCandidateResolution(candidate, "accepted", parsed)
+                    : new FileEpisodeCandidateResolution(null, "ambiguous_episode_markers", parsed);
         }
 
-        return new FileEpisodeCandidateResolution(parsed.Episode, "accepted", parsed);
+        if (candidates.Count == 0 && hasOutOfRangeMarker)
+        {
+            return new FileEpisodeCandidateResolution(null, "episode_number_out_of_range", parsed);
+        }
+
+        return new FileEpisodeCandidateResolution(null, "ambiguous_episode_markers", parsed);
     }
+
+    private static bool IsPlausibleWeakEpisodeNumber(int value) =>
+        value is >= MinimumWeakEpisodeNumber and <= MaximumWeakEpisodeNumber;
 
     [GeneratedRegex(
         @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",

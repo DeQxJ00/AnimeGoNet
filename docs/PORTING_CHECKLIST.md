@@ -43,7 +43,7 @@
 |---|---|---:|---:|---|
 | `internal/animego/parser` | 标题/季度/EP/字幕组解析 | 保留 | 已验证 | Go develop 的 3 个 ParseEp fixtures、扩展整数模式、小数/特别篇隔离、Mikan RSS 最后可靠标记、19 组 AutoBangumi Python 标题/季度/EP/字幕/字幕组/分辨率/来源 golden fixtures 均已覆盖；RSS 字幕组解析与 raw parser 对全部 golden 输入交叉一致，持久化前的年份/分辨率/歧义/非正片安全层已验证；任务详情把持久 RSS batch/revision/decision/groups 与实际 Torrent `file_episode_candidate` 跨请求并列审计且不返回 URL/指纹 |
 | `builtin_parser.py` | 编译期 C# parser | 替换 | 已验证 | 与 raw_parser.py 共用的完整解析主体已由 `AutoBangumiRawParser` 编译期替换；无 Python 运行时，develop Python golden fixture 逐字段通过 |
-| `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 已验证 | 19 组 develop Python golden 覆盖全部输出字段和原始 E04/EP04 不识别语义；独立安全层才拒绝年份/分辨率/歧义/非正片，数据层证明只对 Mikan adapter 落候选 |
+| `Auto_Bangumi/raw_parser.py` | C# 1:1 文件 EP 候选解析 | 替换 | 已验证 | 19 组 develop Python golden 覆盖全部输出字段和原始 E04/EP04 不识别语义；独立安全层才拒绝年份/分辨率/歧义/非正片，并将弱数字限制为 1～9999、先排除超范围哈希再判断歧义，数据层证明只对 Mikan adapter 落候选 |
 | `internal/animego/filter` | 有序规则管理器 | 保留+扩展 | 已验证 | 编译期注册过滤器按稳定顺序串行执行；上一规则仅将 accepted 候选传给下一规则；显式空链等价于上游 `skipFilter`；业务错误、无效结果与意外异常均立即停止且后续规则不执行；固定 `Mikan.xml` 直接复现上游 13 个输入、4 个 NC-Raws、9 个有效 1080p 和 inline regex 单候选结果；生产 Mikan RSS 显式使用 `mikan-tool` 链，外部过滤器必须显式启用；PluginManager 回归 tests |
 | `mikan_tool.py` `Filiter0..4` | 内置 C# MikanTool | 替换 | 已验证 | pure differential、schema v15、legacy config API、Episode identity、schema v16 audit、安全页面抓取/批内缓存/真实 RSS 前置执行，以及五档 WebUI CRUD/排序、开关、可解释预览、legacy JSON 导入导出和快照回滚均已验证；发布镜像浏览器全链已在 Ubuntu CT 通过 |
 | RSS 黑白名单→有序规则组 | `MikanRssRuleEngine` | 扩展 | 已验证 | schema v13 规则、API/WebUI、有界 RSS、来源 EP、schema v14/16 审计、legacy filter、`/api/rss`、winner→统一 staging，以及 schema v25 关系型历史快照和 revision 安全回滚均已验证；统一任务详情按 `ingest_task_id` 安全投影一个任务关联的全部历史 batch/entry ordinal 与实际执行组，重复请求不丢入口证据且不返回 URL 派生 candidate ID；首版以可键盘操作的上下移动排序代替拖拽 |
