@@ -237,12 +237,17 @@ test("anime library exposes an accessible Mikan season completion picker", async
   assert.ok(dialog);
   assert.equal(dialog.getAttribute("aria-labelledby"), "mikan-season-completion-title");
   assert.ok(dialog.querySelector("#mikan-season-completion-binding"));
+  assert.ok(dialog.querySelector("#mikan-season-completion-groups"));
+  assert.ok(dialog.querySelector("#mikan-season-completion-preview"));
   assert.ok(dialog.querySelector("#mikan-season-completion-items"));
+  assert.match(dialog.textContent, /历史中已有的 groupid 默认勾选/);
   assert.match(dialog.textContent, /超过 12/);
+  assert.match(app, /discoverMikanSeasonCompletionGroups/);
   assert.match(app, /previewMikanSeasonCompletion/);
   assert.match(app, /selected\.length > 12/);
   assert.match(app, /expected_resource_revision: preview\.resource_revision/);
   assert.match(css, /\.mikan-season-completion-table-wrap\s*\{/);
+  assert.match(css, /#mikan-season-completion-groups\s*\{/);
 });
 
 test("task deletion waits for a durable execution result and reports item states", async () => {

@@ -94,6 +94,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MikanSeasonCompletionPreviewRequest))]
 [JsonSerializable(typeof(MikanSeasonCompletionConfirmRequest))]
 [JsonSerializable(typeof(MikanSeasonCompletionPreviewResponse))]
+[JsonSerializable(typeof(MikanSeasonCompletionGroupDiscoveryRequest))]
+[JsonSerializable(typeof(MikanSeasonCompletionGroupDiscoveryResponse))]
 [JsonSerializable(typeof(ExternalMediaImportResponse))]
 [JsonSerializable(typeof(DirectoryDatabaseStatusResponse))]
 [JsonSerializable(typeof(DataUpdateStatusResponse))]

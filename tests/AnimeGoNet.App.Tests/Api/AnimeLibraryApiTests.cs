@@ -200,6 +200,34 @@ public sealed class AnimeLibraryApiTests
         {
             command.CommandText = """
                 UPDATE ingest_tasks
+                SET source_profile_id = 'mikan-bulk', source_id = 'mikan', groupid = NULL
+                WHERE id = 'task-alpha';
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+        using (var detailResponse = await app.Client.GetAsync("/api/v1/library/seasons/100/1"))
+        using (var detail = JsonDocument.Parse(await detailResponse.Content.ReadAsStreamAsync()))
+        {
+            var binding = Assert.Single(detail.RootElement.GetProperty("mikan_bindings").EnumerateArray());
+            Assert.Equal(7788, binding.GetProperty("mikanid").GetInt32());
+            Assert.Equal(JsonValueKind.Null, binding.GetProperty("groupid").ValueKind);
+        }
+        using (var groupsResponse = await PostJsonAsync(
+            app,
+            "/api/v1/library/seasons/100/1/mikan-completion/groups",
+            new { source_profile_id = "mikan-bulk", mikanid = 7788 }))
+        using (var groups = JsonDocument.Parse(await groupsResponse.Content.ReadAsStreamAsync()))
+        {
+            Assert.Equal(HttpStatusCode.OK, groupsResponse.StatusCode);
+            Assert.All(
+                groups.RootElement.GetProperty("groups").EnumerateArray(),
+                group => Assert.False(group.GetProperty("previously_used").GetBoolean()));
+        }
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE ingest_tasks
                 SET source_profile_id = 'mikan-bulk', source_id = 'mikan', groupid = 583
                 WHERE id = 'task-alpha';
 
@@ -211,6 +239,21 @@ public sealed class AnimeLibraryApiTests
                     '7788', '1', NULL, '2026-01-02T00:00:00.0000000+00:00');
                 """;
             await command.ExecuteNonQueryAsync();
+        }
+
+        using (var groupsResponse = await PostJsonAsync(
+            app,
+            "/api/v1/library/seasons/100/1/mikan-completion/groups",
+            new { source_profile_id = "mikan-bulk", mikanid = 7788 }))
+        {
+            using var groups = JsonDocument.Parse(await groupsResponse.Content.ReadAsStreamAsync());
+            Assert.Equal(HttpStatusCode.OK, groupsResponse.StatusCode);
+            var items = groups.RootElement.GetProperty("groups").EnumerateArray().ToArray();
+            Assert.Equal(2, items.Length);
+            Assert.Equal(583, items[0].GetProperty("groupid").GetInt32());
+            Assert.Equal("ANi", items[0].GetProperty("name").GetString());
+            Assert.True(items[0].GetProperty("previously_used").GetBoolean());
+            Assert.False(items[1].GetProperty("previously_used").GetBoolean());
         }
 
         using var previewResponse = await PostJsonAsync(
@@ -574,6 +617,10 @@ public sealed class AnimeLibraryApiTests
             if (uri.AbsolutePath.Equals("/Home/Bangumi/7788", StringComparison.OrdinalIgnoreCase))
             {
                 return ValueTask.FromResult(Response(HttpStatusCode.OK, """
+                    <div class="leftbar-nav"><div class="header">字幕组列表</div><ul>
+                      <li><a class="subgroup-name subgroup-583" data-anchor="#583">ANi</a></li>
+                      <li><a class="subgroup-name subgroup-370" data-anchor="#370">LoliHouse</a></li>
+                    </ul></div>
                     <p class="bangumi-info"><a href="https://bgm.tv/subject/42">Bangumi</a></p>
                     """));
             }

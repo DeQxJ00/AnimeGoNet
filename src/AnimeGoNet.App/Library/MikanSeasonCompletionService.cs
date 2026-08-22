@@ -32,6 +32,16 @@ public sealed record MikanSeasonCompletionPreview(
     int? EpisodeOffset,
     IReadOnlyList<MikanSeasonCompletionCandidate> Items);
 
+public sealed record MikanSeasonCompletionGroup(
+    int GroupId,
+    string Name,
+    bool PreviouslyUsed);
+
+public sealed record MikanSeasonCompletionGroupDiscovery(
+    string SourceProfileId,
+    int MikanId,
+    IReadOnlyList<MikanSeasonCompletionGroup> Groups);
+
 public sealed class MikanSeasonCompletionException(string code, string message)
     : Exception(message)
 {
@@ -43,11 +53,44 @@ public sealed class MikanSeasonCompletionService(
     SourceProfileStore profiles,
     MikanWorkMetadataRuleStore workRules,
     MikanTrustedOffsetStore trustedOffsets,
+    IRssFeedHttpClient httpClient,
     RssFeedReader feeds,
     TitleParserManager titleParsers,
     MikanRssIngestProcessor ingest,
     AnimeGoOptions options)
 {
+    public async Task<MikanSeasonCompletionGroupDiscovery> DiscoverGroupsAsync(
+        int tmdbSeriesId,
+        int seasonNumber,
+        string sourceProfileId,
+        int mikanId,
+        CancellationToken cancellationToken = default)
+    {
+        var context = await RequireWorkContextAsync(
+            tmdbSeriesId,
+            seasonNumber,
+            sourceProfileId,
+            mikanId,
+            cancellationToken).ConfigureAwait(false);
+        var groups = await ReadGroupsAsync(
+            context.SourceProfileId,
+            mikanId,
+            cancellationToken).ConfigureAwait(false);
+        var used = context.Detail.Audit.MikanBindings
+            .Where(binding => binding.MikanId == mikanId
+                && binding.GroupId is > 0
+                && string.Equals(binding.SourceProfileId, context.SourceProfileId, StringComparison.OrdinalIgnoreCase))
+            .Select(binding => binding.GroupId!.Value)
+            .ToHashSet();
+        return new MikanSeasonCompletionGroupDiscovery(
+            context.SourceProfileId,
+            mikanId,
+            groups.Select(group => new MikanSeasonCompletionGroup(
+                group.GroupId,
+                group.Name,
+                used.Contains(group.GroupId))).ToArray());
+    }
+
     public async Task<MikanSeasonCompletionPreview> PreviewAsync(
         int tmdbSeriesId,
         int seasonNumber,
@@ -232,11 +275,43 @@ public sealed class MikanSeasonCompletionService(
         int groupId,
         CancellationToken cancellationToken)
     {
-        if (tmdbSeriesId <= 0 || seasonNumber <= 0 || mikanId <= 0 || groupId <= 0)
+        if (groupId <= 0)
         {
             throw new MikanSeasonCompletionException(
                 "mikan_completion_identity_invalid",
                 "TMDB Series, Season, mikanid and groupid must be positive integers.");
+        }
+        var context = await RequireWorkContextAsync(
+            tmdbSeriesId,
+            seasonNumber,
+            sourceProfileId,
+            mikanId,
+            cancellationToken).ConfigureAwait(false);
+        var groups = await ReadGroupsAsync(
+            context.SourceProfileId,
+            mikanId,
+            cancellationToken).ConfigureAwait(false);
+        if (!groups.Any(group => group.GroupId == groupId))
+        {
+            throw new MikanSeasonCompletionException(
+                "mikan_completion_group_unknown",
+                "The requested groupid is not present on the associated Mikan work page.");
+        }
+        return context;
+    }
+
+    private async Task<CompletionContext> RequireWorkContextAsync(
+        int tmdbSeriesId,
+        int seasonNumber,
+        string sourceProfileId,
+        int mikanId,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0 || seasonNumber <= 0 || mikanId <= 0)
+        {
+            throw new MikanSeasonCompletionException(
+                "mikan_completion_identity_invalid",
+                "TMDB Series, Season and mikanid must be positive integers.");
         }
         var profileId = sourceProfileId?.Trim().ToLowerInvariant() ?? string.Empty;
         if (profileId.Length is < 1 or > 128)
@@ -254,7 +329,6 @@ public sealed class MikanSeasonCompletionService(
                 "The requested TMDB season was not found in the local library.");
         if (!detail.Audit.MikanBindings.Any(binding =>
                 binding.MikanId == mikanId
-                && binding.GroupId == groupId
                 && string.Equals(
                     binding.SourceProfileId,
                     profileId,
@@ -262,7 +336,7 @@ public sealed class MikanSeasonCompletionService(
         {
             throw new MikanSeasonCompletionException(
                 "mikan_completion_binding_unknown",
-                "The requested mikanid and groupid are not associated with this library season.");
+                "The requested Mikan source and mikanid are not associated with this library season.");
         }
         var profile = await profiles.GetEnabledAsync(profileId, cancellationToken)
             .ConfigureAwait(false);
@@ -273,6 +347,35 @@ public sealed class MikanSeasonCompletionService(
                 "The associated Mikan source profile is missing or disabled.");
         }
         return new CompletionContext(detail, profile.Id);
+    }
+
+    private async Task<IReadOnlyList<MikanSubgroup>> ReadGroupsAsync(
+        string sourceProfileId,
+        int mikanId,
+        CancellationToken cancellationToken)
+    {
+        var page = new Uri(
+            options.Metadata.Mikan.BaseUrl,
+            $"Home/Bangumi/{mikanId.ToString(CultureInfo.InvariantCulture)}");
+        try
+        {
+            var html = httpClient is ISourceProfileRssFeedHttpClient profileClient
+                ? await profileClient.GetAsync(page, sourceProfileId, cancellationToken).ConfigureAwait(false)
+                : await httpClient.GetAsync(page, cancellationToken).ConfigureAwait(false);
+            return MikanSubgroupListParser.Parse(html);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (MikanSubgroupListException exception)
+        {
+            throw new MikanSeasonCompletionException(exception.Code, exception.Message);
+        }
+        catch (RssFeedException exception)
+        {
+            throw new MikanSeasonCompletionException(exception.Code, "Mikan subgroup discovery failed.");
+        }
     }
 
     private async Task<(string? Source, int? Value)> ResolveOffsetAsync(

@@ -1477,22 +1477,28 @@
         <button id="mikan-season-completion-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
       <div class="mikan-season-completion-toolbar">
-        <label>Mikan 来源与字幕组
+        <label>Mikan 来源与作品
           <select id="mikan-season-completion-binding"></select>
         </label>
         <div class="mikan-season-completion-selection-actions" aria-label="候选选择">
+          <button id="mikan-season-completion-preview" type="button" class="primary-button" disabled>预览已选字幕组</button>
           <button id="mikan-season-completion-default" type="button" class="secondary-button">恢复推荐</button>
           <button id="mikan-season-completion-all" type="button" class="secondary-button">选择全部普通 EP</button>
           <button id="mikan-season-completion-none" type="button" class="secondary-button">清空选择</button>
         </div>
       </div>
-      <p class="muted mikan-season-completion-help">列表来自该作品与字幕组的 Mikan Bangumi RSS。确认后仍会执行当前来源的黑白名单、有序规则、SQLite 去重和统一导入；已有来源完成记录或目标 TMDB EP 默认不选。</p>
+      <fieldset class="mikan-season-completion-groups">
+        <legend>字幕组（可多选）</legend>
+        <div id="mikan-season-completion-groups" aria-live="polite"></div>
+      </fieldset>
+      <p class="muted mikan-season-completion-help">字幕组列表实时解析自 <code>/Home/Bangumi/{mikanid}</code>；历史中已有的 groupid 默认勾选，也可改选或多选。候选来自每个字幕组的 Bangumi RSS，确认后仍执行来源黑白名单、有序规则、SQLite 去重和统一导入。</p>
       <p id="mikan-season-completion-status" class="muted" role="status" aria-live="polite">请选择一个已知的 Mikan 来源。</p>
       <div class="mikan-season-completion-table-wrap">
         <table class="mikan-season-completion-table">
           <thead>
             <tr>
               <th scope="col">选择</th>
+              <th scope="col">字幕组</th>
               <th scope="col">来源 EP</th>
               <th scope="col">目标 TMDB EP</th>
               <th scope="col">标题</th>

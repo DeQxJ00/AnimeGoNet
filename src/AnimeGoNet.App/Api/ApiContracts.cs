@@ -1268,8 +1268,22 @@ public sealed record AnimeSeasonManualOffsetResponse(
 public sealed record AnimeSeasonMikanBindingResponse(
     [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
     [property: JsonPropertyName("mikanid")] int MikanId,
-    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("groupid")] int? GroupId,
     [property: JsonPropertyName("last_used_at_utc")] DateTimeOffset LastUsedAtUtc);
+
+public sealed record MikanSeasonCompletionGroupDiscoveryRequest(
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("mikanid")] int MikanId);
+
+public sealed record MikanSeasonCompletionGroupResponse(
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("previously_used")] bool PreviouslyUsed);
+
+public sealed record MikanSeasonCompletionGroupDiscoveryResponse(
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groups")] IReadOnlyList<MikanSeasonCompletionGroupResponse> Groups);
 
 public sealed record AnimeSeasonRelatedTaskResponse(
     [property: JsonPropertyName("task_id")] string TaskId,

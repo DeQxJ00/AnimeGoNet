@@ -163,6 +163,10 @@ public sealed class AnimeLibraryStoreTests
             .ToArray());
         Assert.True(detail.Audit.ManualOffsets[0].Enabled);
         Assert.False(detail.Audit.ManualOffsets[1].Enabled);
+        Assert.Equal([7789, 7788], detail.Audit.MikanBindings
+            .Select(value => value.MikanId)
+            .ToArray());
+        Assert.All(detail.Audit.MikanBindings, value => Assert.Null(value.GroupId));
         Assert.Equal(2, detail.Audit.RelatedTaskTotal);
         Assert.False(detail.Audit.RelatedTasksTruncated);
         Assert.Equal(["task-alpha-2", "task-alpha-1"], detail.Audit.RelatedTasks

@@ -580,11 +580,11 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT task.source_profile_id, task.mikanid, task.groupid,
+            SELECT task.source_profile_id, task.mikanid,
+                   CASE WHEN task.groupid > 0 THEN task.groupid ELSE NULL END,
                    MAX(task.updated_at_utc)
             FROM ingest_tasks AS task
             WHERE task.mikanid > 0
-              AND task.groupid > 0
               AND (
                     EXISTS (
                         SELECT 1
@@ -615,7 +615,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             values.Add(new AnimeSeasonMikanBindingProjection(
                 reader.GetString(0),
                 reader.GetInt32(1),
-                reader.GetInt32(2),
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
                 ParseTimestamp(reader.GetString(3))));
         }
 

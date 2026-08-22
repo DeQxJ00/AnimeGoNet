@@ -178,6 +178,9 @@ public static class ApiEndpoints
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/mikan-completion/preview",
             PreviewMikanSeasonCompletion);
         app.MapPost(
+            "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/mikan-completion/groups",
+            DiscoverMikanSeasonCompletionGroups);
+        app.MapPost(
             "/api/v1/library/seasons/{tmdbSeriesId:int}/{seasonNumber:int}/mikan-completion",
             ConfirmMikanSeasonCompletion);
         app.MapGet(
@@ -6249,6 +6252,35 @@ public static class ApiEndpoints
         catch (RssFeedException exception)
         {
             return TypedResults.BadRequest(Error(exception.Code, "Mikan RSS preview failed."));
+        }
+    }
+
+    private static async Task<IResult> DiscoverMikanSeasonCompletionGroups(
+        int tmdbSeriesId,
+        int seasonNumber,
+        MikanSeasonCompletionGroupDiscoveryRequest request,
+        MikanSeasonCompletionService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var discovery = await service.DiscoverGroupsAsync(
+                tmdbSeriesId,
+                seasonNumber,
+                request.SourceProfileId ?? string.Empty,
+                request.MikanId,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new MikanSeasonCompletionGroupDiscoveryResponse(
+                discovery.SourceProfileId,
+                discovery.MikanId,
+                discovery.Groups.Select(group => new MikanSeasonCompletionGroupResponse(
+                    group.GroupId,
+                    group.Name,
+                    group.PreviouslyUsed)).ToArray()));
+        }
+        catch (MikanSeasonCompletionException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.Code, exception.Message));
         }
     }
 

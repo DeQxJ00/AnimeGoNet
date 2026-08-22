@@ -89,7 +89,7 @@ public sealed record AnimeSeasonRelatedTaskProjection(
 public sealed record AnimeSeasonMikanBindingProjection(
     string SourceProfileId,
     int MikanId,
-    int GroupId,
+    int? GroupId,
     DateTimeOffset LastUsedAtUtc);
 
 public sealed record AnimeSeasonResolutionAttemptProjection(
