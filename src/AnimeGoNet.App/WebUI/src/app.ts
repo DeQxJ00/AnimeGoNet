@@ -2190,7 +2190,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
       { id: "paths", label: "目录与路径" },
       { id: "ai", label: "AI 与 MCP" },
       { id: "network", label: "网络与代理" },
-      { id: "webui", label: "WebUI" },
+      { id: "webui", label: "WebUI 鉴权" },
       { id: "archive", label: "导入导出与备份" },
     ],
   },

@@ -83,6 +83,11 @@ public sealed class WorkspaceNavigationTests
             StringComparison.Ordinal);
         Assert.Contains(">设置与备份</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"设置与备份\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "{ id: \"webui\", label: \"WebUI 鉴权\" }",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("data-nav-label=\"WebUI 鉴权\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "{ id: \"sources\", label: \"输入源\" }",
             script,

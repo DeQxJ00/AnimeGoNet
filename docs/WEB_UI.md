@@ -194,7 +194,7 @@ Torrent URL 与 RSS URL 在手动提交表单中使用普通 URL 输入并直接
 
 离线导入不要求 manifest URL。页面只接受一个 ZIP，并在请求建立后立即清空文件选择；不保存上传文件名、本机路径或 ZIP 本体。ZIP 根目录必须严格等于 `manifest.json + assets[].file_name`，服务端拒绝额外条目、目录、路径穿越、重复名称、长度或 SHA-256 不符。上传先进入 `data_path/data-update/.partial-*`，成功后只保留已验证包目录；失败清理 partial 且不改变 active。
 
-“设置与备份”拆为“目录与路径 / AI 与 MCP / 网络与代理 / WebUI / 导入导出与备份”。前三个编辑器复用同一生效配置快照和明文凭据回填，但只显示本区字段，并调用 `/api/v1/config/sections/{paths|ai|network}` 预览和保存；服务端只合并对应字段，其他分区不会被旧表单覆盖。网络分区同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时；保存后立即替换共享运行策略和 `animegonet-data-update` 调度。目录分区用流程条明确展示 qB 下载位置 → 路径映射 → `download_path` → move/copy/link → `save_path`，并提供下载器映射入口。`data_path` 单独写部署 YAML 和备份，明确不自动搬迁现有数据。
+“设置与备份”拆为“目录与路径 / AI 与 MCP / 网络与代理 / WebUI 鉴权 / 导入导出与备份”。前三个编辑器复用同一生效配置快照和明文凭据回填，但只显示本区字段，并调用 `/api/v1/config/sections/{paths|ai|network}` 预览和保存；服务端只合并对应字段，其他分区不会被旧表单覆盖。网络分区同时提供 data update 开关、六字段 Cron、Manifest URL、自动下载、自动导入、保留版本数和 HTTP 超时；保存后立即替换共享运行策略和 `animegonet-data-update` 调度。目录分区用流程条明确展示 qB 下载位置 → 路径映射 → `download_path` → move/copy/link → `save_path`，并提供下载器映射入口。`data_path` 单独写部署 YAML 和备份，明确不自动搬迁现有数据。
 
 一级“插件”菜单分为“内部插件 / 外部插件”。“内部插件”当前提供“Web API / AnimeGoHelper (Mikan) 油猴插件”卡片，并为后续站点内部插件保留同级扩展位置；“外部插件”继续管理进程外 C# 包。Mikan 卡片通过既有强类型部署配置接口读取并明文回填 `inner_plugin_mikan.access_key`，显示由当前浏览器 origin 生成的 `/api` 地址和固定 `PluginName=inner_plugin_mikan`；旧 `filter/mikan_tool.py` 继续作为后端兼容别名。新部署 AccessKey 默认 `123456`。保存前重新读取完整部署文档，只修改 `inner_plugin_mikan.access_key` 并移除旧 `web.access_key`，经强类型校验后原子替换并创建部署 YAML 备份。修改不热切换当前鉴权闭包，页面明确要求重启；Docker 模式禁止从 WebUI 保存空 key。
 

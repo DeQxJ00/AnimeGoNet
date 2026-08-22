@@ -141,7 +141,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "delete web.access_key")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260823-auto-backup")]
+    [InlineData("/", "text/html", "/app.js?v=20260823-webui-auth-label")]
     [InlineData("/", "text/html", "ai-test-mikan-import")]
     [InlineData("/", "text/html", "ai-test-enable-tmdb-mcp")]
     [InlineData("/app.js", "text/javascript", "enable_bgm_mcp")]
