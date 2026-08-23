@@ -114,6 +114,7 @@ test("ids are unique and initial async regions expose valid state", async () => 
 
 test("stylesheet provides focus, responsive and reduced-motion contracts", async () => {
   const css = await readFile(cssPath, "utf8");
+  assert.match(css, /:root\s*\{[^}]*font-size:\s*16px/s);
   assert.match(css, /\.skip-link:focus\s*\{/);
   assert.match(css, /:focus-visible\s*\{/);
   assert.match(css, /@media\s*\(max-width:\s*620px\)/);
