@@ -222,9 +222,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-card:hover { border-color: #526b93; transform: translateY(-2px); }
 .library-card:focus-visible { outline: 3px solid #6d94cc; outline-offset: 3px; }
 .library-card.active { border-color: #3e9b7d; background: rgba(18,45,39,.9); }
-.library-poster, .library-detail-poster { width: 100%; height: 100%; min-height: 168px; object-fit: cover; background: linear-gradient(145deg,#202b42,#101624); }
+.library-poster { width: 100%; height: auto; min-height: 0; aspect-ratio: 2 / 3; align-self: start; object-fit: cover; background: linear-gradient(145deg,#202b42,#101624); }
+.library-detail-poster { width: 100%; height: 100%; min-height: 168px; object-fit: cover; background: linear-gradient(145deg,#202b42,#101624); }
 .library-poster.failed, .library-detail-poster.failed { opacity: .35; }
-.library-card-content { min-width: 0; display: grid; align-content: center; gap: 11px; padding: 15px 15px 15px 0; }
+.library-card-content { min-width: 0; display: grid; align-content: center; gap: 8px; padding: 10px 15px 10px 0; }
 .library-card-heading { display: grid; gap: 4px; min-width: 0; }
 .library-card-title { min-block-size: 2.7em; display: -webkit-box; overflow: hidden; font-size: .95rem; line-height: 1.35; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .library-card-heading > span { color: #9db0d0; font-size: .76rem; }
@@ -928,10 +929,6 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .rss-decision.winner { border-left: 3px solid #59d3a5; }
 .rss-decision.rejected, .rss-decision.suppressed { border-left: 3px solid #e35d6a; }
 
-@media (max-width: 1500px) {
-  .library-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
-}
-
 @media (max-width: 1000px) {
   .overview-statistics-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .overview-resource-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -987,7 +984,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 
 @media (max-width: 460px) {
   .library-card { grid-template-columns: 92px minmax(0,1fr); }
-  .library-poster { min-height: 150px; }
+  .library-poster { min-height: 0; }
   .library-detail-facts, .library-episodes { grid-template-columns: 1fr; }
   .library-toolbar label { flex: 1 1 120px; }
   .library-toolbar select { width: 100%; min-width: 0; }

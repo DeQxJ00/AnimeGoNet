@@ -264,7 +264,7 @@ test("anime library card titles stay aligned and expose their complete name", as
   assert.match(app, /title\.className = "library-card-title"/);
   assert.match(app, /title\.title = item\.display_name/);
   assert.match(css, /\.library-card-title\s*\{[^}]*min-block-size:\s*2\.7em[^}]*overflow:\s*hidden[^}]*-webkit-line-clamp:\s*2/s);
-  assert.match(css, /@media \(max-width: 1500px\)\s*\{\s*\.library-list\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
+  assert.match(css, /\.library-poster\s*\{[^}]*height:\s*auto[^}]*aspect-ratio:\s*2\s*\/\s*3/s);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.library-list\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
