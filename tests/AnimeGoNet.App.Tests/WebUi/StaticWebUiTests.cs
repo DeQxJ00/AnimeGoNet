@@ -6,7 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
-    [InlineData("/", "text/html", "/styles.css?v=20260823-library-title-clamp")]
+    [InlineData("/", "text/html", "/styles.css?v=20260823-library-card-width")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]

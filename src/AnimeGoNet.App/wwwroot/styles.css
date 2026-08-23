@@ -928,6 +928,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .rss-decision.winner { border-left: 3px solid #59d3a5; }
 .rss-decision.rejected, .rss-decision.suppressed { border-left: 3px solid #e35d6a; }
 
+@media (max-width: 1500px) {
+  .library-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
 @media (max-width: 1000px) {
   .overview-statistics-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .overview-resource-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
