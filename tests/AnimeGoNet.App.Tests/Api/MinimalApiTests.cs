@@ -58,6 +58,32 @@ public sealed class MinimalApiTests
     }
 
     [Fact]
+    public async Task StatusReportsProcessAndDataPathResourceUsage()
+    {
+        await using var app = await RunningApp.StartAsync(prepareData: layout =>
+        {
+            Directory.CreateDirectory(layout.DataPath);
+            File.WriteAllBytes(
+                Path.Combine(layout.DataPath, "resource-metric.bin"),
+                new byte[4096]);
+        });
+
+        using var response = await app.Client.GetAsync("/api/v1/status");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var resources = json.RootElement.GetProperty("resources");
+
+        Assert.True(resources.GetProperty("working_set_bytes").GetInt64() > 0);
+        Assert.InRange(resources.GetProperty("cpu_percent").GetDouble(), 0, 100);
+        Assert.True(resources.GetProperty("logical_processor_count").GetInt32() >= 1);
+        Assert.True(resources.GetProperty("data_path_bytes").GetInt64() >= 4096);
+        Assert.True(resources.GetProperty("data_path_scan_complete").GetBoolean());
+        Assert.NotEqual(
+            default,
+            resources.GetProperty("data_path_scanned_at_utc").GetDateTimeOffset());
+    }
+
+    [Fact]
     public async Task DirectoryDatabaseStatusAndExplicitRefreshAreExposed()
     {
         await using var app = await RunningApp.StartAsync();

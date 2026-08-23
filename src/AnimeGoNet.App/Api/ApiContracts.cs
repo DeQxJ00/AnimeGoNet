@@ -223,7 +223,16 @@ public sealed record RuntimeStatus(
     [property: JsonPropertyName("migration_diagnostics")]
     IReadOnlyList<ConfigurationMigrationDiagnosticResponse> MigrationDiagnostics,
     [property: JsonPropertyName("external_plugins")]
-    ExternalPluginRuntimeStatusResponse ExternalPlugins);
+    ExternalPluginRuntimeStatusResponse ExternalPlugins,
+    [property: JsonPropertyName("resources")] RuntimeResourceStatusResponse Resources);
+
+public sealed record RuntimeResourceStatusResponse(
+    [property: JsonPropertyName("working_set_bytes")] long WorkingSetBytes,
+    [property: JsonPropertyName("cpu_percent")] double CpuPercent,
+    [property: JsonPropertyName("logical_processor_count")] int LogicalProcessorCount,
+    [property: JsonPropertyName("data_path_bytes")] long DataPathBytes,
+    [property: JsonPropertyName("data_path_scanned_at_utc")] DateTimeOffset DataPathScannedAtUtc,
+    [property: JsonPropertyName("data_path_scan_complete")] bool DataPathScanComplete);
 
 public sealed record ExternalPluginRuntimeStatusResponse(
     [property: JsonPropertyName("packages")]

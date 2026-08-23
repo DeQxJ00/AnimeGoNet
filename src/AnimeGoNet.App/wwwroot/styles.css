@@ -652,6 +652,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .overview-stat-card.failed strong, .overview-stat-card.offline strong { color: #ff9fae; }
 .overview-stat-card.review, .overview-stat-card.library, .overview-stat-card.tasks, .overview-stat-card.stale { border-color: #3d6690; background: linear-gradient(135deg,rgba(27,61,98,.58),rgba(18,35,58,.78)); }
 .overview-stat-card.review strong, .overview-stat-card.library strong, .overview-stat-card.tasks strong, .overview-stat-card.stale strong { color: #9bc9ff; }
+.overview-stat-card.runtime { border-color: #3b6583; background: linear-gradient(135deg,rgba(26,66,89,.58),rgba(16,37,53,.78)); }
+.overview-stat-card.runtime strong { color: #8eddf4; }
+.overview-stat-card.storage { border-color: #66558d; background: linear-gradient(135deg,rgba(67,47,99,.58),rgba(35,27,56,.78)); }
+.overview-stat-card.storage strong { color: #cdb7ff; }
 .metadata-attention-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 18px 0 16px; }
 .metadata-attention-card { min-height: 116px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-content: center; gap: 4px 14px; padding: 16px 18px; border-width: 1px; text-align: left; }
 .metadata-attention-card span { align-self: center; color: #dce7fb; font-size: .86rem; font-weight: 750; }

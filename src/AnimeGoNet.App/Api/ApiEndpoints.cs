@@ -17,6 +17,7 @@ using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Hosting;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Notifications;
@@ -1475,13 +1476,16 @@ public static class ApiEndpoints
         }
     }
 
-    private static Ok<RuntimeStatus> Status(
+    private static async Task<Ok<RuntimeStatus>> Status(
         AnimeGoOptions options,
         LegacyDownloaderMigrationState legacyMigration,
         ExternalPluginDiscoveryResult externalPlugins,
         ExternalPluginHostManager externalPluginHost,
-        ExternalPluginConfigurationService externalPluginConfigurations)
+        ExternalPluginConfigurationService externalPluginConfigurations,
+        RuntimeResourceMetricsService resourceMetrics,
+        CancellationToken cancellationToken)
     {
+        var resources = await resourceMetrics.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         return TypedResults.Ok(new RuntimeStatus(
             version,
@@ -1526,7 +1530,14 @@ public static class ApiEndpoints
                         error.Code,
                         error.Message)).ToArray(),
                 externalPluginHost.GetSnapshots().Select(runtime =>
-                    ToResponse(runtime)).ToArray())));
+                    ToResponse(runtime)).ToArray()),
+            new RuntimeResourceStatusResponse(
+                resources.WorkingSetBytes,
+                resources.CpuPercent,
+                resources.LogicalProcessorCount,
+                resources.DataPathBytes,
+                resources.DataPathScannedAtUtc,
+                resources.DataPathScanComplete)));
     }
 
     private static async Task<IResult> ResetExternalPlugin(

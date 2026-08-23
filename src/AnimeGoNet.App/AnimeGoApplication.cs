@@ -361,6 +361,7 @@ public static class AnimeGoApplication
             startBackgroundWorkers.Value,
             !string.IsNullOrWhiteSpace(accessKey),
             !string.IsNullOrWhiteSpace(webUiAccessKey)));
+        builder.Services.AddSingleton<RuntimeResourceMetricsService>();
         builder.Services.AddSingleton(legacyDownloaderMigrationState);
         builder.Services.AddSingleton(externalPluginLoader);
         builder.Services.AddSingleton(externalPluginDiscovery);

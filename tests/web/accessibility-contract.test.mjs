@@ -183,6 +183,9 @@ test("overview exposes operational statistics as direct navigation and filters",
     "overview-metadata-total",
     "overview-sources-enabled",
     "overview-downloaders-offline",
+    "overview-runtime-memory",
+    "overview-runtime-cpu",
+    "overview-data-path-size",
   ]) {
     assert.equal(document.querySelector(`#${id}`)?.tagName, "BUTTON");
   }
@@ -195,6 +198,11 @@ test("overview exposes operational statistics as direct navigation and filters",
   assert.match(app, /selectWorkspace\("library", "seasons"\)/);
   assert.match(app, /selectWorkspace\("sources", "manage"\)/);
   assert.match(app, /selectWorkspace\("download-tools", "qbittorrent"\)/);
+  assert.match(app, /resources\.working_set_bytes/);
+  assert.match(app, /resources\.cpu_percent/);
+  assert.match(app, /resources\.data_path_bytes/);
+  assert.match(app, /selectWorkspace\("logs", "runtime"\)/);
+  assert.match(app, /selectWorkspace\("connections", "paths"\)/);
   assert.match(app, /loadOverviewStatistics/);
   assert.match(app, /Promise\.allSettled/);
   assert.match(css, /\.overview-statistics-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);

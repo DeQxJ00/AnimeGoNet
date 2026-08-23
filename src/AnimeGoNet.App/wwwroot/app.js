@@ -6651,12 +6651,13 @@ async function fetchOverviewJson(path) {
     return await response.json();
 }
 async function loadOverviewStatistics() {
-    const [downloads, metadata, library, pendingTmdb, sources] = await Promise.allSettled([
+    const [downloads, metadata, library, pendingTmdb, sources, runtime] = await Promise.allSettled([
         fetchOverviewJson("/api/v1/downloads?page=1&page_size=10"),
         fetchOverviewJson("/api/v1/metadata/tasks?page=1&page_size=10"),
         fetchOverviewJson("/api/v1/library/seasons?page=1&page_size=12"),
         fetchOverviewJson("/api/v1/metadata/pending-tmdb"),
         fetchOverviewJson("/api/v1/sources"),
+        fetchOverviewJson("/api/v1/status"),
     ]);
     if (downloads.status === "fulfilled") {
         const summary = downloads.value.summary;
@@ -6717,6 +6718,34 @@ async function loadOverviewStatistics() {
     }
     else {
         setOverviewFailure(["overview-sources-enabled-count"], "overview-sources-detail");
+    }
+    if (runtime.status === "fulfilled") {
+        const resources = runtime.value.resources;
+        element("#overview-runtime-memory-value").textContent =
+            formatBytes(resources.working_set_bytes);
+        element("#overview-runtime-cpu-value").textContent =
+            `${resources.cpu_percent.toFixed(1)}%`;
+        element("#overview-runtime-cpu-detail").textContent =
+            `主进程 · ${resources.logical_processor_count.toLocaleString("zh-CN")} 个逻辑 CPU 归一化`;
+        element("#overview-data-path-size-value").textContent =
+            formatBytes(resources.data_path_bytes);
+        const scannedAt = new Date(resources.data_path_scanned_at_utc);
+        const scannedAtText = Number.isNaN(scannedAt.getTime())
+            ? "扫描时间未知"
+            : scannedAt.toLocaleTimeString("zh-CN", { hour12: false });
+        element("#overview-data-path-size-detail").textContent =
+            `${resources.data_path_scan_complete ? "扫描完成" : "部分扫描"} · ${scannedAtText}`;
+    }
+    else {
+        for (const id of [
+            "overview-runtime-memory-value",
+            "overview-runtime-cpu-value",
+            "overview-data-path-size-value",
+        ]) {
+            element(`#${id}`).textContent = "!";
+        }
+        element("#overview-runtime-cpu-detail").textContent = "读取失败，点击查看日志";
+        element("#overview-data-path-size-detail").textContent = "读取失败，点击检查目录";
     }
 }
 async function loadMetadataTasks(background = false) {
@@ -9590,6 +9619,10 @@ element("#overview-library-seasons").addEventListener("click", () => selectWorks
 element("#overview-metadata-total").addEventListener("click", openAllMetadataFromOverview);
 element("#overview-sources-enabled").addEventListener("click", () => selectWorkspace("sources", "manage"));
 element("#overview-downloaders-offline").addEventListener("click", () => selectWorkspace("download-tools", "qbittorrent"));
+for (const id of ["overview-runtime-memory", "overview-runtime-cpu"]) {
+    element(`#${id}`).addEventListener("click", () => selectWorkspace("logs", "runtime"));
+}
+element("#overview-data-path-size").addEventListener("click", () => selectWorkspace("connections", "paths"));
 element("#metadata-previous").addEventListener("click", () => {
     if (metadataState.page <= 1)
         return;

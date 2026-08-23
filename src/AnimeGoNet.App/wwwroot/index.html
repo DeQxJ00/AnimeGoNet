@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260823-auto-backup">
+  <link rel="stylesheet" href="/styles.css?v=20260823-runtime-metrics">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -151,6 +151,15 @@
             </button>
             <button id="overview-downloaders-offline" type="button" class="overview-stat-card offline">
               <span>离线下载器</span><strong id="overview-downloaders-offline-count">—</strong><small>进入 qBittorrent 实例配置</small>
+            </button>
+            <button id="overview-runtime-memory" type="button" class="overview-stat-card runtime">
+              <span>运行内存</span><strong id="overview-runtime-memory-value">—</strong><small>AnimeGoNet 主进程 Working Set</small>
+            </button>
+            <button id="overview-runtime-cpu" type="button" class="overview-stat-card runtime">
+              <span>CPU 占用</span><strong id="overview-runtime-cpu-value">—</strong><small id="overview-runtime-cpu-detail">主进程 CPU</small>
+            </button>
+            <button id="overview-data-path-size" type="button" class="overview-stat-card storage">
+              <span>animegonet_data</span><strong id="overview-data-path-size-value">—</strong><small id="overview-data-path-size-detail">当前 data_path 占用</small>
             </button>
           </div>
         </section>
@@ -1909,6 +1918,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260823-library-tmdb-link"></script>
+    <script type="module" src="/app.js?v=20260823-runtime-metrics"></script>
 </body>
 </html>

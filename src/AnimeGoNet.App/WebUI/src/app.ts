@@ -31,6 +31,14 @@ interface RuntimeStatus {
   paths: { data_path: string };
   capabilities: Record<string, boolean>;
   external_plugins: ExternalPluginStatus;
+  resources: {
+    working_set_bytes: number;
+    cpu_percent: number;
+    logical_processor_count: number;
+    data_path_bytes: number;
+    data_path_scanned_at_utc: string;
+    data_path_scan_complete: boolean;
+  };
 }
 
 interface ExternalPluginStatus {
@@ -9223,12 +9231,13 @@ async function fetchOverviewJson<T>(path: string): Promise<T> {
 }
 
 async function loadOverviewStatistics(): Promise<void> {
-  const [downloads, metadata, library, pendingTmdb, sources] = await Promise.allSettled([
+  const [downloads, metadata, library, pendingTmdb, sources, runtime] = await Promise.allSettled([
     fetchOverviewJson<DownloadListPage>("/api/v1/downloads?page=1&page_size=10"),
     fetchOverviewJson<MetadataTaskListPage>("/api/v1/metadata/tasks?page=1&page_size=10"),
     fetchOverviewJson<AnimeSeasonListPage>("/api/v1/library/seasons?page=1&page_size=12"),
     fetchOverviewJson<{ items: PendingTmdbSummary[] }>("/api/v1/metadata/pending-tmdb"),
     fetchOverviewJson<SourceProfileList>("/api/v1/sources"),
+    fetchOverviewJson<RuntimeStatus>("/api/v1/status"),
   ]);
 
   if (downloads.status === "fulfilled") {
@@ -9295,6 +9304,34 @@ async function loadOverviewStatistics(): Promise<void> {
       `共 ${sources.value.items.length.toLocaleString("zh-CN")} 个来源`;
   } else {
     setOverviewFailure(["overview-sources-enabled-count"], "overview-sources-detail");
+  }
+
+  if (runtime.status === "fulfilled") {
+    const resources = runtime.value.resources;
+    element<HTMLElement>("#overview-runtime-memory-value").textContent =
+      formatBytes(resources.working_set_bytes);
+    element<HTMLElement>("#overview-runtime-cpu-value").textContent =
+      `${resources.cpu_percent.toFixed(1)}%`;
+    element<HTMLElement>("#overview-runtime-cpu-detail").textContent =
+      `主进程 · ${resources.logical_processor_count.toLocaleString("zh-CN")} 个逻辑 CPU 归一化`;
+    element<HTMLElement>("#overview-data-path-size-value").textContent =
+      formatBytes(resources.data_path_bytes);
+    const scannedAt = new Date(resources.data_path_scanned_at_utc);
+    const scannedAtText = Number.isNaN(scannedAt.getTime())
+      ? "扫描时间未知"
+      : scannedAt.toLocaleTimeString("zh-CN", { hour12: false });
+    element<HTMLElement>("#overview-data-path-size-detail").textContent =
+      `${resources.data_path_scan_complete ? "扫描完成" : "部分扫描"} · ${scannedAtText}`;
+  } else {
+    for (const id of [
+      "overview-runtime-memory-value",
+      "overview-runtime-cpu-value",
+      "overview-data-path-size-value",
+    ]) {
+      element<HTMLElement>(`#${id}`).textContent = "!";
+    }
+    element<HTMLElement>("#overview-runtime-cpu-detail").textContent = "读取失败，点击查看日志";
+    element<HTMLElement>("#overview-data-path-size-detail").textContent = "读取失败，点击检查目录";
   }
 }
 
@@ -12388,6 +12425,16 @@ element<HTMLButtonElement>("#overview-sources-enabled").addEventListener(
 element<HTMLButtonElement>("#overview-downloaders-offline").addEventListener(
   "click",
   () => selectWorkspace("download-tools", "qbittorrent"),
+);
+for (const id of ["overview-runtime-memory", "overview-runtime-cpu"] as const) {
+  element<HTMLButtonElement>(`#${id}`).addEventListener(
+    "click",
+    () => selectWorkspace("logs", "runtime"),
+  );
+}
+element<HTMLButtonElement>("#overview-data-path-size").addEventListener(
+  "click",
+  () => selectWorkspace("connections", "paths"),
 );
 element<HTMLButtonElement>("#metadata-previous").addEventListener("click", () => {
   if (metadataState.page <= 1) return;
