@@ -7221,7 +7221,11 @@ public static class ApiEndpoints
                 plugins,
                 cancellationToken).ConfigureAwait(false);
             var result = await processor
-                .ProcessAsync(feed, profile.Id, cancellationToken)
+                .ProcessAsync(
+                    feed,
+                    profile.Id,
+                    request.MediaType ?? "tv",
+                    cancellationToken)
                 .ConfigureAwait(false);
             return TypedResults.Ok(result);
         }
@@ -7383,7 +7387,11 @@ public static class ApiEndpoints
                 };
             }
 
-            var result = await processor.ProcessAsync(feed, "mikan", cancellationToken).ConfigureAwait(false);
+            var result = await processor.ProcessAsync(
+                feed,
+                "mikan",
+                request.MediaType ?? "tv",
+                cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 200, $"开始处理{feed.Items.Count}个下载项", result));
         }

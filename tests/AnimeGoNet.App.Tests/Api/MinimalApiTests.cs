@@ -560,7 +560,7 @@ public sealed class MinimalApiTests
               "data": [
                 {
                   "torrent": "https://tracker.invalid/personal-passkey/one.torrent",
-                  "info": { "title": "Episode 1", "mikanid": 3951, "bgmid": 547888 },
+                  "info": { "title": "Movie", "mikanid": 3951, "bgmid": 547888, "media_type": "movie" },
                   "source_evidence": {
                     "published_at_raw": "2099-01-01T00:00:00+08:00",
                     "published_at": "2099-01-01T00:00:00+08:00"
@@ -600,14 +600,15 @@ public sealed class MinimalApiTests
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                SELECT source_published_at_raw, source_published_at
+                SELECT source_published_at_raw, source_published_at, media_type
                 FROM ingest_tasks
-                WHERE title = 'Episode 1';
+                WHERE title = 'Movie';
                 """;
             await using var reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
             Assert.True(reader.IsDBNull(0));
             Assert.True(reader.IsDBNull(1));
+            Assert.Equal("movie", reader.GetString(2));
         }
 
         const string u2Payload = """

@@ -334,8 +334,20 @@ test("anime library links a confirmed season to its canonical TMDB page", async 
 });
 
 test("manual ingest uses the WebUI-authenticated route instead of the plugin boundary", async () => {
-  const app = await readFile(appPath, "utf8");
+  const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
   assert.match(app, /authenticatedFetch\("\/api\/v1\/ingest\/manual"/);
+  assert.deepEqual(
+    [...document.querySelectorAll("#manual-download-media-type option")]
+      .map(option => option.getAttribute("value")),
+    ["tv", "movie"],
+  );
+  assert.deepEqual(
+    [...document.querySelectorAll("#manual-rss-media-type option")]
+      .map(option => option.getAttribute("value")),
+    ["tv", "movie"],
+  );
+  assert.match(app, /media_type:\s*element\("#manual-download-media-type"\)\.value/);
+  assert.match(app, /media_type:\s*element\("#manual-rss-media-type"\)\.value/);
 });
 
 test("task deletion waits for a durable execution result and reports item states", async () => {

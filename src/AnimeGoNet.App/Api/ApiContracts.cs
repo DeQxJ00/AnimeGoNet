@@ -9,14 +9,16 @@ public sealed record LegacyRssRequest(
     [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("rss")] LegacyRssLocation? Rss,
     [property: JsonPropertyName("is_select_ep")] bool IsSelectEp,
-    [property: JsonPropertyName("ep_links")] IReadOnlyList<string>? EpLinks);
+    [property: JsonPropertyName("ep_links")] IReadOnlyList<string>? EpLinks,
+    [property: JsonPropertyName("media_type")] string? MediaType = null);
 
 public sealed record LegacyRssLocation(
     [property: JsonPropertyName("url")] string? Url);
 
 public sealed record RssIngestRequest(
     [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
-    [property: JsonPropertyName("url")] string? Url);
+    [property: JsonPropertyName("url")] string? Url,
+    [property: JsonPropertyName("media_type")] string? MediaType = null);
 
 public sealed record LegacyApiResponse<T>(int Code, string Msg, T Data);
 

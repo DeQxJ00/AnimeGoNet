@@ -4,6 +4,7 @@ using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.Data.Rules;
@@ -59,7 +60,19 @@ public sealed class MikanRssIngestProcessor(
         RssFeedDocument feed,
         string sourceProfileId = "mikan",
         CancellationToken cancellationToken = default) =>
-        ProcessAggregateAwareAsync(feed, sourceProfileId, null, cancellationToken);
+        ProcessAsync(feed, sourceProfileId, MediaTypes.Tv, cancellationToken);
+
+    public Task<MikanRssIngestResult> ProcessAsync(
+        RssFeedDocument feed,
+        string sourceProfileId,
+        string mediaType,
+        CancellationToken cancellationToken = default) =>
+        ProcessAggregateAwareAsync(
+            feed,
+            sourceProfileId,
+            null,
+            NormalizeMediaType(mediaType),
+            cancellationToken);
 
     public Task<MikanRssIngestResult> ProcessScheduledAsync(
         RssFeedDocument feed,
@@ -70,12 +83,14 @@ public sealed class MikanRssIngestProcessor(
             feed,
             sourceProfileId,
             expectedSourceProfileRevision,
+            MediaTypes.Tv,
             cancellationToken);
 
     private async Task<MikanRssIngestResult> ProcessAggregateAwareAsync(
         RssFeedDocument feed,
         string sourceProfileId,
         long? expectedSourceProfileRevision,
+        string mediaType,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(feed);
@@ -87,6 +102,7 @@ public sealed class MikanRssIngestProcessor(
                 expectedSourceProfileRevision,
                 null,
                 null,
+                mediaType,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -123,6 +139,7 @@ public sealed class MikanRssIngestProcessor(
                 expectedSourceProfileRevision,
                 group.IdentityFailureCode,
                 group.Identities,
+                mediaType,
                 cancellationToken).ConfigureAwait(false);
             completed.Add(new AggregateResult(group.ItemIndexes, result));
         }
@@ -159,6 +176,7 @@ public sealed class MikanRssIngestProcessor(
         long? expectedSourceProfileRevision,
         string? identityFailureCode,
         IReadOnlyList<MikanEpisodeIdentity?>? resolvedIdentities,
+        string mediaType,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(feed);
@@ -452,7 +470,8 @@ public sealed class MikanRssIngestProcessor(
                     item.FeedItem.Title, null, item.Candidate.Id,
                     feed.MikanId?.ToString(CultureInfo.InvariantCulture),
                     item.FeedItem.MikanUrl, null, feed.MikanId,
-                    stored.BangumiDiscovery.BangumiSubjectId, null, null),
+                    stored.BangumiDiscovery.BangumiSubjectId, null, null,
+                    MediaType: mediaType),
                 string.IsNullOrWhiteSpace(item.FeedItem.PublishedDate)
                     ? null
                     : new IngestSourceEvidence(
@@ -509,6 +528,18 @@ public sealed class MikanRssIngestProcessor(
             legacy.Revision,
             legacy.Enabled,
             results);
+    }
+
+    private static string NormalizeMediaType(string? value)
+    {
+        if (!MediaTypes.TryNormalize(value, out var mediaType))
+        {
+            throw new RssFeedException(
+                "rss_media_type_invalid",
+                "media_type must be 'tv' or 'movie'.");
+        }
+
+        return mediaType;
     }
 
     private sealed record AggregateWork(

@@ -8135,6 +8135,7 @@ async function submitManualDownload(event) {
                         bgmid: optionalPositiveNumber("#manual-download-bgmid"),
                         anidbid: optionalPositiveNumber("#manual-download-anidbid"),
                         imdbid: element("#manual-download-imdbid").value.trim() || null,
+                        media_type: element("#manual-download-media-type").value,
                     },
                 }],
         });
@@ -8192,6 +8193,7 @@ async function submitManualRss(event) {
         requestBody = JSON.stringify({
             source_profile_id: sourceId,
             url: url.value,
+            media_type: element("#manual-rss-media-type").value,
         });
         url.value = "";
         const requestHeaders = new Headers(headers);

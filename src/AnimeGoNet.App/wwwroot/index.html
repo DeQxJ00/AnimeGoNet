@@ -1176,6 +1176,12 @@
             <label>输入源
               <select id="manual-download-source" required></select>
             </label>
+            <label>媒体类型
+              <select id="manual-download-media-type" required>
+                <option value="tv" selected>TV 动画</option>
+                <option value="movie">动画电影</option>
+              </select>
+            </label>
             <label class="wide">任务 title
               <input id="manual-download-title" required maxlength="512" autocomplete="off">
             </label>
@@ -1223,6 +1229,12 @@
           <div class="manual-submit-fields">
             <label class="wide">Mikan 输入源
               <select id="manual-rss-source" required></select>
+            </label>
+            <label class="wide">媒体类型
+              <select id="manual-rss-media-type" required>
+                <option value="tv" selected>TV 动画</option>
+                <option value="movie">动画电影</option>
+              </select>
             </label>
             <label class="wide">RSS URL（直接显示）
               <input id="manual-rss-url" type="url" required inputmode="url" autocomplete="off" spellcheck="false">

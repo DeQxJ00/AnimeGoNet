@@ -122,6 +122,27 @@ public sealed class MikanRssIngestProcessorTests
     }
 
     [Fact]
+    public async Task ExplicitMovieRssPersistsMovieMediaTypeOnWinnerTask()
+    {
+        await using var staging = new CountingStagingService();
+        var transport = new WorkPageTransport();
+        await using var app = await StartAsync(staging, transport);
+        var result = await app.App.Services
+            .GetRequiredService<MikanRssIngestProcessor>()
+            .ProcessAsync(Feed(Item("Feature [1080p]", "movie")), "mikan", "movie");
+
+        var taskId = Assert.IsType<string>(Assert.Single(result.Items).IngestTaskId);
+        await using var connection = await app.App.Services
+            .GetRequiredService<AnimeGoSqliteDatabase>()
+            .OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT media_type FROM ingest_tasks WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", taskId);
+
+        Assert.Equal("movie", await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task CompletedSourceEpisodeStopsBeforeTorrentStagingAndDeletionAllowsReentry()
     {
         await using var staging = new CountingStagingService();
