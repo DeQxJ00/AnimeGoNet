@@ -516,6 +516,10 @@ public static class AnimeGoApplication
             refreshScope: metadataRefreshScope);
         var registeredTmdbClient = tmdbClient;
         builder.Services.AddSingleton<ITmdbClient>(_ => registeredTmdbClient);
+        if (registeredTmdbClient is ITmdbMovieClient registeredTmdbMovieClient)
+        {
+            builder.Services.AddSingleton<ITmdbMovieClient>(_ => registeredTmdbMovieClient);
+        }
         builder.Services.AddSingleton<TmdbAuthority>();
         builder.Services.AddSingleton<TmdbSeriesResolver>();
         builder.Services.AddSingleton<TmdbSeriesSeasonResolver>();

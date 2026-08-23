@@ -42,6 +42,13 @@ public sealed record TmdbSeriesDetails(
     TmdbSeries Series,
     IReadOnlyList<TmdbSeason> Seasons);
 
+public sealed record TmdbMovie(
+    int Id,
+    string Title,
+    string OriginalTitle,
+    DateOnly? ReleaseDate,
+    string? PosterPath = null);
+
 public sealed record BangumiSubject(
     int Id,
     string Name,
@@ -104,6 +111,17 @@ public interface ITmdbClient
         int seriesId,
         int seasonNumber,
         int episodeNumber,
+        CancellationToken cancellationToken = default);
+}
+
+public interface ITmdbMovieClient
+{
+    Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+        string title,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbMovie?> GetMovieAsync(
+        int movieId,
         CancellationToken cancellationToken = default);
 }
 

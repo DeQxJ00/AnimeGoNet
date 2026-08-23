@@ -10,6 +10,46 @@ namespace AnimeGoNet.App.Tests.Metadata;
 public sealed class TmdbClientTests
 {
     [Fact]
+    public async Task MovieSearchUsesAnimatedMovieDiscoverAndMapsCanonicalFields()
+    {
+        const string json = """
+            {"total_results":1,"results":[{"id":129,"title":"千与千寻","original_title":"千と千尋の神隠し","release_date":"2001-07-20","poster_path":"/movie.jpg"}]}
+            """;
+        using var handler = new RecordingHandler(_ => Json(json));
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+
+        var movie = Assert.Single(await client.SearchMoviesAsync("千と千尋の神隠し"));
+
+        Assert.Equal(129, movie.Id);
+        Assert.Equal("千与千寻", movie.Title);
+        Assert.Equal("千と千尋の神隠し", movie.OriginalTitle);
+        Assert.Equal(new DateOnly(2001, 7, 20), movie.ReleaseDate);
+        Assert.Equal("/movie.jpg", movie.PosterPath);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("/3/discover/movie", request.Path);
+        Assert.Contains("sort_by=primary_release_date.desc", request.Query, StringComparison.Ordinal);
+        Assert.Contains("with_genres=16", request.Query, StringComparison.Ordinal);
+        Assert.Contains("with_text_query=", request.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MovieDetailsUseMovieEndpointAndValidateIdentity()
+    {
+        const string json = """
+            {"id":129,"title":"千与千寻","original_title":"千と千尋の神隠し","release_date":"2001-07-20","poster_path":"/movie.jpg"}
+            """;
+        using var handler = new RecordingHandler(_ => Json(json));
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+
+        var movie = Assert.IsType<TmdbMovie>(await client.GetMovieAsync(129));
+
+        Assert.Equal(129, movie.Id);
+        Assert.Equal("/3/movie/129", Assert.Single(handler.Requests).Path);
+    }
+
+    [Fact]
     public async Task SearchPreservesUpstreamDiscoverParametersAndMapsCanonicalFields()
     {
         const string json = """

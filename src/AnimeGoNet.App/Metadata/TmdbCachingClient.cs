@@ -14,7 +14,7 @@ internal sealed class TmdbCachingClient(
     TmdbClientOptions options,
     TimeProvider? timeProvider = null,
     bool ownsInner = false,
-    MetadataRefreshScope? refreshScope = null) : ITmdbClient, IDisposable
+    MetadataRefreshScope? refreshScope = null) : ITmdbClient, ITmdbMovieClient, IDisposable
 {
     internal const string DatabaseName = "bolt";
     internal const string BucketName = "themoviedb";
@@ -52,6 +52,74 @@ internal sealed class TmdbCachingClient(
             result,
             TmdbJsonContext.Default.TmdbSeriesArray,
             cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    public async Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        var movieClient = MovieClient();
+        if (string.IsNullOrWhiteSpace(title) || options.CacheTtl <= TimeSpan.Zero)
+        {
+            return await movieClient.SearchMoviesAsync(title, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var key = Key("movie-search", title.Trim());
+        var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
+            key,
+            TmdbJsonContext.Default.TmdbMovieArray,
+            static value => value.All(IsValidMovie)
+                && value.Select(item => item.Id).Distinct().Count() == value.Length,
+            cancellationToken).ConfigureAwait(false);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var result = (await movieClient.SearchMoviesAsync(title, cancellationToken)
+            .ConfigureAwait(false)).ToArray();
+        await WriteAsync(
+            key,
+            result,
+            TmdbJsonContext.Default.TmdbMovieArray,
+            cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    public async Task<TmdbMovie?> GetMovieAsync(
+        int movieId,
+        CancellationToken cancellationToken = default)
+    {
+        var movieClient = MovieClient();
+        if (movieId <= 0 || options.CacheTtl <= TimeSpan.Zero)
+        {
+            return await movieClient.GetMovieAsync(movieId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var key = Key("movie", movieId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
+            key,
+            TmdbJsonContext.Default.TmdbMovie,
+            value => IsValidMovie(value) && value.Id == movieId,
+            cancellationToken).ConfigureAwait(false);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var result = await movieClient.GetMovieAsync(movieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (result is not null)
+        {
+            await WriteAsync(
+                key,
+                result,
+                TmdbJsonContext.Default.TmdbMovie,
+                cancellationToken).ConfigureAwait(false);
+        }
         return result;
     }
 
@@ -278,6 +346,16 @@ internal sealed class TmdbCachingClient(
 
     private static bool IsValidSeries(TmdbSeries value) =>
         value.Id > 0 && value.Name is not null && value.OriginalName is not null;
+
+    private static bool IsValidMovie(TmdbMovie value) =>
+        value.Id > 0 && value.Title is not null && value.OriginalTitle is not null;
+
+    private ITmdbMovieClient MovieClient() =>
+        inner as ITmdbMovieClient
+        ?? throw new TmdbClientException(
+            MetadataFailureKind.Configuration,
+            "tmdb_movie_client_unavailable",
+            tmdbAccessConfirmed: false);
 
     private static bool IsValidSeason(TmdbSeason value, int seriesId, int seasonNumber) =>
         value.Id > 0

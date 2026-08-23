@@ -49,6 +49,24 @@ public sealed class TmdbCachingClientTests
     }
 
     [Fact]
+    public async Task SuccessfulMovieResponsesAreReusedAcrossClientInstances()
+    {
+        await using var fixture = await CacheFixture.CreateAsync();
+        var first = new FakeTmdbClient();
+        using (var client = fixture.Create(first))
+        {
+            Assert.Single(await client.SearchMoviesAsync("Spirited Away"));
+            Assert.NotNull(await client.GetMovieAsync(129));
+        }
+
+        var second = new FakeTmdbClient { ThrowOnEveryCall = true };
+        using var restarted = fixture.Create(second);
+        Assert.Single(await restarted.SearchMoviesAsync("Spirited Away"));
+        Assert.NotNull(await restarted.GetMovieAsync(129));
+        Assert.Equal(0, second.MovieCallCount);
+    }
+
+    [Fact]
     public async Task ExpiredEntryFetchesAndReplacesAuthoritativeValue()
     {
         await using var fixture = await CacheFixture.CreateAsync(cacheTtl: TimeSpan.FromHours(2));
@@ -330,7 +348,7 @@ public sealed class TmdbCachingClientTests
         public override DateTimeOffset GetUtcNow() => UtcNow;
     }
 
-    private sealed class FakeTmdbClient : ITmdbClient
+    private sealed class FakeTmdbClient : ITmdbClient, ITmdbMovieClient
     {
         public TmdbSeries Series { get; init; } =
             new(42, "Example", "Example JP", new DateOnly(2026, 1, 1));
@@ -351,6 +369,12 @@ public sealed class TmdbCachingClientTests
 
         public int EpisodeCalls { get; private set; }
 
+        public int MovieSearchCalls { get; private set; }
+
+        public int MovieDetailsCalls { get; private set; }
+
+        public int MovieCallCount => MovieSearchCalls + MovieDetailsCalls;
+
         public int CallCount => SearchCalls + DetailsCalls + SeasonCalls + EpisodeCalls;
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
@@ -362,6 +386,29 @@ public sealed class TmdbCachingClientTests
             SearchCalls++;
             ThrowIfRequested();
             return Task.FromResult(SearchResult ?? (IReadOnlyList<TmdbSeries>)[Series]);
+        }
+
+        public Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            _ = title;
+            cancellationToken.ThrowIfCancellationRequested();
+            MovieSearchCalls++;
+            ThrowIfRequested();
+            return Task.FromResult<IReadOnlyList<TmdbMovie>>(
+                [new TmdbMovie(129, "Spirited Away", "千と千尋の神隠し", new DateOnly(2001, 7, 20))]);
+        }
+
+        public Task<TmdbMovie?> GetMovieAsync(
+            int movieId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MovieDetailsCalls++;
+            ThrowIfRequested();
+            return Task.FromResult<TmdbMovie?>(
+                new TmdbMovie(movieId, "Spirited Away", "千と千尋の神隠し", new DateOnly(2001, 7, 20)));
         }
 
         public async Task<TmdbSeries?> GetSeriesAsync(

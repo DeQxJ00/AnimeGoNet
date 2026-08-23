@@ -9,7 +9,7 @@ using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Metadata;
 
-public sealed class TmdbClient : ITmdbClient, IDisposable
+public sealed class TmdbClient : ITmdbClient, ITmdbMovieClient, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly TmdbClientOptions _options;
@@ -50,6 +50,57 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
         }
 
         return response.Results.Select(MapSeries).ToArray();
+    }
+
+    public async Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            throw Failure(MetadataFailureKind.InvalidInput, "tmdb_movie_title_required");
+        }
+
+        var query = string.Join(
+            '&',
+            "sort_by=primary_release_date.desc",
+            $"language={Uri.EscapeDataString(_options.Language)}",
+            "with_genres=16",
+            $"with_text_query={Uri.EscapeDataString(title.Trim())}");
+        var response = await GetAsync(
+            $"3/discover/movie?{query}",
+            TmdbJsonContext.Default.TmdbMovieSearchResponse,
+            allowNotFound: false,
+            cancellationToken).ConfigureAwait(false);
+        if (response?.Results is null || response.TotalResults < 0)
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_invalid_movie_search_response");
+        }
+
+        return response.Results.Select(MapMovie).ToArray();
+    }
+
+    public async Task<TmdbMovie?> GetMovieAsync(
+        int movieId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidatePositive(movieId, "tmdb_movie_id_invalid");
+        var response = await GetAsync(
+            $"3/movie/{movieId}?language={Uri.EscapeDataString(_options.Language)}",
+            TmdbJsonContext.Default.TmdbMovieDto,
+            allowNotFound: true,
+            cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            return null;
+        }
+
+        if (response.Id != movieId)
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_movie_identity_mismatch");
+        }
+
+        return MapMovie(response);
     }
 
     public async Task<TmdbSeries?> GetSeriesAsync(
@@ -248,6 +299,21 @@ public sealed class TmdbClient : ITmdbClient, IDisposable
             response.Name?.Trim() ?? string.Empty,
             response.OriginalName?.Trim() ?? string.Empty,
             ParseDate(response.FirstAirDate),
+            NormalizePosterPath(response.PosterPath));
+    }
+
+    private static TmdbMovie MapMovie(TmdbMovieDto response)
+    {
+        if (response.Id <= 0)
+        {
+            throw Failure(MetadataFailureKind.Protocol, "tmdb_movie_id_invalid");
+        }
+
+        return new TmdbMovie(
+            response.Id,
+            response.Title?.Trim() ?? string.Empty,
+            response.OriginalTitle?.Trim() ?? string.Empty,
+            ParseDate(response.ReleaseDate),
             NormalizePosterPath(response.PosterPath));
     }
 

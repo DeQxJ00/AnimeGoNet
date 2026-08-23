@@ -7,6 +7,17 @@ internal sealed record TmdbSearchResponse(
     [property: JsonPropertyName("total_results")] int TotalResults,
     [property: JsonPropertyName("results")] TmdbSeriesDto[]? Results);
 
+internal sealed record TmdbMovieSearchResponse(
+    [property: JsonPropertyName("total_results")] int TotalResults,
+    [property: JsonPropertyName("results")] TmdbMovieDto[]? Results);
+
+internal sealed record TmdbMovieDto(
+    [property: JsonPropertyName("id")] int Id,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("original_title")] string? OriginalTitle,
+    [property: JsonPropertyName("release_date")] string? ReleaseDate,
+    [property: JsonPropertyName("poster_path")] string? PosterPath);
+
 internal sealed record TmdbSeriesDto(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string? Name,
@@ -33,6 +44,8 @@ internal sealed record TmdbEpisodeDto(
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = false)]
 [JsonSerializable(typeof(TmdbSearchResponse))]
+[JsonSerializable(typeof(TmdbMovieSearchResponse))]
+[JsonSerializable(typeof(TmdbMovieDto))]
 [JsonSerializable(typeof(TmdbSeriesDto))]
 [JsonSerializable(typeof(TmdbSeasonDto))]
 [JsonSerializable(typeof(TmdbEpisodeDto))]
@@ -40,4 +53,6 @@ internal sealed record TmdbEpisodeDto(
 [JsonSerializable(typeof(TmdbSeriesDetails))]
 [JsonSerializable(typeof(TmdbSeason))]
 [JsonSerializable(typeof(TmdbEpisode))]
+[JsonSerializable(typeof(TmdbMovie[]))]
+[JsonSerializable(typeof(TmdbMovie))]
 internal sealed partial class TmdbJsonContext : JsonSerializerContext;
