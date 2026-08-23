@@ -137,6 +137,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         int? mikanId;
         int? bangumiId;
         var isOtherReadaptation = false;
+        var mediaType = "tv";
         await using (var details = connection.CreateCommand())
         {
             details.Transaction = transaction;
@@ -148,7 +149,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                        EXISTS (
                            SELECT 1 FROM other_file_readaptation_jobs AS readaptation
                            WHERE readaptation.task_id = task.id
-                             AND readaptation.state = 'pending')
+                             AND readaptation.state = 'pending'),
+                       task.media_type
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
                 WHERE job.id = $job_id AND job.task_id = $task_id
@@ -175,6 +177,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             mikanId = reader.IsDBNull(8) ? null : reader.GetInt32(8);
             fileStrategy = reader.GetString(9);
             isOtherReadaptation = reader.GetInt64(10) == 1;
+            mediaType = reader.GetString(11);
             if (fileStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
             {
                 throw new InvalidOperationException("Captured file strategy is unsupported.");
@@ -194,16 +197,20 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             query.Transaction = transaction;
             query.CommandText = """
                 SELECT file.id, file.relative_path, file.size_bytes, file.disposition,
-                       series.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
-                       series.canonical_name, file.rename_suffix, file.associated_task_file_id
+                       COALESCE(series.tmdb_series_id, 0),
+                       COALESCE(file.tmdb_season_number, 0), file.tmdb_episode_number,
+                       COALESCE(series.canonical_name, movie.canonical_title),
+                       file.rename_suffix, file.associated_task_file_id
                        , file.source_episode, readaptation.source_media_path,
-                       COALESCE(readaptation.preserve_source, 0)
+                       COALESCE(readaptation.preserve_source, 0),
+                       task.media_type, file.tmdb_movie_id, movie.release_date,
+                       movie.original_title
                 FROM task_files AS file
                 JOIN ingest_tasks AS task ON task.id = file.task_id
                 LEFT JOIN other_file_readaptation_jobs AS readaptation
                   ON readaptation.task_file_id = file.id
                  AND readaptation.state = 'pending'
-                JOIN anime_series AS series ON
+                LEFT JOIN anime_series AS series ON
                     (file.tmdb_series_id IS NOT NULL
                      AND series.tmdb_series_id = file.tmdb_series_id)
                     OR
@@ -211,8 +218,13 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                      AND file.other_reason = 'tmdb_fallback_pending_completion'
                      AND series.tmdb_series_id = 0
                      AND series.bangumi_subject_id = task.bangumi_subject_id)
+                LEFT JOIN anime_movies AS movie
+                  ON file.tmdb_movie_id IS NOT NULL
+                 AND movie.tmdb_movie_id = file.tmdb_movie_id
                 WHERE file.task_id = $task_id
                   AND file.disposition IN ('episode', 'other')
+                  AND ((task.media_type = 'tv' AND series.id IS NOT NULL)
+                       OR (task.media_type = 'movie' AND movie.id IS NOT NULL))
                   AND COALESCE(file.download_wanted, 1) = 1
                   AND (
                       NOT EXISTS (
@@ -232,7 +244,16 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(9) ? null : reader.GetString(9),
                     reader.IsDBNull(10) ? null : reader.GetString(10),
                     reader.IsDBNull(11) ? null : reader.GetString(11),
-                    reader.GetInt64(12) == 1));
+                    reader.GetInt64(12) == 1,
+                    reader.GetString(13),
+                    reader.IsDBNull(14) ? null : reader.GetInt32(14),
+                    reader.IsDBNull(15)
+                        ? null
+                        : DateOnly.ParseExact(
+                            reader.GetString(15),
+                            "yyyy-MM-dd",
+                            CultureInfo.InvariantCulture),
+                    reader.IsDBNull(16) ? null : reader.GetString(16)));
             }
 
             if (files.Count == 0)
@@ -245,7 +266,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         return new MediaOrganizationClaim(
             jobId, taskId, downloaderId, infoHash, fileStrategy, downloadRoot, saveRoot,
             sourceId, sourceItemId, bangumiId, token, attempt, stage, files,
-            sourceWorkId, mikanId, isOtherReadaptation);
+            sourceWorkId, mikanId, isOtherReadaptation, mediaType);
     }
 
     public async Task<IReadOnlyList<MediaOperationRecord>> EnsureOperationsAsync(
@@ -456,7 +477,43 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        foreach (var file in claim.Files.Where(file => file.TmdbSeriesId == 0))
+        foreach (var file in claim.Files.Where(file =>
+                     file.MediaType == "movie" && file.AssociatedFileId is null))
+        {
+            if (file.TmdbMovieId is null or <= 0)
+            {
+                throw new InvalidOperationException("Movie completion requires a positive TMDB Movie ID.");
+            }
+
+            var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO movie_completion_records (
+                    id, tmdb_movie_id, source_id, source_item_id,
+                    media_path, completed_at_utc)
+                VALUES ($id, $tmdb_id, $source, $source_item, $path, $now);
+
+                UPDATE movie_claims
+                SET state = 'completed', expires_at_utc = NULL
+                WHERE tmdb_movie_id = $tmdb_id
+                  AND task_file_id = $file_id AND state = 'active';
+                """;
+            insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            insert.Parameters.AddWithValue("$tmdb_id", file.TmdbMovieId.Value);
+            insert.Parameters.AddWithValue("$source", claim.SourceId.ToLowerInvariant());
+            insert.Parameters.AddWithValue("$source_item", (object?)claim.SourceItemId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$path", operation.TargetPath);
+            insert.Parameters.AddWithValue("$now", now);
+            insert.Parameters.AddWithValue("$file_id", file.TaskFileId);
+            if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
+            {
+                throw new InvalidOperationException("Movie completion claim changed concurrently.");
+            }
+        }
+
+        foreach (var file in claim.Files.Where(file =>
+                     file.MediaType == "tv" && file.TmdbSeriesId == 0))
         {
             var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
             var scope = FallbackDedupScopeResolver.Resolve(

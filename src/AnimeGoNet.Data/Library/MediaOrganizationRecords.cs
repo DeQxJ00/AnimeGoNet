@@ -34,7 +34,11 @@ public sealed record MediaOrganizationFile(
     string? AssociatedFileId,
     string? SourceEpisode = null,
     string? SourceOverridePath = null,
-    bool PreserveSource = false);
+    bool PreserveSource = false,
+    string MediaType = "tv",
+    int? TmdbMovieId = null,
+    DateOnly? MovieReleaseDate = null,
+    string? OriginalMovieTitle = null);
 
 public sealed record MediaOrganizationClaim(
     string JobId,
@@ -53,7 +57,8 @@ public sealed record MediaOrganizationClaim(
     IReadOnlyList<MediaOrganizationFile> Files,
     string? SourceWorkId = null,
     int? MikanId = null,
-    bool IsOtherReadaptation = false);
+    bool IsOtherReadaptation = false,
+    string MediaType = "tv");
 
 public sealed record MediaOperationPlan(
     string TaskFileId,

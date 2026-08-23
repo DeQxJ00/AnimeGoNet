@@ -498,6 +498,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<SafeFileMover>();
         builder.Services.AddSingleton<SafeFileLinker>();
         builder.Services.AddSingleton<TvShowNfoWriter>();
+        builder.Services.AddSingleton<MovieNfoWriter>();
         builder.Services.AddSingleton<PendingTmdbNfoRewriteProcessor>();
         builder.Services.AddSingleton<MediaOrganizationProcessor>();
         builder.Services.AddSingleton<SafeFileDeleter>();

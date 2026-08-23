@@ -21,6 +21,7 @@ public sealed class MediaOrganizationProcessor(
     SafeFileMover mover,
     SafeFileLinker linker,
     TvShowNfoWriter nfoWriter,
+    MovieNfoWriter movieNfoWriter,
     DirectoryDatabaseWriter directoryDatabaseWriter,
     DirectoryDatabaseIndexStore directoryDatabaseIndex,
     PluginCatalog plugins,
@@ -144,76 +145,117 @@ public sealed class MediaOrganizationProcessor(
                 MediaOrganizationPhases.SubtitleTransfer,
                 cancellationToken).ConfigureAwait(false);
 
-            var seriesGroups = claim.Files
-                         .GroupBy(file => (file.TmdbSeriesId, file.CanonicalSeriesName))
-                         .Select(group => group.Key)
-                         .ToArray();
-            await store.UpdateProgressAsync(
-                claim,
-                MediaOrganizationPhases.NfoWrite,
-                0,
-                seriesGroups.Length,
-                _timeProvider.GetUtcNow(),
-                cancellationToken).ConfigureAwait(false);
-            for (var index = 0; index < seriesGroups.Length; index++)
+            if (claim.MediaType == "movie")
             {
-                var series = seriesGroups[index];
-                await nfoWriter.WriteAsync(
-                    claim.SaveRootPath, series.CanonicalSeriesName, series.TmdbSeriesId,
-                    claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+                var movieGroups = claim.Files
+                    .GroupBy(file => (
+                        MovieId: file.TmdbMovieId!.Value,
+                        Title: file.CanonicalSeriesName,
+                        OriginalTitle: file.OriginalMovieTitle ?? file.CanonicalSeriesName,
+                        file.MovieReleaseDate))
+                    .Select(group => group.Key)
+                    .ToArray();
                 await store.UpdateProgressAsync(
                     claim,
                     MediaOrganizationPhases.NfoWrite,
-                    index + 1,
+                    0,
+                    movieGroups.Length,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
+                for (var index = 0; index < movieGroups.Length; index++)
+                {
+                    var movie = movieGroups[index];
+                    await movieNfoWriter.WriteAsync(
+                        claim.SaveRootPath,
+                        new AnimeGoNet.Core.Metadata.TmdbMovie(
+                            movie.MovieId,
+                            movie.Title,
+                            movie.OriginalTitle,
+                            movie.MovieReleaseDate),
+                        claim.BangumiSubjectId,
+                        cancellationToken).ConfigureAwait(false);
+                    await store.UpdateProgressAsync(
+                        claim,
+                        MediaOrganizationPhases.NfoWrite,
+                        index + 1,
+                        movieGroups.Length,
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                var seriesGroups = claim.Files
+                    .GroupBy(file => (file.TmdbSeriesId, file.CanonicalSeriesName))
+                    .Select(group => group.Key)
+                    .ToArray();
+                await store.UpdateProgressAsync(
+                    claim,
+                    MediaOrganizationPhases.NfoWrite,
+                    0,
                     seriesGroups.Length,
                     _timeProvider.GetUtcNow(),
                     cancellationToken).ConfigureAwait(false);
-            }
+                for (var index = 0; index < seriesGroups.Length; index++)
+                {
+                    var series = seriesGroups[index];
+                    await nfoWriter.WriteAsync(
+                        claim.SaveRootPath, series.CanonicalSeriesName, series.TmdbSeriesId,
+                        claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+                    await store.UpdateProgressAsync(
+                        claim,
+                        MediaOrganizationPhases.NfoWrite,
+                        index + 1,
+                        seriesGroups.Length,
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                }
 
-            var seasonGroups = claim.Files.GroupBy(file =>
-                    (file.TmdbSeriesId, file.CanonicalSeriesName, file.SeasonNumber))
-                .ToArray();
-            await store.UpdateProgressAsync(
-                claim,
-                MediaOrganizationPhases.DirectoryIndex,
-                0,
-                seasonGroups.Length,
-                _timeProvider.GetUtcNow(),
-                cancellationToken).ConfigureAwait(false);
-            for (var index = 0; index < seasonGroups.Length; index++)
-            {
-                var seasonGroup = seasonGroups[index];
-                var episodeSidecars = seasonGroup
-                    .Where(file => file.Disposition == "episode" && file.AssociatedFileId is null)
-                    .Select(file =>
-                    {
-                        var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
-                        return new DirectoryDatabaseEpisodeWrite(
-                            operation.TargetPath,
-                            file.EpisodeNumber is > 0 ? 1 : 0,
-                            file.EpisodeNumber ?? 0);
-                    })
+                var seasonGroups = claim.Files.GroupBy(file =>
+                        (file.TmdbSeriesId, file.CanonicalSeriesName, file.SeasonNumber))
                     .ToArray();
-                var directoryEntries = await directoryDatabaseWriter.WriteAsync(
-                    new DirectoryDatabaseWriteRequest(
-                        claim.SaveRootPath,
-                        claim.InfoHash,
-                        seasonGroup.Key.CanonicalSeriesName,
-                        seasonGroup.Key.SeasonNumber,
-                        episodeSidecars),
-                    _timeProvider.GetUtcNow(),
-                    cancellationToken).ConfigureAwait(false);
-                await directoryDatabaseIndex.UpsertAsync(
-                    directoryEntries,
-                    _timeProvider.GetUtcNow(),
-                    cancellationToken).ConfigureAwait(false);
                 await store.UpdateProgressAsync(
                     claim,
                     MediaOrganizationPhases.DirectoryIndex,
-                    index + 1,
+                    0,
                     seasonGroups.Length,
                     _timeProvider.GetUtcNow(),
                     cancellationToken).ConfigureAwait(false);
+                for (var index = 0; index < seasonGroups.Length; index++)
+                {
+                    var seasonGroup = seasonGroups[index];
+                    var episodeSidecars = seasonGroup
+                        .Where(file => file.Disposition == "episode" && file.AssociatedFileId is null)
+                        .Select(file =>
+                        {
+                            var operation = operations.Single(item => item.TaskFileId == file.TaskFileId);
+                            return new DirectoryDatabaseEpisodeWrite(
+                                operation.TargetPath,
+                                file.EpisodeNumber is > 0 ? 1 : 0,
+                                file.EpisodeNumber ?? 0);
+                        })
+                        .ToArray();
+                    var directoryEntries = await directoryDatabaseWriter.WriteAsync(
+                        new DirectoryDatabaseWriteRequest(
+                            claim.SaveRootPath,
+                            claim.InfoHash,
+                            seasonGroup.Key.CanonicalSeriesName,
+                            seasonGroup.Key.SeasonNumber,
+                            episodeSidecars),
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                    await directoryDatabaseIndex.UpsertAsync(
+                        directoryEntries,
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                    await store.UpdateProgressAsync(
+                        claim,
+                        MediaOrganizationPhases.DirectoryIndex,
+                        index + 1,
+                        seasonGroups.Length,
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
 
             await store.CompleteMovesAsync(claim, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
@@ -326,6 +368,26 @@ public sealed class MediaOrganizationProcessor(
         CancellationToken cancellationToken)
     {
         var sourceRelative = file.RelativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        if (file.MediaType == "movie")
+        {
+            if (file.TmdbMovieId is null or <= 0)
+            {
+                throw new MediaRenamePluginException("movie_tmdb_identity_missing");
+            }
+
+            var movieSource = file.SourceOverridePath
+                ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
+            var relativeTarget = MoviePathPlanner.PlanRelativePath(new MoviePathInput(
+                file.CanonicalSeriesName,
+                file.MovieReleaseDate,
+                file.RelativePath,
+                file.RenameSuffix));
+            return new MediaOperationPlan(
+                file.TaskFileId,
+                movieSource,
+                PathBoundary.Combine(claim.SaveRootPath, relativeTarget));
+        }
+
         var rename = await plugins.Require<IRenamePlugin>("anime-library").RenameAsync(
             new RenameContext(
                 file.RelativePath,

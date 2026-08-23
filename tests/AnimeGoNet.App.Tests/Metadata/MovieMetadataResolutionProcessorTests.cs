@@ -1,4 +1,8 @@
 using AnimeGoNet.App.Metadata;
+using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Downloads;
+using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Metadata;
@@ -90,13 +94,97 @@ public sealed class MovieMetadataResolutionProcessorTests
         Assert.Empty(tmdb.MovieSearches);
     }
 
+    [Fact]
+    public async Task VerifiedMovieMovesToMovieLibraryAndCreatesMovieCompletion()
+    {
+        var tmdb = new FakeTmdbClient();
+        var downloadClient = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient(),
+            downloadClientRegistry: new FakeDownloadRegistry(downloadClient));
+        var taskId = await SeedStagedMovieAsync(app, "Spirited Away", includeSubtitle: true);
+        var store = app.App.Services.GetRequiredService<IngestTaskStore>();
+        var dispatch = Assert.IsType<ClaimedStagedTorrentRecord>(await store.TryClaimNextStagedAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var downloadRoot = Path.Combine(paths.DownloadPath, "bt");
+        await store.CompleteDispatchAsync(
+            dispatch,
+            new DownloadTaskSnapshot(
+                new string('a', 40), "Spirited Away", DownloadTaskState.Complete,
+                1, 1_100, 1_100, 0, null),
+            downloadRoot,
+            paths.EffectiveMovieSavePath,
+            DateTimeOffset.UtcNow);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>()
+            .RunOnceAsync());
+        Directory.CreateDirectory(downloadRoot);
+        await File.WriteAllBytesAsync(Path.Combine(downloadRoot, "movie.mkv"), new byte[1_000]);
+        await File.WriteAllBytesAsync(Path.Combine(downloadRoot, "movie.zh-CN.ass"), new byte[100]);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var update = connection.CreateCommand())
+        {
+            update.CommandText = """
+                UPDATE task_files SET download_wanted = 1 WHERE task_id = $task_id;
+                UPDATE download_jobs
+                SET preparation_state = 'completed', state = 'complete', progress = 1,
+                    organization_state = 'pending', seeding_state = 'not_required'
+                WHERE task_id = $task_id;
+                UPDATE ingest_tasks SET status = 'downloaded' WHERE id = $task_id;
+                """;
+            update.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(4, await update.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var targetDirectory = Path.Combine(paths.EffectiveMovieSavePath, "千与千寻 (2001)");
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).zh-CN.ass")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "movie.nfo")));
+        await using var verify = await database.OpenConnectionAsync();
+        await using var query = verify.CreateCommand();
+        query.CommandText = """
+            SELECT COUNT(*), MIN(tmdb_movie_id), MIN(media_path)
+            FROM movie_completion_records;
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1, reader.GetInt32(0));
+        Assert.Equal(129, reader.GetInt32(1));
+        Assert.Equal(Path.Combine(targetDirectory, "千与千寻 (2001).mkv"), reader.GetString(2));
+        Assert.Equal(1, downloadClient.PauseCalls);
+    }
+
     private static async Task<string> SeedMovieAsync(
         RunningApp app,
         string title,
         bool includeSubtitle = false,
         bool secondVideo = false)
     {
+        var taskId = await SeedStagedMovieAsync(app, title, includeSubtitle, secondVideo);
         var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var update = connection.CreateCommand();
+        update.CommandText = "UPDATE ingest_tasks SET status = 'download_preparing' WHERE id = $task_id;";
+        update.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await update.ExecuteNonQueryAsync());
+        return taskId;
+    }
+
+    private static async Task<string> SeedStagedMovieAsync(
+        RunningApp app,
+        string title,
+        bool includeSubtitle = false,
+        bool secondVideo = false)
+    {
         var profiles = app.App.Services.GetRequiredService<SourceProfileStore>();
         var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("mikan"));
         var normalization = IngestCommandNormalizer.Normalize(
@@ -125,11 +213,6 @@ public sealed class MovieMetadataResolutionProcessorTests
             new TorrentMetadata(title, new string('a', 40), files.Sum(file => file.Size), files),
             $"movie-{Guid.NewGuid():N}.torrent",
             DateTimeOffset.UtcNow.AddMinutes(10));
-        await using var connection = await database.OpenConnectionAsync();
-        await using var update = connection.CreateCommand();
-        update.CommandText = "UPDATE ingest_tasks SET status = 'download_preparing' WHERE id = $task_id;";
-        update.Parameters.AddWithValue("$task_id", task.Id);
-        Assert.Equal(1, await update.ExecuteNonQueryAsync());
         return task.Id;
     }
 
@@ -194,5 +277,59 @@ public sealed class MovieMetadataResolutionProcessorTests
             int subjectId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<BangumiSubjectRelation>>([]);
+    }
+
+    private sealed class FakeDownloadRegistry(IDownloadClient client) : IDownloadClientRegistry
+    {
+        public IReadOnlyCollection<string> InstanceIds => ["bt"];
+
+        public IDownloadClient GetRequired(string instanceId) =>
+            instanceId == "bt" ? client : throw new KeyNotFoundException(instanceId);
+    }
+
+    private sealed class FakeDownloadClient : IDownloadClient
+    {
+        public int PauseCalls { get; private set; }
+
+        public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<DownloadTaskSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<DownloadTaskSnapshot>>([]);
+
+        public Task AddTorrentAsync(AddTorrentCommand command, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<DownloadFileSnapshot>> ListFilesAsync(
+            string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<DownloadFileSnapshot>>([]);
+
+        public Task SetFilePriorityAsync(
+            string hash,
+            IReadOnlyList<int> fileIndexes,
+            int priority,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task AddTagsAsync(
+            IReadOnlyList<string> hashes,
+            IReadOnlyList<string> tags,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task PauseAsync(
+            IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default)
+        {
+            PauseCalls++;
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAsync(
+            IReadOnlyList<string> hashes,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteAsync(
+            IReadOnlyList<string> hashes,
+            bool deleteFiles,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
