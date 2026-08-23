@@ -227,6 +227,45 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        var isMovie = item.TargetKey.StartsWith("movie:", StringComparison.Ordinal);
+        var recordId = item.TargetKey.StartsWith("tv:", StringComparison.Ordinal)
+            ? item.TargetKey[3..]
+            : isMovie
+                ? item.TargetKey[6..]
+                : item.TargetKey;
+        if (isMovie)
+        {
+            int? movieId = null;
+            await using (var identity = connection.CreateCommand())
+            {
+                identity.Transaction = transaction;
+                identity.CommandText = "SELECT tmdb_movie_id FROM movie_completion_records WHERE id = $id;";
+                identity.Parameters.AddWithValue("$id", recordId);
+                var value = await identity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+                movieId = value is null ? null : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            }
+
+            if (movieId is not null)
+            {
+                await using var deleteMovie = connection.CreateCommand();
+                deleteMovie.Transaction = transaction;
+                deleteMovie.CommandText = """
+                    DELETE FROM movie_completion_records WHERE id = $id;
+                    DELETE FROM movie_claims
+                    WHERE tmdb_movie_id = $movie_id AND state = 'completed';
+                    """;
+                deleteMovie.Parameters.AddWithValue("$id", recordId);
+                deleteMovie.Parameters.AddWithValue("$movie_id", movieId.Value);
+                await deleteMovie.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await SetItemStateAsync(
+                connection, transaction, claim, item,
+                movieId is null ? "skipped" : "completed", null, Format(utcNow), cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         int? series = null;
         int? season = null;
         int? episode = null;
@@ -237,7 +276,7 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
                 SELECT tmdb_series_id, tmdb_season_number, tmdb_episode_number
                 FROM completion_records WHERE id = $id;
                 """;
-            identity.Parameters.AddWithValue("$id", item.TargetKey);
+            identity.Parameters.AddWithValue("$id", recordId);
             await using var reader = await identity.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -257,7 +296,7 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
                 WHERE tmdb_series_id = $series AND tmdb_season_number = $season
                   AND tmdb_episode_number = $episode AND state = 'completed';
                 """;
-            delete.Parameters.AddWithValue("$id", item.TargetKey);
+            delete.Parameters.AddWithValue("$id", recordId);
             delete.Parameters.AddWithValue("$series", series.Value);
             delete.Parameters.AddWithValue("$season", season!.Value);
             delete.Parameters.AddWithValue("$episode", episode!.Value);

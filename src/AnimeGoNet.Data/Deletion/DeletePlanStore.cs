@@ -137,7 +137,7 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
         }
 
         var business = await ReadTargetsAsync(connection, transaction, """
-            SELECT DISTINCT 'business_record', completion.id, NULL, NULL,
+            SELECT DISTINCT 'business_record', 'tv:' || completion.id, NULL, NULL,
                    printf('TMDB %d S%02dE%03d', completion.tmdb_series_id,
                           completion.tmdb_season_number, completion.tmdb_episode_number)
             FROM task_files AS file
@@ -146,7 +146,14 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
              AND completion.tmdb_season_number = file.tmdb_season_number
              AND completion.tmdb_episode_number = file.tmdb_episode_number
             WHERE file.task_id = $task_id AND file.associated_task_file_id IS NULL
-            ORDER BY completion.id;
+            UNION ALL
+            SELECT DISTINCT 'business_record', 'movie:' || completion.id, NULL, NULL,
+                   printf('TMDB Movie %d', completion.tmdb_movie_id)
+            FROM task_files AS file
+            JOIN movie_completion_records AS completion
+              ON completion.tmdb_movie_id = file.tmdb_movie_id
+            WHERE file.task_id = $task_id AND file.associated_task_file_id IS NULL
+            ORDER BY 2;
             """, taskId, cancellationToken).ConfigureAwait(false);
         var downloader = await ReadTargetsAsync(connection, transaction, """
             SELECT DISTINCT 'downloader_task', lower(info_hash), NULL, downloader_id,
