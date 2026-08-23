@@ -63,9 +63,10 @@
 
 - [x] 动画电影基础边界：新增独立 `movie_save_path`（原生默认 `download/movies`、Docker 默认 `/download/movies`），接入 YAML/环境变量/命令行别名、部署锁、私有覆盖、备份/预览、WebUI 与 Compose；`save_path` 保持 TV 媒体库。SQLite schema v56 为导入任务增加 `media_type=tv|movie`，旧任务确定性回填 `tv`，统一导入与编译期 Source adapter 已透传并拒绝其他值。
 - [x] 动画电影 Mikan 输入：手动 Torrent/RSS 与 AnimeGoHelper 的“单/全”请求显式透传 `media_type`；普通入口默认 `tv`，Mikan 首页“剧场版”分区固定 `movie`。主程序 API/WebUI/SQLite 测试通过；独立 AnimeGoHelper 仓库提交 `1290d42` 的 Node DOM/请求契约测试通过。
-- [>] 动画电影 TMDB 与整理：已实现 `/3/discover/movie`、`/3/movie/{id}` 强制验证、独立 Movie 身份/去重、单正片路径、字幕、`movie.nfo`、move/copy/link、完成记录和四类删除；不进入 TV 季度失败链。待实现多主视频/Extras/Versions、电影外部媒体扫描与本地真实 Torrent 验收。
-- [>] 动画电影作品库/任务中心：下载任务已显示 Movie ID/标题/上映日期；“动画电影”库已支持搜索、排序、分页、封面、完成状态和 TMDB 跳转，不显示伪造 Season/EP。待补电影详情人工覆盖、电影专用匹配日志/Other 审核、电影库级删除入口和 Playwright 容器验收。
-- [!] 电影 AI Prompt 尚未修改：现有正式 Prompt 的输出契约是 Series/Season/Episode；如要 AI 处理电影，必须先由项目所有者确认 movie 输出字段与提示词文本，再实现和测试。
+- [x] 动画电影 TMDB 与整理首版：实现 `/3/discover/movie`、`/3/movie/{id}` 强制验证、独立 Movie 身份/去重、单正片路径、字幕、`movie.nfo`、move/copy/link、完成记录和四类删除；不进入 TV 季度失败链。
+- [x] 动画电影作品库/任务中心首版：下载任务显示 Movie ID/标题/上映日期；“动画电影”库支持搜索、排序、分页、封面、完成状态和 TMDB 跳转，不显示伪造 Season/EP。
+
+电影未来扩展（不属于本次已确认的单正片首版范围）：多主视频/Extras/Versions、电影外部媒体扫描、电影详情人工覆盖、电影专用匹配日志/Other 审核、电影库级删除入口和 Playwright 容器验收。电影 AI Prompt 未修改；现有正式 Prompt 的输出契约是 Series/Season/Episode，如需 AI 处理电影，必须先由项目所有者确认 movie 输出字段与提示词文本。
 
 - [x] 移植所有领域模型、枚举和错误类型：固定 `develop@c7475df` 的机器清单逐文件/逐导出类型覆盖 `internal/models`、`internal/constant`、`internal/exceptions`、`pkg/exceptions`，每项标记保留/强类型替代/NativeAOT 例外并绑定真实目标文件；契约测试同时校验上游 HEAD、目录无漏项和目标存在。旧 `ExistError`/`NotFoundError`/`ParseFailedError` 由显式业务结果及可跨 InnerException 识别的 `IStableError`/`StableErrorSemantic` 替代，结构解析异常已统一暴露稳定 `ParseFailed` 语义。
 - [x] 建立首阶段强类型配置/目录模型与校验：Docker 三路径、命名 qBittorrent、Mikan `move` 默认、AI 600 秒和高风险 fallback 默认关闭。
