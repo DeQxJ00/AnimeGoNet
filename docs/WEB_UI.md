@@ -101,6 +101,8 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 作品库搜索由服务端在分页前执行，支持 TMDB 规范名称、原名、季度名的大小写不敏感包含匹配，以及精确 TMDB Series ID。搜索词会与排序、方向、页大小和 EP 筛选一起保存在浏览器本地；开始新搜索或清除搜索时回到第一页并关闭旧季度详情，避免显示与列表条件不一致的内容。
 
+作品库季度卡片的作品名固定保留两行高度，超过两行时由 CSS 省略，避免长短标题造成 Cover 卡片内容和进度条上下错位；鼠标停留在标题上时通过原生提示显示未经截断的完整 TMDB 规范名称，卡片的可访问名称也继续包含完整作品名与季度名。
+
 SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster 路径，并为普通 Season 保存首播日期、TMDB Episode 总数与 poster 路径。正常自动/人工解析先提交 Series/Season 身份，完成逐文件 Episode 判断与最终 TMDB 验证后才替换正式 Episode snapshot；“待补全 TMDB”恢复在最终恢复事务写入同一投影。这些字段是作品库查询和 Cover 代理的权威输入，浏览器不直连 TMDB 图片 URL。
 
 `GET /api/v1/library/seasons` 已提供第 6 节的季度列表基础投影和服务端分页。`sort` 接受 `last_updated`、`name`、`air_date`、`added_at`，`direction` 接受 `asc`/`desc`；空开播日期在两个方向都置后。列表用单次批量查询聚合完整 Episode snapshot 与规范完成记录，返回 snapshot 缺口、snapshot 外完成记录、完成记录缺媒体路径和本地未验证季度警告。`tmdbid=0` 条目始终排除。响应中的 `poster_url` 固定指向同源 Cover API；`poster_path` 只是诊断用的经校验 TMDB 相对路径，页面不得自行拼接外部 URL。

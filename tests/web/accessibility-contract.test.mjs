@@ -256,6 +256,16 @@ test("anime library exposes auditable task and file deletion without merging pro
   assert.match(css, /\.library-audit-actions\s*\{/);
 });
 
+test("anime library card titles stay aligned and expose their complete name", async () => {
+  const [app, css] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  assert.match(app, /title\.className = "library-card-title"/);
+  assert.match(app, /title\.title = item\.display_name/);
+  assert.match(css, /\.library-card-title\s*\{[^}]*min-block-size:\s*2\.7em[^}]*overflow:\s*hidden[^}]*-webkit-line-clamp:\s*2/s);
+});
+
 test("anime library exposes an accessible Mikan season completion picker", async () => {
   const [document, app, css] = await Promise.all([
     page(),

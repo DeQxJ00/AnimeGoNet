@@ -6,7 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
-    [InlineData("/", "text/html", "/styles.css?v=20260823-runtime-metrics-layout")]
+    [InlineData("/", "text/html", "/styles.css?v=20260823-library-title-clamp")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]
@@ -141,7 +141,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "delete web.access_key")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260823-runtime-metrics")]
+    [InlineData("/", "text/html", "/app.js?v=20260823-library-title-clamp")]
     [InlineData("/", "text/html", "ai-test-mikan-import")]
     [InlineData("/", "text/html", "ai-test-enable-tmdb-mcp")]
     [InlineData("/app.js", "text/javascript", "enable_bgm_mcp")]

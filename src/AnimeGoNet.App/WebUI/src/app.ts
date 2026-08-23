@@ -4633,7 +4633,9 @@ function renderLibraryPage(page: AnimeSeasonListPage): void {
     const heading = document.createElement("span");
     heading.className = "library-card-heading";
     const title = document.createElement("strong");
+    title.className = "library-card-title";
     title.textContent = item.display_name;
+    title.title = item.display_name;
     const season = document.createElement("span");
     season.textContent = `${item.season_name} · S${String(item.tmdb_season_number).padStart(2, "0")}`;
     heading.append(title, season);

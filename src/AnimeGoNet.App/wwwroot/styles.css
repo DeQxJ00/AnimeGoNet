@@ -226,7 +226,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-poster.failed, .library-detail-poster.failed { opacity: .35; }
 .library-card-content { min-width: 0; display: grid; align-content: center; gap: 11px; padding: 15px 15px 15px 0; }
 .library-card-heading { display: grid; gap: 4px; min-width: 0; }
-.library-card-heading strong { overflow-wrap: anywhere; font-size: .95rem; }
+.library-card-title { min-block-size: 2.7em; display: -webkit-box; overflow: hidden; font-size: .95rem; line-height: 1.35; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .library-card-heading > span { color: #9db0d0; font-size: .76rem; }
 .library-card-identity { color: #8da2c9; font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
 .library-tmdb-link { text-decoration: none; }
