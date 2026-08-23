@@ -7,10 +7,12 @@ using AnimeGoNet.App.Serialization;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Feeds;
 using AnimeGoNet.Core.Library;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Feeds;
 using AnimeGoNet.Data.Library;
+using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,6 +20,58 @@ namespace AnimeGoNet.App.Tests.Feeds;
 
 public sealed class MikanRssIngestProcessorTests
 {
+    [Fact]
+    public async Task VerifiedMultiFileWinnerSuppressesOverlappingSinglesAndReusesStagedTorrent()
+    {
+        await using var staging = new MultiFileStagingService();
+        var transport = new WorkPageTransport();
+        var metadata = new VerifiedCoverageMetadataClient();
+        await using var app = await RunningApp.StartAsync(
+            stagingService: staging,
+            rssDnsResolver: new PublicDnsResolver(),
+            rssHttpTransport: transport,
+            tmdbClient: metadata,
+            bangumiSubjectClient: metadata,
+            bangumiEpisodeClient: metadata);
+        var ruleStore = app.App.Services.GetRequiredService<MikanRssRuleStore>();
+        var currentRules = Assert.IsType<MikanRssRuleSnapshot>(await ruleStore.GetAsync("mikan"));
+        await ruleStore.SaveAsync(
+            "mikan",
+            new MikanRssRuleSet(
+                [],
+                [],
+                [
+                    new PriorityGroup("release", "Release", [
+                        new NamedMatchArray("preferred", "Preferred", true, ["packpreferred"]),
+                    ]),
+                    new PriorityGroup("language", "Language", [
+                        new NamedMatchArray("simplified", "Simplified", true, ["简体"]),
+                        new NamedMatchArray("traditional", "Traditional", true, ["繁体"]),
+                    ]),
+                ]),
+            currentRules.Revision,
+            DateTimeOffset.UtcNow);
+        var feed = Feed(
+            Item("[PackPreferred] Show [02-03] [简体]", "pack-preferred"),
+            Item("[PackOther] Show [02-03] [繁体]", "pack-other"),
+            Item("[Single] Show - 02", "single-2"),
+            Item("[Single] Show - 03", "single-3"));
+
+        var result = await app.App.Services
+            .GetRequiredService<MikanRssIngestProcessor>()
+            .ProcessAsync(feed);
+
+        Assert.Equal(2, staging.StageCount);
+        Assert.Equal("staged", result.Items[0].Status);
+        Assert.Equal(MikanRssDecisionKind.Winner, result.Items[0].DecisionKind);
+        Assert.Equal("VerifiedMultiEpisodePriorityWinner", result.Items[0].DecisionReason);
+        Assert.All(result.Items.Skip(1), item => Assert.Equal("blocked", item.Status));
+        Assert.All(
+            result.Items.Skip(2),
+            item => Assert.Equal("SuppressedByMultiEpisodeWinner", item.DecisionReason));
+        Assert.Equal(547888, result.BangumiSubjectId);
+    }
+
     [Fact]
     public async Task OnlyWinnerStagesAndRepeatedBatchReturnsExistingTask()
     {
@@ -472,6 +526,130 @@ public sealed class MikanRssIngestProcessorTests
             if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class MultiFileStagingService : ITorrentStagingService, IAsyncDisposable
+    {
+        private readonly string _root = Path.Combine(
+            Path.GetTempPath(), "animegonet-rss-multi-tests", Guid.NewGuid().ToString("N"));
+
+        public int StageCount { get; private set; }
+
+        public async Task<StagedTorrent> StageAsync(
+            Uri secretUrl,
+            TorrentSourcePolicy sourcePolicy,
+            CancellationToken cancellationToken = default)
+        {
+            _ = sourcePolicy;
+            StageCount++;
+            Directory.CreateDirectory(_root);
+            var path = Path.Combine(_root, $"multi-{Guid.NewGuid():N}.torrent");
+            await File.WriteAllBytesAsync(path, [1, 2, 3], cancellationToken);
+            var files = secretUrl.AbsolutePath.Contains("pack-", StringComparison.Ordinal)
+                ? new[]
+                {
+                    new TorrentFile("Show - 02.mkv", 100, false),
+                    new TorrentFile("Show - 03.mkv", 100, false),
+                }
+                : new[] { new TorrentFile("Show - 01.mkv", 100, false) };
+            return new StagedTorrent(
+                path,
+                new TorrentMetadata(
+                    "Show",
+                    StageCount.ToString("x40", System.Globalization.CultureInfo.InvariantCulture),
+                    files.Sum(file => file.Size),
+                    files));
+        }
+
+        public Task<bool> DeleteAsync(string stagingFileName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public FileStream OpenRead(string stagingFileName) => throw new FileNotFoundException();
+
+        public Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
+
+        public ValueTask DisposeAsync()
+        {
+            if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class VerifiedCoverageMetadataClient :
+        ITmdbClient,
+        IBangumiSubjectClient,
+        IBangumiEpisodeClient
+    {
+        private static readonly TmdbSeries Series = new(100, "Show", "Show", new DateOnly(2026, 1, 1));
+        private static readonly TmdbEpisode Episode2 = new(102, 100, 1, 2, "Two", new DateOnly(2026, 1, 8));
+        private static readonly TmdbEpisode Episode3 = new(103, 100, 1, 3, "Three", new DateOnly(2026, 1, 15));
+        private static readonly TmdbSeason Season = new(
+            101,
+            100,
+            1,
+            "Season 1",
+            new DateOnly(2026, 1, 1),
+            3,
+            Episodes: [Episode2, Episode3]);
+
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+            string title,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TmdbSeries>>([Series]);
+
+        public Task<TmdbSeries?> GetSeriesAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeries?>(seriesId == 100 ? Series : null);
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeriesDetails?>(seriesId == 100
+                ? new TmdbSeriesDetails(Series, [Season])
+                : null);
+
+        public Task<TmdbSeason?> GetSeasonAsync(
+            int seriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbSeason?>(seriesId == 100 && seasonNumber == 1 ? Season : null);
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(
+            int seriesId,
+            int seasonNumber,
+            int episodeNumber,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TmdbEpisode?>(episodeNumber switch
+            {
+                2 when seriesId == 100 && seasonNumber == 1 => Episode2,
+                3 when seriesId == 100 && seasonNumber == 1 => Episode3,
+                _ => null,
+            });
+
+        public Task<BangumiSubject?> GetSubjectAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<BangumiSubject?>(subjectId == 547888
+                ? new BangumiSubject(547888, "Show", "Show", new DateOnly(2026, 1, 1), 3)
+                : null);
+
+        public Task<IReadOnlyList<BangumiSubjectRelation>> GetRelatedSubjectsAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<BangumiSubjectRelation>>([]);
+
+        public Task<IReadOnlyList<BangumiEpisode>> GetEpisodesAsync(
+            int subjectId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<BangumiEpisode>>(
+                subjectId == 547888
+                    ? [
+                        new BangumiEpisode(2, 0, 2, new DateOnly(2026, 1, 8)),
+                        new BangumiEpisode(3, 0, 3, new DateOnly(2026, 1, 15)),
+                    ]
+                    : []);
     }
 
     private sealed class PublicDnsResolver : ITorrentDnsResolver

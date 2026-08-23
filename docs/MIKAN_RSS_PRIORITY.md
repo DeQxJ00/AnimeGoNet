@@ -120,6 +120,19 @@ blacklist:
 
 被选中的 RSS item 才进入 Torrent 获取、TMDB Series/Season/Episode 匹配和下载流程。若后续多个不同来源分组收敛到同一规范 TMDB Episode，仍由全局 Episode claim/完成记录去重；本 RSS 优选不会回头重新比较，也不会用新批次的高优先级版本替换已开始或已完成下载。
 
+### 5.1 未识别合集的确定性二次分组
+
+RSS 标题中的 `[02-03]` 等范围仍不直接当作可信 Episode；初次规划继续记录 `UngroupedBypass`。只有同一批次、同一正整数 `mikanid` 下同时存在至少两个这类旁路 winner 时，主程序才执行一次下载前预检：
+
+1. 只暂存这些旁路候选的 `.torrent` 元数据，不添加 qBittorrent 任务，也不下载媒体内容。
+2. 只接受实际视频文件数大于 1 的 Torrent；字幕、图片和 padding 不计入视频数。
+3. 每个视频文件都必须能从实际文件名唯一解析出普通正整数 EP，且不能重复。
+4. 每个文件 EP 都必须通过既有 Bangumi Episode 日期证据、已确认的 TMDB Series/普通 Season，以及 TMDB Episode 官方端点验证；预检不调用 AI。
+5. 验证成功后，整个多文件 Torrent 作为一个不可拆分的 TMDB Episode 覆盖集合，和同批次的普通单集候选一起重新执行第 6 节的 RSS 标题优先级规则。规则仍只读取 RSS title，不读取 Torrent 文件名来判断字幕组、语言、封装或编码。
+6. 合集必须在其覆盖的每一个 TMDB Episode 上都胜出才保留；只赢其中一部分时记录 `PartialCoverageConflict` 并整体移除，然后重新评估被覆盖 Episode。合集胜出后，重叠普通单集记录 `SuppressedByMultiEpisodeWinner`，不会重复下载。
+
+Torrent 暂存失败、不是多视频文件、任一文件 EP 不可靠、Bangumi/TMDB 证据缺失、日期歧义或官方 Episode 验证失败时，候选保持原 `UngroupedBypass` 后续流程；不会在预检阶段伪造范围，也不会因为预检失败阻断原有 AI/Other 处理。最终 winner 直接复用预检生成的 staging 文件，统一导入不会再次获取同一 `.torrent`。
+
 ## 6. 选择算法
 
 对同一分组的候选使用逐组淘汰和即时短路，而不是先计算加权分数或强制执行全部组：
@@ -167,3 +180,4 @@ schema v25 将每个 revision 的优先级组、具名数组和 lowercase values
 6. loser 不获取 Torrent、不调用 AI、不创建下载；winner 后续失败不会在首版隐式晋级另一个 loser。
 7. 两个开关的四种组合、批次快照、Web预览与实际执行一致。
 8. 并发批次和后续 Episode claim 竞争均不产生双下载。
+9. 同一 mikanid 的多个 `UngroupedBypass` 仅对多视频 Torrent 做确定性二次分组；覆盖集合与普通单集共同优选，合集只赢部分 Episode 时整体移除，胜出时重叠单集不进入 staging。预检不调用 AI，失败回到原流程，胜出合集不重复获取 `.torrent`。

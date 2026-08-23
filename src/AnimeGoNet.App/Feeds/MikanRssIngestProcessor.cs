@@ -48,6 +48,7 @@ public sealed class MikanRssIngestProcessor(
     OrderedFeedFilterManager filters,
     MikanFeedIdentityResolver identityResolver,
     MikanBangumiSubjectResolver bangumiResolver,
+    MikanRssMultiFileCandidatePreflight multiFilePreflight,
     UnifiedIngestProcessor ingest,
     IHostApplicationLifetime applicationLifetime,
     DuplicateHitNotifier duplicateNotifier)
@@ -222,6 +223,35 @@ public sealed class MikanRssIngestProcessor(
             legacy.Revision,
             legacy.Enabled,
             cancellationToken).ConfigureAwait(false);
+        MikanBangumiDiscovery? preflightDiscovery = null;
+        MikanRssCandidatePreflightResult preflightResult;
+        if (MikanRssMultiFileCandidatePreflight.ShouldRun(
+                plan,
+                profile.RssPriorityEnabled))
+        {
+            preflightDiscovery = identityFailureCode is null
+                ? await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false)
+                : new MikanBangumiDiscovery(
+                    null,
+                    MikanBangumiDiscoveryStates.NotApplicable,
+                    identityFailureCode);
+            preflightResult = preflightDiscovery.IsResolved
+                ? await multiFilePreflight.RefineAsync(
+                    feed,
+                    plan,
+                    ruleSnapshot.Rules,
+                    profile,
+                    preflightDiscovery.BangumiSubjectId!.Value,
+                    cancellationToken).ConfigureAwait(false)
+                : new MikanRssCandidatePreflightResult(plan);
+        }
+        else
+        {
+            preflightResult = new MikanRssCandidatePreflightResult(plan);
+        }
+
+        await using var stagedCandidateLease = preflightResult;
+        plan = preflightResult.Plan;
         var stored = await batches.SaveAsync(
             profile.Id, ruleSnapshot.Revision, profile.RssPriorityEnabled,
             plan, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
@@ -280,12 +310,13 @@ public sealed class MikanRssIngestProcessor(
         }
         else if (hasPendingWinner && !stored.BangumiDiscovery.IsResolved)
         {
-            var discovery = identityFailureCode is null
-                ? await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false)
-                : new MikanBangumiDiscovery(
-                    null,
-                    MikanBangumiDiscoveryStates.NotApplicable,
-                    identityFailureCode);
+            var discovery = preflightDiscovery
+                ?? (identityFailureCode is null
+                    ? await bangumiResolver.ResolveAsync(feed, cancellationToken).ConfigureAwait(false)
+                    : new MikanBangumiDiscovery(
+                        null,
+                        MikanBangumiDiscoveryStates.NotApplicable,
+                        identityFailureCode));
             stored = await batches.SetBangumiDiscoveryAsync(
                 stored.Id, discovery, cancellationToken).ConfigureAwait(false);
         }
@@ -430,8 +461,19 @@ public sealed class MikanRssIngestProcessor(
             UnifiedIngestItemResult outcome;
             try
             {
-                outcome = await ingest.ProcessRssWinnerAsync(
-                    profile, command, lease, cancellationToken).ConfigureAwait(false);
+                var preStagedTorrent = preflightResult.TakeStagedTorrent(item.Candidate.Id);
+                outcome = preStagedTorrent is null
+                    ? await ingest.ProcessRssWinnerAsync(
+                        profile,
+                        command,
+                        lease,
+                        cancellationToken).ConfigureAwait(false)
+                    : await ingest.ProcessRssWinnerAsync(
+                        profile,
+                        command,
+                        lease,
+                        preStagedTorrent,
+                        cancellationToken).ConfigureAwait(false);
                 if (!outcome.Accepted)
                 {
                     _ = await batches.ReleaseWinnerAsync(lease, cancellationToken).ConfigureAwait(false);

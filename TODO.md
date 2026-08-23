@@ -148,6 +148,7 @@
 - [x] 一级“连接与配置”改名为“设置与备份”；Mikan RSS 手动区增加“管理来源与 Cookie”直达入口并明确 Cookie 位于“设置与备份 / 输入源”，选择 Mikan 来源后直接回填。TMDB 成功响应缓存的新部署默认值调整为 144 小时，显式旧配置值继续保留。
 - [x] 实现完全可配置的 `priority_groups[]`：纯 C# 引擎支持任意有序组/具名数组、统一 lowercase 和逐级淘汰；schema v13 store 与 GET/PUT expected-revision 全快照 API 支持增删/排序，schema v25 保存每个 revision 的关系型历史快照并支持安全回滚；WebUI 已提供白/黑名单、组/数组 CRUD、启停、上下移动、服务端预览和历史回滚。
 - [x] 优选组资格过滤后只有一个候选记录 `SingleCandidateBypass` 且不执行优先级组；多候选每轮剩一个立即短路，最终并列按原 RSS 顺序稳定选择。
+- [x] 增加 Mikan RSS 未识别合集的确定性二次分组：同一 mikanid 存在多个 `UngroupedBypass` 时仅预取 Torrent 元数据；多视频文件逐个解析普通 EP 并完成 Bangumi/TMDB 日期及官方 Episode 验证后，作为不可拆分覆盖集合与普通单集按 RSS title 重新优选。合集必须赢得全部覆盖 EP，否则整体移除并重算；胜出后压制重叠单集且复用已暂存 Torrent。预检零 AI，任一证据失败保守回到原流程。
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
 - [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。

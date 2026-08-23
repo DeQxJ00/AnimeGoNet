@@ -548,6 +548,7 @@ public static class AnimeGoApplication
         {
             builder.Services.AddSingleton(bangumiEpisodeClient);
         }
+        builder.Services.AddSingleton<MikanRssMultiFileCandidatePreflight>();
         builder.Services.AddSingleton<BangumiSeasonBacktraceResolver>();
         builder.Services.AddSingleton(new AiPublicationEvidenceResolver(
             bangumiEpisodeClient,

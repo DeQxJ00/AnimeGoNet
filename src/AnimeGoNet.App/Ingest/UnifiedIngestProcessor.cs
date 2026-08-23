@@ -42,6 +42,7 @@ public sealed class UnifiedIngestProcessor(
             requireModernMetadata,
             null,
             null,
+            null,
             cancellationToken).ConfigureAwait(false);
 
     public async Task<UnifiedIngestItemResult> ProcessRssWinnerAsync(
@@ -57,7 +58,40 @@ public sealed class UnifiedIngestProcessor(
             false,
             winnerLease,
             sourceProfileSnapshot,
+            null,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<UnifiedIngestItemResult> ProcessRssWinnerAsync(
+        SourceProfileRecord sourceProfileSnapshot,
+        IngestItemCommand command,
+        MikanRssWinnerLease winnerLease,
+        StagedTorrent stagedTorrent,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceProfileSnapshot);
+        ArgumentNullException.ThrowIfNull(stagedTorrent);
+        var ownershipTransferred = false;
+        try
+        {
+            var result = await ProcessCoreAsync(
+                sourceProfileSnapshot.Id,
+                command,
+                false,
+                winnerLease,
+                sourceProfileSnapshot,
+                stagedTorrent,
+                cancellationToken).ConfigureAwait(false);
+            ownershipTransferred = result.Accepted;
+            return result;
+        }
+        finally
+        {
+            if (!ownershipTransferred)
+            {
+                await stagedTorrent.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private async Task<UnifiedIngestItemResult> ProcessCoreAsync(
@@ -66,6 +100,7 @@ public sealed class UnifiedIngestProcessor(
         bool requireModernMetadata,
         MikanRssWinnerLease? winnerLease,
         SourceProfileRecord? sourceProfileSnapshot,
+        StagedTorrent? suppliedStagedTorrent,
         CancellationToken cancellationToken)
     {
         if (legacyMigration.BlockingDiagnostic is { } diagnostic)
@@ -125,18 +160,21 @@ public sealed class UnifiedIngestProcessor(
                 ? new[] { torrentRequestUrl.IdnHost }
                 : [];
 
-        StagedTorrent? staged = null;
+        StagedTorrent? staged = suppliedStagedTorrent;
         var ownershipTransferred = false;
         try
         {
-            staged = await staging.StageAsync(
-                torrentRequestUrl,
-                new TorrentSourcePolicy(
-                    profile.Id,
-                    allowedHosts,
-                    profile.MikanIdentityCookie,
-                    trustedPrivateHosts),
-                cancellationToken).ConfigureAwait(false);
+            if (staged is null)
+            {
+                staged = await staging.StageAsync(
+                    torrentRequestUrl,
+                    new TorrentSourcePolicy(
+                        profile.Id,
+                        allowedHosts,
+                        profile.MikanIdentityCookie,
+                        trustedPrivateHosts),
+                    cancellationToken).ConfigureAwait(false);
+            }
             var expires = DateTimeOffset.UtcNow + options.TorrentFetch.StagingTtl;
             var task = winnerLease is null
                 ? await tasks.AddStagedAsync(
@@ -156,7 +194,7 @@ public sealed class UnifiedIngestProcessor(
         }
         finally
         {
-            if (!ownershipTransferred && staged is not null)
+            if (!ownershipTransferred && suppliedStagedTorrent is null && staged is not null)
             {
                 await staged.DisposeAsync().ConfigureAwait(false);
             }
