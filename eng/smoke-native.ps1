@@ -16,6 +16,7 @@ $smokeRoot = Join-Path ([IO.Path]::GetTempPath()) ("animegonet-smoke-" + [Guid]:
 $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'
+$env:movie_save_path = Join-Path $smokeRoot 'download/movies'
 $env:background_workers_enabled = 'false'
 $env:mikan_base_url = 'http://127.0.0.1:1/'
 $nativeCredential = 'native-aot-private-cookie'
