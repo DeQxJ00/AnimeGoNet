@@ -333,6 +333,20 @@ test("anime library links a confirmed season to its canonical TMDB page", async 
   assert.match(app, /tmdbLink\.setAttribute\(\s*"aria-label"/);
 });
 
+test("movie library remains distinct from TV seasons and exposes TMDB Movie identity", async () => {
+  const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
+  assert.equal(
+    document.querySelector('[data-workspace="library"][data-subview="movies"]')
+      ?.getAttribute("data-nav-label"),
+    "动画电影",
+  );
+  assert.ok(document.querySelector("#movie-library-list"));
+  assert.match(app, /\/api\/v1\/library\/movies/);
+  assert.match(app, /themoviedb\.org\/movie\/\$\{item\.tmdb_movie_id\}/);
+  assert.match(app, /TMDB Movie \$\{item\.tmdb_movie_id\}/);
+  assert.match(app, /元数据已确认 · 等待整理完成/);
+});
+
 test("manual ingest uses the WebUI-authenticated route instead of the plugin boundary", async () => {
   const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
   assert.match(app, /authenticatedFetch\("\/api\/v1\/ingest\/manual"/);

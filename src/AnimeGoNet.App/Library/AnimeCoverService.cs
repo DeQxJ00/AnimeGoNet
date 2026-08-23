@@ -52,6 +52,26 @@ public sealed class AnimeCoverService(
             return null;
         }
 
+        return await GetAssetAsync(poster, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AnimeCoverAsset?> GetMovieAsync(
+        int tmdbMovieId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbMovieId, 1);
+        var poster = await library.GetMoviePosterAsync(tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        return poster is null
+            ? null
+            : await GetAssetAsync(poster, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AnimeCoverAsset> GetAssetAsync(
+        AnimePosterProjection poster,
+        CancellationToken cancellationToken)
+    {
+
         if (poster.PosterPath is null)
         {
             return PlaceholderAsset();

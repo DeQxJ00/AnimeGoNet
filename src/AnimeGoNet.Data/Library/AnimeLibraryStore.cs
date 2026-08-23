@@ -9,6 +9,98 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
     private const int RelatedTaskLimit = 50;
     private const int ResolutionAttemptLimit = 200;
 
+    public async Task<AnimeMovieListPage> ListMoviesAsync(
+        AnimeSeasonListQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfLessThan(query.Page, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(query.PageSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(query.PageSize, 100);
+        if (!Enum.IsDefined(query.Sort) || !Enum.IsDefined(query.Direction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(query), "Movie library ordering is invalid.");
+        }
+
+        var search = NormalizeSearch(query.Search);
+        var offset = checked((query.Page - 1) * query.PageSize);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var count = connection.CreateCommand();
+        count.CommandText = """
+            SELECT COUNT(*)
+            FROM anime_movies AS movie
+            """ + SearchSql("WHERE", "movie.tmdb_movie_id", "movie.canonical_title", "movie.original_title", "movie.original_title", search) + ";";
+        AddSearchParameters(count, search);
+        var totalItems = Convert.ToInt32(
+            await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
+
+        var sqlDirection = query.Direction == AnimeLibrarySortDirection.Ascending ? "ASC" : "DESC";
+        var orderBy = query.Sort switch
+        {
+            AnimeLibrarySort.LastUpdated => $"movie.updated_at_utc {sqlDirection}, movie.tmdb_movie_id ASC",
+            AnimeLibrarySort.Name => $"movie.canonical_title COLLATE NOCASE {sqlDirection}, movie.tmdb_movie_id ASC",
+            AnimeLibrarySort.AirDate => $"movie.release_date IS NULL ASC, movie.release_date {sqlDirection}, movie.tmdb_movie_id ASC",
+            AnimeLibrarySort.AddedAt => $"movie.created_at_utc {sqlDirection}, movie.tmdb_movie_id ASC",
+            _ => throw new ArgumentOutOfRangeException(nameof(query)),
+        };
+        await using var command = connection.CreateCommand();
+        command.CommandText = $$"""
+            SELECT movie.tmdb_movie_id, movie.canonical_title, movie.original_title,
+                   movie.poster_path, movie.release_date, movie.created_at_utc,
+                   movie.updated_at_utc, completion.id, completion.source_id,
+                   completion.completed_at_utc, completion.media_path
+            FROM anime_movies AS movie
+            LEFT JOIN movie_completion_records AS completion
+              ON completion.tmdb_movie_id = movie.tmdb_movie_id
+            {{SearchSql("WHERE", "movie.tmdb_movie_id", "movie.canonical_title", "movie.original_title", "movie.original_title", search)}}
+            ORDER BY {{orderBy}}
+            LIMIT $limit OFFSET $offset;
+            """;
+        AddSearchParameters(command, search);
+        command.Parameters.AddWithValue("$limit", query.PageSize);
+        command.Parameters.AddWithValue("$offset", offset);
+        var items = new List<AnimeMovieListProjection>(Math.Min(query.PageSize, totalItems));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var completed = !reader.IsDBNull(7);
+            items.Add(new AnimeMovieListProjection(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                ParseDate(reader, 4),
+                ParseTimestamp(reader.GetString(5)),
+                ParseTimestamp(reader.GetString(6)),
+                completed,
+                completed ? reader.GetString(8) : null,
+                completed ? ParseTimestamp(reader.GetString(9)) : null,
+                completed && !reader.IsDBNull(10)));
+        }
+
+        return new AnimeMovieListPage(query.Page, query.PageSize, totalItems, items);
+    }
+
+    public async Task<AnimePosterProjection?> GetMoviePosterAsync(
+        int tmdbMovieId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbMovieId, 1);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT poster_path FROM anime_movies WHERE tmdb_movie_id = $tmdb_movie_id LIMIT 1;";
+        command.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value switch
+        {
+            null => null,
+            DBNull => new AnimePosterProjection(null, "placeholder"),
+            string posterPath => new AnimePosterProjection(posterPath, "movie"),
+            _ => null,
+        };
+    }
+
     public async Task<IReadOnlySet<int>> ListCompletedMikanSourceEpisodesAsync(
         string sourceProfileId,
         int mikanId,

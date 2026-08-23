@@ -1237,6 +1237,29 @@ public sealed record AnimeSeasonListItemResponse(
     [property: JsonPropertyName("last_resolution_run_id")] string? LastResolutionRunId,
     [property: JsonPropertyName("warnings")] IReadOnlyList<string> Warnings);
 
+public sealed record AnimeMovieListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] int TotalItems,
+    [property: JsonPropertyName("sort")] string Sort,
+    [property: JsonPropertyName("direction")] string Direction,
+    [property: JsonPropertyName("items")] IReadOnlyList<AnimeMovieListItemResponse> Items);
+
+public sealed record AnimeMovieListItemResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("original_title")] string OriginalTitle,
+    [property: JsonPropertyName("poster_path")] string? PosterPath,
+    [property: JsonPropertyName("poster_url")] string PosterUrl,
+    [property: JsonPropertyName("release_date")] DateOnly? ReleaseDate,
+    [property: JsonPropertyName("added_at_utc")] DateTimeOffset AddedAtUtc,
+    [property: JsonPropertyName("last_updated_at_utc")] DateTimeOffset LastUpdatedAtUtc,
+    [property: JsonPropertyName("completed")] bool Completed,
+    [property: JsonPropertyName("download_source_id")] string? DownloadSourceId,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
+    [property: JsonPropertyName("media_path_known")] bool MediaPathKnown);
+
 public sealed record AnimeSeasonDetailResponse(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,

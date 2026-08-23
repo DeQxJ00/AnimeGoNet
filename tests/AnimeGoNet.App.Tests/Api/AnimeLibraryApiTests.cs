@@ -62,6 +62,29 @@ public sealed class AnimeLibraryApiTests
     }
 
     [Fact]
+    public async Task ListsVerifiedMoviesWithIndependentCompletionState()
+    {
+        await using var app = await RunningApp.StartAsync();
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+
+        using var response = await app.Client.GetAsync("/api/v1/library/movies?search=萤火");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, json.RootElement.GetProperty("total_items").GetInt32());
+        Assert.Equal("tmdb:movie:10681", item.GetProperty("id").GetString());
+        Assert.Equal(10681, item.GetProperty("tmdb_movie_id").GetInt32());
+        Assert.Equal("萤火之森", item.GetProperty("title").GetString());
+        Assert.Equal("蛍火の杜へ", item.GetProperty("original_title").GetString());
+        Assert.Equal("2011-09-17", item.GetProperty("release_date").GetString());
+        Assert.Equal("/api/v1/library/movie-covers/10681", item.GetProperty("poster_url").GetString());
+        Assert.True(item.GetProperty("completed").GetBoolean());
+        Assert.True(item.GetProperty("media_path_known").GetBoolean());
+        Assert.Equal("mikan", item.GetProperty("download_source_id").GetString());
+    }
+
+    [Fact]
     public async Task SortDirectionAndPaginationAreAppliedBeforeReturningItems()
     {
         await using var app = await RunningApp.StartAsync();
@@ -549,6 +572,22 @@ public sealed class AnimeLibraryApiTests
             VALUES (
                 7788, 42, 100, 1, 2, 1, 3, $now,
                 '2026-01-02T00:00:00.0000000+00:00');
+
+            INSERT INTO anime_movies (
+                id, tmdb_movie_id, canonical_title, original_title,
+                release_date, poster_path, created_at_utc, updated_at_utc)
+            VALUES (
+                'movie-firefly', 10681, '萤火之森', '蛍火の杜へ',
+                '2011-09-17', '/firefly.jpg', $now,
+                '2026-01-04T00:00:00.0000000+00:00');
+
+            INSERT INTO movie_completion_records (
+                id, tmdb_movie_id, source_id, source_item_id,
+                media_path, completed_at_utc)
+            VALUES (
+                'movie-completion-firefly', 10681, 'mikan', 'firefly-source',
+                '/movies/萤火之森 (2011)/萤火之森 (2011).mkv',
+                '2026-01-05T00:00:00.0000000+00:00');
             """;
         command.Parameters.AddWithValue("$now", "2026-01-01T00:00:00.0000000+00:00");
         await command.ExecuteNonQueryAsync();

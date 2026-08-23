@@ -153,6 +153,7 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/notifications/channels/{channelId}/test", TestNotificationChannel);
         app.MapGet("/api/v1/notifications/deliveries", ListNotificationDeliveries);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
+        app.MapGet("/api/v1/library/movies", LibraryMovies);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
         app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
@@ -193,6 +194,7 @@ public static class ApiEndpoints
         app.MapGet(
             "/api/v1/library/covers/{tmdbSeriesId:int}/{seasonNumber:int}",
             LibraryCover);
+        app.MapGet("/api/v1/library/movie-covers/{tmdbMovieId:int}", LibraryMovieCover);
         app.MapGet("/api/v1/metadata/pending-tmdb", PendingTmdbSeries);
         app.MapGet("/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}", PendingTmdbDetail);
         app.MapPost(
@@ -6192,6 +6194,68 @@ public static class ApiEndpoints
             }).ToArray()));
     }
 
+    private static async Task<IResult> LibraryMovies(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? search,
+        [FromQuery] string? sort,
+        [FromQuery] string? direction,
+        AnimeLibraryStore library,
+        CancellationToken cancellationToken)
+    {
+        var resolvedPage = page ?? 1;
+        var resolvedPageSize = pageSize ?? 24;
+        if (resolvedPage < 1)
+        {
+            return TypedResults.BadRequest(Error("library_page_invalid", "Library page must be a positive integer."));
+        }
+
+        if (resolvedPageSize is < 1 or > 100)
+        {
+            return TypedResults.BadRequest(Error("library_page_size_invalid", "Library page size must be between 1 and 100."));
+        }
+
+        var resolvedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (resolvedSearch is { Length: > 200 } || resolvedSearch?.Any(char.IsControl) == true)
+        {
+            return TypedResults.BadRequest(Error("library_search_invalid", "Library search must be at most 200 characters without control characters."));
+        }
+
+        if (!TryParseLibrarySort(sort, out var resolvedSort))
+        {
+            return TypedResults.BadRequest(Error("library_sort_invalid", "Library sort must be last_updated, name, air_date or added_at."));
+        }
+
+        if (!TryParseLibraryDirection(direction, out var resolvedDirection))
+        {
+            return TypedResults.BadRequest(Error("library_direction_invalid", "Library direction must be asc or desc."));
+        }
+
+        var result = await library.ListMoviesAsync(
+            new AnimeSeasonListQuery(resolvedPage, resolvedPageSize, resolvedSort, resolvedDirection, resolvedSearch),
+            cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new AnimeMovieListResponse(
+            result.Page,
+            result.PageSize,
+            result.TotalItems,
+            LibrarySortName(resolvedSort),
+            resolvedDirection == AnimeLibrarySortDirection.Ascending ? "asc" : "desc",
+            result.Items.Select(item => new AnimeMovieListItemResponse(
+                $"tmdb:movie:{item.TmdbMovieId}",
+                item.TmdbMovieId,
+                item.Title,
+                item.OriginalTitle,
+                item.PosterPath,
+                $"/api/v1/library/movie-covers/{item.TmdbMovieId}",
+                item.ReleaseDate,
+                item.AddedAt,
+                item.LastUpdatedAt,
+                item.Completed,
+                item.DownloadSourceId,
+                item.CompletedAtUtc,
+                item.MediaPathKnown)).ToArray()));
+    }
+
     private static async Task<IResult> CreateLibrarySeason(
         AnimeSeasonCreateRequest request,
         ITmdbClient tmdb,
@@ -6845,6 +6909,35 @@ public static class ApiEndpoints
         context.Response.Headers["X-AnimeGoNet-Cover-Source"] = cover.Source;
         context.Response.Headers["X-AnimeGoNet-Cover-Cache"] =
             cover.CacheHit ? "hit" : "miss";
+        if (cover.WarningCode is not null)
+        {
+            context.Response.Headers["X-AnimeGoNet-Cover-Warning"] = cover.WarningCode;
+        }
+        context.Response.Headers.CacheControl = cover.Source == "placeholder"
+            ? "public, max-age=60"
+            : "public, max-age=86400";
+        return Results.Bytes(cover.Content, cover.ContentType);
+    }
+
+    private static async Task<IResult> LibraryMovieCover(
+        int tmdbMovieId,
+        AnimeCoverService covers,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbMovieId <= 0)
+        {
+            return TypedResults.BadRequest(Error("library_movie_id_invalid", "TMDB Movie ID must be a positive integer."));
+        }
+
+        var cover = await covers.GetMovieAsync(tmdbMovieId, cancellationToken).ConfigureAwait(false);
+        if (cover is null)
+        {
+            return TypedResults.NotFound(Error("library_movie_not_found", "The requested TMDB movie was not found in the local library."));
+        }
+
+        context.Response.Headers["X-AnimeGoNet-Cover-Source"] = cover.Source;
+        context.Response.Headers["X-AnimeGoNet-Cover-Cache"] = cover.CacheHit ? "hit" : "miss";
         if (cover.WarningCode is not null)
         {
             context.Response.Headers["X-AnimeGoNet-Cover-Warning"] = cover.WarningCode;

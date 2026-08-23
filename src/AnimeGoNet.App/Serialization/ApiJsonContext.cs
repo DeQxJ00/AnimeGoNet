@@ -88,6 +88,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(AiInvocationLogListResponse))]
 [JsonSerializable(typeof(AiMetadataDebugDocument))]
 [JsonSerializable(typeof(AnimeSeasonListResponse))]
+[JsonSerializable(typeof(AnimeMovieListResponse))]
 [JsonSerializable(typeof(AnimeSeasonDetailResponse))]
 [JsonSerializable(typeof(AnimeSeasonCreateRequest))]
 [JsonSerializable(typeof(AnimeSeasonRefreshRequest))]

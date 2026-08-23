@@ -1098,6 +1098,31 @@ interface AnimeSeasonListPage {
   items: AnimeSeasonListItem[];
 }
 
+interface AnimeMovieListItem {
+  id: string;
+  tmdb_movie_id: number;
+  title: string;
+  original_title: string;
+  poster_path: string | null;
+  poster_url: string;
+  release_date: string | null;
+  added_at_utc: string;
+  last_updated_at_utc: string;
+  completed: boolean;
+  download_source_id: string | null;
+  completed_at_utc: string | null;
+  media_path_known: boolean;
+}
+
+interface AnimeMovieListPage {
+  page: number;
+  page_size: number;
+  total_items: number;
+  sort: AnimeLibrarySort;
+  direction: AnimeLibraryDirection;
+  items: AnimeMovieListItem[];
+}
+
 interface AnimeEpisodeItem {
   id: string;
   tmdb_episode_id: number;
@@ -1938,6 +1963,12 @@ let mikanSeasonCompletionRequestSequence = 0;
 let externalImportDetailIdentity: string | null = null;
 let libraryListRequestSequence = 0;
 let libraryDetailRequestSequence = 0;
+let movieLibraryPage = 1;
+let movieLibraryPageSize: 12 | 24 | 48 = 24;
+let movieLibrarySearch = "";
+let movieLibrarySort: AnimeLibrarySort = "last_updated";
+let movieLibraryDirection: AnimeLibraryDirection = "desc";
+let movieLibraryRequestSequence = 0;
 let activeMikanWorkRule: MikanWorkRule | null = null;
 let loadedMikanWorkId: number | null = null;
 let activeMikanWorkImpact: MikanWorkImpact | null = null;
@@ -4678,6 +4709,103 @@ function renderLibraryPage(page: AnimeSeasonListPage): void {
     });
     return card;
   }));
+}
+
+function renderMovieLibraryPage(page: AnimeMovieListPage): void {
+  const list = element<HTMLElement>("#movie-library-list");
+  const pageCount = Math.max(1, Math.ceil(page.total_items / page.page_size));
+  element<HTMLElement>("#movie-library-status").textContent =
+    `${page.total_items} 部电影 · ${librarySortLabel(page.sort)} · `
+    + (page.direction === "asc" ? "升序" : "降序")
+    + (movieLibrarySearch ? ` · 搜索“${movieLibrarySearch}”` : "");
+  element<HTMLElement>("#movie-library-page-label").textContent =
+    `第 ${page.page} / ${pageCount} 页`;
+  element<HTMLButtonElement>("#movie-library-previous").disabled = page.page <= 1;
+  element<HTMLButtonElement>("#movie-library-next").disabled = page.page >= pageCount;
+  if (page.items.length === 0) {
+    renderRegionMessage(
+      list,
+      "empty",
+      movieLibrarySearch
+        ? `没有找到与“${movieLibrarySearch}”匹配的动画电影。`
+        : "电影库暂时为空。通过 Mikan 手动输入或油猴插件提交 media_type=movie 后，验证成功的 TMDB Movie 会显示在这里。",
+    );
+    return;
+  }
+
+  renderRegionContent(list, ...page.items.map((item) => {
+    const card = document.createElement("a");
+    card.className = "library-card movie-library-card";
+    card.href = `https://www.themoviedb.org/movie/${item.tmdb_movie_id}`;
+    card.target = "_blank";
+    card.rel = "noopener noreferrer";
+    card.setAttribute("aria-label", `在 TMDB 打开电影 ${item.title}`);
+    const image = libraryPoster(item.poster_url, item.title, "library-poster");
+    const content = document.createElement("span");
+    content.className = "library-card-content";
+    const heading = document.createElement("span");
+    heading.className = "library-card-heading";
+    const title = document.createElement("strong");
+    title.className = "library-card-title";
+    title.textContent = item.title;
+    title.title = item.title;
+    const original = document.createElement("span");
+    original.textContent = item.original_title !== item.title
+      ? item.original_title
+      : "TMDB Movie";
+    heading.append(title, original);
+    const identity = document.createElement("span");
+    identity.className = "library-card-identity";
+    identity.textContent =
+      `TMDB Movie ${item.tmdb_movie_id} · 上映 ${libraryDate(item.release_date)}`;
+    const completion = document.createElement("span");
+    completion.className = `movie-library-status ${item.completed ? "completed" : "pending"}`;
+    completion.textContent = item.completed
+      ? `✓ 已整理${item.completed_at_utc ? ` · ${libraryDate(item.completed_at_utc, true)}` : ""}`
+        + (item.media_path_known ? "" : " · 媒体路径未记录")
+      : "○ 元数据已确认 · 等待整理完成";
+    content.append(heading, identity, completion);
+    card.append(image, content);
+    return card;
+  }));
+}
+
+async function loadMovieLibrary(background = false): Promise<void> {
+  const sequence = ++movieLibraryRequestSequence;
+  const list = element<HTMLElement>("#movie-library-list");
+  if (!background) {
+    setRegionState(list, "loading");
+    element<HTMLElement>("#movie-library-status").textContent = "正在读取电影库…";
+  }
+  const query = new URLSearchParams({
+    page: String(movieLibraryPage),
+    page_size: String(movieLibraryPageSize),
+    sort: movieLibrarySort,
+    direction: movieLibraryDirection,
+  });
+  if (movieLibrarySearch) query.set("search", movieLibrarySearch);
+  try {
+    const response = await authenticatedFetch(`/api/v1/library/movies?${query}`, { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const page = await response.json() as AnimeMovieListPage;
+    if (sequence !== movieLibraryRequestSequence) return;
+    if (page.items.length === 0 && page.total_items > 0 && movieLibraryPage > 1) {
+      movieLibraryPage = Math.max(1, Math.ceil(page.total_items / page.page_size));
+      await loadMovieLibrary(background);
+      return;
+    }
+    renderMovieLibraryPage(page);
+  } catch (error) {
+    if (sequence !== movieLibraryRequestSequence) return;
+    if (!background) {
+      renderRegionMessage(
+        list,
+        "error",
+        `电影库读取失败：${errorMessage(error, "未知错误")}`,
+      );
+      element<HTMLElement>("#movie-library-status").textContent = "电影库读取失败";
+    }
+  }
 }
 
 function renderLibraryEpisodes(detail: AnimeSeasonDetail): void {
@@ -12755,6 +12883,58 @@ element<HTMLButtonElement>("#download-next").addEventListener("click", () => {
   void loadDownloads();
 });
 element<HTMLButtonElement>("#library-reload").addEventListener("click", () => void loadLibrary());
+element<HTMLButtonElement>("#movie-library-reload").addEventListener(
+  "click",
+  () => void loadMovieLibrary(),
+);
+element<HTMLFormElement>("#movie-library-search-form").addEventListener(
+  "submit",
+  (event) => {
+    event.preventDefault();
+    movieLibrarySearch = element<HTMLInputElement>("#movie-library-search").value.trim();
+    movieLibraryPage = 1;
+    void loadMovieLibrary();
+  },
+);
+element<HTMLButtonElement>("#movie-library-search-clear").addEventListener(
+  "click",
+  () => {
+    element<HTMLInputElement>("#movie-library-search").value = "";
+    movieLibrarySearch = "";
+    movieLibraryPage = 1;
+    void loadMovieLibrary();
+  },
+);
+const changeMovieLibraryOrdering = (): void => {
+  movieLibrarySort = element<HTMLSelectElement>("#movie-library-sort").value as AnimeLibrarySort;
+  movieLibraryDirection = element<HTMLSelectElement>("#movie-library-direction").value as AnimeLibraryDirection;
+  movieLibraryPageSize = Number(
+    element<HTMLSelectElement>("#movie-library-page-size").value,
+  ) as 12 | 24 | 48;
+  movieLibraryPage = 1;
+  void loadMovieLibrary();
+};
+element<HTMLSelectElement>("#movie-library-sort").addEventListener(
+  "change",
+  changeMovieLibraryOrdering,
+);
+element<HTMLSelectElement>("#movie-library-direction").addEventListener(
+  "change",
+  changeMovieLibraryOrdering,
+);
+element<HTMLSelectElement>("#movie-library-page-size").addEventListener(
+  "change",
+  changeMovieLibraryOrdering,
+);
+element<HTMLButtonElement>("#movie-library-previous").addEventListener("click", () => {
+  if (movieLibraryPage <= 1) return;
+  movieLibraryPage--;
+  void loadMovieLibrary();
+});
+element<HTMLButtonElement>("#movie-library-next").addEventListener("click", () => {
+  movieLibraryPage++;
+  void loadMovieLibrary();
+});
 element<HTMLButtonElement>("#library-external-import").addEventListener(
   "click",
   () => void importExternalMedia("all"),
@@ -13540,6 +13720,7 @@ void loadDataUpdate();
 void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
+void loadMovieLibrary();
 void loadConfiguration().then(() => loadDeploymentDataPath());
 void loadWebUiAuthentication();
 void loadWebApiCompatibility();
@@ -13584,5 +13765,11 @@ window.setInterval(() => {
   if (isSubviewVisible("library", "seasons") && activeLibraryDetail === null
     && !hasFocusedEditorWithin("#anime-library") && !hasOpenDialog()) {
     void loadLibrary();
+  }
+}, 15000);
+window.setInterval(() => {
+  if (isSubviewVisible("library", "movies")
+    && !hasFocusedEditorWithin("#movie-library") && !hasOpenDialog()) {
+    void loadMovieLibrary(true);
   }
 }, 15000);

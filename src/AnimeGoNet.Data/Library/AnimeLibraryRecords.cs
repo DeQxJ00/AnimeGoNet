@@ -52,6 +52,25 @@ public sealed record AnimeSeasonListPage(
     int TotalItems,
     IReadOnlyList<AnimeSeasonListProjection> Items);
 
+public sealed record AnimeMovieListProjection(
+    int TmdbMovieId,
+    string Title,
+    string OriginalTitle,
+    string? PosterPath,
+    DateOnly? ReleaseDate,
+    DateTimeOffset AddedAt,
+    DateTimeOffset LastUpdatedAt,
+    bool Completed,
+    string? DownloadSourceId,
+    DateTimeOffset? CompletedAtUtc,
+    bool MediaPathKnown);
+
+public sealed record AnimeMovieListPage(
+    int Page,
+    int PageSize,
+    int TotalItems,
+    IReadOnlyList<AnimeMovieListProjection> Items);
+
 public sealed record AnimeEpisodeProjection(
     int TmdbEpisodeId,
     int EpisodeNumber,

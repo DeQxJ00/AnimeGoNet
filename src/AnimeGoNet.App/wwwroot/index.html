@@ -952,6 +952,56 @@
       </nav>
     </section>
 
+    <section id="movie-library" aria-labelledby="movie-library-title" data-workspace="library" data-subview="movies" data-nav-label="动画电影">
+      <div class="section-heading library-heading">
+        <div>
+          <p class="eyebrow">TMDB canonical movie library</p>
+          <h2 id="movie-library-title">动画电影库</h2>
+        </div>
+        <button id="movie-library-reload" type="button" class="secondary-button">刷新电影库</button>
+      </div>
+      <p class="muted">这里只展示已通过 TMDB Movie 接口验证的电影；电影没有 Series、Season 或 Episode，也不会伪造成 S01E01。完成状态来自独立的电影完成记录。</p>
+      <div class="library-toolbar" aria-label="电影库搜索、排序和分页设置">
+        <form id="movie-library-search-form" class="library-search-form" role="search">
+          <label>搜索电影
+            <input id="movie-library-search" type="search" maxlength="200" placeholder="TMDB 电影名、原名或 Movie ID">
+          </label>
+          <button type="submit" class="primary-button">搜索</button>
+          <button id="movie-library-search-clear" type="button" class="secondary-button">清除</button>
+        </form>
+        <label>排序
+          <select id="movie-library-sort">
+            <option value="last_updated">最后更新时间</option>
+            <option value="name">TMDB 名称</option>
+            <option value="air_date">上映日期</option>
+            <option value="added_at">本地加入日期</option>
+          </select>
+        </label>
+        <label>方向
+          <select id="movie-library-direction">
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
+        </label>
+        <label>每页
+          <select id="movie-library-page-size">
+            <option value="12">12</option>
+            <option value="24" selected>24</option>
+            <option value="48">48</option>
+          </select>
+        </label>
+        <span id="movie-library-status" class="muted" role="status">正在读取电影库…</span>
+      </div>
+      <div id="movie-library-list" class="library-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取 TMDB Movie…</p>
+      </div>
+      <nav class="library-pagination" aria-label="电影库分页">
+        <button id="movie-library-previous" type="button" class="secondary-button">上一页</button>
+        <span id="movie-library-page-label">第 1 页</span>
+        <button id="movie-library-next" type="button" class="secondary-button">下一页</button>
+      </nav>
+    </section>
+
     <section id="pending-tmdb" aria-labelledby="pending-tmdb-title" data-workspace="library" data-subview="pending" data-nav-label="待补全 TMDB">
       <div class="section-heading pending-tmdb-heading">
         <div>
