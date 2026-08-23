@@ -92,6 +92,7 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("/download:/download", compose, StringComparison.Ordinal);
         Assert.Contains("download_path: /download/incomplete", compose, StringComparison.Ordinal);
         Assert.Contains("save_path: /download/anime", compose, StringComparison.Ordinal);
+        Assert.Contains("movie_save_path: /download/movies", compose, StringComparison.Ordinal);
         Assert.Contains("data_path: /data", compose, StringComparison.Ordinal);
         Assert.Contains("read_only: true", compose, StringComparison.Ordinal);
         Assert.Contains("no-new-privileges:true", compose, StringComparison.Ordinal);

@@ -19,16 +19,16 @@
 |---|---|---|---|---|
 | 配置 | `paths.save_path` | `paths.movie_save_path` | 已实现 | Core/App 配置测试、Web 测试 |
 | 任务身份 | 默认 TV Episode | `media_type=movie` | 已实现基础字段 | schema v56、导入存储测试 |
-| 手动导入 | 单 Torrent/RSS | 类型下拉并透传 | 进行中 | API/WebUI 测试 |
-| AnimeGoHelper | 单/全默认 TV | 剧场版按钮传 movie | 进行中 | 浏览器 DOM fixture |
-| TMDB 搜索 | `/3/discover/tv?with_genres=16` | `/3/discover/movie?with_genres=16` | 待实现 | loopback HTTP 测试 |
-| TMDB 详情 | Series/Season/Episode | Movie details | 待实现 | DTO/AOT 与缓存测试 |
-| 规范身份 | Series+Season+Episode | Movie ID | 待实现 | SQLite 唯一约束/去重测试 |
-| 整理 | `<show>/Sxx/E###` | `<movie> (<year>)/<movie> (<year>).ext` | 待实现 | 路径与文件策略测试 |
-| NFO | `tvshow.nfo` + Episode | `movie.nfo` | 待实现 | XML golden 测试 |
-| 字幕 | EP 关联后同名 | 主电影文件关联后同名 | 待实现 | 多语言后缀测试 |
-| 作品库 | Season/EP 进度 | 电影状态、封面、TMDB 跳转 | 待实现 | API/WebUI/Playwright |
-| 删除/扫描 | TV 目录边界 | movie 根目录边界 | 待实现 | 安全删除、外部补录测试 |
+| 手动导入 | 单 Torrent/RSS | 类型下拉并透传 | 已实现 | API/WebUI 测试 |
+| AnimeGoHelper | 单/全默认 TV | 剧场版按钮传 movie | 已实现于独立仓库 `1290d42` | Node DOM/请求契约测试 |
+| TMDB 搜索 | `/3/discover/tv?with_genres=16` | `/3/discover/movie?with_genres=16` | 已实现 | loopback HTTP 测试 |
+| TMDB 详情 | Series/Season/Episode | `/3/movie/{id}` 并再次验证身份 | 已实现 | DTO/AOT 与缓存测试 |
+| 规范身份 | Series+Season+Episode | Movie ID | 已实现 | schema v57、唯一 claim/完成记录测试 |
+| 整理 | `<show>/Sxx/E###` | `<movie> (<year>)/<movie> (<year>).ext` | 已实现（单正片） | 端到端文件策略测试 |
+| NFO | `tvshow.nfo` + Episode | `movie.nfo` | 已实现 | XML 测试 |
+| 字幕 | EP 关联后同名 | 主电影文件关联后同名 | 已实现 | 多语言后缀测试 |
+| 作品库 | Season/EP 进度 | 电影状态、封面、TMDB 跳转 | 已实现 | API/WebUI 测试 |
+| 删除/扫描 | TV 目录边界 | movie 根目录边界 | 删除已实现；外部扫描待实现 | 删除计划/执行测试 |
 
 ## 仍需明确或容易遗漏
 
@@ -42,3 +42,14 @@
    媒体类型级路由覆盖；本阶段保持来源路由不变。
 5. 外部媒体扫描、删除计划、备份导入导出、Docker 路径探测和磁盘容量统计必须同时覆盖
    `movie_save_path`，不能只改下载后的移动目标。
+
+## 当前确定性流程
+
+1. Mikan/手动导入把 `info.media_type=movie` 写入任务；缺失时仍按 `tv`。
+2. 电影任务只接受一个主视频；零视频或多个视频使用稳定失败码停止，不进入 TV 的 EP/季度流程。
+3. 可用 bgmid 时读取 Bangumi `name` 与 `name_cn` 作为搜索词，再执行多轮标题清理搜索。
+4. 每个候选先来自 `/3/discover/movie?with_genres=16`，随后必须由 `/3/movie/{id}` 验证。
+5. 通过 Movie ID 独立去重，整理到 `movie_save_path`，字幕随主文件改名并保留语言后缀，写入 `movie.nfo`。
+6. 下载任务和“动画电影”库显示 Movie ID、标题、上映日期和完成状态，不显示伪造 EP 进度。
+
+当前没有修改正式 AI Prompt；多主视频/特典/多版本、电影 AI 契约和电影外部媒体扫描仍需单独确认或实现。

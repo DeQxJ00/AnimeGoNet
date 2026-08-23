@@ -22,6 +22,7 @@ public sealed class ExternalQbittorrentDeploymentContractTests
         AssertScalar(environment, "data_path", "/data");
         AssertScalar(environment, "download_path", "/download/incomplete");
         AssertScalar(environment, "save_path", "/download/anime");
+        AssertScalar(environment, "movie_save_path", "/download/movies");
         AssertScalar(environment, "downloaders__bt__download_path", "/download/incomplete/bt");
         AssertScalar(environment, "downloaders__pt__download_path", "/download/incomplete/pt");
         AssertRequiredVariable(

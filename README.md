@@ -21,7 +21,8 @@ dotnet restore AnimeGoNet.slnx
 dotnet run --project src/AnimeGoNet.App -- `
   --data_path E:\AnimeGoNet\data `
   --download_path E:\AnimeGoNet\download `
-  --save_path E:\AnimeGoNet\library
+  --save_path E:\AnimeGoNet\library `
+  --movie_save_path E:\AnimeGoNet\movies
 ```
 
 原生程序默认只监听 `http://127.0.0.1:7991`。可用 YAML `web.host` / `web.port`、
@@ -41,7 +42,7 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 
 部署 YAML 支持：
 
-- `paths`：`data_path`、`download_path`、`save_path`
+- `paths`：`data_path`、`download_path`、TV `save_path`、电影 `movie_save_path`
 - `web`：监听 host/port、Access Key 和后台 worker 开关
 - `downloaders.<id>`：qB WebUI 地址、用户名、密码、下载路径和启停
 - `sources.<id>`：adapter、下载器绑定、文件策略、Torrent Host 白名单、
@@ -67,6 +68,7 @@ docker compose -f docker-compose.animegonet.yml up --build
 - `data_path=/data`
 - `download_path=/download/incomplete`
 - `save_path=/download/anime`
+- `movie_save_path=/download/movies`
 
 Compose 将 `./data` 挂载到 `/data`，将同一个 `./download` 同时挂载给
 AnimeGoNet 和两个 qB 容器；首次启动生成的 `/data/animego.yaml` 因此可持久化。
