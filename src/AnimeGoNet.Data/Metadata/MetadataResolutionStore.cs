@@ -78,6 +78,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         string? sourceProfileId = null;
         string? sourceId = null;
         var duplicateNotificationEnabled = true;
+        var mediaType = "tv";
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -117,7 +118,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        , task.source_profile_id, task.source_id,
                        COALESCE(json_extract(
                            task.route_snapshot_json,
-                           '$.duplicate_notification_enabled'), 1)
+                           '$.duplicate_notification_enabled'), 1),
+                       task.media_type
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -163,6 +165,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 sourceProfileId = reader.GetString(18);
                 sourceId = reader.GetString(19);
                 duplicateNotificationEnabled = reader.GetInt64(20) == 1;
+                mediaType = reader.GetString(21);
             }
         }
 
@@ -260,7 +263,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 SourceProfileId: sourceProfileId,
                 SourceId: sourceId,
                 DuplicateNotificationEnabled: duplicateNotificationEnabled,
-                IsForcedReadaptation: isOtherReadaptation),
+                IsForcedReadaptation: isOtherReadaptation,
+                MediaType: mediaType),
             tmdbSeriesId,
             tmdbSeasonNumber,
             files,
@@ -365,6 +369,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         DateTimeOffset? sourcePublishedAt = null;
         var torrentFileCount = 0;
         var isForcedReadaptation = false;
+        var mediaType = "tv";
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -376,7 +381,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        EXISTS (
                          SELECT 1 FROM other_file_readaptation_jobs AS readaptation
                          WHERE readaptation.task_id = task.id
-                           AND readaptation.state = 'pending')
+                           AND readaptation.state = 'pending'),
+                       task.media_type
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 WHERE (
@@ -428,6 +434,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     : ParseDateTimeOffset(reader.GetString(9));
                 torrentFileCount = reader.GetInt32(10);
                 isForcedReadaptation = reader.GetInt64(11) == 1;
+                mediaType = reader.GetString(12);
             }
         }
 
@@ -535,7 +542,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             sourcePublishedAtRaw,
             sourcePublishedAt,
             torrentFileCount,
-            IsForcedReadaptation: isForcedReadaptation);
+            IsForcedReadaptation: isForcedReadaptation,
+            MediaType: mediaType);
     }
 
     public async Task<string> RecordAttemptAsync(
@@ -607,6 +615,191 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         }
 
         return attemptId;
+    }
+
+    public async Task CompleteMovieAsync(
+        MetadataTaskClaim claim,
+        TmdbMovie movie,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentNullException.ThrowIfNull(movie);
+        if (movie.Id <= 0 || string.IsNullOrWhiteSpace(movie.Title)
+            || claim.Files is null || claim.Files.Count == 0)
+        {
+            throw new ArgumentException("Movie completion identity is invalid.", nameof(movie));
+        }
+
+        var videos = claim.Files
+            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            .ToArray();
+        if (videos.Length != 1)
+        {
+            throw new ArgumentException("Movie completion requires exactly one video file.", nameof(claim));
+        }
+
+        var associations = SubtitleAssociationResolver.Resolve(claim.Files.Select(file =>
+            new TorrentMediaFile(file.FileId, file.RelativePath, null)).ToArray());
+        var mainFile = videos[0];
+        var now = Format(utcNow);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        await using (var upsertMovie = connection.CreateCommand())
+        {
+            upsertMovie.Transaction = transaction;
+            upsertMovie.CommandText = """
+                INSERT INTO anime_movies (
+                    id, tmdb_movie_id, canonical_title, original_title,
+                    release_date, poster_path, created_at_utc, updated_at_utc)
+                VALUES (
+                    $id, $tmdb_id, $title, $original_title,
+                    $release_date, $poster_path, $now, $now)
+                ON CONFLICT(tmdb_movie_id) DO UPDATE SET
+                    canonical_title = excluded.canonical_title,
+                    original_title = excluded.original_title,
+                    release_date = COALESCE(excluded.release_date, anime_movies.release_date),
+                    poster_path = COALESCE(excluded.poster_path, anime_movies.poster_path),
+                    updated_at_utc = excluded.updated_at_utc;
+                """;
+            upsertMovie.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            upsertMovie.Parameters.AddWithValue("$tmdb_id", movie.Id);
+            upsertMovie.Parameters.AddWithValue("$title", movie.Title.Trim());
+            upsertMovie.Parameters.AddWithValue("$original_title", movie.OriginalTitle.Trim());
+            upsertMovie.Parameters.AddWithValue(
+                "$release_date",
+                movie.ReleaseDate is null
+                    ? DBNull.Value
+                    : movie.ReleaseDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            upsertMovie.Parameters.AddWithValue("$poster_path", (object?)movie.PosterPath ?? DBNull.Value);
+            upsertMovie.Parameters.AddWithValue("$now", now);
+            await upsertMovie.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var alreadyCompleted = false;
+        await using (var completed = connection.CreateCommand())
+        {
+            completed.Transaction = transaction;
+            completed.CommandText = "SELECT EXISTS (SELECT 1 FROM movie_completion_records WHERE tmdb_movie_id = $tmdb_id);";
+            completed.Parameters.AddWithValue("$tmdb_id", movie.Id);
+            alreadyCompleted = Convert.ToInt64(
+                await completed.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                CultureInfo.InvariantCulture) == 1;
+        }
+
+        var claimedByAnotherTask = false;
+        if (!alreadyCompleted)
+        {
+            await using var releaseExpired = connection.CreateCommand();
+            releaseExpired.Transaction = transaction;
+            releaseExpired.CommandText = """
+                UPDATE movie_claims
+                SET state = 'released', expires_at_utc = NULL
+                WHERE tmdb_movie_id = $tmdb_id
+                  AND state = 'active' AND expires_at_utc <= $now;
+                """;
+            releaseExpired.Parameters.AddWithValue("$tmdb_id", movie.Id);
+            releaseExpired.Parameters.AddWithValue("$now", now);
+            await releaseExpired.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+            await using var claimMovie = connection.CreateCommand();
+            claimMovie.Transaction = transaction;
+            claimMovie.CommandText = """
+                INSERT INTO movie_claims (
+                    id, tmdb_movie_id, task_file_id, state, claimed_at_utc, expires_at_utc)
+                VALUES ($id, $tmdb_id, $file_id, 'active', $now, $expires)
+                ON CONFLICT(tmdb_movie_id) DO UPDATE SET
+                    id = excluded.id,
+                    task_file_id = excluded.task_file_id,
+                    state = 'active',
+                    claimed_at_utc = excluded.claimed_at_utc,
+                    expires_at_utc = excluded.expires_at_utc
+                WHERE movie_claims.state = 'released';
+                """;
+            claimMovie.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            claimMovie.Parameters.AddWithValue("$tmdb_id", movie.Id);
+            claimMovie.Parameters.AddWithValue("$file_id", mainFile.FileId);
+            claimMovie.Parameters.AddWithValue("$now", now);
+            claimMovie.Parameters.AddWithValue("$expires", Format(utcNow.AddDays(7)));
+            claimedByAnotherTask = await claimMovie.ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false) != 1;
+        }
+
+        var duplicateReason = alreadyCompleted
+            ? "movie_already_completed"
+            : claimedByAnotherTask ? "movie_claimed_by_another_task" : null;
+        foreach (var file in claim.Files)
+        {
+            var association = associations.SingleOrDefault(value => value.SubtitleFileId == file.FileId);
+            var isMain = file.FileId == mainFile.FileId;
+            var isBoundSubtitle = association?.VideoFileId == mainFile.FileId;
+            var disposition = duplicateReason is not null
+                ? (isMain || isBoundSubtitle ? "duplicate" : "ignored")
+                : isMain || isBoundSubtitle ? "other" : "ignored";
+            var reason = duplicateReason
+                ?? (isMain ? "movie"
+                    : isBoundSubtitle ? "movie_subtitle"
+                    : association?.UnmatchedReason ?? "movie_auxiliary_ignored");
+
+            await using var updateFile = connection.CreateCommand();
+            updateFile.Transaction = transaction;
+            updateFile.CommandText = """
+                UPDATE task_files
+                SET tmdb_movie_id = $tmdb_id,
+                    disposition = $disposition,
+                    other_reason = $reason,
+                    associated_task_file_id = $associated_file_id,
+                    rename_suffix = $rename_suffix
+                WHERE id = $file_id AND task_id = $task_id AND disposition = 'pending';
+                """;
+            updateFile.Parameters.AddWithValue("$tmdb_id", movie.Id);
+            updateFile.Parameters.AddWithValue("$disposition", disposition);
+            updateFile.Parameters.AddWithValue("$reason", reason);
+            updateFile.Parameters.AddWithValue(
+                "$associated_file_id",
+                isBoundSubtitle ? mainFile.FileId : DBNull.Value);
+            updateFile.Parameters.AddWithValue(
+                "$rename_suffix",
+                isBoundSubtitle ? association!.RenameSuffix : DBNull.Value);
+            updateFile.Parameters.AddWithValue("$file_id", file.FileId);
+            updateFile.Parameters.AddWithValue("$task_id", claim.TaskId);
+            if (await updateFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                throw new InvalidOperationException("Movie task file changed concurrently.");
+            }
+        }
+
+        await using var finish = connection.CreateCommand();
+        finish.Transaction = transaction;
+        finish.CommandText = """
+            UPDATE metadata_resolution_runs
+            SET status = 'resolved', tmdb_access_confirmed = 1,
+                failure_kind = NULL, fallback_eligible = 0,
+                fallback_denial_reason = NULL, completed_at_utc = $now,
+                lease_token = NULL, lease_expires_at_utc = NULL,
+                tmdb_movie_id = $tmdb_id
+            WHERE id = $run_id AND task_id = $task_id
+              AND status = 'running' AND lease_token = $lease_token;
+
+            UPDATE ingest_tasks
+            SET status = 'metadata_resolved', failure_kind = NULL,
+                failure_reason = NULL, updated_at_utc = $now
+            WHERE id = $task_id AND status = 'metadata_resolving'
+              AND media_type = 'movie';
+            """;
+        finish.Parameters.AddWithValue("$now", now);
+        finish.Parameters.AddWithValue("$tmdb_id", movie.Id);
+        finish.Parameters.AddWithValue("$run_id", claim.RunId);
+        finish.Parameters.AddWithValue("$task_id", claim.TaskId);
+        finish.Parameters.AddWithValue("$lease_token", claim.LeaseToken);
+        if (await finish.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 2)
+        {
+            throw new InvalidOperationException("Movie metadata resolution lease is no longer active.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task CompleteSeasonAsync(

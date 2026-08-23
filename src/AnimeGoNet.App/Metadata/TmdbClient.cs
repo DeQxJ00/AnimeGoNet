@@ -425,3 +425,27 @@ public sealed class TmdbClient : ITmdbClient, ITmdbMovieClient, IDisposable
         }
     }
 }
+
+internal sealed class UnavailableTmdbMovieClient : ITmdbMovieClient
+{
+    public static UnavailableTmdbMovieClient Instance { get; } = new();
+
+    private UnavailableTmdbMovieClient()
+    {
+    }
+
+    public Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+        string title,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<TmdbMovie>>(Failure());
+
+    public Task<TmdbMovie?> GetMovieAsync(
+        int movieId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<TmdbMovie?>(Failure());
+
+    private static TmdbClientException Failure() => new(
+        MetadataFailureKind.Configuration,
+        "tmdb_movie_client_unavailable",
+        tmdbAccessConfirmed: false);
+}

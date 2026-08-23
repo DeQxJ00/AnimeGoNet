@@ -1,6 +1,7 @@
 using System.Globalization;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
@@ -15,6 +16,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
     AiMetadataTaskResolver aiMetadata,
     MikanWorkMetadataRuleStore rules,
     MikanTrustedOffsetStore trustedOffsets,
+    TmdbMovieResolver movieResolver,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null,
     IBangumiEpisodeClient? bangumiEpisodes = null,
@@ -34,6 +36,11 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return false;
         }
         using var refresh = refreshScope?.Begin(claim.IsForcedReadaptation);
+
+        if (claim.MediaType == MediaTypes.Movie)
+        {
+            return await ResolveMovieAsync(claim, cancellationToken).ConfigureAwait(false);
+        }
 
         var rule = claim.MikanId is null
             ? null
@@ -272,6 +279,97 @@ public sealed class AutomaticMetadataResolutionProcessor(
             claim,
             terminalFailure,
             details is null ? SeriesFailureDenialReason(claim, terminalFailure) : "tmdb_series_resolved",
+            cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> ResolveMovieAsync(
+        MetadataTaskClaim claim,
+        CancellationToken cancellationToken)
+    {
+        var videos = (claim.Files ?? [])
+            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            .ToArray();
+        if (videos.Length != 1)
+        {
+            var failure = new MetadataFailure(
+                MetadataFailureKind.Ambiguous,
+                videos.Length == 0 ? "movie_video_missing" : "movie_multiple_videos_unsupported",
+                false);
+            await RecordAsync(
+                claim,
+                "series",
+                "tmdb_movie_title",
+                null,
+                "not_applicable",
+                failure.Code,
+                false,
+                _timeProvider.GetTimestamp(),
+                cancellationToken).ConfigureAwait(false);
+            await FailAsync(claim, failure, "movie_file_layout_unresolved", cancellationToken)
+                .ConfigureAwait(false);
+            return true;
+        }
+
+        IReadOnlyList<string> titles = [claim.Title];
+        if (claim.BangumiSubjectId is > 0)
+        {
+            var bangumiStarted = _timeProvider.GetTimestamp();
+            try
+            {
+                var subject = await bangumi.GetSubjectAsync(
+                    claim.BangumiSubjectId.Value,
+                    cancellationToken).ConfigureAwait(false);
+                if (subject is not null)
+                {
+                    titles = TmdbSeriesSeasonResolver.BangumiTitles(subject);
+                    if (titles.Count == 0)
+                    {
+                        titles = [claim.Title];
+                    }
+                    await RecordAsync(
+                        claim, "bangumi", "bangumi_movie_subject", null, "matched", null,
+                        false, bangumiStarted, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (BangumiClientException exception)
+            {
+                await RecordAsync(
+                    claim, "bangumi", "bangumi_movie_subject", null, "failed", exception.SafeCode,
+                    IsRetryable(exception.Kind), bangumiStarted, cancellationToken).ConfigureAwait(false);
+                var failure = new MetadataFailure(exception.Kind, exception.SafeCode, false);
+                await FailAsync(claim, failure, "tmdb_access_not_attempted", cancellationToken)
+                    .ConfigureAwait(false);
+                return true;
+            }
+        }
+
+        var started = _timeProvider.GetTimestamp();
+        var resolution = await movieResolver.ResolveAsync(titles, cancellationToken).ConfigureAwait(false);
+        await RecordAsync(
+            claim,
+            "series",
+            "tmdb_movie_title",
+            null,
+            resolution.IsSuccess ? "matched" : "not_matched",
+            resolution.Failure?.Code,
+            resolution.Failure is not null && IsRetryable(resolution.Failure.Kind),
+            started,
+            cancellationToken).ConfigureAwait(false);
+        if (!resolution.IsSuccess)
+        {
+            await FailAsync(
+                claim,
+                resolution.Failure!,
+                "tmdb_movie_not_resolved",
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        await resolutions.CompleteMovieAsync(
+            claim,
+            resolution.Value!,
+            _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return true;
     }

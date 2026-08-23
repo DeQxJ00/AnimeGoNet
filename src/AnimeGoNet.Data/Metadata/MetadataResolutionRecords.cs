@@ -21,7 +21,8 @@ public sealed record MetadataTaskClaim(
     string? SourceProfileId = null,
     string? SourceId = null,
     bool DuplicateNotificationEnabled = true,
-    bool IsForcedReadaptation = false);
+    bool IsForcedReadaptation = false,
+    string MediaType = "tv");
 
 public sealed record MetadataAttempt(
     string Stage,
