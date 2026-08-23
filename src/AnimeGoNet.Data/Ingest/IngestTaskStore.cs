@@ -378,7 +378,8 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                        json_extract(ingest_tasks.route_snapshot_json, '$.category'),
                        json_extract(ingest_tasks.route_snapshot_json, '$.tags'),
                        json_extract(ingest_tasks.route_snapshot_json, '$.seeding_time_minutes'),
-                       json_extract(ingest_tasks.route_snapshot_json, '$.dynamic_tag_template')
+                       json_extract(ingest_tasks.route_snapshot_json, '$.dynamic_tag_template'),
+                       ingest_tasks.media_type
                 FROM staged_torrents
                 JOIN ingest_tasks ON ingest_tasks.id = staged_torrents.task_id
                 WHERE staged_torrents.task_id = $task_id
@@ -406,7 +407,8 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 reader.GetInt32(10),
                 leaseToken,
                 attemptCount,
-                reader.IsDBNull(11) ? null : reader.GetString(11));
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.GetString(12));
         }
 
         await using (var updateTask = connection.CreateCommand())

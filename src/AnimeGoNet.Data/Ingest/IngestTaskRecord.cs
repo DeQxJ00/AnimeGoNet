@@ -32,4 +32,5 @@ public sealed record ClaimedStagedTorrentRecord(
     int SeedingTimeMinutes,
     string LeaseToken,
     int AttemptCount,
-    string? DynamicTagTemplate = null);
+    string? DynamicTagTemplate = null,
+    string MediaType = "tv");

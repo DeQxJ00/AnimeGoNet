@@ -2,6 +2,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Data.Ingest;
 
 namespace AnimeGoNet.App.Downloads;
@@ -60,7 +61,9 @@ public sealed class StagedTorrentDispatcher(
                 claim,
                 snapshot,
                 downloader.DownloadPath,
-                options.Paths.SavePath,
+                claim.MediaType == MediaTypes.Movie
+                    ? options.Paths.EffectiveMovieSavePath
+                    : options.Paths.SavePath,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
             try

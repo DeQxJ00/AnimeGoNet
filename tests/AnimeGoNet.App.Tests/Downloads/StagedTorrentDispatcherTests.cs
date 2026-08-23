@@ -3,6 +3,7 @@ using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
@@ -54,6 +55,17 @@ public sealed class StagedTorrentDispatcherTests
         Assert.Empty(client.Added);
         Assert.Equal([fixture.InfoHash], client.PausedHashes);
         Assert.Equal(1, (await fixture.ReadLifecycleAsync()).DownloadJobCount);
+    }
+
+    [Fact]
+    public async Task MovieDispatchCapturesDedicatedMovieLibraryRoot()
+    {
+        await using var fixture = await DispatchFixture.CreateAsync(MediaTypes.Movie);
+        var client = new FakeDownloadClient(fixture.InfoHash);
+
+        Assert.Equal(StagedDispatchResult.Completed, await fixture.CreateDispatcher(client).DispatchNextAsync());
+
+        Assert.Equal(fixture.Options.Paths.EffectiveMovieSavePath, (await fixture.ReadLifecycleAsync()).SaveRootPath);
     }
 
     [Fact]
@@ -254,7 +266,7 @@ public sealed class StagedTorrentDispatcherTests
 
         public string InfoHash { get; }
 
-        public static async Task<DispatchFixture> CreateAsync()
+        public static async Task<DispatchFixture> CreateAsync(string mediaType = MediaTypes.Tv)
         {
             var root = Path.Combine(Path.GetTempPath(), "animegonet-dispatch-tests", Guid.NewGuid().ToString("N"));
             var options = AnimeGoDefaults.CreateNative(root);
@@ -269,7 +281,9 @@ public sealed class StagedTorrentDispatcherTests
                 "mikan",
                 new IngestItemCommand(
                     "https://mikanani.me/passkey/item.torrent",
-                    new IngestItemInfo("Episode", null, "one", "3951", null, null, 3951, 547888, null, null))).Item);
+                    new IngestItemInfo(
+                        "Episode", null, "one", "3951", null, null,
+                        3951, 547888, null, null, MediaType: mediaType))).Item);
             var infoHash = new string('a', 40);
             var stagingFileName = $"{infoHash}-{Guid.NewGuid():N}.torrent";
             var stagingFilePath = Path.Combine(layout.StagingPath, stagingFileName);
