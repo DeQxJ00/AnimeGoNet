@@ -1050,7 +1050,8 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.GetInt64(27) != 0,
             reader.IsDBNull(28) ? null : reader.GetString(28),
             ReadDateTimeOffset(reader, 29),
-            []);
+            [],
+            null);
 
     private static async Task EnrichTmdbMetadataAsync(
         Microsoft.Data.Sqlite.SqliteConnection connection,
@@ -1137,6 +1138,52 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                     value.EpisodeNumbers.Order().ToArray()))
                 .ToArray();
             items[index] = items[index] with { TmdbMetadata = metadata };
+        }
+
+        await using var movieCommand = connection.CreateCommand();
+        var movieTaskParameters = new string[items.Count];
+        for (var index = 0; index < items.Count; index++)
+        {
+            var parameter = $"$movie_task_id_{index}";
+            movieTaskParameters[index] = parameter;
+            movieCommand.Parameters.AddWithValue(parameter, items[index].TaskId);
+        }
+
+        movieCommand.CommandText = $$"""
+            SELECT DISTINCT file.task_id, movie.tmdb_movie_id, movie.canonical_title,
+                            movie.original_title, movie.release_date
+            FROM task_files AS file
+            INNER JOIN anime_movies AS movie
+              ON movie.tmdb_movie_id = file.tmdb_movie_id
+            WHERE file.task_id IN ({{string.Join(", ", movieTaskParameters)}})
+              AND file.tmdb_movie_id IS NOT NULL
+              AND file.tmdb_movie_id > 0
+            ORDER BY file.task_id, movie.tmdb_movie_id;
+            """;
+
+        var movies = new Dictionary<string, DownloadTmdbMovieMetadataRecord>(StringComparer.Ordinal);
+        await using var movieReader = await movieCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await movieReader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var taskId = movieReader.GetString(0);
+            if (movies.ContainsKey(taskId))
+            {
+                continue;
+            }
+
+            movies.Add(taskId, new DownloadTmdbMovieMetadataRecord(
+                movieReader.GetInt32(1),
+                movieReader.GetString(2),
+                movieReader.IsDBNull(3) ? null : movieReader.GetString(3),
+                movieReader.IsDBNull(4) ? null : DateOnly.Parse(movieReader.GetString(4), CultureInfo.InvariantCulture)));
+        }
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (movies.TryGetValue(items[index].TaskId, out var movie))
+            {
+                items[index] = items[index] with { TmdbMovieMetadata = movie };
+            }
         }
     }
 

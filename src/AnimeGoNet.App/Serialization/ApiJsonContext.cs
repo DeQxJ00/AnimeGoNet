@@ -57,6 +57,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(DownloadListResponse))]
 [JsonSerializable(typeof(DownloadDashboardSummary))]
 [JsonSerializable(typeof(DownloadTmdbMetadata))]
+[JsonSerializable(typeof(DownloadTmdbMovieMetadata))]
 [JsonSerializable(typeof(DownloadDetailResponse))]
 [JsonSerializable(typeof(DownloadControlRequest))]
 [JsonSerializable(typeof(DownloadControlResponse))]

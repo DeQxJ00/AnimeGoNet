@@ -4885,7 +4885,7 @@ function formatTmdbEpisodeNumbers(values) {
         : "");
 }
 function renderDownloadTmdbMetadata(item) {
-    if (item.tmdb_metadata.length === 0)
+    if (item.tmdb_metadata.length === 0 && item.tmdb_movie_metadata === null)
         return null;
     const section = document.createElement("section");
     section.className = "download-tmdb-metadata";
@@ -4900,6 +4900,19 @@ function renderDownloadTmdbMetadata(item) {
     flow.addEventListener("click", () => openMatchingLogTask(item.task_id));
     heading.append(title, flow);
     section.append(heading);
+    if (item.tmdb_movie_metadata !== null) {
+        const metadata = item.tmdb_movie_metadata;
+        const row = document.createElement("div");
+        row.className = "download-tmdb-row";
+        const movie = document.createElement("strong");
+        movie.textContent = `TMDB Movie ${metadata.movie_id} · ${metadata.title}`;
+        const release = document.createElement("span");
+        release.textContent = metadata.release_date
+            ? `电影 · 上映 ${metadata.release_date}`
+            : "电影 · 上映日期未提供";
+        row.append(movie, release);
+        section.append(row);
+    }
     for (const metadata of item.tmdb_metadata) {
         const row = document.createElement("div");
         row.className = "download-tmdb-row";

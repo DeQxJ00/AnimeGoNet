@@ -31,7 +31,8 @@ public sealed record DownloadJobListItemRecord(
     bool DownloaderConnected,
     string? DownloaderFailureCode,
     DateTimeOffset? DownloaderLastSuccessAtUtc,
-    IReadOnlyList<DownloadTmdbMetadataRecord> TmdbMetadata);
+    IReadOnlyList<DownloadTmdbMetadataRecord> TmdbMetadata,
+    DownloadTmdbMovieMetadataRecord? TmdbMovieMetadata = null);
 
 public sealed record DownloadTmdbMetadataRecord(
     int SeriesId,
@@ -39,6 +40,12 @@ public sealed record DownloadTmdbMetadataRecord(
     int? SeasonNumber,
     string? SeasonName,
     IReadOnlyList<int> EpisodeNumbers);
+
+public sealed record DownloadTmdbMovieMetadataRecord(
+    int MovieId,
+    string Title,
+    string? OriginalTitle,
+    DateOnly? ReleaseDate);
 
 public sealed record DownloadSyncResult(int ActiveJobs, int MatchedJobs);
 

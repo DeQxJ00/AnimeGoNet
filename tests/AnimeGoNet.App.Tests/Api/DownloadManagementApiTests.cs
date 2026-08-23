@@ -121,6 +121,25 @@ public sealed class DownloadManagementApiTests
                 .EnumerateArray());
     }
 
+    [Fact]
+    public async Task ReturnsPersistedTmdbMovieIdentityWithoutFakeTvMetadata()
+    {
+        await using var fixture = await DownloadApiFixture.CreateAsync(new FakeDownloadClient());
+        await fixture.MarkTmdbMovieResolvedAsync();
+
+        using var response = await fixture.App.Client.GetAsync("/api/v1/downloads?page=1&page_size=10");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        var movie = item.GetProperty("tmdb_movie_metadata");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(item.GetProperty("tmdb_metadata").EnumerateArray());
+        Assert.Equal(10681, movie.GetProperty("movie_id").GetInt32());
+        Assert.Equal("萤火之森", movie.GetProperty("title").GetString());
+        Assert.Equal("蛍火の杜へ", movie.GetProperty("original_title").GetString());
+        Assert.Equal("2011-09-17", movie.GetProperty("release_date").GetString());
+    }
+
     [Theory]
     [InlineData("sort=unknown")]
     [InlineData("direction=sideways")]
@@ -551,6 +570,34 @@ public sealed class DownloadManagementApiTests
                     tmdb_episode_number = 41,
                     disposition = 'episode',
                     other_reason = NULL
+                WHERE task_id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
+                """;
+            command.Parameters.AddWithValue("$job_id", JobId);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(3, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task MarkTmdbMovieResolvedAsync()
+        {
+            await using var connection = await _database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO anime_movies (
+                    id, tmdb_movie_id, canonical_title, original_title,
+                    poster_path, release_date, created_at_utc, updated_at_utc)
+                VALUES (
+                    'movie-download-metadata', 10681, '萤火之森', '蛍火の杜へ',
+                    '/poster.jpg', '2011-09-17', $now, $now);
+                UPDATE ingest_tasks
+                SET media_type = 'movie'
+                WHERE id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
+                UPDATE task_files
+                SET tmdb_movie_id = 10681,
+                    tmdb_series_id = NULL,
+                    tmdb_season_number = NULL,
+                    tmdb_episode_number = NULL,
+                    disposition = 'other',
+                    other_reason = 'movie'
                 WHERE task_id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
                 """;
             command.Parameters.AddWithValue("$job_id", JobId);

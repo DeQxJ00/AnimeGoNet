@@ -695,7 +695,8 @@ public sealed record DownloadListItem(
     [property: JsonPropertyName("downloader_connected")] bool DownloaderConnected,
     [property: JsonPropertyName("downloader_failure_code")] string? DownloaderFailureCode,
     [property: JsonPropertyName("downloader_last_success_at_utc")] DateTimeOffset? DownloaderLastSuccessAtUtc,
-    [property: JsonPropertyName("tmdb_metadata")] IReadOnlyList<DownloadTmdbMetadata> TmdbMetadata);
+    [property: JsonPropertyName("tmdb_metadata")] IReadOnlyList<DownloadTmdbMetadata> TmdbMetadata,
+    [property: JsonPropertyName("tmdb_movie_metadata")] DownloadTmdbMovieMetadata? TmdbMovieMetadata);
 
 public sealed record DownloadTmdbMetadata(
     [property: JsonPropertyName("series_id")] int SeriesId,
@@ -703,6 +704,12 @@ public sealed record DownloadTmdbMetadata(
     [property: JsonPropertyName("season_number")] int? SeasonNumber,
     [property: JsonPropertyName("season_name")] string? SeasonName,
     [property: JsonPropertyName("episode_numbers")] IReadOnlyList<int> EpisodeNumbers);
+
+public sealed record DownloadTmdbMovieMetadata(
+    [property: JsonPropertyName("movie_id")] int MovieId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("original_title")] string? OriginalTitle,
+    [property: JsonPropertyName("release_date")] DateOnly? ReleaseDate);
 
 public sealed record DownloadDetailResponse(
     [property: JsonPropertyName("summary")] DownloadListItem Summary,

@@ -8210,7 +8210,14 @@ public static class ApiEndpoints
                 metadata.SeriesName,
                 metadata.SeasonNumber,
                 metadata.SeasonName,
-                metadata.EpisodeNumbers)).ToArray());
+                metadata.EpisodeNumbers)).ToArray(),
+            record.TmdbMovieMetadata is null
+                ? null
+                : new DownloadTmdbMovieMetadata(
+                    record.TmdbMovieMetadata.MovieId,
+                    record.TmdbMovieMetadata.Title,
+                    record.TmdbMovieMetadata.OriginalTitle,
+                    record.TmdbMovieMetadata.ReleaseDate));
 
     private static bool CanRetry(DownloadJobDetailRecord detail) =>
         detail.Summary.State == "error"
