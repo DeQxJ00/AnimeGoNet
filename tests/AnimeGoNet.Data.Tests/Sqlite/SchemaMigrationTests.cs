@@ -29,6 +29,7 @@ public sealed class SchemaMigrationTests
         var expected = new[]
         {
             "anime_seasons",
+            "anime_movies",
             "anime_series",
             "cache_buckets",
             "cache_entries",
@@ -65,6 +66,8 @@ public sealed class SchemaMigrationTests
             "legacy_mikan_filter_values",
             "metadata_resolution_attempts",
             "metadata_resolution_runs",
+            "movie_claims",
+            "movie_completion_records",
             "mikan_offset_evidence",
             "mikan_rss_batches",
             "mikan_rss_batch_entries",
@@ -139,6 +142,26 @@ public sealed class SchemaMigrationTests
         Assert.True(await reader.ReadAsync());
         Assert.Equal("'tv'", reader.GetString(0));
         Assert.Equal(1, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task MovieMetadataMigrationKeepsMovieIdentitySeparateFromTvEpisodes()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+              EXISTS (SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'anime_movies'),
+              EXISTS (SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'movie_claims'),
+              EXISTS (SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'movie_completion_records'),
+              EXISTS (SELECT 1 FROM pragma_table_info('task_files') WHERE name = 'tmdb_movie_id'),
+              EXISTS (SELECT 1 FROM pragma_table_info('metadata_resolution_runs') WHERE name = 'tmdb_movie_id');
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal([1L, 1L, 1L, 1L, 1L], Enumerable.Range(0, 5).Select(reader.GetInt64).ToArray());
     }
 
     [Fact]

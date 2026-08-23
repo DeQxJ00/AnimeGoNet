@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 56;
+    public const int CurrentVersion = 57;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -110,7 +110,57 @@ public static class DatabaseSchema
             56,
             "task_media_type",
             TaskMediaType),
+        new SchemaMigration(
+            57,
+            "movie_metadata_identity",
+            MovieMetadataIdentity),
     ];
+
+    private const string MovieMetadataIdentity = """
+        CREATE TABLE anime_movies (
+            id TEXT NOT NULL PRIMARY KEY,
+            tmdb_movie_id INTEGER NOT NULL UNIQUE CHECK (tmdb_movie_id > 0),
+            canonical_title TEXT NOT NULL,
+            original_title TEXT NOT NULL,
+            release_date TEXT,
+            poster_path TEXT,
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        ALTER TABLE task_files
+        ADD COLUMN tmdb_movie_id INTEGER CHECK (tmdb_movie_id > 0)
+            REFERENCES anime_movies(tmdb_movie_id);
+
+        ALTER TABLE metadata_resolution_runs
+        ADD COLUMN tmdb_movie_id INTEGER CHECK (tmdb_movie_id > 0);
+
+        CREATE TABLE movie_claims (
+            id TEXT NOT NULL PRIMARY KEY,
+            tmdb_movie_id INTEGER NOT NULL CHECK (tmdb_movie_id > 0),
+            task_file_id TEXT NOT NULL REFERENCES task_files(id) ON DELETE CASCADE,
+            state TEXT NOT NULL CHECK (state IN ('active', 'completed', 'released')),
+            claimed_at_utc TEXT NOT NULL,
+            expires_at_utc TEXT,
+            UNIQUE (tmdb_movie_id)
+        ) STRICT;
+
+        CREATE TABLE movie_completion_records (
+            id TEXT NOT NULL PRIMARY KEY,
+            tmdb_movie_id INTEGER NOT NULL CHECK (tmdb_movie_id > 0),
+            source_id TEXT NOT NULL,
+            source_item_id TEXT,
+            media_path TEXT,
+            completed_at_utc TEXT NOT NULL,
+            UNIQUE (tmdb_movie_id)
+        ) STRICT;
+
+        CREATE INDEX ix_task_files_tmdb_movie
+        ON task_files(tmdb_movie_id, task_id);
+
+        CREATE INDEX ix_movie_completion_source
+        ON movie_completion_records(source_id, source_item_id);
+        """;
 
     private const string TaskMediaType = """
         ALTER TABLE ingest_tasks
