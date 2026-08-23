@@ -238,6 +238,29 @@ test("download summary cards provide direct, accessible list filters", async () 
   assert.match(css, /\.download-summary-card\.filterable\.selected\s*\{/);
 });
 
+test("downloads expose verified TMDB metadata and link to persistent matching logs", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  assert.equal(
+    document.querySelector('[data-workspace="logs"][data-subview="matching"]')
+      ?.getAttribute("data-nav-label"),
+    "匹配日志",
+  );
+  assert.ok(document.querySelector("#matching-log-filters"));
+  assert.ok(document.querySelector("#matching-log-list"));
+  assert.match(app, /item\.tmdb_metadata\.length === 0/);
+  assert.match(app, /已确认 TMDB 元数据/);
+  assert.match(app, /openMatchingLogTask\(item\.task_id\)/);
+  assert.match(app, /Series、Season、Episode 匹配流程/);
+  assert.match(app, /loadMetadataDetail\(item\.task_id/);
+  assert.match(app, /loadMetadataAttempts\(item\.task_id/);
+  assert.match(css, /\.download-tmdb-metadata\s*\{/);
+  assert.match(css, /\.matching-log-flow\s*\{[^}]*grid-template-columns:\s*repeat\(3/s);
+});
+
 test("anime library exposes auditable task and file deletion without merging projection deletion", async () => {
   const [document, app, css] = await Promise.all([
     page(),

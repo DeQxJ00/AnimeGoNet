@@ -8180,7 +8180,13 @@ public static class ApiEndpoints
             record.UpdatedAtUtc,
             record.DownloaderConnected,
             record.DownloaderFailureCode,
-            record.DownloaderLastSuccessAtUtc);
+            record.DownloaderLastSuccessAtUtc,
+            record.TmdbMetadata.Select(metadata => new DownloadTmdbMetadata(
+                metadata.SeriesId,
+                metadata.SeriesName,
+                metadata.SeasonNumber,
+                metadata.SeasonName,
+                metadata.EpisodeNumbers)).ToArray());
 
     private static bool CanRetry(DownloadJobDetailRecord detail) =>
         detail.Summary.State == "error"

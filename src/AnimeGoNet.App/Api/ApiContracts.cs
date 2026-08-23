@@ -688,7 +688,15 @@ public sealed record DownloadListItem(
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
     [property: JsonPropertyName("downloader_connected")] bool DownloaderConnected,
     [property: JsonPropertyName("downloader_failure_code")] string? DownloaderFailureCode,
-    [property: JsonPropertyName("downloader_last_success_at_utc")] DateTimeOffset? DownloaderLastSuccessAtUtc);
+    [property: JsonPropertyName("downloader_last_success_at_utc")] DateTimeOffset? DownloaderLastSuccessAtUtc,
+    [property: JsonPropertyName("tmdb_metadata")] IReadOnlyList<DownloadTmdbMetadata> TmdbMetadata);
+
+public sealed record DownloadTmdbMetadata(
+    [property: JsonPropertyName("series_id")] int SeriesId,
+    [property: JsonPropertyName("series_name")] string? SeriesName,
+    [property: JsonPropertyName("season_number")] int? SeasonNumber,
+    [property: JsonPropertyName("season_name")] string? SeasonName,
+    [property: JsonPropertyName("episode_numbers")] IReadOnlyList<int> EpisodeNumbers);
 
 public sealed record DownloadDetailResponse(
     [property: JsonPropertyName("summary")] DownloadListItem Summary,

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260823-root-font-size">
+  <link rel="stylesheet" href="/styles.css?v=20260823-download-tmdb-matching-log">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -812,6 +812,28 @@
         <span id="ai-log-page-label">第 1 页</span>
         <button id="ai-log-next" type="button" class="secondary-button" disabled>下一页</button>
       </nav>
+    </section>
+
+    <section id="matching-logs" aria-labelledby="matching-logs-title" data-workspace="logs" data-subview="matching" data-nav-label="匹配日志">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Persistent metadata pipeline</p>
+          <h2 id="matching-logs-title">匹配日志</h2>
+        </div>
+        <button id="matching-log-reload" type="button" class="secondary-button">刷新</button>
+      </div>
+      <p class="muted">按最近更新时间展示真实持久化流程。Series、Season、Episode 的策略、结果、失败原因、AI 用量及最终 TMDB 文件映射均可逐项展开。</p>
+      <form id="matching-log-filters" class="matching-log-filters" aria-label="匹配日志筛选">
+        <label>搜索任务
+          <input id="matching-log-search" type="search" maxlength="200" placeholder="标题、任务 ID、来源或错误码">
+        </label>
+        <div class="form-actions">
+          <button type="submit">查询</button>
+          <button id="matching-log-reset" type="button" class="secondary-button">重置</button>
+        </div>
+      </form>
+      <p id="matching-log-status" class="muted" role="status">正在读取最近匹配任务…</p>
+      <div id="matching-log-list" class="matching-log-list" aria-live="polite" aria-busy="true"><p class="ui-state ui-state--loading muted empty">正在读取…</p></div>
     </section>
 
     <section id="metadata-tasks-workspace" aria-labelledby="metadata-title" data-workspace="tasks" data-subview="metadata" data-nav-label="匹配与整理">
@@ -1927,6 +1949,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260823-manual-ingest-auth"></script>
+    <script type="module" src="/app.js?v=20260823-download-tmdb-matching-log"></script>
 </body>
 </html>

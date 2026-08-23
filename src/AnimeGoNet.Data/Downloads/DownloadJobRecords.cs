@@ -30,7 +30,15 @@ public sealed record DownloadJobListItemRecord(
     DateTimeOffset UpdatedAtUtc,
     bool DownloaderConnected,
     string? DownloaderFailureCode,
-    DateTimeOffset? DownloaderLastSuccessAtUtc);
+    DateTimeOffset? DownloaderLastSuccessAtUtc,
+    IReadOnlyList<DownloadTmdbMetadataRecord> TmdbMetadata);
+
+public sealed record DownloadTmdbMetadataRecord(
+    int SeriesId,
+    string? SeriesName,
+    int? SeasonNumber,
+    string? SeasonName,
+    IReadOnlyList<int> EpisodeNumbers);
 
 public sealed record DownloadSyncResult(int ActiveJobs, int MatchedJobs);
 

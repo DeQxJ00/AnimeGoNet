@@ -510,6 +510,15 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .download-seeding.seeding { color: #73dbb4; }
 .download-seeding.completed { color: #9ee8c8; }
 .download-dynamic-tags { margin: 4px 0 0; color: #91a0bb; font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
+.download-tmdb-metadata { display: grid; gap: 8px; margin-top: 12px; padding: 12px 14px; border: 1px solid #315f58; border-radius: 13px; background: rgba(20,67,57,.2); }
+.download-tmdb-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.download-tmdb-heading > strong { color: #8de7c4; font-size: .78rem; }
+.download-metadata-link { border: 0; padding: 2px 0; color: #9bc7ff; background: transparent; font: inherit; font-size: .74rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.download-metadata-link:hover { color: #d7eaff; }
+.download-tmdb-row { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.download-tmdb-row strong, .download-tmdb-row span { overflow-wrap: anywhere; }
+.download-tmdb-row strong { color: #e0eaff; font-size: .8rem; }
+.download-tmdb-row span { color: #aebdd5; font-size: .77rem; }
 .download-dynamic-tags.applied { color: #9ee8c8; }
 .download-dynamic-tags.skipped { color: #e5bc7c; }
 .download-actions, .download-detail-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
@@ -718,6 +727,29 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-attempt-empty { margin: 0; padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.45); }
 .metadata-detail { display: grid; gap: 10px; margin-top: 12px; }
 .metadata-detail:empty { display: none; }
+.matching-log-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin: 16px 0; }
+.matching-log-filters label { display: grid; gap: 6px; color: #9badca; font-size: .76rem; }
+.matching-log-filters input { width: 100%; }
+.matching-log-list { display: grid; gap: 14px; }
+.matching-log-card { border: 1px solid #344a6a; border-radius: 17px; padding: 16px 18px; background: rgba(16,22,37,.9); }
+.matching-log-card.failed { border-color: #7c414b; }
+.matching-log-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.matching-log-heading > div { display: grid; min-width: 0; gap: 5px; }
+.matching-log-heading strong { color: #e3ebfb; overflow-wrap: anywhere; }
+.matching-log-heading small { color: #8497b8; overflow-wrap: anywhere; }
+.matching-log-identity { margin: 10px 0 0; color: #9fb2d2; font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
+.matching-log-flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 14px 0 0; padding: 0; list-style: none; }
+.matching-log-flow li { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; min-width: 0; padding: 10px 14px 10px 0; }
+.matching-log-flow li:not(:last-child)::after { content: ""; position: absolute; top: 24px; right: 6px; width: 18px; height: 2px; background: #40506b; }
+.matching-log-stage-marker { display: inline-flex; width: 27px; height: 27px; align-items: center; justify-content: center; border: 1px solid #53627d; border-radius: 50%; color: #a8b6cf; background: #131c2c; font-weight: 800; }
+.matching-log-flow li.resolved .matching-log-stage-marker { border-color: #3b9d7a; color: #a8f2d4; background: #153b32; }
+.matching-log-flow li.failed .matching-log-stage-marker { border-color: #a64c5c; color: #ffc1c6; background: #401d25; }
+.matching-log-flow li > div { display: grid; min-width: 0; gap: 3px; }
+.matching-log-flow strong { color: #dbe6fa; font-size: .76rem; }
+.matching-log-flow span, .matching-log-flow small { color: #91a4c4; font-size: .7rem; overflow-wrap: anywhere; }
+.matching-log-flow small { color: #7186a8; }
+.matching-log-failure { margin: 10px 0 0; padding: 9px 11px; border-radius: 10px; color: #ffb6ba; background: rgba(103,31,42,.32); font-size: .75rem; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .download-tmdb-row, .matching-log-filters, .matching-log-flow { grid-template-columns: 1fr; } .matching-log-flow li:not(:last-child)::after { display: none; } }
 .metadata-source-evidence { display: grid; gap: 6px; padding: 12px; border: 1px solid #355675; border-radius: 12px; background: rgba(5,8,16,.6); }
 .metadata-source-evidence h4 { margin: 0; color: #dce7fb; font-size: .82rem; }
 .metadata-source-evidence strong { color: #f1f5ff; font-size: .8rem; overflow-wrap: anywhere; }

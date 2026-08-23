@@ -315,6 +315,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         {
             results.Add(ReadListItem(reader));
         }
+        await reader.DisposeAsync().ConfigureAwait(false);
+
+        await EnrichTmdbMetadataAsync(connection, results, cancellationToken).ConfigureAwait(false);
 
         return new DownloadJobListPage(query.Page, query.PageSize, totalItems, summary, results);
     }
@@ -343,6 +346,10 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         {
             return null;
         }
+
+        var detailSummaries = new List<DownloadJobListItemRecord> { summary };
+        await EnrichTmdbMetadataAsync(connection, detailSummaries, cancellationToken).ConfigureAwait(false);
+        summary = detailSummaries[0];
 
         string? taskFailureKind;
         string? taskFailureReason;
@@ -1042,7 +1049,105 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             ReadDateTimeOffset(reader, 26)!.Value,
             reader.GetInt64(27) != 0,
             reader.IsDBNull(28) ? null : reader.GetString(28),
-            ReadDateTimeOffset(reader, 29));
+            ReadDateTimeOffset(reader, 29),
+            []);
+
+    private static async Task EnrichTmdbMetadataAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        List<DownloadJobListItemRecord> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await using var command = connection.CreateCommand();
+        var taskParameters = new string[items.Count];
+        for (var index = 0; index < items.Count; index++)
+        {
+            var parameter = $"$task_id_{index}";
+            taskParameters[index] = parameter;
+            command.Parameters.AddWithValue(parameter, items[index].TaskId);
+        }
+
+        command.CommandText = $$"""
+            SELECT file.task_id, file.tmdb_series_id, series.canonical_name,
+                   file.tmdb_season_number, season.canonical_name,
+                   file.tmdb_episode_number
+            FROM task_files AS file
+            LEFT JOIN anime_series AS series
+              ON series.tmdb_series_id = file.tmdb_series_id
+             AND series.tmdb_series_id > 0
+            LEFT JOIN anime_seasons AS season
+              ON season.series_id = series.id
+             AND season.season_number = file.tmdb_season_number
+            WHERE file.task_id IN ({{string.Join(", ", taskParameters)}})
+              AND file.tmdb_series_id IS NOT NULL
+              AND file.tmdb_series_id > 0
+            ORDER BY file.task_id, file.tmdb_series_id,
+                     file.tmdb_season_number, file.tmdb_episode_number, file.id;
+            """;
+
+        var rows = new Dictionary<string, Dictionary<(int SeriesId, int? SeasonNumber), TmdbMetadataBuilder>>(
+            StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var taskId = reader.GetString(0);
+            var seriesId = reader.GetInt32(1);
+            var seriesName = reader.IsDBNull(2) ? null : reader.GetString(2);
+            int? seasonNumber = reader.IsDBNull(3) ? null : reader.GetInt32(3);
+            var seasonName = reader.IsDBNull(4) ? null : reader.GetString(4);
+            int? episodeNumber = reader.IsDBNull(5) ? null : reader.GetInt32(5);
+            if (!rows.TryGetValue(taskId, out var taskRows))
+            {
+                taskRows = [];
+                rows.Add(taskId, taskRows);
+            }
+
+            var key = (seriesId, seasonNumber);
+            if (!taskRows.TryGetValue(key, out var builder))
+            {
+                builder = new TmdbMetadataBuilder(seriesId, seriesName, seasonNumber, seasonName);
+                taskRows.Add(key, builder);
+            }
+
+            if (episodeNumber is not null)
+            {
+                builder.EpisodeNumbers.Add(episodeNumber.Value);
+            }
+        }
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (!rows.TryGetValue(items[index].TaskId, out var taskRows))
+            {
+                continue;
+            }
+
+            var metadata = taskRows.Values
+                .OrderBy(value => value.SeriesId)
+                .ThenBy(value => value.SeasonNumber)
+                .Select(value => new DownloadTmdbMetadataRecord(
+                    value.SeriesId,
+                    value.SeriesName,
+                    value.SeasonNumber,
+                    value.SeasonName,
+                    value.EpisodeNumbers.Order().ToArray()))
+                .ToArray();
+            items[index] = items[index] with { TmdbMetadata = metadata };
+        }
+    }
+
+    private sealed record TmdbMetadataBuilder(
+        int SeriesId,
+        string? SeriesName,
+        int? SeasonNumber,
+        string? SeasonName)
+    {
+        public HashSet<int> EpisodeNumbers { get; } = [];
+    }
 
     private static string NormalizeSort(string? value) =>
         value?.Trim().ToLowerInvariant() switch

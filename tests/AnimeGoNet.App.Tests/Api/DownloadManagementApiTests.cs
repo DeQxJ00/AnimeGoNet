@@ -59,6 +59,7 @@ public sealed class DownloadManagementApiTests
         Assert.Equal("pending", item.GetProperty("dynamic_tag_state").GetString());
         Assert.Empty(item.GetProperty("dynamic_tags").EnumerateArray());
         Assert.Equal(JsonValueKind.Null, item.GetProperty("dynamic_tag_failure_code").ValueKind);
+        Assert.Empty(item.GetProperty("tmdb_metadata").EnumerateArray());
 
         using var detailResponse = await fixture.App.Client.GetAsync(
             $"/api/v1/downloads/{fixture.JobId}");
@@ -88,6 +89,36 @@ public sealed class DownloadManagementApiTests
         Assert.NotEmpty(detail.RootElement.GetProperty("timeline").EnumerateArray());
         Assert.DoesNotContain(fixture.App.RootPath, body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("private-passkey", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReturnsPersistedTmdbIdentityForResolvedDownloadFiles()
+    {
+        await using var fixture = await DownloadApiFixture.CreateAsync(new FakeDownloadClient());
+        await fixture.MarkTmdbResolvedAsync();
+
+        using var response = await fixture.App.Client.GetAsync("/api/v1/downloads?page=1&page_size=10");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        var metadata = Assert.Single(item.GetProperty("tmdb_metadata").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(82684, metadata.GetProperty("series_id").GetInt32());
+        Assert.Equal("关于我转生变成史莱姆这档事", metadata.GetProperty("series_name").GetString());
+        Assert.Equal(4, metadata.GetProperty("season_number").GetInt32());
+        Assert.Equal("第 4 季", metadata.GetProperty("season_name").GetString());
+        Assert.Equal(
+            [41],
+            metadata.GetProperty("episode_numbers").EnumerateArray()
+                .Select(value => value.GetInt32())
+                .ToArray());
+
+        using var detailResponse = await fixture.App.Client.GetAsync($"/api/v1/downloads/{fixture.JobId}");
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStreamAsync());
+        Assert.Single(
+            detailJson.RootElement.GetProperty("summary")
+                .GetProperty("tmdb_metadata")
+                .EnumerateArray());
     }
 
     [Theory]
@@ -494,6 +525,37 @@ public sealed class DownloadManagementApiTests
                 """;
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task MarkTmdbResolvedAsync()
+        {
+            await using var connection = await _database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, bangumi_subject_id, canonical_name, original_name,
+                    poster_path, needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES (
+                    'series-download-metadata', 82684, NULL,
+                    '关于我转生变成史莱姆这档事', '転生したらスライムだった件',
+                    NULL, 0, $now, $now);
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name, poster_path,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'season-download-metadata', 'series-download-metadata', 4,
+                    '第 4 季', NULL, $now, $now);
+                UPDATE task_files
+                SET tmdb_series_id = 82684,
+                    tmdb_season_number = 4,
+                    tmdb_episode_number = 41,
+                    disposition = 'episode',
+                    other_reason = NULL
+                WHERE task_id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
+                """;
+            command.Parameters.AddWithValue("$job_id", JobId);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(3, await command.ExecuteNonQueryAsync());
         }
 
         public async Task<string?> PreparationFailureAsync()

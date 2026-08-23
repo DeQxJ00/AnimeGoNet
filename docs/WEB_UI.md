@@ -220,7 +220,7 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
 
 ## 13. 日志工作区
 
-日志已从任务中心独立为一级菜单，下分“运行日志”和“AI 调用日志”。运行日志通过同源 `/websocket/log` 接收服务端已脱敏日志。协议保留上游
+日志已从任务中心独立为一级菜单，下分“运行日志”“匹配日志”和“AI 调用日志”。运行日志通过同源 `/websocket/log` 接收服务端已脱敏日志。协议保留上游
 `{"type":"log","count":N}\n\n<line>...` 帧，因此旧客户端仍可消费；新增
 `control` 确认帧只用于静态 WebUI，旧客户端可按既有逻辑忽略。
 
@@ -259,6 +259,8 @@ Access Key 或表单内容写入 hash。切换只隐藏非当前的顶层区域�
 Attempt 才进入列表；确定性规则、仅计划调用但未发出请求的失败不伪造成 AI 调用。
 Prompt、工具正文、模型原始响应、API Key、Cookie、passkey URL 和下载绝对路径不入库也不由
 该普通列表接口返回。每条记录另显示与当次 AI attempt 精确绑定、且已由主程序完成 TMDB 最终验证的唯一 Episode 列表（TMDB Series、Season、Episode 与名称）；失败或尚未通过验证的调用明确显示“未通过最终 TMDB Episode 验证”，不采信模型自报 EP。schema v52 将该结果持久化为独立审计，避免后续人工重新适配改写旧日志。配置归档仍排除这些运行审计。配置页另有默认关闭的“AI Debug 完整链路”；开启后，新 AI 调用把前置确定性尝试、任务输入、Prompt 模板与最终渲染 Prompt、每轮 AI/MCP Body、解析结果和 TMDB 本地验证写入 `data_path/ai-debug` 的独立文件。AI 调用日志只在文件存在时显示“查看完整链路”，弹窗按四阶段时间线可视化并提供单条删除；Authorization Header、API Key、Cookie、passkey 和 Torrent URL 始终不捕获。关闭开关不会删除已有调试文件。
+
+“匹配日志”复用元数据任务、Run、Attempt 与逐文件 TMDB 映射的持久化权威数据，默认按最后更新时间倒序显示最近 25 个任务。每张卡把 Series → Season → Episode 画成三阶段流程，区分已解析、失败与尚未建立结果，并显示实际策略及对应 Run/Attempt 引用；可继续展开来源/RSS/AI/TMDB 文件对照和完整策略时间线。下载任务列表会批量读取同页 `task_files` 已落库的 TMDB Series/Season/Episode，按 Series+Season 合并多文件 EP 后显示“已确认 TMDB 元数据”；没有已确认字段时整块不显示，也不从 Torrent 标题生成占位。卡片中的“查看匹配流程”会按任务 ID进入匹配日志并自动展开两类证据。
 
 ## 14. 外部 C# 插件运行状态
 

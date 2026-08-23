@@ -585,6 +585,13 @@ interface DownloadItem {
   revision: number;
   downloader_failure_code: string | null;
   created_at_utc: string;
+  tmdb_metadata: Array<{
+    series_id: number;
+    series_name: string | null;
+    season_number: number | null;
+    season_name: string | null;
+    episode_numbers: number[];
+  }>;
 }
 
 interface DownloadListPage {
@@ -728,6 +735,7 @@ interface MetadataItem {
   other_file_count: number;
   duplicate_file_count: number;
   pending_file_count: number;
+  updated_at_utc: string;
   readaptation_review_state: "not_required" | "pending" | "approved";
 }
 
@@ -2221,10 +2229,11 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
   },
   logs: {
     title: "日志",
-    description: "筛选运行诊断，并跨任务查询持久化的 AI 调用审计。",
+    description: "筛选运行诊断，并查看持久化的匹配流程与 AI 调用审计。",
     defaultSubview: "runtime",
     tabs: [
       { id: "runtime", label: "运行日志" },
+      { id: "matching", label: "匹配日志" },
       { id: "ai-invocations", label: "AI 调用日志" },
     ],
   },
@@ -2370,6 +2379,7 @@ function selectWorkspace(
     void loadDataUpdate(true);
   }
   if (workspace === "logs" && selectedSubview === "ai-invocations") void loadAiInvocationLogs();
+  if (workspace === "logs" && selectedSubview === "matching") void loadMatchingLogs();
   closeMobileSidebar();
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -7238,6 +7248,49 @@ function seedingDescription(item: DownloadItem): string {
   return `做种：${state} · ${elapsed} / ${formatDuration(targetSeconds)} · ${percentage.toFixed(1)}%`;
 }
 
+function formatTmdbEpisodeNumbers(values: number[]): string {
+  const episodes = [...new Set(values)].sort((left, right) => left - right);
+  if (episodes.length === 0) return "EP 尚未确认";
+  const labels = episodes.slice(0, 8)
+    .map(value => `E${String(value).padStart(3, "0")}`);
+  return labels.join("、") + (episodes.length > labels.length
+    ? ` 等 ${episodes.length} 集`
+    : "");
+}
+
+function renderDownloadTmdbMetadata(item: DownloadItem): HTMLElement | null {
+  if (item.tmdb_metadata.length === 0) return null;
+  const section = document.createElement("section");
+  section.className = "download-tmdb-metadata";
+  const heading = document.createElement("div");
+  heading.className = "download-tmdb-heading";
+  const title = document.createElement("strong");
+  title.textContent = "已确认 TMDB 元数据";
+  const flow = document.createElement("button");
+  flow.type = "button";
+  flow.className = "download-metadata-link";
+  flow.textContent = "查看匹配流程";
+  flow.addEventListener("click", () => openMatchingLogTask(item.task_id));
+  heading.append(title, flow);
+  section.append(heading);
+  for (const metadata of item.tmdb_metadata) {
+    const row = document.createElement("div");
+    row.className = "download-tmdb-row";
+    const series = document.createElement("strong");
+    series.textContent = `TMDB ${metadata.series_id}`
+      + (metadata.series_name ? ` · ${metadata.series_name}` : "");
+    const episode = document.createElement("span");
+    episode.textContent = metadata.season_number === null
+      ? "季度尚未确认"
+      : `S${String(metadata.season_number).padStart(2, "0")}`
+        + (metadata.season_name ? ` · ${metadata.season_name}` : "")
+        + ` · ${formatTmdbEpisodeNumbers(metadata.episode_numbers)}`;
+    row.append(series, episode);
+    section.append(row);
+  }
+  return section;
+}
+
 function downloadControlButton(
   item: DownloadItem,
   action: "pause" | "resume" | "retry",
@@ -7619,6 +7672,7 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
       : item.dynamic_tag_state === "pending"
       ? "动态 Tags：等待元数据确认"
       : "动态 Tags：未配置";
+    const tmdbMetadata = renderDownloadTmdbMetadata(item);
     const actions = document.createElement("div");
     actions.className = "download-actions";
     const expand = document.createElement("button");
@@ -7646,7 +7700,9 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
     remove.textContent = "删除…";
     remove.addEventListener("click", () => void openDeletePreview(item.task_id));
     actions.append(remove);
-    card.append(heading, progress, details, addedAt, seeding, dynamicTags, actions, detailTarget);
+    card.append(heading, progress, details, addedAt, seeding, dynamicTags);
+    if (tmdbMetadata !== null) card.append(tmdbMetadata);
+    card.append(actions, detailTarget);
     if (expandedDownloadJobIds.has(item.job_id)) {
       void loadDownloadDetail(item, detailTarget, expand);
     }
@@ -9334,6 +9390,173 @@ async function loadOverviewStatistics(): Promise<void> {
     }
     element<HTMLElement>("#overview-runtime-cpu-detail").textContent = "读取失败，点击查看日志";
     element<HTMLElement>("#overview-data-path-size-detail").textContent = "读取失败，点击检查目录";
+  }
+}
+
+let matchingLogRequestSequence = 0;
+let pendingMatchingLogTaskId: string | null = null;
+
+function openMatchingLogTask(taskId: string): void {
+  pendingMatchingLogTaskId = taskId;
+  element<HTMLInputElement>("#matching-log-search").value = taskId;
+  selectWorkspace("logs", "matching");
+}
+
+function matchingLogStage(
+  item: MetadataItem,
+  label: string,
+  stage: "series" | "season" | "episode",
+  strategy: string | null,
+  runId: string | null,
+  attemptId: string | null,
+): HTMLLIElement {
+  const row = document.createElement("li");
+  const failed = item.failure_stage === stage && item.failure_kind !== null;
+  row.className = failed ? "failed" : strategy ? "resolved" : "pending";
+  const marker = document.createElement("span");
+  marker.className = "matching-log-stage-marker";
+  marker.textContent = failed ? "!" : strategy ? "✓" : "…";
+  marker.setAttribute("aria-hidden", "true");
+  const content = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = label;
+  const value = document.createElement("span");
+  value.textContent = failed
+    ? textOrDash(item.failure_code ?? item.failure_kind)
+    : strategy === null ? "尚未建立结果" : libraryStrategy(strategy);
+  content.append(title, value);
+  if (strategy !== null) {
+    const reference = document.createElement("small");
+    reference.textContent = resolutionReference(runId, attemptId);
+    reference.title = `run_id=${runId ?? "未记录"}\nattempt_id=${attemptId ?? "未记录"}`;
+    content.append(reference);
+  }
+  row.append(marker, content);
+  return row;
+}
+
+function openMetadataTaskFromMatchingLog(taskId: string): void {
+  metadataState.search = taskId;
+  metadataState.page = 1;
+  element<HTMLInputElement>("#metadata-search").value = taskId;
+  saveMetadataState();
+  selectWorkspace("tasks", "metadata");
+}
+
+async function loadMatchingLogs(): Promise<void> {
+  const list = element<HTMLElement>("#matching-log-list");
+  setRegionState(list, "loading");
+  const requestSequence = ++matchingLogRequestSequence;
+  const search = element<HTMLInputElement>("#matching-log-search").value.trim();
+  const query = new URLSearchParams({
+    page: "1",
+    page_size: "25",
+    handling: "all",
+    file_state: "all",
+    review_state: "all",
+    retryability: "all",
+    sort: "updated",
+    direction: "desc",
+  });
+  if (search) query.set("search", search);
+  try {
+    const response = await authenticatedFetch(`/api/v1/metadata/tasks?${query}`, { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as MetadataTaskListPage;
+    if (requestSequence !== matchingLogRequestSequence) return;
+    element<HTMLElement>("#matching-log-status").textContent =
+      `最近 ${body.items.length} / ${body.total_items} 个匹配任务 · 按最后更新时间倒序`;
+    if (body.items.length === 0) {
+      renderRegionMessage(list, "empty", "没有符合条件的匹配日志");
+      pendingMatchingLogTaskId = null;
+      return;
+    }
+
+    const autoExpandTaskId = pendingMatchingLogTaskId;
+    pendingMatchingLogTaskId = null;
+    const cards = body.items.map(item => {
+      const card = document.createElement("article");
+      card.className = `matching-log-card ${item.status === "metadata_failed" ? "failed" : ""}`;
+      card.dataset.taskId = item.task_id;
+      const heading = document.createElement("div");
+      heading.className = "matching-log-heading";
+      const headingText = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const audit = document.createElement("small");
+      audit.textContent = `${item.source} · ${new Date(item.updated_at_utc).toLocaleString()} · ${item.task_id}`;
+      headingText.append(title, audit);
+      const state = document.createElement("span");
+      state.className = `badge ${item.status === "metadata_failed" ? "error" : "ready"}`;
+      state.textContent = statusLabels[item.status] ?? item.status;
+      heading.append(headingText, state);
+
+      const identity = document.createElement("p");
+      identity.className = "matching-log-identity";
+      identity.textContent = `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`
+        + ` · TMDB ${textOrDash(item.tmdb_series_id)}`
+        + ` · S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`
+        + ` · 正片 ${item.episode_file_count} / 重复 ${item.duplicate_file_count} / Other ${item.other_file_count} / 待处理 ${item.pending_file_count}`;
+
+      const flow = document.createElement("ol");
+      flow.className = "matching-log-flow";
+      flow.setAttribute("aria-label", "Series、Season、Episode 匹配流程");
+      flow.append(
+        matchingLogStage(item, "Series", "series", item.series_strategy, item.series_run_id, item.series_attempt_id),
+        matchingLogStage(item, "Season", "season", item.season_strategy, item.season_run_id, item.season_attempt_id),
+        matchingLogStage(item, "Episode", "episode", item.episode_strategy, item.episode_run_id, item.episode_attempt_id),
+      );
+
+      if (item.failure_kind || item.failure_reason) {
+        const failure = document.createElement("p");
+        failure.className = "matching-log-failure";
+        failure.textContent = `${textOrDash(item.failure_stage)} · ${textOrDash(item.failure_code ?? item.failure_kind)} · ${textOrDash(item.failure_reason)}`;
+        card.append(heading, identity, flow, failure);
+      } else {
+        card.append(heading, identity, flow);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "metadata-actions";
+      const detailButton = document.createElement("button");
+      detailButton.type = "button";
+      detailButton.className = "metadata-attempt-button";
+      detailButton.textContent = "来源 / TMDB 对照";
+      detailButton.setAttribute("aria-expanded", "false");
+      const detailTarget = document.createElement("div");
+      detailTarget.className = "metadata-detail";
+      detailButton.onclick = () => void loadMetadataDetail(item.task_id, detailTarget, detailButton);
+      const attemptsButton = document.createElement("button");
+      attemptsButton.type = "button";
+      attemptsButton.className = "metadata-attempt-button";
+      attemptsButton.textContent = "策略时间线";
+      const attemptsTarget = document.createElement("div");
+      attemptsTarget.className = "metadata-attempt-list";
+      attemptsButton.onclick = () => void loadMetadataAttempts(item.task_id, attemptsTarget, attemptsButton);
+      const locate = document.createElement("button");
+      locate.type = "button";
+      locate.className = "secondary-button";
+      locate.textContent = "转到任务处理";
+      locate.onclick = () => openMetadataTaskFromMatchingLog(item.task_id);
+      actions.append(detailButton, attemptsButton, locate);
+      card.append(actions, detailTarget, attemptsTarget);
+      if (autoExpandTaskId === item.task_id) {
+        void loadMetadataDetail(item.task_id, detailTarget, detailButton);
+        void loadMetadataAttempts(item.task_id, attemptsTarget, attemptsButton);
+      }
+      return card;
+    });
+    renderRegionContent(list, ...cards);
+    if (autoExpandTaskId !== null) {
+      requestAnimationFrame(() => {
+        list.querySelector<HTMLElement>(`[data-task-id="${CSS.escape(autoExpandTaskId)}"]`)
+          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+    }
+  } catch (error) {
+    if (requestSequence !== matchingLogRequestSequence) return;
+    element<HTMLElement>("#matching-log-status").textContent = "匹配日志读取失败";
+    renderRegionMessage(list, "error", errorMessage(error, "未知错误"));
   }
 }
 
@@ -13219,6 +13442,20 @@ element<HTMLButtonElement>("#ai-log-next").addEventListener("click", () => {
   aiLogPage++;
   void loadAiInvocationLogs();
 });
+element<HTMLFormElement>("#matching-log-filters").addEventListener("submit", event => {
+  event.preventDefault();
+  pendingMatchingLogTaskId = null;
+  void loadMatchingLogs();
+});
+element<HTMLButtonElement>("#matching-log-reset").addEventListener("click", () => {
+  element<HTMLInputElement>("#matching-log-search").value = "";
+  pendingMatchingLogTaskId = null;
+  void loadMatchingLogs();
+});
+element<HTMLButtonElement>("#matching-log-reload").addEventListener(
+  "click",
+  () => void loadMatchingLogs(),
+);
 element<HTMLButtonElement>("#ai-debug-close").addEventListener("click", () => aiDebugDialog.close());
 element<HTMLButtonElement>("#ai-debug-delete").addEventListener(
   "click",
