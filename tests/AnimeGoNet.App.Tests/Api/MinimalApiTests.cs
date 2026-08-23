@@ -518,6 +518,22 @@ public sealed class MinimalApiTests
         resolveWithWebUiKey.Headers.Add("X-AnimeGo-WebUI-Access-Key", webUiAccessKey);
         using var webUiAcceptedByResolve = await app.Client.SendAsync(resolveWithWebUiKey);
         Assert.NotEqual(HttpStatusCode.Unauthorized, webUiAcceptedByResolve.StatusCode);
+
+        const string manualIngestPath = "/api/v1/ingest/manual";
+        using var manualIngestWithPluginKey = new HttpRequestMessage(HttpMethod.Post, manualIngestPath)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        manualIngestWithPluginKey.Headers.Add("X-AnimeGo-Access-Key", pluginAccessKey);
+        using var pluginDeniedFromManualIngest = await app.Client.SendAsync(manualIngestWithPluginKey);
+        Assert.Equal(HttpStatusCode.Unauthorized, pluginDeniedFromManualIngest.StatusCode);
+        using var manualIngestWithWebUiKey = new HttpRequestMessage(HttpMethod.Post, manualIngestPath)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        manualIngestWithWebUiKey.Headers.Add("X-AnimeGo-WebUI-Access-Key", webUiAccessKey);
+        using var webUiAcceptedByManualIngest = await app.Client.SendAsync(manualIngestWithWebUiKey);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, webUiAcceptedByManualIngest.StatusCode);
     }
 
     [Fact]

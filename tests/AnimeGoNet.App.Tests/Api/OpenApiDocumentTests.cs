@@ -89,6 +89,12 @@ public sealed partial class OpenApiDocumentTests
                 .ValueKind);
         Assert.True(ingest.GetProperty("responses").TryGetProperty("200", out _));
 
+        var manualIngest = Operation(root, "/api/v1/ingest/manual", "post");
+        Assert.Equal(
+            ["AnimeGoWebUiAccessKey", "WebUiAccessKey", "WebUiAccessKeyQuery"],
+            manualIngest.GetProperty("security").EnumerateArray().Skip(1)
+                .Select(item => Assert.Single(item.EnumerateObject()).Name));
+
         var workRule = Operation(root, "/api/v1/mikan/work-rules/{mikanId}", "get");
         var mikanId = Assert.Single(workRule.GetProperty("parameters").EnumerateArray(), parameter =>
             string.Equals(parameter.GetProperty("name").GetString(), "mikanId", StringComparison.Ordinal));

@@ -310,6 +310,11 @@ test("anime library links a confirmed season to its canonical TMDB page", async 
   assert.match(app, /tmdbLink\.setAttribute\(\s*"aria-label"/);
 });
 
+test("manual ingest uses the WebUI-authenticated route instead of the plugin boundary", async () => {
+  const app = await readFile(appPath, "utf8");
+  assert.match(app, /authenticatedFetch\("\/api\/v1\/ingest\/manual"/);
+});
+
 test("task deletion waits for a durable execution result and reports item states", async () => {
   const [document, app] = await Promise.all([
     page(),

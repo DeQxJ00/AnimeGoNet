@@ -21,6 +21,10 @@ Authentication is split into two independently configured boundaries:
 - WebUI management routes and `/websocket` use `web.webui_access_key`. They accept
   plaintext `X-AnimeGo-WebUI-Access-Key`, or its lowercase SHA-256 through
   `WebUI-Access-Key` / `webui_access_key`.
+- WebUI “Mikan 手动设置 / 单个 Torrent” submits to `/api/v1/ingest/manual`, which
+  uses WebUI authentication while reusing the same unified-ingest handler. External
+  plugins continue to use `/api/v1/ingest` with `inner_plugin_mikan.access_key`; the
+  two credentials are not interchangeable.
 
 Each boundary is unprotected only when its own configured key is empty. A plugin key
 never authorizes WebUI management, and a WebUI key never authorizes plugin/import routes.

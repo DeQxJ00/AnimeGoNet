@@ -7935,7 +7935,7 @@ async function submitManualDownload(event) {
         mikanUrl.value = "";
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
-        const responsePromise = authenticatedFetch("/api/v1/ingest", {
+        const responsePromise = authenticatedFetch("/api/v1/ingest/manual", {
             method: "POST",
             headers: requestHeaders,
             body: requestBody,

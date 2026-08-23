@@ -199,6 +199,7 @@ public static class ApiEndpoints
             "/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}/recover",
             RecoverPendingTmdb);
         app.MapPost("/api/v1/ingest", Ingest);
+        app.MapPost("/api/v1/ingest/manual", Ingest);
         app.MapPost("/api/v1/ingest/mikan/resolve", ResolveMikanEpisode);
         app.MapPost("/api/v1/rss/ingest", RssIngest);
         app.MapPost("/api/rss", LegacyRss);
