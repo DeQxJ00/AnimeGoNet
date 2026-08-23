@@ -267,6 +267,22 @@ test("anime library exposes an accessible Mikan season completion picker", async
   assert.match(css, /#mikan-season-completion-groups\s*\{/);
 });
 
+test("anime library links a confirmed season to its canonical TMDB page", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  const link = document.querySelector("#library-detail-tmdb-link");
+  assert.ok(link);
+  assert.equal(link.getAttribute("target"), "_blank");
+  assert.equal(link.getAttribute("rel"), "noopener noreferrer");
+  assert.match(
+    app,
+    /https:\/\/www\.themoviedb\.org\/tv\/\$\{detail\.tmdb_series_id\}\/season\/\$\{detail\.tmdb_season_number\}/,
+  );
+  assert.match(app, /tmdbLink\.setAttribute\(\s*"aria-label"/);
+});
+
 test("task deletion waits for a durable execution result and reports item states", async () => {
   const [document, app] = await Promise.all([
     page(),

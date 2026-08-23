@@ -105,6 +105,8 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 `GET /api/v1/library/seasons` 已提供第 6 节的季度列表基础投影和服务端分页。`sort` 接受 `last_updated`、`name`、`air_date`、`added_at`，`direction` 接受 `asc`/`desc`；空开播日期在两个方向都置后。列表用单次批量查询聚合完整 Episode snapshot 与规范完成记录，返回 snapshot 缺口、snapshot 外完成记录、完成记录缺媒体路径和本地未验证季度警告。`tmdbid=0` 条目始终排除。响应中的 `poster_url` 固定指向同源 Cover API；`poster_path` 只是诊断用的经校验 TMDB 相对路径，页面不得自行拼接外部 URL。
 
+季度详情根据已确认的规范 `tmdb_series_id + tmdb_season_number` 提供“打开 TMDB 季度”按钮，固定跳转到 `https://www.themoviedb.org/tv/{tmdbid}/season/{season}` 并在新标签页打开；不使用任务标题、本地解析值或未验证候选拼接外链。
+
 `GET /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 返回季度头部和完整 EP 网格。网格只枚举该季度实际保存的 `tmdb_episodes`，不会按 `episode_count` 猜造缺失项；状态只由同一规范 TMDB 三元组的 `completion_records` 决定。响应可显示来源、完成时间和媒体路径是否已记录，但不返回媒体绝对路径、内部 SQLite 行 ID、Torrent URL 或凭据。删除完成记录后下一次读取立即显示 `not_downloaded`。
 
 外部自行补齐的媒体默认不扫描。作品库顶部的“扫描外部媒体并补录”显式调用 `POST /api/v1/library/external-media/import`；季度详情的按钮调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/external-media/import`。扫描只检查当前正式作品库投影对应的 `save_path/<TMDB规范名>/Sxx` 直接目录，接受非空且文件 stem 精确为 `E###`（也支持更多位正整数）的已知视频扩展名；`Other`、子目录、字幕、非标准命名、未知 TMDB EP、无法读取项、目录链/文件符号链接和同 EP 多视频不会补录。每个唯一候选必须命中当前 `tmdb_episodes`，再以 `source_id=external_import` 和媒体绝对路径写入规范完成记录；响应和 WebUI 只展示相对路径及稳定跳过原因。重复点击通过 TMDB 三元组唯一键返回 `already_recorded`。此操作不移动或删除文件，不生成缺少真实 Torrent 身份的目录 sidecar/NFO/来源 alias，也没有 schedule、启动扫描或配置开关。

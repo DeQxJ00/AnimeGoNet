@@ -2747,6 +2747,10 @@ function renderLibraryDetail(detail, focus) {
         content.append(renderLibraryWarnings(detail.warnings));
     layout.append(image, content);
     summary.replaceChildren(layout);
+    const tmdbLink = element("#library-detail-tmdb-link");
+    tmdbLink.href = `https://www.themoviedb.org/tv/${detail.tmdb_series_id}/season/${detail.tmdb_season_number}`;
+    tmdbLink.hidden = false;
+    tmdbLink.setAttribute("aria-label", `在 TMDB 打开 ${detail.display_name} ${detail.season_name}`);
     const completionButton = element("#library-detail-mikan-completion");
     completionButton.disabled = detail.mikan_bindings.length === 0;
     completionButton.title = detail.mikan_bindings.length === 0
