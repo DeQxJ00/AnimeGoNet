@@ -1682,11 +1682,12 @@
       <div class="configuration-form-grid">
         <fieldset class="wide configuration-data-update-editor">
           <legend>全局目录</legend>
-          <p class="configuration-data-update-caption"><code>data_path</code> 决定当前数据库和私有配置所在位置，运行中保持只读；下载根目录和媒体库目录保存后重启生效。每个 qBittorrent 实例的下载目录仍必须位于全局下载根目录内。</p>
+          <p class="configuration-data-update-caption"><code>data_path</code> 决定当前数据库和私有配置所在位置，运行中保持只读；下载根目录、TV 媒体库和电影媒体库保存后重启生效。每个 qBittorrent 实例的下载目录仍必须位于全局下载根目录内。</p>
           <div class="configuration-data-update-grid">
             <label class="wide">数据目录（只读）<input id="configuration-data-path" readonly aria-readonly="true"></label>
             <label class="wide">全局下载根目录<input id="configuration-download-path" required></label>
-            <label class="wide">媒体库目录<input id="configuration-save-path" required></label>
+            <label class="wide">TV 媒体库目录（save_path）<input id="configuration-save-path" required></label>
+            <label class="wide">电影媒体库目录（movie_save_path）<input id="configuration-movie-save-path" required></label>
           </div>
         </fieldset>
         <fieldset class="wide configuration-data-update-editor">

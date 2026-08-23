@@ -24,7 +24,8 @@ public sealed record IngestItemInfo(
     int? BangumiId,
     int? AniDbId,
     string? ImdbId,
-    int? GroupId = null);
+    int? GroupId = null,
+    string? MediaType = null);
 
 public sealed record NormalizedIngestItem(
     string Source,
@@ -40,7 +41,8 @@ public sealed record NormalizedIngestItem(
     string? PublishedAtRaw = null,
     DateTimeOffset? PublishedAt = null,
     string? SourcePageUrl = null,
-    int? GroupId = null);
+    int? GroupId = null,
+    string MediaType = "tv");
 
 public sealed record IngestValidationResult(NormalizedIngestItem? Item, IReadOnlyList<string> Errors)
 {

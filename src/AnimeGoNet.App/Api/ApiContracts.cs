@@ -306,7 +306,8 @@ public sealed record ExternalPluginConfigurationDeleteResponse(
 public sealed record RuntimePaths(
     [property: JsonPropertyName("data_path")] string DataPath,
     [property: JsonPropertyName("download_path")] string DownloadPath,
-    [property: JsonPropertyName("save_path")] string SavePath);
+    [property: JsonPropertyName("save_path")] string SavePath,
+    [property: JsonPropertyName("movie_save_path")] string MovieSavePath);
 
 public sealed record RuntimeCapabilities(
     [property: JsonPropertyName("configuration")] bool Configuration,
@@ -397,7 +398,8 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("locked_fields")] IReadOnlyList<ConfigurationFieldLockResponse> LockedFields,
     [property: JsonPropertyName("ai_reasoning_effort")] string AiReasoningEffort = "none",
     [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
-    int MikanTrustedOffsetRequiredEpisodes = 3);
+    int MikanTrustedOffsetRequiredEpisodes = 3,
+    [property: JsonPropertyName("movie_save_path")] string MovieSavePath = "");
 
 public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -463,7 +465,8 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
     int? MikanTrustedOffsetRequiredEpisodes = null,
     [property: JsonPropertyName("download_path")] string? DownloadPath = null,
-    [property: JsonPropertyName("save_path")] string? SavePath = null);
+    [property: JsonPropertyName("save_path")] string? SavePath = null,
+    [property: JsonPropertyName("movie_save_path")] string? MovieSavePath = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -607,7 +610,8 @@ public sealed record IngestItemInfoRequest(
     [property: JsonPropertyName("bgmid")] int? BangumiId,
     [property: JsonPropertyName("anidbid")] int? AniDbId,
     [property: JsonPropertyName("imdbid")] string? ImdbId,
-    [property: JsonPropertyName("groupid")] int? GroupId = null);
+    [property: JsonPropertyName("groupid")] int? GroupId = null,
+    [property: JsonPropertyName("media_type")] string? MediaType = null);
 
 public sealed record IngestBatchResponse(
     [property: JsonPropertyName("source")] string Source,

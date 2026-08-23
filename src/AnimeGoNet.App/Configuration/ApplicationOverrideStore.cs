@@ -65,7 +65,8 @@ public sealed record ApplicationOverrideEntry(
     string? AiReasoningEffort = null,
     int? MikanTrustedOffsetRequiredEpisodes = null,
     string? DownloadPath = null,
-    string? SavePath = null);
+    string? SavePath = null,
+    string? MovieSavePath = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -210,6 +211,10 @@ public sealed class ApplicationOverrideStore : IDisposable
                 || settings.SavePath is null
                 ? options.Paths.SavePath
                 : Path.GetFullPath(settings.SavePath),
+            MovieSavePath = inheritedFields.Contains("movie_save_path")
+                || settings.MovieSavePath is null
+                ? options.Paths.MovieSavePath
+                : Path.GetFullPath(settings.MovieSavePath),
         };
         var mikanBaseUrl = inheritedFields.Contains("mikan_base_url")
             || settings.MikanBaseUrl is null

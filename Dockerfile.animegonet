@@ -54,6 +54,7 @@ ENV ASPNETCORE_URLS=http://+:7991 \
     data_path=/data \
     download_path=/download/incomplete \
     save_path=/download/anime
+    movie_save_path=/download/movies
 
 VOLUME ["/data", "/download"]
 EXPOSE 7991

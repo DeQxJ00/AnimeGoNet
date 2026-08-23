@@ -124,6 +124,24 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task TaskMediaTypeMigrationDefaultsExistingContractToTv()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT dflt_value, "notnull"
+            FROM pragma_table_info('ingest_tasks')
+            WHERE name = 'media_type' AND type = 'TEXT';
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("'tv'", reader.GetString(0));
+        Assert.Equal(1, reader.GetInt32(1));
+    }
+
+    [Fact]
     public async Task LibraryMetadataAuditMigrationCreatesTargetedIndexes()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

@@ -657,11 +657,19 @@ public static class AnimeGoApplication
                 "save_path",
                 "paths:save_path")
             ?? defaults.Paths.SavePath);
+        var movieSavePath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_MOVIE_SAVE_PATH",
+                "movie_save_path",
+                "paths:movie_save_path")
+            ?? defaults.Paths.MovieSavePath);
         var paths = new PathOptions
         {
             DataPath = dataPath,
             DownloadPath = downloadPath,
             SavePath = savePath,
+            MovieSavePath = movieSavePath,
         };
         var downloaders = LoadDownloaders(configuration, defaults, downloadPath);
         var sources = LoadSourceProfiles(configuration, defaults);
@@ -1092,6 +1100,12 @@ public static class AnimeGoApplication
                 "ANIMEGO_SAVE_PATH",
                 "save_path")
             ?? defaults.Paths.SavePath);
+        var movieSavePath = ResolveConfiguredPath(
+            FirstConfigurationValue(
+                configuration,
+                "ANIMEGO_MOVIE_SAVE_PATH",
+                "movie_save_path")
+            ?? defaults.Paths.MovieSavePath);
         return defaults with
         {
             Paths = new PathOptions
@@ -1099,6 +1113,7 @@ public static class AnimeGoApplication
                 DataPath = dataPath,
                 DownloadPath = downloadPath,
                 SavePath = savePath,
+                MovieSavePath = movieSavePath,
             },
             Downloaders = defaults.Downloaders.ToDictionary(
                 pair => pair.Key,

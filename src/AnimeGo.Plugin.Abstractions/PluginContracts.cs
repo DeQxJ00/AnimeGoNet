@@ -41,7 +41,8 @@ public sealed record SourceIngestContext(
     string? PublishedAtRaw,
     DateTimeOffset? PublishedAt,
     bool RequireModernMetadata,
-    int? GroupId = null);
+    int? GroupId = null,
+    string? MediaType = null);
 
 public sealed record SourceNormalizedItem(
     string Source,
@@ -56,7 +57,8 @@ public sealed record SourceNormalizedItem(
     string? ImdbId,
     string? PublishedAtRaw,
     DateTimeOffset? PublishedAt,
-    int? GroupId = null);
+    int? GroupId = null,
+    string MediaType = "tv");
 
 public sealed record SourceIngestResult(
     SourceNormalizedItem? Item,

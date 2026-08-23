@@ -25,6 +25,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(DeploymentYamlConfiguration.CurrentVersion, snapshot.Version);
             Assert.Equal(Path.GetFullPath(path), snapshot.FilePath);
             Assert.Equal(defaults.Paths.DataPath, snapshot.Values["paths:data_path"]);
+            Assert.Equal(defaults.Paths.MovieSavePath, snapshot.Values["paths:movie_save_path"]);
             Assert.Equal("127.0.0.1", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
             Assert.Equal("123456", snapshot.Values["inner_plugin_mikan:access_key"]);
@@ -200,6 +201,7 @@ public sealed class DeploymentYamlConfigurationTests
                 "/download/incomplete",
                 snapshot.Values["paths:download_path"]);
             Assert.Equal("/download/anime", snapshot.Values["paths:save_path"]);
+            Assert.Equal("/download/movies", snapshot.Values["paths:movie_save_path"]);
             Assert.Equal("0.0.0.0", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
             Assert.Equal("123456", snapshot.Values["inner_plugin_mikan:access_key"]);

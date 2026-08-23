@@ -317,6 +317,7 @@ interface RuntimeConfiguration {
     data_path: string;
     download_path: string;
     save_path: string;
+    movie_save_path: string;
   };
   deployment: {
     running_in_container: boolean;
@@ -402,6 +403,7 @@ interface RuntimeConfiguration {
   editable: {
     download_path: string;
     save_path: string;
+    movie_save_path: string;
     outbound_proxy_url: string | null;
     outbound_proxy_hosts: string[];
     mikan_base_url: string;
@@ -483,6 +485,7 @@ interface ConfigurationMigrationDiagnostic {
 interface ConfigurationUpdatePayload {
   download_path: string;
   save_path: string;
+  movie_save_path: string;
   outbound_proxy_url: string | null;
   outbound_proxy_hosts: string[];
   mikan_base_url: string;
@@ -5850,6 +5853,7 @@ async function loadConfiguration(): Promise<void> {
         ["data_path", config.paths.data_path],
         ["download_path", config.paths.download_path],
         ["save_path", config.paths.save_path],
+        ["movie_save_path", config.paths.movie_save_path],
         ["修改生效", config.deployment.paths_restart_required ? "需要重启" : "即时生效"],
       ]),
     ];
@@ -5927,7 +5931,7 @@ async function loadConfiguration(): Promise<void> {
       : `当前进程生效值 · revision ${config.configuration_revision}`;
     status.textContent = config.downloads_blocked
       ? "检测到不支持或无法安全读取的旧下载器配置；下载与后台 workers 已强制停用，请先按迁移提示修复并重启。"
-      : `${revisionStatus}；目录编辑只保存 download_path 与 save_path。`;
+      : `${revisionStatus}；目录编辑只保存 download_path、save_path 与 movie_save_path。`;
     networkStatus.textContent = `${revisionStatus}；本页只保存网络、代理、Torrent 与数据更新字段。`;
     aiStatus.textContent = `${revisionStatus}；本页只保存 AI、MCP、失败链和可信 Offset 字段。`;
   } catch (error) {
@@ -6562,6 +6566,7 @@ function syncConfigurationSecretInputs(): void {
 const configurationLockSelectors: Record<string, string[]> = {
   download_path: ["#configuration-download-path"],
   save_path: ["#configuration-save-path"],
+  movie_save_path: ["#configuration-movie-save-path"],
   outbound_proxy_url: ["#configuration-outbound-proxy-url"],
   outbound_proxy_hosts: ["#configuration-outbound-proxy-hosts"],
   mikan_base_url: ["#configuration-mikan-url"],
@@ -6701,7 +6706,7 @@ function configureConfigurationEditorSection(section: EditableConfigurationSecti
     ai: "编辑 AI 与 MCP",
   };
   const descriptions: Record<EditableConfigurationSection, string> = {
-    paths: "仅显示 data_path、download_path 与 save_path；保存时只合并目录字段。",
+    paths: "仅显示 data_path、download_path、save_path 与 movie_save_path；保存时只合并目录字段。",
     network: "仅显示代理、Mikan、TMDB、Bangumi、Torrent 与 AnimeGoNetData 更新设置。",
     ai: "仅显示季度失败链、模型与 MCP、Prompt、匹配兜底和可信 EP Offset。",
   };
@@ -6719,6 +6724,7 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
   setConfigurationValue("#configuration-data-path", currentConfiguration.paths.data_path);
   setConfigurationValue("#configuration-download-path", editable.download_path);
   setConfigurationValue("#configuration-save-path", editable.save_path);
+  setConfigurationValue("#configuration-movie-save-path", editable.movie_save_path);
   setConfigurationValue(
     "#configuration-outbound-proxy-url",
     editable.outbound_proxy_url ?? "",
@@ -6847,6 +6853,7 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
 const configurationFieldLabels: Record<string, string> = {
   download_path: "全局下载根目录",
   save_path: "媒体库目录",
+  movie_save_path: "电影媒体库目录",
   outbound_proxy_url: "全局代理地址",
   outbound_proxy_hosts: "使用代理的域名",
   mikan_base_url: "Mikan 地址",
@@ -6905,6 +6912,8 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-download-path").value,
     save_path:
       element<HTMLInputElement>("#configuration-save-path").value,
+    movie_save_path:
+      element<HTMLInputElement>("#configuration-movie-save-path").value,
     outbound_proxy_url:
       element<HTMLInputElement>("#configuration-outbound-proxy-url").value || null,
     outbound_proxy_hosts:

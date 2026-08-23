@@ -441,13 +441,15 @@ public sealed class ConfigurationApiTests
         await using var app = await RunningApp.StartAsync();
         var downloadPath = Path.Combine(app.RootPath, "download");
         var savePath = Path.Combine(app.RootPath, "media-library-next");
+        var movieSavePath = Path.Combine(app.RootPath, "movie-library-next");
 
         using var preview = await app.Client.PostAsync(
             "/api/v1/config/preview",
             Payload(
                 expectedRevision: 0,
                 downloadPath: downloadPath,
-                savePath: savePath));
+                savePath: savePath,
+                movieSavePath: movieSavePath));
         using var previewJson = JsonDocument.Parse(
             await preview.Content.ReadAsStreamAsync());
 
@@ -459,6 +461,8 @@ public sealed class ConfigurationApiTests
             .GetProperty("after").GetString());
         Assert.Equal(Path.GetFullPath(savePath), changes["save_path"]
             .GetProperty("after").GetString());
+        Assert.Equal(Path.GetFullPath(movieSavePath), changes["movie_save_path"]
+            .GetProperty("after").GetString());
         Assert.Equal("restart", changes["download_path"].GetProperty("effect").GetString());
         Assert.True(previewJson.RootElement.GetProperty("restart_required").GetBoolean());
 
@@ -467,7 +471,8 @@ public sealed class ConfigurationApiTests
             Payload(
                 expectedRevision: 0,
                 downloadPath: downloadPath,
-                savePath: savePath));
+                savePath: savePath,
+                movieSavePath: movieSavePath));
         Assert.Equal(HttpStatusCode.OK, write.StatusCode);
 
         using var response = await app.Client.GetAsync("/api/v1/config");
@@ -478,6 +483,8 @@ public sealed class ConfigurationApiTests
             .GetProperty("editable").GetProperty("download_path").GetString());
         Assert.Equal(Path.GetFullPath(savePath), json.RootElement
             .GetProperty("editable").GetProperty("save_path").GetString());
+        Assert.Equal(Path.GetFullPath(movieSavePath), json.RootElement
+            .GetProperty("editable").GetProperty("movie_save_path").GetString());
         Assert.True(json.RootElement.GetProperty("restart_required").GetBoolean());
 
         var stored = await app.App.Services
@@ -485,6 +492,7 @@ public sealed class ConfigurationApiTests
             .LoadAsync();
         Assert.Equal(Path.GetFullPath(downloadPath), stored.Settings?.DownloadPath);
         Assert.Equal(Path.GetFullPath(savePath), stored.Settings?.SavePath);
+        Assert.Equal(Path.GetFullPath(movieSavePath), stored.Settings?.MovieSavePath);
     }
 
     [Fact]
@@ -1374,7 +1382,8 @@ public sealed class ConfigurationApiTests
         string? aiReasoningEffort = null,
         int? mikanTrustedOffsetRequiredEpisodes = null,
         string? downloadPath = null,
-        string? savePath = null)
+        string? savePath = null,
+        string? movieSavePath = null)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -1382,6 +1391,7 @@ public sealed class ConfigurationApiTests
             outbound_proxy_hosts = outboundHosts ?? [],
             download_path = downloadPath,
             save_path = savePath,
+            movie_save_path = movieSavePath,
             mikan_episode_identity_cache_hours = mikanEpisodeIdentityCacheHours,
             mikan_bangumi_identity_cache_hours = mikanBangumiIdentityCacheHours,
             tmdb_base_url = baseUrl,

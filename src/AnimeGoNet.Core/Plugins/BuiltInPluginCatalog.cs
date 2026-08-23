@@ -55,7 +55,8 @@ internal abstract class BuiltInSourceAdapter(
                 context.BangumiId,
                 context.AniDbId,
                 context.ImdbId,
-                context.GroupId),
+                context.GroupId,
+                context.MediaType),
             context.PublishedAtRaw is null && context.PublishedAt is null
                 ? null
                 : new IngestSourceEvidence(context.PublishedAtRaw, context.PublishedAt));
@@ -78,7 +79,8 @@ internal abstract class BuiltInSourceAdapter(
                 normalized.Item.ImdbId,
                 normalized.Item.PublishedAtRaw,
                 normalized.Item.PublishedAt,
-                normalized.Item.GroupId);
+                normalized.Item.GroupId,
+                normalized.Item.MediaType);
         return ValueTask.FromResult(new SourceIngestResult(
             item,
             normalized.Errors

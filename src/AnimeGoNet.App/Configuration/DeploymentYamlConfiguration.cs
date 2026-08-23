@@ -279,6 +279,7 @@ internal static class DeploymentYamlConfiguration
         Alias(values, "setting:data_path", "paths:data_path");
         Alias(values, "setting:download_path", "paths:download_path");
         Alias(values, "setting:save_path", "paths:save_path");
+        Alias(values, "setting:movie_save_path", "paths:movie_save_path");
         Alias(values, "setting:webapi:access_key", "inner_plugin_mikan:access_key");
         Alias(values, "setting:webapi:host", "web:host");
         Alias(values, "setting:webapi:port", "web:port");
@@ -595,6 +596,7 @@ internal static class DeploymentYamlConfiguration
               data_path: {{Scalar(Configured(values, "paths:data_path", defaults.Paths.DataPath))}}
               download_path: {{Scalar(Configured(values, "paths:download_path", defaults.Paths.DownloadPath))}}
               save_path: {{Scalar(Configured(values, "paths:save_path", defaults.Paths.SavePath))}}
+              movie_save_path: {{Scalar(Configured(values, "paths:movie_save_path", defaults.Paths.MovieSavePath))}}
 
             web:
               host: {{Scalar(Configured(values, "web:host", defaults.Web.Host))}}
@@ -803,11 +805,12 @@ internal static class DeploymentYamlConfiguration
             # AnimeGoNet 部署配置。业务状态保存在 SQLite；WebUI 不回显或改写本文件中的 secret。
             version: {{CurrentVersion}}
 
-            # Docker 固定 /data、/download/incomplete、/download/anime；原生路径可按部署修改。
+            # Docker 固定 /data、/download/incomplete、/download/anime、/download/movies；原生路径可按部署修改。
             paths:
               data_path: {{Scalar(options.Paths.DataPath)}}
               download_path: {{Scalar(options.Paths.DownloadPath)}}
               save_path: {{Scalar(options.Paths.SavePath)}}
+              movie_save_path: {{Scalar(options.Paths.MovieSavePath)}}
 
             web:
               # webui_access_key 独立保护 WebUI 管理接口；默认留空。

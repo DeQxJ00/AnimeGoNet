@@ -77,6 +77,12 @@ public sealed record PathOptions
     public required string DownloadPath { get; init; }
 
     public required string SavePath { get; init; }
+
+    public string MovieSavePath { get; init; } = string.Empty;
+
+    public string EffectiveMovieSavePath => string.IsNullOrWhiteSpace(MovieSavePath)
+        ? SavePath
+        : MovieSavePath;
 }
 
 public sealed record QbittorrentInstanceOptions

@@ -78,6 +78,7 @@ services:
       data_path: /data
       download_path: /download/incomplete
       save_path: /download/anime
+      movie_save_path: /download/movies
       background_workers_enabled: "true"
       mikan_base_url: http://container-e2e-fixture.invalid:8089/
       tmdb_base_url: http://container-e2e-fixture.invalid:8089/tmdb/

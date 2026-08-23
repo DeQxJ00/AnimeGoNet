@@ -32,7 +32,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 bangumi_subject_id, anidb_id, imdb_id, title,
                 source_published_at_raw, source_published_at,
                 source_page_url,
-                torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                torrent_url_fingerprint, media_type, downloader_id, route_snapshot_json,
                 status, failure_kind, failure_reason, created_at_utc, updated_at_utc)
             VALUES (
                 $id, $source_profile_id, $source_profile_revision, $source_id,
@@ -40,7 +40,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 $bangumi_subject_id, $anidb_id, $imdb_id, $title,
                 $source_published_at_raw, $source_published_at,
                 $source_page_url,
-                $torrent_url_fingerprint, $downloader_id, $route_snapshot_json,
+                $torrent_url_fingerprint, $media_type, $downloader_id, $route_snapshot_json,
                 'received', NULL, NULL, $created_at_utc, $updated_at_utc);
             """;
         command.Parameters.AddWithValue("$id", id);
@@ -65,6 +65,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 : item.PublishedAt.Value.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$source_page_url", (object?)item.SourcePageUrl ?? DBNull.Value);
         command.Parameters.AddWithValue("$torrent_url_fingerprint", item.TorrentUrlFingerprint);
+        command.Parameters.AddWithValue("$media_type", item.MediaType);
         command.Parameters.AddWithValue("$downloader_id", profile.DownloaderId);
         command.Parameters.AddWithValue("$route_snapshot_json", CreateRouteSnapshot(profile));
         command.Parameters.AddWithValue("$created_at_utc", now);
@@ -135,7 +136,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     bangumi_subject_id, anidb_id, imdb_id, title,
                     source_published_at_raw, source_published_at,
                     source_page_url,
-                    torrent_url_fingerprint, downloader_id, route_snapshot_json,
+                    torrent_url_fingerprint, media_type, downloader_id, route_snapshot_json,
                     status, failure_kind, failure_reason, created_at_utc, updated_at_utc)
                 VALUES (
                     $id, $source_profile_id, $source_profile_revision, $source_id,
@@ -143,7 +144,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                     $bangumi_subject_id, $anidb_id, $imdb_id, $title,
                     $source_published_at_raw, $source_published_at,
                     $source_page_url,
-                    $torrent_url_fingerprint, $downloader_id, $route_snapshot_json,
+                    $torrent_url_fingerprint, $media_type, $downloader_id, $route_snapshot_json,
                     'staged', NULL, NULL, $created_at_utc, $updated_at_utc);
                 """;
             AddTaskParameters(command, id, item, profile, now);
@@ -700,6 +701,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 : item.PublishedAt.Value.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$source_page_url", (object?)item.SourcePageUrl ?? DBNull.Value);
         command.Parameters.AddWithValue("$torrent_url_fingerprint", item.TorrentUrlFingerprint);
+        command.Parameters.AddWithValue("$media_type", item.MediaType);
         command.Parameters.AddWithValue("$downloader_id", profile.DownloaderId);
         command.Parameters.AddWithValue("$route_snapshot_json", CreateRouteSnapshot(profile));
         command.Parameters.AddWithValue("$created_at_utc", now);

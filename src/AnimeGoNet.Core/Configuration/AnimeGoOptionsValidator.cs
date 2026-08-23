@@ -16,6 +16,16 @@ public static partial class AnimeGoOptionsValidator
         ValidateAbsolutePath(options.Paths.DataPath, "data_path", errors);
         ValidateAbsolutePath(options.Paths.DownloadPath, "download_path", errors);
         ValidateAbsolutePath(options.Paths.SavePath, "save_path", errors);
+        ValidateAbsolutePath(options.Paths.EffectiveMovieSavePath, "movie_save_path", errors);
+        if (!string.IsNullOrWhiteSpace(options.Paths.MovieSavePath)
+            && Path.GetFullPath(options.Paths.SavePath).Equals(
+                Path.GetFullPath(options.Paths.MovieSavePath),
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal))
+        {
+            errors.Add("movie_save_path must be different from save_path.");
+        }
 
         if (string.IsNullOrWhiteSpace(options.Web.Host)
             || !string.Equals(options.Web.Host, options.Web.Host.Trim(), StringComparison.Ordinal)

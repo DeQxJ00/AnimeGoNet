@@ -124,6 +124,30 @@ public sealed class IngestCommandNormalizerTests
             error.Contains("publication evidence", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(null, "tv")]
+    [InlineData(" TV ", "tv")]
+    [InlineData("MOVIE", "movie")]
+    public void NormalizesSupportedMediaType(string? value, string expected)
+    {
+        var result = IngestCommandNormalizer.Normalize(
+            "mikan",
+            Item(title: "Feature", mikanId: 3951, bgmid: 547888, mediaType: value));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+        Assert.Equal(expected, result.Item!.MediaType);
+    }
+
+    [Fact]
+    public void RejectsUnsupportedMediaType()
+    {
+        var result = IngestCommandNormalizer.Normalize(
+            "mikan",
+            Item(title: "Feature", mikanId: 3951, bgmid: 547888, mediaType: "ova"));
+
+        Assert.Contains("info.media_type must be 'tv' or 'movie'", result.Errors);
+    }
+
     private static IngestItemCommand Item(
         string? title,
         string? name = null,
@@ -131,8 +155,11 @@ public sealed class IngestCommandNormalizerTests
         string? mikanUrl = null,
         int? mikanId = null,
         int? bgmid = null,
-        string? imdbid = null) =>
+        string? imdbid = null,
+        string? mediaType = null) =>
         new(
             torrent,
-            new IngestItemInfo(title, name, null, null, mikanUrl, null, mikanId, bgmid, null, imdbid));
+            new IngestItemInfo(
+                title, name, null, null, mikanUrl, null, mikanId, bgmid, null, imdbid,
+                MediaType: mediaType));
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using AnimeGo.Plugin.Abstractions;
 using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Plugins;
+using AnimeGoNet.Core.Media;
 
 namespace AnimeGoNet.Core.Ingest;
 
@@ -65,7 +66,8 @@ public static class IngestCommandNormalizer
                 command.SourceEvidence?.PublishedAtRaw,
                 command.SourceEvidence?.PublishedAt,
                 requireModernMetadata,
-                command.Info.GroupId),
+                command.Info.GroupId,
+                command.Info.MediaType),
             cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded || result.Item is null)
         {
@@ -133,6 +135,10 @@ public static class IngestCommandNormalizer
             ? mikanId?.ToString(CultureInfo.InvariantCulture)
             : command.Info.SourceWorkId.Trim();
         var imdbId = NormalizeImdbId(command.Info.ImdbId, errors);
+        if (!MediaTypes.TryNormalize(command.Info.MediaType, out var mediaType))
+        {
+            errors.Add("info.media_type must be 'tv' or 'movie'");
+        }
         var publishedAtRaw = NullIfWhiteSpace(command.SourceEvidence?.PublishedAtRaw);
         var publishedAt = command.SourceEvidence?.PublishedAt;
         if (command.SourceEvidence is not null
@@ -191,7 +197,8 @@ public static class IngestCommandNormalizer
                 publishedAtRaw,
                 publishedAt,
                 NormalizeSafeSourcePageUrl(mikanUrl),
-                command.Info.GroupId),
+                command.Info.GroupId,
+                mediaType),
             []);
     }
 
@@ -238,6 +245,10 @@ public static class IngestCommandNormalizer
         {
             errors.Add("source adapter returned an invalid torrent URL fingerprint");
         }
+        if (!MediaTypes.TryNormalize(item.MediaType, out var mediaType))
+        {
+            errors.Add("source adapter returned an invalid media type");
+        }
 
         return errors.Count > 0 || torrentUrl is null
             ? new IngestValidationResult(null, errors)
@@ -256,7 +267,8 @@ public static class IngestCommandNormalizer
                     item.PublishedAtRaw,
                     item.PublishedAt,
                     SourcePageUrl: NormalizeSafeSourcePageUrl(sourcePageUrl),
-                    GroupId: item.GroupId),
+                    GroupId: item.GroupId,
+                    MediaType: mediaType),
                 []);
     }
 

@@ -29,7 +29,7 @@ public sealed class IngestTaskStoreTests
         Assert.Equal("bt", task.DownloaderId);
         await using var connection = await fixture.Database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT torrent_url_fingerprint, route_snapshot_json FROM ingest_tasks WHERE id = $id;";
+        command.CommandText = "SELECT torrent_url_fingerprint, route_snapshot_json, media_type FROM ingest_tasks WHERE id = $id;";
         command.Parameters.AddWithValue("$id", task.Id);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
@@ -48,6 +48,25 @@ public sealed class IngestTaskStoreTests
         }
         Assert.Contains("\"seeding_time_minutes\":0", reader.GetString(1), StringComparison.Ordinal);
         Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);
+        Assert.Equal("tv", reader.GetString(2));
+    }
+
+    [Fact]
+    public async Task PersistsMovieMediaTypeOnIngestTask()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profiles = new SourceProfileStore(fixture.Database);
+        await profiles.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("mikan"));
+        var normalized = CreateNormalized() with { MediaType = "movie" };
+
+        var task = await new IngestTaskStore(fixture.Database).AddAsync(normalized, profile);
+
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT media_type FROM ingest_tasks WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", task.Id);
+        Assert.Equal("movie", await command.ExecuteScalarAsync());
     }
 
     [Fact]

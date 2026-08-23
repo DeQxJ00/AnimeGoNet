@@ -1496,7 +1496,8 @@ public static class ApiEndpoints
             new RuntimePaths(
                 options.Paths.DataPath,
                 options.Paths.DownloadPath,
-                options.Paths.SavePath),
+                options.Paths.SavePath,
+                options.Paths.EffectiveMovieSavePath),
             new RuntimeCapabilities(
                 Configuration: true,
                 Sqlite: true,
@@ -2014,7 +2015,8 @@ public static class ApiEndpoints
             new RuntimePaths(
                 options.Paths.DataPath,
                 options.Paths.DownloadPath,
-                options.Paths.SavePath),
+                options.Paths.SavePath,
+                options.Paths.EffectiveMovieSavePath),
             new DeploymentConfigurationResponse(
                 runtime.RunningInContainer,
                 runtime.BackgroundWorkersEnabled,
@@ -2168,7 +2170,8 @@ public static class ApiEndpoints
                 item.ControllingKeys)).ToArray(),
             AiReasoningEffort: ai.ReasoningEffort ?? "none",
             MikanTrustedOffsetRequiredEpisodes:
-                desired.Metadata.MikanTrustedOffsetRequiredEpisodes);
+                desired.Metadata.MikanTrustedOffsetRequiredEpisodes,
+            MovieSavePath: desired.Paths.EffectiveMovieSavePath);
     }
 
     private static string SecretState(bool overridden, string? value) =>
@@ -2208,6 +2211,7 @@ public static class ApiEndpoints
             deployment.Metadata.Tmdb.CacheTtl.TotalHours,
             deployment.Paths.DownloadPath,
             deployment.Paths.SavePath,
+            deployment.Paths.EffectiveMovieSavePath,
             DateTimeOffset.UtcNow);
         var requestedCandidate = ApplicationOverrideStore.Apply(
             deployment,
@@ -2295,6 +2299,10 @@ public static class ApiEndpoints
 
         Add("download_path", current.Paths.DownloadPath, candidate.Paths.DownloadPath);
         Add("save_path", current.Paths.SavePath, candidate.Paths.SavePath);
+        Add(
+            "movie_save_path",
+            current.Paths.EffectiveMovieSavePath,
+            candidate.Paths.EffectiveMovieSavePath);
 
         Add(
             "outbound_proxy_url",
@@ -2613,7 +2621,8 @@ public static class ApiEndpoints
             MikanTrustedOffsetRequiredEpisodes:
                 current.Metadata.MikanTrustedOffsetRequiredEpisodes,
             DownloadPath: current.Paths.DownloadPath,
-            SavePath: current.Paths.SavePath);
+            SavePath: current.Paths.SavePath,
+            MovieSavePath: current.Paths.EffectiveMovieSavePath);
 
         return section.Trim().ToLowerInvariant() switch
         {
@@ -2621,6 +2630,7 @@ public static class ApiEndpoints
             {
                 DownloadPath = request.DownloadPath,
                 SavePath = request.SavePath,
+                MovieSavePath = request.MovieSavePath,
             },
             "network" => merged with
             {
@@ -2699,6 +2709,7 @@ public static class ApiEndpoints
         double deploymentTmdbCacheHours,
         string deploymentDownloadPath,
         string deploymentSavePath,
+        string deploymentMovieSavePath,
         DateTimeOffset utcNow)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(request.ExpectedConfigurationRevision);
@@ -2708,6 +2719,9 @@ public static class ApiEndpoints
         var savePath = NormalizeAbsolutePath(
             request.SavePath ?? current?.SavePath ?? deploymentSavePath,
             "save_path");
+        var movieSavePath = NormalizeAbsolutePath(
+            request.MovieSavePath ?? current?.MovieSavePath ?? deploymentMovieSavePath,
+            "movie_save_path");
         var mikanBaseUrl = request.MikanBaseUrl?.Trim()
             ?? current?.MikanBaseUrl
             ?? deploymentMikanBaseUrl;
@@ -2973,7 +2987,8 @@ public static class ApiEndpoints
             AiDebugMode: request.AiDebugMode ?? current?.AiDebugMode ?? false,
             MikanTrustedOffsetRequiredEpisodes: mikanTrustedOffsetRequiredEpisodes,
             DownloadPath: downloadPath,
-            SavePath: savePath);
+            SavePath: savePath,
+            MovieSavePath: movieSavePath);
     }
 
     private static string PromptSummary(string template) =>
@@ -7563,7 +7578,8 @@ public static class ApiEndpoints
                 request.Info.BangumiId,
                 request.Info.AniDbId,
                 request.Info.ImdbId,
-                request.Info.GroupId));
+                request.Info.GroupId,
+                request.Info.MediaType));
 
     private static IngestItemResponse Rejected(int index, IReadOnlyList<string> errors) =>
         new(index, "rejected", null, null, null, null, null, null, null, errors);

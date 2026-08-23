@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 55;
+    public const int CurrentVersion = 56;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -106,7 +106,20 @@ public static class DatabaseSchema
             55,
             "ai_invocation_trigger_reason",
             AiInvocationTriggerReason),
+        new SchemaMigration(
+            56,
+            "task_media_type",
+            TaskMediaType),
     ];
+
+    private const string TaskMediaType = """
+        ALTER TABLE ingest_tasks
+        ADD COLUMN media_type TEXT NOT NULL DEFAULT 'tv'
+            CHECK (media_type IN ('tv', 'movie'));
+
+        CREATE INDEX ix_ingest_tasks_media_type_status
+        ON ingest_tasks(media_type, status, created_at_utc DESC);
+        """;
 
     private const string AiInvocationTriggerReason = """
         ALTER TABLE metadata_resolution_attempts

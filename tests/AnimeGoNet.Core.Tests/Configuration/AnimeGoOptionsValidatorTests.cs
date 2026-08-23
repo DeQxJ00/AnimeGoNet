@@ -4,6 +4,30 @@ namespace AnimeGoNet.Core.Tests.Configuration;
 
 public sealed class AnimeGoOptionsValidatorTests
 {
+    [Fact]
+    public void DockerDefaultsUseSeparateTvAndMovieLibraryRoots()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+
+        Assert.Equal("/download/anime", defaults.Paths.SavePath);
+        Assert.Equal("/download/movies", defaults.Paths.MovieSavePath);
+        Assert.Empty(AnimeGoOptionsValidator.Validate(defaults));
+    }
+
+    [Fact]
+    public void RejectsMovieLibraryRootThatEqualsTvLibraryRoot()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Paths = defaults.Paths with { MovieSavePath = defaults.Paths.SavePath },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains("movie_save_path must be different from save_path.", errors);
+    }
+
     [Theory]
     [InlineData("http://127.0.0.1", 7991)]
     [InlineData("127.0.0.1/path", 7991)]

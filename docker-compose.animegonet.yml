@@ -17,6 +17,7 @@ services:
       data_path: /data
       download_path: /download/incomplete
       save_path: /download/anime
+      movie_save_path: /download/movies
       background_workers_enabled: "true"
     ports:
       - "7991:7991"

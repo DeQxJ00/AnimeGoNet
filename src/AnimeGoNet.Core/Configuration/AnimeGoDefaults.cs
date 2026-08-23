@@ -11,6 +11,7 @@ public static class AnimeGoDefaults
             DataPath = "/data",
             DownloadPath = "/download/incomplete",
             SavePath = "/download/anime",
+            MovieSavePath = "/download/movies",
         };
 
         return Create(
@@ -29,6 +30,7 @@ public static class AnimeGoDefaults
             DataPath = Path.Combine(root, "data"),
             DownloadPath = Path.Combine(root, "download", "incomplete"),
             SavePath = Path.Combine(root, "download", "anime"),
+            MovieSavePath = Path.Combine(root, "download", "movies"),
         };
 
         return Create(

@@ -28,6 +28,7 @@ public sealed class DeploymentConfigurationLocks
     [
         new("download_path", ["download_path", "paths:download_path"]),
         new("save_path", ["save_path", "paths:save_path"]),
+        new("movie_save_path", ["movie_save_path", "paths:movie_save_path"]),
         new("mikan_base_url", ["mikan_base_url", "metadata:mikan:base_url"]),
         new("mikan_episode_identity_cache_hours", ["mikan_episode_identity_cache_hours", "metadata:mikan:episode_identity_cache_hours"]),
         new("mikan_bangumi_identity_cache_hours", ["mikan_bangumi_identity_cache_hours", "metadata:mikan:bangumi_identity_cache_hours"]),
@@ -214,6 +215,10 @@ public sealed class DeploymentConfigurationLocks
                     "save_path",
                     current.SavePath,
                     candidate.SavePath),
+                MovieSavePath = Preserve(
+                    "movie_save_path",
+                    current.MovieSavePath,
+                    candidate.MovieSavePath),
                 MikanBaseUrl = Preserve(
                     "mikan_base_url",
                     current.MikanBaseUrl,
@@ -466,6 +471,10 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("save_path"))
         {
             paths = paths with { SavePath = deployment.Paths.SavePath };
+        }
+        if (IsLocked("movie_save_path"))
+        {
+            paths = paths with { MovieSavePath = deployment.Paths.MovieSavePath };
         }
         if (IsLocked("outbound_proxy_url"))
         {
@@ -757,6 +766,10 @@ public sealed class DeploymentConfigurationLocks
             "save_path",
             deployment.Paths.SavePath,
             candidate.Paths.SavePath);
+        AddIfChanged(
+            "movie_save_path",
+            deployment.Paths.MovieSavePath,
+            candidate.Paths.MovieSavePath);
         AddIfChanged(
             "outbound_proxy_url",
             deployment.OutboundProxy.Url,
