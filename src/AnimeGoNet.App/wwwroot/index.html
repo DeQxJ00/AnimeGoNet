@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260823-runtime-metrics">
+  <link rel="stylesheet" href="/styles.css?v=20260823-runtime-metrics-layout">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -83,6 +83,24 @@
         <p class="muted">点击任意数字，直接进入对应页面并应用相关筛选。</p>
       </div>
       <div id="overview-statistics-groups" class="overview-statistics-groups" aria-live="polite">
+        <section class="overview-statistics-group overview-resource-group" aria-labelledby="overview-resource-statistics-title">
+          <div class="overview-statistics-heading">
+            <h3 id="overview-resource-statistics-title">系统资源</h3>
+            <small>AnimeGoNet 主进程与当前数据目录</small>
+          </div>
+          <div class="overview-resource-grid">
+            <button id="overview-runtime-memory" type="button" class="overview-stat-card overview-resource-card runtime">
+              <span>运行内存</span><strong id="overview-runtime-memory-value">—</strong><small>主进程 Working Set</small>
+            </button>
+            <button id="overview-runtime-cpu" type="button" class="overview-stat-card overview-resource-card runtime">
+              <span>CPU 占用</span><strong id="overview-runtime-cpu-value">—</strong><small id="overview-runtime-cpu-detail">主进程 CPU</small>
+            </button>
+            <button id="overview-data-path-size" type="button" class="overview-stat-card overview-resource-card storage">
+              <span>animegonet_data</span><strong id="overview-data-path-size-value">—</strong><small id="overview-data-path-size-detail">当前 data_path 占用</small>
+            </button>
+          </div>
+        </section>
+
         <section class="overview-statistics-group" aria-labelledby="overview-download-statistics-title">
           <div class="overview-statistics-heading">
             <h3 id="overview-download-statistics-title">下载与整理</h3>
@@ -151,15 +169,6 @@
             </button>
             <button id="overview-downloaders-offline" type="button" class="overview-stat-card offline">
               <span>离线下载器</span><strong id="overview-downloaders-offline-count">—</strong><small>进入 qBittorrent 实例配置</small>
-            </button>
-            <button id="overview-runtime-memory" type="button" class="overview-stat-card runtime">
-              <span>运行内存</span><strong id="overview-runtime-memory-value">—</strong><small>AnimeGoNet 主进程 Working Set</small>
-            </button>
-            <button id="overview-runtime-cpu" type="button" class="overview-stat-card runtime">
-              <span>CPU 占用</span><strong id="overview-runtime-cpu-value">—</strong><small id="overview-runtime-cpu-detail">主进程 CPU</small>
-            </button>
-            <button id="overview-data-path-size" type="button" class="overview-stat-card storage">
-              <span>animegonet_data</span><strong id="overview-data-path-size-value">—</strong><small id="overview-data-path-size-detail">当前 data_path 占用</small>
             </button>
           </div>
         </section>

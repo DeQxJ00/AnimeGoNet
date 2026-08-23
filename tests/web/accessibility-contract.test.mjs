@@ -167,6 +167,9 @@ test("overview exposes operational statistics as direct navigation and filters",
   ]);
   const summary = document.querySelector("#overview-metadata-attention-summary");
   assert.ok(summary);
+  const groups = [...document.querySelectorAll("#overview-statistics-groups > .overview-statistics-group")];
+  assert.equal(groups[0]?.querySelector("h3")?.textContent.trim(), "系统资源");
+  assert.equal(groups[0]?.querySelectorAll(".overview-resource-card").length, 3);
   for (const id of [
     "overview-download-active",
     "overview-download-paused",
@@ -206,7 +209,10 @@ test("overview exposes operational statistics as direct navigation and filters",
   assert.match(app, /loadOverviewStatistics/);
   assert.match(app, /Promise\.allSettled/);
   assert.match(css, /\.overview-statistics-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
+  assert.match(css, /\.overview-resource-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3/s);
+  assert.match(css, /\.overview-resource-card strong\s*\{[^}]*grid-column:\s*auto[^}]*white-space:\s*nowrap/s);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.overview-statistics-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.overview-resource-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
 test("download summary cards provide direct, accessible list filters", async () => {
