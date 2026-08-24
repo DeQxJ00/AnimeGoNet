@@ -19,6 +19,15 @@ public sealed class MikanPublishGroupApiTests
     }
 
     [Fact]
+    public void ParserAcceptsRealisticMultiMegabytePublishGroupPage()
+    {
+        var prefix = new string('x', 3 * 1024 * 1024);
+        var value = MikanPublishGroupNameParser.Parse(Encoding.UTF8.GetBytes(
+            prefix + "<h1>Kirara Fantasia作品年表</h1>"));
+        Assert.Equal("Kirara Fantasia", value);
+    }
+
+    [Fact]
     public async Task ConfirmedTaskGroupIsFetchedListedAndEditable()
     {
         var transport = new PublishGroupTransport();

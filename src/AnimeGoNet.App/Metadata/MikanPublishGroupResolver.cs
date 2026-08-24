@@ -15,7 +15,7 @@ public sealed class MikanPublishGroupNameException(string code, string message) 
 
 public static partial class MikanPublishGroupNameParser
 {
-    private const int MaximumBytes = 1024 * 1024;
+    private const int MaximumBytes = 5 * 1024 * 1024;
 
     public static string Parse(ReadOnlyMemory<byte> html)
     {
