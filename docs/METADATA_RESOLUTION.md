@@ -108,7 +108,7 @@ Web UI 的“删除业务记录”必须细分出“删除已下载完成记录�
 
 只有得到唯一候选才绑定，存在多个候选时不得按文件顺序或容量猜测。字幕绑定成功后直接继承对应视频已验证的 TMDB Series/Season/Episode，不独立调用 AI，也不再次应用 Episode Offset。视频目标为 `E013.mkv` 时，`原视频名.zh-Hans.forced.ass` 重命名为 `E013.zh-Hans.forced.ass`；无法识别的原后缀也应原样保留在 `E013` 与字幕扩展名之间，避免多语言轨道互相覆盖。
 
-未能唯一绑定的字幕在 Series 和普通 Season 已确认时，保留原文件名放入 `<TmdbSeriesName>/Sxx/Other/` 并记录 `SubtitleUnmatched` 或 `SubtitleAmbiguous`；季度未知时留在下载目录。其他非字幕附件首版始终留在下载目录，不放入 `Other`。
+未能唯一绑定的字幕在 Series 和普通 Season 已确认时，归类为 `Other`，保留原文件名放入 `<TmdbSeriesName>/Sxx/Extras/` 并记录 `SubtitleUnmatched` 或 `SubtitleAmbiguous`；季度未知时留在下载目录。其他非字幕附件首版始终留在下载目录，不放入 `Extras`。
 
 ## 2. 业务兜底配置
 
@@ -262,7 +262,7 @@ passkey、announce、info-hash、暂存字节、route snapshot、Cookie、Author
 
 Mikan RSS 可在统一 AI Prompt 中增加单文件发布日期提示。配置开关开启后，主程序仍只在 Torrent 实际文件条目数恰好为1、`bgmid` 和合法内部 `pubDate` 同时存在且没有命中更高优先级人工 Episode Offset 时尝试计算；Torrent单文件模式和根目录下仅一个文件均满足，目录节点不计数，但字幕、图片及已标记为 ignored/duplicate 的实际文件条目都计数。`pubDate` 无时区时按 Mikan SourceProfile 默认 `Asia/Shanghai` 解析。主程序可从在该发布时间之前已经播出的 Bangumi 普通正整数 Episode 中选取最近项，写入 `bgm_episode_candidate` 供 AI 参考，但不设置 Torrent 发布延迟的通过/拒绝窗口，也不以该候选直接确认 TMDB 集号。查询失败或候选为空时最终门禁保持 false，继续原通用 AI 流程；门禁为 true 时，Prompt 也只能把该候选和文件名集号当作辅助证据，最终 Series、Season、Episode 仍须 TMDB 验证。
 
-AI 和确定性匹配均不接受 Season 0。Series 和大于0的普通季度已经确认、但 Episode 无法确认时，不用来源集号冒充 TMDB Episode；该文件保留原名进入 `<TmdbSeriesName>/Sxx/Other/`，并保存未匹配原因。季度也无法确认时保留在下载目录，等待重试或人工处理。多文件任务中的其他已验证文件可以正常落盘。
+AI 和确定性匹配均不接受 Season 0。Series 和大于0的普通季度已经确认、但 Episode 无法确认时，不用来源集号冒充 TMDB Episode；该文件以业务分类 `Other` 保留原名进入 `<TmdbSeriesName>/Sxx/Extras/`，并保存未匹配原因。季度也无法确认时保留在下载目录，等待重试或人工处理。多文件任务中的其他已验证文件可以正常落盘。
 
 ### 6.3 失败分类、持久化与 Web 展示
 

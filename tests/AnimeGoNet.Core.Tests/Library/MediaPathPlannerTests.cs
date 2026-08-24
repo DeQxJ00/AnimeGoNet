@@ -27,7 +27,7 @@ public sealed class MediaPathPlannerTests
             null,
             "Extras\\PV: 01?.mkv"));
 
-        Assert.Equal(Path.Combine("_CON", "S12", "Other", "PV_ 01_.mkv"), result);
+        Assert.Equal(Path.Combine("_CON", "S12", "Extras", "PV_ 01_.mkv"), result);
     }
 
     [Fact]

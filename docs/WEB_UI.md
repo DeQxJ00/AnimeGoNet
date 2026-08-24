@@ -114,7 +114,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 `GET /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}` 返回季度头部和完整 EP 网格。网格只枚举该季度实际保存的 `tmdb_episodes`，不会按 `episode_count` 猜造缺失项；状态只由同一规范 TMDB 三元组的 `completion_records` 决定。响应可显示来源、完成时间和媒体路径是否已记录，但不返回媒体绝对路径、内部 SQLite 行 ID、Torrent URL 或凭据。删除完成记录后下一次读取立即显示 `not_downloaded`。
 
-外部自行补齐的媒体默认不扫描。作品库顶部的“扫描外部媒体并补录”显式调用 `POST /api/v1/library/external-media/import`；季度详情的按钮调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/external-media/import`。扫描只检查当前正式作品库投影对应的 `save_path/<TMDB规范名>/Sxx` 直接目录，接受非空且文件 stem 精确为 `E###`（也支持更多位正整数）的已知视频扩展名；`Other`、子目录、字幕、非标准命名、未知 TMDB EP、无法读取项、目录链/文件符号链接和同 EP 多视频不会补录。每个唯一候选必须命中当前 `tmdb_episodes`，再以 `source_id=external_import` 和媒体绝对路径写入规范完成记录；响应和 WebUI 只展示相对路径及稳定跳过原因。重复点击通过 TMDB 三元组唯一键返回 `already_recorded`。此操作不移动或删除文件，不生成缺少真实 Torrent 身份的目录 sidecar/NFO/来源 alias，也没有 schedule、启动扫描或配置开关。
+外部自行补齐的媒体默认不扫描。作品库顶部的“扫描外部媒体并补录”显式调用 `POST /api/v1/library/external-media/import`；季度详情的按钮调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/external-media/import`。扫描只检查当前正式作品库投影对应的 `save_path/<TMDB规范名>/Sxx` 直接目录，接受非空且文件 stem 精确为 `E###`（也支持更多位正整数）的已知视频扩展名；`Extras`、历史 `Other` 及其他子目录、字幕、非标准命名、未知 TMDB EP、无法读取项、目录链/文件符号链接和同 EP 多视频不会补录。每个唯一候选必须命中当前 `tmdb_episodes`，再以 `source_id=external_import` 和媒体绝对路径写入规范完成记录；响应和 WebUI 只展示相对路径及稳定跳过原因。重复点击通过 TMDB 三元组唯一键返回 `already_recorded`。此操作不移动或删除文件，不生成缺少真实 Torrent 身份的目录 sidecar/NFO/来源 alias，也没有 schedule、启动扫描或配置开关。
 
 `POST /api/v1/library/seasons` 只接受正整数 `tmdb_series_id` 与普通 `tmdb_season_number`。服务端必须分别读取并验证 TMDB Series、Season 的身份，再以 TMDB 名称、开播日期、封面和完整 Episode snapshot 创建本地投影；页面不允许手工填写动画名、季度名或 Episode。已存在资源返回冲突，不能用创建请求静默覆盖。
 

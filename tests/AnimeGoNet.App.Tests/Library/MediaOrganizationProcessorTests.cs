@@ -350,7 +350,7 @@ public sealed class MediaOrganizationProcessorTests
             MediaOrganizationResult.FilesCompleted,
             await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
 
-        var target = Path.Combine(paths.SavePath, "Fallback Series", "S02", "Other", "episode.mkv");
+        var target = Path.Combine(paths.SavePath, "Fallback Series", "S02", "Extras", "episode.mkv");
         var nfo = Path.Combine(paths.SavePath, "Fallback Series", "tvshow.nfo");
         Assert.True(File.Exists(target));
         var document = XDocument.Load(nfo);
@@ -427,7 +427,7 @@ public sealed class MediaOrganizationProcessorTests
             MediaOrganizationResult.FilesCompleted,
             await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
 
-        var target = Path.Combine(paths.SavePath, "Series", "S01", "Other", relativePath);
+        var target = Path.Combine(paths.SavePath, "Series", "S01", "Extras", relativePath);
         Assert.True(File.Exists(target));
         Assert.False(File.Exists(Path.Combine(downloadRoot, relativePath)));
         Assert.True(File.Exists(Path.Combine(paths.SavePath, "Series", "S01", "anime.s_json")));

@@ -18,6 +18,7 @@ public sealed class ExternalMediaImportStoreTests
         Write(seasonPath, "episode.mkv", [6]);
         Write(seasonPath, "E001.zh.ass", [7]);
         Write(Path.Combine(seasonPath, "Other"), "E003.mkv", [8]);
+        Write(Path.Combine(seasonPath, "Extras"), "E002.mkv", [9]);
 
         var result = await fixture.Store.ScanSeasonAsync(
             fixture.SaveRoot,
@@ -44,6 +45,7 @@ public sealed class ExternalMediaImportStoreTests
         Assert.Contains(result.Items, item =>
             item.ReasonCode == "external_media_filename_invalid");
         Assert.DoesNotContain(result.Items, item => item.RelativePath.Contains("Other", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Items, item => item.RelativePath.Contains("Extras", StringComparison.Ordinal));
 
         await using var connection = await fixture.Database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();

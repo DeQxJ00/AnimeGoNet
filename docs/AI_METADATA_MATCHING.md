@@ -167,7 +167,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 
 - 不匹配 TMDB Season 0 或 Specials；AI 和主程序都拒绝 `season=0`。
 - Menu、特别篇、OVA、Summary、PV、CM、NCOP、NCED、Logo 或其他非正片文件返回 `matched=false`、`episode=null` 和具体原因。
-- 如果已经可靠确认该文件随任务所属的普通季度，可以保留大于0的 `season`；主程序将原文件名放入 `<TmdbSeriesName>/Sxx/Other/`。
+- 如果已经可靠确认该文件随任务所属的普通季度，可以保留大于0的 `season`；主程序仍将其归类为业务状态 `Other`，但物理文件以原文件名放入 `<TmdbSeriesName>/Sxx/Extras/`。
 - 如果 Season 也无法确认，则文件留在下载目录等待重试或人工处理，不能放进猜测的季度。
 - `Other` 文件不使用 `Eyyy` 重命名，不伪装为已完成 TMDB Episode 匹配。
 
@@ -182,7 +182,7 @@ https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/a
 5. 检查输入/输出文件数量、顺序和名称完全一致。
 6. 拒绝重复主视频目标、缺失映射、伪造 ID 或字段越界。
 
-已确认 Episode 的视频正常进入 `Sxx/Eyyy.ext`；Series/Season 已确认但 Episode 未匹配的文件保留原名进入 `Sxx/Other/`。Series 或 Season 未确认、重复目标、目标冲突的文件不移动。网络错误、认证错误、AI 未匹配和 TMDB 验证失败由主程序写入元数据失败审计。
+已确认 Episode 的视频正常进入 `Sxx/Eyyy.ext`；Series/Season 已确认但 Episode 未匹配的文件保留原名进入 `Sxx/Extras/`，其业务分类仍为 `Other`。Series 或 Season 未确认、重复目标、目标冲突的文件不移动。网络错误、认证错误、AI 未匹配和 TMDB 验证失败由主程序写入元数据失败审计。
 
 跨季度 Torrent 包仍只发起一次任务级 AI 请求。验证成功后，任务级 `metadata_resolution_runs.tmdb_season_number` 保持 `NULL`，每个 `task_files.tmdb_season_number` 保存自己的普通季度；Episode worker 按逐文件季度请求和校验 TMDB，不能用任务摘要中的最小季度覆盖其他文件。能够唯一关联到视频的字幕继承该视频的季度和 Episode/Other 种子；存在无法归属季度的字幕或其他待处理文件时，整个跨季度候选以 `ai_cross_season_file_unassigned` 安全拒绝，事务不得产生部分季度写入。跨季度任务不应用作品级单季度人工 EP offset，也不会产生第二次 AI 调用。
 

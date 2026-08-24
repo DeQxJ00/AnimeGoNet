@@ -29,7 +29,7 @@ public static class MediaPathPlanner
         };
 
         return input.Disposition == "other"
-            ? Path.Combine(series, season, "Other", fileName)
+            ? Path.Combine(series, season, "Extras", fileName)
             : Path.Combine(series, season, fileName);
     }
 

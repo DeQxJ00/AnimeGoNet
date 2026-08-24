@@ -49,7 +49,7 @@ runner 和外部 Release 仍未验证。详见
 | 多下载器路由 | 命名实例、SourceProfile、ID schema、规则/路径/做种/去重、路由快照 | U/C/I/E | Mikan→bt、U2/TTG→pt；改配置不改变进行中任务，实例状态隔离 |
 | 下载状态机 | init/wait/download/seed/complete/pause/error/restart、0/-1/正数做种目标 | U/C/I | schema v33 目标/累计秒数/完成时间持久化；状态和累计值不回退；整理只按持久化门禁推进 |
 | 去重 | RSS alias早停、全局TMDB Episode键、包内逐文件跳过、事务复查、来源级通知开关、删除记录后重下 | U/I/E | 跨来源只认第一个完整成功Episode；其他Episode不受影响，无并发双写；schema v38 通知默认开启并固化到路由快照，关闭不绕过去重，RSS/TMDB 命中事件经脱敏 WebSocket 可见 |
-| 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 进入 `Other`，未知季度或冲突文件不落盘 |
+| 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 归类为 `Other` 并进入 `Extras`，未知季度或冲突文件不落盘 |
 | 字幕 | 同stem、多语言/轨道后缀、按EP唯一绑定、idx/sub、歧义、Other | U/P/I/E | 匹配字幕随视频继承TMDB EP且后缀不丢；未匹配字幕不猜测，其他附件不移动 |
 | 文件策略 | link/link_delete/move/wait_move、跨盘、失败回滚 | U/I/E | 测试根外零写入/删除 |
 | 刮削 | `tvshow.nfo` 新建/更新、正常 TMDB 默认不写 Bgm、显式开关恢复 TMDB+Bgm、兜底 `tmdbid=0`+Bgm、恢复重写作业投影、Unicode | U/P/I | 三种 ID 输出模式均有 XML 断言；兜底关闭或前置条件失败时断言没有失败 NFO；恢复作业四态、尝试/重试/完成时间在任务详情可见且不泄露 save root |
@@ -151,7 +151,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 3. 大小写不同的字幕扩展名、嵌套相对目录和 `.idx/.sub` 成对字幕正确处理。
 4. stem 不同但字幕文件名能解析出唯一来源 EP 时绑定；同一任务存在多个候选时标记 `SubtitleAmbiguous`，不得按顺序猜测。
 5. 已绑定字幕继承视频的人工 Episode Offset 或 AI 最终 TMDB Episode，不独立再偏移或调用 AI。
-6. 未匹配字幕在季度已知时保留原名进入 `Sxx/Other`，季度未知时留在下载目录；字体、图片、校验文件及其他非字幕附件始终不移动。
+6. 未匹配字幕在季度已知时归类为 `Other` 并保留原名进入 `Sxx/Extras`，季度未知时留在下载目录；字体、图片、校验文件及其他非字幕附件始终不移动。
 
 ## TMDB 季度回溯场景
 
@@ -181,14 +181,14 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 5. 模型返回不存在的 ID、Season 0、日期冲突、外层/业务畸形 JSON、零个或多个 `choices`：拒绝对应候选；不得静默采用多个候选的第一项。Series/普通季度已确认但 Episode 缺失时保留原名进入季度 `Other`。
 6. TMDB `zh-CN` 名称存在时用中文目录名；缺失时用 TMDB `original_name`，不得使用 Bangumi 名称替代。
 7. 来源 EP=1、TMDB EP=67：保留 `SourceEpisodeNumber=1`，最终文件为 `E067`，去重键和目录 DB 使用规范集号。
-8. 多文件映射存在 Episode 缺口：已确认季度的缺口文件进入 `Other`，其余已验证文件正常落盘；Series/Season 缺失、重复目标或目标冲突的对应文件不落盘并可幂等重试。
+8. 多文件映射存在 Episode 缺口：已确认季度的缺口文件归类为 `Other` 并进入 `Extras`，其余已验证文件正常落盘；Series/Season 缺失、重复目标或目标冲突的对应文件不落盘并可幂等重试。
 9. AI/网络超时、429、5xx、取消和缓存命中分别验证；日志不得包含密钥或完整敏感请求头。
 10. NativeAOT 发布二进制执行 fake AI → fake TMDB → 重命名 smoke，无反射序列化警告。
 11. 确定性季度成功且本地 EP 与 TMDB 同号 Episode 的标题/日期一致：直接采用，AI 请求数为 0。
 12. 同号不存在或存在标题/日期冲突：`ai_use_metadata_match=false` 时进入 `EpisodeUnmatched`；开启且此前未尝试时整个下载任务恰好一次语义 AI 调用。
 13. Episode 阶段首次触发统一 AI 时，返回不同 Season、缺失 Episode、文件列表不一致或无效 JSON：拒绝候选，不改写已确认季度，不使用来源 EP 重命名。返回不同 TMDB Series 时先单独分类；若替代 Series/Season/Episode 全部通过 TMDB 再验证且为单正片，则只保存人工审核提议，未经“同意 AI 的 TMDB ID 变更”不得改写，拒绝后保留 Other；季度阶段已尝试时不得再次调用。
 14. 多文件仅一个 EP 需要补全时仍按整个下载任务调用一次；未匹配文件按季度 `Other` 规则处理，不影响其他已验证文件。
-15. 特别篇、OVA、NCOP、NCED 不匹配 Season 0；季度已确认时保留原名进入 `Sxx/Other`，季度未知时留在下载目录。
+15. 特别篇、OVA、NCOP、NCED 不匹配 Season 0；季度已确认时归类为 `Other` 并保留原名进入 `Sxx/Extras`，季度未知时留在下载目录。
 16. BD 多文件任务中正片 1–12 全部映射，Menu/Summary/PV/NCOP/NCED/Logo 均返回 `matched=false + season>0 + episode=null` 时，顶层 `matched=true`，全部文件按正片或 `Other` 路径落盘。
 17. 任一非正片文件返回 `season=null`、Series 未确认或存在映射冲突时，顶层 `matched=false`，不得用猜测季度安排该文件。
 18. `bgmid=null` 时无 Bangumi工具；有值时才连接 BGM MCP并只把结果作为辅助证据。TMDB MCP在两种情况下始终先于 Web Search。
@@ -263,7 +263,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 23. 对同一 `mikanid+来源EP` 并发提交不同字幕组、不同 Torrent 和不同下载器路由，断言 SQLite 只有一个活动 claim 且至多一个下载器收到该文件；第一项成功后其余输入早停，失败/崩溃恢复不会盲目重下，其他 EP 不受影响，页面标明去重范围仅为同一 mikanid。
 24. 对两个来源提交标题/容量相似但没有共同可靠 Episode 身份的文件，断言系统不跨来源误拦截，并在待补全详情提示可能重复；相同 source item、info-hash 或文件指纹仍可幂等早停。
 25. 将多个 fallback 记录恢复到同一 TMDB Episode，断言事务只产生一个规范完成记录，其他项标记 `DuplicateAfterResolution`，不新增下载任务、不自动删除或移动冲突文件。
-26. 在标准 `save_path/<TMDB规范名>/S01` 放入唯一非空 `E001.mkv`，未点击时进度不变；显式执行季度扫描后新增 `external_import` 完成记录并显示已下载，第二次扫描返回 `already_recorded`。同目录的 `E099.mkv`、非标准文件名、空文件、同 EP 多视频、字幕、`Other` 子目录和符号链接均不补录，API/WebUI 只展示相对路径和稳定跳过原因。
+26. 在标准 `save_path/<TMDB规范名>/S01` 放入唯一非空 `E001.mkv`，未点击时进度不变；显式执行季度扫描后新增 `external_import` 完成记录并显示已下载，第二次扫描返回 `already_recorded`。同目录的 `E099.mkv`、非标准文件名、空文件、同 EP 多视频、字幕、`Extras`/历史 `Other` 子目录和符号链接均不补录，API/WebUI 只展示相对路径和稳定跳过原因。
 
 ## Docker 路径 E2E
 
