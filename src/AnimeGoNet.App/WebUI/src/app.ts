@@ -1145,6 +1145,8 @@ interface AnimeEpisodeItem {
   source_id: string | null;
   downloaded_at_utc: string | null;
   media_path_known: boolean;
+  groupid: number | null;
+  group_name: string | null;
 }
 
 interface AnimeSeasonManualOffset {
@@ -1433,6 +1435,19 @@ interface MikanPluginCallLogList {
   page_size: number;
   total_count: number;
   items: MikanPluginCallLog[];
+}
+
+interface MikanPublishGroupItem {
+  groupid: number;
+  group_name: string | null;
+  name_source: "automatic" | "manual";
+  source_profile_id: string | null;
+  state: "pending" | "resolved" | "failed";
+  failure_code: string | null;
+  fetched_at_utc: string | null;
+  next_attempt_at_utc: string | null;
+  updated_at_utc: string;
+  revision: number;
 }
 
 type MikanTrustedOffsetBlacklistScope = "mikanid" | "groupid" | "pair";
@@ -2265,6 +2280,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
           { id: "mikan-ingest", label: "手动设置" },
           { id: "mikan-manual-rules", label: "人工规则" },
           { id: "mikan-series-mappings", label: "人工 TMDB 映射" },
+          { id: "mikan-groups", label: "字幕组对照" },
           { id: "mikan-plugin-calls", label: "插件调用日志" },
           { id: "mikan-offsets", label: "可信 Offset" },
           { id: "mikan-candidate-rules", label: "候选规则" },
@@ -2485,6 +2501,9 @@ function selectWorkspace(
   if (workspace === "logs" && selectedSubview === "matching") void loadMatchingLogs();
   if (workspace === "sources" && selectedSubview === "mikan-plugin-calls") {
     void loadMikanPluginCallLogs();
+  }
+  if (workspace === "sources" && selectedSubview === "mikan-groups") {
+    void loadMikanPublishGroups();
   }
   closeMobileSidebar();
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -4934,6 +4953,9 @@ function renderLibraryEpisodes(detail: AnimeSeasonDetail): void {
     completion.className = "library-episode-completion";
     completion.textContent = episode.status === "downloaded"
       ? `完成于 ${libraryDate(episode.downloaded_at_utc, true)} · 来源 ${episode.source_id ?? "未记录"}`
+        + (episode.groupid === null
+          ? ""
+          : ` · 字幕组 ${episode.group_name ?? `Group ${episode.groupid}`}（${episode.groupid}）`)
         + (episode.media_path_known ? "" : " · 媒体路径未记录")
       : "没有规范完成记录；等待、下载中、整理失败或删除完成记录后都保持未下载。";
     card.addEventListener("toggle", () => {
@@ -8223,6 +8245,89 @@ async function loadMikanPluginCallLogs(): Promise<void> {
       `插件调用日志读取失败：${errorMessage(error, "未知错误")}`,
     );
   }
+}
+
+async function loadMikanPublishGroups(): Promise<void> {
+  const container = element<HTMLElement>("#mikan-publish-group-list");
+  setRegionState(container, "loading");
+  try {
+    const response = await authenticatedFetch("/api/v1/mikan/publish-groups", { headers });
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as { items: MikanPublishGroupItem[] };
+    if (body.items.length === 0) {
+      renderRegionMessage(container, "empty", "暂无已发现的 Mikan 字幕组；带 groupid 的任务进入后会自动获取。",);
+      return;
+    }
+    renderRegionContent(container, ...body.items.map(item => {
+      const card = document.createElement("article");
+      card.className = "publish-group-card";
+      const identity = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = `Group ${item.groupid}`;
+      const state = document.createElement("p");
+      state.className = "muted";
+      state.textContent = `${item.name_source === "manual" ? "人工名称" : "自动名称"} · ${item.state}`
+        + `${item.failure_code ? ` · ${item.failure_code}` : ""}`
+        + ` · 更新 ${new Date(item.updated_at_utc).toLocaleString()}`;
+      identity.append(title, state);
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 200;
+      input.value = item.group_name ?? "";
+      input.setAttribute("aria-label", `Group ${item.groupid} 字幕组名称`);
+      const actions = document.createElement("div");
+      actions.className = "publish-group-actions";
+      const save = document.createElement("button");
+      save.type = "button";
+      save.className = "primary-button";
+      save.textContent = "保存人工名称";
+      save.addEventListener("click", () => void saveMikanPublishGroup(item, input.value));
+      const refresh = document.createElement("button");
+      refresh.type = "button";
+      refresh.className = "secondary-button";
+      refresh.textContent = "从 Mikan 重新获取";
+      refresh.addEventListener("click", () => void refreshMikanPublishGroup(item));
+      actions.append(save, refresh);
+      card.append(identity, input, actions);
+      return card;
+    }));
+  } catch (error) {
+    renderRegionMessage(container, "error", `字幕组对照读取失败：${errorMessage(error, "未知错误")}`);
+  }
+}
+
+async function saveMikanPublishGroup(item: MikanPublishGroupItem, name: string): Promise<void> {
+  const value = name.trim();
+  if (!value) {
+    window.alert("字幕组名称不能为空。");
+    return;
+  }
+  const response = await authenticatedFetch(`/api/v1/mikan/publish-groups/${item.groupid}`, {
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ group_name: value, expected_revision: item.revision }),
+  });
+  if (!response.ok) {
+    window.alert(`保存失败：${await responseError(response)}`);
+    return;
+  }
+  await loadMikanPublishGroups();
+}
+
+async function refreshMikanPublishGroup(item: MikanPublishGroupItem): Promise<void> {
+  const response = await authenticatedFetch(
+    `/api/v1/mikan/publish-groups/${item.groupid}/refresh`,
+    {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ expected_revision: item.revision }),
+    },
+  );
+  if (!response.ok) {
+    window.alert(`重新获取失败：${await responseError(response)}`);
+    return;
+  }
+  await loadMikanPublishGroups();
 }
 
 const notificationProviderDefaults: Record<NotificationProvider, string> = {
@@ -13358,6 +13463,10 @@ element<HTMLButtonElement>("#mikan-plugin-call-reload").addEventListener(
   "click",
   () => void loadMikanPluginCallLogs(),
 );
+element<HTMLButtonElement>("#mikan-publish-group-reload").addEventListener(
+  "click",
+  () => void loadMikanPublishGroups(),
+);
 element<HTMLSelectElement>("#mikan-plugin-call-mode").addEventListener(
   "change",
   () => void loadMikanPluginCallLogs(),
@@ -14070,6 +14179,7 @@ void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 void loadMikanManualSeriesMappings();
 void loadMikanPluginCallLogs();
+void loadMikanPublishGroups();
 updateTrustedOffsetBlacklistFields();
 void loadTrustedOffsetBlacklist();
 resetNotificationForm();

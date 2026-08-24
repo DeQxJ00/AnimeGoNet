@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 62;
+    public const int CurrentVersion = 63;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -135,7 +135,29 @@ public static class DatabaseSchema
             62,
             "mikan_plugin_call_audit",
             MikanPluginCallAudit),
+        new SchemaMigration(
+            63,
+            "mikan_publish_group_directory",
+            MikanPublishGroupDirectory),
     ];
+
+    private const string MikanPublishGroupDirectory = """
+        CREATE TABLE mikan_publish_groups (
+            groupid INTEGER NOT NULL PRIMARY KEY CHECK (groupid > 0),
+            group_name TEXT NULL,
+            name_source TEXT NOT NULL CHECK (name_source IN ('automatic', 'manual')),
+            source_profile_id TEXT NULL,
+            state TEXT NOT NULL CHECK (state IN ('pending', 'resolved', 'failed')),
+            failure_code TEXT NULL,
+            fetched_at_utc TEXT NULL,
+            next_attempt_at_utc TEXT NULL,
+            updated_at_utc TEXT NOT NULL,
+            revision INTEGER NOT NULL CHECK (revision > 0)
+        ) STRICT;
+
+        CREATE INDEX ix_mikan_publish_groups_retry
+        ON mikan_publish_groups(state, next_attempt_at_utc, updated_at_utc);
+        """;
 
     private const string MikanPluginCallAudit = """
         CREATE TABLE mikan_plugin_call_logs (

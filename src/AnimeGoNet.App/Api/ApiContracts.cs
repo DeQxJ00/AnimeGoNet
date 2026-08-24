@@ -863,6 +863,28 @@ public sealed record MikanPluginCallLogItemResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("failure_code")] string? FailureCode);
 
+public sealed record MikanPublishGroupListResponse(
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanPublishGroupResponse> Items);
+
+public sealed record MikanPublishGroupResponse(
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("group_name")] string? GroupName,
+    [property: JsonPropertyName("name_source")] string NameSource,
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("fetched_at_utc")] DateTimeOffset? FetchedAtUtc,
+    [property: JsonPropertyName("next_attempt_at_utc")] DateTimeOffset? NextAttemptAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
+    [property: JsonPropertyName("revision")] long Revision);
+
+public sealed record MikanPublishGroupWriteRequest(
+    [property: JsonPropertyName("group_name")] string GroupName,
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+
+public sealed record MikanPublishGroupRefreshRequest(
+    [property: JsonPropertyName("expected_revision")] long ExpectedRevision);
+
 public sealed record MikanTrustedOffsetItemResponse(
     [property: JsonPropertyName("mikanid")] int MikanId,
     [property: JsonPropertyName("groupid")] int GroupId,
@@ -1361,7 +1383,9 @@ public sealed record AnimeEpisodeItemResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("source_id")] string? SourceId,
     [property: JsonPropertyName("downloaded_at_utc")] DateTimeOffset? DownloadedAtUtc,
-    [property: JsonPropertyName("media_path_known")] bool MediaPathKnown);
+    [property: JsonPropertyName("media_path_known")] bool MediaPathKnown,
+    [property: JsonPropertyName("groupid")] int? GroupId,
+    [property: JsonPropertyName("group_name")] string? GroupName);
 
 public sealed record AnimeSeasonManualOffsetResponse(
     [property: JsonPropertyName("mikanid")] int MikanId,

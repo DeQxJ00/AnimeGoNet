@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260824-mikan-plugin-audit">
+  <link rel="stylesheet" href="/styles.css?v=20260824-mikan-group-directory">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1389,6 +1389,20 @@
       </div>
     </section>
 
+    <section id="mikan-publish-group-workspace" aria-labelledby="mikan-publish-group-title" data-workspace="sources" data-subview="mikan-groups" data-nav-label="Mikan 字幕组对照">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">PublishGroup directory</p>
+          <h2 id="mikan-publish-group-title">Mikan 字幕组对照表</h2>
+        </div>
+        <button id="mikan-publish-group-reload" type="button" class="secondary-button">刷新对照表</button>
+      </div>
+      <p class="muted">groupid 只使用 Episode/RSS 已确认的身份。首次遇到新 groupid 时，程序从配置的 Mikan Base URL 请求 /Home/PublishGroup/{groupid}，读取“字幕组名作品年表”并去掉“作品年表”；成功后长期保存。名称可以人工修改，也可显式恢复自动获取。</p>
+      <div id="mikan-publish-group-list" class="publish-group-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status">正在读取字幕组对照…</p>
+      </div>
+    </section>
+
     <section id="mikan-plugin-call-workspace" aria-labelledby="mikan-plugin-call-title" data-workspace="sources" data-subview="mikan-plugin-calls" data-nav-label="Mikan 插件调用日志">
       <div class="section-heading">
         <div>
@@ -2072,6 +2086,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260824-mikan-plugin-audit"></script>
+    <script type="module" src="/app.js?v=20260824-mikan-group-directory"></script>
 </body>
 </html>

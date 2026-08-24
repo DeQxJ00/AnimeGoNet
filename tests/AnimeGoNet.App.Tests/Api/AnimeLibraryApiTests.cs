@@ -181,6 +181,8 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal("downloaded", episodes[0].GetProperty("status").GetString());
         Assert.Equal("test", episodes[0].GetProperty("source_id").GetString());
         Assert.True(episodes[0].GetProperty("media_path_known").GetBoolean());
+        Assert.Equal(583, episodes[0].GetProperty("groupid").GetInt32());
+        Assert.Equal("Test Group", episodes[0].GetProperty("group_name").GetString());
         Assert.Equal("not_downloaded", episodes[1].GetProperty("status").GetString());
         Assert.Equal(JsonValueKind.Null, episodes[1].GetProperty("downloaded_at_utc").ValueKind);
         var manualOffset = Assert.Single(root.GetProperty("manual_offsets").EnumerateArray());
@@ -559,6 +561,12 @@ public sealed class AnimeLibraryApiTests
             VALUES (
                 'file-alpha', 'task-alpha', 'alpha.mkv', 100,
                 100, 1, 1, 1001, 'episode');
+
+            INSERT INTO mikan_publish_groups (
+                groupid, group_name, name_source, source_profile_id, state,
+                failure_code, fetched_at_utc, next_attempt_at_utc, updated_at_utc, revision)
+            VALUES (583, 'Test Group', 'automatic', 'test', 'resolved',
+                    NULL, $now, NULL, $now, 1);
 
             INSERT INTO metadata_resolution_runs (
                 id, task_id, status, tmdb_access_confirmed, fallback_eligible,

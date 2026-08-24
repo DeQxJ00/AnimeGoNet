@@ -117,6 +117,9 @@ public static class ApiEndpoints
         app.MapDelete(
             "/api/v1/mikan/manual-series-mappings/{mikanId:int}/{groupId:int}",
             DeleteMikanManualSeriesMapping);
+        app.MapGet("/api/v1/mikan/publish-groups", ListMikanPublishGroups);
+        app.MapPut("/api/v1/mikan/publish-groups/{groupId:int}", UpdateMikanPublishGroup);
+        app.MapPost("/api/v1/mikan/publish-groups/{groupId:int}/refresh", RefreshMikanPublishGroup);
         app.MapGet(
             "/api/v1/mikan/trusted-offset-blacklist",
             ListMikanTrustedOffsetBlacklist);
@@ -5703,6 +5706,61 @@ public static class ApiEndpoints
         }
     }
 
+    private static async Task<Ok<MikanPublishGroupListResponse>> ListMikanPublishGroups(
+        MikanPublishGroupStore groups,
+        CancellationToken cancellationToken)
+    {
+        var items = await groups.ListAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new MikanPublishGroupListResponse(items.Select(item =>
+            new MikanPublishGroupResponse(
+                item.GroupId, item.GroupName, item.NameSource, item.SourceProfileId,
+                item.State, item.FailureCode, item.FetchedAtUtc, item.NextAttemptAtUtc,
+                item.UpdatedAtUtc, item.Revision)).ToArray()));
+    }
+
+    private static async Task<IResult> UpdateMikanPublishGroup(
+        int groupId,
+        MikanPublishGroupWriteRequest request,
+        MikanPublishGroupStore groups,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await groups.UpdateManualAsync(
+                groupId, request.GroupName, request.ExpectedRevision,
+                DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            return result switch
+            {
+                MikanPublishGroupUpdateResult.Updated => TypedResults.NoContent(),
+                MikanPublishGroupUpdateResult.NotFound => TypedResults.NotFound(Error(
+                    "mikan_publish_group_not_found", "Mikan publish group was not found.")),
+                _ => TypedResults.Conflict(Error(
+                    "mikan_publish_group_revision_conflict", "Mikan publish group changed; reload and retry.")),
+            };
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+        {
+            return TypedResults.BadRequest(Error("mikan_publish_group_name_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> RefreshMikanPublishGroup(
+        int groupId,
+        MikanPublishGroupRefreshRequest request,
+        MikanPublishGroupStore groups,
+        MikanPublishGroupResolver resolver,
+        CancellationToken cancellationToken)
+    {
+        var result = await groups.RequestRefreshAsync(
+            groupId, request.ExpectedRevision, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        if (result == MikanPublishGroupUpdateResult.NotFound)
+            return TypedResults.NotFound(Error("mikan_publish_group_not_found", "Mikan publish group was not found."));
+        if (result == MikanPublishGroupUpdateResult.RevisionConflict)
+            return TypedResults.Conflict(Error("mikan_publish_group_revision_conflict", "Mikan publish group changed; reload and retry."));
+        await resolver.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.NoContent();
+    }
+
     private static async Task<IResult> RejectAiSeriesChangeReview(
         string taskId,
         AiSeriesChangeReviewStore reviews,
@@ -6710,7 +6768,9 @@ public static class ApiEndpoints
                 episode.Downloaded ? "downloaded" : "not_downloaded",
                 episode.DownloadSourceId,
                 episode.DownloadedAtUtc,
-                episode.MediaPathKnown)).ToArray(),
+                episode.MediaPathKnown,
+                episode.GroupId,
+                episode.GroupName)).ToArray(),
             detail.Audit.ManualOffsets.Select(value =>
                 new AnimeSeasonManualOffsetResponse(
                     value.MikanId,

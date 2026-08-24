@@ -249,7 +249,24 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    completion.id,
                    completion.source_id,
                    completion.completed_at_utc,
-                   CASE WHEN completion.media_path IS NOT NULL THEN 1 ELSE 0 END
+                   CASE WHEN completion.media_path IS NOT NULL THEN 1 ELSE 0 END,
+                   (SELECT task.groupid
+                    FROM task_files AS file
+                    JOIN ingest_tasks AS task ON task.id = file.task_id
+                    WHERE file.tmdb_episode_id = episode.tmdb_episode_id
+                      AND file.disposition = 'episode'
+                      AND task.groupid IS NOT NULL AND task.groupid > 0
+                    ORDER BY task.updated_at_utc DESC, task.id DESC
+                    LIMIT 1),
+                   (SELECT map.group_name
+                    FROM task_files AS file
+                    JOIN ingest_tasks AS task ON task.id = file.task_id
+                    JOIN mikan_publish_groups AS map ON map.groupid = task.groupid
+                    WHERE file.tmdb_episode_id = episode.tmdb_episode_id
+                      AND file.disposition = 'episode'
+                      AND map.state = 'resolved'
+                    ORDER BY task.updated_at_utc DESC, task.id DESC
+                    LIMIT 1)
             FROM tmdb_episodes AS episode
             JOIN anime_series AS series ON series.id = episode.series_id
             LEFT JOIN completion_records AS completion
@@ -280,7 +297,9 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 downloaded,
                 downloaded ? episodeReader.GetString(7) : null,
                 downloaded ? ParseTimestamp(episodeReader.GetString(8)) : null,
-                episodeReader.GetInt32(9) == 1));
+                episodeReader.GetInt32(9) == 1,
+                episodeReader.IsDBNull(10) ? null : episodeReader.GetInt32(10),
+                episodeReader.IsDBNull(11) ? null : episodeReader.GetString(11)));
         }
 
         var audit = await ReadAuditAsync(

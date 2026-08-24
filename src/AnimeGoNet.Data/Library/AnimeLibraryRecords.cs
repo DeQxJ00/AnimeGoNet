@@ -83,7 +83,9 @@ public sealed record AnimeEpisodeProjection(
     bool Downloaded,
     string? DownloadSourceId,
     DateTimeOffset? DownloadedAtUtc,
-    bool MediaPathKnown);
+    bool MediaPathKnown,
+    int? GroupId,
+    string? GroupName);
 
 public sealed record AnimeSeasonManualOffsetProjection(
     int MikanId,

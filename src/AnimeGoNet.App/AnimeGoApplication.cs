@@ -459,6 +459,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MikanManualSeriesMappingStore>();
         builder.Services.AddSingleton<MikanPluginCallLogStore>();
+        builder.Services.AddSingleton<MikanPublishGroupStore>();
         builder.Services.AddSingleton<NotificationStore>();
         builder.Services.AddSingleton(new WebhookNotificationSender(
             OutboundHttpClientFactory.Create(
@@ -574,6 +575,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(aiMetadataMatcher);
         builder.Services.AddSingleton<AiMetadataResultValidator>();
         builder.Services.AddSingleton<MikanAiTestImportService>();
+        builder.Services.AddSingleton<MikanPublishGroupResolver>();
         builder.Services.AddSingleton<AnimeGoNet.App.AiTesterCompat.AiTesterCoordinator>();
         builder.Services.AddSingleton<AiMetadataTaskResolver>();
         builder.Services.AddSingleton<DuplicateHitNotifier>();
@@ -594,6 +596,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<PluginScheduleHostedService>();
             builder.Services.AddHostedService<NotificationWorker>();
             builder.Services.AddHostedService<ConfigurationBackupAutomationWorker>();
+            builder.Services.AddHostedService<MikanPublishGroupWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));
