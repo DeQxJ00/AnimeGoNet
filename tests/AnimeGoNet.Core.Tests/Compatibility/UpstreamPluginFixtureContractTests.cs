@@ -117,7 +117,7 @@ public sealed partial class UpstreamPluginFixtureContractTests
     {
         var text = File.ReadAllText(Path.Combine(root, "docs", "baseline", "FIXTURES.sha256.md"));
         return HashLineRegex()
-            .Matches(text)
+            .Matches(text.ReplaceLineEndings("\n"))
             .ToDictionary(
                 match => match.Groups[2].Value,
                 match => match.Groups[1].Value,
