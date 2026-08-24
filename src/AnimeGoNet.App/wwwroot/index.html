@@ -1449,7 +1449,7 @@
         </div>
         <button id="trusted-offsets-reload" type="button" class="secondary-button">刷新状态</button>
       </div>
-      <p class="muted">按 mikanid + groupid 隔离。Offset 的来源 EP 是从 Torrent 视频文件名解析出的 EP，目标 TMDB EP = 文件名 EP + Offset；只有不同文件名 EP 得到相同且已验证的映射达到设定次数后才可信。清理只删除自动学习证据与缓存，不影响人工规则、下载记录或媒体文件。</p>
+      <p class="muted">按 mikanid + groupid 隔离。Offset 的来源 EP 是从 Torrent 视频文件名解析出的 EP，目标 TMDB EP = 文件名 EP + Offset；只有不同文件名 EP 得到相同且已验证的非零映射达到设定次数后才可信。Offset = 0 表示文件名 EP 已一致，不学习、不缓存。清理只删除自动学习证据与缓存，不影响人工规则、下载记录或媒体文件。</p>
       <section class="offset-blacklist-panel" aria-labelledby="trusted-offset-blacklist-title">
         <div>
           <h3 id="trusted-offset-blacklist-title">可信 Offset 黑名单</h3>

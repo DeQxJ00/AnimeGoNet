@@ -112,6 +112,49 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task NonZeroTrustedOffsetMigrationPurgesLegacyZeroRows()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations.Take(64).ToArray(),
+            CancellationToken.None);
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO mikan_offset_evidence(
+                    id, mikanid, groupid, source_episode, tmdb_series_id,
+                    tmdb_season_number, episode_offset, observed_at_utc)
+                VALUES ('legacy-zero', 10, 20, '1', 30, 1, 0, '2026-08-25T00:00:00Z');
+
+                INSERT INTO mikan_trusted_offsets(
+                    mikanid, groupid, tmdb_series_id, tmdb_season_number,
+                    episode_offset, distinct_episode_count, state, updated_at_utc)
+                VALUES (10, 20, 30, 1, 0, 1, 'trusted', '2026-08-25T00:00:00Z');
+                """;
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations,
+            CancellationToken.None);
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM mikan_offset_evidence WHERE episode_offset = 0),
+                (SELECT COUNT(*) FROM mikan_trusted_offsets WHERE episode_offset = 0);
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0, reader.GetInt32(0));
+        Assert.Equal(0, reader.GetInt32(1));
+    }
+
+    [Fact]
     public async Task AiInvocationTriggerReasonMigrationAddsAuditableColumn()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

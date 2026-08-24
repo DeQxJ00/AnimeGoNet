@@ -1141,6 +1141,64 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task VerifiedEpisodeMatchingFilenameDoesNotCreateZeroOffsetEvidence()
+    {
+        var tmdb = new FakeTmdbClient(
+            Series,
+            [SeasonOne, SeasonTwo],
+            number => new TmdbEpisode(
+                9000 + number,
+                Series.Id,
+                2,
+                number,
+                $"Episode {number}",
+                null));
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                Series.Id,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    2,
+                    4,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    MikanTrustedOffsetCacheEnabled = true,
+                    MikanTrustedOffsetRequiredEpisodes = 1,
+                    Ai = options.Metadata.Ai with { UseMetadataMatch = true },
+                },
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient(new BangumiSubject(
+                547888,
+                "Made in Abyss",
+                "来自深渊",
+                new DateOnly(2020, 1, 1),
+                12)),
+            aiMetadataMatcher: ai);
+        var taskId = await AddDownloadedTaskAsync(app, "来自深渊 第四话");
+        await SetMikanGroupAndEpisodeCandidateAsync(app, taskId, 7, 4);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var offsets = app.App.Services.GetRequiredService<MikanTrustedOffsetStore>();
+        Assert.Empty(await offsets.ListAsync(3951, 7, requiredDistinctEpisodes: 1));
+        Assert.Null(await offsets.GetTrustedAsync(3951, 7, requiredDistinctEpisodes: 1));
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+    }
+
+    [Fact]
     public async Task UnifiedAiFailureThenTitleFallbackDoesNotCallAiAgainForEpisode()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);

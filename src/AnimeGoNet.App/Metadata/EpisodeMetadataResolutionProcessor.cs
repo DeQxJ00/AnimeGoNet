@@ -625,13 +625,19 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 continue;
             }
 
+            var episodeOffset = result.Episode!.EpisodeNumber - sourceEpisode;
+            if (episodeOffset == 0)
+            {
+                continue;
+            }
+
             evidence.Add(new MikanOffsetEvidenceObservation(
                 claim.Resolution.MikanId.Value,
                 claim.Resolution.GroupId.Value,
                 sourceEpisode,
-                result.Episode!.SeriesId,
+                result.Episode.SeriesId,
                 result.Episode.SeasonNumber,
-                result.Episode.EpisodeNumber - sourceEpisode));
+                episodeOffset));
         }
 
         if (evidence.Count == 0

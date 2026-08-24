@@ -29,6 +29,11 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
         ArgumentNullException.ThrowIfNull(observation);
         Validate(observation);
         ValidateRequiredDistinctEpisodes(requiredDistinctEpisodes);
+        if (observation.EpisodeOffset == 0)
+        {
+            return null;
+        }
+
         var now = Format(utcNow);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -127,6 +132,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                        COUNT(DISTINCT source_episode)
                 FROM mikan_offset_evidence
                 WHERE mikanid = $mikanid AND groupid = $groupid
+                  AND episode_offset != 0
                 GROUP BY tmdb_series_id, tmdb_season_number, episode_offset
                 HAVING COUNT(DISTINCT source_episode) >= $required_count
                 ORDER BY tmdb_series_id, tmdb_season_number, episode_offset;
@@ -391,6 +397,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
              AND trusted.groupid = evidence.groupid
             WHERE ($mikanid IS NULL OR evidence.mikanid = $mikanid)
               AND ($groupid IS NULL OR evidence.groupid = $groupid)
+              AND evidence.episode_offset != 0
             GROUP BY evidence.mikanid, evidence.groupid, evidence.tmdb_series_id,
                      evidence.tmdb_season_number, evidence.episode_offset,
                      trusted.state, trusted.tmdb_series_id,
@@ -541,6 +548,7 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                    episode_offset, distinct_episode_count, state, updated_at_utc
             FROM mikan_trusted_offsets
             WHERE mikanid = $mikanid AND groupid = $groupid
+              AND episode_offset != 0
               AND ($trusted_only = 0 OR (state = 'trusted'
                    AND distinct_episode_count >= $required_count))
               AND NOT EXISTS (

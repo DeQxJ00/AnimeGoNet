@@ -4,6 +4,26 @@ namespace AnimeGoNet.Data.Tests.Mikan;
 
 public sealed class MikanTrustedOffsetStoreTests
 {
+    [Fact]
+    public async Task ZeroOffsetIsNotLearnedOrExposed()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new MikanTrustedOffsetStore(fixture.Database);
+
+        Assert.Null(await store.ObserveAsync(
+            Observation(1, 0),
+            DateTimeOffset.UtcNow,
+            requiredDistinctEpisodes: 1));
+        Assert.Empty(await store.ListAsync());
+        Assert.Null(await store.GetTrustedAsync(3951, 7, requiredDistinctEpisodes: 1));
+        Assert.Null(await store.TryResolveEpisodeAsync(
+            3951,
+            7,
+            2,
+            enabled: true,
+            requiredDistinctEpisodes: 1));
+    }
+
     [Theory]
     [InlineData("mikanid", 3951, null, 3951, 7, true)]
     [InlineData("mikanid", 3951, null, 3952, 7, false)]

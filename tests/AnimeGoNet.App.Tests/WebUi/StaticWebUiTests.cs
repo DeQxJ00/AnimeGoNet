@@ -176,6 +176,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "ai_prompt_template")]
     [InlineData("/app.js", "text/javascript", "后台 Worker 与测试工具共用")]
     [InlineData("/", "text/html", "ai-test-api-mode")]
+    [InlineData("/", "text/html", "Offset = 0 表示文件名 EP 已一致，不学习、不缓存")]
     [InlineData("/", "text/html", "chat-completions")]
     [InlineData("/styles.css", "text/css", ".ai-test-trace-row")]
     [InlineData("/styles.css", "text/css", ".external-plugin-card")]

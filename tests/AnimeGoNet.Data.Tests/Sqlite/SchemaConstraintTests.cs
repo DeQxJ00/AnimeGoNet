@@ -68,6 +68,29 @@ public sealed class SchemaConstraintTests
         await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
     }
 
+    [Fact]
+    public async Task TrustedOffsetTablesRejectZeroOffsets()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO mikan_offset_evidence(
+                id, mikanid, groupid, source_episode, tmdb_series_id,
+                tmdb_season_number, episode_offset, observed_at_utc)
+            VALUES ('zero-evidence', 10, 20, '1', 30, 1, 0, '2026-08-25T00:00:00Z');
+            """;
+        await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
+
+        command.CommandText = """
+            INSERT INTO mikan_trusted_offsets(
+                mikanid, groupid, tmdb_series_id, tmdb_season_number,
+                episode_offset, distinct_episode_count, state, updated_at_utc)
+            VALUES (10, 20, 30, 1, 0, 1, 'trusted', '2026-08-25T00:00:00Z');
+            """;
+        await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
+    }
+
     [Theory]
     [InlineData("mikanid", 10, 20)]
     [InlineData("groupid", 10, 20)]

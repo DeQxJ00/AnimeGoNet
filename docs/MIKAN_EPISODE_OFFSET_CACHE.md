@@ -93,7 +93,7 @@ SQLite 必须以 `(mikanid, groupid, file_episode_candidate)` 建立证据唯一
 
 可信状态来自达到当前设定次数的不同文件名 EP 的成功 TMDB 验证，因此后续命中不因“新 Episode 尚未出现在 TMDB”而逐集联网，也不会仅凭一次本地推导撤销可信。只有后续正常 AI/TMDB 流程成功产生不同的已验证签名时，才执行冲突重置。调高阈值后，证据数不足的新旧记录立即按 Learning 处理且不再命中；不需要删除历史证据。
 
-主程序现已在自动元数据 worker 中执行这条旁路。命中前必须同时找到本地已验证过的 `anime_series + anime_seasons` canonical projection；投影缺失时记录 `trusted_offset_projection_missing` 并完整回退，不能联网补一半后仍称为缓存命中。命中后的本地 Episode 不伪造 `tmdb_episode_id`，但仍使用 `(tmdb_id, season, episode)` 参与全局 claim/completion 去重。Episode worker 完成正常 TMDB 验证后，只对同一任务内签名一致、具有正整数本地候选的正片写学习证据；跨季度、候选缺失、偏移不一致以及缓存推导出来的结果不会自我强化。
+主程序现已在自动元数据 worker 中执行这条旁路。命中前必须同时找到本地已验证过的 `anime_series + anime_seasons` canonical projection；投影缺失时记录 `trusted_offset_projection_missing` 并完整回退，不能联网补一半后仍称为缓存命中。命中后的本地 Episode 不伪造 `tmdb_episode_id`，但仍使用 `(tmdb_id, season, episode)` 参与全局 claim/completion 去重。Episode worker 完成正常 TMDB 验证后，只对同一任务内签名一致、具有正整数本地候选且 `offset != 0` 的正片写学习证据；`offset = 0` 代表文件名 EP 已与 TMDB EP 一致，不累计次数、不写缓存也不出现在管理列表。跨季度、候选缺失、偏移不一致以及缓存推导出来的结果不会自我强化。
 
 ## 8. WebUI 与审计
 

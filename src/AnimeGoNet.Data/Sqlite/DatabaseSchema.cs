@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 64;
+    public const int CurrentVersion = 65;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -143,7 +143,44 @@ public static class DatabaseSchema
             64,
             "mikan_plugin_call_item_title",
             MikanPluginCallItemTitle),
+        new SchemaMigration(
+            65,
+            "non_zero_trusted_episode_offsets",
+            NonZeroTrustedEpisodeOffsets),
     ];
+
+    private const string NonZeroTrustedEpisodeOffsets = """
+        DELETE FROM mikan_trusted_offsets WHERE episode_offset = 0;
+        DELETE FROM mikan_offset_evidence WHERE episode_offset = 0;
+
+        CREATE TRIGGER mikan_offset_evidence_non_zero_insert
+        BEFORE INSERT ON mikan_offset_evidence
+        WHEN NEW.episode_offset = 0
+        BEGIN
+            SELECT RAISE(ABORT, 'zero episode offset is not cache evidence');
+        END;
+
+        CREATE TRIGGER mikan_offset_evidence_non_zero_update
+        BEFORE UPDATE OF episode_offset ON mikan_offset_evidence
+        WHEN NEW.episode_offset = 0
+        BEGIN
+            SELECT RAISE(ABORT, 'zero episode offset is not cache evidence');
+        END;
+
+        CREATE TRIGGER mikan_trusted_offsets_non_zero_insert
+        BEFORE INSERT ON mikan_trusted_offsets
+        WHEN NEW.episode_offset = 0
+        BEGIN
+            SELECT RAISE(ABORT, 'zero episode offset cannot be trusted');
+        END;
+
+        CREATE TRIGGER mikan_trusted_offsets_non_zero_update
+        BEFORE UPDATE OF episode_offset ON mikan_trusted_offsets
+        WHEN NEW.episode_offset = 0
+        BEGIN
+            SELECT RAISE(ABORT, 'zero episode offset cannot be trusted');
+        END;
+        """;
 
     private const string MikanPluginCallItemTitle = """
         ALTER TABLE mikan_plugin_call_log_items
