@@ -34,15 +34,15 @@
 - [x] 确认 Web UI 同时支持四类独立删除：业务记录、下载器任务、下载源文件、媒体库文件，并可预览后组合执行。
 - [x] 确认重复集默认只认首个成功完成记录；后续同集在 RSS 解析阶段命中完成记录即停止，删除该业务记录后允许重新进入流程。
 - [x] 确认附属文件首版只整理字幕；唯一匹配 EP 时随视频重命名并保留多语言/轨道后缀，无法对应时季度已知则进入 `Other`。
-- [x] 确认支持多个命名下载器实例，并按输入源配置下载器、元数据字段、过滤/匹配规则、文件/做种策略；Mikan/U2/TTG 使用同一通用导入流水线和 API 契约。
-- [x] 原多源示例路由已完成通用骨架：Mikan（bgmid必填）→ `bt` qBittorrent；U2/TTG → `pt` 仅保留 adapter/API/路由回归夹具，不作为首版支持承诺。
+- [x] 确认支持多个命名下载器实例，并按输入源配置下载器、元数据字段、过滤/匹配规则、文件/做种策略；Mikan/U2 使用同一通用导入流水线和 API 契约。
+- [x] 原多源示例路由已完成通用骨架：Mikan（bgmid必填）→ `bt` qBittorrent；U2 → `pt` 仅保留 adapter/API/路由回归夹具，不作为首版支持承诺。
 - [x] 确认项目只支持 qBittorrent 下载器及其多命名实例；取消 Transmission 适配计划，旧类型仅作不支持诊断。
-- [x] U2/TTG 原外部油猴/扩展/API 提交设计已记录，但项目所有者现已确认首版暂缓；主程序不新增站点登录、抓取、账号/Cookie 或默认来源配置。
+- [x] U2 原外部油猴/扩展/API 提交设计已记录，但项目所有者现已确认首版暂缓；主程序不新增站点登录、抓取、账号/Cookie 或默认来源配置。
 - [x] 确认沿用并强类型化 Mikan `source + data[].torrent + data[].info` 批量格式，所有来源统一调用 `/api/v1/ingest`；旧 API 转同一 command。
 - [x] 确认跨输入源按 `(TMDB Series, Season, Episode)` 全局去重；只跳过已完成 EP，同剧集和多文件 Torrent 中的其他 EP 不受影响。
 - [x] 确认 Mikan RSS 同集优选的黑白名单是前置资格过滤，单候选也执行；只有资格过滤后同一 `mikanid+来源EP` 仍有多个候选时才运行可配置优先级组。
 - [x] 确认默认 Mikan SourceProfile 使用 `move`：下载完成后移动到媒体库、不继续做种；Web可改其他策略且只影响新任务。
-- [x] 确认 U2/TTG 首版暂缓：不选择默认文件策略、不生成默认 SourceProfile、不做站点业务验收；现有通用 adapter/API/路由骨架保留，未来恢复范围时重新确认策略。
+- [x] 确认 U2 首版暂缓：不选择默认文件策略、不生成默认 SourceProfile、不做站点业务验收；现有通用 adapter/API/路由骨架保留，未来恢复范围时重新确认策略。
 - [x] Linux Go 容器基线 job 已验证：Ubuntu 24.04 x86_64 CT 使用官方 `golang:1.22.10-bookworm` 与上游 `c7475df`，以 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...` 串行执行；结果 exit 0、3109 条事件、100 个上游 skip，`events.jsonl`、stderr、稳定 summary 和 SHA-256 均已取回校验。Docker Hub 下载使用所有者提供的代理，官方摘要和清理已记录。
 - [x] 生成上游 fixture SHA-256 清单和 OpenAPI 快照。
 
@@ -160,7 +160,7 @@
 - [x] 预置字幕语言、字幕封装、编码、分辨率四组，但引擎不写死组数或内容；name 仅展示，values 才参与匹配。
 - [x] 实现优选阶段具名白名单/黑名单数组、黑名单优先和默认 720p 黑名单；schema v13 SQLite CRUD/版本快照、schema v14/v16 批次决策与实际执行组审计、API/WebUI 编辑/预览/回滚和真实 RSS 批次执行均已验证。
 - [x] RSS loser 产生 `SuppressedByHigherPriority` 且 winner 不隐式晋级；`POST /api/rss` 依次执行安全 feed 获取/精确 ep_links → legacy Filiter0..4（按需安全页面身份、批内缓存）→ 新黑白名单/有序优选 → winner 原子统一 staging，并兼容 HTTP 200 + code 200/300 与成功消息。
-- [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2/TTG 统一导入已通过目录真实路由。
+- [x] 实现显式 `PluginCatalog` 注册，禁止反射扫描和动态 DLL 加载；目录校验稳定小写 ID、单一类别、全局重复 ID 和确定性顺序，Mikan/U2 统一导入已通过目录真实路由。
 - [x] 实现外部 C# 插件进程：manifest、JSON Lines、环境隔离、惰性复用、插件级指数退避/自动禁用和独立数据目录；启停/args/vars 使用 revision 原子私有文件，管理 API/schema 表单支持 writeOnly 留空保留/显式清除；stderr 按插件 ID 结构化脱敏限流；source/feed/parser/filter/rename/schedule 六类外部包均以固定 operation、source-generated DTO 和严格结果校验注册进 `PluginCatalog`，非法结果关闭会话并进入退避。
 - [x] 提供 `AnimeGo.Plugin.Sdk`、NativeAOT 插件模板和五 RID GitHub Actions 模板：SDK 以 source-generated `JsonTypeInfo` 驱动六类强类型处理器，严格执行 initialize/execute/health/shutdown JSON Lines、环境身份、输入输出上限和稳定业务错误；模板包可生成六类最小实现，五 RID workflow 使用原生 Windows/Linux ARM64 与 macOS ARM64 runner 实际发布，并由 `eng/verify-plugin-template.ps1` 生成六类项目、Release 编译、NativeAOT 发布及四阶段真实进程 smoke。
 - [x] 实现 `AnimeGo.PluginTool`：AOT-safe `validate/run/pack` CLI 复用主程序 manifest、配置 schema、进程协议和六类结果校验；严格 fixture UTF-8/JSON/operation/config 边界、包树权限/链接/容量审计、内容摘要、确定性 ZIP 与原子覆盖已完成。专用 fake 测试覆盖退出码、脱敏、生命周期、健康失败、临时/显式 data path、变更竞态和可重复打包；五 RID template workflow 使用原生工具对生成的 NativeAOT filter 执行真实 validate→run→pack。
@@ -172,16 +172,16 @@
 ## P7 — 首版 qBittorrent 下载客户端
 
 - [x] 定义稳定 `IDownloadClient` 契约，并将单下载器配置升级为命名实例字典；`bt`/`pt` 客户端、Cookie 会话、实例隔离、按实例串行操作、失败隔离、可选客户端版本/默认保存路径诊断，以及按实例 2～120 秒指数退避/熔断均已实现。
-- [x] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/TTG/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、动态 tag 模板、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成。Cookie 按来源隔离且跨 Host redirect 剥离；RSS 并发修改不混用新旧 revision。动态模板随任务冻结，元数据确认后在恢复下载前按规范季度日期和首个普通 EP 渲染并写 qB，跳过/失败均有持久状态和事件。schema v36 另为每个 Mikan 来源保存只写 RSS URL、六字段 Cron、启用状态和最近执行审计；后台启动、CRUD 热更新、旧 revision 失效、中断恢复与 passkey 不回显均已验证。
+- [x] 实现 `SourceProfile` 和不可变路由快照：Mikan 默认 seed、U2/Mikan 版本化 CRUD、启停、下载器绑定、Host 白名单、规则开关、category、静态附加 tags、qB 做种分钟、动态 tag 模板、Mikan 私有身份 Cookie、乐观并发和任务/RSS引用保护 API/WebUI/路由预览已完成。Cookie 按来源隔离且跨 Host redirect 剥离；RSS 并发修改不混用新旧 revision。动态模板随任务冻结，元数据确认后在恢复下载前按规范季度日期和首个普通 EP 渲染并写 qB，跳过/失败均有持久状态和事件。schema v36 另为每个 Mikan 来源保存只写 RSS URL、六字段 Cron、启用状态和最近执行审计；后台启动、CRUD 热更新、旧 revision 失效、中断恢复与 passkey 不回显均已验证。
 - [x] 初始化默认 Mikan SourceProfile 的 `file_strategy=move`；API 修改只影响新任务，返回值明确提示该模式移动后不继续做种。
-- [x] 新增强类型输入适配层：Mikan/U2/TTG 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口在请求期执行安全 Torrent staging 并原子保存文件清单，后台 worker 按不可变下载器路由暂停投递 qB、确认 hash 后进入元数据和逐文件准备。
+- [x] 新增强类型输入适配层：Mikan/U2 统一校验、别名、mikanid/IMDb 规范化和冲突拒绝已实现；统一/旧入口在请求期执行安全 Torrent staging 并原子保存文件清单，后台 worker 按不可变下载器路由暂停投递 qB、确认 hash 后进入元数据和逐文件准备。
 - [x] 实现 qBittorrent 5 WebUI API adapter 和 fake-handler contract tests：登录、torrent/file list、multipart add（category/tags/seedingTimeLimit）、file priority、stop/start/delete、状态映射、严格 hash/index/priority/做种分钟校验与失败响应。
 - [x] 实现 staged Torrent 后台 dispatch：SQLite并发租约、崩溃租约恢复、不可变实例路由、paused add、同hash幂等检查、已有/新增任务显式再暂停、qB确认、download job事务与确认后staging清理。
 - [x] 接入本机 `TestSpace` portable qBittorrent 隔离沙箱：ignore、独立测试项目、端口所有者/profile/版本、用户名密码 Cookie 登录、list 和三路径 smoke 已通过；qB 专用脚本用 FQN 过滤只启动 `QbittorrentSandboxTests`，不会串跑同项目的 TMDB live 测试；默认 CI 不启动该实例，也未创建 Torrent。
 - [x] 实现下载器路径可见性与硬链接能力探测：仅在显式 API/WebUI 操作时向实例 `download_path` 和全局 `save_path` 写入同名随机临时文件，验证后尽力清理；缺目录、权限、跨文件系统/挂载和平台不支持均返回稳定脱敏错误码，Windows/Linux/macOS 使用 AOT-safe 原生调用。
 - [x] 建立隔离 Docker Compose 下载环境：专用 Compose 只绑定随机回环端口，使用临时 data/download/qB profile 根目录、非 root AnimeGoNet、只读根文件系统和退出清理；不复用 TestSpace 或生产卷。
 - [x] qBittorrent 真实容器 smoke 已接入 Docker CI 并在 Ubuntu 24.04 x86_64 CT 实跑通过：从首启日志读取临时密码后设置隔离测试密码，逐实例覆盖登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete；合法 128 KiB WebSeed 完成统一导入→真实下载→SQLite→move/NFO/sidecar/completion→`deleteFiles=false` cleanup，唯一 category/tag/hash、容器、镜像和临时目录均精确清理。
-- [x] 双实例容器统一导入门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：隔离 fixture 提供不同 info-hash，AnimeGoNet 后台 worker 通过 `/api/v1/ingest` 将 `mikan-ci` 实际投递到 `bt`、将测试用 U2 route 骨架实际投递到 `pt`；staged 响应不泄露 URL，目标实例 hash/category/tag/暂停状态/保存路径正确，另一实例不存在同 hash，测试任务/文件/tag/category 已精确删除。U2/TTG 首版业务仍暂缓。
+- [x] 双实例容器统一导入门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：隔离 fixture 提供不同 info-hash，AnimeGoNet 后台 worker 通过 `/api/v1/ingest` 将 `mikan-ci` 实际投递到 `bt`、将测试用 U2 route 骨架实际投递到 `pt`；staged 响应不泄露 URL，目标实例 hash/category/tag/暂停状态/保存路径正确，另一实例不存在同 hash，测试任务/文件/tag/category 已精确删除。U2 首版业务仍暂缓。
 - [x] 旧 YAML/环境变量出现 Transmission 时读取并生成 `UnsupportedDownloaderType`：按 `ANIMEGO_CLIENT`→显式 `ANIMEGO_CONFIG`/`--config`→`data_path/animego.yaml` 检测，只读取 `setting.client.client` 且不回显凭据；诊断未解除时强制关闭 workers、替换为空下载器 registry、拒绝导入/恢复/连接与路径测试，Web/API 保持可用并显示修复原因，绝不静默转成 qB。
 
 ## P8 — 下载、重命名、刮削

@@ -89,7 +89,7 @@ public static class IngestCommandNormalizer
     {
         var errors = new List<string>();
         var normalizedSource = (source ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedSource is not ("mikan" or "u2" or "ttg"))
+        if (normalizedSource is not ("mikan" or "u2"))
         {
             errors.Add($"source adapter '{normalizedSource}' is not registered");
         }

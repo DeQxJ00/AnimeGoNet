@@ -15,7 +15,6 @@ public static class BuiltInPluginCatalog
         [
             new MikanSourceAdapter(),
             new U2SourceAdapter(),
-            new TtgSourceAdapter(),
             new MikanTitleParserPlugin(),
             new AnimeLibraryRenamePlugin(),
         ];
@@ -94,9 +93,6 @@ internal sealed class MikanSourceAdapter()
 
 internal sealed class U2SourceAdapter()
     : BuiltInSourceAdapter("u2", "U2 input source", 20);
-
-internal sealed class TtgSourceAdapter()
-    : BuiltInSourceAdapter("ttg", "TTG input source", 30);
 
 internal sealed class MikanTitleParserPlugin : ITitleParserPlugin
 {

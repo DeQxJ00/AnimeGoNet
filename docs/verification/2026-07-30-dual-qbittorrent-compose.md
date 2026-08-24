@@ -20,7 +20,7 @@
 - 每个实例使用唯一 `animegonet-ci-*` category/tag；测试结束显式删除任务、文件、
   tag、category，最终 trap 再销毁完整隔离根目录。
 - AnimeGoNet 使用运行期私有下载器配置连接两个容器，验证连接诊断、默认路径、
-  shared-volume 硬链接探测和 Mikan→bt、U2/TTG→pt 的 SourceProfile 路由。
+  shared-volume 硬链接探测和 Mikan→bt、U2→pt 的 SourceProfile 路由。
 - Docker GitHub Actions 在单镜像 smoke 后运行双 qB smoke。
 
 ## 本机验证

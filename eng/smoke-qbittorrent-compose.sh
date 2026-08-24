@@ -1073,7 +1073,7 @@ assert result["save_path"].rstrip("/") == "/download/anime", result
 done
 
 stage "create source routes and previews"
-for source in u2 ttg; do
+for source in u2; do
   create_body="$(
     printf '{"id":"%s-ci","display_name":"%s CI","adapter":"%s","downloader_id":"pt","file_strategy":"link","allowed_torrent_hosts":["%s.invalid","torrent-fixture.invalid"],"category":"animegonet-ci-route-pt","tags":["animegonet-ci-route-pt"],"seeding_time_minutes":0,"rss_filter_enabled":true,"rss_priority_enabled":true,"enabled":true}' \
       "$source" "${source^^}" "$source" "$source"

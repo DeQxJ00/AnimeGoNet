@@ -5,7 +5,7 @@
 - Added the NativeAOT-compatible `AnimeGo.Plugin.Abstractions` project.
 - Added stable DTOs and executable contracts for source, feed, parser, filter, rename, and schedule plugins.
 - Added an explicit `PluginCatalog`; it performs no assembly discovery and has no DLL loading path.
-- Registered Mikan, U2, and TTG adapters by direct construction.
+- Registered Mikan and U2 adapters by direct construction.
 - Routed both unified ingest and source-route preview through the catalog.
 - Retained the synchronous normalizer only as a test/backward-compatible facade over the same built-in catalog.
 

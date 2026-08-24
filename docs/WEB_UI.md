@@ -6,8 +6,8 @@ WebUI 在 `:root` 明确使用 `16px` 作为 `rem` 基准，避免 Chrome“字�
 
 一级菜单“通知”包含“通知渠道”和“发送记录”。渠道编辑器直接回填本地凭据，提供 Bark详细参数以及通用 Webhook、Discord、Slack、Telegram、Server酱、PushPlus原生配置；测试按钮会真实发送并记录 HTTP状态、稳定错误码、耗时和响应摘要。
 
-首版正式输入源仅为 Mikan。页面中仍能显示或编辑历史/自定义 U2、TTG adapter 值，
-是因为通用 SourceProfile 骨架需要保持数据兼容；项目所有者已确认 U2/TTG 首版暂缓，
+首版正式输入源仅为 Mikan。页面中仍能显示或编辑历史/自定义 U2 adapter 值，
+是因为通用 SourceProfile 骨架需要保持数据兼容；项目所有者已确认 U2 首版暂缓，
 不提供默认 profile、默认文件策略或站点业务支持。
 
 本文固定首版本地 Web UI 的动画作品列表、季度详情和排序语义。页面展示的是 AnimeGoNet 已纳管的作品，不把下载器任务列表当成媒体库。
@@ -164,7 +164,7 @@ Mikan 地址、TMDB API 地址、TMDB 图片地址和 Bangumi API 地址均进�
 
 ## 9. 手动 Torrent 与 RSS 提交
 
-首页“手动提交”区不建立第二套下载逻辑。单个 Torrent 调用 `POST /api/v1/ingest`，选择值是已启用的 SourceProfile ID，因此自定义 Mikan/U2/TTG 来源继续使用各自不可变的下载器、目录、文件策略、category、tags 和 revision 快照。Mikan 手动导入要求 `mikanid` 与 `bgmid`；也可输入受支持的 `/Home/Episode/{40位ID}` 地址并调用 `POST /api/v1/ingest/mikan/resolve`，服务端使用所选 Mikan SourceProfile 的 Cookie/网络策略依次解析 Episode 页面、分组 RSS 和作品页，自动回填 title、Torrent URL、source item/work ID、`mikanid`、`groupid`、`bgmid`。这一解析接口不创建任务、不暂存 Torrent、不访问 qBittorrent；实际点击“提交下载”后才进入统一导入。U2/TTG 可附带作品级 `anidbid`/`imdbid` 参考。最终结果显示接受/拒绝数量、任务 ID、实际来源 revision、下载器、文件数、info hash 和不可逆 URL 指纹，不显示原 Torrent URL。
+首页“手动提交”区不建立第二套下载逻辑。单个 Torrent 调用 `POST /api/v1/ingest`，选择值是已启用的 SourceProfile ID，因此自定义 Mikan/U2 来源继续使用各自不可变的下载器、目录、文件策略、category、tags 和 revision 快照。Mikan 手动导入要求 `mikanid` 与 `bgmid`；也可输入受支持的 `/Home/Episode/{40位ID}` 地址并调用 `POST /api/v1/ingest/mikan/resolve`，服务端使用所选 Mikan SourceProfile 的 Cookie/网络策略依次解析 Episode 页面、分组 RSS 和作品页，自动回填 title、Torrent URL、source item/work ID、`mikanid`、`groupid`、`bgmid`。这一解析接口不创建任务、不暂存 Torrent、不访问 qBittorrent；实际点击“提交下载”后才进入统一导入。U2 可附带作品级 `anidbid`/`imdbid` 参考。最终结果显示接受/拒绝数量、任务 ID、实际来源 revision、下载器、文件数、info hash 和不可逆 URL 指纹，不显示原 Torrent URL。
 
 Mikan RSS 的临时 URL 测试调用现代 `POST /api/v1/rss/ingest`，请求包含明确的 `source_profile_id` 与 RSS URL。页面另提供“执行已保存 RSS”，调用 `POST /api/v1/sources/{source_profile_id}/rss/run`，直接读取该来源服务端保存的地址，不要求开启自动 Cron；它仍写入最近运行状态/batch，并与自动调度互斥，避免同一来源重叠执行。服务端必须先确认该 profile 已启用、adapter 为 Mikan 且已保存 RSS 地址，再发起任何网络请求；随后复用旧过滤、同集有序优选、winner lease 和统一 Torrent staging。两种入口共用 batch、mikanid、规则 revision、候选决策和实际任务 ID 展示。旧 `/api/rss` 的 AnimeGoHelper 契约保持不变。
 
@@ -285,7 +285,7 @@ plugin-data。
 
 类型为 `source` 的有效外部包也进入“来源”页面的 adapter 下拉。只有已启用包可用于
 新建 profile；已存在 profile 对应包后来被禁用或移除时仍显示原 ID 和明确状态，不会
-静默改成 Mikan/U2/TTG。服务端创建时从实际 `PluginCatalog` 验证 adapter，路由预览走
+静默改成 Mikan/U2。服务端创建时从实际 `PluginCatalog` 验证 adapter，路由预览走
 同一个强类型 adapter；默认禁用的外部包会安全返回不可用，不启动进程或产生任务。
 
 ## 15. TypeScript 工程与 API client

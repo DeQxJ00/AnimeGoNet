@@ -1,6 +1,6 @@
 # 功能验证矩阵
 
-范围说明：U2/TTG 已由项目所有者确认为首版暂缓。矩阵中已有的 U2/TTG 用例只锁定
+范围说明：U2 已由项目所有者确认为首版暂缓。矩阵中已有的 U2 用例只锁定
 通用 adapter、跨来源去重和路由骨架不回退，不代表首版站点支持或默认配置验收。
 
 当前基础设施快照（2026-08-12）：win-x64 NativeAOT 与 Ubuntu 24.04 x86_64 上的
@@ -46,7 +46,7 @@ runner 和外部 Release 仍未验证。详见
 | AnimeGoHelper | 单集、全集、过滤配置上传/获取/往返、认证、CORS | C/P/E | 原油猴脚本无需修改即可完成四个主流程，配置无损往返且真实参与RSS过滤 |
 | qBittorrent | connect/retry/add/list/state/delete/category/static tag/metadata dynamic tag/seed | C/I/E | fake + `addTags` HTTP 合同与后置准备流程通过；真实容器主合同进入 CI |
 | 不支持的下载器类型 | 旧Transmission配置读取、诊断、禁用、零路由 | C/E | 明确永久Unsupported，不崩溃、不误转qB、不提供创建入口 |
-| 多下载器路由 | 命名实例、SourceProfile、ID schema、规则/路径/做种/去重、路由快照 | U/C/I/E | Mikan→bt、U2/TTG→pt；改配置不改变进行中任务，实例状态隔离 |
+| 多下载器路由 | 命名实例、SourceProfile、ID schema、规则/路径/做种/去重、路由快照 | U/C/I/E | Mikan→bt、U2→pt；改配置不改变进行中任务，实例状态隔离 |
 | 下载状态机 | init/wait/download/seed/complete/pause/error/restart、0/-1/正数做种目标 | U/C/I | schema v33 目标/累计秒数/完成时间持久化；状态和累计值不回退；整理只按持久化门禁推进 |
 | 去重 | RSS alias早停、全局TMDB Episode键、包内逐文件跳过、事务复查、来源级通知开关、删除记录后重下 | U/I/E | 跨来源只认第一个完整成功Episode；其他Episode不受影响，无并发双写；schema v38 通知默认开启并固化到路由快照，关闭不绕过去重，RSS/TMDB 命中事件经脱敏 WebSocket 可见 |
 | 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 归类为 `Other` 并进入 `Extras`，未知季度或冲突文件不落盘 |
@@ -139,10 +139,10 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 7. 删除业务记录中的“已下载完成记录”后，同集再次解析可以重新进入流程；下载器任务、下载源和媒体库文件保持不变。
 8. 四类删除分别单独执行并验证互不隐式级联；组合删除显示准确计划，部分失败保留可重试审计，路径越界时零文件删除。
 9. 作品详情分别显示 Series、Season、Episode 获取阶段；人工偏移、直接匹配、Backtrace、AI、TitleSeason、FirstSeason、Other 和 BangumiFallback 均显示正确。
-10. Mikan 完成的 `(tmdb=100, season=1, episode=1)` 从 U2/TTG 输入时同样跳过；同剧集 Episode 2 不受影响。
+10. Mikan 完成的 `(tmdb=100, season=1, episode=1)` 从 U2 输入时同样跳过；同剧集 Episode 2 不受影响。
 11. 多文件 Torrent 含已完成 EP1 和未完成 EP2：EP1视频及绑定字幕为 unwanted，EP2视频/字幕为 wanted；下载器实际传输字节和最终文件均不包含EP1。
 12. qBittorrent 在 paused 状态完成 metadata/文件索引校验后才设置 priority 并恢复；路径/容量不符时不启动下载。
-13. 删除规范 EP1 完成记录同时失效 Mikan/U2/TTG alias；任一来源随后均可重新下载 EP1。
+13. 删除规范 EP1 完成记录同时失效 Mikan/U2 alias；任一来源随后均可重新下载 EP1。
 
 ## 字幕整理场景
 
@@ -209,9 +209,9 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 
 ## 多输入源与下载器路由场景
 
-1. 配置两个命名 qBittorrent 实例 `bt`、`pt`；Mikan profile 只向 `bt` 添加，U2/TTG profile 只向 `pt` 添加。
+1. 配置两个命名 qBittorrent 实例 `bt`、`pt`；Mikan profile 只向 `bt` 添加，U2 profile 只向 `pt` 添加。
 2. 新安装默认Mikan profile为`move`；下载完成后暂停，移动和整理成功后用`DeleteFile=false`移除下载器任务并写完成记录，源目录消失、媒体库存在且不做种；任一步失败不得丢失源文件或标完成。
-3. Mikan 缺 `bgmid` 立即拒绝；U2 的 `anidbid` 和 TTG 的 `imdbid` 为空时仍可凭 title/files 进入匹配，非空格式错误时拒绝。
+3. Mikan 缺 `bgmid` 立即拒绝；U2 的 `anidbid` 为空时仍可凭 title/files 进入匹配，非空格式错误时拒绝。
 4. 旧 Mikan `/api/rss`、`/api/download/manager` 与新 `/api/v1/ingest` 对同一输入生成相同内部 command、规则版本和下载器路由。
 5. 修改 SourceProfile 的下载器绑定或文件策略后，新任务使用新快照；已经创建的任务继续使用原实例、策略和 profile 版本。
 6. `bt` 离线不影响 `pt`；不同实例认证、超时、熔断、category/tag 和任务列表相互隔离。

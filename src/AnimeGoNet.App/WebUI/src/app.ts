@@ -11234,7 +11234,6 @@ function refreshSourceAdapterOptions(): void {
   const entries = new Map<string, { label: string; enabled: boolean }>([
     ["mikan", { label: "Mikan", enabled: true }],
     ["u2", { label: "U2", enabled: true }],
-    ["ttg", { label: "TTG", enabled: true }],
   ]);
   for (const adapter of externalSourceAdapters) {
     entries.set(adapter.id, {

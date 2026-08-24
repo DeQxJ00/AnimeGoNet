@@ -4,7 +4,7 @@
 
 | Category | Stable ID | Existing business implementation |
 |---|---|---|
-| source | `mikan`, `u2`, `ttg` | unified ingest source normalization |
+| source | `mikan`, `u2` | unified ingest source normalization |
 | feed | `mikan-rss` | bounded `RssFeedReader` and safe profile-bound HTTP transport |
 | parser | `mikan-title` | `MikanRssEpisodeParser` |
 | filter | `mikan-tool` | persisted `MikanLegacyFilterProcessor` / five Filiter tiers |

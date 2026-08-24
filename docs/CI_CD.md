@@ -94,7 +94,7 @@ LinuxServer qBittorrent 首次启动会在容器日志中提供临时 `admin` �
 3. 对两个实例分别创建唯一 category/tag，添加仓库内 5 字节 Torrent fixture，
    验证 list、文件清单、priority 0/1、start、stop、delete。
 4. 启动 AnimeGoNet NativeAOT 镜像，验证两个下载器的连接诊断和共享目录硬链接
-   探测，并验证 Mikan 路由到 `bt`、U2/TTG 路由到 `pt`。
+   探测，并验证 Mikan 路由到 `bt`、U2 路由到 `pt`。
 5. 无论成功或失败都执行 `docker compose down --volumes --remove-orphans` 并删除
    临时根目录。
 

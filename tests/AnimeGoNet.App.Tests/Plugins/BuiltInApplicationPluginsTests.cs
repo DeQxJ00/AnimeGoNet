@@ -12,7 +12,7 @@ public sealed class BuiltInApplicationPluginsTests
         await using var app = await RunningApp.StartAsync();
         var catalog = app.App.Services.GetRequiredService<PluginCatalog>();
 
-        Assert.Equal(3, catalog.GetAll<IInputSourceAdapter>().Count);
+        Assert.Equal(2, catalog.GetAll<IInputSourceAdapter>().Count);
         Assert.Single(catalog.GetAll<IFeedPlugin>());
         Assert.Single(catalog.GetAll<ITitleParserPlugin>());
         Assert.Single(catalog.GetAll<IFeedFilterPlugin>());

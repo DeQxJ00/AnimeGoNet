@@ -2,7 +2,7 @@
 
 ## 已实现
 
-- `GET/POST/PUT/DELETE /api/v1/sources` 管理 Mikan/U2/TTG 来源。
+- `GET/POST/PUT/DELETE /api/v1/sources` 管理 Mikan/U2 来源。
 - 稳定小写 ID、编译期 adapter、已启用 qBittorrent 实例、四种文件策略和 Torrent Host 白名单均在写入前校验。
 - 更新采用 `expected_revision` 乐观并发；adapter 不可变，历史 ingest task 固化原 revision 和 downloader ID。
 - list/get 返回任务数、RSS batch 数、默认来源标志和时间；`move` 返回“不保留做种”的明确提示。

@@ -14,7 +14,6 @@ SourceProfile 路由预览：
 
 - `mikan-ci` 通过 `POST /api/v1/ingest` 路由到 `bt`；
 - `u2-ci` 通过相同入口路由到 `pt`；
-- `ttg-ci` 保留与 U2 相同的可配置 `pt` 路由预览；
 - AnimeGoNet 容器仅在该集成 Compose 中启用后台 workers，使 staged Torrent 真正由
   dispatcher 投递到 qBittorrent。
 

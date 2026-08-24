@@ -3,10 +3,10 @@
 ## Implemented boundary
 
 - Strongly typed `source + data[].torrent + data[].info` batch contract.
-- Mikan/U2/TTG source normalization, legacy `name`/`url` aliases, positive ID validation, canonical IMDb ID, and conflicting `mikanid` evidence rejection.
+- Mikan/U2 source normalization, legacy `name`/`url` aliases, positive ID validation, canonical IMDb ID, and conflicting `mikanid` evidence rejection.
 - `/api/v1/ingest` per-item accepted/rejected results without returning the passkey URL.
 - Legacy `/api/download/manager` adapter using the same command normalizer, source profile lookup, immutable route snapshot, and explicit SQL task store.
-- Seeded source routing: Mikan → `bt` with `move`. A test-only U2 profile verifies routing to the separately named `pt` qBittorrent instance; U2/TTG default file strategy remains deliberately unset pending the recorded product decision.
+- Seeded source routing: Mikan → `bt` with `move`. A test-only U2 profile verifies routing to the separately named `pt` qBittorrent instance; U2 default file strategy remains deliberately unset pending the recorded product decision.
 - Configurable pure C# Mikan batch rule engine: blacklist before whitelist, invariant lowercase matching, reliable `(mikanid, episode kind, episode)` grouping, single-candidate bypass, ordered priority arrays, immediate winner short-circuit, and stable RSS-order fallback.
 - Default 720p blacklist and four editable preset groups.
 

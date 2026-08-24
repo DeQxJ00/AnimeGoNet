@@ -5,7 +5,7 @@
 内部模型禁止使用含糊的 `AnimeEntity.ID`：
 
 - `Id`：AnimeGoNet 自增/内部主键。
-- `SourceId`：输入源 profile ID，例如 `mikan`、`u2`、`ttg`；不是站点条目 ID。
+- `SourceId`：输入源 profile ID，例如 `mikan`、`u2`；不是站点条目 ID。
 - `SourceItemId`、`SourceWorkId`：可空的站点条目/作品标识，用于审计和通用作品规则。
 - `MikanId`：Mikan RSS 和页面 URL 中的作品 ID，统一简称 `mikanid`。例如 `https://mikanani.me/Home/Bangumi/3951` 的 `mikanid` 为 `3951`；旧实现或上游数据中的 `bangumiId` 仅作为兼容输入名称，不在新 UI 中使用，避免与 Bangumi.tv Subject ID 混淆。
 - `BangumiSubjectId`：Bangumi.tv Subject ID，对外兼容字段仍为 `bangumi_id`/`bgmid`。
@@ -58,7 +58,7 @@
 
 ### 1.3 已下载记录与重复集
 
-重复集/多版本采用“第一个成功记录生效”，不实现自动多版本管理。规范去重键固定为 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)`，作用域是整个媒体库，不区分 Mikan、U2、TTG、字幕组、Torrent 或下载器实例。同一 TMDB 剧集不整体阻断：只跳过已经完成的具体 Episode，其他 Episode 正常处理。
+重复集/多版本采用“第一个成功记录生效”，不实现自动多版本管理。规范去重键固定为 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)`，作用域是整个媒体库，不区分 Mikan、U2、字幕组、Torrent 或下载器实例。同一 TMDB 剧集不整体阻断：只跳过已经完成的具体 Episode，其他 Episode 正常处理。
 
 只有下载、文件策略、重命名和必要的 NFO/目录数据库写入全部成功后，才为每个 Episode 原子写入 `Downloaded=true` 的完成记录。失败、取消、只完成下载但整理失败的任务不能占用“第一个”资格。
 
@@ -78,7 +78,7 @@ TMDB 完全失败、`tmdbid=0` 的 Bangumi 兜底没有规范 TMDB Episode 键�
 
 fallback 唯一键必须包含身份类型，不能把不同编号体系拼进同一命名空间。命中记录时必须在 qBittorrent 恢复下载前停止对应文件；多文件 Torrent 仍逐文件处理。上述第二、三档不能保证跨来源、跨编号体系识别同一真实 Episode，因此 Web 必须显示当前去重范围和“可能跨来源重复”的风险，不能宣称全局去重。为了避免误伤，系统也不能仅凭相同标题、容量或来源集号跨来源阻断。
 
-当前自动 fallback 会在确认 bgmid 后读取 Bangumi Episode 列表。只有来源集号是正普通整数，且在 `type=0` Episode 中唯一命中一个正 Bangumi Episode ID 时，才使用 `bangumi_episode` 作为最高优先级 scope；Mikan/U2/TTG 因而可共享该可靠身份。小数、特别篇、文本集号、重复编号、无结果或 Bangumi Episode API 错误都不升级身份，继续使用 mikan/source/torrent 的保守边界。API 错误会写元数据 attempt 审计但不阻止已获准的 Bangumi 完全兜底。
+当前自动 fallback 会在确认 bgmid 后读取 Bangumi Episode 列表。只有来源集号是正普通整数，且在 `type=0` Episode 中唯一命中一个正 Bangumi Episode ID 时，才使用 `bangumi_episode` 作为最高优先级 scope；Mikan/U2 因而可共享该可靠身份。小数、特别篇、文本集号、重复编号、无结果或 Bangumi Episode API 错误都不升级身份，继续使用 mikan/source/torrent 的保守边界。API 错误会写元数据 attempt 审计但不阻止已获准的 Bangumi 完全兜底。
 
 为关闭并发窗口，在 qBittorrent 恢复下载前必须用 SQLite 唯一约束和事务为每个 fallback 键创建 `FallbackEpisodeClaim`。同键只有一个活动 claim；随后到达的任务等待首项结果或以 `DuplicateInProgress` 早停，不能同时进入不同下载器。下载/整理失败时 claim 进入可重试失败态并按重试策略释放或接管；完整成功时在同一事务中转为 `FallbackCompletionRecord`。进程崩溃后的过期 claim 只能在核对下载器任务和文件状态后恢复，不能仅按超时直接再次下载。
 

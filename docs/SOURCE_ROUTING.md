@@ -1,7 +1,7 @@
 # 多输入源、下载器实例与规则路由
 
-> 首版范围（2026-08-09）：项目所有者已确认 U2/TTG 暂缓。首版正式输入源只有
-> Mikan；U2/TTG 不生成默认 SourceProfile、不选择默认文件策略，也不承诺站点业务
+> 首版范围（2026-08-09）：项目所有者已确认 U2 暂缓。首版正式输入源只有
+> Mikan；U2 不生成默认 SourceProfile、不选择默认文件策略，也不承诺站点业务
 > 验收。下文相关字段、adapter 和路由是已经存在的通用扩展骨架及历史设计记录，保留
 > 用于未来恢复范围，不代表首版支持。
 
@@ -15,7 +15,6 @@ AnimeGoNet 支持多个命名下载器实例，并按输入源选择下载器和
 |---|---|---|---|
 | `mikan` | `bgmid` 必填；从 Mikan URL/RSS 取得 `mikanid` | `bt`（qBittorrent） | `move`（确认的默认值，不做种） |
 | `u2` | 首版暂缓；保留可空 `anidbid` 的协议骨架 | `pt`（仅回归夹具） | 未决定，不生成默认值 |
-| `ttg` | 首版暂缓；保留可空 `imdbid` 的协议骨架 | `pt`（仅回归夹具） | 未决定，不生成默认值 |
 
 名称和绑定均可在 Web UI 修改；表中的 `bt`、`pt` 不是硬编码关键字。
 默认 Mikan profile 的 `file_strategy=move` 也是可修改的初始值，不是协议常量；变更只影响之后创建的任务，历史/进行中任务继续使用路由快照。Web 选择 `move` 时必须提示下载完成即移动、无法继续做种。
@@ -88,7 +87,7 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 通用作品规则键为 `(source_id, source_work_key)`：
 
 - Mikan 的 `source_work_key` 固定为十进制 `mikanid`。
-- U2/TTG 可由调用方传稳定 `source_work_id`；缺失时可以处理单次任务，但不能自动套用作品级人工规则。
+- U2 可由调用方传稳定 `source_work_id`；缺失时可以处理单次任务，但不能自动套用作品级人工规则。
 - `anidbid`、`imdbid` 是作品级元数据候选，不自动等价于站点内部作品 ID。
 
 ## 4. 通用导入契约
@@ -128,11 +127,10 @@ POST /api/v1/ingest
 
 - `mikan`：必须有正整数 `bgmid`，并从 URL/RSS 或 `source_work_id` 得到正整数 `mikanid`。
 - `u2`：`anidbid` 可空；非空时必须是正整数。
-- `ttg`：`imdbid` 可空；非空时规范为小写 `tt` 加数字的 IMDb Title ID。
 
-保留旧 `/api/rss` 和 `/api/download/manager` 的 Mikan/AnimeGoHelper 行为，内部转换为同一个 ingest command，不复制第二套流水线。旧 AnimeGoHelper 没有显式传 `bgmid` 时允许 Mikan adapter 按上游方式解析补齐；新 `/api/v1/ingest` 的 Mikan 项按产品规则要求显式提供 `bgmid`。U2/TTG 沿用相同格式，仅替换 `source` 和对应 `info.anidbid`/`info.imdbid`。
+保留旧 `/api/rss` 和 `/api/download/manager` 的 Mikan/AnimeGoHelper 行为，内部转换为同一个 ingest command，不复制第二套流水线。旧 AnimeGoHelper 没有显式传 `bgmid` 时允许 Mikan adapter 按上游方式解析补齐；新 `/api/v1/ingest` 的 Mikan 项按产品规则要求显式提供 `bgmid`。U2 沿用相同格式，仅替换 `source` 和对应 `info.anidbid`。
 
-首版明确采用外部脚本/API模式：油猴、浏览器扩展或其他已登录程序取得标题、带个人 passkey 的 Torrent URL 和可选元数据 ID，再调用 AnimeGoNet。主程序不保存 U2/TTG 账号、Cookie，不执行网站登录、页面抓取、验证码或 2FA 流程。
+首版明确采用外部脚本/API模式：油猴、浏览器扩展或其他已登录程序取得标题、带个人 passkey 的 Torrent URL 和可选元数据 ID，再调用 AnimeGoNet。主程序不保存 U2 账号、Cookie，不执行网站登录、页面抓取、验证码或 2FA 流程。
 
 ### 4.1 Passkey Torrent URL 安全边界
 
@@ -181,7 +179,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - `PUT /api/v1/sources/{id}`，请求必须带 `expected_revision`；
 - `DELETE /api/v1/sources/{id}?expected_revision=...`。
 
-创建 ID 必须已经是稳定小写 ID，adapter 只接受编译期注册的 `mikan`、`u2`、`ttg`，绑定只能指向当前部署配置中已启用的 qBittorrent 实例。Host 白名单统一转小写并校验 DNS host/`*.` 通配形式。adapter 创建后不可修改；修改下载器、文件策略、白名单、规则开关或重复通知会增加 revision，只影响之后创建的任务。API 返回不可变任务和 RSS batch 引用计数；存在引用时拒绝删除，默认 `mikan` profile 始终拒绝删除。新 profile 自动初始化独立的有序 RSS 规则集，Mikan adapter 还会初始化内置 legacy filter 空配置。
+创建 ID 必须已经是稳定小写 ID，adapter 只接受编译期注册的 `mikan`、`u2`，绑定只能指向当前部署配置中已启用的 qBittorrent 实例。Host 白名单统一转小写并校验 DNS host/`*.` 通配形式。adapter 创建后不可修改；修改下载器、文件策略、白名单、规则开关或重复通知会增加 revision，只影响之后创建的任务。API 返回不可变任务和 RSS batch 引用计数；存在引用时拒绝删除，默认 `mikan` profile 始终拒绝删除。新 profile 自动初始化独立的有序 RSS 规则集，Mikan adapter 还会初始化内置 legacy filter 空配置。
 
 下载器连接以部署级 `AnimeGoOptions.Downloaders` 为基础，可由 data_path 私有覆盖增加或替换。`GET /api/v1/downloaders` 永不返回用户名/密码；`PUT/DELETE /api/v1/downloaders/{id}` 使用全局 configuration revision 原子写入覆盖，密码字段留空时保留、`clear_password=true` 时清除。修改不会热替换正在运行的客户端，响应与 Web 明确显示 `restart_required`；重启后在配置校验和客户端注册前应用。仍被 SourceProfile、导入任务或下载任务引用的实例不能停用或移除覆盖。
 
@@ -212,15 +210,15 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 
 ## 7. 插件与 NativeAOT
 
-新增强类型 `IInputSourceAdapter` 契约，内置 Mikan/U2/TTG adapter 通过显式 DI 注册。它负责输入校验、作品键规范化和可选 RSS 转换，不直接访问下载器或 SQLite。外部来源可使用既有独立 C# 可执行插件协议增加 `source` 类型；NativeAOT 主程序仍不动态加载 DLL。
+新增强类型 `IInputSourceAdapter` 契约，内置 Mikan/U2 adapter 通过显式 DI 注册。它负责输入校验、作品键规范化和可选 RSS 转换，不直接访问下载器或 SQLite。外部来源可使用既有独立 C# 可执行插件协议增加 `source` 类型；NativeAOT 主程序仍不动态加载 DLL。
 
 ## 8. 验证门禁
 
-1. 同时启动两个 fake/真实 qBittorrent 实例，`mikan` 只进入 `bt`，`u2/ttg` 只进入 `pt`。
+1. 同时启动两个 fake/真实 qBittorrent 实例，`mikan` 只进入 `bt`，`u2` 只进入 `pt`。
 2. 修改绑定后新任务走新实例，进行中任务仍走创建时的实例。
 3. 下载器离线、禁用、认证失败、路径越界和硬链接不可用均在提交前给出可操作错误。
-4. Mikan 缺 bgmid 拒绝；U2/TTG 可在可选 ID 为空时仅凭标题/Torrent进入后续匹配。
+4. Mikan 缺 bgmid 拒绝；U2 可在可选 ID 为空时仅凭标题/Torrent进入后续匹配。
 5. imdbid 格式、TMDB external ID候选、Movie误命中、TV验证失败和 Episode不一致均覆盖 fixture。
 6. 旧 Mikan API 与新通用 API 对同一输入生成相同 ingest command 和路由结果，AnimeGoHelper 原脚本无需修改。
 7. Source profile 和 downloader 的新增 API、Web UI、NativeAOT 发布二进制及 Docker 双下载器场景全部通过。
-8. Mikan 已完成的 TMDB Episode 从 U2/TTG 再次输入时同样跳过；同一多文件 Torrent 中未完成的其他 Episode 继续下载。
+8. Mikan 已完成的 TMDB Episode 从 U2 再次输入时同样跳过；同一多文件 Torrent 中未完成的其他 Episode 继续下载。

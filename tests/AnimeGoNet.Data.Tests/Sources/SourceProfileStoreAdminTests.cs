@@ -87,11 +87,11 @@ public sealed class SourceProfileStoreAdminTests
         var store = new SourceProfileStore(fixture.Database);
         await store.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
         _ = await store.CreateAsync(
-            "ttg", Definition("TTG", "ttg", "pt", "link", ["ttg.invalid"]), At(10));
+            "u2-test", Definition("U2 test", "u2", "pt", "link", ["u2.invalid"]), At(10));
 
-        await store.DeleteAsync("ttg", 1);
+        await store.DeleteAsync("u2-test", 1);
 
-        Assert.Null(await store.GetAsync("ttg"));
+        Assert.Null(await store.GetAsync("u2-test"));
         await Assert.ThrowsAsync<SourceProfileConflictException>(() => store.DeleteAsync("mikan", 1));
     }
 

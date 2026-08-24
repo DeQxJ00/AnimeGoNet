@@ -18,7 +18,7 @@ AnimeGoNet.slnx
 
 HTTP JSON 边界只使用闭合 DTO 和编译期 `ApiJsonContext`。生成的 resolver 在 Minimal API resolver chain 中排第一；所有公开、非泛型 `AnimeGoNet.App.Api` contract，以及 endpoint 方法签名里出现的每个闭合 generic envelope，都由测试穷尽枚举并要求 `GetTypeInfo` 非空。新增 DTO 不能依赖 JIT 反射兜底：漏登记会在普通测试阶段直接失败，发布的 NativeAOT API smoke 再验证真实运行边界。开放式旧配置 payload 只以显式 `JsonElement` 表示，不创建 `Dictionary<string, object>` 或运行时实体映射。
 
-内置目录当前包含 source `mikan/u2/ttg`、feed `mikan-rss`、parser `mikan-title`、filter `mikan-tool`、rename `anime-library` 和 schedule `staged-torrent-dispatch`。Legacy RSS API、Mikan 批次过滤/解析、媒体整理和 staging worker 都从同一个目录按稳定 ID 取得实现；同步静态入口仅保留为测试/兼容 facade。目录中没有 Python 条目，主程序也没有解释器、脚本执行、程序集扫描或动态 DLL 加载路径。
+内置目录当前包含 source `mikan/u2`、feed `mikan-rss`、parser `mikan-title`、filter `mikan-tool`、rename `anime-library` 和 schedule `staged-torrent-dispatch`。Legacy RSS API、Mikan 批次过滤/解析、媒体整理和 staging worker 都从同一个目录按稳定 ID 取得实现；同步静态入口仅保留为测试/兼容 facade。目录中没有 Python 条目，主程序也没有解释器、脚本执行、程序集扫描或动态 DLL 加载路径。
 
 `PluginScheduleCoordinator` 是编译期 schedule 插件的统一 Cron 宿主。它使用无反射的纯 C# 六字段解析器，注册时固定插件 ID、参数、时区、`StartRun` 和下一次执行时间；运行中增删任务会唤醒等待，不依赖轮询配置。每个触发独立执行，失败最多三次且间隔三秒；应用停止令牌会同时取消等待、重试和插件调用，HostedService 在退出前回收仍在运行的调用。目录数据库、AnimeGoNetData 更新与 Mikan RSS 导入均以编译期内置 schedule 插件注册，不通过程序集扫描自动出现。`DataUpdateScheduleManager` 串行执行移除/重建：新 Cron 无效时恢复旧任务与旧运行快照，禁用只移除定时任务；没有启动后台 worker 时仍更新手动 API 使用的运行策略，但不创建假调度。`SourceRssScheduleManager` 在启动时按已启用 SourceProfile 注册 `source-rss-*`，来源 CRUD 后立即热替换；调度参数只有规范来源 ID 和 revision，不含 RSS URL、Cookie 或 passkey。插件执行前按 revision 重新取得 URL，旧任务不访问网络；同来源重叠触发被 SQLite `running` 门禁旁路，异常退出留下的运行状态在下次启动标为 `rss_schedule_interrupted`。
 

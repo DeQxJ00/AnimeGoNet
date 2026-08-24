@@ -271,25 +271,25 @@ public sealed class SourceProfileApiTests
 
         using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
         {
-            id = "ttg",
-            display_name = "TTG",
-            adapter = "ttg",
+            id = "u2-test",
+            display_name = "U2 test",
+            adapter = "u2",
             downloader_id = "pt",
             file_strategy = "link",
-            allowed_torrent_hosts = new List<string> { "ttg.invalid" },
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
             enabled = true,
         }));
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         Assert.Equal(
             HttpStatusCode.OK,
-            (await app.Client.GetAsync("/api/v1/sources/ttg")).StatusCode);
+            (await app.Client.GetAsync("/api/v1/sources/u2-test")).StatusCode);
 
         using var deleted = await app.Client.DeleteAsync(
-            "/api/v1/sources/ttg?expected_revision=1");
+            "/api/v1/sources/u2-test?expected_revision=1");
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal(
             HttpStatusCode.NotFound,
-            (await app.Client.GetAsync("/api/v1/sources/ttg")).StatusCode);
+            (await app.Client.GetAsync("/api/v1/sources/u2-test")).StatusCode);
 
         using var defaultDelete = await app.Client.DeleteAsync(
             "/api/v1/sources/mikan?expected_revision=1");

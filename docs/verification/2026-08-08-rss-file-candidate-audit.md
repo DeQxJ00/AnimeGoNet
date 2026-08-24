@@ -5,7 +5,7 @@
 - Mikan RSS already persisted each batch, candidate, rule revision, Legacy filter decision, evaluated priority groups and the winner's `ingest_task_id`. Metadata task detail now follows that durable relation instead of inferring history from the current rule configuration.
 - One unified ingest task may be linked by multiple RSS requests. `rss_evidence` returns every linked batch in stable creation order, then the existing `files` projection shows the actual Torrent-relative file name, source Episode and locally parsed file Episode candidate.
 - The safe projection contains an opaque batch ID plus non-secret entry ordinal, SourceProfile, revisions and switches, Mikan/source Episode identity, stable decisions/groups, Legacy state and effect state. It deliberately excludes the candidate ID (it is derived from a source URL), stored Mikan URL, Torrent URL fingerprint, batch fingerprint, request URL, passkey and filesystem paths.
-- Manual Mikan/U2/TTG submissions without an RSS batch return an empty `rss_evidence` array; their existing task/file audit remains unchanged.
+- Manual Mikan/U2 submissions without an RSS batch return an empty `rss_evidence` array; their existing task/file audit remains unchanged.
 
 ## Automated evidence
 

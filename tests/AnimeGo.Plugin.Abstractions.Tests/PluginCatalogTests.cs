@@ -9,13 +9,13 @@ public sealed class PluginCatalogTests
     {
         var catalog = new PluginCatalog(
         [
-            new SourcePlugin("ttg", 20),
+            new SourcePlugin("rss", 20),
             new SourcePlugin("u2", 20),
             new SourcePlugin("mikan", 10),
         ]);
 
         Assert.Equal(
-            ["mikan", "ttg", "u2"],
+            ["mikan", "rss", "u2"],
             catalog.GetAll<IInputSourceAdapter>().Select(plugin => plugin.Descriptor.Id));
     }
 

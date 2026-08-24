@@ -4,7 +4,7 @@
 
 - The static TypeScript WebUI submits one Torrent through the existing unified `/api/v1/ingest` pipeline.
 - Enabled SourceProfile IDs populate the source selector, so the task keeps that profile's downloader, file policy and revision snapshot.
-- Mikan manual submission requires `mikanid` and `bgmid`; U2/TTG retain optional work-level references.
+- Mikan manual submission requires `mikanid` and `bgmid`; U2 retains optional work-level references.
 - New `POST /api/v1/rss/ingest` accepts an explicit enabled Mikan SourceProfile and then reuses legacy filtering, ordered priority rules, winner leasing and unified staging.
 - A non-Mikan profile is rejected before the RSS URL is fetched.
 - Torrent/RSS URL fields use password inputs, are cleared immediately after request construction and are never rendered back. Results contain only stable task/batch data and irreversible fingerprints.

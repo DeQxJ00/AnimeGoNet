@@ -55,7 +55,6 @@ public interface IScheduledPlugin : IAnimeGoPlugin
 ```csharp
 services.AddSingleton<IInputSourceAdapter, MikanSourceAdapter>();
 services.AddSingleton<IInputSourceAdapter, U2SourceAdapter>();
-services.AddSingleton<IInputSourceAdapter, TtgSourceAdapter>();
 services.AddSingleton<IFeedPlugin, MikanRssFeed>();
 services.AddSingleton<ITitleParserPlugin, AnimeTitleParser>();
 services.AddSingleton<IFeedFilterPlugin, MikanToolFilter>();
@@ -65,7 +64,7 @@ services.AddSingleton<IScheduledPlugin, MetadataRefreshTask>();
 
 `PluginCatalog` 根据稳定 ID 和配置顺序建立执行链；禁止通过反射扫描程序集寻找实现。
 
-当前宿主已经落地这一边界：目录构造函数只接受显式实例，验证插件只实现一个类别契约、描述类别一致、ID 为小写稳定格式且全局不重复，并按 `order`、`id` 确定性排序。Mikan、U2、TTG source adapter 在 `BuiltInPluginCatalog.Create()` 中逐项构造；统一导入和来源路由预览都从同一个目录解析 adapter。插件返回的来源 ID、HTTP(S) Torrent URL、标题与 SHA-256 指纹还会由宿主再次验证，不能仅凭插件声明进入 staging。
+当前宿主已经落地这一边界：目录构造函数只接受显式实例，验证插件只实现一个类别契约、描述类别一致、ID 为小写稳定格式且全局不重复，并按 `order`、`id` 确定性排序。Mikan、U2 source adapter 在 `BuiltInPluginCatalog.Create()` 中逐项构造；统一导入和来源路由预览都从同一个目录解析 adapter。插件返回的来源 ID、HTTP(S) Torrent URL、标题与 SHA-256 指纹还会由宿主再次验证，不能仅凭插件声明进入 staging。
 
 其余内置实现同样不是 marker 或展示对象：
 

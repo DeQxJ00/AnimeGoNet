@@ -1,6 +1,6 @@
 # SourceProfile 路由预览（2026-07-26）
 
-- 新增 `POST /api/v1/sources/{id}/route-preview`，复用 `IngestCommandNormalizer` 的 Mikan/U2/TTG 字段规则。
+- 新增 `POST /api/v1/sources/{id}/route-preview`，复用 `IngestCommandNormalizer` 的 Mikan/U2 字段规则。
 - 返回 SourceProfile revision、adapter、下载器及启用状态、download/save path、文件策略、两个 RSS 开关和规则 revision。
 - 预览不抓 Torrent、不写数据库任务、不连接下载器；无效输入返回逐项错误而非创建失败任务。
 - 修复统一导入把自定义 SourceProfile ID 误当 adapter 的问题：现在先按 profile ID 取配置，再按其编译期 adapter 校验，最终任务仍保存自定义来源 ID。

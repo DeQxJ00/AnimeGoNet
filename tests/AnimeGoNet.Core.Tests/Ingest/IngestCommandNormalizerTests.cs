@@ -61,9 +61,9 @@ public sealed class IngestCommandNormalizerTests
     }
 
     [Fact]
-    public void TtgImdbIdIsCanonicalLowercase()
+    public void RegisteredSourceImdbIdIsCanonicalLowercase()
     {
-        var result = IngestCommandNormalizer.Normalize("ttg", Item(title: "Show", imdbid: " TT1234567 "));
+        var result = IngestCommandNormalizer.Normalize("u2", Item(title: "Show", imdbid: " TT1234567 "));
 
         Assert.True(result.IsValid, string.Join("; ", result.Errors));
         Assert.Equal("tt1234567", result.Item!.ImdbId);
@@ -118,7 +118,7 @@ public sealed class IngestCommandNormalizerTests
                     System.Globalization.CultureInfo.InvariantCulture)),
         };
 
-        var result = IngestCommandNormalizer.Normalize("ttg", command);
+        var result = IngestCommandNormalizer.Normalize("u2", command);
 
         Assert.Contains(result.Errors, error =>
             error.Contains("publication evidence", StringComparison.Ordinal));

@@ -23,7 +23,7 @@
 | 决策 | 推荐默认值 | 影响 |
 |---|---|---|
 | 首发平台 | 已确认：`win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` | 五个 RID 均须在对应原生 GitHub runner 发布并执行 smoke。 |
-| 内置插件 | 已确认：上游五类 builtin 与 MikanTool 全部 C# 化；新增 source adapter 第六类 | Mikan/U2/TTG 输入源显式注册；MikanTool 默认启用；空规则等价于全部放行，不依赖 Python。 |
+| 内置插件 | 已确认：上游五类 builtin 与 MikanTool 全部 C# 化；新增 source adapter 第六类 | Mikan/U2 输入源显式注册；MikanTool 默认启用；空规则等价于全部放行，不依赖 Python。 |
 | 扩展插件 | 已确认：完全移除 Python；官方 C# 插件编译期注册，第三方动态插件使用独立 C# 可执行程序 | NativeAOT 主程序不加载程序集；外部插件可独立发布、安装、升级和隔离。 |
 | 旧 `.bolt` 数据 | 已确认：新程序直接使用 SQLite，不实现 .NET Bolt 二进制解析 | 配置和媒体 JSON 直接兼容；需要时用可选旧 Go 导出器转 JSON。 |
 | Web UI 技术 | 已确认：静态 TypeScript/HTML/CSS，无 Vue/React 等重型运行时框架 | TypeScript 构建后作为静态资源随 AOT 主程序发布；生产环境不包含 Node.js。 |
@@ -35,7 +35,7 @@
 | 数据更新 | 已确认：完全由 YAML 配置驱动 | 开关、Cron、manifest、自动下载/导入、保留版本数可配置并由 Web 安全编辑。 |
 | TMDB 规范命名 | 已确认：TMDB 匹配成功时名称、季度和集号全部以经官方 API 验证的 TMDB 数据为准 | TMDB 语言固定 `zh-CN`，中文名缺失时仍使用 TMDB `original_name`；Bangumi/文件名值仅保留为来源字段。 |
 | Mikan 人工规则 | 已确认：人工覆盖最高优先级；Mikan URL 中的作品 ID 统一称 `mikanid` | 相同 `mikanid` 视为同一作品，共享 `bgmid`、TMDB Series/Season 和 Episode Offset；自动解析不得覆盖。 |
-| 多源路由 | 已确认：多个命名下载器实例；首版正式来源仅 Mikan，U2/TTG 暂缓 | Mikan（bgmid必填）可绑定 `bt`；U2/TTG 的 adapter/API/`pt` 路由仅保留未来扩展骨架，不生成默认 SourceProfile 或文件策略。 |
+| 多源路由 | 已确认：多个命名下载器实例；首版正式来源仅 Mikan，U2 暂缓 | Mikan（bgmid必填）可绑定 `bt`；U2 的 adapter/API/`pt` 路由仅保留未来扩展骨架，不生成默认 SourceProfile 或文件策略。 |
 | AI 匹配 | 已确认：确定性季度链为 `TMDBFailSkip=4`、`TMDBFailBacktrace=3`、`TMDBFailUseTitleSeason=2`、`TMDBFailUseFirstSeason=1`；AI 是一个独立、默认关闭的任务级开关 | 每个任务最多一次调用和一个 Prompt，发送总标题、候选视频相对文件名/字节容量及可空 `bgmid`/`anidbid`/`imdbid`，同时返回 Series/Season/全部 Episode；非空 ID 与任务作品级绑定但跨站标题/季度/EP 仅供参考；最终结果必须由 TMDB 验证。P2/P1 是明确的本地 Season 回退例外，不验证 TMDB Season。 |
 | 在线数据源测试 | CI 默认回放 fixture；手动/定时任务运行受控 live smoke | 避免 Mikan/Bangumi/TMDB 波动导致 CI 不稳定。 |
 
@@ -174,7 +174,7 @@ docs/
 
 - 实现 SQLite bucket/key/value/TTL/批量/删除接口，API 层仍可保留 `/api/bolt` 兼容名称。
 - 实现媒体目录 JSON 扫描、anime/season/episode 索引和写入。
-- 实现全局 TMDB Episode 去重索引、来源 alias、完成记录删除和 `tvshow.nfo` 更新。规范键固定为 TMDB Series/Season/Episode；Mikan/U2/TTG 来源键只作 alias 和审计。删除规范完成记录时同时失效全部 alias。
+- 实现全局 TMDB Episode 去重索引、来源 alias、完成记录删除和 `tvshow.nfo` 更新。规范键固定为 TMDB Series/Season/Episode；Mikan/U2 来源键只作 alias 和审计。删除规范完成记录时同时失效全部 alias。
 - 不在 .NET 主程序解析 Bolt；若确有历史数据保留需求，提供独立旧 Go 导出器，将已知 bucket 导出为带 schema 的 JSON，再由 .NET 幂等导入。
 - 已实现的 schema-v1 工具链固定主库五个 bucket 与归档库 `bangumi_sub`，导出只读且拒绝覆盖；导入采用 schema v39 内容指纹审计和单事务 upsert，相同包复跑不覆盖后续缓存。用户步骤见 `LEGACY_DATA_MIGRATION.md`。
 

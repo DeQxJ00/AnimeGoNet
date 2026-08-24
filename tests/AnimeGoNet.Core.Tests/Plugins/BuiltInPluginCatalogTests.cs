@@ -12,7 +12,7 @@ public sealed class BuiltInPluginCatalogTests
         var catalog = BuiltInPluginCatalog.Create();
 
         Assert.Equal(
-            ["mikan", "u2", "ttg"],
+            ["mikan", "u2"],
             catalog.GetAll<IInputSourceAdapter>().Select(plugin => plugin.Descriptor.Id));
         Assert.All(catalog.All, plugin => Assert.True(plugin.Descriptor.IsBuiltIn));
         Assert.Single(catalog.GetAll<ITitleParserPlugin>());

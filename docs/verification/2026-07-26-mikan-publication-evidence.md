@@ -9,7 +9,7 @@ schema v19 在 `ingest_tasks` 增加：
 
 Mikan RSS 不再截断 `T` 后的时分秒。显式 `Z`、UTC、GMT 或数字偏移按来源值解析；没有偏移时默认按 `Asia/Shanghai` 解析。缺失、非法和本地时区不存在的时间不会产生规范值。
 
-发布时间证据不是统一导入公开 API 的字段。`IngestItemRequest` 使用独立 DTO，内部 `IngestItemCommand.SourceEvidence` 另有 `JsonIgnore` 防线；API 即使额外发送同名 JSON 字段，数据库两列仍为空。因此外部 Mikan/U2/TTG 程序不能伪造 AI 的发布日期最终门禁。
+发布时间证据不是统一导入公开 API 的字段。`IngestItemRequest` 使用独立 DTO，内部 `IngestItemCommand.SourceEvidence` 另有 `JsonIgnore` 防线；API 即使额外发送同名 JSON 字段，数据库两列仍为空。因此外部 Mikan/U2 程序不能伪造 AI 的发布日期最终门禁。
 
 ## NativeAOT 边界
 

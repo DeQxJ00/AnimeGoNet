@@ -35,7 +35,7 @@
 | `anisource/themoviedb` | TMDB Series/Season/Episode | 保留+扩展 | 已验证 | 上游 discover 参数、Series季度摘要、四步后缀正则、UTF-8 byte SimilarText/0.75、普通季度日期选择、AOT DTO、API key/Bearer、zh-CN→原名回退、三级官方端点验证、安全 failure taxonomy、Bangumi 日期候选、逐次超时和安全可取消重试及自动 Series/Season/Episode worker tests 已通过；季度首播日期按确认后的 `±1` 日业务窗口匹配（有意收窄上游窗口）；实际 `TmdbClient` 随机 loopback 证明 `name` 全部清理轮次→`name_cn`→每响应全部合格 Series 的完整验证早停；Mikan 有 bgmid 时先做 Bangumi/TMDB 普通 EP `±1` 日映射，失败后仅实际单文件可用文件名 EP 与最近日期补判，最多 7 日且 TMDB EP 必须同号，最终 Episode 仍经官方 endpoint 验证；SQLite `bolt/themoviedb` 成功响应缓存按 Base URL/语言/operation 分区，144 小时默认 TTL、旧 `themoviedb_cache_hour` 迁移、WebUI 配置/锁/精确删除、无凭据/搜索词泄漏、到期/损坏/身份伪造回源及 NativeAOT source-generated JSON 已验证 |
 | Bangumi archive/cache | SQLite-backed archive refresh | 替换存储 | 已验证 | 官方 `aux/latest.json`/ZIP SHA 门禁、AOT-compatible DataBuilder 的动画/正片/动画关系筛选、文本/日期/小数 EP 规范化、Subject 范围分片、确定性 schema-v2 JSONL.gz/manifest/离线 ZIP、原子输出、唯一/双端引用完整性、生产数量下限及真实 SQLite 导入已验证；v1 继续兼容，v2 关系可供 P3 离线遍历但最终 TMDB 仍在线验证；版本化下载/导入、保留/回滚和活动版本 read-through 完整串联，Actions 每日/手动构建但不自动发布到主程序仓库 |
 | 外部 Mikan 调用 | `/api/v1/ingest` + Mikan legacy adapter | 扩展 | 已验证 | Mikan 统一校验、版本化 SourceProfile、legacy contract、安全 Torrent staging、后台 qB dispatch 与本机合法下载整理闭环均已验证；Ubuntu 24.04 x86_64 CT 的 NativeAOT 容器全链也已实跑通过 |
-| 外部 U2/TTG 调用 | 保留的通用 source adapter/API/路由骨架 | 扩展 | 暂缓 | 所有者确认移出首版；不生成默认 SourceProfile、不选择默认文件策略、不新增站点登录/抓取或首版业务验收。已有 normalizer、route-preview 和测试夹具保留，未来恢复范围时重新确认 |
+| 外部 U2 调用 | 保留的通用 source adapter/API/路由骨架 | 扩展 | 暂缓 | 所有者确认移出首版；不生成默认 SourceProfile、不选择默认文件策略、不新增站点登录/抓取或首版业务验收。已有 normalizer、route-preview 和测试夹具保留，未来恢复范围时重新确认 |
 
 ## 解析、规则与元数据编排
 
@@ -90,7 +90,7 @@
 | `/api/v1/rss/ingest` | 现代 Mikan RSS 手动导入 | 扩展 | 已验证 | 明确 SourceProfile、adapter 预检后再抓取、规则 revision、winner 原子 staging、错误脱敏和带 passkey URL 不回显 Kestrel tests |
 | `/api/plugin/config` | C# built-in rule/config adapter | 保留语义 | 已验证 | 原请求名与 Base64 JSON、HTTP 200 + code 200/300、成功消息、等价别名、完整 SQLite replacement/revision/source、无 Python 文件 Kestrel tests |
 | Mikan source adapter | `IInputSourceAdapter` + `PluginCatalog` | 替换静态选择 | 已验证 | 显式注册顺序、未知 adapter、无效插件输出和真实统一导入 normalizer tests |
-| U2/TTG source adapter | 保留编译期扩展骨架 | 扩展 | 暂缓 | 代码与协议回归测试保留，但不属于首版正式支持范围 |
+| U2 source adapter | 保留编译期扩展骨架 | 扩展 | 暂缓 | 代码与协议回归测试保留，但不属于首版正式支持范围 |
 | `/api/config` | legacy deployment config + typed private overrides | 保留+扩展 | 已验证 | legacy `all/default/comment/raw` GET 与 `all/raw` PUT 保持 HTTP 200 + code 200/300、query 覆盖 body、独立 WebUI AccessKey 和“重启后应用”；JSON/Base64/YAML/版本/强类型值先在同目录隔离文件验证，通过后才以 CreateNew 保存可选原字节备份并原子替换。现代 `/api/v1/config` 返回含当前凭据的本机 editable projection，并通过明文 preview、revision PUT/DELETE、私有 0600 覆盖和 Web 两步确认管理；日志、运行状态和错误仍脱敏 |
 | `/api/bolt*` | compatibility view over SQLite | 替换 | 已验证 | bucket/key 列表、JSON value/绝对 Unix TTL、HTTP 200 + code 200/300、幂等删除、`bolt_sub` 只读和 WebUI AccessKey Kestrel tests |
 | `/api/download/manager` | legacy Mikan → unified ingest | 保留内部替换 | 已验证 | Kestrel contract 使用同一规范化/路由/持久化路径并保留 legacy envelope |
