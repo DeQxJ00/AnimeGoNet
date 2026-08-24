@@ -122,6 +122,7 @@ const otherReadaptationReviewScrollbar = element("#other-readaptation-review-scr
 const otherReadaptationReviewScrollbarThumb = element("#other-readaptation-review-scrollbar-thumb");
 const otherReadaptationReviewConfirm = element("#other-readaptation-review-confirm");
 const otherReadaptationReviewCancel = element("#other-readaptation-review-cancel");
+const otherReadaptationReviewReject = element("#other-readaptation-review-reject");
 let activeDeletePreview = null;
 let activeOtherReadaptationReview = null;
 let otherReadaptationReviewSubmitting = false;
@@ -2411,6 +2412,16 @@ function externalMediaImportReason(value) {
         external_media_file_changed: "扫描期间文件被删除、清空或替换",
     };
     return value ? labels[value] ?? value : "无";
+}
+function metadataReasonLabel(value) {
+    if (!value)
+        return "无";
+    const labels = {
+        ai_tmdb_series_candidate_conflict: "AI 返回的 TMDB Series 与当前已确认 Series 不同",
+        ai_tmdb_multilingual_series_conflict_review_required: "日文/中文等标题命中不同 TMDB Series；AI 候选已通过 TMDB 验证，等待人工决定",
+    };
+    const label = labels[value];
+    return label ? `${label} (${value})` : value;
 }
 function renderExternalMediaImportResult(target, result) {
     const container = element(target);
@@ -6330,7 +6341,9 @@ function renderOtherReadaptationReview(preview) {
         awaiting_review: "执行完成 · 等待人工审核",
         review_completed: "执行完成 · 人工审核完成",
     };
-    summary.replaceChildren(readaptationSummaryItem("任务", preview.title), readaptationSummaryItem("任务 ID", preview.task_id), readaptationSummaryItem("完成后状态", completionLabels[preview.completion_status]), readaptationSummaryItem("最终文件", `正片 ${episodeCount} · Other ${otherCount} · 重复目标 ${duplicateCount}`), readaptationSummaryItem("开始", libraryDate(preview.requested_at_utc, true)), readaptationSummaryItem("执行完成", libraryDate(preview.completed_at_utc, true)), readaptationSummaryItem("审核完成", libraryDate(preview.reviewed_at_utc, true)));
+    summary.replaceChildren(readaptationSummaryItem("审核类型", preview.review_kind === "ai_series_change"
+        ? "多语言标题命中不同 TMDB Series · AI 变更候选"
+        : "Other 重新适配"), readaptationSummaryItem("任务", preview.title), readaptationSummaryItem("任务 ID", preview.task_id), readaptationSummaryItem("完成后状态", completionLabels[preview.completion_status]), readaptationSummaryItem("最终文件", `正片 ${episodeCount} · Other ${otherCount} · 重复目标 ${duplicateCount}`), readaptationSummaryItem("开始", libraryDate(preview.requested_at_utc, true)), readaptationSummaryItem("执行完成", libraryDate(preview.completed_at_utc, true)), readaptationSummaryItem("审核完成", libraryDate(preview.reviewed_at_utc, true)));
     const files = element("#other-readaptation-review-files");
     const cards = preview.files.map((file, index) => {
         const card = document.createElement("section");
@@ -6370,7 +6383,7 @@ function renderOtherReadaptationReview(preview) {
         appendReadaptationRow(body, "TMDB Series", readaptationIdentity("TMDB", file.before_tmdb_series_id, file.before_series_name), readaptationIdentity("TMDB", file.after_tmdb_series_id, file.after_series_name));
         appendReadaptationRow(body, "Season", readaptationIdentity("S", file.before_tmdb_season_number, file.before_season_name), readaptationIdentity("S", file.after_tmdb_season_number, file.after_season_name));
         appendReadaptationRow(body, "Episode", readaptationIdentity("E", file.before_tmdb_episode_number, file.before_episode_name), readaptationIdentity("E", file.after_tmdb_episode_number, file.after_episode_name));
-        appendReadaptationRow(body, "原因", file.before_other_reason || "未记录", file.after_other_reason || "无", true);
+        appendReadaptationRow(body, "原因", metadataReasonLabel(file.before_other_reason), metadataReasonLabel(file.after_other_reason), true);
         appendReadaptationRow(body, "媒体位置", file.before_media_path, file.after_media_path || "未生成新的整理目标", true);
         appendReadaptationRow(body, "Episode 取得", "原 Other，未取得", libraryStrategy(file.after_episode_strategy));
         appendReadaptationRow(body, "共享文件", file.preserved_shared_source ? "是" : "否", file.preserved_shared_source
@@ -6405,6 +6418,13 @@ async function approveOtherReadaptation(taskId, button) {
         button.textContent = "审核窗口已打开";
         otherReadaptationReviewConfirm.hidden = preview.review_state !== "pending";
         otherReadaptationReviewConfirm.disabled = preview.review_state !== "pending";
+        const needsSeriesDecision = preview.review_kind === "ai_series_change"
+            && preview.review_decision === "pending";
+        otherReadaptationReviewReject.hidden = !needsSeriesDecision;
+        otherReadaptationReviewReject.disabled = !needsSeriesDecision;
+        otherReadaptationReviewConfirm.textContent = needsSeriesDecision
+            ? "同意 AI 的 TMDB ID 变更"
+            : "确认审核通过";
         otherReadaptationReviewCancel.disabled = false;
         otherReadaptationReviewCancel.textContent = preview.review_state === "pending" ? "返回检查" : "关闭";
         otherReadaptationReviewDialog.showModal();
@@ -6431,10 +6451,16 @@ async function confirmOtherReadaptationReview() {
     const message = element("#other-readaptation-review-message");
     message.textContent = "正在写入人工审核结果…";
     try {
-        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(active.preview.task_id)}/other-readaptation/review`, { method: "POST", headers });
+        const isSeriesChange = active.preview.review_kind === "ai_series_change"
+            && active.preview.review_decision === "pending";
+        const response = await authenticatedFetch(isSeriesChange
+            ? `/api/v1/metadata/tasks/${encodeURIComponent(active.preview.task_id)}/ai-series-change-review/accept`
+            : `/api/v1/metadata/tasks/${encodeURIComponent(active.preview.task_id)}/other-readaptation/review`, { method: "POST", headers });
         if (!response.ok)
             throw new Error(await responseError(response));
-        message.textContent = "人工审核已确认。";
+        message.textContent = isSeriesChange
+            ? "已同意 AI 的 TMDB ID 变更，已提交重新整理。完成后还需最终人工审核。"
+            : "人工审核已确认。";
         otherReadaptationReviewDialog.close();
         await loadMetadataTasks();
     }
@@ -6446,6 +6472,34 @@ async function confirmOtherReadaptationReview() {
     finally {
         otherReadaptationReviewSubmitting = false;
         otherReadaptationReviewConfirm.textContent = "确认审核通过";
+    }
+}
+async function rejectAiSeriesChangeReview() {
+    const active = activeOtherReadaptationReview;
+    if (active === null || otherReadaptationReviewSubmitting)
+        return;
+    otherReadaptationReviewSubmitting = true;
+    otherReadaptationReviewConfirm.disabled = true;
+    otherReadaptationReviewReject.disabled = true;
+    otherReadaptationReviewCancel.disabled = true;
+    const message = element("#other-readaptation-review-message");
+    message.textContent = "正在记录拒绝决定…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(active.preview.task_id)}/ai-series-change-review/reject`, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        message.textContent = "已拒绝 AI 的 TMDB ID 变更；文件继续保留在 Other。";
+        otherReadaptationReviewDialog.close();
+        await loadMetadataTasks();
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "拒绝决定写入失败");
+        otherReadaptationReviewConfirm.disabled = false;
+        otherReadaptationReviewReject.disabled = false;
+        otherReadaptationReviewCancel.disabled = false;
+    }
+    finally {
+        otherReadaptationReviewSubmitting = false;
     }
 }
 const expandedMetadataTaskIds = new Set();
@@ -7170,11 +7224,13 @@ async function loadMetadataTasks(background = false) {
             title.textContent = item.title;
             const state = document.createElement("span");
             state.className = `badge ${item.status === "metadata_failed" ? "error" : "ready"}`;
-            state.textContent = item.readaptation_review_state === "pending" && item.status === "organized"
-                ? "重新适配待审核"
-                : item.readaptation_review_state === "approved"
-                    ? "重新适配审核完成"
-                    : statusLabels[item.status] ?? item.status;
+            state.textContent = item.review_kind === "ai_series_change"
+                ? "AI TMDB 变更待审核"
+                : item.readaptation_review_state === "pending" && item.status === "organized"
+                    ? "重新适配待审核"
+                    : item.readaptation_review_state === "approved"
+                        ? "重新适配审核完成"
+                        : statusLabels[item.status] ?? item.status;
             heading.append(title, state);
             const handling = document.createElement("p");
             handling.className = `metadata-handling ${item.handling_category}`;
@@ -7233,9 +7289,11 @@ async function loadMetadataTasks(background = false) {
             if (item.readaptation_review_state === "pending") {
                 const review = document.createElement("p");
                 review.className = "metadata-failure";
-                review.textContent = item.status === "organized"
-                    ? "Other 重新适配已完成，等待人工审核"
-                    : "Other 重新适配执行中；完成后需人工审核";
+                review.textContent = item.review_kind === "ai_series_change"
+                    ? "多语言标题命中不同 TMDB Series；AI 候选已通过 TMDB 验证，等待决定是否变更 TMDB ID"
+                    : item.status === "organized"
+                        ? "Other 重新适配已完成，等待人工审核"
+                        : "Other 重新适配执行中；完成后需人工审核";
                 card.append(review);
             }
             else if (item.readaptation_review_state === "approved") {
@@ -7296,7 +7354,9 @@ async function loadMetadataTasks(background = false) {
                 const approve = document.createElement("button");
                 approve.type = "button";
                 approve.className = "retry-button";
-                approve.textContent = "确认人工审核";
+                approve.textContent = item.review_kind === "ai_series_change"
+                    ? "审核 AI TMDB 变更"
+                    : "确认人工审核";
                 approve.addEventListener("click", () => void approveOtherReadaptation(item.task_id, approve));
                 actions.append(approve);
             }
@@ -10300,6 +10360,7 @@ otherReadaptationReviewCancel.addEventListener("click", () => {
         otherReadaptationReviewDialog.close();
 });
 otherReadaptationReviewConfirm.addEventListener("click", () => void confirmOtherReadaptationReview());
+otherReadaptationReviewReject.addEventListener("click", () => void rejectAiSeriesChangeReview());
 otherReadaptationReviewPanel.addEventListener("scroll", updateOtherReadaptationReviewScrollbar, { passive: true });
 otherReadaptationReviewScrollbar.addEventListener("click", event => {
     if (event.target === otherReadaptationReviewScrollbarThumb)
@@ -10383,6 +10444,8 @@ otherReadaptationReviewDialog.addEventListener("close", () => {
     element("#other-readaptation-review-message").textContent = "";
     otherReadaptationReviewConfirm.disabled = false;
     otherReadaptationReviewConfirm.hidden = false;
+    otherReadaptationReviewReject.disabled = false;
+    otherReadaptationReviewReject.hidden = true;
     otherReadaptationReviewCancel.disabled = false;
     otherReadaptationReviewCancel.textContent = "返回检查";
     otherReadaptationReviewConfirm.textContent = "确认审核通过";

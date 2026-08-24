@@ -466,6 +466,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<NotificationProcessor>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
         builder.Services.AddSingleton<OtherFileReadaptationStore>();
+        builder.Services.AddSingleton<AiSeriesChangeReviewStore>();
         var metadataRefreshScope = new MetadataRefreshScope();
         builder.Services.AddSingleton(metadataRefreshScope);
         builder.Services.AddSingleton<PendingTmdbStore>();

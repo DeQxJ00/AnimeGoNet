@@ -186,7 +186,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 10. NativeAOT 发布二进制执行 fake AI → fake TMDB → 重命名 smoke，无反射序列化警告。
 11. 确定性季度成功且本地 EP 与 TMDB 同号 Episode 的标题/日期一致：直接采用，AI 请求数为 0。
 12. 同号不存在或存在标题/日期冲突：`ai_use_metadata_match=false` 时进入 `EpisodeUnmatched`；开启且此前未尝试时整个下载任务恰好一次语义 AI 调用。
-13. Episode 阶段首次触发统一 AI 时，返回不同 TMDB ID/Season、缺失 Episode、文件列表不一致或无效 JSON：拒绝候选，不改写已确认季度，不使用来源 EP 重命名；季度阶段已尝试时不得再次调用。
+13. Episode 阶段首次触发统一 AI 时，返回不同 Season、缺失 Episode、文件列表不一致或无效 JSON：拒绝候选，不改写已确认季度，不使用来源 EP 重命名。返回不同 TMDB Series 时先单独分类；若替代 Series/Season/Episode 全部通过 TMDB 再验证且为单正片，则只保存人工审核提议，未经“同意 AI 的 TMDB ID 变更”不得改写，拒绝后保留 Other；季度阶段已尝试时不得再次调用。
 14. 多文件仅一个 EP 需要补全时仍按整个下载任务调用一次；未匹配文件按季度 `Other` 规则处理，不影响其他已验证文件。
 15. 特别篇、OVA、NCOP、NCED 不匹配 Season 0；季度已确认时保留原名进入 `Sxx/Other`，季度未知时留在下载目录。
 16. BD 多文件任务中正片 1–12 全部映射，Menu/Summary/PV/NCOP/NCED/Logo 均返回 `matched=false + season>0 + episode=null` 时，顶层 `matched=true`，全部文件按正片或 `Other` 路径落盘。

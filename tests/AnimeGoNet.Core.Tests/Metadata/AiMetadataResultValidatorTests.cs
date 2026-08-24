@@ -182,7 +182,8 @@ public sealed class AiMetadataResultValidatorTests
             expectedSeriesId: 42,
             expectedSeasonNumber: 1);
 
-        Assert.Equal("ai_tmdb_series_changed", changedSeries.Failure!.Code);
+        Assert.Equal(MetadataFailureKind.Ambiguous, changedSeries.Failure!.Kind);
+        Assert.Equal("ai_tmdb_series_candidate_conflict", changedSeries.Failure.Code);
         Assert.Equal("ai_tmdb_season_changed", changedSeason.Failure!.Code);
     }
 

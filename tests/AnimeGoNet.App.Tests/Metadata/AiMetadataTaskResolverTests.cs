@@ -114,9 +114,40 @@ public sealed class AiMetadataTaskResolverTests
         Assert.Empty(matcher.Requests);
     }
 
+    [Fact]
+    public async Task DifferentSeriesIsFullyValidatedAndReturnedAsManualReviewProposal()
+    {
+        var matcher = new FakeMatcher { TmdbId = 90001 };
+        var resolver = new AiMetadataTaskResolver(
+            matcher,
+            new AiMetadataResultValidator(new FakeTmdbClient()),
+            new AiPublicationEvidenceResolver(
+                null,
+                new AiMatchingOptions { UseBangumiPubDateFirst = false }));
+        var claim = new MetadataTaskClaim(
+            "run", "task", "同一作品的另一语言标题", 1, 2, 3, 1, "lease",
+            TorrentFileCount: 1);
+
+        var result = await resolver.ResolveAsync(
+            claim,
+            [new MetadataTaskFileProjection("video", "episode-04.mkv", 1234, "4", "4")],
+            expectedSeriesId: 72517,
+            expectedSeasonNumber: 2);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            "ai_tmdb_multilingual_series_conflict_review_required",
+            result.Failure!.Code);
+        Assert.True(result.Failure.TmdbAccessConfirmed);
+        var proposal = Assert.IsType<ValidatedAiMetadataMatch>(result.SeriesChangeProposal);
+        Assert.Equal(90001, proposal.Series.Id);
+        Assert.Equal(4, Assert.Single(proposal.Files).Episode!.EpisodeNumber);
+    }
+
     private sealed class FakeMatcher : IAiMetadataMatcher
     {
         public List<AiMetadataMatchInput> Requests { get; } = [];
+        public int TmdbId { get; init; } = 72517;
 
         public Task<AiMetadataMatchResponse> MatchAsync(
             AiMetadataMatchInput input,
@@ -126,7 +157,7 @@ public sealed class AiMetadataTaskResolverTests
             return Task.FromResult(new AiMetadataMatchResponse(
                 new AiMetadataMatchCandidate(
                     true,
-                    72517,
+                    TmdbId,
                     input.Files.Select(file => new AiMetadataFileCandidate(
                         file.Name,
                         true,
@@ -144,6 +175,10 @@ public sealed class AiMetadataTaskResolverTests
             new(72517, "来自深渊", "メイドインアビス", null);
         private static readonly TmdbSeason Season =
             new(204984, 72517, 2, "Season 2", new DateOnly(2022, 7, 6), 12);
+        private static readonly TmdbSeries AlternateSeries =
+            new(90001, "Alternative title", "別名", null);
+        private static readonly TmdbSeason AlternateSeason =
+            new(900012, 90001, 2, "Season 2", new DateOnly(2022, 7, 6), 12);
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
             string title,
@@ -153,20 +188,33 @@ public sealed class AiMetadataTaskResolverTests
         public Task<TmdbSeries?> GetSeriesAsync(
             int seriesId,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeries?>(seriesId == Series.Id ? Series : null);
+            Task.FromResult<TmdbSeries?>(seriesId switch
+            {
+                72517 => Series,
+                90001 => AlternateSeries,
+                _ => null,
+            });
 
         public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
             int seriesId,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeriesDetails?>(
-                seriesId == Series.Id ? new TmdbSeriesDetails(Series, [Season]) : null);
+            Task.FromResult<TmdbSeriesDetails?>(seriesId switch
+            {
+                72517 => new TmdbSeriesDetails(Series, [Season]),
+                90001 => new TmdbSeriesDetails(AlternateSeries, [AlternateSeason]),
+                _ => null,
+            });
 
         public Task<TmdbSeason?> GetSeasonAsync(
             int seriesId,
             int seasonNumber,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<TmdbSeason?>(
-                seriesId == Series.Id && seasonNumber == Season.SeasonNumber ? Season : null);
+            Task.FromResult<TmdbSeason?>(seriesId switch
+            {
+                72517 when seasonNumber == 2 => Season,
+                90001 when seasonNumber == 2 => AlternateSeason,
+                _ => null,
+            });
 
         public Task<TmdbEpisode?> GetEpisodeAsync(
             int seriesId,
@@ -174,7 +222,8 @@ public sealed class AiMetadataTaskResolverTests
             int episodeNumber,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<TmdbEpisode?>(
-                seriesId == Series.Id && seasonNumber == Season.SeasonNumber && episodeNumber == 4
+                (seriesId == Series.Id || seriesId == AlternateSeries.Id)
+                    && seasonNumber == 2 && episodeNumber == 4
                     ? new TmdbEpisode(300004, seriesId, seasonNumber, episodeNumber, "Episode 4", null)
                     : null);
     }

@@ -64,6 +64,8 @@ public sealed record OtherFileReadaptationReviewPreview(
     DateTimeOffset RequestedAtUtc,
     DateTimeOffset? CompletedAtUtc,
     DateTimeOffset? ReviewedAtUtc,
+    string ReviewKind,
+    string? ReviewDecision,
     IReadOnlyList<OtherFileReadaptationReviewFileComparison> Files);
 
 public enum OtherFileReadaptationStartResult
@@ -128,7 +130,25 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
         if (requestedAt is null)
         {
             return new OtherFileReadaptationReviewPreview(
-                taskId, title, taskStatus, reviewState, DateTimeOffset.MinValue, null, null, []);
+                taskId, title, taskStatus, reviewState, DateTimeOffset.MinValue,
+                null, null, "other_readaptation", null, []);
+        }
+
+        string reviewKind = "other_readaptation";
+        string? reviewDecision = null;
+        await using (var kind = connection.CreateCommand())
+        {
+            kind.CommandText = """
+                SELECT state FROM ai_series_change_reviews
+                WHERE task_id = $task_id AND state = 'pending'
+                ORDER BY requested_at_utc DESC LIMIT 1;
+                """;
+            kind.Parameters.AddWithValue("$task_id", taskId);
+            reviewDecision = await kind.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+            if (reviewDecision is not null)
+            {
+                reviewKind = "ai_series_change";
+            }
         }
 
         var files = new List<OtherFileReadaptationReviewFileComparison>();
@@ -220,6 +240,58 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             }
         }
 
+        if (files.Count == 0 && reviewKind == "ai_series_change")
+        {
+            await using var proposal = connection.CreateCommand();
+            proposal.CommandText = """
+                SELECT review.task_file_id, file.relative_path, file.disposition,
+                       COALESCE(file.other_reason, 'ai_tmdb_multilingual_series_conflict_review_required'),
+                       review.expected_tmdb_series_id, before_series.canonical_name,
+                       review.expected_tmdb_season_number, before_season.canonical_name,
+                       file.tmdb_episode_number, before_episode.name,
+                       review.proposed_tmdb_series_id, review.proposed_series_name,
+                       review.proposed_tmdb_season_number, review.proposed_season_name,
+                       review.proposed_tmdb_episode_number, review.proposed_episode_name,
+                       (SELECT operation.target_path FROM file_operations AS operation
+                        WHERE operation.task_file_id = file.id AND operation.state = 'completed'
+                        ORDER BY operation.updated_at_utc DESC, operation.id DESC LIMIT 1),
+                       review.requested_at_utc
+                FROM ai_series_change_reviews AS review
+                JOIN task_files AS file ON file.id = review.task_file_id
+                LEFT JOIN anime_series AS before_series
+                  ON before_series.tmdb_series_id = review.expected_tmdb_series_id
+                LEFT JOIN anime_seasons AS before_season
+                  ON before_season.series_id = before_series.id
+                 AND before_season.season_number = review.expected_tmdb_season_number
+                LEFT JOIN tmdb_episodes AS before_episode
+                  ON before_episode.series_id = before_series.id
+                 AND before_episode.season_number = review.expected_tmdb_season_number
+                 AND before_episode.episode_number = file.tmdb_episode_number
+                WHERE review.task_id = $task_id
+                ORDER BY review.requested_at_utc DESC LIMIT 1;
+                """;
+            proposal.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await proposal.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var sourcePath = reader.IsDBNull(16) ? "尚未完成整理" : reader.GetString(16);
+                completedAt = DateTimeOffset.Parse(
+                    reader.GetString(17), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                files.Add(new OtherFileReadaptationReviewFileComparison(
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                    reader.GetInt32(4), reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.GetInt32(6), reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    "episode", null,
+                    reader.GetInt32(10), reader.GetString(11),
+                    reader.GetInt32(12), reader.GetString(13),
+                    reader.GetInt32(14), reader.GetString(15),
+                    "ai_metadata_tmdb_series_change_review", false,
+                    sourcePath, null));
+            }
+        }
+
         return new OtherFileReadaptationReviewPreview(
             taskId,
             title,
@@ -236,6 +308,8 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                     reviewedAt,
                     CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.RoundtripKind),
+            reviewKind,
+            reviewDecision,
             files);
     }
 
@@ -564,6 +638,9 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
               AND NOT EXISTS (
                 SELECT 1 FROM other_file_readaptation_jobs AS job
                 WHERE job.task_id = ingest_tasks.id AND job.state = 'pending')
+              AND NOT EXISTS (
+                SELECT 1 FROM ai_series_change_reviews AS review
+                WHERE review.task_id = ingest_tasks.id AND review.state = 'pending')
             RETURNING 1;
             """;
         command.Parameters.AddWithValue("$task_id", taskId);

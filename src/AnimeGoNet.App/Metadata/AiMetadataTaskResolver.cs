@@ -10,7 +10,8 @@ public sealed record AiMetadataTaskResolution(
     MetadataFailure? Failure,
     AiPublicationEvidenceResult? Publication,
     AiMetadataProviderUsage? Usage,
-    bool IsApplicable)
+    bool IsApplicable,
+    ValidatedAiMetadataMatch? SeriesChangeProposal = null)
 {
     public bool IsSuccess => IsApplicable && Value is not null && Failure is null;
 }
@@ -99,6 +100,29 @@ public sealed class AiMetadataTaskResolver(
             expectedSeriesId,
             expectedSeasonNumber,
             cancellationToken).ConfigureAwait(false);
+        ValidatedAiMetadataMatch? seriesChangeProposal = null;
+        if (string.Equals(
+                validated.Failure?.Code,
+                "ai_tmdb_series_candidate_conflict",
+                StringComparison.Ordinal))
+        {
+            var proposalValidation = await validator.ValidateAsync(
+                input,
+                response.Candidate,
+                expectedSeriesId: null,
+                expectedSeasonNumber,
+                cancellationToken).ConfigureAwait(false);
+            if (proposalValidation.IsSuccess)
+            {
+                seriesChangeProposal = proposalValidation.Value;
+                validated = new AiMetadataValidationResult(
+                    null,
+                    new MetadataFailure(
+                        MetadataFailureKind.Ambiguous,
+                        "ai_tmdb_multilingual_series_conflict_review_required",
+                        TmdbAccessConfirmed: true));
+            }
+        }
         await SaveDebugAsync(
             response.DebugChain,
             validated,
@@ -110,7 +134,8 @@ public sealed class AiMetadataTaskResolver(
             validated.Failure,
             publication,
             response.Usage,
-            IsApplicable: true);
+            IsApplicable: true,
+            seriesChangeProposal);
     }
 
     private static async Task<AiMetadataDebugPreAiContext> CreateDebugContextAsync(

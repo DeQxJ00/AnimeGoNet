@@ -216,6 +216,7 @@ public sealed record MetadataTaskListProjection(
     int PendingFileCount,
     DateTimeOffset UpdatedAtUtc,
     string ReadaptationReviewState,
+    string? ReviewKind,
     TmdbResolutionEvidence? SeriesResolution = null,
     TmdbResolutionEvidence? SeasonResolution = null,
     TmdbResolutionEvidence? EpisodeResolution = null,

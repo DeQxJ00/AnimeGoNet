@@ -99,6 +99,71 @@ public sealed class OtherFileReadaptationApiTests
             Assert.Equal(5, await command.ExecuteNonQueryAsync());
         }
 
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var candidate = connection.CreateCommand())
+        {
+            candidate.CommandText = """
+                INSERT INTO ai_series_change_reviews (
+                    id, task_id, task_file_id, state,
+                    expected_tmdb_series_id, expected_tmdb_season_number,
+                    proposed_tmdb_series_id, proposed_series_name, proposed_original_name,
+                    proposed_series_first_air_date, proposed_series_poster_path,
+                    proposed_tmdb_season_id, proposed_tmdb_season_number,
+                    proposed_season_name, proposed_season_air_date,
+                    proposed_season_episode_count, proposed_season_poster_path,
+                    proposed_tmdb_episode_id, proposed_tmdb_episode_number,
+                    proposed_episode_name, proposed_episode_air_date,
+                    requested_at_utc, reviewed_at_utc)
+                SELECT 'ai-series-review-api', $task_id, id, 'pending',
+                       65942, 1, 70000, 'AI Candidate', 'AI Candidate',
+                       '2026-07-05', NULL, 70001, 1, 'Season 1', '2026-07-05',
+                       12, NULL, 70006, 6, 'Episode 6', '2026-08-09', $now, NULL
+                FROM task_files WHERE task_id = $task_id;
+                UPDATE ingest_tasks
+                SET readaptation_review_state = 'pending',
+                    readaptation_review_requested_at_utc = $now,
+                    readaptation_reviewed_at_utc = NULL
+                WHERE id = $task_id;
+                """;
+            candidate.Parameters.AddWithValue("$task_id", taskId);
+            candidate.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(2, await candidate.ExecuteNonQueryAsync());
+        }
+
+        using (var aiReview = await app.Client.GetAsync(
+                   $"/api/v1/metadata/tasks/{taskId}/other-readaptation/review"))
+        {
+            Assert.Equal(HttpStatusCode.OK, aiReview.StatusCode);
+            using var aiReviewJson = JsonDocument.Parse(await aiReview.Content.ReadAsStreamAsync());
+            Assert.Equal("ai_series_change", aiReviewJson.RootElement
+                .GetProperty("review_kind").GetString());
+            Assert.Equal("pending", aiReviewJson.RootElement
+                .GetProperty("review_decision").GetString());
+            Assert.Equal(70000, aiReviewJson.RootElement.GetProperty("files")[0]
+                .GetProperty("after_tmdb_series_id").GetInt32());
+        }
+
+        using (var tasks = await app.Client.GetAsync(
+                   "/api/v1/metadata/tasks?page=1&page_size=100&review_state=pending"))
+        {
+            Assert.Equal(HttpStatusCode.OK, tasks.StatusCode);
+            using var tasksJson = JsonDocument.Parse(await tasks.Content.ReadAsStreamAsync());
+            var task = Assert.Single(tasksJson.RootElement.GetProperty("items")
+                .EnumerateArray()
+                .Where(item => item.GetProperty("task_id").GetString() == taskId));
+            Assert.Equal("ai_series_change", task.GetProperty("review_kind").GetString());
+        }
+
+        using (var reject = await app.Client.PostAsync(
+                   $"/api/v1/metadata/tasks/{taskId}/ai-series-change-review/reject",
+                   null))
+        {
+            Assert.Equal(HttpStatusCode.OK, reject.StatusCode);
+            using var rejectJson = JsonDocument.Parse(await reject.Content.ReadAsStreamAsync());
+            Assert.Equal("rejected", rejectJson.RootElement.GetProperty("decision").GetString());
+            Assert.Equal("kept_in_other", rejectJson.RootElement.GetProperty("result").GetString());
+        }
+
         using var preview = await app.Client.GetAsync(
             $"/api/v1/metadata/tasks/{taskId}/other-readaptation/preview");
         Assert.Equal(HttpStatusCode.OK, preview.StatusCode);

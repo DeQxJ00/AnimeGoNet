@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 59;
+    public const int CurrentVersion = 60;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -123,7 +123,43 @@ public static class DatabaseSchema
             "movie_file_disposition",
             MovieFileDisposition,
             RequiresForeignKeysDisabled: true),
+        new SchemaMigration(
+            60,
+            "ai_series_change_review",
+            AiSeriesChangeReview),
     ];
+
+    private const string AiSeriesChangeReview = """
+        CREATE TABLE ai_series_change_reviews (
+            id TEXT NOT NULL PRIMARY KEY,
+            task_id TEXT NOT NULL REFERENCES ingest_tasks(id) ON DELETE CASCADE,
+            task_file_id TEXT NOT NULL REFERENCES task_files(id) ON DELETE CASCADE,
+            state TEXT NOT NULL CHECK (state IN ('pending', 'accepted', 'rejected')),
+            expected_tmdb_series_id INTEGER NOT NULL CHECK (expected_tmdb_series_id > 0),
+            expected_tmdb_season_number INTEGER NOT NULL CHECK (expected_tmdb_season_number > 0),
+            proposed_tmdb_series_id INTEGER NOT NULL CHECK (proposed_tmdb_series_id > 0),
+            proposed_series_name TEXT NOT NULL,
+            proposed_original_name TEXT NOT NULL,
+            proposed_series_first_air_date TEXT,
+            proposed_series_poster_path TEXT,
+            proposed_tmdb_season_id INTEGER NOT NULL CHECK (proposed_tmdb_season_id > 0),
+            proposed_tmdb_season_number INTEGER NOT NULL CHECK (proposed_tmdb_season_number > 0),
+            proposed_season_name TEXT NOT NULL,
+            proposed_season_air_date TEXT,
+            proposed_season_episode_count INTEGER NOT NULL CHECK (proposed_season_episode_count >= 0),
+            proposed_season_poster_path TEXT,
+            proposed_tmdb_episode_id INTEGER NOT NULL CHECK (proposed_tmdb_episode_id > 0),
+            proposed_tmdb_episode_number INTEGER NOT NULL CHECK (proposed_tmdb_episode_number > 0),
+            proposed_episode_name TEXT NOT NULL,
+            proposed_episode_air_date TEXT,
+            requested_at_utc TEXT NOT NULL,
+            reviewed_at_utc TEXT,
+            UNIQUE(task_id, task_file_id)
+        ) STRICT;
+
+        CREATE INDEX ix_ai_series_change_reviews_task_state
+        ON ai_series_change_reviews(task_id, state, requested_at_utc DESC);
+        """;
 
     private const string MovieFileDisposition = """
         ALTER TABLE task_files RENAME TO task_files_v58;

@@ -950,7 +950,8 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("duplicate_file_count")] int DuplicateFileCount,
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
-    [property: JsonPropertyName("readaptation_review_state")] string ReadaptationReviewState);
+    [property: JsonPropertyName("readaptation_review_state")] string ReadaptationReviewState,
+    [property: JsonPropertyName("review_kind")] string? ReviewKind);
 
 public sealed record OtherFileReadaptationFileResponse(
     [property: JsonPropertyName("task_file_id")] string TaskFileId,
@@ -977,6 +978,11 @@ public sealed record OtherFileReadaptationStartResponse(
 public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("review_state")] string ReviewState);
+
+public sealed record AiSeriesChangeReviewDecisionResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("decision")] string Decision,
+    [property: JsonPropertyName("result")] string Result);
 
 public sealed record OtherFileReadaptationManualOverrideRequest(
     [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
@@ -1028,6 +1034,8 @@ public sealed record OtherFileReadaptationReviewPreviewResponse(
     [property: JsonPropertyName("requested_at_utc")] DateTimeOffset RequestedAtUtc,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
     [property: JsonPropertyName("reviewed_at_utc")] DateTimeOffset? ReviewedAtUtc,
+    [property: JsonPropertyName("review_kind")] string ReviewKind,
+    [property: JsonPropertyName("review_decision")] string? ReviewDecision,
     [property: JsonPropertyName("files")] IReadOnlyList<OtherFileReadaptationReviewFileResponse> Files);
 
 public sealed record MetadataTaskDetailResponse(

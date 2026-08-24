@@ -15,6 +15,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
     AiMetadataTaskResolver aiMetadata,
     MikanTrustedOffsetStore trustedOffsets,
     DuplicateHitNotifier duplicateNotifier,
+    AiSeriesChangeReviewStore seriesChangeReviews,
     AnimeGoOptions options,
     IBangumiSubjectClient bangumiSubjects,
     IBangumiEpisodeClient? bangumiEpisodes = null,
@@ -689,6 +690,14 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
         if (!resolved.IsSuccess)
         {
+            if (resolved.SeriesChangeProposal is not null)
+            {
+                await seriesChangeReviews.RecordAsync(
+                    claim,
+                    resolved.SeriesChangeProposal,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken).ConfigureAwait(false);
+            }
             return await HandleAiFailureAsync(
                 claim,
                 results,

@@ -33,6 +33,25 @@ Episode。服务端必须通过 TMDB Series/Season/Episode 三个 endpoint 验�
 - “审核通过”只完成审核，不隐式删除 Other。需要删除重复或不需要的实体文件时，
   必须另走显式、可预览的删除操作。
 
+### AI 提议更换 TMDB Series
+
+Episode 阶段已经确认 Series/Season 后，AI 偶尔会因日文名、中文名分别命中 TMDB
+中的两个重复 Series。该情况使用独立原因
+`ai_tmdb_multilingual_series_conflict_review_required`，不再混入普通 AI 匹配失败：
+
+1. 原 Series 保持不变，AI 返回值不能直接覆盖数据库、目录或 NFO；
+2. 主程序忽略原 Series 约束，再对 AI 候选执行完整的 TMDB Series、普通 Season、
+   Episode 身份验证；验证失败仍按真实 TMDB/网络/协议错误处理；
+3. 首版仅对恰好一个正片 Episode 的任务建立变更提议，schema v60 保存原 Series/Season、
+   经验证的候选 Series/Season/Episode、请求时间与接受/拒绝决定；
+4. 文件先按独立失败原因整理到当前季度 Other。任务完成后，审核弹窗以表格显示原
+   TMDB 与 AI 候选，提供“同意 AI 的 TMDB ID 变更”和“拒绝并保留 Other”；
+5. 同意时服务端再次在线验证候选并复用人工 TMDB 修正的 claim/去重/共享文件安全
+   整理；拒绝时不移动媒体。接受后的重新整理完成仍需要最后一次人工审核，拒绝则
+   直接记录人工决定并允许按既有显式删除语义处理任务。
+
+此流程不修改或追加正式 AI Prompt，只改变主程序对已验证候选的分类和人工门禁。
+
 ## 安全门禁
 
 首版只支持任务快照中的 `move` / `wait_move`。执行前必须同时满足：
@@ -51,7 +70,8 @@ SQLite schema v47 的 `other_file_readaptation_jobs` 按文件保存旧媒体路
 `other_reason`、请求时间和完成时间。重新适配期间，媒体整理只领取这些文件，并把旧
 媒体路径作为源路径。全部文件操作和完成记录提交后，任务直接恢复为 `organized`，
 不会再次进入下载器清理阶段。schema v49 固化审核前的 TMDB/归类快照；schema v50
-为人工修正保存独立的 `manual_review_override` 来源。
+为人工修正保存独立的 `manual_review_override` 来源。schema v60 的
+`ai_series_change_reviews` 保存 AI 跨 Series 候选与人工接受/拒绝审计。
 
 ## 验收
 
@@ -61,4 +81,7 @@ SQLite schema v47 的 `other_file_readaptation_jobs` 按文件保存旧媒体路
 - 人工修正：Data tests 覆盖唯一目标重新入队和重复目标保留 Other；API test 使用 fake
   TMDB 完成三段验证并证明审核完成后仍可只读查看结果；Web contract 覆盖手工表单及
   Other 不自动删除说明。
+- AI Series 变更：Core/App tests 覆盖原 Series 冲突分类与候选的 TMDB 三层再验证；
+  Data tests 覆盖候选快照、审核对照和拒绝后 Other 不移动；Web contract 覆盖两个
+  明确决定按钮，普通“审核通过”接口不能绕过待决定候选。
 - NativeAOT：随正常 win-x64 发布 smoke 验证端点和静态 WebUI。

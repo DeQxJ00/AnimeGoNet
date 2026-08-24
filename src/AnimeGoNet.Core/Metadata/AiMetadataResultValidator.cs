@@ -25,7 +25,10 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
         var tmdbId = candidate.TmdbId!.Value;
         if (expectedSeriesId is not null && tmdbId != expectedSeriesId.Value)
         {
-            return Failed(MetadataFailureKind.Protocol, "ai_tmdb_series_changed", false);
+            return Failed(
+                MetadataFailureKind.Ambiguous,
+                "ai_tmdb_series_candidate_conflict",
+                false);
         }
 
         TmdbSeriesDetails? details;

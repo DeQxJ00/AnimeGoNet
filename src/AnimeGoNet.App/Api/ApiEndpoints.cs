@@ -139,6 +139,12 @@ public static class ApiEndpoints
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
             PreviewOtherFileReadaptationReview);
         app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/ai-series-change-review/accept",
+            AcceptAiSeriesChangeReview);
+        app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/ai-series-change-review/reject",
+            RejectAiSeriesChangeReview);
+        app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review/files/{taskFileId}/manual-override",
             ApplyOtherFileReadaptationManualOverride);
         app.MapGet("/api/v1/metadata/tasks", MetadataTasks);
@@ -5451,8 +5457,15 @@ public static class ApiEndpoints
     private static async Task<IResult> ApproveOtherFileReadaptationReview(
         string taskId,
         OtherFileReadaptationStore store,
+        AiSeriesChangeReviewStore seriesChangeReviews,
         CancellationToken cancellationToken)
     {
+        if (await seriesChangeReviews.GetPendingAsync(taskId, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            return TypedResults.Conflict(Error(
+                "ai_tmdb_series_change_decision_required",
+                "请先明确同意或拒绝 AI 提议的 TMDB Series 变更。"));
+        }
         var result = await store.ApproveReviewAsync(
             taskId,
             DateTimeOffset.UtcNow,
@@ -5503,6 +5516,8 @@ public static class ApiEndpoints
             preview.RequestedAtUtc,
             preview.CompletedAtUtc,
             preview.ReviewedAtUtc,
+            preview.ReviewKind,
+            preview.ReviewDecision,
             preview.Files.Select(file => new OtherFileReadaptationReviewFileResponse(
                 file.TaskFileId,
                 file.SourceName,
@@ -5526,6 +5541,77 @@ public static class ApiEndpoints
                 file.PreservedSharedSource,
                 file.BeforeMediaPath,
                 file.AfterMediaPath)).ToArray()));
+    }
+
+    private static async Task<IResult> AcceptAiSeriesChangeReview(
+        string taskId,
+        AiSeriesChangeReviewStore reviews,
+        TmdbAuthority authority,
+        OtherFileReadaptationStore readaptation,
+        CancellationToken cancellationToken)
+    {
+        var proposal = await reviews.GetPendingAsync(taskId, cancellationToken).ConfigureAwait(false);
+        if (proposal is null)
+        {
+            return TypedResults.Conflict(Error(
+                "ai_tmdb_series_change_review_not_pending",
+                "任务没有待决定的 AI TMDB Series 变更。"));
+        }
+
+        var validation = await authority.ValidateEpisodeAsync(
+            proposal.Proposed.Series.Id,
+            proposal.Proposed.Season.SeasonNumber,
+            proposal.Proposed.Episode.EpisodeNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (!validation.IsSuccess)
+        {
+            return TypedResults.UnprocessableEntity(Error(
+                validation.Failure!.Code,
+                "AI 提议的 TMDB Series / Season / Episode 重新验证失败，未修改任务。"));
+        }
+
+        var apply = await readaptation.ApplyManualOverrideAsync(
+            taskId,
+            proposal.TaskFileId,
+            validation.Value!,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        if (apply is OtherFileReadaptationManualOverrideResult.NotFound
+            or OtherFileReadaptationManualOverrideResult.NotEligible)
+        {
+            return TypedResults.Conflict(Error(
+                "ai_tmdb_series_change_review_not_eligible",
+                "任务尚未整理完成，或候选文件已不处于可审核的 Other 状态。"));
+        }
+
+        await reviews.AcceptAsync(taskId, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new AiSeriesChangeReviewDecisionResponse(
+            taskId,
+            "accepted",
+            apply == OtherFileReadaptationManualOverrideResult.OrganizationQueued
+                ? "organization_queued"
+                : "duplicate_kept_in_other"));
+    }
+
+    private static async Task<IResult> RejectAiSeriesChangeReview(
+        string taskId,
+        AiSeriesChangeReviewStore reviews,
+        CancellationToken cancellationToken)
+    {
+        var result = await reviews.RejectAsync(
+            taskId,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return result switch
+        {
+            AiSeriesChangeReviewDecisionResult.Updated => TypedResults.Ok(
+                new AiSeriesChangeReviewDecisionResponse(taskId, "rejected", "kept_in_other")),
+            AiSeriesChangeReviewDecisionResult.NotFound => TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found.")),
+            _ => TypedResults.Conflict(Error(
+                "ai_tmdb_series_change_review_not_pending",
+                "任务没有待决定的 AI TMDB Series 变更。")),
+        };
     }
 
     private static async Task<IResult> ApplyOtherFileReadaptationManualOverride(
@@ -8255,7 +8341,8 @@ public static class ApiEndpoints
             item.DuplicateFileCount,
             item.PendingFileCount,
             item.UpdatedAtUtc,
-            item.ReadaptationReviewState);
+            item.ReadaptationReviewState,
+            item.ReviewKind);
 
     private static IOrderedEnumerable<MetadataTaskListProjection> OrderMetadataTasks(
         IEnumerable<MetadataTaskListProjection> items,

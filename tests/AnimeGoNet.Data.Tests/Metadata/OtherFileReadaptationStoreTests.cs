@@ -184,6 +184,50 @@ public sealed class OtherFileReadaptationStoreTests
         Assert.Null(comparison.AfterMediaPath);
     }
 
+    [Fact]
+    public async Task AiSeriesChangeProposalIsShownAndCanBeRejectedWithoutMovingOther()
+    {
+        await using var fixture = await ReadaptationFixture.CreateAsync();
+        var reviews = new AiSeriesChangeReviewStore(fixture.Database);
+        var proposal = new ValidatedAiMetadataMatch(
+            CanonicalEpisode().Series,
+            [new ValidatedAiMetadataFile(
+                new AiMetadataFileInput("episode.mkv", 5),
+                CanonicalEpisode().Season,
+                CanonicalEpisode().Episode,
+                null)]);
+        var claim = new MetadataEpisodeTaskClaim(
+            new MetadataTaskClaim(
+                "run", fixture.TaskId, "Readaptation", 3951, 583, 547888, 1, "lease",
+                TorrentFileCount: 1),
+            100,
+            2,
+            [new MetadataTaskFileProjection(fixture.FileId, "episode.mkv", 5, null, null)]);
+
+        Assert.True(await reviews.RecordAsync(claim, proposal, DateTimeOffset.UtcNow));
+        var pending = Assert.IsType<AiSeriesChangeReviewProposal>(
+            await reviews.GetPendingAsync(fixture.TaskId));
+        Assert.Equal(100, pending.ExpectedTmdbSeriesId);
+        Assert.Equal(200, pending.Proposed.Series.Id);
+
+        var preview = Assert.IsType<OtherFileReadaptationReviewPreview>(
+            await fixture.Store.GetReviewPreviewAsync(fixture.TaskId));
+        Assert.Equal("ai_series_change", preview.ReviewKind);
+        Assert.Equal("pending", preview.ReviewDecision);
+        var comparison = Assert.Single(preview.Files);
+        Assert.Equal(100, comparison.BeforeTmdbSeriesId);
+        Assert.Equal(200, comparison.AfterTmdbSeriesId);
+        Assert.Equal(9, comparison.AfterTmdbEpisodeNumber);
+
+        Assert.Equal(
+            AiSeriesChangeReviewDecisionResult.Updated,
+            await reviews.RejectAsync(fixture.TaskId, DateTimeOffset.UtcNow));
+        Assert.Null(await reviews.GetPendingAsync(fixture.TaskId));
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("other", state.FileDisposition);
+        Assert.Equal("organized", state.TaskStatus);
+    }
+
     private static TmdbCanonicalEpisode CanonicalEpisode() => new(
         new TmdbSeries(200, "Canonical Series", "Original Series", new DateOnly(2025, 1, 1)),
         new TmdbSeason(300, 200, 3, "Season 3", new DateOnly(2025, 1, 1), 12),

@@ -2674,7 +2674,18 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                    SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
-                   task.updated_at_utc, task.readaptation_review_state
+                   task.updated_at_utc, task.readaptation_review_state,
+                   CASE
+                       WHEN EXISTS (
+                           SELECT 1
+                           FROM ai_series_change_reviews AS review
+                           WHERE review.task_id = task.id
+                             AND review.state = 'pending'
+                       ) THEN 'ai_series_change'
+                       WHEN task.readaptation_review_state = 'pending'
+                           THEN 'other_readaptation'
+                       ELSE NULL
+                   END
             FROM ingest_tasks AS task
             LEFT JOIN task_files AS file ON file.task_id = task.id
             GROUP BY task.id
@@ -2829,6 +2840,17 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
                        task.updated_at_utc, task.readaptation_review_state,
+                       CASE
+                           WHEN EXISTS (
+                               SELECT 1
+                               FROM ai_series_change_reviews AS review
+                               WHERE review.task_id = task.id
+                                 AND review.state = 'pending'
+                           ) THEN 'ai_series_change'
+                           WHEN task.readaptation_review_state = 'pending'
+                               THEN 'other_readaptation'
+                           ELSE NULL
+                       END,
                        task.source_profile_id, task.source_profile_revision,
                        task.source_item_id, task.source_work_id, task.groupid,
                        task.anidb_id, task.imdb_id,
@@ -2849,26 +2871,26 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             summary = ReadTaskListProjection(reader);
             var sourceId = summary.SourceId;
             source = new MetadataTaskSourceProjection(
-                reader.GetString(34),
-                reader.GetInt64(35),
+                reader.GetString(35),
+                reader.GetInt64(36),
                 sourceId,
                 summary.Title,
-                reader.IsDBNull(36)
-                    ? null
-                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(36)),
                 reader.IsDBNull(37)
                     ? null
-                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(37)),
+                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(37)),
+                reader.IsDBNull(38)
+                    ? null
+                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(38)),
                 summary.MikanId,
-                reader.IsDBNull(38) ? null : reader.GetInt32(38),
-                summary.BangumiSubjectId,
                 reader.IsDBNull(39) ? null : reader.GetInt32(39),
-                reader.IsDBNull(40) ? null : reader.GetString(40),
-                reader.GetInt64(41) != 0,
-                reader.IsDBNull(42)
+                summary.BangumiSubjectId,
+                reader.IsDBNull(40) ? null : reader.GetInt32(40),
+                reader.IsDBNull(41) ? null : reader.GetString(41),
+                reader.GetInt64(42) != 0,
+                reader.IsDBNull(43)
                     ? null
                     : DateTimeOffset.Parse(
-                        reader.GetString(42),
+                        reader.GetString(43),
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind));
         }
@@ -3008,6 +3030,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind),
             reader.GetString(33),
+            reader.IsDBNull(34) ? null : reader.GetString(34),
             seriesResolution,
             seasonResolution,
             episodeResolution,
