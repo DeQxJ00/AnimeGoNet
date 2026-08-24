@@ -3,6 +3,23 @@ namespace AnimeGoNet.App.Tests.Delivery;
 public sealed class UnverifiedDeliveryStatusContractTests
 {
     [Fact]
+    public void MainRepositoryDoesNotOwnRetiredDataOrUpstreamBaselineWorkflows()
+    {
+        var root = RepositoryRoot();
+
+        Assert.False(File.Exists(Path.Combine(
+            root,
+            ".github",
+            "workflows",
+            "animegonet-data.yml")));
+        Assert.False(File.Exists(Path.Combine(
+            root,
+            ".github",
+            "workflows",
+            "upstream-go-baseline.yml")));
+    }
+
+    [Fact]
     public void TodoSeparatesGeneratedUnverifiedGatesFromCompletedImplementation()
     {
         var root = RepositoryRoot();
@@ -14,7 +31,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("- [~]", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(6, unverified.Length);
+        Assert.Equal(5, unverified.Length);
         Assert.All(unverified, line => Assert.Contains("未验证", line, StringComparison.Ordinal));
 
         AssertUnverified(unverified, "优雅退出和取消传播");
@@ -22,7 +39,6 @@ public sealed class UnverifiedDeliveryStatusContractTests
         AssertUnverified(unverified, "Linux x64/arm64 NativeAOT");
         AssertUnverified(unverified, "五 RID NativeAOT artifact");
         AssertUnverified(unverified, "首个可用预发布自动化");
-        AssertUnverified(unverified, "AnimeGoNetData 不可变 Release");
 
         AssertCompleted(todo, "移植 Mikan：");
         AssertCompleted(todo, "移植 feed → filter → parse → download pipeline");
@@ -31,6 +47,7 @@ public sealed class UnverifiedDeliveryStatusContractTests
         AssertCompleted(todo, "多文件任务逐集验证 TMDB Episode");
         AssertCompleted(todo, "TypeScript 7 strict 类型检查");
         AssertCompleted(todo, "Linux Go 容器基线 job");
+        AssertCompleted(todo, "AnimeGoNetData 构建/发布 Action 已移出主仓库");
     }
 
     [Fact]
@@ -55,7 +72,6 @@ public sealed class UnverifiedDeliveryStatusContractTests
         var root = RepositoryRoot();
         var paths = new[]
         {
-            ".github/workflows/upstream-go-baseline.yml",
             ".github/workflows/animegonet-docker.yml",
             "Dockerfile.animegonet",
             "Dockerfile.container-e2e-fixture",

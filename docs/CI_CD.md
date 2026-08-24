@@ -7,8 +7,6 @@
 - `.github/workflows/dotnet-ci.yml`：除三平台 .NET/WebUI 门禁外，用 Go 1.22 对只读 legacy bbolt exporter 的真实 fixture 运行测试。
 - `.github/workflows/animegonet-docker.yml`：使用 Buildx 构建 `linux/amd64`、`linux/arm64`，并加载 amd64 镜像验证 API、SQLite、NativeAOT 和挂载路径。
 
-原上游 Go 工作流保留作为行为基准，没有覆盖或删除。
-
 `.NET` build-test job 另把公开 `wetor/AnimeGo@c7475dfc55a374cd0dd08821bf17125dab1e3145`
 检出到独立 `upstream-animego` 子目录，只供 parity tests 读取。当前四个真实
 `.torrent` 测试直接解析原文件，但 DTO/断言/TRX 均不投影 announce 或 tracker；
@@ -44,13 +42,9 @@ Prerelease。`--verify-tag` 禁止工作流暗中创建标签，`--latest=false`
 稳定最新版；工作流不使用覆盖资产的 `--clobber`。普通 branch/PR/workflow_dispatch
 只构建 artifact，不发布 Release。
 
-AnimeGoNetData 日常工作流使用仓库变量 `ANIMEGONET_DATA_REPOSITORY`
-（必须是独立仓库且不能等于主程序仓库）、可选目标分支变量
-`ANIMEGONET_DATA_TARGET` 和仅对目标仓库有 Release 写权限的 secret
-`ANIMEGONET_DATA_TOKEN`。主仓库 workflow 权限仍为 `contents: read`。DataBuilder
-生成包含上游精确 UTC 秒的版本号与 `SHA256SUMS`；发布先建 draft，已有同名资产必须
-逐字节相等，缺失资产只允许补进 draft，远端集合和每个字节再次校验后才标记 public
-和 latest。已发布版本缺文件、多文件或内容不同会失败，工作流不使用 `--clobber`。
+AnimeGoNetData 的构建和 Release 发布由独立数据仓库自行负责，主程序仓库不再定义或
+调度该 Action。这里仍保留 DataBuilder、数据格式、离线导入和在线更新客户端，供独立
+数据仓库生成包以及 AnimeGoNet 主程序消费经过校验的发布资产。
 
 ## Docker 契约
 

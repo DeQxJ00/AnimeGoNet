@@ -6,7 +6,6 @@ using AnimeGoNet.Core.DataUpdate;
 using AnimeGoNet.Data.DataUpdate;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.DataBuilder;
-using YamlDotNet.RepresentationModel;
 
 namespace AnimeGoNet.Data.Tests.DataUpdate;
 
@@ -280,49 +279,6 @@ public sealed class BangumiArchivePackageBuilderTests
         {
             Directory.Delete(root, recursive: true);
         }
-    }
-
-    [Fact]
-    public async Task ScheduledWorkflowPublishesVerifiedImmutableExternalRelease()
-    {
-        var workflow = await File.ReadAllTextAsync(Path.Combine(
-            RepositoryRoot(),
-            ".github",
-            "workflows",
-            "animegonet-data.yml"));
-        var yaml = new YamlStream();
-        yaml.Load(new StringReader(workflow));
-
-        Assert.Single(yaml.Documents);
-        Assert.Contains("bangumi/Archive/master/aux/latest.json", workflow, StringComparison.Ordinal);
-        Assert.Contains("sha256sum --check --strict", workflow, StringComparison.Ordinal);
-        Assert.Contains("tools/AnimeGoNet.DataBuilder", workflow, StringComparison.Ordinal);
-        Assert.Contains("cron: '0 23 * * *'", workflow, StringComparison.Ordinal);
-        Assert.Contains("--minimum-subject-count 30000", workflow, StringComparison.Ordinal);
-        Assert.Contains("--minimum-episode-count 300000", workflow, StringComparison.Ordinal);
-        Assert.Contains("--minimum-relation-count 10000", workflow, StringComparison.Ordinal);
-        Assert.Contains(
-            "--minimum-episode-count 300000 \\\n            --minimum-relation-count 10000",
-            workflow.ReplaceLineEndings("\n"),
-            StringComparison.Ordinal);
-        Assert.Contains("actions/checkout@v6", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/upload-artifact@v7", workflow, StringComparison.Ordinal);
-        Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
-        Assert.Contains("ANIMEGONET_DATA_REPOSITORY", workflow, StringComparison.Ordinal);
-        Assert.Contains("ANIMEGONET_DATA_TOKEN", workflow, StringComparison.Ordinal);
-        Assert.Contains("gh release create", workflow, StringComparison.Ordinal);
-        Assert.Contains("--draft", workflow, StringComparison.Ordinal);
-        Assert.Contains("gh release edit", workflow, StringComparison.Ordinal);
-        Assert.Contains("--latest", workflow, StringComparison.Ordinal);
-        Assert.Contains("sha256sum --check --strict", workflow, StringComparison.Ordinal);
-        Assert.Contains("releases/assets/$asset_id", workflow, StringComparison.Ordinal);
-        Assert.Contains(
-            "[[ \"$DATA_REPOSITORY\" != \"$GITHUB_REPOSITORY\" ]]",
-            workflow,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("--clobber", workflow, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TestSpace", workflow, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
