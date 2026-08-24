@@ -294,7 +294,7 @@
 - [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
 - [x] 一级“插件”拆分“内部插件 / 外部插件”；内部插件页提供 `Web API / AnimeGoHelper (Mikan) 油猴插件`，明文回填/修改部署 AccessKey（新部署默认 `123456`）、自动显示 `/api` 地址、固定 `PluginName=inner_plugin_mikan`，并保留旧 `filter/mikan_tool.py` 后端别名。
 - [x] 为 AnimeGoHelper 的 Mikan “单 / 全”入口增加 schema v62 持久化调用审计：明确区分单集、批量单集、全集与选集，记录 TV/Movie、接收/未接收数量、耗时、稳定错误码及逐项 Mikan 身份/任务 ID；“输入源 → Mikan → 插件调用日志”可按模式和结果筛选并展开明细。审计不保存标题、Cookie、AccessKey、RSS/Torrent URL 或 passkey。
-- [x] 增加 schema v63 Mikan 字幕组对照表：仅以 Episode/RSS 已确认的 groupid 请求可配置 Mikan Base URL 的 `/Home/PublishGroup/{groupid}`，解析“字幕组名作品年表”并去除后缀，成功长期保存、失败 6 小时退避。人工名称优先且不会被后台覆盖，可显式恢复自动获取；“输入源 → Mikan → 字幕组对照”支持逐项编辑，动画库已下载 Episode 在有任务证据时显示字幕组名称和 groupid。
+- [x] 增加 schema v63 Mikan 字幕组对照表：仅以 Episode/RSS 已确认的 `mikanid+groupid` 请求可配置 Mikan Base URL 的 `/Home/Bangumi/{mikanid}`，复用作品页“字幕组列表”解析器并按 groupid 精确取名，成功长期保存、失败 6 小时退避；不再依赖 PublishGroup 页面或“作品年表”标题。人工名称优先且不会被后台覆盖，可显式恢复自动获取；“输入源 → Mikan → 字幕组对照”支持逐项编辑，动画库已下载 Episode 在有任务证据时显示字幕组名称和 groupid。
 - [x] 将外部插件/API 与 WebUI 鉴权完全拆分：`inner_plugin_mikan.access_key` 仅保护 AnimeGoHelper、兼容插件接口和精确的统一导入端点，`web.webui_access_key` 独立保护其余管理 API/日志 WebSocket且默认留空；两把密钥使用不同 header/query、不能交叉授权。应用配置页明文回填并保存备份，不再展示专用地址；裸地址由登录窗口/顶部 AccessKey 入口完成鉴权，旧查询参数书签继续兼容。旧 `web.access_key` 只作启动兼容读取，WebUI 保存时迁移删除；Mikan URL 解析与 RSS 手动导入保持在 WebUI 边界。
 
 ## P10 — 组合与发布

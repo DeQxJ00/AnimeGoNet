@@ -2,9 +2,9 @@
 
 ## 行为
 
-- `groupid` 只读取已经由 Mikan Episode/RSS 解析确认的任务字段，不从 PublishGroup 页面反推身份。
-- 首次发现新 groupid 后，后台通过对应来源配置和全局网络策略请求 `{mikan_base_url}/Home/PublishGroup/{groupid}`。
-- 页面中的“名称作品年表”解析成功后去掉“作品年表”并长期保存；失败每 6 小时重试。
+- `mikanid` 和 `groupid` 只读取已经由 Mikan Episode/RSS 解析确认的任务字段，不从 HTML 猜测任务身份。
+- 首次发现新 groupid 后，后台通过对应来源配置和全局网络策略请求 `{mikan_base_url}/Home/Bangumi/{mikanid}`。
+- 复用“下载全部”已经验证的作品页字幕组列表解析器，按 groupid 精确读取名称并长期保存；不再请求 PublishGroup 页面或处理“作品年表”标题。失败每 6 小时重试。
 - 人工编辑名称后自动刷新不能覆盖；只有用户点击“从 Mikan 重新获取”才恢复自动来源。
 - 动画库 Episode 若能关联到已确认 groupid，则显示对照表名称和 groupid；外部补录或无来源证据时保持空白。
 

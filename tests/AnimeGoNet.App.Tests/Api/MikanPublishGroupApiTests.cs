@@ -4,29 +4,13 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.App.Torrents;
+using AnimeGoNet.Data.Mikan;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
 public sealed class MikanPublishGroupApiTests
 {
-    [Fact]
-    public void ParserRemovesDirectorySuffixAndDecodesHtml()
-    {
-        var value = MikanPublishGroupNameParser.Parse(Encoding.UTF8.GetBytes(
-            "<html><title>Kirara &amp; Fantasia作品年表</title></html>"));
-        Assert.Equal("Kirara & Fantasia", value);
-    }
-
-    [Fact]
-    public void ParserAcceptsRealisticMultiMegabytePublishGroupPage()
-    {
-        var prefix = new string('x', 3 * 1024 * 1024);
-        var value = MikanPublishGroupNameParser.Parse(Encoding.UTF8.GetBytes(
-            prefix + "<h1>Kirara Fantasia作品年表</h1>"));
-        Assert.Equal("Kirara Fantasia", value);
-    }
-
     [Fact]
     public async Task ConfirmedTaskGroupIsFetchedListedAndEditable()
     {
@@ -56,15 +40,21 @@ public sealed class MikanPublishGroupApiTests
         Assert.Equal(HttpStatusCode.OK, ingest.StatusCode);
         using (var ingestJson = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync()))
             Assert.Equal(200, ingestJson.RootElement.GetProperty("code").GetInt32());
+        var groupStore = app.App.Services.GetRequiredService<MikanPublishGroupStore>();
+        await groupStore.SaveFailureAsync(
+            392,
+            "mikan",
+            "mikan_publish_group_name_missing",
+            DateTimeOffset.UtcNow);
         Assert.True(await app.App.Services.GetRequiredService<MikanPublishGroupResolver>().RunOnceAsync());
 
         using var listed = await app.Client.GetAsync("/api/v1/mikan/publish-groups");
         using var json = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
         var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
         Assert.Equal(392, item.GetProperty("groupid").GetInt32());
-        Assert.Equal("Kirara Fantasia", item.GetProperty("group_name").GetString());
+        Assert.Equal("Kirara & Fantasia", item.GetProperty("group_name").GetString());
         Assert.Equal("automatic", item.GetProperty("name_source").GetString());
-        Assert.Equal("/Home/PublishGroup/392", Assert.Single(transport.Requests).AbsolutePath);
+        Assert.Equal("/Home/Bangumi/3981", Assert.Single(transport.Requests).AbsolutePath);
 
         using var updated = await app.Client.PutAsJsonAsync(
             "/api/v1/mikan/publish-groups/392",
@@ -87,7 +77,13 @@ public sealed class MikanPublishGroupApiTests
             CancellationToken cancellationToken)
         {
             Requests.Add(uri);
-            var bytes = Encoding.UTF8.GetBytes("<h1>Kirara Fantasia作品年表</h1>");
+            var bytes = Encoding.UTF8.GetBytes("""
+                <div class="header">字幕组列表</div>
+                <ul>
+                  <li><a class="subgroup-name subgroup-370" data-anchor="#370">LoliHouse</a></li>
+                  <li><a class="subgroup-name subgroup-392" data-anchor="#392">Kirara &amp; Fantasia</a></li>
+                </ul>
+                """);
             return ValueTask.FromResult(new TorrentHttpResponse(
                 HttpStatusCode.OK, null, bytes.Length, new MemoryStream(bytes, writable: false)));
         }

@@ -15,7 +15,7 @@ public sealed record MikanPublishGroup(
     DateTimeOffset UpdatedAtUtc,
     long Revision);
 
-public sealed record MikanPublishGroupCandidate(int GroupId, string SourceProfileId);
+public sealed record MikanPublishGroupCandidate(int MikanId, int GroupId, string SourceProfileId);
 
 public enum MikanPublishGroupUpdateResult
 {
@@ -49,24 +49,29 @@ public sealed class MikanPublishGroupStore(AnimeGoSqliteDatabase database)
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT task.groupid, task.source_profile_id
+            SELECT task.mikanid, task.groupid, task.source_profile_id
             FROM ingest_tasks AS task
             JOIN source_profiles AS profile ON profile.id = task.source_profile_id
             LEFT JOIN mikan_publish_groups AS map ON map.groupid = task.groupid
             WHERE profile.adapter = 'mikan'
+              AND task.mikanid IS NOT NULL AND task.mikanid > 0
               AND task.groupid IS NOT NULL AND task.groupid > 0
               AND (map.groupid IS NULL
                    OR (map.name_source = 'automatic'
                        AND map.state IN ('pending', 'failed')
-                       AND (map.next_attempt_at_utc IS NULL OR map.next_attempt_at_utc <= $now)))
-            GROUP BY task.groupid, task.source_profile_id
-            ORDER BY MAX(task.updated_at_utc) DESC
+                       AND (map.next_attempt_at_utc IS NULL
+                            OR map.next_attempt_at_utc <= $now
+                            OR map.failure_code IN (
+                                'mikan_publish_group_name_missing',
+                                'mikan_publish_group_page_invalid',
+                                'mikan_publish_group_encoding_invalid'))))
+            ORDER BY task.updated_at_utc DESC
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$now", Format(utcNow));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
-            ? new MikanPublishGroupCandidate(reader.GetInt32(0), reader.GetString(1))
+            ? new MikanPublishGroupCandidate(reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2))
             : null;
     }
 

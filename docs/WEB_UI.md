@@ -128,7 +128,7 @@ SQLite schema v23 已为正式 TMDB 作品保存 Series 首播日期与 poster �
 
 季度详情同时返回元数据审计投影。`manual_offsets` 只显示当前仍与该规范季度或其关联 Mikan 任务有关、且确实含 EP offset 的人工规则，并同时标明启停、作用域和 revision；它是“当前配置”，不冒充某次历史 Run 实际使用的值。关联任务用规范 `task_files` 或任一解析 Run 的 `tmdb_series_id + tmdb_season_number` 建立，按最近更新时间返回最多 50 条。季度时间线再读取这些任务的全部历史 Run，按尝试时间倒序返回最多 200 条，保留阶段、策略、确定性优先级、结果、稳定错误码、脱敏原因、可重试性和耗时。响应提供总数与 `*_truncated`，页面把三类信息放在独立可展开区块，不用单个“最后成功策略”覆盖历史失败。
 
-季度详情的“下载全部 / 补全 EP”在历史关联任务能确定 `source_profile_id + mikanid` 时启用，不再要求旧任务必须带 `groupid`。弹窗先调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/mikan-completion/groups`，使用对应 SourceProfile 的 Cookie、域名改写与网络策略读取 `/Home/Bangumi/{mikanid}`，从作品页 `字幕组列表` 下的 `a.subgroup-name` 解析名称和正整数 groupid。历史已有 groupid 默认勾选，用户仍可取消、改选或多选；没有历史 groupid 时显示完整字幕组列表供选择。服务端只允许查询本季度已关联的 `source_profile_id+mikanid`，每次 RSS 预览/确认还会重新验证所选 groupid 仍存在于作品页。
+季度详情的“下载全部 / 补全 EP”在历史关联任务能确定 `source_profile_id + mikanid` 时启用，不再要求旧任务必须带 `groupid`。弹窗先调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/mikan-completion/groups`，使用对应 SourceProfile 的 Cookie、域名改写与网络策略读取 `/Home/Bangumi/{mikanid}`，从作品页 `字幕组列表` 下的 `a.subgroup-name` 解析名称和正整数 groupid。历史已有 groupid 默认勾选，用户仍可取消、改选或多选；没有历史 groupid 时显示完整字幕组列表供选择。服务端只允许查询本季度已关联的 `source_profile_id+mikanid`，每次 RSS 预览/确认还会重新验证所选 groupid 仍存在于作品页。Mikan“字幕组对照”也复用同一作品页解析结果：由任务中的 `mikanid+groupid` 定位列表项并长期保存名称，不再读取 `/Home/PublishGroup/{groupid}` 或依赖“作品年表”标题。
 
 选好字幕组后，预览分别调用 `POST /api/v1/library/seasons/{tmdbSeriesId}/{seasonNumber}/mikan-completion/preview`，使用配置的 Mikan Base URL 读取对应 `/RSS/Bangumi?bangumiId=...&subgroupid=...`，在合并表格中显示字幕组、普通来源 EP、可用人工/可信 Offset 推导的目标 TMDB EP、大小、发布日期及完成状态。来源 completion alias、目标 TMDB Episode 已完成和非普通 EP 默认不选；没有 Offset 时不伪造目标集号，明确显示“待主流程匹配”。页面不接收或展示 Torrent URL、passkey。
 
