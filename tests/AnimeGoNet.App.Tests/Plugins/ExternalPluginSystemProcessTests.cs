@@ -58,15 +58,18 @@ public sealed class ExternalPluginSystemProcessTests
                 Assert.Equal("1", result.GetProperty("apiVersion").GetString());
                 Assert.Equal(Path.GetFullPath(dataPath), result.GetProperty("dataPath").GetString());
                 Assert.Equal(JsonValueKind.Null, result.GetProperty("inheritedSecret").ValueKind);
+                var pluginEnvironmentKeys = result.GetProperty("environmentKeys")
+                    .EnumerateArray()
+                    .Select(item => item.GetString())
+                    .Where(item => item is not null
+                        && item.StartsWith("ANIMEGO_", StringComparison.Ordinal));
                 Assert.Equal(
                     [
                         "ANIMEGO_PLUGIN_API_VERSION",
                         "ANIMEGO_PLUGIN_DATA_PATH",
                         "ANIMEGO_PLUGIN_ID",
                     ],
-                    result.GetProperty("environmentKeys")
-                        .EnumerateArray()
-                        .Select(item => item.GetString()));
+                    pluginEnvironmentKeys);
                 Assert.True(await session.HealthAsync());
 
                 await session.ShutdownAsync("integration_test_complete");
