@@ -252,6 +252,68 @@ public sealed class DownloadJobStoreTests
     }
 
     [Fact]
+    public async Task SevenDaysAtZeroProgressBecomesDeadAndResumeRestartsSevenDayWindow()
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+        var detectedAt = new DateTimeOffset(2026, 8, 25, 2, 0, 0, TimeSpan.Zero);
+        await fixture.SetDownloadJobCreatedAtAsync(
+            detectedAt - DownloadJobStore.DeadTorrentThreshold);
+
+        var detected = await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Waiting,
+                0, 0, 100, 0, null)],
+            detectedAt);
+        var dead = Assert.Single(await fixture.Jobs.ListAsync());
+        var candidate = Assert.Single(detected.DeadTorrentCandidates);
+        var deadPage = await fixture.ListBucketAsync("dead");
+
+        Assert.Equal(dead.JobId, candidate.JobId);
+        Assert.Equal(fixture.InfoHash, candidate.InfoHash);
+        Assert.Equal("dead", dead.State);
+        Assert.Equal(1, deadPage.Summary.DeadJobs);
+        Assert.Equal(0, deadPage.Summary.PausedJobs);
+        Assert.Single(deadPage.Items);
+
+        var target = Assert.IsType<DownloadJobControlTarget>(
+            await fixture.Jobs.GetControlTargetAsync(dead.JobId));
+        Assert.Equal(
+            DownloadJobControlUpdateResult.Updated,
+            await fixture.Jobs.ApplyRemoteControlAsync(
+                target, "resume", "waiting", detectedAt));
+
+        var beforeDeadline = await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Waiting,
+                0, 0, 100, 0, null)],
+            detectedAt + DownloadJobStore.DeadTorrentThreshold - TimeSpan.FromSeconds(1));
+        Assert.Empty(beforeDeadline.DeadTorrentCandidates);
+        Assert.Equal("waiting", Assert.Single(await fixture.Jobs.ListAsync()).State);
+
+        var atDeadline = await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Waiting,
+                0, 0, 100, 0, null)],
+            detectedAt + DownloadJobStore.DeadTorrentThreshold);
+        Assert.Single(atDeadline.DeadTorrentCandidates);
+        var detail = Assert.IsType<DownloadJobDetailRecord>(
+            await fixture.Jobs.GetDetailAsync(dead.JobId));
+        Assert.Equal("dead", detail.Summary.State);
+        Assert.Contains(
+            detail.Events,
+            value => value.Kind == "dead_torrent"
+                && value.FailureCode == "zero_progress_7d");
+        Assert.Contains(
+            detail.Events,
+            value => value.Kind == "resume"
+                && value.FromState == "dead"
+                && value.ToState == "waiting");
+    }
+
+    [Fact]
     public async Task RemoteControlUsesRevisionAndRecordsSuccessfulTransition()
     {
         await using var fixture = await DownloadJobFixture.CreateAsync();
@@ -360,6 +422,16 @@ public sealed class DownloadJobStoreTests
                 """;
             command.Parameters.AddWithValue("$created_at_utc", createdAt.ToUniversalTime().ToString("O"));
             command.Parameters.AddWithValue("$info_hash", hash);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task SetDownloadJobCreatedAtAsync(DateTimeOffset createdAt)
+        {
+            await using var connection = await _databaseFixture.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE download_jobs SET created_at_utc = $created_at_utc WHERE info_hash = $info_hash;";
+            command.Parameters.AddWithValue("$created_at_utc", createdAt.ToUniversalTime().ToString("O"));
+            command.Parameters.AddWithValue("$info_hash", InfoHash);
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 

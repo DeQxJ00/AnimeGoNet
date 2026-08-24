@@ -113,6 +113,9 @@
             <button id="overview-download-paused" type="button" class="overview-stat-card paused">
               <span>暂停</span><strong id="overview-download-paused-count">—</strong><small>进入暂停任务筛选</small>
             </button>
+            <button id="overview-download-dead" type="button" class="overview-stat-card warning">
+              <span>死种</span><strong id="overview-download-dead-count">—</strong><small>7 天零进度并已自动暂停</small>
+            </button>
             <button id="overview-download-failed" type="button" class="overview-stat-card failed">
               <span>下载/整理失败</span><strong id="overview-download-failed-count">—</strong><small id="overview-download-failed-detail">等待读取失败原因</small>
             </button>
@@ -1040,6 +1043,7 @@
             <option value="waiting">等待</option>
             <option value="downloading">下载中</option>
             <option value="paused">已暂停</option>
+            <option value="dead">死种</option>
             <option value="seeding">做种中</option>
             <option value="complete">下载完成</option>
             <option value="error">下载错误</option>

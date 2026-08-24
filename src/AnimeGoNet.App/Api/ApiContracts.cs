@@ -653,6 +653,7 @@ public sealed record DownloadDashboardSummary(
     [property: JsonPropertyName("total_jobs")] int TotalJobs,
     [property: JsonPropertyName("active_jobs")] int ActiveJobs,
     [property: JsonPropertyName("paused_jobs")] int PausedJobs,
+    [property: JsonPropertyName("dead_jobs")] int DeadJobs,
     [property: JsonPropertyName("failed_jobs")] int FailedJobs,
     [property: JsonPropertyName("stale_jobs")] int StaleJobs,
     [property: JsonPropertyName("waiting_organization_jobs")] int WaitingOrganizationJobs,

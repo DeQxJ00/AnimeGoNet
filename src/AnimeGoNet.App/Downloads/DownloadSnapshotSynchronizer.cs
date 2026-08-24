@@ -30,11 +30,38 @@ public sealed class DownloadSnapshotSynchronizer(
                     return await client.ListAsync(token).ConfigureAwait(false);
                 },
                 cancellationToken).ConfigureAwait(false);
-            await jobs.ApplyInstanceSnapshotAsync(
+            var sync = await jobs.ApplyInstanceSnapshotAsync(
                 instanceId,
                 snapshots,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
+            foreach (var candidate in sync.DeadTorrentCandidates)
+            {
+                try
+                {
+                    await clients.ExecuteAsync(
+                        instanceId,
+                        async (client, token) =>
+                        {
+                            await client.PauseAsync([candidate.InfoHash], token).ConfigureAwait(false);
+                            return true;
+                        },
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    await jobs.RecordControlFailureAsync(
+                        candidate.JobId,
+                        "dead_torrent_pause",
+                        Classify(exception),
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

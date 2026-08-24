@@ -3190,6 +3190,7 @@ public static class ApiEndpoints
                     records.Summary.TotalJobs,
                     records.Summary.ActiveJobs,
                     records.Summary.PausedJobs,
+                    records.Summary.DeadJobs,
                     records.Summary.FailedJobs,
                     records.Summary.StaleJobs,
                     records.Summary.WaitingOrganizationJobs,
@@ -3339,7 +3340,7 @@ public static class ApiEndpoints
             fileSnapshotState,
             fileSnapshotFailureCode,
             detail.Summary.State is "waiting" or "downloading" or "moving" or "seeding",
-            detail.Summary.State == "paused",
+            detail.Summary.State is "paused" or "dead",
             canRetry,
             files,
             detail.Events.Select(item => new DownloadTimelineItem(
@@ -8730,7 +8731,7 @@ public static class ApiEndpoints
         kind switch
         {
             "pause" => state is "waiting" or "downloading" or "moving" or "seeding",
-            "resume" => state == "paused",
+            "resume" => state is "paused" or "dead",
             "retry_download" => state == "error",
             _ => false,
         };

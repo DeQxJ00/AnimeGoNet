@@ -1,12 +1,111 @@
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Torrents;
 using AnimeGoNet.Data.Downloads;
+using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sqlite;
+using AnimeGoNet.Data.Sources;
 
 namespace AnimeGoNet.App.Tests.Downloads;
 
 public sealed class DownloadSnapshotSynchronizerTests
 {
+    [Fact]
+    public async Task SevenDayZeroProgressTaskIsPausedAndPersistedAsDead()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-sync-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            var database = new AnimeGoSqliteDatabase(Path.Combine(root, "animegonet.db"));
+            await database.InitializeAsync();
+            var profiles = new SourceProfileStore(database);
+            await profiles.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+            var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("mikan"));
+            var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
+                "mikan",
+                new IngestItemCommand(
+                    "https://mikanani.me/passkey/dead.torrent",
+                    new IngestItemInfo(
+                        "Dead torrent", null, "dead", "3951", null, null,
+                        3951, 547888, null, null))).Item);
+            var hash = new string('a', 40);
+            var tasks = new IngestTaskStore(database);
+            await tasks.AddStagedAsync(
+                normalized,
+                profile,
+                new TorrentMetadata(
+                    "dead.mkv", hash, 100,
+                    [new TorrentFile("dead.mkv", 100, false)]),
+                "dead.torrent",
+                DateTimeOffset.UtcNow.AddMinutes(15));
+            var detectedAt = new DateTimeOffset(2026, 8, 25, 2, 0, 0, TimeSpan.Zero);
+            var dispatchedAt = detectedAt - TimeSpan.FromDays(8);
+            var claim = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+                dispatchedAt, TimeSpan.FromMinutes(1)));
+            await tasks.CompleteDispatchAsync(
+                claim,
+                new DownloadTaskSnapshot(
+                    hash, "Dead torrent", DownloadTaskState.Waiting,
+                    0, 0, 100, 0, null),
+                "/download/incomplete/bt",
+                "/download/anime",
+                dispatchedAt);
+            await using (var connection = await database.OpenConnectionAsync())
+            await using (var update = connection.CreateCommand())
+            {
+                update.CommandText = """
+                    UPDATE download_jobs SET created_at_utc = $created_at_utc;
+                    UPDATE ingest_tasks SET status = 'download_queued';
+                    """;
+                update.Parameters.AddWithValue("$created_at_utc", dispatchedAt.ToString("O"));
+                Assert.Equal(2, await update.ExecuteNonQueryAsync());
+            }
+            await using (var connection = await database.OpenConnectionAsync())
+            await using (var query = connection.CreateCommand())
+            {
+                query.CommandText = "SELECT created_at_utc FROM download_jobs;";
+                var stored = DateTimeOffset.Parse(
+                    Assert.IsType<string>(await query.ExecuteScalarAsync()),
+                    System.Globalization.CultureInfo.InvariantCulture);
+                Assert.True(detectedAt - stored >= DownloadJobStore.DeadTorrentThreshold);
+            }
+
+            var client = new FakeClient
+            {
+                Snapshots =
+                [
+                    new DownloadTaskSnapshot(
+                        hash, "Dead torrent", DownloadTaskState.Waiting,
+                        0, 0, 100, 0, null),
+                ],
+            };
+            var clock = new MutableTimeProvider(detectedAt);
+            var jobs = new DownloadJobStore(database);
+            var synchronizer = new DownloadSnapshotSynchronizer(
+                jobs,
+                new DownloadClientOperationCoordinator(
+                    new FakeRegistry(new Dictionary<string, IDownloadClient> { [profile.DownloaderId] = client })),
+                clock);
+
+            await synchronizer.SyncOnceAsync();
+
+            var persisted = Assert.Single(await jobs.ListAsync());
+            Assert.True(persisted.DownloaderConnected, persisted.DownloaderFailureCode);
+            Assert.Equal("dead", persisted.State);
+            Assert.Equal([hash], client.PausedHashes);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public async Task OneOfflineInstanceDoesNotBlockHealthyInstanceState()
     {
@@ -224,6 +323,10 @@ public sealed class DownloadSnapshotSynchronizerTests
     {
         public int ConnectCount { get; private set; }
 
+        public IReadOnlyList<DownloadTaskSnapshot> Snapshots { get; init; } = [];
+
+        public List<string> PausedHashes { get; } = [];
+
         public Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             ConnectCount++;
@@ -231,7 +334,7 @@ public sealed class DownloadSnapshotSynchronizerTests
         }
 
         public Task<IReadOnlyList<DownloadTaskSnapshot>> ListAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<DownloadTaskSnapshot>>([]);
+            Task.FromResult(Snapshots);
 
         public Task AddTorrentAsync(AddTorrentCommand command, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
@@ -254,8 +357,11 @@ public sealed class DownloadSnapshotSynchronizerTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default)
+        {
+            PausedHashes.AddRange(hashes);
+            return Task.CompletedTask;
+        }
 
         public Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

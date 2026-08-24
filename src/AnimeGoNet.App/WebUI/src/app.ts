@@ -619,6 +619,7 @@ interface DownloadListPage {
     total_jobs: number;
     active_jobs: number;
     paused_jobs: number;
+    dead_jobs: number;
     failed_jobs: number;
     stale_jobs: number;
     waiting_organization_jobs: number;
@@ -637,6 +638,7 @@ interface DownloadListPage {
 type DownloadSummaryBucket =
   | "active"
   | "paused"
+  | "dead"
   | "failed"
   | "waiting_organization"
   | "completed"
@@ -4467,6 +4469,7 @@ function readDownloadState(): DownloadUiState {
       summary_bucket: [
         "active",
         "paused",
+        "dead",
         "failed",
         "waiting_organization",
         "completed",
@@ -7778,6 +7781,7 @@ function renderDownloadSummary(body: DownloadListPage): void {
   }> = [
     { label: "活动", value: String(summary.active_jobs), bucket: "active" },
     { label: "暂停", value: String(summary.paused_jobs), bucket: "paused" },
+    { label: "死种", value: String(summary.dead_jobs), bucket: "dead" },
     {
       label: "失败",
       value: String(summary.failed_jobs),
@@ -7806,6 +7810,7 @@ function renderDownloadSummary(body: DownloadListPage): void {
     const card = document.createElement(bucket ? "button" : "article");
     card.className = "download-summary-card"
       + (label === "失败" && summary.failed_jobs > 0 ? " error" : "")
+      + (bucket === "dead" ? " dead" : "")
       + (bucket ? " filterable" : "")
       + (bucket === downloadState.summary_bucket ? " selected" : "");
     if (card instanceof HTMLButtonElement && bucket) {
@@ -7856,6 +7861,7 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
   const quickFilterLabel = ({
     active: "活动",
     paused: "暂停",
+    dead: "死种",
     failed: "失败",
     waiting_organization: "等待整理",
     skipped_duplicate: "重复跳过",
@@ -7904,16 +7910,18 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
 
   renderRegionContent(container, ...body.items.map((item) => {
     const card = document.createElement("article");
-    card.className = `download-card ${item.is_stale ? "stale" : ""}`;
+    card.className = `download-card ${item.is_stale ? "stale" : item.state === "dead" ? "dead" : ""}`;
     card.dataset.jobId = item.job_id;
     const heading = document.createElement("div");
     heading.className = "download-heading";
     const title = document.createElement("strong");
     title.textContent = item.title;
     const state = document.createElement("span");
-    state.className = `badge ${item.is_stale ? "error" : "ready"}`;
+    state.className = `badge ${item.is_stale ? "error" : item.state === "dead" ? "warning" : "ready"}`;
     state.textContent = item.is_stale
       ? `快照过期 · ${item.downloader_failure_code ?? "离线"}`
+      : item.state === "dead"
+      ? "死种 · 7 天零进度，已自动暂停"
       : `${item.state} · ${statusLabels[item.business_status] ?? item.business_status}`;
     heading.append(title, state);
     const progress = document.createElement("progress");
@@ -7949,7 +7957,7 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
     detailTarget.className = "download-detail";
     expand.onclick = () => void loadDownloadDetail(item, detailTarget, expand);
     actions.append(expand);
-    if (item.state === "paused") {
+    if (item.state === "paused" || item.state === "dead") {
       actions.append(downloadControlButton(item, "resume", "恢复"));
     } else if (["waiting", "downloading", "moving", "seeding"].includes(item.state)) {
       actions.append(downloadControlButton(item, "pause", "暂停"));
@@ -9872,6 +9880,7 @@ async function loadOverviewStatistics(): Promise<void> {
     const summary = downloads.value.summary;
     setOverviewCount("overview-download-active-count", summary.active_jobs);
     setOverviewCount("overview-download-paused-count", summary.paused_jobs);
+    setOverviewCount("overview-download-dead-count", summary.dead_jobs);
     setOverviewCount("overview-download-failed-count", summary.failed_jobs);
     setOverviewCount("overview-download-waiting-organization-count", summary.waiting_organization_jobs);
     setOverviewCount("overview-download-skipped-duplicate-count", summary.skipped_duplicate_jobs);
@@ -9884,6 +9893,7 @@ async function loadOverviewStatistics(): Promise<void> {
     setOverviewFailure([
       "overview-download-active-count",
       "overview-download-paused-count",
+      "overview-download-dead-count",
       "overview-download-failed-count",
       "overview-download-waiting-organization-count",
       "overview-download-skipped-duplicate-count",
@@ -13210,6 +13220,7 @@ element<HTMLButtonElement>("#overview-attention-review").addEventListener(
 for (const [id, bucket] of [
   ["overview-download-active", "active"],
   ["overview-download-paused", "paused"],
+  ["overview-download-dead", "dead"],
   ["overview-download-failed", "failed"],
   ["overview-download-waiting-organization", "waiting_organization"],
   ["overview-download-skipped-duplicate", "skipped_duplicate"],

@@ -47,7 +47,12 @@ public sealed record DownloadTmdbMovieMetadataRecord(
     string? OriginalTitle,
     DateOnly? ReleaseDate);
 
-public sealed record DownloadSyncResult(int ActiveJobs, int MatchedJobs);
+public sealed record DownloadSyncResult(
+    int ActiveJobs,
+    int MatchedJobs,
+    IReadOnlyList<DeadTorrentCandidate> DeadTorrentCandidates);
+
+public sealed record DeadTorrentCandidate(string JobId, string InfoHash);
 
 public sealed record DownloadJobListQuery(
     int Page,
@@ -72,6 +77,7 @@ public sealed record DownloadJobDashboardSummary(
     int TotalJobs,
     int ActiveJobs,
     int PausedJobs,
+    int DeadJobs,
     int FailedJobs,
     int StaleJobs,
     int WaitingOrganizationJobs,

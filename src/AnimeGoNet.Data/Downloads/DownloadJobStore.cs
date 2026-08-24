@@ -9,6 +9,8 @@ namespace AnimeGoNet.Data.Downloads;
 
 public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
 {
+    public static readonly TimeSpan DeadTorrentThreshold = TimeSpan.FromHours(7 * 24);
+
     public async Task<int> CountActiveAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -46,7 +48,8 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             bool IsStale,
             string SeedingState,
             int SeedingTargetMinutes,
-            long SeedingElapsedSeconds)>();
+            long SeedingElapsedSeconds,
+            DateTimeOffset DeadWindowStartedAtUtc)>();
         await using (var query = connection.CreateCommand())
         {
             query.Transaction = transaction;
@@ -55,7 +58,15 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                        download_jobs.state, download_jobs.is_stale,
                        download_jobs.seeding_state,
                        download_jobs.seeding_target_minutes,
-                       download_jobs.seeding_elapsed_seconds
+                       download_jobs.seeding_elapsed_seconds,
+                       COALESCE((
+                           SELECT MAX(event.created_at_utc)
+                           FROM download_job_events AS event
+                           WHERE event.job_id = download_jobs.id
+                             AND event.kind = 'resume'
+                             AND event.result = 'succeeded'
+                             AND event.from_state = 'dead'
+                       ), download_jobs.created_at_utc)
                 FROM download_jobs
                 JOIN ingest_tasks ON ingest_tasks.id = download_jobs.task_id
                 WHERE download_jobs.downloader_id = $downloader_id
@@ -73,11 +84,13 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                     reader.GetInt64(4) != 0,
                     reader.GetString(5),
                     reader.GetInt32(6),
-                    reader.GetInt64(7)));
+                    reader.GetInt64(7),
+                    ReadDateTimeOffset(reader, 8)!.Value));
             }
         }
 
         var matched = 0;
+        var deadTorrentCandidates = new List<DeadTorrentCandidate>();
         foreach (var job in jobs)
         {
             if (!byHash.TryGetValue(job.InfoHash, out var snapshot))
@@ -111,6 +124,17 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 ParseSeedingState(job.SeedingState),
                 job.SeedingElapsedSeconds);
             var seedingState = ToDatabaseValue(seeding.State);
+            var observedState = ToDatabaseValue(snapshot.State);
+            var remainsDead = job.State == "dead" && observedState == "paused";
+            var isDeadCandidate = snapshot.State is DownloadTaskState.Waiting or DownloadTaskState.Downloading
+                && snapshot.Progress <= 0
+                && snapshot.DownloadedBytes <= 0
+                && utcNow - job.DeadWindowStartedAtUtc >= DeadTorrentThreshold;
+            var effectiveState = isDeadCandidate || remainsDead ? "dead" : observedState;
+            if (isDeadCandidate)
+            {
+                deadTorrentCandidates.Add(new DeadTorrentCandidate(job.JobId, job.InfoHash));
+            }
             await using (var update = connection.CreateCommand())
             {
                 update.Transaction = transaction;
@@ -130,7 +154,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                         is_stale = 0, revision = revision + 1, updated_at_utc = $now
                     WHERE id = $id;
                     """;
-                update.Parameters.AddWithValue("$state", ToDatabaseValue(snapshot.State));
+                update.Parameters.AddWithValue("$state", effectiveState);
                 update.Parameters.AddWithValue("$progress", Math.Clamp(snapshot.Progress, 0, 1));
                 update.Parameters.AddWithValue("$downloaded_bytes", Math.Max(0, snapshot.DownloadedBytes));
                 update.Parameters.AddWithValue("$total_bytes", Math.Max(0, snapshot.TotalBytes));
@@ -145,13 +169,14 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                 await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            var snapshotState = ToDatabaseValue(snapshot.State);
-            if (job.IsStale || !string.Equals(job.State, snapshotState, StringComparison.Ordinal))
+            if (job.IsStale || !string.Equals(job.State, effectiveState, StringComparison.Ordinal))
             {
                 await InsertEventAsync(
                     connection, transaction, job.JobId,
-                    "snapshot_sync", "observed",
-                    job.State, snapshotState, null,
+                    isDeadCandidate ? "dead_torrent" : "snapshot_sync",
+                    isDeadCandidate ? "detected" : "observed",
+                    job.State, effectiveState,
+                    isDeadCandidate ? "zero_progress_7d" : null,
                     now, cancellationToken).ConfigureAwait(false);
             }
 
@@ -184,7 +209,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         await UpsertRuntimeStateAsync(connection, transaction, downloaderId, connected: true, null, now, cancellationToken)
             .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new DownloadSyncResult(jobs.Count, matched);
+        return new DownloadSyncResult(jobs.Count, matched, deadTorrentCandidates);
     }
 
     public async Task MarkInstanceUnavailableAsync(
@@ -947,6 +972,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                        WHEN job.state IN ('waiting', 'downloading', 'moving', 'seeding') THEN 1
                        ELSE 0 END), 0),
                    COALESCE(SUM(CASE WHEN job.state = 'paused' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN job.state = 'dead' THEN 1 ELSE 0 END), 0),
                    COALESCE(SUM(CASE
                        WHEN job.state = 'error'
                          OR task.status = 'download_error'
@@ -1012,10 +1038,11 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(7),
             reader.GetInt32(8),
             reader.GetInt32(9),
-            reader.GetInt64(10),
-            reader.GetInt32(11),
-            reader.IsDBNull(12) ? null : reader.GetString(12),
-            ReadDateTimeOffset(reader, 13));
+            reader.GetInt32(10),
+            reader.GetInt64(11),
+            reader.GetInt32(12),
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            ReadDateTimeOffset(reader, 14));
     }
 
     private static DownloadJobListItemRecord ReadListItem(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
@@ -1223,7 +1250,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                    OR ingest_tasks.status = 'download_error'
                    OR download_jobs.preparation_failure_code IS NOT NULL
                    OR download_jobs.organization_failure_code IS NOT NULL THEN 0
-                 WHEN download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding', 'paused')
+                WHEN download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding', 'paused', 'dead')
                    OR ingest_tasks.status NOT IN ('organized', 'download_skipped_duplicate') THEN 1
                  ELSE 2
              END, download_jobs.updated_at_utc {direction}, download_jobs.id {direction}
@@ -1272,6 +1299,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             {
                 "active" => "active",
                 "paused" => "paused",
+                "dead" => "dead",
                 "failed" => "failed",
                 "waiting_organization" => "waiting_organization",
                 "completed" => "completed",
@@ -1286,6 +1314,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
     {
         "active" => "download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding')",
         "paused" => "download_jobs.state = 'paused'",
+        "dead" => "download_jobs.state = 'dead'",
         "failed" => """
             (download_jobs.state = 'error'
              OR ingest_tasks.status = 'download_error'
@@ -1341,7 +1370,7 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
         kind switch
         {
             "pause" => currentState is "waiting" or "downloading" or "moving" or "seeding",
-            "resume" => currentState == "paused",
+            "resume" => currentState is "paused" or "dead",
             "retry_download" => currentState == "error",
             _ => false,
         };

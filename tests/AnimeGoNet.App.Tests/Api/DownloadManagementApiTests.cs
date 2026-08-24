@@ -188,6 +188,38 @@ public sealed class DownloadManagementApiTests
     }
 
     [Fact]
+    public async Task DeadTorrentHasDedicatedSummaryFilterAndCanResume()
+    {
+        var client = new FakeDownloadClient();
+        await using var fixture = await DownloadApiFixture.CreateAsync(client);
+        await fixture.MarkDeadAsync();
+
+        using var response = await fixture.App.Client.GetAsync(
+            "/api/v1/downloads?state=dead&summary_bucket=dead");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("dead", item.GetProperty("state").GetString());
+        Assert.Equal(
+            1,
+            json.RootElement.GetProperty("summary").GetProperty("dead_jobs").GetInt32());
+        Assert.Equal(
+            0,
+            json.RootElement.GetProperty("summary").GetProperty("paused_jobs").GetInt32());
+
+        using var resumed = await PostControlAsync(
+            fixture.App.Client,
+            fixture.JobId,
+            "resume",
+            item.GetProperty("revision").GetInt64());
+        using var resumedJson = JsonDocument.Parse(await resumed.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, resumed.StatusCode);
+        Assert.Equal("waiting", resumedJson.RootElement.GetProperty("state").GetString());
+        Assert.Equal([fixture.InfoHash], client.ResumedHashes);
+    }
+
+    [Fact]
     public async Task PauseAndResumeUseRevisionAndWriteTimeline()
     {
         var client = new FakeDownloadClient();
@@ -503,6 +535,15 @@ public sealed class DownloadManagementApiTests
                 """;
             command.Parameters.AddWithValue("$job_id", JobId);
             Assert.Equal(3, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task MarkDeadAsync()
+        {
+            await using var connection = await _database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE download_jobs SET state = 'dead', progress = 0, downloaded_bytes = 0, revision = revision + 1 WHERE id = $job_id;";
+            command.Parameters.AddWithValue("$job_id", JobId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public async Task<(string TaskStatus, string PreparationState, string Disposition, string? OtherReason, string ClaimState)>
