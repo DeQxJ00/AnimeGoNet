@@ -236,6 +236,7 @@ const workspaceDefinitions = {
                     { id: "mikan-ingest", label: "手动设置" },
                     { id: "mikan-manual-rules", label: "人工规则" },
                     { id: "mikan-series-mappings", label: "人工 TMDB 映射" },
+                    { id: "mikan-plugin-calls", label: "插件调用日志" },
                     { id: "mikan-offsets", label: "可信 Offset" },
                     { id: "mikan-candidate-rules", label: "候选规则" },
                     { id: "mikan-legacy-filter", label: "五级过滤" },
@@ -451,6 +452,9 @@ function selectWorkspace(workspace, subview, updateHash = true) {
         void loadAiInvocationLogs();
     if (workspace === "logs" && selectedSubview === "matching")
         void loadMatchingLogs();
+    if (workspace === "sources" && selectedSubview === "mikan-plugin-calls") {
+        void loadMikanPluginCallLogs();
+    }
     closeMobileSidebar();
     window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -5599,6 +5603,101 @@ async function deleteMikanManualSeriesMapping(item) {
     }
     await loadMikanManualSeriesMappings();
 }
+function pluginCallModeLabel(mode) {
+    if (mode === "single")
+        return "单集";
+    if (mode === "all")
+        return "全集";
+    if (mode === "selected")
+        return "选集";
+    return "批量单集";
+}
+async function loadMikanPluginCallLogs() {
+    const container = element("#mikan-plugin-call-list");
+    setRegionState(container, "loading");
+    const mode = element("#mikan-plugin-call-mode").value;
+    const result = element("#mikan-plugin-call-result").value;
+    const query = new URLSearchParams({ page: "1", page_size: "100" });
+    if (mode)
+        query.set("mode", mode);
+    if (result)
+        query.set("result", result);
+    try {
+        const response = await authenticatedFetch(`/api/v1/logs/mikan-plugin-calls?${query}`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        element("#mikan-plugin-call-count").textContent =
+            `共 ${body.total_count.toLocaleString("zh-CN")} 次调用`;
+        if (body.items.length === 0) {
+            renderRegionMessage(container, "empty", "暂无符合条件的 Mikan 插件调用记录");
+            return;
+        }
+        renderRegionContent(container, ...body.items.map(item => {
+            const card = document.createElement("details");
+            card.className = `plugin-call-card ${item.result}`;
+            const summary = document.createElement("summary");
+            const heading = document.createElement("strong");
+            heading.textContent = `${pluginCallModeLabel(item.mode)} · ${item.media_type.toUpperCase()}`;
+            const status = document.createElement("span");
+            status.className = `badge ${item.result}`;
+            status.textContent = item.result === "success" ? "成功"
+                : item.result === "partial" ? "部分成功" : "失败";
+            const counts = document.createElement("span");
+            counts.className = "muted";
+            counts.textContent = `请求 ${item.requested_count} · 接收 ${item.accepted_count} · 未接收 ${item.rejected_count}`;
+            const audit = document.createElement("span");
+            audit.className = "muted";
+            audit.textContent = `${new Date(item.completed_at_utc).toLocaleString()} · ${item.duration_ms} ms`;
+            summary.append(heading, status, counts, audit);
+            const bodyElement = document.createElement("div");
+            bodyElement.className = "plugin-call-body";
+            const endpoint = document.createElement("p");
+            endpoint.textContent = `入口 ${item.endpoint}${item.failure_code ? ` · ${item.failure_code}` : ""}`;
+            bodyElement.append(endpoint);
+            if (item.items.length === 0) {
+                const empty = document.createElement("p");
+                empty.className = "muted";
+                empty.textContent = "本次调用没有生成项目明细。";
+                bodyElement.append(empty);
+            }
+            else {
+                const table = document.createElement("table");
+                table.className = "compact-table";
+                const head = document.createElement("thead");
+                const headRow = document.createElement("tr");
+                ["序号", "mikanid / groupid", "状态", "任务 ID"].forEach(label => {
+                    const cell = document.createElement("th");
+                    cell.textContent = label;
+                    headRow.append(cell);
+                });
+                head.append(headRow);
+                const tableBody = document.createElement("tbody");
+                item.items.forEach(detail => {
+                    const row = document.createElement("tr");
+                    [
+                        String(detail.index + 1),
+                        `${detail.mikanid ?? "—"} / ${detail.groupid ?? "—"}`,
+                        `${detail.status}${detail.failure_code ? ` · ${detail.failure_code}` : ""}`,
+                        detail.task_id ?? "—",
+                    ].forEach(value => {
+                        const cell = document.createElement("td");
+                        cell.textContent = value;
+                        row.append(cell);
+                    });
+                    tableBody.append(row);
+                });
+                table.append(head, tableBody);
+                bodyElement.append(table);
+            }
+            card.append(summary, bodyElement);
+            return card;
+        }));
+    }
+    catch (error) {
+        renderRegionMessage(container, "error", `插件调用日志读取失败：${errorMessage(error, "未知错误")}`);
+    }
+}
 const notificationProviderDefaults = {
     bark: "https://api.day.app",
     generic: "",
@@ -10227,6 +10326,9 @@ element("#library-episode-filter").addEventListener("change", () => {
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsets());
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsetBlacklist());
 element("#mikan-manual-series-mappings-reload").addEventListener("click", () => void loadMikanManualSeriesMappings());
+element("#mikan-plugin-call-reload").addEventListener("click", () => void loadMikanPluginCallLogs());
+element("#mikan-plugin-call-mode").addEventListener("change", () => void loadMikanPluginCallLogs());
+element("#mikan-plugin-call-result").addEventListener("change", () => void loadMikanPluginCallLogs());
 element("#trusted-offset-blacklist-scope").addEventListener("change", updateTrustedOffsetBlacklistFields);
 element("#trusted-offset-blacklist-form").addEventListener("submit", event => void addTrustedOffsetBlacklist(event));
 element("#notification-provider").addEventListener("change", () => notificationProviderChanged());
@@ -10646,6 +10748,7 @@ void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 void loadMikanManualSeriesMappings();
+void loadMikanPluginCallLogs();
 updateTrustedOffsetBlacklistFields();
 void loadTrustedOffsetBlacklist();
 resetNotificationForm();

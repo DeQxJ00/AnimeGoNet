@@ -834,6 +834,35 @@ public sealed record MikanManualSeriesMappingItemResponse(
     [property: JsonPropertyName("accepted_at_utc")] DateTimeOffset AcceptedAtUtc,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
 
+public sealed record MikanPluginCallLogListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_count")] int TotalCount,
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanPluginCallLogResponse> Items);
+
+public sealed record MikanPluginCallLogResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("endpoint")] string Endpoint,
+    [property: JsonPropertyName("mode")] string Mode,
+    [property: JsonPropertyName("media_type")] string MediaType,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("requested_count")] int RequestedCount,
+    [property: JsonPropertyName("accepted_count")] int AcceptedCount,
+    [property: JsonPropertyName("rejected_count")] int RejectedCount,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("started_at_utc")] DateTimeOffset StartedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset CompletedAtUtc,
+    [property: JsonPropertyName("items")] IReadOnlyList<MikanPluginCallLogItemResponse> Items);
+
+public sealed record MikanPluginCallLogItemResponse(
+    [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("task_id")] string? TaskId,
+    [property: JsonPropertyName("mikanid")] int? MikanId,
+    [property: JsonPropertyName("groupid")] int? GroupId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("failure_code")] string? FailureCode);
+
 public sealed record MikanTrustedOffsetItemResponse(
     [property: JsonPropertyName("mikanid")] int MikanId,
     [property: JsonPropertyName("groupid")] int GroupId,

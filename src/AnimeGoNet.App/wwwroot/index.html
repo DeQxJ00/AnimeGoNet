@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260823-download-tmdb-matching-log">
+  <link rel="stylesheet" href="/styles.css?v=20260824-mikan-plugin-audit">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1389,6 +1389,40 @@
       </div>
     </section>
 
+    <section id="mikan-plugin-call-workspace" aria-labelledby="mikan-plugin-call-title" data-workspace="sources" data-subview="mikan-plugin-calls" data-nav-label="Mikan 插件调用日志">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">AnimeGoHelper audit</p>
+          <h2 id="mikan-plugin-call-title">Mikan 插件“单 / 全”调用日志</h2>
+        </div>
+        <button id="mikan-plugin-call-reload" type="button" class="secondary-button">刷新日志</button>
+      </div>
+      <p class="muted">持久记录 AnimeGoHelper 的单集、全集、选集与批量调用结果。日志只保存调用模式、媒体类型、Mikan 身份、任务 ID 和安全错误码，不保存 Cookie、AccessKey、Torrent URL 或 passkey。</p>
+      <div class="plugin-call-toolbar">
+        <label>调用方式
+          <select id="mikan-plugin-call-mode">
+            <option value="">全部</option>
+            <option value="single">单集</option>
+            <option value="all">全集</option>
+            <option value="selected">选集</option>
+            <option value="batch">批量单集</option>
+          </select>
+        </label>
+        <label>结果
+          <select id="mikan-plugin-call-result">
+            <option value="">全部</option>
+            <option value="success">成功</option>
+            <option value="partial">部分成功</option>
+            <option value="failed">失败</option>
+          </select>
+        </label>
+        <span id="mikan-plugin-call-count" class="muted">正在统计…</span>
+      </div>
+      <div id="mikan-plugin-call-list" class="plugin-call-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status">正在读取插件调用日志…</p>
+      </div>
+    </section>
+
     <section id="trusted-offset-workspace" aria-labelledby="trusted-offsets-title" data-workspace="sources" data-subview="mikan-offsets" data-nav-label="Mikan 可信 Offset">
       <div class="section-heading">
         <div>
@@ -2038,6 +2072,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260824-mikan-manual-series-map"></script>
+    <script type="module" src="/app.js?v=20260824-mikan-plugin-audit"></script>
 </body>
 </html>

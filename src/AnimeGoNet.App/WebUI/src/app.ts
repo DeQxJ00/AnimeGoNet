@@ -1403,6 +1403,38 @@ interface MikanManualSeriesMappingItem {
   updated_at_utc: string;
 }
 
+interface MikanPluginCallLogItem {
+  index: number;
+  task_id: string | null;
+  mikanid: number | null;
+  groupid: number | null;
+  status: string;
+  failure_code: string | null;
+}
+
+interface MikanPluginCallLog {
+  id: string;
+  endpoint: string;
+  mode: "single" | "all" | "selected" | "batch";
+  media_type: "tv" | "movie" | "mixed";
+  result: "success" | "partial" | "failed";
+  requested_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  failure_code: string | null;
+  duration_ms: number;
+  started_at_utc: string;
+  completed_at_utc: string;
+  items: MikanPluginCallLogItem[];
+}
+
+interface MikanPluginCallLogList {
+  page: number;
+  page_size: number;
+  total_count: number;
+  items: MikanPluginCallLog[];
+}
+
 type MikanTrustedOffsetBlacklistScope = "mikanid" | "groupid" | "pair";
 
 interface MikanTrustedOffsetBlacklistItem {
@@ -2233,6 +2265,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
           { id: "mikan-ingest", label: "手动设置" },
           { id: "mikan-manual-rules", label: "人工规则" },
           { id: "mikan-series-mappings", label: "人工 TMDB 映射" },
+          { id: "mikan-plugin-calls", label: "插件调用日志" },
           { id: "mikan-offsets", label: "可信 Offset" },
           { id: "mikan-candidate-rules", label: "候选规则" },
           { id: "mikan-legacy-filter", label: "五级过滤" },
@@ -2450,6 +2483,9 @@ function selectWorkspace(
   }
   if (workspace === "logs" && selectedSubview === "ai-invocations") void loadAiInvocationLogs();
   if (workspace === "logs" && selectedSubview === "matching") void loadMatchingLogs();
+  if (workspace === "sources" && selectedSubview === "mikan-plugin-calls") {
+    void loadMikanPluginCallLogs();
+  }
   closeMobileSidebar();
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -8093,6 +8129,102 @@ async function deleteMikanManualSeriesMapping(
   await loadMikanManualSeriesMappings();
 }
 
+function pluginCallModeLabel(mode: MikanPluginCallLog["mode"]): string {
+  if (mode === "single") return "单集";
+  if (mode === "all") return "全集";
+  if (mode === "selected") return "选集";
+  return "批量单集";
+}
+
+async function loadMikanPluginCallLogs(): Promise<void> {
+  const container = element<HTMLElement>("#mikan-plugin-call-list");
+  setRegionState(container, "loading");
+  const mode = element<HTMLSelectElement>("#mikan-plugin-call-mode").value;
+  const result = element<HTMLSelectElement>("#mikan-plugin-call-result").value;
+  const query = new URLSearchParams({ page: "1", page_size: "100" });
+  if (mode) query.set("mode", mode);
+  if (result) query.set("result", result);
+  try {
+    const response = await authenticatedFetch(
+      `/api/v1/logs/mikan-plugin-calls?${query}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as MikanPluginCallLogList;
+    element<HTMLElement>("#mikan-plugin-call-count").textContent =
+      `共 ${body.total_count.toLocaleString("zh-CN")} 次调用`;
+    if (body.items.length === 0) {
+      renderRegionMessage(container, "empty", "暂无符合条件的 Mikan 插件调用记录");
+      return;
+    }
+    renderRegionContent(container, ...body.items.map(item => {
+      const card = document.createElement("details");
+      card.className = `plugin-call-card ${item.result}`;
+      const summary = document.createElement("summary");
+      const heading = document.createElement("strong");
+      heading.textContent = `${pluginCallModeLabel(item.mode)} · ${item.media_type.toUpperCase()}`;
+      const status = document.createElement("span");
+      status.className = `badge ${item.result}`;
+      status.textContent = item.result === "success" ? "成功"
+        : item.result === "partial" ? "部分成功" : "失败";
+      const counts = document.createElement("span");
+      counts.className = "muted";
+      counts.textContent = `请求 ${item.requested_count} · 接收 ${item.accepted_count} · 未接收 ${item.rejected_count}`;
+      const audit = document.createElement("span");
+      audit.className = "muted";
+      audit.textContent = `${new Date(item.completed_at_utc).toLocaleString()} · ${item.duration_ms} ms`;
+      summary.append(heading, status, counts, audit);
+      const bodyElement = document.createElement("div");
+      bodyElement.className = "plugin-call-body";
+      const endpoint = document.createElement("p");
+      endpoint.textContent = `入口 ${item.endpoint}${item.failure_code ? ` · ${item.failure_code}` : ""}`;
+      bodyElement.append(endpoint);
+      if (item.items.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = "本次调用没有生成项目明细。";
+        bodyElement.append(empty);
+      } else {
+        const table = document.createElement("table");
+        table.className = "compact-table";
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["序号", "mikanid / groupid", "状态", "任务 ID"].forEach(label => {
+          const cell = document.createElement("th");
+          cell.textContent = label;
+          headRow.append(cell);
+        });
+        head.append(headRow);
+        const tableBody = document.createElement("tbody");
+        item.items.forEach(detail => {
+          const row = document.createElement("tr");
+          [
+            String(detail.index + 1),
+            `${detail.mikanid ?? "—"} / ${detail.groupid ?? "—"}`,
+            `${detail.status}${detail.failure_code ? ` · ${detail.failure_code}` : ""}`,
+            detail.task_id ?? "—",
+          ].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.append(cell);
+          });
+          tableBody.append(row);
+        });
+        table.append(head, tableBody);
+        bodyElement.append(table);
+      }
+      card.append(summary, bodyElement);
+      return card;
+    }));
+  } catch (error) {
+    renderRegionMessage(
+      container,
+      "error",
+      `插件调用日志读取失败：${errorMessage(error, "未知错误")}`,
+    );
+  }
+}
+
 const notificationProviderDefaults: Record<NotificationProvider, string> = {
   bark: "https://api.day.app",
   generic: "",
@@ -13222,6 +13354,18 @@ element<HTMLButtonElement>("#mikan-manual-series-mappings-reload").addEventListe
   "click",
   () => void loadMikanManualSeriesMappings(),
 );
+element<HTMLButtonElement>("#mikan-plugin-call-reload").addEventListener(
+  "click",
+  () => void loadMikanPluginCallLogs(),
+);
+element<HTMLSelectElement>("#mikan-plugin-call-mode").addEventListener(
+  "change",
+  () => void loadMikanPluginCallLogs(),
+);
+element<HTMLSelectElement>("#mikan-plugin-call-result").addEventListener(
+  "change",
+  () => void loadMikanPluginCallLogs(),
+);
 element<HTMLSelectElement>("#trusted-offset-blacklist-scope").addEventListener(
   "change",
   updateTrustedOffsetBlacklistFields,
@@ -13925,6 +14069,7 @@ void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 void loadMikanManualSeriesMappings();
+void loadMikanPluginCallLogs();
 updateTrustedOffsetBlacklistFields();
 void loadTrustedOffsetBlacklist();
 resetNotificationForm();

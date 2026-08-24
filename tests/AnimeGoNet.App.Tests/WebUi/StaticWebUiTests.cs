@@ -6,7 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
-    [InlineData("/", "text/html", "/styles.css?v=20260823-download-tmdb-matching-log")]
+    [InlineData("/", "text/html", "/styles.css?v=20260824-mikan-plugin-audit")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]
@@ -148,7 +148,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "delete web.access_key")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260824-mikan-manual-series-map")]
+    [InlineData("/", "text/html", "/app.js?v=20260824-mikan-plugin-audit")]
     [InlineData("/", "text/html", "other-readaptation-review-reject")]
     [InlineData("/", "text/html", "拒绝并保留 Other")]
     [InlineData("/app.js", "text/javascript", "/ai-series-change-review/accept")]

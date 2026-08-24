@@ -171,6 +171,8 @@ public sealed class MikanTrustedOffsetApiTests
         Assert.Contains("人工规则、完成记录和媒体文件不会删除", script, StringComparison.Ordinal);
         Assert.Contains("id=\"mikan-manual-series-mappings\"", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/manual-series-mappings", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"mikan-plugin-call-workspace\"", html, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/logs/mikan-plugin-calls", script, StringComparison.Ordinal);
     }
 
     private static MikanOffsetEvidenceObservation Observation(int sourceEpisode) =>

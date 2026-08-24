@@ -157,6 +157,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks/{taskId}", MetadataTaskDetail);
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/logs/ai-invocations", AiInvocationLogs);
+        app.MapGet("/api/v1/logs/mikan-plugin-calls", ListMikanPluginCallLogs);
         app.MapGet("/api/v1/logs/ai-invocations/{runId}/debug", AiInvocationDebug);
         app.MapDelete("/api/v1/logs/ai-invocations/{runId}/debug", DeleteAiInvocationDebug);
         app.MapGet("/api/v1/notifications/channels", ListNotificationChannels);
@@ -5630,6 +5631,56 @@ public static class ApiEndpoints
                 value.UpdatedAtUtc)).ToArray()));
     }
 
+    private static async Task<IResult> ListMikanPluginCallLogs(
+        int? page,
+        int? page_size,
+        string? mode,
+        string? result,
+        MikanPluginCallLogStore logs,
+        CancellationToken cancellationToken)
+    {
+        var effectivePage = page ?? 1;
+        var effectivePageSize = page_size ?? 50;
+        if (effectivePage < 1
+            || effectivePageSize is < 1 or > 200
+            || (!string.IsNullOrWhiteSpace(mode)
+                && mode.Trim().ToLowerInvariant() is not ("single" or "all" or "selected" or "batch"))
+            || (!string.IsNullOrWhiteSpace(result)
+                && result.Trim().ToLowerInvariant() is not ("success" or "partial" or "failed")))
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_plugin_call_log_filter_invalid",
+                "Mikan plugin call log filter is invalid."));
+        }
+
+        var pageResult = await logs.ListAsync(
+            effectivePage, effectivePageSize, mode, result, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new MikanPluginCallLogListResponse(
+            pageResult.Page,
+            pageResult.PageSize,
+            pageResult.TotalCount,
+            pageResult.Items.Select(entry => new MikanPluginCallLogResponse(
+                entry.Id,
+                entry.Endpoint,
+                entry.Mode,
+                entry.MediaType,
+                entry.Result,
+                entry.RequestedCount,
+                entry.AcceptedCount,
+                entry.RejectedCount,
+                entry.FailureCode,
+                entry.DurationMilliseconds,
+                entry.StartedAtUtc,
+                entry.CompletedAtUtc,
+                entry.Items.Select(item => new MikanPluginCallLogItemResponse(
+                    item.Index,
+                    item.TaskId,
+                    item.MikanId,
+                    item.GroupId,
+                    item.Status,
+                    item.FailureCode)).ToArray())).ToArray()));
+    }
+
     private static async Task<IResult> DeleteMikanManualSeriesMapping(
         int mikanId,
         int groupId,
@@ -7606,10 +7657,18 @@ public static class ApiEndpoints
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         MikanRssIngestProcessor processor,
         LegacyDownloaderMigrationState legacyMigration,
+        MikanPluginCallLogStore audit,
         CancellationToken cancellationToken)
     {
+        var startedAt = DateTimeOffset.UtcNow;
+        var timer = Stopwatch.StartNew();
+        var mode = request.IsSelectEp ? "selected" : "all";
+        var mediaType = NormalizePluginMediaType(request.MediaType);
         if (legacyMigration.BlockingDiagnostic is { } diagnostic)
         {
+            await RecordMikanPluginCallAsync(
+                audit, "/api/rss", mode, mediaType, 0, 0, 0,
+                "failed", diagnostic.Code, startedAt, timer, [], cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 300,
                 $"{diagnostic.Code}: {diagnostic.Message}",
@@ -7619,6 +7678,9 @@ public static class ApiEndpoints
         if (!string.Equals(request.Source?.Trim(), "mikan", StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrWhiteSpace(request.Rss?.Url))
         {
+            await RecordMikanPluginCallAsync(
+                audit, "/api/rss", mode, mediaType, 0, 0, 0,
+                "failed", "plugin_request_invalid", startedAt, timer, [], cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 300, "source and rss.url are required", null));
         }
@@ -7644,11 +7706,26 @@ public static class ApiEndpoints
                 "mikan",
                 request.MediaType ?? "tv",
                 cancellationToken).ConfigureAwait(false);
+            var auditItems = result.Items.Select((item, index) => new MikanPluginCallLogItem(
+                index,
+                item.IngestTaskId,
+                item.IdentityMikanId ?? result.MikanId,
+                item.IdentityGroupId,
+                item.Status,
+                item.Errors.Count == 0 ? null : "ingest_item_rejected")).ToArray();
+            var accepted = auditItems.Count(item => item.TaskId is not null);
+            await RecordMikanPluginCallAsync(
+                audit, "/api/rss", mode, mediaType, feed.Items.Count, accepted,
+                auditItems.Length - accepted, "success", null, startedAt, timer,
+                auditItems, cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 200, $"开始处理{feed.Items.Count}个下载项", result));
         }
         catch (RssFeedException exception)
         {
+            await RecordMikanPluginCallAsync(
+                audit, "/api/rss", mode, mediaType, request.EpLinks?.Count ?? 0, 0, 0,
+                "failed", exception.Code, startedAt, timer, [], cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 300, $"RSS processing failed: {exception.Code}", null));
         }
@@ -7702,8 +7779,16 @@ public static class ApiEndpoints
         IngestBatchRequest request,
         UnifiedIngestProcessor processor,
         MikanAiTestImportService mikanResolver,
+        MikanPluginCallLogStore audit,
         CancellationToken cancellationToken)
     {
+        var startedAt = DateTimeOffset.UtcNow;
+        var timer = Stopwatch.StartNew();
+        var requested = request.Data?.Count ?? 0;
+        var mode = requested == 1 ? "single" : "batch";
+        var mediaType = NormalizePluginMediaType(request.Data?
+            .Select(item => item?.Info?.MediaType)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)));
         var legacyData = new List<IngestItemRequest?>();
         foreach (var item in request.Data ?? [])
         {
@@ -7748,6 +7833,9 @@ public static class ApiEndpoints
                 }
                 catch (MikanAiTestImportException exception)
                 {
+                    await RecordMikanPluginCallAsync(
+                        audit, "/api/download/manager", mode, mediaType, requested, 0, requested,
+                        "failed", exception.Code, startedAt, timer, [], cancellationToken).ConfigureAwait(false);
                     return TypedResults.Ok(new LegacyApiResponse<IngestBatchResponse?>(
                         300,
                         $"{exception.Code}: {exception.Message}",
@@ -7763,6 +7851,23 @@ public static class ApiEndpoints
             requireModernMetadata: false,
             cancellationToken).ConfigureAwait(false);
         var success = response.RejectedCount == 0;
+        var auditItems = response.Items.Select((item, index) =>
+        {
+            var info = index < legacyData.Count ? legacyData[index]?.Info : null;
+            return new MikanPluginCallLogItem(
+                index,
+                item.IngestId,
+                info?.MikanId,
+                info?.GroupId,
+                item.Status,
+                item.Errors.Count == 0 ? null : "ingest_item_rejected");
+        }).ToArray();
+        await RecordMikanPluginCallAsync(
+            audit, "/api/download/manager", mode, mediaType, requested,
+            response.AcceptedCount, response.RejectedCount,
+            success ? "success" : response.AcceptedCount > 0 ? "partial" : "failed",
+            success ? null : "ingest_items_rejected", startedAt, timer,
+            auditItems, cancellationToken).ConfigureAwait(false);
         var message = success
             ? $"开始处理{response.AcceptedCount}个下载项"
             : string.Join("; ", response.Items.SelectMany(item => item.Errors));
@@ -7770,6 +7875,32 @@ public static class ApiEndpoints
             success ? 200 : 300,
             message,
             response));
+    }
+
+    private static string NormalizePluginMediaType(string? value) =>
+        string.Equals(value?.Trim(), "movie", StringComparison.OrdinalIgnoreCase) ? "movie" : "tv";
+
+    private static async Task RecordMikanPluginCallAsync(
+        MikanPluginCallLogStore audit,
+        string endpoint,
+        string mode,
+        string mediaType,
+        int requestedCount,
+        int acceptedCount,
+        int rejectedCount,
+        string result,
+        string? failureCode,
+        DateTimeOffset startedAt,
+        Stopwatch timer,
+        IReadOnlyList<MikanPluginCallLogItem> items,
+        CancellationToken cancellationToken)
+    {
+        timer.Stop();
+        await audit.RecordAsync(new MikanPluginCallLog(
+            Guid.NewGuid().ToString("N"), endpoint, mode, mediaType, result,
+            requestedCount, acceptedCount, rejectedCount, failureCode,
+            timer.ElapsedMilliseconds, startedAt, DateTimeOffset.UtcNow, items),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static bool ShouldResolveLegacyMikanEpisode(

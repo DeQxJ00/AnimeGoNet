@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 61;
+    public const int CurrentVersion = 62;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -131,7 +131,43 @@ public static class DatabaseSchema
             61,
             "mikan_manual_series_mapping",
             MikanManualSeriesMapping),
+        new SchemaMigration(
+            62,
+            "mikan_plugin_call_audit",
+            MikanPluginCallAudit),
     ];
+
+    private const string MikanPluginCallAudit = """
+        CREATE TABLE mikan_plugin_call_logs (
+            id TEXT NOT NULL PRIMARY KEY,
+            endpoint TEXT NOT NULL,
+            mode TEXT NOT NULL CHECK (mode IN ('single', 'all', 'selected', 'batch')),
+            media_type TEXT NOT NULL CHECK (media_type IN ('tv', 'movie', 'mixed')),
+            result TEXT NOT NULL CHECK (result IN ('success', 'partial', 'failed')),
+            requested_count INTEGER NOT NULL CHECK (requested_count >= 0),
+            accepted_count INTEGER NOT NULL CHECK (accepted_count >= 0),
+            rejected_count INTEGER NOT NULL CHECK (rejected_count >= 0),
+            failure_code TEXT NULL,
+            duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0),
+            started_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_mikan_plugin_call_logs_completed
+        ON mikan_plugin_call_logs(completed_at_utc DESC);
+
+        CREATE TABLE mikan_plugin_call_log_items (
+            call_id TEXT NOT NULL,
+            item_index INTEGER NOT NULL CHECK (item_index >= 0),
+            task_id TEXT NULL,
+            mikanid INTEGER NULL CHECK (mikanid > 0),
+            groupid INTEGER NULL CHECK (groupid > 0),
+            status TEXT NOT NULL,
+            failure_code TEXT NULL,
+            PRIMARY KEY (call_id, item_index),
+            FOREIGN KEY (call_id) REFERENCES mikan_plugin_call_logs(id) ON DELETE CASCADE
+        ) STRICT;
+        """;
 
     private const string MikanManualSeriesMapping = """
         ALTER TABLE ai_series_change_reviews ADD COLUMN mikanid INTEGER NULL CHECK (mikanid > 0);

@@ -44,6 +44,16 @@ public sealed class LegacyRssApiTests
         Assert.Equal("resolved", data.GetProperty("bgmid_discovery_state").GetString());
         Assert.Equal("staged", data.GetProperty("items")[0].GetProperty("status").GetString());
         Assert.Single(transport.FeedRequests);
+
+        using var logs = await app.Client.GetAsync(
+            "/api/v1/logs/mikan-plugin-calls?mode=selected");
+        using var logsJson = JsonDocument.Parse(await logs.Content.ReadAsStreamAsync());
+        var call = Assert.Single(logsJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("selected", call.GetProperty("mode").GetString());
+        Assert.Equal("success", call.GetProperty("result").GetString());
+        Assert.Equal(1, call.GetProperty("accepted_count").GetInt32());
+        Assert.Equal(3951, call.GetProperty("items")[0].GetProperty("mikanid").GetInt32());
+        Assert.False((await logs.Content.ReadAsStringAsync()).Contains("Download/b.torrent", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -68,6 +78,12 @@ public sealed class LegacyRssApiTests
         Assert.Equal(300, json.RootElement.GetProperty("code").GetInt32());
         Assert.Equal("RSS processing failed: rss_redirect_rejected", json.RootElement.GetProperty("msg").GetString());
         Assert.Single(transport.FeedRequests);
+
+        using var logs = await app.Client.GetAsync(
+            "/api/v1/logs/mikan-plugin-calls?result=failed");
+        using var logsJson = JsonDocument.Parse(await logs.Content.ReadAsStreamAsync());
+        var call = Assert.Single(logsJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("rss_redirect_rejected", call.GetProperty("failure_code").GetString());
     }
 
     [Fact]

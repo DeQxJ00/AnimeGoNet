@@ -837,6 +837,15 @@ public sealed class MinimalApiTests
         var data = json.RootElement.GetProperty("data");
         Assert.Equal("bt", data.GetProperty("items")[0].GetProperty("downloader_id").GetString());
         Assert.Equal(1, data.GetProperty("accepted_count").GetInt32());
+
+        using var logs = await app.Client.GetAsync(
+            "/api/v1/logs/mikan-plugin-calls?mode=single");
+        using var logsJson = JsonDocument.Parse(await logs.Content.ReadAsStreamAsync());
+        var call = Assert.Single(logsJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("/api/download/manager", call.GetProperty("endpoint").GetString());
+        Assert.Equal("single", call.GetProperty("mode").GetString());
+        Assert.Equal(1, call.GetProperty("accepted_count").GetInt32());
+        Assert.DoesNotContain("private-passkey", await logs.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     private sealed class RejectingStagingService : ITorrentStagingService

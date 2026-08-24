@@ -458,6 +458,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanWorkMetadataRuleStore>();
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MikanManualSeriesMappingStore>();
+        builder.Services.AddSingleton<MikanPluginCallLogStore>();
         builder.Services.AddSingleton<NotificationStore>();
         builder.Services.AddSingleton(new WebhookNotificationSender(
             OutboundHttpClientFactory.Create(
