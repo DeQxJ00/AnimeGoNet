@@ -114,6 +114,28 @@ public interface ITmdbClient
         CancellationToken cancellationToken = default);
 }
 
+public interface ITmdbRefreshClient : ITmdbClient
+{
+    Task<IReadOnlyList<TmdbSeries>> RefreshSeriesSearchAsync(
+        string title,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbSeriesDetails?> RefreshSeriesDetailsAsync(
+        int seriesId,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbSeason?> RefreshSeasonAsync(
+        int seriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken = default);
+
+    Task<TmdbEpisode?> RefreshEpisodeAsync(
+        int seriesId,
+        int seasonNumber,
+        int episodeNumber,
+        CancellationToken cancellationToken = default);
+}
+
 public interface ITmdbMovieClient
 {
     Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(

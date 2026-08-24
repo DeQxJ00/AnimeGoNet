@@ -181,6 +181,70 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task MikanStaleTmdbSeasonSnapshotRefreshesBeforeEpisodeEightDateMatch()
+    {
+        var staleEpisodes = Enumerable.Range(1, 7)
+            .Select(number => new TmdbEpisode(
+                29610100 + number,
+                296101,
+                1,
+                number,
+                $"Episode {number}",
+                new DateOnly(2026, 7, 4).AddDays((number - 1) * 7)))
+            .ToArray();
+        var episodeEight = new TmdbEpisode(
+            29610108,
+            296101,
+            1,
+            8,
+            "Episode 8",
+            new DateOnly(2026, 8, 22));
+        var tmdb = new FakeTmdbClient
+        {
+            SeriesValue = new TmdbSeries(296101, "Grow Up Show", "Grow Up Show", new DateOnly(2026, 7, 4)),
+            SeasonValue = new TmdbSeason(
+                29610101,
+                296101,
+                1,
+                "Season 1",
+                new DateOnly(2026, 7, 4),
+                7,
+                Episodes: staleEpisodes),
+            RefreshedSeasonValue = new TmdbSeason(
+                29610101,
+                296101,
+                1,
+                "Season 1",
+                new DateOnly(2026, 7, 4),
+                8,
+                Episodes: [.. staleEpisodes, episodeEight]),
+            EpisodeFactory = number => number == 8 ? episodeEight : null,
+        };
+        var bangumi = new FakeBangumiEpisodeClient(
+        [
+            new BangumiEpisode(57058308, 0, 8, new DateOnly(2026, 8, 22)),
+        ]);
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            bangumiEpisodeClient: bangumi,
+            tmdbSeriesId: 296101,
+            tmdbSeasonNumber: 1);
+        var taskId = await PrepareFilesAsync(app, ("Grow Up Show - 08.mkv", "8", "8"));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("episode", file.Disposition);
+        Assert.Equal(8, file.EpisodeNumber);
+        Assert.Equal("tmdb_episode_bangumi_date", file.ResolutionSource);
+        Assert.Equal(1, tmdb.SeasonRefreshCalls);
+        Assert.Equal([8], tmdb.EpisodeRequests);
+    }
+
+    [Fact]
     public async Task MikanTargetAirDateRefreshFailureRemainsRetryable()
     {
         var bangumi = new RefreshingBangumiEpisodeClient(
@@ -685,6 +749,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         var file = Assert.Single(await ReadFilesAsync(app, taskId));
         Assert.Equal(13, file.EpisodeNumber);
         Assert.Equal([13], tmdb.EpisodeRequests);
+        Assert.Equal(0, tmdb.EpisodeRefreshCalls);
     }
 
     [Fact]
@@ -753,7 +818,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
             .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
         Assert.Equal(MetadataFailureKind.SemanticNoMatch, run.FailureKind);
-        Assert.Equal([13], tmdb.EpisodeRequests);
+        Assert.Equal([13, 13], tmdb.EpisodeRequests);
+        Assert.Equal(1, tmdb.EpisodeRefreshCalls);
     }
 
     [Fact]
@@ -1384,17 +1450,53 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         string? ResolutionRunId,
         string? ResolutionAttemptId);
 
-    private sealed class FakeTmdbClient : ITmdbClient
+    private sealed class FakeTmdbClient : ITmdbRefreshClient
     {
         public TmdbSeries SeriesValue { get; init; } = Series;
 
         public TmdbSeason SeasonValue { get; init; } = Season;
+
+        public TmdbSeason? RefreshedSeasonValue { get; init; }
 
         public Func<int, TmdbEpisode?> EpisodeFactory { get; init; } = _ => null;
 
         public TmdbClientException? EpisodeFailure { get; init; }
 
         public List<int> EpisodeRequests { get; } = [];
+
+        public int SeasonRefreshCalls { get; private set; }
+
+        public int EpisodeRefreshCalls { get; private set; }
+
+        public Task<IReadOnlyList<TmdbSeries>> RefreshSeriesSearchAsync(
+            string title,
+            CancellationToken cancellationToken = default) =>
+            SearchSeriesAsync(title, cancellationToken);
+
+        public Task<TmdbSeriesDetails?> RefreshSeriesDetailsAsync(
+            int seriesId,
+            CancellationToken cancellationToken = default) =>
+            GetSeriesDetailsAsync(seriesId, cancellationToken);
+
+        public Task<TmdbSeason?> RefreshSeasonAsync(
+            int seriesId,
+            int seasonNumber,
+            CancellationToken cancellationToken = default)
+        {
+            SeasonRefreshCalls++;
+            return Task.FromResult<TmdbSeason?>(
+                CompleteSnapshot(RefreshedSeasonValue ?? SeasonValue));
+        }
+
+        public Task<TmdbEpisode?> RefreshEpisodeAsync(
+            int seriesId,
+            int seasonNumber,
+            int episodeNumber,
+            CancellationToken cancellationToken = default)
+        {
+            EpisodeRefreshCalls++;
+            return GetEpisodeAsync(seriesId, seasonNumber, episodeNumber, cancellationToken);
+        }
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(string title, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<TmdbSeries>>([SeriesValue]);

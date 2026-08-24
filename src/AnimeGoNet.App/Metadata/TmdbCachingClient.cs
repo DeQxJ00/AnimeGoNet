@@ -14,7 +14,7 @@ internal sealed class TmdbCachingClient(
     TmdbClientOptions options,
     TimeProvider? timeProvider = null,
     bool ownsInner = false,
-    MetadataRefreshScope? refreshScope = null) : ITmdbClient, ITmdbMovieClient, IDisposable
+    MetadataRefreshScope? refreshScope = null) : ITmdbRefreshClient, ITmdbMovieClient, IDisposable
 {
     internal const string DatabaseName = "bolt";
     internal const string BucketName = "themoviedb";
@@ -45,13 +45,41 @@ internal sealed class TmdbCachingClient(
             return cached;
         }
 
+        return await FetchSeriesSearchAsync(
+            title,
+            cacheEmptyResult: true,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<TmdbSeries>> RefreshSeriesSearchAsync(
+        string title,
+        CancellationToken cancellationToken = default) =>
+        await FetchSeriesSearchAsync(
+            title,
+            cacheEmptyResult: false,
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<IReadOnlyList<TmdbSeries>> FetchSeriesSearchAsync(
+        string title,
+        bool cacheEmptyResult,
+        CancellationToken cancellationToken)
+    {
         var result = (await inner.SearchSeriesAsync(title, cancellationToken)
             .ConfigureAwait(false)).ToArray();
-        await WriteAsync(
-            key,
-            result,
-            TmdbJsonContext.Default.TmdbSeriesArray,
-            cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(title) || options.CacheTtl <= TimeSpan.Zero)
+        {
+            return result;
+        }
+
+        var key = Key("search", title.Trim());
+        if (cacheEmptyResult || result.Length > 0)
+        {
+            await WriteAsync(
+                key,
+                result,
+                TmdbJsonContext.Default.TmdbSeriesArray,
+                cancellationToken).ConfigureAwait(false);
+        }
         return result;
     }
 
@@ -156,10 +184,23 @@ internal sealed class TmdbCachingClient(
             return cached;
         }
 
+        return await RefreshSeriesDetailsAsync(seriesId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TmdbSeriesDetails?> RefreshSeriesDetailsAsync(
+        int seriesId,
+        CancellationToken cancellationToken = default)
+    {
         var result = await inner.GetSeriesDetailsAsync(seriesId, cancellationToken)
             .ConfigureAwait(false);
-        if (result is not null)
+        if (result is not null && IsValidDetails(result, seriesId))
         {
+            if (seriesId <= 0 || options.CacheTtl <= TimeSpan.Zero)
+            {
+                return result;
+            }
+
+            var key = Key("series", seriesId.ToString(System.Globalization.CultureInfo.InvariantCulture));
             await WriteAsync(
                 key,
                 result,
@@ -191,10 +232,24 @@ internal sealed class TmdbCachingClient(
             return cached;
         }
 
+        return await RefreshSeasonAsync(seriesId, seasonNumber, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TmdbSeason?> RefreshSeasonAsync(
+        int seriesId,
+        int seasonNumber,
+        CancellationToken cancellationToken = default)
+    {
         var result = await inner.GetSeasonAsync(seriesId, seasonNumber, cancellationToken)
             .ConfigureAwait(false);
         if (result is not null && IsCacheableSeason(result, seriesId, seasonNumber))
         {
+            if (seriesId <= 0 || seasonNumber <= 0 || options.CacheTtl <= TimeSpan.Zero)
+            {
+                return result;
+            }
+
+            var key = Key("season", FormattableString.Invariant($"{seriesId}:{seasonNumber}"));
             await WriteAsync(
                 key,
                 result,
@@ -230,11 +285,30 @@ internal sealed class TmdbCachingClient(
             return cached;
         }
 
+        return await RefreshEpisodeAsync(
+            seriesId, seasonNumber, episodeNumber, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TmdbEpisode?> RefreshEpisodeAsync(
+        int seriesId,
+        int seasonNumber,
+        int episodeNumber,
+        CancellationToken cancellationToken = default)
+    {
         var result = await inner.GetEpisodeAsync(
             seriesId, seasonNumber, episodeNumber, cancellationToken).ConfigureAwait(false);
         if (result is not null && IsCacheableEpisode(
                 result, seriesId, seasonNumber, episodeNumber))
         {
+            if (seriesId <= 0 || seasonNumber <= 0 || episodeNumber <= 0
+                || options.CacheTtl <= TimeSpan.Zero)
+            {
+                return result;
+            }
+
+            var key = Key(
+                "episode",
+                FormattableString.Invariant($"{seriesId}:{seasonNumber}:{episodeNumber}"));
             await WriteAsync(
                 key,
                 result,

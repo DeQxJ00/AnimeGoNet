@@ -23,6 +23,9 @@
   Series/Season/Episode 父子身份；
   JSON 损坏或身份不一致时删除并回源。
 - 序列化只使用 `TmdbJsonContext` source generation，保持 NativeAOT 边界。
+- 缓存命中但本次解析所需对象缺失时，只刷新缺失层一次：空 Search、缺失的
+  Series/Season、Season 快照缺目标 EP、空 Episode 分别走显式权威刷新。刷新成功覆盖
+  同一 key 并重置 TTL；刷新为空、身份无效、Episode 无日期或网络失败均保留旧成功值。
 
 ## 验收
 
@@ -30,6 +33,10 @@
   无 `air_date` Episode/Season 不缓存且旧条目自动刷新、
   失败不缓存、Base URL/语言隔离、secret/query 不落库、伪造身份回源、取消传播与默认
   DI 装配。
+- `TmdbSeriesResolverTests`、`TmdbSeriesSeasonResolverTests` 与
+  `EpisodeMetadataResolutionProcessorTests`：三层缺失均只刷新一次；固定
+  TMDB `296101/S01` 的旧快照只有 E1–E7，刷新得到 E8 后按 Bangumi 日期确定性完成，
+  不进入 AI。
 - 配置测试：144 小时默认值、范围校验、规范 YAML、12 份固定上游历史 YAML 的旧
   `themoviedb_cache_hour` 迁移、环境/命令行只读锁、API/WebUI 投影与私有覆盖。
 - WebUI：TypeScript strict check、确定性编译和 5 项共享 HTTP client 测试。

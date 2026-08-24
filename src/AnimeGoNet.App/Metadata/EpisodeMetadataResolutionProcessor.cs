@@ -130,6 +130,14 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     claim.TmdbSeriesId,
                     claim.TmdbSeasonNumber,
                     cancellationToken).ConfigureAwait(false);
+                if (NeedsEpisodeSnapshotRefresh(tmdbSeason, sourceCandidates)
+                    && tmdb is ITmdbRefreshClient refreshClient)
+                {
+                    tmdbSeason = await refreshClient.RefreshSeasonAsync(
+                        claim.TmdbSeriesId,
+                        claim.TmdbSeasonNumber,
+                        cancellationToken).ConfigureAwait(false);
+                }
                 episodeDateContext = new EpisodeDateContext(
                     bangumiValues,
                     tmdbSeason?.Episodes ?? []);
@@ -311,6 +319,14 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     targetSeasonNumber,
                     targetEpisode,
                     cancellationToken).ConfigureAwait(false);
+                if (episode is null && tmdb is ITmdbRefreshClient refreshClient)
+                {
+                    episode = await refreshClient.RefreshEpisodeAsync(
+                        claim.TmdbSeriesId,
+                        targetSeasonNumber,
+                        targetEpisode,
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (TmdbClientException exception)
             {
@@ -528,6 +544,13 @@ public sealed class EpisodeMetadataResolutionProcessor(
         await LearnTrustedOffsetAsync(claim, results, cancellationToken).ConfigureAwait(false);
         return true;
     }
+
+    private static bool NeedsEpisodeSnapshotRefresh(
+        TmdbSeason? season,
+        IReadOnlyCollection<int> sourceCandidates) =>
+        season?.Episodes is null
+        || sourceCandidates.Any(candidate =>
+            !season.Episodes.Any(episode => episode.EpisodeNumber == candidate));
 
     private sealed record EpisodeDateContext(
         IReadOnlyList<BangumiEpisode> BangumiEpisodes,

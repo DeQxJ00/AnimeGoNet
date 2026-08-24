@@ -335,6 +335,13 @@ Search/Series/Season/Episode 成功响应，默认 `144` 小时（6 天），范
 缓存位于 SQLite `bolt/themoviedb` bucket，可在 WebUI 缓存页按 opaque 标识精确
 删除；缓存键和值都不包含 API key 或 Bearer token，原始搜索词只参与键摘要而不单独落库。
 
+解析过程中若已命中的缓存无法提供当前必需的权威对象，主程序会只针对缺失层在线强制
+刷新一次：搜索结果为空时刷新 Search，Series 详情没有可匹配季度或季度 endpoint 为空
+时刷新 Series/Season，已确认季度的快照没有目标 EP 或 Episode endpoint 为空时刷新
+Season/Episode。有效刷新结果覆盖原条目并重新计算 TTL；空、身份不符、无 Episode
+日期及网络失败结果不会覆盖已有成功缓存。刷新一次后仍缺失才继续既有失败分类或 AI
+流程，不循环重试，也不清除其他 TMDB 缓存。
+
 季度失败链按 P4 → P3 → P2 → P1 逐级执行；四项均默认关闭。P3 需要 bgmid，并按
 Bangumi 前作名字和开播日期重新验证 TMDB Series+Season；P2 只从统一导入任务
 title 本地解析季度，P1 本地固定 S01，P2/P1 不调用 TMDB Season 验证。AI 是独立的

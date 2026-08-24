@@ -186,6 +186,20 @@ public sealed class TmdbSeriesResolverTests
         Assert.False(result.Failure.TmdbAccessConfirmed);
     }
 
+    [Fact]
+    public async Task CachedEmptySearchRefreshesOnceAndUsesAuthoritativeResult()
+    {
+        var found = new TmdbSeries(296101, "Grow Up Show", "Grow Up Show", null);
+        var client = new RefreshingSearchClient(found);
+
+        var result = await new TmdbSeriesResolver(client).ResolveAsync("Grow Up Show");
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(found, result.Value);
+        Assert.Equal(1, client.CachedSearchCalls);
+        Assert.Equal(1, client.RefreshSearchCalls);
+    }
+
     private sealed class SearchClient(Func<string, IReadOnlyList<TmdbSeries>> search) : ITmdbClient
     {
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
@@ -212,6 +226,50 @@ public sealed class TmdbSeriesResolverTests
             int seasonNumber,
             int episodeNumber,
             CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class RefreshingSearchClient(TmdbSeries refreshed) : ITmdbRefreshClient
+    {
+        public int CachedSearchCalls { get; private set; }
+
+        public int RefreshSearchCalls { get; private set; }
+
+        public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            CachedSearchCalls++;
+            return Task.FromResult<IReadOnlyList<TmdbSeries>>([]);
+        }
+
+        public Task<IReadOnlyList<TmdbSeries>> RefreshSeriesSearchAsync(
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            RefreshSearchCalls++;
+            return Task.FromResult<IReadOnlyList<TmdbSeries>>([refreshed]);
+        }
+
+        public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(int seriesId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbSeriesDetails?> RefreshSeriesDetailsAsync(int seriesId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbSeason?> GetSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbSeason?> RefreshSeasonAsync(int seriesId, int seasonNumber, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbEpisode?> GetEpisodeAsync(int seriesId, int seasonNumber, int episodeNumber, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<TmdbEpisode?> RefreshEpisodeAsync(int seriesId, int seasonNumber, int episodeNumber, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 }

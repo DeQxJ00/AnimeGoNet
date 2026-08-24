@@ -16,6 +16,12 @@ public sealed class TmdbAuthority(ITmdbClient client)
         try
         {
             var series = await client.GetSeriesAsync(seriesId, cancellationToken).ConfigureAwait(false);
+            if (series is null && client is ITmdbRefreshClient seriesRefreshClient)
+            {
+                series = (await seriesRefreshClient.RefreshSeriesDetailsAsync(
+                    seriesId,
+                    cancellationToken).ConfigureAwait(false))?.Series;
+            }
             if (series is null)
             {
                 return Failed(MetadataFailureKind.SemanticNoMatch, "tmdb_series_not_found", accessConfirmed: true);
@@ -35,6 +41,13 @@ public sealed class TmdbAuthority(ITmdbClient client)
             }
 
             var season = await client.GetSeasonAsync(seriesId, seasonNumber, cancellationToken).ConfigureAwait(false);
+            if (season is null && client is ITmdbRefreshClient seasonRefreshClient)
+            {
+                season = await seasonRefreshClient.RefreshSeasonAsync(
+                    seriesId,
+                    seasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+            }
             if (season is null)
             {
                 return Failed(MetadataFailureKind.SemanticNoMatch, "tmdb_season_not_found", accessConfirmed: true);
@@ -50,6 +63,14 @@ public sealed class TmdbAuthority(ITmdbClient client)
                 seasonNumber,
                 episodeNumber,
                 cancellationToken).ConfigureAwait(false);
+            if (episode is null && client is ITmdbRefreshClient episodeRefreshClient)
+            {
+                episode = await episodeRefreshClient.RefreshEpisodeAsync(
+                    seriesId,
+                    seasonNumber,
+                    episodeNumber,
+                    cancellationToken).ConfigureAwait(false);
+            }
             if (episode is null)
             {
                 return Failed(MetadataFailureKind.SemanticNoMatch, "tmdb_episode_not_found", accessConfirmed: true);

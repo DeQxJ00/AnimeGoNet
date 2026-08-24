@@ -88,6 +88,77 @@ public sealed class TmdbCachingClientTests
     }
 
     [Fact]
+    public async Task ExplicitRefreshBypassesAndReplacesSuccessfulCachedMetadata()
+    {
+        await using var fixture = await CacheFixture.CreateAsync();
+        var oldInner = new FakeTmdbClient
+        {
+            Series = new TmdbSeries(42, "Old", "Old JP", new DateOnly(2026, 1, 1)),
+            EpisodeAirDate = new DateOnly(2026, 1, 3),
+        };
+        var oldClient = fixture.Create(oldInner);
+        Assert.Single(await oldClient.SearchSeriesAsync("Example"));
+        Assert.NotNull(await oldClient.GetSeriesDetailsAsync(42));
+        Assert.NotNull(await oldClient.GetSeasonAsync(42, 2));
+        Assert.NotNull(await oldClient.GetEpisodeAsync(42, 2, 3));
+
+        var refreshedInner = new FakeTmdbClient
+        {
+            Series = new TmdbSeries(42, "New", "New JP", new DateOnly(2026, 1, 2)),
+            EpisodeAirDate = new DateOnly(2026, 2, 3),
+        };
+        var refreshClient = Assert.IsAssignableFrom<ITmdbRefreshClient>(
+            fixture.Create(refreshedInner));
+        Assert.Equal("New", Assert.Single(
+            await refreshClient.RefreshSeriesSearchAsync("Example")).Name);
+        Assert.Equal("New", (await refreshClient.RefreshSeriesDetailsAsync(42))!.Series.Name);
+        Assert.Equal(
+            new DateOnly(2026, 2, 3),
+            Assert.Single((await refreshClient.RefreshSeasonAsync(42, 2))!.Episodes!).AirDate);
+        Assert.Equal(
+            new DateOnly(2026, 2, 3),
+            (await refreshClient.RefreshEpisodeAsync(42, 2, 3))!.AirDate);
+
+        var cachedOnly = new FakeTmdbClient { ThrowOnEveryCall = true };
+        var restarted = fixture.Create(cachedOnly);
+        Assert.Equal("New", Assert.Single(await restarted.SearchSeriesAsync("Example")).Name);
+        Assert.Equal("New", (await restarted.GetSeriesDetailsAsync(42))!.Series.Name);
+        Assert.Equal(
+            new DateOnly(2026, 2, 3),
+            Assert.Single((await restarted.GetSeasonAsync(42, 2))!.Episodes!).AirDate);
+        Assert.Equal(
+            new DateOnly(2026, 2, 3),
+            (await restarted.GetEpisodeAsync(42, 2, 3))!.AirDate);
+        Assert.Equal(0, cachedOnly.CallCount);
+    }
+
+    [Fact]
+    public async Task EmptyExplicitRefreshDoesNotOverwriteExistingCache()
+    {
+        await using var fixture = await CacheFixture.CreateAsync();
+        var seeded = fixture.Create(new FakeTmdbClient());
+        Assert.Single(await seeded.SearchSeriesAsync("Example"));
+        Assert.NotNull(await seeded.GetSeriesDetailsAsync(42));
+        Assert.NotNull(await seeded.GetSeasonAsync(42, 2));
+        Assert.NotNull(await seeded.GetEpisodeAsync(42, 2, 3));
+
+        var missing = Assert.IsAssignableFrom<ITmdbRefreshClient>(fixture.Create(
+            new FakeTmdbClient { SearchResult = [], ReturnNotFound = true }));
+        Assert.Empty(await missing.RefreshSeriesSearchAsync("Example"));
+        Assert.Null(await missing.RefreshSeriesDetailsAsync(42));
+        Assert.Null(await missing.RefreshSeasonAsync(42, 2));
+        Assert.Null(await missing.RefreshEpisodeAsync(42, 2, 3));
+
+        var cachedOnly = new FakeTmdbClient { ThrowOnEveryCall = true };
+        var restarted = fixture.Create(cachedOnly);
+        Assert.Single(await restarted.SearchSeriesAsync("Example"));
+        Assert.NotNull(await restarted.GetSeriesDetailsAsync(42));
+        Assert.NotNull(await restarted.GetSeasonAsync(42, 2));
+        Assert.NotNull(await restarted.GetEpisodeAsync(42, 2, 3));
+        Assert.Equal(0, cachedOnly.CallCount);
+    }
+
+    [Fact]
     public async Task EmptySearchIsCachedButNotFoundEntitiesAreNotNegativeCached()
     {
         await using var fixture = await CacheFixture.CreateAsync();

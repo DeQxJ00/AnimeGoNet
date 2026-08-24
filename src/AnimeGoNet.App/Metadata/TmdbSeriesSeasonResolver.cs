@@ -54,6 +54,13 @@ public sealed class TmdbSeriesSeasonResolver(
                     }
 
                     var details = await tmdb.GetSeriesDetailsAsync(series.Id, token).ConfigureAwait(false);
+                    if ((details is null || details.Series.Id != series.Id)
+                        && tmdb is ITmdbRefreshClient refreshClient)
+                    {
+                        details = await refreshClient.RefreshSeriesDetailsAsync(
+                            series.Id,
+                            token).ConfigureAwait(false);
+                    }
                     if (details is null || details.Series.Id != series.Id)
                     {
                         lastSemanticFailure = new MetadataFailure(
@@ -65,6 +72,23 @@ public sealed class TmdbSeriesSeasonResolver(
 
                     firstValidatedSeries ??= details;
                     var seasonResult = TmdbSeasonSelector.SelectByAirDate(details.Seasons, airDate);
+                    if (!seasonResult.IsSuccess
+                        && ShouldRefreshSeasonList(seasonResult.Failure)
+                        && tmdb is ITmdbRefreshClient detailsRefreshClient)
+                    {
+                        var refreshedDetails = await detailsRefreshClient.RefreshSeriesDetailsAsync(
+                            series.Id,
+                            token).ConfigureAwait(false);
+                        if (refreshedDetails is not null
+                            && refreshedDetails.Series.Id == series.Id)
+                        {
+                            details = refreshedDetails;
+                            firstValidatedSeries = refreshedDetails;
+                            seasonResult = TmdbSeasonSelector.SelectByAirDate(
+                                refreshedDetails.Seasons,
+                                airDate);
+                        }
+                    }
                     if (!seasonResult.IsSuccess)
                     {
                         lastSemanticFailure = seasonResult.Failure;
@@ -76,10 +100,15 @@ public sealed class TmdbSeriesSeasonResolver(
                         details.Series.Id,
                         selectedSeason.SeasonNumber,
                         token).ConfigureAwait(false);
-                    if (verifiedSeason is null
-                        || verifiedSeason.Id <= 0
-                        || verifiedSeason.SeriesId != details.Series.Id
-                        || verifiedSeason.SeasonNumber != selectedSeason.SeasonNumber)
+                    if (!IsValidSeason(verifiedSeason, details.Series.Id, selectedSeason.SeasonNumber)
+                        && tmdb is ITmdbRefreshClient seasonRefreshClient)
+                    {
+                        verifiedSeason = await seasonRefreshClient.RefreshSeasonAsync(
+                            details.Series.Id,
+                            selectedSeason.SeasonNumber,
+                            token).ConfigureAwait(false);
+                    }
+                    if (!IsValidSeason(verifiedSeason, details.Series.Id, selectedSeason.SeasonNumber))
                     {
                         lastSemanticFailure = new MetadataFailure(
                             MetadataFailureKind.SemanticNoMatch,
@@ -139,4 +168,13 @@ public sealed class TmdbSeriesSeasonResolver(
         MetadataFailure failure,
         IReadOnlyList<string> attemptedTitles) =>
         new(details, null, failure, attemptedTitles.ToArray());
+
+    private static bool ShouldRefreshSeasonList(MetadataFailure? failure) =>
+        failure?.Code is "tmdb_seasons_empty" or "tmdb_season_air_date_not_matched";
+
+    private static bool IsValidSeason(TmdbSeason? season, int seriesId, int seasonNumber) =>
+        season is not null
+        && season.Id > 0
+        && season.SeriesId == seriesId
+        && season.SeasonNumber == seasonNumber;
 }

@@ -32,6 +32,12 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
         try
         {
             details = await tmdb.GetSeriesDetailsAsync(tmdbId, cancellationToken).ConfigureAwait(false);
+            if (details is null && tmdb is ITmdbRefreshClient detailsRefreshClient)
+            {
+                details = await detailsRefreshClient.RefreshSeriesDetailsAsync(
+                    tmdbId,
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (TmdbClientException exception)
         {
@@ -68,6 +74,13 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
                         tmdbId,
                         seasonNumber,
                         cancellationToken).ConfigureAwait(false);
+                    if (season is null && tmdb is ITmdbRefreshClient seasonRefreshClient)
+                    {
+                        season = await seasonRefreshClient.RefreshSeasonAsync(
+                            tmdbId,
+                            seasonNumber,
+                            cancellationToken).ConfigureAwait(false);
+                    }
                 }
                 catch (TmdbClientException exception)
                 {
@@ -111,6 +124,14 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
                     seasonNumber,
                     episodeNumber,
                     cancellationToken).ConfigureAwait(false);
+                if (episode is null && tmdb is ITmdbRefreshClient episodeRefreshClient)
+                {
+                    episode = await episodeRefreshClient.RefreshEpisodeAsync(
+                        tmdbId,
+                        seasonNumber,
+                        episodeNumber,
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (TmdbClientException exception)
             {

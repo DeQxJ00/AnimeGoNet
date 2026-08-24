@@ -48,6 +48,12 @@ public sealed class TmdbSeriesResolver(ITmdbClient client)
                     attempts.Add(currentTitle);
                     var candidates = await client.SearchSeriesAsync(currentTitle, cancellationToken)
                         .ConfigureAwait(false);
+                    if (candidates.Count == 0 && client is ITmdbRefreshClient refreshClient)
+                    {
+                        candidates = await refreshClient.RefreshSeriesSearchAsync(
+                            currentTitle,
+                            cancellationToken).ConfigureAwait(false);
+                    }
                     var selected = SelectCandidates(originalTitle, currentTitle, candidates);
                     foreach (var candidate in selected.Values)
                     {
