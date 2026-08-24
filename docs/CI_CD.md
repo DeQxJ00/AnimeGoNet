@@ -32,6 +32,10 @@ fixture 不复制进 AnimeGoNet Git 历史。
 
 `eng/smoke-native-metadata.ps1` 在同一五 RID 矩阵中再次使用实际发布二进制：先关闭 workers 完成首次建库，再由 `AnimeGoNet.NativeMetadataSmokeFixture` 通过正式 Data Store 写入唯一的已下载单文件任务；随后打开 workers，并把 AI、TMDB MCP 与 TMDB API 全部固定到随机 `127.0.0.1` fixture。门禁要求一次任务级 AI 调用完成两轮对话和 MCP 工具调用，经 TMDB Series/Season/Episode 逐级验证后在 SQLite 与公开任务 API 中得到 `S02E07`、`ai_metadata` 和 `tmdb_verified`。qB 实例在该 smoke 中显式禁用；临时数据库、日志、fixture 进程和两个原生进程无论成功失败都回收，不读取用户 TestSpace 或真实凭据。
 
+`eng/smoke-native-cli.ps1` 的无 Web headless 进程完成建库和零监听检查后由测试直接发送
+SIGTERM；Unix runner 接受应用自行归零退出或标准的 `128 + SIGTERM = 143`，其他退出码、
+发送失败或七秒内未退出仍然失败。完整 Web 宿主 smoke 继续要求应用完成优雅关闭。
+
 每个 RID 在 `upload-artifact` 前运行 `eng/generate-release-metadata.ps1`。脚本只读取该 RID 的实际 publish 目录和本次 restore 的 `project.assets.json`，生成三项随 artifact 一起交付的确定性元数据：覆盖所有发布文件但不自包含的 `SHA256SUMS`、包含精确 NuGet 名称/版本/package SHA-512/SPDX 许可证和 purl 的 CycloneDX 1.5 `sbom.cdx.json`，以及 `THIRD-PARTY-LICENSES.txt`。NuGet 声明许可证文件时会把有界 UTF-8 原文纳入清单；缺失/未知许可证、非法 nuspec URL、包缓存缺失、符号链接、重复规范路径或不安全输入均使 job 失败。输出不包含本机包缓存路径、仓库路径、凭据或生成时间，重复执行字节一致。
 
 推送 `vMAJOR.MINOR.PATCH-SUFFIX` 标签后，只有五个 RID 的 publish、原生 smoke、

@@ -128,7 +128,7 @@ finally {
             elseif (-not $process.WaitForExit(7000)) {
                 $shutdownFailure = 'Published headless process did not exit within seven seconds after SIGTERM.'
             }
-            elseif ($process.ExitCode -ne 0) {
+            elseif ($process.ExitCode -notin @(0, 143)) {
                 $shutdownFailure = "Published headless process returned exit code $($process.ExitCode) after SIGTERM."
             }
         }

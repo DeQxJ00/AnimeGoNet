@@ -26,8 +26,30 @@ public sealed class HostCliDeliveryContractTests
         Assert.Contains("Get-FreeLoopbackPort", smoke, StringComparison.Ordinal);
         Assert.Contains("unexpectedly opened a TCP listener", smoke, StringComparison.Ordinal);
         Assert.Contains("did not initialize its database within 20 seconds", smoke, StringComparison.Ordinal);
+        Assert.Contains(
+            "$process.ExitCode -notin @(0, 143)",
+            smoke,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("TestSpace", smoke, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("192.168.", smoke, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PluginToolKeepsOnlyKnownUnusedMvcAotDiagnosticsNonFatal()
+    {
+        string root = RepositoryRoot();
+        string project = await File.ReadAllTextAsync(Path.Combine(
+            root,
+            "src",
+            "AnimeGo.PluginTool",
+            "AnimeGo.PluginTool.csproj"));
+
+        Assert.Contains(
+            "<WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3053</WarningsNotAsErrors>",
+            project,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("<TreatWarningsAsErrors>false", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("<SuppressTrimAnalysisWarnings>true", project, StringComparison.Ordinal);
     }
 
     private static string RepositoryRoot() =>
