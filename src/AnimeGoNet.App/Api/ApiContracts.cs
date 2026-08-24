@@ -820,6 +820,20 @@ public sealed record MikanWorkRematchResponse(
 public sealed record MikanTrustedOffsetListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<MikanTrustedOffsetItemResponse> Items);
 
+public sealed record MikanManualSeriesMappingListResponse(
+    [property: JsonPropertyName("items")]
+    IReadOnlyList<MikanManualSeriesMappingItemResponse> Items);
+
+public sealed record MikanManualSeriesMappingItemResponse(
+    [property: JsonPropertyName("mikanid")] int MikanId,
+    [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("expected_tmdb_series_id")] int ExpectedTmdbSeriesId,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("accepted_from_task_id")] string AcceptedFromTaskId,
+    [property: JsonPropertyName("accepted_at_utc")] DateTimeOffset AcceptedAtUtc,
+    [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc);
+
 public sealed record MikanTrustedOffsetItemResponse(
     [property: JsonPropertyName("mikanid")] int MikanId,
     [property: JsonPropertyName("groupid")] int GroupId,

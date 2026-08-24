@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 60;
+    public const int CurrentVersion = 61;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -127,7 +127,31 @@ public static class DatabaseSchema
             60,
             "ai_series_change_review",
             AiSeriesChangeReview),
+        new SchemaMigration(
+            61,
+            "mikan_manual_series_mapping",
+            MikanManualSeriesMapping),
     ];
+
+    private const string MikanManualSeriesMapping = """
+        ALTER TABLE ai_series_change_reviews ADD COLUMN mikanid INTEGER NULL CHECK (mikanid > 0);
+        ALTER TABLE ai_series_change_reviews ADD COLUMN groupid INTEGER NULL CHECK (groupid > 0);
+
+        CREATE TABLE mikan_manual_series_mappings (
+            mikanid INTEGER NOT NULL CHECK (mikanid > 0),
+            groupid INTEGER NOT NULL CHECK (groupid > 0),
+            expected_tmdb_series_id INTEGER NOT NULL CHECK (expected_tmdb_series_id > 0),
+            tmdb_series_id INTEGER NOT NULL CHECK (tmdb_series_id > 0),
+            tmdb_season_number INTEGER NOT NULL CHECK (tmdb_season_number > 0),
+            accepted_from_task_id TEXT NOT NULL,
+            accepted_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (mikanid, groupid)
+        ) STRICT;
+
+        CREATE INDEX ix_mikan_manual_series_mappings_target
+        ON mikan_manual_series_mappings(tmdb_series_id, tmdb_season_number);
+        """;
 
     private const string AiSeriesChangeReview = """
         CREATE TABLE ai_series_change_reviews (

@@ -1375,6 +1375,20 @@
       </div>
     </section>
 
+    <section id="mikan-manual-series-mapping-workspace" aria-labelledby="mikan-manual-series-mappings-title" data-workspace="sources" data-subview="mikan-series-mappings" data-nav-label="Mikan 人工 TMDB 映射">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Human-approved series identity</p>
+          <h2 id="mikan-manual-series-mappings-title">人工 TMDB Series 映射</h2>
+        </div>
+        <button id="mikan-manual-series-mappings-reload" type="button" class="secondary-button">刷新映射</button>
+      </div>
+      <p class="muted">当 AI 因日文名、中文名搜索到不同 TMDB Series 并由人工明确同意后，系统按精确 mikanid + groupid 保存映射。后续同组 EP 在标题搜索前使用已确认 Series/Season，但仍重新验证 TMDB Series、Season，并继续执行现有 Episode 匹配与最终 TMDB 验证。删除不会修改已整理文件或历史审核。</p>
+      <div id="mikan-manual-series-mappings" class="offset-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status">正在读取人工 TMDB 映射…</p>
+      </div>
+    </section>
+
     <section id="trusted-offset-workspace" aria-labelledby="trusted-offsets-title" data-workspace="sources" data-subview="mikan-offsets" data-nav-label="Mikan 可信 Offset">
       <div class="section-heading">
         <div>
@@ -2024,6 +2038,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260824-ai-series-change-review-list"></script>
+    <script type="module" src="/app.js?v=20260824-mikan-manual-series-map"></script>
 </body>
 </html>

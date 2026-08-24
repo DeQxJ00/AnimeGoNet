@@ -112,6 +112,12 @@ public static class ApiEndpoints
             "/api/v1/mikan/trusted-offsets/{mikanId:int}/{groupId:int}",
             ClearMikanTrustedOffset);
         app.MapGet(
+            "/api/v1/mikan/manual-series-mappings",
+            ListMikanManualSeriesMappings);
+        app.MapDelete(
+            "/api/v1/mikan/manual-series-mappings/{mikanId:int}/{groupId:int}",
+            DeleteMikanManualSeriesMapping);
+        app.MapGet(
             "/api/v1/mikan/trusted-offset-blacklist",
             ListMikanTrustedOffsetBlacklist);
         app.MapPost(
@@ -5546,6 +5552,7 @@ public static class ApiEndpoints
     private static async Task<IResult> AcceptAiSeriesChangeReview(
         string taskId,
         AiSeriesChangeReviewStore reviews,
+        MikanManualSeriesMappingStore manualSeriesMappings,
         TmdbAuthority authority,
         OtherFileReadaptationStore readaptation,
         CancellationToken cancellationToken)
@@ -5584,6 +5591,19 @@ public static class ApiEndpoints
                 "任务尚未整理完成，或候选文件已不处于可审核的 Other 状态。"));
         }
 
+        if (proposal.MikanId is > 0 && proposal.GroupId is > 0)
+        {
+            await manualSeriesMappings.UpsertAsync(
+                proposal.MikanId.Value,
+                proposal.GroupId.Value,
+                proposal.ExpectedTmdbSeriesId,
+                validation.Value!.Series.Id,
+                validation.Value.Season.SeasonNumber,
+                taskId,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await reviews.AcceptAsync(taskId, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(new AiSeriesChangeReviewDecisionResponse(
             taskId,
@@ -5591,6 +5611,45 @@ public static class ApiEndpoints
             apply == OtherFileReadaptationManualOverrideResult.OrganizationQueued
                 ? "organization_queued"
                 : "duplicate_kept_in_other"));
+    }
+
+    private static async Task<Ok<MikanManualSeriesMappingListResponse>> ListMikanManualSeriesMappings(
+        MikanManualSeriesMappingStore mappings,
+        CancellationToken cancellationToken)
+    {
+        var values = await mappings.ListAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new MikanManualSeriesMappingListResponse(
+            values.Select(value => new MikanManualSeriesMappingItemResponse(
+                value.MikanId,
+                value.GroupId,
+                value.ExpectedTmdbSeriesId,
+                value.TmdbSeriesId,
+                value.TmdbSeasonNumber,
+                value.AcceptedFromTaskId,
+                value.AcceptedAtUtc,
+                value.UpdatedAtUtc)).ToArray()));
+    }
+
+    private static async Task<IResult> DeleteMikanManualSeriesMapping(
+        int mikanId,
+        int groupId,
+        MikanManualSeriesMappingStore mappings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await mappings.DeleteAsync(mikanId, groupId, cancellationToken).ConfigureAwait(false)
+                ? TypedResults.NoContent()
+                : TypedResults.NotFound(Error(
+                    "mikan_manual_series_mapping_not_found",
+                    "Mikan manual TMDB Series mapping was not found."));
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            return TypedResults.BadRequest(Error(
+                "mikan_manual_series_mapping_key_invalid",
+                exception.Message));
+        }
     }
 
     private static async Task<IResult> RejectAiSeriesChangeReview(

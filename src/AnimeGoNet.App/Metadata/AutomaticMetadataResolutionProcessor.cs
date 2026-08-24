@@ -15,7 +15,9 @@ public sealed class AutomaticMetadataResolutionProcessor(
     TmdbSeriesSeasonResolver seriesSeasonResolver,
     AiMetadataTaskResolver aiMetadata,
     MikanWorkMetadataRuleStore rules,
+    MikanManualSeriesMappingStore manualSeriesMappings,
     MikanTrustedOffsetStore trustedOffsets,
+    ITmdbClient tmdb,
     TmdbMovieResolver movieResolver,
     AnimeGoOptions options,
     TimeProvider? timeProvider = null,
@@ -48,6 +50,11 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (rule?.BangumiSubjectId is not null)
         {
             claim = claim with { BangumiSubjectId = rule.BangumiSubjectId };
+        }
+
+        if (await TryCompleteManualSeriesMappingAsync(claim, cancellationToken).ConfigureAwait(false))
+        {
+            return true;
         }
 
         if (await TryCompleteTrustedOffsetAsync(claim, cancellationToken).ConfigureAwait(false))
@@ -568,6 +575,155 @@ public sealed class AutomaticMetadataResolutionProcessor(
             canonical.Season,
             seeds,
             _timeProvider.GetUtcNow(),
+            cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> TryCompleteManualSeriesMappingAsync(
+        MetadataTaskClaim claim,
+        CancellationToken cancellationToken)
+    {
+        if (claim.IsForcedReadaptation
+            || !string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase)
+            || claim.MikanId is null or <= 0
+            || claim.GroupId is null or <= 0)
+        {
+            return false;
+        }
+
+        var mapping = await manualSeriesMappings.GetAsync(
+            claim.MikanId.Value,
+            claim.GroupId.Value,
+            cancellationToken).ConfigureAwait(false);
+        if (mapping is null)
+        {
+            return false;
+        }
+
+        var started = _timeProvider.GetTimestamp();
+        TmdbSeries? series;
+        TmdbSeason? season;
+        try
+        {
+            series = await tmdb.GetSeriesAsync(
+                mapping.TmdbSeriesId,
+                cancellationToken).ConfigureAwait(false);
+            if ((series is null || series.Id != mapping.TmdbSeriesId)
+                && tmdb is ITmdbRefreshClient seriesRefresh)
+            {
+                series = (await seriesRefresh.RefreshSeriesDetailsAsync(
+                    mapping.TmdbSeriesId,
+                    cancellationToken).ConfigureAwait(false))?.Series;
+            }
+            season = series is null
+                ? null
+                : await tmdb.GetSeasonAsync(
+                    mapping.TmdbSeriesId,
+                    mapping.TmdbSeasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+            if ((season is null
+                    || season.SeriesId != mapping.TmdbSeriesId
+                    || season.SeasonNumber != mapping.TmdbSeasonNumber)
+                && tmdb is ITmdbRefreshClient seasonRefresh)
+            {
+                season = await seasonRefresh.RefreshSeasonAsync(
+                    mapping.TmdbSeriesId,
+                    mapping.TmdbSeasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (TmdbClientException exception)
+        {
+            var failure = new MetadataFailure(
+                exception.Kind,
+                exception.SafeCode,
+                exception.TmdbAccessConfirmed);
+            await RecordAsync(
+                claim,
+                "series",
+                "manual_mikan_series_mapping",
+                ManualMetadataResolutionProcessor.ManualOverridePriority,
+                "error",
+                failure.Code,
+                IsRetryable(failure.Kind),
+                started,
+                cancellationToken).ConfigureAwait(false);
+            await FailAsync(
+                claim,
+                failure,
+                "manual_mikan_series_mapping_validation_failed",
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        if (series is null || series.Id != mapping.TmdbSeriesId)
+        {
+            var failure = new MetadataFailure(
+                MetadataFailureKind.SemanticNoMatch,
+                "manual_mikan_series_mapping_series_not_found",
+                true);
+            await RecordAsync(
+                claim,
+                "series",
+                "manual_mikan_series_mapping",
+                ManualMetadataResolutionProcessor.ManualOverridePriority,
+                "not_matched",
+                failure.Code,
+                false,
+                started,
+                cancellationToken).ConfigureAwait(false);
+            await FailAsync(
+                claim,
+                failure,
+                "manual_mikan_series_mapping_invalid",
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        if (season is null
+            || season.Id <= 0
+            || season.SeriesId != mapping.TmdbSeriesId
+            || season.SeasonNumber != mapping.TmdbSeasonNumber)
+        {
+            var failure = new MetadataFailure(
+                MetadataFailureKind.SemanticNoMatch,
+                "manual_mikan_series_mapping_season_not_found",
+                true);
+            await RecordAsync(
+                claim,
+                "season",
+                "manual_mikan_series_mapping",
+                ManualMetadataResolutionProcessor.ManualOverridePriority,
+                "not_matched",
+                failure.Code,
+                false,
+                started,
+                cancellationToken).ConfigureAwait(false);
+            await FailAsync(
+                claim,
+                failure,
+                "manual_mikan_series_mapping_invalid",
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        await RecordAsync(
+            claim,
+            "series",
+            "manual_mikan_series_mapping",
+            ManualMetadataResolutionProcessor.ManualOverridePriority,
+            "matched",
+            null,
+            false,
+            started,
+            cancellationToken).ConfigureAwait(false);
+        await CompleteSeasonAsync(
+            claim,
+            series,
+            season,
+            "manual_mikan_series_mapping",
+            ManualMetadataResolutionProcessor.ManualOverridePriority,
+            started,
             cancellationToken).ConfigureAwait(false);
         return true;
     }

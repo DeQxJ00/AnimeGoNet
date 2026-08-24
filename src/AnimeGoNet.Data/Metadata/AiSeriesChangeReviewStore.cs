@@ -8,6 +8,8 @@ public sealed record AiSeriesChangeReviewProposal(
     string TaskId,
     string TaskFileId,
     string State,
+    int? MikanId,
+    int? GroupId,
     int ExpectedTmdbSeriesId,
     int ExpectedTmdbSeasonNumber,
     TmdbCanonicalEpisode Proposed,
@@ -61,6 +63,7 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
             insert.CommandText = """
                 INSERT INTO ai_series_change_reviews (
                     id, task_id, task_file_id, state,
+                    mikanid, groupid,
                     expected_tmdb_series_id, expected_tmdb_season_number,
                     proposed_tmdb_series_id, proposed_series_name, proposed_original_name,
                     proposed_series_first_air_date, proposed_series_poster_path,
@@ -72,6 +75,7 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
                     requested_at_utc, reviewed_at_utc)
                 VALUES (
                     $id, $task_id, $file_id, 'pending',
+                    $mikanid, $groupid,
                     $expected_series, $expected_season,
                     $series_id, $series_name, $original_name,
                     $series_air_date, $series_poster,
@@ -81,6 +85,8 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
                     $now, NULL)
                 ON CONFLICT(task_id, task_file_id) DO UPDATE SET
                     state = 'pending',
+                    mikanid = excluded.mikanid,
+                    groupid = excluded.groupid,
                     expected_tmdb_series_id = excluded.expected_tmdb_series_id,
                     expected_tmdb_season_number = excluded.expected_tmdb_season_number,
                     proposed_tmdb_series_id = excluded.proposed_tmdb_series_id,
@@ -104,6 +110,8 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
             insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             insert.Parameters.AddWithValue("$task_id", claim.Resolution.TaskId);
             insert.Parameters.AddWithValue("$file_id", taskFile.FileId);
+            insert.Parameters.AddWithValue("$mikanid", (object?)claim.Resolution.MikanId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$groupid", (object?)claim.Resolution.GroupId ?? DBNull.Value);
             insert.Parameters.AddWithValue("$expected_series", claim.TmdbSeriesId);
             insert.Parameters.AddWithValue("$expected_season", claim.TmdbSeasonNumber);
             AddCanonicalParameters(insert, canonical, now);
@@ -141,7 +149,8 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT task_file_id, state, expected_tmdb_series_id, expected_tmdb_season_number,
+            SELECT review.task_file_id, review.state, review.mikanid, review.groupid,
+                   review.expected_tmdb_series_id, review.expected_tmdb_season_number,
                    proposed_tmdb_series_id, proposed_series_name, proposed_original_name,
                    proposed_series_first_air_date, proposed_series_poster_path,
                    proposed_tmdb_season_id, proposed_tmdb_season_number,
@@ -150,9 +159,9 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
                    proposed_tmdb_episode_id, proposed_tmdb_episode_number,
                    proposed_episode_name, proposed_episode_air_date,
                    requested_at_utc, reviewed_at_utc
-            FROM ai_series_change_reviews
-            WHERE task_id = $task_id AND state = 'pending'
-            ORDER BY requested_at_utc DESC LIMIT 1;
+            FROM ai_series_change_reviews AS review
+            WHERE review.task_id = $task_id AND review.state = 'pending'
+            ORDER BY review.requested_at_utc DESC LIMIT 1;
             """;
         command.Parameters.AddWithValue("$task_id", taskId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -162,21 +171,27 @@ public sealed class AiSeriesChangeReviewStore(AnimeGoSqliteDatabase database)
         }
 
         var series = new TmdbSeries(
-            reader.GetInt32(4), reader.GetString(5), reader.GetString(6),
-            ReadDate(reader, 7), reader.IsDBNull(8) ? null : reader.GetString(8));
+            reader.GetInt32(6), reader.GetString(7), reader.GetString(8),
+            ReadDate(reader, 9), reader.IsDBNull(10) ? null : reader.GetString(10));
         var season = new TmdbSeason(
-            reader.GetInt32(9), series.Id, reader.GetInt32(10), reader.GetString(11),
-            ReadDate(reader, 12), reader.GetInt32(13),
-            reader.IsDBNull(14) ? null : reader.GetString(14));
+            reader.GetInt32(11), series.Id, reader.GetInt32(12), reader.GetString(13),
+            ReadDate(reader, 14), reader.GetInt32(15),
+            reader.IsDBNull(16) ? null : reader.GetString(16));
         var episode = new TmdbEpisode(
-            reader.GetInt32(15), series.Id, season.SeasonNumber, reader.GetInt32(16),
-            reader.GetString(17), ReadDate(reader, 18));
+            reader.GetInt32(17), series.Id, season.SeasonNumber, reader.GetInt32(18),
+            reader.GetString(19), ReadDate(reader, 20));
         return new AiSeriesChangeReviewProposal(
-            taskId, reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3),
+            taskId,
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetInt32(2),
+            reader.IsDBNull(3) ? null : reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
             new TmdbCanonicalEpisode(series, season, episode, series.Name),
-            DateTimeOffset.Parse(reader.GetString(19), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-            reader.IsDBNull(20) ? null : DateTimeOffset.Parse(
-                reader.GetString(20), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+            DateTimeOffset.Parse(reader.GetString(21), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+            reader.IsDBNull(22) ? null : DateTimeOffset.Parse(
+                reader.GetString(22), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
     }
 
     public Task<AiSeriesChangeReviewDecisionResult> AcceptAsync(

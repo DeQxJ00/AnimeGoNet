@@ -235,6 +235,7 @@ const workspaceDefinitions = {
                 children: [
                     { id: "mikan-ingest", label: "手动设置" },
                     { id: "mikan-manual-rules", label: "人工规则" },
+                    { id: "mikan-series-mappings", label: "人工 TMDB 映射" },
                     { id: "mikan-offsets", label: "可信 Offset" },
                     { id: "mikan-candidate-rules", label: "候选规则" },
                     { id: "mikan-legacy-filter", label: "五级过滤" },
@@ -5550,6 +5551,54 @@ async function loadTrustedOffsets() {
         renderRegionMessage(container, "error", `可信 offset 读取失败：${errorMessage(error, "未知错误")}`);
     }
 }
+async function loadMikanManualSeriesMappings() {
+    const container = element("#mikan-manual-series-mappings");
+    setRegionState(container, "loading");
+    try {
+        const response = await authenticatedFetch("/api/v1/mikan/manual-series-mappings", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        if (body.items.length === 0) {
+            renderRegionMessage(container, "empty", "暂无人工确认的字幕组 TMDB 映射");
+            return;
+        }
+        renderRegionContent(container, ...body.items.map(item => {
+            const card = document.createElement("article");
+            card.className = "offset-card";
+            const content = document.createElement("div");
+            const title = document.createElement("strong");
+            title.textContent = `Mikan ${item.mikanid} · Group ${item.groupid}`;
+            const mapping = document.createElement("p");
+            mapping.className = "muted";
+            mapping.textContent = `原 TMDB ${item.expected_tmdb_series_id} → 人工确认 TMDB ${item.tmdb_series_id} · S${String(item.tmdb_season_number).padStart(2, "0")}`;
+            const audit = document.createElement("p");
+            audit.className = "muted";
+            audit.textContent = `确认于 ${libraryDate(item.accepted_at_utc, true)} · 任务 ${item.accepted_from_task_id}`;
+            content.append(title, mapping, audit);
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "delete-button";
+            remove.textContent = "删除映射";
+            remove.addEventListener("click", () => void deleteMikanManualSeriesMapping(item));
+            card.append(content, remove);
+            return card;
+        }));
+    }
+    catch (error) {
+        renderRegionMessage(container, "error", `人工 TMDB 映射读取失败：${errorMessage(error, "未知错误")}`);
+    }
+}
+async function deleteMikanManualSeriesMapping(item) {
+    if (!window.confirm(`删除 Mikan ${item.mikanid} / Group ${item.groupid} 的人工 TMDB 映射？之后的新任务会重新执行正常 TMDB 搜索与匹配。`))
+        return;
+    const response = await authenticatedFetch(`/api/v1/mikan/manual-series-mappings/${item.mikanid}/${item.groupid}`, { method: "DELETE", headers });
+    if (!response.ok) {
+        window.alert(`删除失败：${await responseError(response)}`);
+        return;
+    }
+    await loadMikanManualSeriesMappings();
+}
 const notificationProviderDefaults = {
     bark: "https://api.day.app",
     generic: "",
@@ -10177,6 +10226,7 @@ element("#library-episode-filter").addEventListener("change", () => {
 });
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsets());
 element("#trusted-offsets-reload").addEventListener("click", () => void loadTrustedOffsetBlacklist());
+element("#mikan-manual-series-mappings-reload").addEventListener("click", () => void loadMikanManualSeriesMappings());
 element("#trusted-offset-blacklist-scope").addEventListener("change", updateTrustedOffsetBlacklistFields);
 element("#trusted-offset-blacklist-form").addEventListener("submit", event => void addTrustedOffsetBlacklist(event));
 element("#notification-provider").addEventListener("change", () => notificationProviderChanged());
@@ -10595,6 +10645,7 @@ void loadSources();
 void loadRssRules();
 void loadLegacyMikanFilter();
 void loadTrustedOffsets();
+void loadMikanManualSeriesMappings();
 updateTrustedOffsetBlacklistFields();
 void loadTrustedOffsetBlacklist();
 resetNotificationForm();

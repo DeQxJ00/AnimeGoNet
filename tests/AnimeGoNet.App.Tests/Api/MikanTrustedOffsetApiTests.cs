@@ -87,6 +87,29 @@ public sealed class MikanTrustedOffsetApiTests
     }
 
     [Fact]
+    public async Task ListsAndDeletesApprovedManualSeriesMapping()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var mappings = app.App.Services.GetRequiredService<MikanManualSeriesMappingStore>();
+        await mappings.UpsertAsync(
+            3981, 392, 65942, 70000, 1, "review-task", DateTimeOffset.UtcNow);
+
+        using var listed = await app.Client.GetAsync("/api/v1/mikan/manual-series-mappings");
+        using var json = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        Assert.Equal(3981, item.GetProperty("mikanid").GetInt32());
+        Assert.Equal(392, item.GetProperty("groupid").GetInt32());
+        Assert.Equal(70000, item.GetProperty("tmdb_series_id").GetInt32());
+        Assert.Equal(1, item.GetProperty("tmdb_season_number").GetInt32());
+
+        using var deleted = await app.Client.DeleteAsync(
+            "/api/v1/mikan/manual-series-mappings/3981/392");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        Assert.Null(await mappings.GetAsync(3981, 392));
+    }
+
+    [Fact]
     public async Task ManagesBlacklistAndPurgesMatchingAutomaticOffsets()
     {
         await using var app = await RunningApp.StartAsync();
@@ -146,6 +169,8 @@ public sealed class MikanTrustedOffsetApiTests
         Assert.Contains("mikan_trusted_offset_required_episodes", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/trusted-offsets", script, StringComparison.Ordinal);
         Assert.Contains("人工规则、完成记录和媒体文件不会删除", script, StringComparison.Ordinal);
+        Assert.Contains("id=\"mikan-manual-series-mappings\"", html, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/mikan/manual-series-mappings", script, StringComparison.Ordinal);
     }
 
     private static MikanOffsetEvidenceObservation Observation(int sourceEpisode) =>

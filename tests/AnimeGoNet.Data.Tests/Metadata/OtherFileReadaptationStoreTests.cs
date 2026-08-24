@@ -207,6 +207,8 @@ public sealed class OtherFileReadaptationStoreTests
         Assert.True(await reviews.RecordAsync(claim, proposal, DateTimeOffset.UtcNow));
         var pending = Assert.IsType<AiSeriesChangeReviewProposal>(
             await reviews.GetPendingAsync(fixture.TaskId));
+        Assert.Equal(3951, pending.MikanId);
+        Assert.Equal(583, pending.GroupId);
         Assert.Equal(100, pending.ExpectedTmdbSeriesId);
         Assert.Equal(200, pending.Proposed.Series.Id);
 

@@ -1045,6 +1045,37 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task ApprovedMikanSeriesMappingBypassesTitleSearchForExactPair()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
+        await using var app = await RunningApp.StartAsync(
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient((BangumiSubject?)null));
+        var mappings = app.App.Services.GetRequiredService<MikanManualSeriesMappingStore>();
+        await mappings.UpsertAsync(
+            3951,
+            7,
+            expectedTmdbSeriesId: 65942,
+            tmdbSeriesId: Series.Id,
+            tmdbSeasonNumber: 2,
+            acceptedFromTaskId: "reviewed-task",
+            utcNow: DateTimeOffset.UtcNow);
+        var taskId = await AddDownloadedTaskAsync(app, "会被错误标题搜索的名称 第四话");
+        await SetMikanGroupAndEpisodeCandidateAsync(app, taskId, 7, 4);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal("season_resolved", run.Status);
+        Assert.Equal(Series.Id, run.TmdbSeriesId);
+        Assert.Equal(2, run.TmdbSeasonNumber);
+        Assert.Empty(tmdb.SearchTitles);
+        Assert.Contains("manual_mikan_series_mapping", await ReadStrategiesAsync(app, taskId));
+    }
+
+    [Fact]
     public async Task VerifiedEpisodeCompletesThirdTrustedOffsetObservation()
     {
         var tmdb = new FakeTmdbClient(
