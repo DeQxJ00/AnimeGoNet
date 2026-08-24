@@ -26,6 +26,8 @@ public sealed class AiMetadataTestApiTests
                 {
                     ApiKey = "configured-ai-test-key",
                     Model = "configured-ai-test-model",
+                    ApiMode = AnimeGoNet.Core.Configuration.AiApiMode.ChatCompletions,
+                    WebSearchEnabled = false,
                 },
             },
         });
@@ -46,6 +48,8 @@ public sealed class AiMetadataTestApiTests
         Assert.Equal(
             "configured-ai-test-model",
             bootstrap.GetProperty("defaults").GetProperty("model").GetString());
+        Assert.Equal(0, bootstrap.GetProperty("defaults").GetProperty("mode").GetInt32());
+        Assert.True(bootstrap.GetProperty("defaults").GetProperty("web_search_enabled").GetBoolean());
         Assert.Equal(
             prompt.GetProperty("template").GetString(),
             bootstrap.GetProperty("prompt_template").GetString());

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260825-matching-episode-identity">
+  <link rel="stylesheet" href="/styles.css?v=20260825-ai-test-responses-default">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1633,12 +1633,12 @@
               <label class="wide">API Key（从主配置回填，本次测试可修改）<input id="ai-test-api-key" type="text" required autocomplete="off" spellcheck="false"></label>
               <label>Model<input id="ai-test-model" required placeholder="gpt-5.4-mini"></label>
               <label>Timeout Seconds<input id="ai-test-timeout" type="number" min="1" value="600" required></label>
-              <label>Mode<select id="ai-test-api-mode"><option value="responses">Responses</option><option value="chat-completions">Chat Completions</option></select></label>
+              <label>Mode<select id="ai-test-api-mode"><option value="responses" selected>Responses</option><option value="chat-completions">Chat Completions</option></select></label>
               <label>Reasoning<select id="ai-test-reasoning-effort"><option value="medium">medium</option><option value="low">low</option><option value="high">high</option><option value="none">none</option></select></label>
               <label class="wide">Proxy URL<input id="ai-test-http-proxy" type="url" placeholder="留空则本次测试直连"></label>
               <label class="wide ai-test-checkbox"><input id="ai-test-enable-tmdb-mcp" type="checkbox" checked>Enable TMDB MCP</label>
               <label class="wide">TMDB MCP URL<input id="ai-test-tmdb-mcp-url" type="url" required></label>
-              <label class="wide ai-test-checkbox"><input id="ai-test-web-search" type="checkbox">Web Search fallback（仅 Responses）</label>
+              <label class="wide ai-test-checkbox"><input id="ai-test-web-search" type="checkbox" checked>Web Search fallback（仅 Responses）</label>
             </div>
           </article>
 
@@ -2090,6 +2090,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260825-matching-episode-identity"></script>
+    <script type="module" src="/app.js?v=20260825-ai-test-responses-default"></script>
 </body>
 </html>

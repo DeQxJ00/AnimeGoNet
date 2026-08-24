@@ -477,11 +477,15 @@ test("AI test page exposes verified Responses compatibility controls and usage",
   const webSearch = document.querySelector("#ai-test-web-search");
   assert.ok(reasoning);
   assert.ok(webSearch);
+  const apiMode = document.querySelector("#ai-test-api-mode");
+  assert.ok(apiMode);
   assert.deepEqual(
     [...reasoning.querySelectorAll("option")].map(option => option.value),
     ["medium", "low", "high", "none"],
   );
   assert.equal(webSearch.getAttribute("type"), "checkbox");
+  assert.equal(webSearch.hasAttribute("checked"), true);
+  assert.equal(apiMode.value, "responses");
   assert.match(app, /reasoning_effort:/);
   assert.match(app, /web_search_enabled:/);
   assert.match(app, /reasoning_tokens/);

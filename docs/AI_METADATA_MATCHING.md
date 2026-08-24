@@ -50,7 +50,7 @@ WebUI 的“AI 匹配测试工具 / AI 元数据测试”以已验证独立 Test
 
 测试页分为公共区域、Mikan/BGM、U2/AniDB、高级 Prompt 和结果审计区。三个来源区域的状态徽标会随表单即时更新：TMDB MCP、Mikan/BGM MCP 与 AniDB 已启用时显示绿色，关闭时显示中性灰色；状态颜色不改变实际工具注册条件。后台 Worker 与测试页默认读取同一份有效生产 Prompt；该 Prompt 使用 `{{#TMDB_MCP}}…{{/TMDB_MCP}}`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST` 条件区块。被关闭或不适用的字段与说明不会发送给模型，对应工具也不会注册。Tester 原结构校验结论保持不变，随后额外显示主程序 `AiMetadataResultValidator` 的 TMDB Series/普通 Season/真实 Episode 二次验证，二者不能混为一个状态。
 
-模型连接字段与原 Tester 一致：Base URL、API Key、Model、Responses/Chat Completions、reasoning effort、Responses Web Search、600 秒默认超时、单次测试 HTTP 代理、TMDB/BGM MCP 地址和 AniDB URL 模板。API Key 只存在于当前请求和内存，不进入浏览器持久化、Prompt、执行日志或响应。Mikan URL 导入继续使用主程序全局“域名匹配代理”，不使用该测试代理。
+模型连接字段与原 Tester 一致：Base URL、API Key、Model、Responses/Chat Completions、reasoning effort、Responses Web Search、600 秒默认超时、单次测试 HTTP 代理、TMDB/BGM MCP 地址和 AniDB URL 模板。测试工具默认使用 Responses 并开启 Web Search；这两个测试默认值不改写后台 Worker 的正式 AI 模式与开关，其余连接字段继续从主配置回填。API Key 只存在于当前请求和内存，不进入浏览器持久化、Prompt、执行日志或响应。Mikan URL 导入继续使用主程序全局“域名匹配代理”，不使用该测试代理。
 
 主程序“设置与备份 / AI 与 MCP”提供正式模型的推理程度：`none`、`low`、`medium`、
 `high`。`none` 表示不向 OpenAI-compatible 请求写入 `reasoning`；其余值以
