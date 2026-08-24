@@ -19,8 +19,17 @@ public sealed class DockerQbittorrentIntegrationContractTests
             ".github",
             "workflows",
             "animegonet-docker.yml"));
+        var normalizedDockerfile = dockerfile.ReplaceLineEndings("\n");
 
         Assert.Contains("USER 10001:10001", dockerfile, StringComparison.Ordinal);
+        Assert.Contains(
+            "mkdir --parents /app /data /download/incomplete /download/anime /download/movies",
+            normalizedDockerfile,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "save_path=/download/anime \\\n    movie_save_path=/download/movies",
+            normalizedDockerfile,
+            StringComparison.Ordinal);
         Assert.Contains(
             "COPY src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj src/AnimeGo.Plugin.Abstractions/",
             dockerfile,
