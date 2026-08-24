@@ -2163,7 +2163,13 @@ function readLibraryState() {
         if (!raw)
             return defaults;
         const stored = JSON.parse(raw);
-        const sorts = ["last_updated", "name", "air_date", "added_at"];
+        const sorts = [
+            "last_updated",
+            "episode_changed_at",
+            "name",
+            "air_date",
+            "added_at",
+        ];
         const directions = ["asc", "desc"];
         const filters = ["all", "downloaded", "not_downloaded"];
         const pageSizes = [12, 24, 48];
@@ -2444,6 +2450,7 @@ function renderExternalMediaImportResult(target, result) {
 function librarySortLabel(value) {
     const labels = {
         last_updated: "最后更新时间",
+        episode_changed_at: "最后 EP 变动时间",
         name: "TMDB 名称",
         air_date: "季度开播日期",
         added_at: "本地加入日期",
@@ -2823,6 +2830,7 @@ function renderLibraryDetail(detail, focus) {
         ["季度开播", libraryDate(detail.air_date)],
         ["本地加入", libraryDate(detail.added_at_utc, true)],
         ["最后更新", libraryDate(detail.last_updated_at_utc, true)],
+        ["最后 EP 变动", libraryDate(detail.last_episode_changed_at_utc, true)],
         [
             "Series 取得",
             `${libraryStrategy(detail.series_resolution_source)} · ${resolutionReference(detail.series_resolution_run_id, detail.series_resolution_attempt_id)}`,

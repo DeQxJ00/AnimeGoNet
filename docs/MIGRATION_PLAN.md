@@ -272,7 +272,7 @@ docs/
   - Mikan 过滤：内置 C# 复现 `Filiter0`～`Filiter4` 的旧规则和 AnimeGoHelper Base64 配置接口；默认 Mikan SourceProfile 提供默认开启的 RSS 过滤总开关，Web 提供开关、五档规则编辑、真实顺序预览、legacy JSON 导入导出、revision 冲突及快照回滚，详见 [`MIKAN_FILTER_COMPAT.md`](MIKAN_FILTER_COMPAT.md)。
   - Mikan 同集优选：一次 RSS 批次内按可靠的 `mikanid+来源EP` 聚合重复选项，使用完全可配置的有序优先级组和组内 `{name, values[]}` 具名数组逐级淘汰，剩一个立即短路；Web 可独立启停、任意增删/排序组与数组并维护具名黑白名单，预设字幕语言/封装/编码/分辨率四组并默认拒绝720p，详见 [`MIKAN_RSS_PRIORITY.md`](MIKAN_RSS_PRIORITY.md)。
   - 动画作品：按 `mikanid` 查看和编辑作品级人工规则，包括关联 Bgm Subject、TMDB Series/Season 与 Episode Offset；保存前预览受影响的未完成任务和样例 EP，支持禁用、清除和显式重新匹配。
-  - 作品库：以已验证的 `TMDB TV Series + 普通 Season` 为列表单位，展示 TMDB 动画名称、季度/剧集 Cover、Season 和 EP 网格；EP 的全集与下载完成标记只认 TMDB Episode 及规范完成记录，不使用来源集号补齐。支持按最后更新日期、TMDB 名称、TMDB Season 开播日期和本地加入日期稳定排序，详细语义见 [`WEB_UI.md`](WEB_UI.md)。
+  - 作品库：以已验证的 `TMDB TV Series + 普通 Season` 为列表单位，展示 TMDB 动画名称、季度/剧集 Cover、Season 和 EP 网格；EP 的全集与下载完成标记只认 TMDB Episode 及规范完成记录，不使用来源集号补齐。支持按最后更新、最后 EP 变动、TMDB 名称、TMDB Season 开播日期和本地加入日期稳定排序，详细语义见 [`WEB_UI.md`](WEB_UI.md)。
   - TMDB 获取方式：作品详情分别显示 Series、Season、Episode 的取得阶段、人工规则 `mikanid`/偏移、验证状态、最后解析时间和策略时间线。
   - 删除中心：提供删除业务记录、删除下载器任务、删除下载源文件、删除媒体库文件四种独立能力，也允许在影响预览后组合执行；业务记录中可精确删除某集的已下载完成记录，解除 RSS 去重门禁；默认不隐式级联。
   - 元数据失败中心：按阶段、错误码、可重试性和处理状态筛选，显示最终失败原因及策略尝试时间线，支持对单项安全地重新匹配。

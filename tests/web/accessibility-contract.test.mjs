@@ -292,6 +292,20 @@ test("anime library card titles stay aligned and expose their complete name", as
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.library-list\s*\{[^}]*grid-template-columns:\s*1fr/s);
 });
 
+test("anime library can sort by the latest episode change", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  const option = document.querySelector(
+    '#library-sort option[value="episode_changed_at"]',
+  );
+  assert.ok(option);
+  assert.match(option.textContent, /最后 EP 变动时间/);
+  assert.match(app, /episode_changed_at: "最后 EP 变动时间"/);
+  assert.match(app, /last_episode_changed_at_utc/);
+});
+
 test("anime library exposes an accessible Mikan season completion picker", async () => {
   const [document, app, css] = await Promise.all([
     page(),

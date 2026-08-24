@@ -53,24 +53,25 @@ Bangumi 完全兜底产生的 NFO `tmdbid=0` 也属于“待补全 TMDB”。它
 
 ## 4. 排序
 
-作品列表支持升序/降序切换，至少提供以下四种排序：
+作品列表支持升序/降序切换，提供以下五种排序：
 
 1. 最后更新日期 `LastUpdatedAt`：该季度的元数据验证、人工规则变更、任务状态、下载完成记录或文件一致性状态最后一次发生业务变化的时间；仅查看页面不更新时间。默认按此字段降序。
-2. 名字 `SortName`：使用 TMDB 显示名称的规范化排序键，不使用来源标题；相同名称按 Season Number、TmdbSeriesId 稳定排序。
-3. 开播日期 `AirDate`：使用 TMDB Season 的 `air_date`；缺失值始终排在有日期项目之后，相同日期按名字和 Season Number 稳定排序。
-4. 加入日期 `AddedAt`：AnimeGoNet 首次确认并纳管该 TMDB Series + Season 的时间，创建后保持不变；重新匹配回同一规范季度不会重置。
+2. 最后 EP 变动时间 `LastEpisodeChangedAt`：只取该季度规范 `completion_records.completed_at_utc` 的最大值，不受 TMDB/Bangumi 缓存刷新、匹配任务更新时间或作品资料编辑影响。删除完成记录后会按剩余记录重新计算；没有完成记录的季度在升序和降序下都排在有记录季度之后。
+3. 名字 `SortName`：使用 TMDB 显示名称的规范化排序键，不使用来源标题；相同名称按 Season Number、TmdbSeriesId 稳定排序。
+4. 开播日期 `AirDate`：使用 TMDB Season 的 `air_date`；缺失值始终排在有日期项目之后，相同日期按名字和 Season Number 稳定排序。
+5. 加入日期 `AddedAt`：AnimeGoNet 首次确认并纳管该 TMDB Series + Season 的时间，创建后保持不变；重新匹配回同一规范季度不会重置。
 
 服务端 API 接受明确的 `sort` 和 `direction` 枚举并执行分页前排序。所有排序都必须追加稳定的 TMDB ID/Season Number tie-breaker，保证翻页时不重复或漏项。
 
 ## 5. 详情与交互
 
-- 点击列表项进入季度详情，顶部继续显示名称、Cover、Season、三种日期、完成比例及 TMDB Series/Season 的取得方式。
+- 点击列表项进入季度详情，顶部继续显示名称、Cover、Season、加入/更新/最后 EP 变动时间、完成比例及 TMDB Series/Season 的取得方式。
 - EP 网格可按已下载/未下载筛选；每格显示 TMDB Episode Number，并可展开 TMDB Episode Name、air date、完成时间和关联任务。
 - 对未完成 EP 可以跳转到导入/任务信息；对已完成 EP 可以进入四类删除的影响预览，但列表本身不执行隐式删除。
 - Cover 加载失败显示占位图和可访问文本；EP 状态除颜色外必须同时使用文字或图标语义，支持键盘操作和窄屏布局。
 - 页面刷新或元数据同步后保持当前排序、方向、筛选和折叠状态；这些纯 UI 偏好可存浏览器本地，不写入业务数据库。
 
-当前静态 TypeScript 页面已实现上述季度列表、四种排序/方向/分页、同源 Cover、详情头部与 EP 网格。EP 项使用可键盘操作的原生详情控件并显式维护 `aria-expanded`；状态同时显示文字与符号，不只依赖颜色。排序、方向、页大小、EP 筛选和当前季度详情使用 `animegonet.library.v1` 保存在浏览器本地，自动刷新不会在用户展开详情时重绘网格。
+当前静态 TypeScript 页面已实现上述季度列表、五种排序/方向/分页、同源 Cover、详情头部与 EP 网格。EP 项使用可键盘操作的原生详情控件并显式维护 `aria-expanded`；状态同时显示文字与符号，不只依赖颜色。排序、方向、页大小、EP 筛选和当前季度详情使用 `animegonet.library.v1` 保存在浏览器本地，自动刷新不会在用户展开详情时重绘网格。
 
 ## 6. 最小查询投影
 

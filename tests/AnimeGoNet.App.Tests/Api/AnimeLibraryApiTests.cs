@@ -102,6 +102,26 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal(JsonValueKind.Null, item.GetProperty("air_date").ValueKind);
     }
 
+    [Fact]
+    public async Task EpisodeChangedAtSortReturnsLatestEpisodeMutationTimestamp()
+    {
+        await using var app = await RunningApp.StartAsync();
+        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+
+        using var response = await app.Client.GetAsync(
+            "/api/v1/library/seasons?sort=episode_changed_at&direction=desc");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var items = json.RootElement.GetProperty("items").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("episode_changed_at", json.RootElement.GetProperty("sort").GetString());
+        Assert.Equal(100, items[0].GetProperty("tmdb_series_id").GetInt32());
+        Assert.Equal(
+            "2026-01-02T00:00:00+00:00",
+            items[0].GetProperty("last_episode_changed_at_utc").GetString());
+        Assert.Equal(JsonValueKind.Null, items[1].GetProperty("last_episode_changed_at_utc").ValueKind);
+    }
+
     [Theory]
     [InlineData("alpha", 100)]
     [InlineData("Alpha One", 100)]

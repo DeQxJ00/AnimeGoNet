@@ -218,7 +218,8 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    validation_status, last_resolution_run_id,
                    all_completion_count, missing_media_path_count,
                    series_resource_id, series_resource_updated_at,
-                   season_resource_id, season_resource_updated_at
+                   season_resource_id, season_resource_updated_at,
+                   last_episode_changed_at
             FROM projection
             WHERE tmdb_series_id = $tmdb_series_id
               AND season_number = $season_number
@@ -346,6 +347,9 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 + "season_number ASC, tmdb_series_id ASC",
             AnimeLibrarySort.AddedAt =>
                 $"added_at {sqlDirection}, tmdb_series_id ASC, season_number ASC",
+            AnimeLibrarySort.EpisodeChangedAt =>
+                $"last_episode_changed_at IS NULL ASC, last_episode_changed_at {sqlDirection}, "
+                + "tmdb_series_id ASC, season_number ASC",
             _ => throw new ArgumentOutOfRangeException(nameof(sort)),
         };
         return LibraryProjectionSql + $$"""
@@ -363,7 +367,8 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    validation_status, last_resolution_run_id,
                    all_completion_count, missing_media_path_count,
                    series_resource_id, series_resource_updated_at,
-                   season_resource_id, season_resource_updated_at
+                   season_resource_id, season_resource_updated_at,
+                   last_episode_changed_at
             FROM projection
             {{SearchSql("WHERE", "tmdb_series_id", "display_name", "original_name", "season_name", search)}}
             ORDER BY {{orderBy}}
@@ -485,7 +490,8 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                     series.id AS series_resource_id,
                     series.updated_at_utc AS series_resource_updated_at,
                     season.id AS season_resource_id,
-                    season.updated_at_utc AS season_resource_updated_at
+                    season.updated_at_utc AS season_resource_updated_at,
+                    completion.last_completed_at AS last_episode_changed_at
                 FROM anime_seasons AS season
                 JOIN anime_series AS series ON series.id = season.series_id
                 LEFT JOIN episode_aggregate AS episodes
@@ -612,6 +618,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             ParseDate(reader, 6),
             ParseTimestamp(reader.GetString(7)),
             ParseTimestamp(reader.GetString(8)),
+            reader.IsDBNull(27) ? null : ParseTimestamp(reader.GetString(27)),
             resourceRevision,
             episodeTotal,
             episodeSnapshotCount,

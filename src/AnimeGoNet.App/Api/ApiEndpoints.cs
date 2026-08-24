@@ -6136,11 +6136,11 @@ public static class ApiEndpoints
                 "Library search must be at most 200 characters without control characters."));
         }
 
-        if (!TryParseLibrarySort(sort, out var resolvedSort))
+        if (!TryParseLibrarySort(sort, allowEpisodeChangedAt: true, out var resolvedSort))
         {
             return TypedResults.BadRequest(Error(
                 "library_sort_invalid",
-                "Library sort must be last_updated, name, air_date or added_at."));
+                "Library sort must be last_updated, episode_changed_at, name, air_date or added_at."));
         }
 
         if (!TryParseLibraryDirection(direction, out var resolvedDirection))
@@ -6185,6 +6185,7 @@ public static class ApiEndpoints
                     item.AirDate,
                     item.AddedAt,
                     item.LastUpdatedAt,
+                    item.LastEpisodeChangedAt,
                     item.ResourceRevision,
                     item.EpisodeTotal,
                     item.EpisodeSnapshotCount,
@@ -6228,7 +6229,7 @@ public static class ApiEndpoints
             return TypedResults.BadRequest(Error("library_search_invalid", "Library search must be at most 200 characters without control characters."));
         }
 
-        if (!TryParseLibrarySort(sort, out var resolvedSort))
+        if (!TryParseLibrarySort(sort, allowEpisodeChangedAt: false, out var resolvedSort))
         {
             return TypedResults.BadRequest(Error("library_sort_invalid", "Library sort must be last_updated, name, air_date or added_at."));
         }
@@ -6488,6 +6489,7 @@ public static class ApiEndpoints
             season.AirDate,
             season.AddedAt,
             season.LastUpdatedAt,
+            season.LastEpisodeChangedAt,
             season.ResourceRevision,
             season.EpisodeTotal,
             season.EpisodeSnapshotCount,
@@ -6958,7 +6960,10 @@ public static class ApiEndpoints
     private static string LibraryCoverUrl(int tmdbSeriesId, int seasonNumber) =>
         $"/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}";
 
-    private static bool TryParseLibrarySort(string? value, out AnimeLibrarySort sort)
+    private static bool TryParseLibrarySort(
+        string? value,
+        bool allowEpisodeChangedAt,
+        out AnimeLibrarySort sort)
     {
         sort = value?.Trim().ToLowerInvariant() switch
         {
@@ -6966,6 +6971,7 @@ public static class ApiEndpoints
             "name" => AnimeLibrarySort.Name,
             "air_date" => AnimeLibrarySort.AirDate,
             "added_at" => AnimeLibrarySort.AddedAt,
+            "episode_changed_at" when allowEpisodeChangedAt => AnimeLibrarySort.EpisodeChangedAt,
             _ => 0,
         };
         return sort != 0;
@@ -6991,6 +6997,7 @@ public static class ApiEndpoints
             AnimeLibrarySort.Name => "name",
             AnimeLibrarySort.AirDate => "air_date",
             AnimeLibrarySort.AddedAt => "added_at",
+            AnimeLibrarySort.EpisodeChangedAt => "episode_changed_at",
             _ => throw new ArgumentOutOfRangeException(nameof(sort)),
         };
 

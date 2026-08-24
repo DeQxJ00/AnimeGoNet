@@ -6,6 +6,7 @@ public enum AnimeLibrarySort
     Name = 2,
     AirDate = 3,
     AddedAt = 4,
+    EpisodeChangedAt = 5,
 }
 
 public enum AnimeLibrarySortDirection
@@ -32,6 +33,7 @@ public sealed record AnimeSeasonListProjection(
     DateOnly? AirDate,
     DateTimeOffset AddedAt,
     DateTimeOffset LastUpdatedAt,
+    DateTimeOffset? LastEpisodeChangedAt,
     string ResourceRevision,
     int EpisodeTotal,
     int EpisodeSnapshotCount,

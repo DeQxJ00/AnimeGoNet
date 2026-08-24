@@ -58,6 +58,42 @@ public sealed class AnimeLibraryStoreTests
     }
 
     [Fact]
+    public async Task EpisodeChangedAtSortUsesLatestCompletionAndKeepsEmptySeasonsLast()
+    {
+        await using var fixture = await LibraryFixture.CreateAsync();
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                INSERT INTO completion_records (
+                    id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
+                    source_id, media_path, completed_at_utc)
+                VALUES (
+                    'completion-s2', 100, 2, 1, 'test', '/media/alpha-s2-e1.mkv',
+                    '2026-01-12T00:00:00.0000000+00:00');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var descending = await fixture.Store.ListSeasonsAsync(new AnimeSeasonListQuery(
+            Sort: AnimeLibrarySort.EpisodeChangedAt,
+            Direction: AnimeLibrarySortDirection.Descending));
+        var ascending = await fixture.Store.ListSeasonsAsync(new AnimeSeasonListQuery(
+            Sort: AnimeLibrarySort.EpisodeChangedAt,
+            Direction: AnimeLibrarySortDirection.Ascending));
+
+        Assert.Equal([(100, 2), (100, 1), (200, 1)],
+            descending.Items.Select(item => (item.TmdbSeriesId, item.TmdbSeasonNumber)).ToArray());
+        Assert.Equal([(100, 1), (100, 2), (200, 1)],
+            ascending.Items.Select(item => (item.TmdbSeriesId, item.TmdbSeasonNumber)).ToArray());
+        Assert.Equal(
+            new DateTimeOffset(2026, 1, 12, 0, 0, 0, TimeSpan.Zero),
+            descending.Items[0].LastEpisodeChangedAt);
+        Assert.Null(descending.Items[^1].LastEpisodeChangedAt);
+        Assert.Null(ascending.Items[^1].LastEpisodeChangedAt);
+    }
+
+    [Fact]
     public async Task NameSortPaginatesBeforeStableTieBreakersWithoutDuplicates()
     {
         await using var fixture = await LibraryFixture.CreateAsync();
