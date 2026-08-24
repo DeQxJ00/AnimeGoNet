@@ -143,14 +143,14 @@ public sealed class OtherFileReadaptationApiTests
                 .GetProperty("after_tmdb_series_id").GetInt32());
         }
 
-        using (var tasks = await app.Client.GetAsync(
+        using (var taskListResponse = await app.Client.GetAsync(
                    "/api/v1/metadata/tasks?page=1&page_size=100&review_state=pending"))
         {
-            Assert.Equal(HttpStatusCode.OK, tasks.StatusCode);
-            using var tasksJson = JsonDocument.Parse(await tasks.Content.ReadAsStreamAsync());
-            var task = Assert.Single(tasksJson.RootElement.GetProperty("items")
-                .EnumerateArray()
-                .Where(item => item.GetProperty("task_id").GetString() == taskId));
+            Assert.Equal(HttpStatusCode.OK, taskListResponse.StatusCode);
+            using var tasksJson = JsonDocument.Parse(await taskListResponse.Content.ReadAsStreamAsync());
+            var task = Assert.Single(
+                tasksJson.RootElement.GetProperty("items").EnumerateArray(),
+                item => item.GetProperty("task_id").GetString() == taskId);
             Assert.Equal("ai_series_change", task.GetProperty("review_kind").GetString());
         }
 
