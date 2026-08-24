@@ -2669,6 +2669,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     FROM metadata_resolution_runs AS run
                     WHERE run.task_id = task.id
                     ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                   COALESCE(GROUP_CONCAT(DISTINCT CASE
+                       WHEN file.disposition IN ('episode', 'duplicate') THEN file.tmdb_episode_number
+                       ELSE NULL
+                   END), ''),
                    SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'movie' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
@@ -2834,6 +2838,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                         FROM metadata_resolution_runs AS run
                         WHERE run.task_id = task.id
                         ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
+                       COALESCE(GROUP_CONCAT(DISTINCT CASE
+                           WHEN file.disposition IN ('episode', 'duplicate') THEN file.tmdb_episode_number
+                           ELSE NULL
+                       END), ''),
                        SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'movie' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
@@ -2871,26 +2879,26 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             summary = ReadTaskListProjection(reader);
             var sourceId = summary.SourceId;
             source = new MetadataTaskSourceProjection(
-                reader.GetString(35),
-                reader.GetInt64(36),
+                reader.GetString(36),
+                reader.GetInt64(37),
                 sourceId,
                 summary.Title,
-                reader.IsDBNull(37)
-                    ? null
-                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(37)),
                 reader.IsDBNull(38)
                     ? null
-                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(38)),
+                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(38)),
+                reader.IsDBNull(39)
+                    ? null
+                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(39)),
                 summary.MikanId,
-                reader.IsDBNull(39) ? null : reader.GetInt32(39),
-                summary.BangumiSubjectId,
                 reader.IsDBNull(40) ? null : reader.GetInt32(40),
-                reader.IsDBNull(41) ? null : reader.GetString(41),
-                reader.GetInt64(42) != 0,
-                reader.IsDBNull(43)
+                summary.BangumiSubjectId,
+                reader.IsDBNull(41) ? null : reader.GetInt32(41),
+                reader.IsDBNull(42) ? null : reader.GetString(42),
+                reader.GetInt64(43) != 0,
+                reader.IsDBNull(44)
                     ? null
                     : DateTimeOffset.Parse(
-                        reader.GetString(43),
+                        reader.GetString(44),
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind));
         }
@@ -3020,22 +3028,31 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(25) ? null : reader.GetInt64(25) != 0,
             reader.IsDBNull(26) ? null : reader.GetString(26),
             ClassifyHandling(status, failureKind, failureRetryable),
-            reader.GetInt32(27),
+            ParseEpisodeNumbers(reader.GetString(27)),
             reader.GetInt32(28),
             reader.GetInt32(29),
             reader.GetInt32(30),
             reader.GetInt32(31),
+            reader.GetInt32(32),
             DateTimeOffset.Parse(
-                reader.GetString(32),
+                reader.GetString(33),
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind),
-            reader.GetString(33),
-            reader.IsDBNull(34) ? null : reader.GetString(34),
+            reader.GetString(34),
+            reader.IsDBNull(35) ? null : reader.GetString(35),
             seriesResolution,
             seasonResolution,
             episodeResolution,
             episodeResolutionMixed);
     }
+
+    private static int[] ParseEpisodeNumbers(string value) =>
+        string.IsNullOrEmpty(value)
+            ? []
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(number => int.Parse(number, CultureInfo.InvariantCulture))
+                .Order()
+                .ToArray();
 
     private static TmdbResolutionEvidence? ReadResolutionEvidence(
         SqliteDataReader reader,

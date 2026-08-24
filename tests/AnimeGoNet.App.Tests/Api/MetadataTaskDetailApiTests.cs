@@ -193,6 +193,12 @@ public sealed class MetadataTaskDetailApiTests
             await command.ExecuteNonQueryAsync();
         }
 
+        var resolutionStore = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Metadata.MetadataResolutionStore>();
+        var projections = await resolutionStore.ListTasksAsync();
+        Assert.Contains(projections, item => item.TaskId == taskId);
+        Assert.NotNull(await resolutionStore.GetTaskDetailAsync(taskId));
+
         using var response = await app.Client.GetAsync(
             $"/api/v1/metadata/tasks/{taskId}");
         var body = await response.Content.ReadAsStringAsync();
@@ -305,6 +311,15 @@ public sealed class MetadataTaskDetailApiTests
         Assert.DoesNotContain(new string('a', 64), body, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('b', 64), body, StringComparison.Ordinal);
         Assert.DoesNotContain(new string('c', 64), body, StringComparison.Ordinal);
+
+        using var listResponse = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks?search={taskId}&page=1&page_size=10");
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStreamAsync());
+        var listItem = Assert.Single(listJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(
+            [3],
+            listItem.GetProperty("episode_numbers").EnumerateArray()
+                .Select(value => value.GetInt32()).ToArray());
     }
 
     [Fact]

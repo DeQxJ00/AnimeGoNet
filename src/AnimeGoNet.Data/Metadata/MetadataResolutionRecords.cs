@@ -209,6 +209,7 @@ public sealed record MetadataTaskListProjection(
     bool? BangumiFallbackEligible,
     string? BangumiFallbackDenialReason,
     string HandlingCategory,
+    IReadOnlyList<int> EpisodeNumbers,
     int EpisodeFileCount,
     int MovieFileCount,
     int OtherFileCount,

@@ -94,7 +94,7 @@ API、日志、DOM和导出数据不得包含qB密码、Cookie、完整Torrent U
 
 schema v24 的 `download_job_events` 保存调度确认、qB 状态变化、快照缺失、暂停/恢复、业务重试和安全失败码；schema v33 另在做种状态变化时记录 `seeding_state` 事件，并保存不可变目标、单调累计秒数和首次完成时间。schema v34 保存元数据动态 tag 的实际值、`pending/applied/skipped/not_configured`、稳定失败码和 `dynamic_tag` 事件。异常正文、URL和凭据不进入该表。详情读取 qB 失败时仍返回 `200` 和 SQLite 快照，并把 `file_snapshot_state` 标记为 `unavailable`；控制命令则返回稳定的安全错误和 `503`，不回显上游异常正文。
 
-静态 TypeScript 页面提供服务端筛选/翻页、做种目标/累计时间/完成门禁、动态 tag 状态/实际值/跳过原因、文件级百分比与 priority/wanted、准备/整理失败、时间线、暂停/恢复、业务重试和四类删除预览入口。生成的 `wwwroot/app.js` 必须由 `npm run web:build` 产生，并由 `npm run web:check` 校验类型。
+静态 TypeScript 页面提供服务端筛选/翻页、做种目标/累计时间/完成门禁、动态 tag 状态/实际值/跳过原因、文件级百分比与 priority/wanted、准备/整理失败、时间线、暂停/恢复、业务重试和四类删除预览入口。匹配日志列表直接返回排序去重后的 `episode_numbers`，身份行和 Episode 流程节点均显示最终确认的 `SxxExxx`，无需先展开逐文件详情才能确认具体 EP；展开详情仍保留来源 EP、文件名候选和逐文件 TMDB 验证证据。生成的 `wwwroot/app.js` 必须由 `npm run web:build` 产生，并由 `npm run web:check` 校验类型。
 
 列表响应的 `summary` 始终是未套用当前筛选的全局下载仪表盘，返回任务总数、活动/暂停/死种/失败/stale、等待整理/重复跳过/已完成、准备/整理失败、离线实例、最近安全失败码和最后一次下载器成功时间。`dead_jobs` 只统计独立 `dead` 状态，不并入 `paused_jobs`。`download_skipped_duplicate` 只计入独立的 `skipped_duplicate_jobs`，即使旧记录仍保留 `organization_state=pending` 也不得计入等待整理。活动、暂停、死种、失败、等待整理、重复跳过、已完成与过期快照卡片是可键盘操作的原生按钮；点击后清除冲突的 qB 状态/业务阶段筛选、回到第一页并应用对应 `summary_bucket`，再次点击当前卡片恢复全部，手工提交筛选或重置也会清除快捷筛选。连接速度与离线实例是不同量纲的汇总信息，不作为任务列表筛选入口。汇总下载速度只计算运行快照标为已连接且任务非 stale 的实例；离线实例的历史速度不得加入。
 

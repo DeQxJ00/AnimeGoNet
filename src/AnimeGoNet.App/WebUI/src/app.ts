@@ -742,6 +742,7 @@ interface MetadataItem {
   bangumi_fallback_eligible: boolean | null;
   bangumi_fallback_denial_reason: string | null;
   handling_category: string;
+  episode_numbers: number[];
   episode_file_count: number;
   movie_file_count: number;
   other_file_count: number;
@@ -9995,21 +9996,28 @@ function matchingLogStage(
   strategy: string | null,
   runId: string | null,
   attemptId: string | null,
+  resolvedValue: string | null = null,
 ): HTMLLIElement {
   const row = document.createElement("li");
   const failed = item.failure_stage === stage && item.failure_kind !== null;
-  row.className = failed ? "failed" : strategy ? "resolved" : "pending";
+  const resolved = strategy !== null || resolvedValue !== null;
+  row.className = failed ? "failed" : resolved ? "resolved" : "pending";
   const marker = document.createElement("span");
   marker.className = "matching-log-stage-marker";
-  marker.textContent = failed ? "!" : strategy ? "✓" : "…";
+  marker.textContent = failed ? "!" : resolved ? "✓" : "…";
   marker.setAttribute("aria-hidden", "true");
   const content = document.createElement("div");
   const title = document.createElement("strong");
   title.textContent = label;
   const value = document.createElement("span");
+  value.className = resolvedValue === null ? "" : "matching-log-stage-value";
   value.textContent = failed
     ? textOrDash(item.failure_code ?? item.failure_kind)
-    : strategy === null ? "尚未建立结果" : libraryStrategy(strategy);
+    : strategy === null && resolvedValue === null
+      ? "尚未建立结果"
+      : [resolvedValue, strategy === null ? null : libraryStrategy(strategy)]
+          .filter(part => part !== null)
+          .join(" · ");
   content.append(title, value);
   if (strategy !== null) {
     const reference = document.createElement("small");
@@ -10019,6 +10027,21 @@ function matchingLogStage(
   }
   row.append(marker, content);
   return row;
+}
+
+function matchingLogEpisodeIdentity(item: MetadataItem): string | null {
+  if (item.episode_numbers.length === 0) return null;
+  const season = item.tmdb_season_number === null
+    ? ""
+    : `S${String(item.tmdb_season_number).padStart(2, "0")}`;
+  return item.episode_numbers
+    .map((episode, index) => `${index === 0 ? season : ""}E${String(episode).padStart(3, "0")}`)
+    .join("、");
+}
+
+function matchingLogEpisodeLabel(item: MetadataItem): string {
+  if (item.movie_file_count > 0 && item.episode_file_count === 0) return "不适用（电影）";
+  return matchingLogEpisodeIdentity(item) ?? "尚未确认";
 }
 
 function openMetadataTaskFromMatchingLog(taskId: string): void {
@@ -10079,18 +10102,23 @@ async function loadMatchingLogs(): Promise<void> {
 
       const identity = document.createElement("p");
       identity.className = "matching-log-identity";
+      const episodeIdentity = matchingLogEpisodeIdentity(item);
       identity.textContent = `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`
         + ` · TMDB ${textOrDash(item.tmdb_series_id)}`
         + ` · S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`
+        + ` · 最终 EP ${matchingLogEpisodeLabel(item)}`
         + ` · 正片 ${item.episode_file_count}${item.movie_file_count > 0 ? ` / 电影 ${item.movie_file_count}` : ""} / 重复 ${item.duplicate_file_count} / Other ${item.other_file_count} / 待处理 ${item.pending_file_count}`;
 
       const flow = document.createElement("ol");
       flow.className = "matching-log-flow";
       flow.setAttribute("aria-label", "Series、Season、Episode 匹配流程");
       flow.append(
-        matchingLogStage(item, "Series", "series", item.series_strategy, item.series_run_id, item.series_attempt_id),
-        matchingLogStage(item, "Season", "season", item.season_strategy, item.season_run_id, item.season_attempt_id),
-        matchingLogStage(item, "Episode", "episode", item.episode_strategy, item.episode_run_id, item.episode_attempt_id),
+        matchingLogStage(item, "Series", "series", item.series_strategy, item.series_run_id, item.series_attempt_id,
+          item.tmdb_series_id === null ? null : `TMDB ${item.tmdb_series_id}`),
+        matchingLogStage(item, "Season", "season", item.season_strategy, item.season_run_id, item.season_attempt_id,
+          item.tmdb_season_number === null ? null : `S${String(item.tmdb_season_number).padStart(2, "0")}`),
+        matchingLogStage(item, "Episode", "episode", item.episode_strategy, item.episode_run_id, item.episode_attempt_id,
+          item.movie_file_count > 0 && item.episode_file_count === 0 ? "不适用（电影）" : episodeIdentity),
       );
 
       if (item.failure_kind || item.failure_reason) {
