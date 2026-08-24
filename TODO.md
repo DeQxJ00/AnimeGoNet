@@ -196,6 +196,7 @@
 - [x] 将媒体整理、做种目标完成、删除下载器任务、删除下载源拆成独立持久化状态：schema v33 固化 `seeding_target_minutes`、单调 `seeding_elapsed_seconds`、waiting/seeding/completed 与完成时间，`0/-1/正数` 语义独立于 qB 瞬时 state；媒体操作、qB cleanup 与四类删除均按独立持久化状态、租约和失败重试推进，qB 删除固定 `deleteFiles=false`，源/媒体文件分别受捕获根目录约束。
 - [x] 处理多文件、跨盘、目标冲突和部分失败：逐文件 operation 按 Torrent 相对路径/文件 ID 稳定执行；同卷优先原子 move，跨盘进入 task-owned partial + 容量/SHA-256 校验 + 原子提交；不同内容的既有目标保留源/目标并返回 `target_conflict`；前序文件已完成而后序文件失败时不写业务 completion，解除冲突后仅续做 pending operation，最终一次性完成全部 Episode 记录和独立下载器 cleanup。
 - [x] 多文件 Torrent 逐文件去重：qBittorrent 暂停添加、metadata/claim 完成后逐项核对 index/path/size、重复与 ignored 文件 priority=0、wanted 文件 priority=1 后才恢复；全重复任务保持停止并以 `deleteFiles=false` 移除。除 fake/SQLite 并发、恢复和失败外，本机 TestSpace 已用四文件合法 Torrent 验证真实 qB `1,1,0,0` priority、未下载重复 EP/ignored 海报、主视频+绑定字幕落盘和单 completion；Ubuntu CT 另验证单文件容器全链。
+- [x] 下载准备文件清单使用固定的跨平台相对路径规范化：统一 `/`/`\\`、Unicode NFC、Windows/macOS 不可移植字符与保留名，不依赖当前 OS；Linux 大小写仍严格区分。Torrent 原名中的 `:` 等字符被 Windows qBittorrent 改写后仍可按路径和大小安全关联，规范化碰撞、越界段和索引冲突继续 fail closed。
 - [x] 实现字幕识别与唯一绑定：同目录同 stem 优先、语言/default/forced/SDH 后缀原样保留、不同 stem 按来源 EP 唯一匹配、`.idx/.sub` 分别绑定并保留扩展；匹配后只复用视频的已验证 TMDB EP/claim/priority，未匹配或歧义进入已确认季度 `Other`，整理不产生重复完成记录。
 - [x] 串联媒体目录 DB 与 NFO：NFO 与三层目录侧车都位于业务完成记录之前；侧车损坏、越界或索引失败会保持可重试且不写完成记录。
 - [x] 任一季度匹配策略成功后，固定使用 TMDB `zh-CN` 名称（缺失时用 TMDB 原名）、Season Number 和 Episode Number 生成 `<TmdbName>/Sxx/Eyyy.ext`；字幕生成 `Eyyy.<保留后缀>.<字幕扩展>`，Other 保留安全清洗后的原文件名，均已串联持久化 move worker。

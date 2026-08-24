@@ -7,7 +7,7 @@ Date: 2026-07-22
 - SQLite schema v8 adds a persistent `pending/preparing/completed` download-preparation state, exclusive lease, expiry recovery, attempt/retry fields, safe failure code, and per-task-file qB index/priority/wanted projection.
 - Confirmed staged dispatch now enters `download_preparing`; both an existing same-hash task and a newly added task receive an explicit pause call before the durable hand-off.
 - Metadata Series/Season/Episode resolution and episode claims run while qB remains paused.
-- The preparation worker pauses again, requires an exact file-count/index/path/size match, sets `duplicate`/`ignored` files to priority 0 and `episode`/`other` files to priority 1, then resumes only when a wanted file exists.
+- The preparation worker pauses again, requires an exact file-count/index/path/size match, sets `duplicate`/`ignored` files to priority 0 and `episode`/`other` files to priority 1, then resumes only when a wanted file exists. Path identity uses the fixed portable normalization documented in `2026-08-24-portable-torrent-manifest-paths.md`; normalized collisions still fail closed.
 - An all-duplicate task is durably marked `download_skipped_duplicate`, is never resumed, and is removed from qB only with `deleteFiles=false`. Manifest mismatch, incomplete metadata, or a post-resume SQLite failure trigger another best-effort pause before the durable lease is released for safe retry.
 - Static WebUI maps the new preparation, allowed-download, and duplicate-skip business states to explicit labels.
 

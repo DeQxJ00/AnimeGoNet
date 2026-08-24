@@ -120,6 +120,68 @@ public sealed class DownloadPreparationProcessorTests
     }
 
     [Fact]
+    public async Task PortableManifestNormalizationMatchesWindowsQbittorrentFileNameRewrite()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files =
+            [
+                new DownloadFileSnapshot(
+                    0,
+                    "Show/Cyborg 009_ Nemesis - 03 (ABEMA 1920x1080 AVC AAC MKV).mkv",
+                    1_130_040_374,
+                    0,
+                    1),
+            ],
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(
+            app,
+            [
+                (
+                    "Show\\Cyborg 009: Nemesis - 03 (ABEMA 1920x1080 AVC AAC MKV).mkv",
+                    1_130_040_374L,
+                    "episode"),
+            ]);
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.Completed, result);
+        Assert.Single(client.Resumed);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("completed", state.PreparationPhase);
+        var file = Assert.Single(state.Files);
+        Assert.Equal((0, 1, true), (file.Index, file.Priority, file.Wanted));
+    }
+
+    [Fact]
+    public async Task PortableManifestNormalizationRejectsAmbiguousPathCollision()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files =
+            [
+                new DownloadFileSnapshot(0, "Show/EP_01.mkv", 5, 0, 1),
+                new DownloadFileSnapshot(1, "Show/EP__01.mkv", 6, 0, 1),
+            ],
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(
+            app,
+            [
+                ("Show/EP:01.mkv", 5L, "episode"),
+                ("Show/EP?01.mkv", 6L, "episode"),
+            ]);
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.RetryScheduled, result);
+        Assert.Empty(client.Resumed);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("download_file_manifest_mismatch", state.PreparationFailureCode);
+    }
+
+    [Fact]
     public async Task AppliesRenderedCanonicalMetadataTagsBeforeResumeAndAuditsResult()
     {
         var client = new FakeDownloadClient

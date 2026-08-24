@@ -39,6 +39,36 @@ public sealed class MediaPathPlannerTests
         Assert.Equal(Path.Combine("Series", "S01", "E003.zh-Hans.forced.ass"), result);
     }
 
+    [Fact]
+    public void PortableComparisonNormalizesSeparatorsUnicodeAndCrossPlatformInvalidCharacters()
+    {
+        var torrentPath = "番組\\Cyborg 009: Ne\u0065\u0301mesis?.mkv";
+        var qbittorrentPath = "番組/Cyborg 009_ Ne\u00E9mesis_.mkv";
+
+        Assert.Equal(
+            PortablePathNormalizer.NormalizeRelativePathForComparison(qbittorrentPath),
+            PortablePathNormalizer.NormalizeRelativePathForComparison(torrentPath));
+    }
+
+    [Theory]
+    [InlineData("/rooted/file.mkv")]
+    [InlineData("C:\\rooted\\file.mkv")]
+    [InlineData("show/../file.mkv")]
+    [InlineData("show//file.mkv")]
+    public void PortableComparisonRejectsRootedTraversalOrEmptySegments(string value)
+    {
+        Assert.Throws<ArgumentException>(() =>
+            PortablePathNormalizer.NormalizeRelativePathForComparison(value));
+    }
+
+    [Fact]
+    public void PortableComparisonPreservesCaseForCaseSensitiveFilesystems()
+    {
+        Assert.NotEqual(
+            PortablePathNormalizer.NormalizeRelativePathForComparison("Show/EP03.mkv"),
+            PortablePathNormalizer.NormalizeRelativePathForComparison("show/EP03.mkv"));
+    }
+
     [Theory]
     [InlineData("pending", 1)]
     [InlineData("duplicate", 1)]

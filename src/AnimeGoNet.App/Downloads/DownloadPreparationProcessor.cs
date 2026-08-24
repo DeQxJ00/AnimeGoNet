@@ -1,5 +1,6 @@
 using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Data.Downloads;
 
 namespace AnimeGoNet.App.Downloads;
@@ -142,11 +143,19 @@ public sealed class DownloadPreparationProcessor(
         }
 
         Dictionary<string, DownloadFileSnapshot> byPath;
+        string[] expectedPaths;
         try
         {
             byPath = clientFiles.ToDictionary(
-                file => NormalizePath(file.RelativePath),
+                file => PortablePathNormalizer.NormalizeRelativePathForComparison(file.RelativePath),
                 StringComparer.Ordinal);
+            expectedPaths = claim.Files
+                .Select(file => PortablePathNormalizer.NormalizeRelativePathForComparison(file.RelativePath))
+                .ToArray();
+            if (expectedPaths.Distinct(StringComparer.Ordinal).Count() != expectedPaths.Length)
+            {
+                throw new ArgumentException("Expected file paths collide after portable normalization.");
+            }
         }
         catch (ArgumentException)
         {
@@ -154,14 +163,15 @@ public sealed class DownloadPreparationProcessor(
         }
 
         var assignments = new List<DownloadFileAssignment>(claim.Files.Count);
-        foreach (var file in claim.Files)
+        for (var fileIndex = 0; fileIndex < claim.Files.Count; fileIndex++)
         {
+            var file = claim.Files[fileIndex];
             if (file.Disposition == "pending")
             {
                 throw new PreparationFailureException("metadata_files_pending");
             }
 
-            if (!byPath.TryGetValue(NormalizePath(file.RelativePath), out var clientFile)
+            if (!byPath.TryGetValue(expectedPaths[fileIndex], out var clientFile)
                 || clientFile.SizeBytes != file.SizeBytes)
             {
                 throw new PreparationFailureException("download_file_manifest_mismatch");
@@ -231,8 +241,6 @@ public sealed class DownloadPreparationProcessor(
             cancellationToken).ConfigureAwait(false);
         return new DownloadDynamicTagAssignment(rendered.Tags, "applied", null);
     }
-
-    private static string NormalizePath(string value) => value.Replace('\\', '/');
 
     private static string Classify(Exception exception) => exception switch
     {
