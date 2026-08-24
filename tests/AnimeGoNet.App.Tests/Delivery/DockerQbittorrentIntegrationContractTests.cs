@@ -70,7 +70,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("{{.State.Health.Status}}", smoke, StringComparison.Ordinal);
         Assert.Contains("docker stop --signal SIGTERM --time 7", smoke, StringComparison.Ordinal);
         Assert.Contains("{{.State.ExitCode}}", smoke, StringComparison.Ordinal);
-        Assert.Contains("./eng/smoke-container.sh animegonet:ci", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "run: bash ./eng/smoke-container.sh animegonet:ci",
+            workflow,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("TestSpace", dockerfile + compose + smoke, StringComparison.OrdinalIgnoreCase);
     }
 

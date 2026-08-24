@@ -52,7 +52,7 @@ jobs:
           tags: animegonet:ci
           cache-from: type=gha
       - name: Smoke container paths, API, SQLite and NativeAOT
-        run: ./eng/smoke-container.sh animegonet:ci
+        run: bash ./eng/smoke-container.sh animegonet:ci
       - name: Smoke release-container WebUI in Chromium
         run: ./eng/smoke-webui-container.sh animegonet:ci
       - name: Smoke full-chain qBittorrent, metadata, WebUI and external plugin isolation
