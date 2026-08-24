@@ -65,7 +65,7 @@
 - [x] 动画电影 Mikan 输入：手动 Torrent/RSS 与 AnimeGoHelper 的“单/全”请求显式透传 `media_type`；普通入口默认 `tv`，Mikan 首页“剧场版”分区固定 `movie`。主程序 API/WebUI/SQLite 测试通过；独立 AnimeGoHelper 仓库提交 `1290d42` 的 Node DOM/请求契约测试通过。
 - [x] 动画电影保存型输入源：schema v58 在 SourceProfile 持久化 `media_type`；WebUI、YAML、配置归档、立即读取 RSS 与 Cron 调度统一使用保存值，旧来源升级后默认 `tv`，非 Mikan 来源拒绝 `movie`。
 - [x] 动画电影 TMDB 与整理首版：实现 `/3/discover/movie`、`/3/movie/{id}` 强制验证、独立 Movie 身份/去重、单正片路径、字幕、`movie.nfo`、move/copy/link、完成记录和四类删除；不进入 TV 季度失败链。schema v59 将电影主文件和绑定字幕独立归类为 `disposition=movie`，旧版 `other_reason=movie/movie_subtitle` 自动迁移且不再计入 Other、触发 Other 提醒或进入 Other 重新适配。
-- [x] 动画电影作品库/任务中心首版：下载任务显示 Movie ID/标题/上映日期；“动画电影”库支持搜索、排序、分页、封面、完成状态和 TMDB 跳转，不显示伪造 Season/EP。
+- [x] 动画电影作品库/任务中心首版：下载任务显示 Movie ID/标题/上映日期；动画库提供独立“动画电影”二级入口，支持搜索、排序、分页、封面、完成状态和 TMDB 跳转，总览显示电影资产数并可直达电影库；电影不混入 TV 季度统计，也不显示伪造 Season/EP。
 
 电影未来扩展（不属于本次已确认的单正片首版范围）：多主视频/Extras/Versions、电影外部媒体扫描、电影详情人工覆盖、电影专用匹配日志/Other 审核、电影库级删除入口和 Playwright 容器验收。电影 AI Prompt 未修改；现有正式 Prompt 的输出契约是 Series/Season/Episode，如需 AI 处理电影，必须先由项目所有者确认 movie 输出字段与提示词文本。
 
@@ -264,7 +264,7 @@
 - [x] 修正 Mikan 手动设置的单 Torrent 提交鉴权：WebUI 改用独立 `/api/v1/ingest/manual` 管理入口并复用统一导入处理，接受 `web.webui_access_key`；外部插件 `/api/v1/ingest` 继续只接受 `inner_plugin_mikan.access_key`，避免 401 后误弹 WebUI 密钥仍无法提交。
 - [x] 下载任务卡片显示已落库的 TMDB Series/Season/Episode：同页任务使用一次批量 SQLite 查询，按 Series+Season 合并多文件 EP；未解析任务不显示猜测占位。日志一级菜单新增“匹配日志”，按最近更新可视化 Series→Season→Episode 策略流程，支持展开来源/TMDB 对照与完整 Attempt 时间线；下载卡片可按 task_id 直达并自动展开。
 - [x] 统一 WebUI 后台刷新策略：下载任务、元数据任务、待补全 TMDB、作品库与数据更新只在对应二级页面可见时轮询；列表内容未变化、详情展开、编辑控件聚焦或对话框打开时不重建 DOM，下载/元数据列表在安全更新时保持首个可见卡片位置，后台失败保留当前内容。
-- [x] 扩展总览关键统计与直达入口：按下载与整理、匹配与人工处理、资产与运行规模显示 15 个权威统计；`download_skipped_duplicate` 独立显示“重复跳过”且不计入等待整理，下载及匹配计数点击后应用目标列表的精确服务端筛选，其余进入对应作品库、来源或下载器页面；五类 API 并行且允许部分失败，真实 WebUI 跳转已验收。
+- [x] 扩展总览关键统计与直达入口：按下载与整理、匹配与人工处理、资产与运行规模显示权威统计；动画季度与动画电影分别计数并直达各自作品库，`download_skipped_duplicate` 独立显示“重复跳过”且不计入等待整理，下载及匹配计数点击后应用目标列表的精确服务端筛选，其余进入对应来源或下载器页面；各类 API 并行且允许部分失败，真实 WebUI 跳转已验收。
 - [x] 总览增加主进程运行内存、按逻辑 CPU 数归一化的实时 CPU 占用和当前 `data_path` 容量；目录扫描跳过重解析点并缓存 60 秒，三项均提供直达日志或目录设置的按钮入口，并由 API、静态契约和真实 WebUI 验收。
 - [x] 实现 Cover 后端代理、本地缓存和占位图，不向浏览器暴露 TMDB API key；列表查询使用批量投影，避免按作品/EP产生 N+1 查询。`poster_url` 只指向同源 `/api/v1/library/covers/{tmdbSeriesId}/{seasonNumber}`；Season/Series 回退、5 MiB 流式上限、图片魔数校验、并发合并、磁盘缓存与失败占位均有测试。
 - [x] 将 TMDB 未解析及 `tmdbid=0` 兜底条目放入“待补全 TMDB”，不生成 TMDB EP 网格、季度封面或完成比例；逐项恢复并验证真实 TMDB 映射后，再事务并入标准作品库。

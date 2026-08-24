@@ -2192,6 +2192,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     defaultSubview: "seasons",
     tabs: [
       { id: "seasons", label: "作品与季度" },
+      { id: "movies", label: "动画电影" },
       { id: "pending", label: "待补全 TMDB" },
     ],
   },
@@ -2419,6 +2420,9 @@ function selectWorkspace(
   if (workspace === "library" && selectedSubview === "seasons"
     && activeLibraryDetail === null) {
     void loadLibrary();
+  }
+  if (workspace === "library" && selectedSubview === "movies") {
+    void loadMovieLibrary();
   }
   if (workspace === "library" && selectedSubview === "pending") {
     void loadPendingTmdb();
@@ -9463,10 +9467,11 @@ async function fetchOverviewJson<T>(path: string): Promise<T> {
 }
 
 async function loadOverviewStatistics(): Promise<void> {
-  const [downloads, metadata, library, pendingTmdb, sources, runtime] = await Promise.allSettled([
+  const [downloads, metadata, library, movies, pendingTmdb, sources, runtime] = await Promise.allSettled([
     fetchOverviewJson<DownloadListPage>("/api/v1/downloads?page=1&page_size=10"),
     fetchOverviewJson<MetadataTaskListPage>("/api/v1/metadata/tasks?page=1&page_size=10"),
     fetchOverviewJson<AnimeSeasonListPage>("/api/v1/library/seasons?page=1&page_size=12"),
+    fetchOverviewJson<AnimeMovieListPage>("/api/v1/library/movies?page=1&page_size=1"),
     fetchOverviewJson<{ items: PendingTmdbSummary[] }>("/api/v1/metadata/pending-tmdb"),
     fetchOverviewJson<SourceProfileList>("/api/v1/sources"),
     fetchOverviewJson<RuntimeStatus>("/api/v1/status"),
@@ -9513,6 +9518,12 @@ async function loadOverviewStatistics(): Promise<void> {
     setOverviewCount("overview-library-seasons-count", library.value.total_items);
   } else {
     setOverviewFailure(["overview-library-seasons-count"]);
+  }
+
+  if (movies.status === "fulfilled") {
+    setOverviewCount("overview-library-movies-count", movies.value.total_items);
+  } else {
+    setOverviewFailure(["overview-library-movies-count"]);
   }
 
   if (pendingTmdb.status === "fulfilled") {
@@ -12820,6 +12831,10 @@ element<HTMLButtonElement>("#overview-pending-tmdb").addEventListener(
 element<HTMLButtonElement>("#overview-library-seasons").addEventListener(
   "click",
   () => selectWorkspace("library", "seasons"),
+);
+element<HTMLButtonElement>("#overview-library-movies").addEventListener(
+  "click",
+  () => selectWorkspace("library", "movies"),
 );
 element<HTMLButtonElement>("#overview-metadata-total").addEventListener(
   "click",

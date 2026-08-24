@@ -209,6 +209,7 @@ const workspaceDefinitions = {
         defaultSubview: "seasons",
         tabs: [
             { id: "seasons", label: "作品与季度" },
+            { id: "movies", label: "动画电影" },
             { id: "pending", label: "待补全 TMDB" },
         ],
     },
@@ -431,6 +432,9 @@ function selectWorkspace(workspace, subview, updateHash = true) {
     if (workspace === "library" && selectedSubview === "seasons"
         && activeLibraryDetail === null) {
         void loadLibrary();
+    }
+    if (workspace === "library" && selectedSubview === "movies") {
+        void loadMovieLibrary();
     }
     if (workspace === "library" && selectedSubview === "pending") {
         void loadPendingTmdb();
@@ -6826,10 +6830,11 @@ async function fetchOverviewJson(path) {
     return await response.json();
 }
 async function loadOverviewStatistics() {
-    const [downloads, metadata, library, pendingTmdb, sources, runtime] = await Promise.allSettled([
+    const [downloads, metadata, library, movies, pendingTmdb, sources, runtime] = await Promise.allSettled([
         fetchOverviewJson("/api/v1/downloads?page=1&page_size=10"),
         fetchOverviewJson("/api/v1/metadata/tasks?page=1&page_size=10"),
         fetchOverviewJson("/api/v1/library/seasons?page=1&page_size=12"),
+        fetchOverviewJson("/api/v1/library/movies?page=1&page_size=1"),
         fetchOverviewJson("/api/v1/metadata/pending-tmdb"),
         fetchOverviewJson("/api/v1/sources"),
         fetchOverviewJson("/api/v1/status"),
@@ -6876,6 +6881,12 @@ async function loadOverviewStatistics() {
     }
     else {
         setOverviewFailure(["overview-library-seasons-count"]);
+    }
+    if (movies.status === "fulfilled") {
+        setOverviewCount("overview-library-movies-count", movies.value.total_items);
+    }
+    else {
+        setOverviewFailure(["overview-library-movies-count"]);
     }
     if (pendingTmdb.status === "fulfilled") {
         setOverviewCount("overview-pending-tmdb-count", pendingTmdb.value.items.length);
@@ -9951,6 +9962,7 @@ for (const [id, bucket] of [
 }
 element("#overview-pending-tmdb").addEventListener("click", () => selectWorkspace("library", "pending"));
 element("#overview-library-seasons").addEventListener("click", () => selectWorkspace("library", "seasons"));
+element("#overview-library-movies").addEventListener("click", () => selectWorkspace("library", "movies"));
 element("#overview-metadata-total").addEventListener("click", openAllMetadataFromOverview);
 element("#overview-sources-enabled").addEventListener("click", () => selectWorkspace("sources", "manage"));
 element("#overview-downloaders-offline").addEventListener("click", () => selectWorkspace("download-tools", "qbittorrent"));
