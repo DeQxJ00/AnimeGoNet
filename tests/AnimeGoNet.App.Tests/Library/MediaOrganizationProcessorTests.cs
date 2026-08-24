@@ -122,6 +122,36 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     [Fact]
+    public async Task ExistingTaskUsesPortableQbittorrentPathWhenOriginalNameContainsWindowsColon()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var downloadRoot = Path.Combine(paths.DownloadPath, "bt");
+        var actualName = "Cyborg 009_ Nemesis - 03.mkv";
+        File.Move(
+            Path.Combine(downloadRoot, "episode.mkv"),
+            Path.Combine(downloadRoot, actualName));
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var update = connection.CreateCommand())
+        {
+            update.CommandText = "UPDATE task_files SET relative_path = 'Cyborg 009: Nemesis - 03.mkv' WHERE task_id = $task_id;";
+            update.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(1, await update.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        Assert.False(File.Exists(Path.Combine(downloadRoot, actualName)));
+        Assert.True(File.Exists(Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv")));
+    }
+
+    [Fact]
     public async Task DownloaderCleanupCallbackRetriesWithoutDeletingOrganizedMedia()
     {
         var client = new FakeDownloadClient();

@@ -216,6 +216,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
 
         foreach (var assignment in assignments)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(assignment.RelativePath);
             ArgumentOutOfRangeException.ThrowIfNegative(assignment.DownloadFileIndex);
             ArgumentOutOfRangeException.ThrowIfLessThan(assignment.Priority, 0);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(assignment.Priority, 7);
@@ -253,12 +254,14 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
             updateFile.Transaction = transaction;
             updateFile.CommandText = """
                 UPDATE task_files
-                SET download_file_index = $download_file_index,
+                SET relative_path = $relative_path,
+                    download_file_index = $download_file_index,
                     download_priority = $download_priority,
                     download_wanted = $download_wanted
                 WHERE id = $file_id AND task_id = $task_id;
                 """;
             updateFile.Parameters.AddWithValue("$download_file_index", assignment.DownloadFileIndex);
+            updateFile.Parameters.AddWithValue("$relative_path", assignment.RelativePath);
             updateFile.Parameters.AddWithValue("$download_priority", assignment.Priority);
             updateFile.Parameters.AddWithValue("$download_wanted", assignment.Wanted ? 1 : 0);
             updateFile.Parameters.AddWithValue("$file_id", assignment.FileId);

@@ -307,8 +307,11 @@ public sealed class MediaOrganizationProcessor(
             var sourceRoot = file.SourceOverridePath is null
                 ? claim.DownloadRootPath
                 : claim.SaveRootPath;
+            var sourcePath = file.SourceOverridePath is null
+                ? ResolvePortableDownloaderPath(sourceRoot, operation.SourcePath)
+                : operation.SourcePath;
             var samePath = string.Equals(
-                Path.GetFullPath(operation.SourcePath),
+                Path.GetFullPath(sourcePath),
                 Path.GetFullPath(operation.TargetPath),
                 OperatingSystem.IsWindows()
                     ? StringComparison.OrdinalIgnoreCase
@@ -316,8 +319,8 @@ public sealed class MediaOrganizationProcessor(
             long bytesVerified;
             if (samePath)
             {
-                if (!File.Exists(operation.SourcePath)
-                    || new FileInfo(operation.SourcePath).Length != file.SizeBytes)
+                if (!File.Exists(sourcePath)
+                    || new FileInfo(sourcePath).Length != file.SizeBytes)
                 {
                     throw new SafeFileMoveException(
                         "readaptation_source_invalid",
@@ -332,14 +335,14 @@ public sealed class MediaOrganizationProcessor(
                 ? (await linker.LinkAsync(new SafeFileLinkRequest(
                     sourceRoot,
                     claim.SaveRootPath,
-                    operation.SourcePath,
+                    sourcePath,
                     operation.TargetPath,
                     file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
                 : (await mover.MoveAsync(new SafeFileMoveRequest(
                     operation.OperationId,
                     sourceRoot,
                     claim.SaveRootPath,
-                    operation.SourcePath,
+                    sourcePath,
                     operation.TargetPath,
                     file.SizeBytes,
                     ForceCopyAndVerify: file.PreserveSource,
@@ -359,6 +362,27 @@ public sealed class MediaOrganizationProcessor(
                 operations.Length,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string ResolvePortableDownloaderPath(string sourceRoot, string sourcePath)
+    {
+        if (File.Exists(sourcePath))
+        {
+            return sourcePath;
+        }
+
+        try
+        {
+            var relativePath = Path.GetRelativePath(sourceRoot, sourcePath);
+            var portablePath = PortablePathNormalizer.NormalizeRelativePathForComparison(relativePath)
+                .Replace('/', Path.DirectorySeparatorChar);
+            var candidate = PathBoundary.Combine(sourceRoot, portablePath);
+            return File.Exists(candidate) ? candidate : sourcePath;
+        }
+        catch (ArgumentException)
+        {
+            return sourcePath;
         }
     }
 

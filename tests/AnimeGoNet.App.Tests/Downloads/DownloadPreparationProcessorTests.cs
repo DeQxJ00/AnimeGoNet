@@ -151,6 +151,9 @@ public sealed class DownloadPreparationProcessorTests
         var state = await ReadStateAsync(app, taskId);
         Assert.Equal("completed", state.PreparationPhase);
         var file = Assert.Single(state.Files);
+        Assert.Equal(
+            "Show/Cyborg 009_ Nemesis - 03 (ABEMA 1920x1080 AVC AAC MKV).mkv",
+            file.RelativePath);
         Assert.Equal((0, 1, true), (file.Index, file.Priority, file.Wanted));
     }
 
@@ -435,7 +438,7 @@ public sealed class DownloadPreparationProcessorTests
         await using (var query = connection.CreateCommand())
         {
             query.CommandText = """
-                SELECT download_file_index, download_priority, download_wanted
+                SELECT relative_path, download_file_index, download_priority, download_wanted
                 FROM task_files WHERE task_id = $task_id ORDER BY relative_path;
                 """;
             query.Parameters.AddWithValue("$task_id", taskId);
@@ -443,9 +446,10 @@ public sealed class DownloadPreparationProcessorTests
             while (await reader.ReadAsync())
             {
                 files.Add(new FileState(
-                    reader.IsDBNull(0) ? null : reader.GetInt32(0),
+                    reader.GetString(0),
                     reader.IsDBNull(1) ? null : reader.GetInt32(1),
-                    reader.IsDBNull(2) ? null : reader.GetInt64(2) != 0));
+                    reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                    reader.IsDBNull(3) ? null : reader.GetInt64(3) != 0));
             }
         }
 
@@ -558,7 +562,7 @@ public sealed class DownloadPreparationProcessorTests
         }
     }
 
-    private sealed record FileState(int? Index, int? Priority, bool? Wanted);
+    private sealed record FileState(string RelativePath, int? Index, int? Priority, bool? Wanted);
 
     private sealed record PreparationState(
         string TaskStatus,

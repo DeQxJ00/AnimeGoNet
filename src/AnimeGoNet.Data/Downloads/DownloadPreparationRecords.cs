@@ -21,6 +21,7 @@ public sealed record DownloadPreparationClaim(
 
 public sealed record DownloadFileAssignment(
     string FileId,
+    string RelativePath,
     int DownloadFileIndex,
     int Priority,
     bool Wanted);

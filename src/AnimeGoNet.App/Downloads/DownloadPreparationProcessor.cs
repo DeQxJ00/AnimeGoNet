@@ -180,6 +180,7 @@ public sealed class DownloadPreparationProcessor(
             var wanted = file.Disposition is not ("duplicate" or "ignored");
             assignments.Add(new DownloadFileAssignment(
                 file.FileId,
+                clientFile.RelativePath,
                 clientFile.Index,
                 wanted ? 1 : 0,
                 wanted));
