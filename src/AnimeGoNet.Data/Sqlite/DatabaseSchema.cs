@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 58;
+    public const int CurrentVersion = 59;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -118,7 +118,161 @@ public static class DatabaseSchema
             58,
             "source_profile_media_type",
             SourceProfileMediaType),
+        new SchemaMigration(
+            59,
+            "movie_file_disposition",
+            MovieFileDisposition,
+            RequiresForeignKeysDisabled: true),
     ];
+
+    private const string MovieFileDisposition = """
+        ALTER TABLE task_files RENAME TO task_files_v58;
+
+        CREATE TABLE task_files (
+            id TEXT NOT NULL PRIMARY KEY,
+            task_id TEXT NOT NULL REFERENCES ingest_tasks(id) ON DELETE CASCADE,
+            relative_path TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+            source_episode TEXT,
+            file_episode_candidate TEXT,
+            tmdb_series_id INTEGER CHECK (tmdb_series_id > 0),
+            tmdb_season_number INTEGER CHECK (tmdb_season_number > 0),
+            tmdb_episode_number INTEGER CHECK (tmdb_episode_number > 0),
+            tmdb_episode_id INTEGER CHECK (tmdb_episode_id > 0),
+            disposition TEXT NOT NULL CHECK (disposition IN (
+                'pending', 'episode', 'movie', 'other', 'ignored', 'duplicate')),
+            other_reason TEXT,
+            download_file_index INTEGER CHECK (download_file_index >= 0),
+            download_priority INTEGER CHECK (download_priority BETWEEN 0 AND 7),
+            download_wanted INTEGER CHECK (download_wanted IN (0, 1)),
+            associated_task_file_id TEXT REFERENCES task_files(id) ON DELETE SET NULL,
+            rename_suffix TEXT,
+            episode_resolution_source TEXT,
+            episode_resolution_run_id TEXT,
+            episode_resolution_attempt_id TEXT,
+            tmdb_movie_id INTEGER CHECK (tmdb_movie_id > 0)
+                REFERENCES anime_movies(tmdb_movie_id),
+            UNIQUE (task_id, relative_path)
+        ) STRICT;
+
+        INSERT INTO task_files (
+            id, task_id, relative_path, size_bytes, source_episode,
+            file_episode_candidate, tmdb_series_id, tmdb_season_number,
+            tmdb_episode_number, tmdb_episode_id, disposition, other_reason,
+            download_file_index, download_priority, download_wanted,
+            associated_task_file_id, rename_suffix, episode_resolution_source,
+            episode_resolution_run_id, episode_resolution_attempt_id,
+            tmdb_movie_id)
+        SELECT
+            file.id, file.task_id, file.relative_path, file.size_bytes,
+            file.source_episode, file.file_episode_candidate, file.tmdb_series_id,
+            file.tmdb_season_number, file.tmdb_episode_number, file.tmdb_episode_id,
+            CASE
+                WHEN task.media_type = 'movie'
+                 AND file.disposition = 'other'
+                 AND file.other_reason IN ('movie', 'movie_subtitle')
+                    THEN 'movie'
+                ELSE file.disposition
+            END,
+            CASE
+                WHEN task.media_type = 'movie'
+                 AND file.disposition = 'other'
+                 AND file.other_reason IN ('movie', 'movie_subtitle')
+                    THEN NULL
+                ELSE file.other_reason
+            END,
+            file.download_file_index, file.download_priority, file.download_wanted,
+            file.associated_task_file_id, file.rename_suffix,
+            file.episode_resolution_source, file.episode_resolution_run_id,
+            file.episode_resolution_attempt_id, file.tmdb_movie_id
+        FROM task_files_v58 AS file
+        JOIN ingest_tasks AS task ON task.id = file.task_id;
+
+        DROP TABLE task_files_v58;
+
+        CREATE INDEX ix_task_files_associated
+        ON task_files(associated_task_file_id);
+
+        CREATE INDEX ix_task_files_tmdb_season_task
+        ON task_files(tmdb_series_id, tmdb_season_number, task_id);
+
+        CREATE INDEX ix_task_files_episode_evidence
+        ON task_files(task_id, episode_resolution_source, episode_resolution_run_id);
+
+        CREATE INDEX ix_task_files_tmdb_movie
+        ON task_files(tmdb_movie_id, task_id);
+
+        CREATE TRIGGER tr_task_files_episode_evidence_insert
+        BEFORE INSERT ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'tmdb_episode_bangumi_date',
+                    'tmdb_episode_bangumi_nearest_date',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_task_files_episode_evidence_update
+        BEFORE UPDATE OF
+            episode_resolution_source, episode_resolution_run_id,
+            episode_resolution_attempt_id
+        ON task_files
+        WHEN NOT (
+            (
+                NEW.episode_resolution_source IS NULL
+                AND NEW.episode_resolution_run_id IS NULL
+                AND NEW.episode_resolution_attempt_id IS NULL
+            )
+            OR (
+                NEW.episode_resolution_source IN (
+                    'manual_mikan_offset', 'trusted_mikan_offset',
+                    'ai_metadata', 'tmdb_episode_number',
+                    'tmdb_episode_bangumi_date',
+                    'tmdb_episode_bangumi_nearest_date',
+                    'subtitle_association')
+                AND NEW.episode_resolution_run_id IS NOT NULL
+                AND NEW.episode_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run
+                      ON run.id = attempt.run_id
+                    WHERE attempt.id = NEW.episode_resolution_attempt_id
+                      AND attempt.run_id = NEW.episode_resolution_run_id
+                      AND run.task_id = NEW.task_id
+                      AND attempt.stage = 'episode'
+                      AND attempt.strategy = NEW.episode_resolution_source
+                      AND attempt.result = 'matched')
+            )
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB Episode resolution evidence');
+        END;
+        """;
 
     private const string SourceProfileMediaType = """
         ALTER TABLE source_profiles

@@ -596,8 +596,8 @@ public sealed class DownloadManagementApiTests
                     tmdb_series_id = NULL,
                     tmdb_season_number = NULL,
                     tmdb_episode_number = NULL,
-                    disposition = 'other',
-                    other_reason = 'movie'
+                    disposition = 'movie',
+                    other_reason = NULL
                 WHERE task_id = (SELECT task_id FROM download_jobs WHERE id = $job_id);
                 """;
             command.Parameters.AddWithValue("$job_id", JobId);

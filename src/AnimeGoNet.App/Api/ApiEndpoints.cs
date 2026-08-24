@@ -8250,6 +8250,7 @@ public static class ApiEndpoints
             item.BangumiFallbackDenialReason,
             item.HandlingCategory,
             item.EpisodeFileCount,
+            item.MovieFileCount,
             item.OtherFileCount,
             item.DuplicateFileCount,
             item.PendingFileCount,

@@ -44,10 +44,15 @@ public sealed class MovieMetadataResolutionProcessorTests
                       AND tmdb_season_number IS NULL
                       AND tmdb_episode_number IS NULL),
                    (SELECT COUNT(*) FROM task_files
-                    WHERE task_id = $task_id AND other_reason = 'movie'),
+                    WHERE task_id = $task_id AND disposition = 'movie'
+                      AND associated_task_file_id IS NULL
+                      AND other_reason IS NULL),
                    (SELECT COUNT(*) FROM task_files
-                    WHERE task_id = $task_id AND other_reason = 'movie_subtitle'
-                      AND associated_task_file_id IS NOT NULL)
+                    WHERE task_id = $task_id AND disposition = 'movie'
+                      AND associated_task_file_id IS NOT NULL
+                      AND other_reason IS NULL),
+                   (SELECT COUNT(*) FROM task_files
+                    WHERE task_id = $task_id AND disposition = 'other')
             FROM ingest_tasks AS task
             JOIN metadata_resolution_runs AS run ON run.task_id = task.id
             WHERE task.id = $task_id;
@@ -64,6 +69,7 @@ public sealed class MovieMetadataResolutionProcessorTests
         Assert.Equal(2, reader.GetInt32(5));
         Assert.Equal(1, reader.GetInt32(6));
         Assert.Equal(1, reader.GetInt32(7));
+        Assert.Equal(0, reader.GetInt32(8));
         Assert.Equal([129], tmdb.MovieDetailRequests);
         Assert.Empty(tmdb.TvSearches);
     }

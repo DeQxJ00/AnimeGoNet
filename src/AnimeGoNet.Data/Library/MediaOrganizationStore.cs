@@ -222,7 +222,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                   ON file.tmdb_movie_id IS NOT NULL
                  AND movie.tmdb_movie_id = file.tmdb_movie_id
                 WHERE file.task_id = $task_id
-                  AND file.disposition IN ('episode', 'other')
+                  AND file.disposition IN ('episode', 'movie', 'other')
                   AND ((task.media_type = 'tv' AND series.id IS NOT NULL)
                        OR (task.media_type = 'movie' AND movie.id IS NOT NULL))
                   AND COALESCE(file.download_wanted, 1) = 1

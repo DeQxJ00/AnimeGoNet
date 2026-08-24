@@ -24,6 +24,13 @@ internal static class SchemaMigrationRunner
         foreach (var migration in migrations)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (migration.RequiresForeignKeysDisabled)
+            {
+                await ApplyWithForeignKeysDisabledAsync(connection, migration, cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
             await using var transaction = connection.BeginTransaction(deferred: false);
             var appliedName = await ReadAppliedNameAsync(
                 connection,
@@ -67,6 +74,105 @@ internal static class SchemaMigrationRunner
         }
 
         await ValidateAppliedHistoryAsync(connection, migrations, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task ApplyWithForeignKeysDisabledAsync(
+        SqliteConnection connection,
+        SchemaMigration migration,
+        CancellationToken cancellationToken)
+    {
+        var appliedName = await ReadAppliedNameAsync(
+            connection,
+            transaction: null,
+            migration.Version,
+            cancellationToken).ConfigureAwait(false);
+        if (appliedName is not null)
+        {
+            if (!string.Equals(appliedName, migration.Name, StringComparison.Ordinal))
+            {
+                throw SchemaMigrationException.HistoryInvalid();
+            }
+
+            return;
+        }
+
+        await SetForeignKeysAsync(connection, enabled: false, cancellationToken).ConfigureAwait(false);
+        await SetLegacyAlterTableAsync(connection, enabled: true, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await using var transaction = connection.BeginTransaction(deferred: false);
+            await using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText = migration.Sql;
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await EnsureForeignKeyIntegrityAsync(connection, transaction, cancellationToken)
+                .ConfigureAwait(false);
+
+            await using (var recordCommand = connection.CreateCommand())
+            {
+                recordCommand.Transaction = transaction;
+                recordCommand.CommandText = """
+                    INSERT INTO schema_migrations(version, name, applied_at_utc)
+                    VALUES ($version, $name, $appliedAtUtc);
+                    """;
+                recordCommand.Parameters.AddWithValue("$version", migration.Version);
+                recordCommand.Parameters.AddWithValue("$name", migration.Name);
+                recordCommand.Parameters.AddWithValue(
+                    "$appliedAtUtc",
+                    DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                await recordCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await SetLegacyAlterTableAsync(connection, enabled: false, CancellationToken.None)
+                .ConfigureAwait(false);
+            await SetForeignKeysAsync(connection, enabled: true, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static async Task SetForeignKeysAsync(
+        SqliteConnection connection,
+        bool enabled,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = enabled ? "PRAGMA foreign_keys = ON;" : "PRAGMA foreign_keys = OFF;";
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task SetLegacyAlterTableAsync(
+        SqliteConnection connection,
+        bool enabled,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = enabled
+            ? "PRAGMA legacy_alter_table = ON;"
+            : "PRAGMA legacy_alter_table = OFF;";
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureForeignKeyIntegrityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "PRAGMA foreign_key_check;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("SQLite migration produced a foreign-key integrity violation.");
+        }
     }
 
     private static void ValidateDefinitions(IReadOnlyList<SchemaMigration> migrations)
@@ -132,7 +238,7 @@ internal static class SchemaMigrationRunner
 
     private static async Task<string?> ReadAppliedNameAsync(
         SqliteConnection connection,
-        SqliteTransaction transaction,
+        SqliteTransaction? transaction,
         int version,
         CancellationToken cancellationToken)
     {

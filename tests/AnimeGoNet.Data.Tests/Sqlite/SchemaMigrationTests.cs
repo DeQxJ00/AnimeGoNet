@@ -183,6 +183,77 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task MovieDispositionMigrationConvertsLegacyMovieRowsAndPreservesReferences()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations.Take(58).ToArray(),
+            CancellationToken.None);
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc, media_type)
+                VALUES (
+                    'movie-source', 'Movie', 'mikan', 'bt', 'move',
+                    0, 0, 1, 1, '2026-08-24T00:00:00Z',
+                    '2026-08-24T00:00:00Z', 'movie');
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc,
+                    media_type)
+                VALUES (
+                    'movie-task', 'movie-source', 1, 'mikan', 'Movie',
+                    'fingerprint', 'bt', '{}', 'organized',
+                    '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z', 'movie');
+
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, disposition, other_reason)
+                VALUES ('movie-file', 'movie-task', 'movie.mkv', 100, 'other', 'movie');
+
+                INSERT INTO file_operations (
+                    id, task_file_id, strategy, source_path, target_path, state,
+                    bytes_verified, created_at_utc, updated_at_utc)
+                VALUES (
+                    'operation', 'movie-file', 'move', 'source.mkv', 'target.mkv',
+                    'completed', 100, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z');
+                """;
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations,
+            CancellationToken.None);
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT
+                (SELECT disposition FROM task_files WHERE id = 'movie-file'),
+                (SELECT other_reason IS NULL FROM task_files WHERE id = 'movie-file'),
+                (SELECT COUNT(*) FROM file_operations WHERE task_file_id = 'movie-file'),
+                (SELECT COUNT(*) FROM pragma_foreign_key_check),
+                (SELECT COUNT(*) FROM sqlite_schema
+                 WHERE sql LIKE '%task_files_v58%');
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("movie", reader.GetString(0));
+        Assert.Equal(1, reader.GetInt32(1));
+        Assert.Equal(1, reader.GetInt32(2));
+        Assert.Equal(0, reader.GetInt32(3));
+        Assert.Equal(0, reader.GetInt32(4));
+    }
+
+    [Fact]
     public async Task LibraryMetadataAuditMigrationCreatesTargetedIndexes()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

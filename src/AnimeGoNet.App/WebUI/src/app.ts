@@ -741,6 +741,7 @@ interface MetadataItem {
   bangumi_fallback_denial_reason: string | null;
   handling_category: string;
   episode_file_count: number;
+  movie_file_count: number;
   other_file_count: number;
   duplicate_file_count: number;
   pending_file_count: number;
@@ -9669,7 +9670,7 @@ async function loadMatchingLogs(): Promise<void> {
       identity.textContent = `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`
         + ` · TMDB ${textOrDash(item.tmdb_series_id)}`
         + ` · S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`
-        + ` · 正片 ${item.episode_file_count} / 重复 ${item.duplicate_file_count} / Other ${item.other_file_count} / 待处理 ${item.pending_file_count}`;
+        + ` · 正片 ${item.episode_file_count}${item.movie_file_count > 0 ? ` / 电影 ${item.movie_file_count}` : ""} / 重复 ${item.duplicate_file_count} / Other ${item.other_file_count} / 待处理 ${item.pending_file_count}`;
 
       const flow = document.createElement("ol");
       flow.className = "matching-log-flow";
@@ -9875,7 +9876,7 @@ async function loadMetadataTasks(background = false): Promise<void> {
       }
       const files = document.createElement("p");
       files.className = "metadata-files";
-      files.textContent = `已确认 ${item.episode_file_count} · 已跳过重复 ${item.duplicate_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
+      files.textContent = `已确认 ${item.episode_file_count}${item.movie_file_count > 0 ? ` · 电影 ${item.movie_file_count}` : ""} · 已跳过重复 ${item.duplicate_file_count} · Other ${item.other_file_count} · 待处理 ${item.pending_file_count}`;
       card.append(heading, handling, identity, stages, files);
       if (item.readaptation_review_state === "pending") {
         const review = document.createElement("p");

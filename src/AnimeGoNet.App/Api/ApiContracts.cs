@@ -945,6 +945,7 @@ public sealed record MetadataTaskListItem(
     string? BangumiFallbackDenialReason,
     [property: JsonPropertyName("handling_category")] string HandlingCategory,
     [property: JsonPropertyName("episode_file_count")] int EpisodeFileCount,
+    [property: JsonPropertyName("movie_file_count")] int MovieFileCount,
     [property: JsonPropertyName("other_file_count")] int OtherFileCount,
     [property: JsonPropertyName("duplicate_file_count")] int DuplicateFileCount,
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,

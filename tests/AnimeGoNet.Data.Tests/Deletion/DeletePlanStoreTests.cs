@@ -254,7 +254,7 @@ public sealed class DeletePlanStoreTests
                     '2011-09-17', NULL, $now, $now);
                 UPDATE ingest_tasks SET media_type = 'movie' WHERE id = $task_id;
                 UPDATE task_files
-                SET disposition = 'other', other_reason = 'movie',
+                SET disposition = 'movie', other_reason = NULL,
                     tmdb_series_id = NULL, tmdb_season_number = NULL,
                     tmdb_episode_number = NULL, tmdb_episode_id = NULL,
                     tmdb_movie_id = 10681

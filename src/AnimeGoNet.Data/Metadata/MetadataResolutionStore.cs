@@ -737,10 +737,10 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             var isBoundSubtitle = association?.VideoFileId == mainFile.FileId;
             var disposition = duplicateReason is not null
                 ? (isMain || isBoundSubtitle ? "duplicate" : "ignored")
-                : isMain || isBoundSubtitle ? "other" : "ignored";
+                : isMain || isBoundSubtitle ? "movie" : "ignored";
             var reason = duplicateReason
-                ?? (isMain ? "movie"
-                    : isBoundSubtitle ? "movie_subtitle"
+                ?? (isMain || isBoundSubtitle
+                    ? null
                     : association?.UnmatchedReason ?? "movie_auxiliary_ignored");
 
             await using var updateFile = connection.CreateCommand();
@@ -756,7 +756,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 """;
             updateFile.Parameters.AddWithValue("$tmdb_id", movie.Id);
             updateFile.Parameters.AddWithValue("$disposition", disposition);
-            updateFile.Parameters.AddWithValue("$reason", reason);
+            updateFile.Parameters.AddWithValue("$reason", (object?)reason ?? DBNull.Value);
             updateFile.Parameters.AddWithValue(
                 "$associated_file_id",
                 isBoundSubtitle ? mainFile.FileId : DBNull.Value);
@@ -2670,6 +2670,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     WHERE run.task_id = task.id
                     ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
                    SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN file.disposition = 'movie' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
                    SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
@@ -2823,6 +2824,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                         WHERE run.task_id = task.id
                         ORDER BY run.attempt_number DESC, run.id DESC LIMIT 1),
                        SUM(CASE WHEN file.disposition = 'episode' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN file.disposition = 'movie' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'other' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'duplicate' THEN 1 ELSE 0 END),
                        SUM(CASE WHEN file.disposition = 'pending' THEN 1 ELSE 0 END),
@@ -2847,26 +2849,26 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             summary = ReadTaskListProjection(reader);
             var sourceId = summary.SourceId;
             source = new MetadataTaskSourceProjection(
-                reader.GetString(33),
-                reader.GetInt64(34),
+                reader.GetString(34),
+                reader.GetInt64(35),
                 sourceId,
                 summary.Title,
-                reader.IsDBNull(35)
-                    ? null
-                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(35)),
                 reader.IsDBNull(36)
                     ? null
-                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(36)),
+                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(36)),
+                reader.IsDBNull(37)
+                    ? null
+                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(37)),
                 summary.MikanId,
-                reader.IsDBNull(37) ? null : reader.GetInt32(37),
-                summary.BangumiSubjectId,
                 reader.IsDBNull(38) ? null : reader.GetInt32(38),
-                reader.IsDBNull(39) ? null : reader.GetString(39),
-                reader.GetInt64(40) != 0,
-                reader.IsDBNull(41)
+                summary.BangumiSubjectId,
+                reader.IsDBNull(39) ? null : reader.GetInt32(39),
+                reader.IsDBNull(40) ? null : reader.GetString(40),
+                reader.GetInt64(41) != 0,
+                reader.IsDBNull(42)
                     ? null
                     : DateTimeOffset.Parse(
-                        reader.GetString(41),
+                        reader.GetString(42),
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind));
         }
@@ -3000,11 +3002,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(28),
             reader.GetInt32(29),
             reader.GetInt32(30),
+            reader.GetInt32(31),
             DateTimeOffset.Parse(
-                reader.GetString(31),
+                reader.GetString(32),
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind),
-            reader.GetString(32),
+            reader.GetString(33),
             seriesResolution,
             seasonResolution,
             episodeResolution,

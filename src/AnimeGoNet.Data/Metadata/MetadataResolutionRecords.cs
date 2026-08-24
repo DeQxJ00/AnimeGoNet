@@ -210,6 +210,7 @@ public sealed record MetadataTaskListProjection(
     string? BangumiFallbackDenialReason,
     string HandlingCategory,
     int EpisodeFileCount,
+    int MovieFileCount,
     int OtherFileCount,
     int DuplicateFileCount,
     int PendingFileCount,

@@ -26,6 +26,7 @@
 | TMDB 详情 | Series/Season/Episode | `/3/movie/{id}` 并再次验证身份 | 已实现 | DTO/AOT 与缓存测试 |
 | 规范身份 | Series+Season+Episode | Movie ID | 已实现 | schema v57、唯一 claim/完成记录测试 |
 | 整理 | `<show>/Sxx/E###` | `<movie> (<year>)/<movie> (<year>).ext` | 已实现（单正片） | 端到端文件策略测试 |
+| 文件归类 | `episode` / `other` | `movie`（主文件及唯一绑定字幕） | 已实现 | schema v59 旧数据迁移、电影全链测试 |
 | NFO | `tvshow.nfo` + Episode | `movie.nfo` | 已实现 | XML 测试 |
 | 字幕 | EP 关联后同名 | 主电影文件关联后同名 | 已实现 | 多语言后缀测试 |
 | 作品库 | Season/EP 进度 | 电影状态、封面、TMDB 跳转 | 已实现 | API/WebUI 测试 |
@@ -53,5 +54,8 @@
 4. 每个候选先来自 `/3/discover/movie?with_genres=16`，随后必须由 `/3/movie/{id}` 验证。
 5. 通过 Movie ID 独立去重，整理到 `movie_save_path`，字幕随主文件改名并保留语言后缀，写入 `movie.nfo`。
 6. 下载任务和“动画电影”库显示 Movie ID、标题、上映日期和完成状态，不显示伪造 EP 进度。
+7. 电影主文件和唯一绑定字幕持久化为 `task_files.disposition=movie`；它不是 TV 的
+   `Other`，因此不进入 Other 计数、提醒或重新适配。schema v59 会把历史电影任务中的
+   `other + movie/movie_subtitle` 原位升级为 `movie`，并保留整理/删除引用和外键完整性。
 
 当前没有修改正式 AI Prompt；多主视频/特典/多版本、电影 AI 契约和电影外部媒体扫描仍需单独确认或实现。
