@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260824-mikan-group-directory">
+  <link rel="stylesheet" href="/styles.css?v=20260825-mikan-plugin-audit-title">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1385,7 +1385,7 @@
       </div>
       <p class="muted">当 AI 因日文名、中文名搜索到不同 TMDB Series 并由人工明确同意后，系统按精确 mikanid + groupid 保存映射。后续同组 EP 在标题搜索前使用已确认 Series/Season，但仍重新验证 TMDB Series、Season，并继续执行现有 Episode 匹配与最终 TMDB 验证。删除不会修改已整理文件或历史审核。</p>
       <div id="mikan-manual-series-mappings" class="offset-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
-        <p class="ui-state ui-state--loading muted empty" role="status">正在读取人工 TMDB 映射…</p>
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取人工 TMDB 映射…</p>
       </div>
     </section>
 
@@ -1399,7 +1399,7 @@
       </div>
       <p class="muted">mikanid 与 groupid 只使用 Episode/RSS 已确认的身份。首次遇到新 groupid 时，程序从配置的 Mikan Base URL 请求 /Home/Bangumi/{mikanid}，复用作品页“字幕组列表”解析器并按 groupid 精确取名；成功后长期保存。名称可以人工修改，也可显式恢复自动获取。</p>
       <div id="mikan-publish-group-list" class="publish-group-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
-        <p class="ui-state ui-state--loading muted empty" role="status">正在读取字幕组对照…</p>
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取字幕组对照…</p>
       </div>
     </section>
 
@@ -1411,7 +1411,7 @@
         </div>
         <button id="mikan-plugin-call-reload" type="button" class="secondary-button">刷新日志</button>
       </div>
-      <p class="muted">持久记录 AnimeGoHelper 的单集、全集、选集与批量调用结果。日志只保存调用模式、媒体类型、Mikan 身份、任务 ID 和安全错误码，不保存 Cookie、AccessKey、Torrent URL 或 passkey。</p>
+      <p class="muted">持久记录 AnimeGoHelper 的单集、全集、选集与批量调用结果。日志保存调用模式、媒体类型、逐项标题、Mikan 身份、任务 ID 和安全错误码，并可跳转关联任务；不保存 Cookie、AccessKey、Torrent URL 或 passkey。</p>
       <div class="plugin-call-toolbar">
         <label>调用方式
           <select id="mikan-plugin-call-mode">
@@ -1433,7 +1433,7 @@
         <span id="mikan-plugin-call-count" class="muted">正在统计…</span>
       </div>
       <div id="mikan-plugin-call-list" class="plugin-call-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
-        <p class="ui-state ui-state--loading muted empty" role="status">正在读取插件调用日志…</p>
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取插件调用日志…</p>
       </div>
     </section>
 
@@ -2086,6 +2086,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260824-mikan-group-directory"></script>
+    <script type="module" src="/app.js?v=20260825-mikan-plugin-audit-title"></script>
 </body>
 </html>

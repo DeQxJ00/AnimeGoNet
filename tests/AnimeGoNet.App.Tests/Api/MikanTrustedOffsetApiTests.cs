@@ -173,6 +173,7 @@ public sealed class MikanTrustedOffsetApiTests
         Assert.Contains("/api/v1/mikan/manual-series-mappings", script, StringComparison.Ordinal);
         Assert.Contains("id=\"mikan-plugin-call-workspace\"", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/logs/mikan-plugin-calls", script, StringComparison.Ordinal);
+        Assert.Contains("openMetadataTaskFromMatchingLog(detail.task_id)", script, StringComparison.Ordinal);
         Assert.Contains("id=\"mikan-publish-group-workspace\"", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/publish-groups", script, StringComparison.Ordinal);
     }

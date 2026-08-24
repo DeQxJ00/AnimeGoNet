@@ -5,6 +5,7 @@ namespace AnimeGoNet.Data.Mikan;
 
 public sealed record MikanPluginCallLogItem(
     int Index,
+    string? Title,
     string? TaskId,
     int? MikanId,
     int? GroupId,
@@ -74,11 +75,12 @@ public sealed class MikanPluginCallLogStore(AnimeGoSqliteDatabase database)
             command.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
             command.CommandText = """
                 INSERT INTO mikan_plugin_call_log_items (
-                    call_id, item_index, task_id, mikanid, groupid, status, failure_code)
-                VALUES ($call_id, $index, $task_id, $mikanid, $groupid, $status, $failure);
+                    call_id, item_index, title, task_id, mikanid, groupid, status, failure_code)
+                VALUES ($call_id, $index, $title, $task_id, $mikanid, $groupid, $status, $failure);
                 """;
             command.Parameters.AddWithValue("$call_id", entry.Id);
             command.Parameters.AddWithValue("$index", item.Index);
+            command.Parameters.AddWithValue("$title", (object?)NormalizeTitle(item.Title) ?? DBNull.Value);
             command.Parameters.AddWithValue("$task_id", (object?)item.TaskId ?? DBNull.Value);
             command.Parameters.AddWithValue("$mikanid", (object?)item.MikanId ?? DBNull.Value);
             command.Parameters.AddWithValue("$groupid", (object?)item.GroupId ?? DBNull.Value);
@@ -152,7 +154,7 @@ public sealed class MikanPluginCallLogStore(AnimeGoSqliteDatabase database)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT item_index, task_id, mikanid, groupid, status, failure_code
+            SELECT item_index, title, task_id, mikanid, groupid, status, failure_code
             FROM mikan_plugin_call_log_items WHERE call_id = $call_id ORDER BY item_index;
             """;
         command.Parameters.AddWithValue("$call_id", callId);
@@ -162,9 +164,10 @@ public sealed class MikanPluginCallLogStore(AnimeGoSqliteDatabase database)
         {
             values.Add(new MikanPluginCallLogItem(
                 reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1),
-                reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetInt32(3), reader.GetString(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5)));
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4), reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
         return values;
     }
@@ -176,7 +179,18 @@ public sealed class MikanPluginCallLogStore(AnimeGoSqliteDatabase database)
         ArgumentOutOfRangeException.ThrowIfNegative(entry.AcceptedCount);
         ArgumentOutOfRangeException.ThrowIfNegative(entry.RejectedCount);
         ArgumentOutOfRangeException.ThrowIfNegative(entry.DurationMilliseconds);
+        foreach (var item in entry.Items)
+        {
+            var title = NormalizeTitle(item.Title);
+            if (title is { Length: > 1000 })
+                throw new ArgumentOutOfRangeException(
+                    nameof(entry),
+                    "Mikan plugin call item titles must not exceed 1000 characters.");
+        }
     }
+
+    private static string? NormalizeTitle(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string Format(DateTimeOffset value) =>
         value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);

@@ -52,7 +52,11 @@ public sealed class LegacyRssApiTests
         Assert.Equal("selected", call.GetProperty("mode").GetString());
         Assert.Equal("success", call.GetProperty("result").GetString());
         Assert.Equal(1, call.GetProperty("accepted_count").GetInt32());
-        Assert.Equal(3951, call.GetProperty("items")[0].GetProperty("mikanid").GetInt32());
+        var logItem = call.GetProperty("items")[0];
+        Assert.Equal("Show [04] [1080p]", logItem.GetProperty("title").GetString());
+        Assert.Equal(3951, logItem.GetProperty("mikanid").GetInt32());
+        Assert.Equal(data.GetProperty("items")[0].GetProperty("ingest_task_id").GetString(),
+            logItem.GetProperty("task_id").GetString());
         Assert.False((await logs.Content.ReadAsStringAsync()).Contains("Download/b.torrent", StringComparison.Ordinal));
     }
 

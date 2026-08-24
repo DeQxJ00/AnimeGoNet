@@ -5673,7 +5673,7 @@ async function loadMikanPluginCallLogs() {
                 table.className = "compact-table";
                 const head = document.createElement("thead");
                 const headRow = document.createElement("tr");
-                ["序号", "mikanid / groupid", "状态", "任务 ID"].forEach(label => {
+                ["序号", "标题", "mikanid / groupid", "状态", "关联任务"].forEach(label => {
                     const cell = document.createElement("th");
                     cell.textContent = label;
                     headRow.append(cell);
@@ -5684,14 +5684,33 @@ async function loadMikanPluginCallLogs() {
                     const row = document.createElement("tr");
                     [
                         String(detail.index + 1),
+                        detail.title ?? "—",
                         `${detail.mikanid ?? "—"} / ${detail.groupid ?? "—"}`,
                         `${detail.status}${detail.failure_code ? ` · ${detail.failure_code}` : ""}`,
-                        detail.task_id ?? "—",
-                    ].forEach(value => {
+                    ].forEach((value, columnIndex) => {
                         const cell = document.createElement("td");
                         cell.textContent = value;
+                        if (columnIndex === 1 && detail.title !== null)
+                            cell.title = detail.title;
                         row.append(cell);
                     });
+                    const taskCell = document.createElement("td");
+                    if (detail.task_id === null) {
+                        taskCell.textContent = "—";
+                    }
+                    else {
+                        const taskLink = document.createElement("a");
+                        taskLink.className = "download-metadata-link";
+                        taskLink.href = "#/tasks/metadata";
+                        taskLink.textContent = `查看任务 · ${detail.task_id.slice(0, 8)}`;
+                        taskLink.title = detail.task_id;
+                        taskLink.addEventListener("click", event => {
+                            event.preventDefault();
+                            openMetadataTaskFromMatchingLog(detail.task_id);
+                        });
+                        taskCell.append(taskLink);
+                    }
+                    row.append(taskCell);
                     tableBody.append(row);
                 });
                 table.append(head, tableBody);

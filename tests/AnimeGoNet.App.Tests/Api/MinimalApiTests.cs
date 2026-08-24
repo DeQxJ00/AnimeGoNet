@@ -845,6 +845,10 @@ public sealed class MinimalApiTests
         Assert.Equal("/api/download/manager", call.GetProperty("endpoint").GetString());
         Assert.Equal("single", call.GetProperty("mode").GetString());
         Assert.Equal(1, call.GetProperty("accepted_count").GetInt32());
+        var logItem = call.GetProperty("items")[0];
+        Assert.Equal("Legacy episode", logItem.GetProperty("title").GetString());
+        Assert.Equal(data.GetProperty("items")[0].GetProperty("ingest_id").GetString(),
+            logItem.GetProperty("task_id").GetString());
         Assert.DoesNotContain("private-passkey", await logs.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 

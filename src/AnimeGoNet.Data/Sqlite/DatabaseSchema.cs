@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 63;
+    public const int CurrentVersion = 64;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -139,7 +139,17 @@ public static class DatabaseSchema
             63,
             "mikan_publish_group_directory",
             MikanPublishGroupDirectory),
+        new SchemaMigration(
+            64,
+            "mikan_plugin_call_item_title",
+            MikanPluginCallItemTitle),
     ];
+
+    private const string MikanPluginCallItemTitle = """
+        ALTER TABLE mikan_plugin_call_log_items
+        ADD COLUMN title TEXT NULL
+            CHECK (title IS NULL OR length(title) BETWEEN 1 AND 1000);
+        """;
 
     private const string MikanPublishGroupDirectory = """
         CREATE TABLE mikan_publish_groups (

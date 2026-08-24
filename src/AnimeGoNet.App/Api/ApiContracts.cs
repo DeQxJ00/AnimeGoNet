@@ -857,6 +857,7 @@ public sealed record MikanPluginCallLogResponse(
 
 public sealed record MikanPluginCallLogItemResponse(
     [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("title")] string? Title,
     [property: JsonPropertyName("task_id")] string? TaskId,
     [property: JsonPropertyName("mikanid")] int? MikanId,
     [property: JsonPropertyName("groupid")] int? GroupId,

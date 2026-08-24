@@ -5677,6 +5677,7 @@ public static class ApiEndpoints
                 entry.CompletedAtUtc,
                 entry.Items.Select(item => new MikanPluginCallLogItemResponse(
                     item.Index,
+                    item.Title,
                     item.TaskId,
                     item.MikanId,
                     item.GroupId,
@@ -7745,9 +7746,10 @@ public static class ApiEndpoints
                 300, "source and rss.url are required", null));
         }
 
+        RssFeedDocument? feed = null;
         try
         {
-            var feed = await FetchMikanFeedAsync(
+            feed = await FetchMikanFeedAsync(
                 request.Rss.Url,
                 "mikan",
                 plugins,
@@ -7768,6 +7770,7 @@ public static class ApiEndpoints
                 cancellationToken).ConfigureAwait(false);
             var auditItems = result.Items.Select((item, index) => new MikanPluginCallLogItem(
                 index,
+                index < feed.Items.Count ? NormalizePluginAuditTitle(feed.Items[index].Title) : null,
                 item.IngestTaskId,
                 item.IdentityMikanId ?? result.MikanId,
                 item.IdentityGroupId,
@@ -7783,9 +7786,12 @@ public static class ApiEndpoints
         }
         catch (RssFeedException exception)
         {
+            var failedItems = CreatePluginFeedAuditItems(
+                feed, "failed", exception.Code);
             await RecordMikanPluginCallAsync(
-                audit, "/api/rss", mode, mediaType, request.EpLinks?.Count ?? 0, 0, 0,
-                "failed", exception.Code, startedAt, timer, [], cancellationToken).ConfigureAwait(false);
+                audit, "/api/rss", mode, mediaType,
+                feed?.Items.Count ?? request.EpLinks?.Count ?? 0, 0, failedItems.Length,
+                "failed", exception.Code, startedAt, timer, failedItems, cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new LegacyApiResponse<MikanRssIngestResult?>(
                 300, $"RSS processing failed: {exception.Code}", null));
         }
@@ -7893,9 +7899,11 @@ public static class ApiEndpoints
                 }
                 catch (MikanAiTestImportException exception)
                 {
+                    var failedItems = CreatePluginRequestAuditItems(
+                        request.Data, "failed", exception.Code);
                     await RecordMikanPluginCallAsync(
                         audit, "/api/download/manager", mode, mediaType, requested, 0, requested,
-                        "failed", exception.Code, startedAt, timer, [], cancellationToken).ConfigureAwait(false);
+                        "failed", exception.Code, startedAt, timer, failedItems, cancellationToken).ConfigureAwait(false);
                     return TypedResults.Ok(new LegacyApiResponse<IngestBatchResponse?>(
                         300,
                         $"{exception.Code}: {exception.Message}",
@@ -7916,6 +7924,7 @@ public static class ApiEndpoints
             var info = index < legacyData.Count ? legacyData[index]?.Info : null;
             return new MikanPluginCallLogItem(
                 index,
+                NormalizePluginAuditTitle(info?.Title ?? info?.Name),
                 item.IngestId,
                 info?.MikanId,
                 info?.GroupId,
@@ -7939,6 +7948,39 @@ public static class ApiEndpoints
 
     private static string NormalizePluginMediaType(string? value) =>
         string.Equals(value?.Trim(), "movie", StringComparison.OrdinalIgnoreCase) ? "movie" : "tv";
+
+    private static string? NormalizePluginAuditTitle(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var title = value.Trim();
+        return title.Length <= 1000 ? title : title[..1000];
+    }
+
+    private static MikanPluginCallLogItem[] CreatePluginFeedAuditItems(
+        RssFeedDocument? feed,
+        string status,
+        string failureCode) =>
+        feed?.Items.Select((item, index) => new MikanPluginCallLogItem(
+            index,
+            NormalizePluginAuditTitle(item.Title),
+            null,
+            feed.MikanId,
+            null,
+            status,
+            failureCode)).ToArray() ?? [];
+
+    private static MikanPluginCallLogItem[] CreatePluginRequestAuditItems(
+        IReadOnlyList<IngestItemRequest?>? items,
+        string status,
+        string failureCode) =>
+        items?.Select((item, index) => new MikanPluginCallLogItem(
+            index,
+            NormalizePluginAuditTitle(item?.Info?.Title ?? item?.Info?.Name),
+            null,
+            item?.Info?.MikanId,
+            item?.Info?.GroupId,
+            status,
+            failureCode)).ToArray() ?? [];
 
     private static async Task RecordMikanPluginCallAsync(
         MikanPluginCallLogStore audit,
