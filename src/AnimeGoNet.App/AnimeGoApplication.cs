@@ -21,6 +21,7 @@ using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Compatibility;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Plugins;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Core.Sources;
@@ -1239,6 +1240,9 @@ public static class AnimeGoApplication
                 DisplayName = NormalizeOptional(
                     FirstConfigurationValue(child, "display_name")) ?? id,
                 Adapter = adapter,
+                MediaType = NormalizeOptional(
+                    FirstConfigurationValue(child, "media_type"))
+                    ?? MediaTypes.Tv,
                 DownloaderId = NormalizeOptional(
                     FirstConfigurationValue(child, "downloader_id"))
                     ?? throw new InvalidOperationException(

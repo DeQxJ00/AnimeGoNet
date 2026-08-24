@@ -7858,14 +7858,18 @@ function updateSourceCredentialInputs() {
     const rssUrl = element("#source-rss-url");
     const clearRssUrl = element("#source-rss-url-clear");
     const rssCron = element("#source-rss-cron");
+    const mediaType = element("#source-media-type");
     const scheduleEnabled = element("#source-rss-schedule-enabled");
     const sourceEnabled = element("#source-enabled").checked;
     rssUrl.disabled = !isMikan || clearRssUrl.checked;
     clearRssUrl.disabled = !isMikan || current === null;
     rssCron.disabled = !isMikan;
+    mediaType.disabled = !isMikan;
     scheduleEnabled.disabled = !isMikan || !sourceEnabled;
     if (!isMikan || clearRssUrl.checked)
         rssUrl.value = "";
+    if (!isMikan)
+        mediaType.value = "tv";
     if (!isMikan || !sourceEnabled || clearRssUrl.checked)
         scheduleEnabled.checked = false;
     element("#source-rss-url-state").textContent = !isMikan
@@ -7931,6 +7935,7 @@ function populateSourceForm(profile) {
     element("#source-mikan-cookie").value = profile?.mikan_identity_cookie ?? "";
     element("#source-mikan-cookie-clear").checked = false;
     element("#source-rss-url").value = profile?.rss_feed_url ?? "";
+    element("#source-media-type").value = profile?.media_type ?? "tv";
     element("#source-rss-url-clear").checked = false;
     element("#source-rss-cron").value =
         profile?.rss_schedule_cron ?? "0 0/15 * * * ?";
@@ -7968,7 +7973,7 @@ function renderSourceList() {
         const lockState = profile.locked_fields.length > 0
             ? ` · 部署锁 ${profile.locked_fields.map((lock) => lock.field).join("/")}`
             : "";
-        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.media_type === "movie" ? "动画电影" : "TV 动画"} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
         card.append(heading, route);
         card.addEventListener("click", () => populateSourceForm(profile));
         return card;
@@ -8006,7 +8011,7 @@ async function previewSourceRoute() {
         const route = await response.json();
         output.textContent = route.valid
             ? [
-                `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter})`,
+                `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter} · ${route.media_type === "movie" ? "动画电影" : "TV 动画"})`,
                 `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
                 `媒体库 ${route.save_path}`,
                 `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
@@ -8675,6 +8680,7 @@ async function saveSource(event) {
             : element("#source-rss-url").value || null,
         rss_schedule_enabled: element("#source-rss-schedule-enabled").checked,
         rss_schedule_cron: element("#source-rss-cron").value.trim(),
+        media_type: element("#source-media-type").value,
     };
     const payload = current
         ? {

@@ -63,6 +63,7 @@
 
 - [x] 动画电影基础边界：新增独立 `movie_save_path`（原生默认 `download/movies`、Docker 默认 `/download/movies`），接入 YAML/环境变量/命令行别名、部署锁、私有覆盖、备份/预览、WebUI 与 Compose；`save_path` 保持 TV 媒体库。SQLite schema v56 为导入任务增加 `media_type=tv|movie`，旧任务确定性回填 `tv`，统一导入与编译期 Source adapter 已透传并拒绝其他值。
 - [x] 动画电影 Mikan 输入：手动 Torrent/RSS 与 AnimeGoHelper 的“单/全”请求显式透传 `media_type`；普通入口默认 `tv`，Mikan 首页“剧场版”分区固定 `movie`。主程序 API/WebUI/SQLite 测试通过；独立 AnimeGoHelper 仓库提交 `1290d42` 的 Node DOM/请求契约测试通过。
+- [x] 动画电影保存型输入源：schema v58 在 SourceProfile 持久化 `media_type`；WebUI、YAML、配置归档、立即读取 RSS 与 Cron 调度统一使用保存值，旧来源升级后默认 `tv`，非 Mikan 来源拒绝 `movie`。
 - [x] 动画电影 TMDB 与整理首版：实现 `/3/discover/movie`、`/3/movie/{id}` 强制验证、独立 Movie 身份/去重、单正片路径、字幕、`movie.nfo`、move/copy/link、完成记录和四类删除；不进入 TV 季度失败链。
 - [x] 动画电影作品库/任务中心首版：下载任务显示 Movie ID/标题/上映日期；“动画电影”库支持搜索、排序、分页、封面、完成状态和 TMDB 跳转，不显示伪造 Season/EP。
 

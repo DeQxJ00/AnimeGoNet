@@ -20,6 +20,7 @@
 | 配置 | `paths.save_path` | `paths.movie_save_path` | 已实现 | Core/App 配置测试、Web 测试 |
 | 任务身份 | 默认 TV Episode | `media_type=movie` | 已实现基础字段 | schema v56、导入存储测试 |
 | 手动导入 | 单 Torrent/RSS | 类型下拉并透传 | 已实现 | API/WebUI 测试 |
+| 保存型 RSS 来源 | 默认 TV | SourceProfile 持久化 tv/movie，立即运行与 Cron 共用 | 已实现 | schema v58、API/调度测试 |
 | AnimeGoHelper | 单/全默认 TV | 剧场版按钮传 movie | 已实现于独立仓库 `1290d42` | Node DOM/请求契约测试 |
 | TMDB 搜索 | `/3/discover/tv?with_genres=16` | `/3/discover/movie?with_genres=16` | 已实现 | loopback HTTP 测试 |
 | TMDB 详情 | Series/Season/Episode | `/3/movie/{id}` 并再次验证身份 | 已实现 | DTO/AOT 与缓存测试 |
@@ -45,7 +46,8 @@
 
 ## 当前确定性流程
 
-1. Mikan/手动导入把 `info.media_type=movie` 写入任务；缺失时仍按 `tv`。
+1. Mikan/手动导入把 `info.media_type=movie` 写入任务；保存型 Mikan RSS 来源则从
+   SourceProfile 读取同一类型，点击立即运行和 Cron 调度不会退回 TV；缺失时仍按 `tv`。
 2. 电影任务只接受一个主视频；零视频或多个视频使用稳定失败码停止，不进入 TV 的 EP/季度流程。
 3. 可用 bgmid 时读取 Bangumi `name` 与 `name_cn` 作为搜索词，再执行多轮标题清理搜索。
 4. 每个候选先来自 `/3/discover/movie?with_genres=16`，随后必须由 `/3/movie/{id}` 验证。

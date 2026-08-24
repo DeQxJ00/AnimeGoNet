@@ -7,6 +7,7 @@ using AnimeGoNet.App.Plugins;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.Data.Mikan;
 using AnimeGoNet.Data.Rules;
@@ -58,7 +59,8 @@ public sealed record ConfigurationArchiveSource(
     string? RssFeedUrl,
     bool RssScheduleEnabled,
     string RssScheduleCron,
-    bool DuplicateNotificationEnabled);
+    bool DuplicateNotificationEnabled,
+    string MediaType = MediaTypes.Tv);
 
 public sealed record ConfigurationArchiveRssRules(
     string SourceProfileId,
@@ -648,7 +650,7 @@ public sealed partial class ConfigurationArchiveService(
             item.RssFilterEnabled, item.RssPriorityEnabled, item.Enabled,
             item.MikanIdentityCookie, item.DynamicTagTemplate, item.RssFeedUrl,
             item.RssScheduleEnabled, item.RssScheduleCron,
-            item.DuplicateNotificationEnabled);
+            item.DuplicateNotificationEnabled, item.MediaType);
 
     private static SourceProfileDefinition ToDefinition(ConfigurationArchiveSource item) =>
         new(
@@ -657,7 +659,7 @@ public sealed partial class ConfigurationArchiveService(
             item.RssFilterEnabled, item.RssPriorityEnabled, item.Enabled,
             item.MikanIdentityCookie, item.DynamicTagTemplate, item.RssFeedUrl,
             item.RssScheduleEnabled, item.RssScheduleCron,
-            item.DuplicateNotificationEnabled);
+            item.DuplicateNotificationEnabled, item.MediaType);
 
     private string BackupPath(string backupId)
     {

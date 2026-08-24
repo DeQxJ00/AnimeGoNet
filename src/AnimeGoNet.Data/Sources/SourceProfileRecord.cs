@@ -17,7 +17,8 @@ public sealed record SourceProfileRecord(
     string? RssFeedUrl = null,
     bool RssScheduleEnabled = false,
     string RssScheduleCron = AnimeGoNet.Core.Sources.SourceRssSchedulePolicy.DefaultCron,
-    bool DuplicateNotificationEnabled = true)
+    bool DuplicateNotificationEnabled = true,
+    string MediaType = AnimeGoNet.Core.Media.MediaTypes.Tv)
 {
     public override string ToString() =>
         $"SourceProfileRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -53,7 +54,8 @@ public sealed record SourceProfileAdminRecord(
     DateTimeOffset? RssLastCompletedAtUtc = null,
     string? RssLastFailureCode = null,
     string? RssLastBatchId = null,
-    bool DuplicateNotificationEnabled = true)
+    bool DuplicateNotificationEnabled = true,
+    string MediaType = AnimeGoNet.Core.Media.MediaTypes.Tv)
 {
     public override string ToString() =>
         $"SourceProfileAdminRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -78,7 +80,8 @@ public sealed record SourceProfileDefinition(
     string? RssFeedUrl = null,
     bool RssScheduleEnabled = false,
     string RssScheduleCron = AnimeGoNet.Core.Sources.SourceRssSchedulePolicy.DefaultCron,
-    bool DuplicateNotificationEnabled = true)
+    bool DuplicateNotificationEnabled = true,
+    string MediaType = AnimeGoNet.Core.Media.MediaTypes.Tv)
 {
     public override string ToString() =>
         $"SourceProfileDefinition {{ Adapter = {Adapter}, "

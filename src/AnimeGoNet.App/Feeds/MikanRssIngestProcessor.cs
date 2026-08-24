@@ -79,11 +79,24 @@ public sealed class MikanRssIngestProcessor(
         string sourceProfileId,
         long expectedSourceProfileRevision,
         CancellationToken cancellationToken = default) =>
-        ProcessAggregateAwareAsync(
+        ProcessScheduledAsync(
             feed,
             sourceProfileId,
             expectedSourceProfileRevision,
             MediaTypes.Tv,
+            cancellationToken);
+
+    public Task<MikanRssIngestResult> ProcessScheduledAsync(
+        RssFeedDocument feed,
+        string sourceProfileId,
+        long expectedSourceProfileRevision,
+        string mediaType,
+        CancellationToken cancellationToken = default) =>
+        ProcessAggregateAwareAsync(
+            feed,
+            sourceProfileId,
+            expectedSourceProfileRevision,
+            NormalizeMediaType(mediaType),
             cancellationToken);
 
     private async Task<MikanRssIngestResult> ProcessAggregateAwareAsync(

@@ -370,10 +370,11 @@ internal sealed class MikanRssIngestSchedulePlugin(
             var result = await services
                 .GetRequiredService<MikanRssIngestProcessor>()
                 .ProcessScheduledAsync(
-                feed,
-                sourceProfileId,
-                expectedRevision,
-                cancellationToken).ConfigureAwait(false);
+                    feed,
+                    sourceProfileId,
+                    expectedRevision,
+                    profile.MediaType,
+                    cancellationToken).ConfigureAwait(false);
             await profiles.CompleteScheduledRunAsync(
                 sourceProfileId,
                 expectedRevision,

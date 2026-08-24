@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Data.Feeds;
+using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
@@ -97,7 +98,8 @@ public sealed class ManualSubmissionApiTests
             "mikan-saved",
             "mikan",
             "pt",
-            secretUrl);
+            secretUrl,
+            "movie");
 
         using var response = await app.Client.PostAsync(
             "/api/v1/sources/mikan-saved/rss/run",
@@ -118,6 +120,12 @@ public sealed class ManualSubmissionApiTests
         Assert.Equal(
             json.RootElement.GetProperty("batch_id").GetString(),
             source.RootElement.GetProperty("rss_last_batch_id").GetString());
+        Assert.Equal("movie", source.RootElement.GetProperty("media_type").GetString());
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT media_type FROM ingest_tasks WHERE source_profile_id = 'mikan-saved';";
+        Assert.Equal("movie", await command.ExecuteScalarAsync());
     }
 
     [Fact]
@@ -146,7 +154,8 @@ public sealed class ManualSubmissionApiTests
         string id,
         string adapter,
         string downloaderId,
-        string? rssFeedUrl = null)
+        string? rssFeedUrl = null,
+        string mediaType = "tv")
     {
         using var response = await PostJsonAsync(
             app,
@@ -167,6 +176,7 @@ public sealed class ManualSubmissionApiTests
                 enabled = true,
                 rss_feed_url = rssFeedUrl,
                 rss_schedule_enabled = false,
+                media_type = mediaType,
             });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }

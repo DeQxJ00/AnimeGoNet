@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 57;
+    public const int CurrentVersion = 58;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -114,7 +114,17 @@ public static class DatabaseSchema
             57,
             "movie_metadata_identity",
             MovieMetadataIdentity),
+        new SchemaMigration(
+            58,
+            "source_profile_media_type",
+            SourceProfileMediaType),
     ];
+
+    private const string SourceProfileMediaType = """
+        ALTER TABLE source_profiles
+        ADD COLUMN media_type TEXT NOT NULL DEFAULT 'tv'
+            CHECK (media_type IN ('tv', 'movie'));
+        """;
 
     private const string MovieMetadataIdentity = """
         CREATE TABLE anime_movies (

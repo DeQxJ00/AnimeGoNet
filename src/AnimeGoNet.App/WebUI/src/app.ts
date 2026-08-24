@@ -1699,6 +1699,7 @@ interface SourceProfile {
   rss_last_completed_at_utc: string | null;
   rss_last_failure_code: string | null;
   rss_last_batch_id: string | null;
+  media_type: "tv" | "movie";
   revision: number;
   ingest_task_count: number;
   rss_batch_count: number;
@@ -1729,6 +1730,7 @@ interface SourceRoutePreview {
   rss_priority_enabled: boolean;
   duplicate_notification_enabled: boolean;
   rss_rule_revision: number | null;
+  media_type: "tv" | "movie";
 }
 
 interface DownloaderInstance {
@@ -10562,13 +10564,16 @@ function updateSourceCredentialInputs(): void {
   const rssUrl = element<HTMLInputElement>("#source-rss-url");
   const clearRssUrl = element<HTMLInputElement>("#source-rss-url-clear");
   const rssCron = element<HTMLInputElement>("#source-rss-cron");
+  const mediaType = element<HTMLSelectElement>("#source-media-type");
   const scheduleEnabled = element<HTMLInputElement>("#source-rss-schedule-enabled");
   const sourceEnabled = element<HTMLInputElement>("#source-enabled").checked;
   rssUrl.disabled = !isMikan || clearRssUrl.checked;
   clearRssUrl.disabled = !isMikan || current === null;
   rssCron.disabled = !isMikan;
+  mediaType.disabled = !isMikan;
   scheduleEnabled.disabled = !isMikan || !sourceEnabled;
   if (!isMikan || clearRssUrl.checked) rssUrl.value = "";
+  if (!isMikan) mediaType.value = "tv";
   if (!isMikan || !sourceEnabled || clearRssUrl.checked) scheduleEnabled.checked = false;
   element<HTMLElement>("#source-rss-url-state").textContent = !isMikan
     ? "仅 Mikan 适配器可配置 RSS URL。"
@@ -10635,6 +10640,7 @@ function populateSourceForm(profile: SourceProfile | null): void {
   element<HTMLInputElement>("#source-mikan-cookie").value = profile?.mikan_identity_cookie ?? "";
   element<HTMLInputElement>("#source-mikan-cookie-clear").checked = false;
   element<HTMLInputElement>("#source-rss-url").value = profile?.rss_feed_url ?? "";
+  element<HTMLSelectElement>("#source-media-type").value = profile?.media_type ?? "tv";
   element<HTMLInputElement>("#source-rss-url-clear").checked = false;
   element<HTMLInputElement>("#source-rss-cron").value =
     profile?.rss_schedule_cron ?? "0 0/15 * * * ?";
@@ -10673,7 +10679,7 @@ function renderSourceList(): void {
     const lockState = profile.locked_fields.length > 0
       ? ` · 部署锁 ${profile.locked_fields.map((lock) => lock.field).join("/")}`
       : "";
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.media_type === "movie" ? "动画电影" : "TV 动画"} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
@@ -10714,7 +10720,7 @@ async function previewSourceRoute(): Promise<void> {
     const route = await response.json() as SourceRoutePreview;
     output.textContent = route.valid
       ? [
-          `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter})`,
+          `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter} · ${route.media_type === "movie" ? "动画电影" : "TV 动画"})`,
           `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
           `媒体库 ${route.save_path}`,
           `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
@@ -11456,6 +11462,7 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     rss_schedule_enabled:
       element<HTMLInputElement>("#source-rss-schedule-enabled").checked,
     rss_schedule_cron: element<HTMLInputElement>("#source-rss-cron").value.trim(),
+    media_type: element<HTMLSelectElement>("#source-media-type").value,
   };
   const payload = current
     ? {

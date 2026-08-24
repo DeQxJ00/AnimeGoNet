@@ -49,7 +49,8 @@ public sealed class ConfigurationArchiveApiTests
                 "https://mikanime.tv/RSS/test",
                 source.RssScheduleEnabled,
                 source.RssScheduleCron,
-                source.DuplicateNotificationEnabled),
+                source.DuplicateNotificationEnabled,
+                MediaType: "movie"),
             source.Revision,
             DateTimeOffset.UtcNow);
         var workRules = app.App.Services.GetRequiredService<MikanWorkMetadataRuleStore>();
@@ -64,6 +65,7 @@ public sealed class ConfigurationArchiveApiTests
         var archiveText = Encoding.UTF8.GetString(archive);
         Assert.Contains("archive-password", archiveText, StringComparison.Ordinal);
         Assert.Contains("archive-cookie", archiveText, StringComparison.Ordinal);
+        Assert.Contains("\"media_type\": \"movie\"", archiveText, StringComparison.Ordinal);
         Assert.DoesNotContain("animegonet.db", archiveText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ingest_tasks", archiveText, StringComparison.OrdinalIgnoreCase);
 
@@ -96,6 +98,7 @@ public sealed class ConfigurationArchiveApiTests
         Assert.True(importedJson.RootElement.GetProperty("restart_required").GetBoolean());
         var safetyBackup = importedJson.RootElement.GetProperty("backup_id").GetString()!;
         Assert.StartsWith("pre-import-", safetyBackup, StringComparison.Ordinal);
+        Assert.Equal("movie", (await sourceStore.GetAsync("mikan"))?.MediaType);
 
         using var backups = await app.Client.GetAsync("/api/v1/configuration-archive/backups");
         backups.EnsureSuccessStatusCode();

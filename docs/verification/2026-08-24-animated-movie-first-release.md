@@ -7,6 +7,8 @@
   `/download/anime` 与 `/download/movies`，共享同一 `/download` 挂载。
 - Mikan 手动 Torrent/RSS 可选择类型；独立 AnimeGoHelper 仓库提交 `1290d42`
   让首页剧场版分区的“单/全”请求传 `movie`，其他入口传 `tv`。
+- 保存型 Mikan RSS 来源在 schema v58 持久化媒体类型；WebUI、部署 YAML、配置归档、
+  “立即读取”与 Cron 调度使用同一值。旧来源默认 TV，非 Mikan 来源不能保存 movie。
 - 电影搜索调用 `/3/discover/movie?with_genres=16`，候选必须再次通过
   `/3/movie/{id}` 验证；不会进入 TV 的季度、EP 或 TMDBFail 链。
 - 首版只接受一个主视频，按 TMDB Movie ID 独立 claim/去重，整理到
@@ -17,12 +19,14 @@
 
 ## 自动验证
 
-- `.NET Release` 全解决方案：1885 passed，0 failed，0 skipped。
+- `.NET Release` 全解决方案：1888 passed，0 failed，0 skipped。
 - 静态 WebUI：43 passed，0 failed。
 - 独立 AnimeGoHelper：2 passed，0 failed，且 `node --check AnimeGoHelper.js` 通过。
 - `win-x64` Release NativeAOT 完成 `Generating native code`，无构建错误；发布后的
-  `AnimeGoNet.App.exe` 通过 `eng/smoke-native.ps1` first-start，验证 schema v57、
+  `AnimeGoNet.App.exe` 通过 `eng/smoke-native.ps1` first-start，验证 schema v58、
   SQLite 初始化、Minimal API、静态 WebUI、WebSocket 与原生运行标识。
+- 保存型 RSS 媒体类型的数据层、立即运行和 Cron 调度均有 movie 透传回归测试；
+  测试会读取最终 `ingest_tasks.media_type`，不只检查表单或 API 回显。
 - 五个目标 RID 与 Docker 构建继续由现有 GitHub Actions 矩阵覆盖；本次未把 Docker
   标记为本机实测，符合项目所有者此前“生成能力保留，Docker 自行测试”的要求。
 

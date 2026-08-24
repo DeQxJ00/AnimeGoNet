@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Media;
 
 namespace AnimeGoNet.App.Api;
 
@@ -1649,7 +1650,8 @@ public sealed record SourceProfileCreateRequest(
     [property: JsonPropertyName("mikan_identity_cookie")] string? MikanIdentityCookie,
     [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
     [property: JsonPropertyName("rss_schedule_enabled")] bool? RssScheduleEnabled = null,
-    [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null);
+    [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null,
+    [property: JsonPropertyName("media_type")] string? MediaType = null);
 
 public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("display_name")] string? DisplayName,
@@ -1671,7 +1673,8 @@ public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
     [property: JsonPropertyName("clear_rss_feed_url")] bool ClearRssFeedUrl = false,
     [property: JsonPropertyName("rss_schedule_enabled")] bool? RssScheduleEnabled = null,
-    [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null);
+    [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null,
+    [property: JsonPropertyName("media_type")] string? MediaType = null);
 
 public sealed record SourceProfileResponse(
     [property: JsonPropertyName("id")] string Id,
@@ -1712,7 +1715,8 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("rss_last_started_at_utc")] DateTimeOffset? RssLastStartedAtUtc = null,
     [property: JsonPropertyName("rss_last_completed_at_utc")] DateTimeOffset? RssLastCompletedAtUtc = null,
     [property: JsonPropertyName("rss_last_failure_code")] string? RssLastFailureCode = null,
-    [property: JsonPropertyName("rss_last_batch_id")] string? RssLastBatchId = null);
+    [property: JsonPropertyName("rss_last_batch_id")] string? RssLastBatchId = null,
+    [property: JsonPropertyName("media_type")] string MediaType = MediaTypes.Tv);
 
 public sealed record SourceProfileFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -1830,7 +1834,8 @@ public sealed record SourceRoutePreviewResponse(
     [property: JsonPropertyName("rss_priority_enabled")] bool RssPriorityEnabled,
     [property: JsonPropertyName("duplicate_notification_enabled")]
     bool DuplicateNotificationEnabled,
-    [property: JsonPropertyName("rss_rule_revision")] long? RssRuleRevision);
+    [property: JsonPropertyName("rss_rule_revision")] long? RssRuleRevision,
+    [property: JsonPropertyName("media_type")] string MediaType);
 
 public sealed record LegacyMikanFilterRuleResponse(
     [property: JsonPropertyName("tier")] int Tier,

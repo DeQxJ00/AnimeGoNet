@@ -7,6 +7,7 @@ using AnimeGoNet.App.Scheduling;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Sources;
+using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Scheduling;
@@ -25,7 +26,7 @@ public sealed class SourceRssScheduleTests
             configure: WithMikanTestOrigin,
             rssDnsResolver: new PublicDnsResolver(),
             rssHttpTransport: transport);
-        await CreateScheduledSourceAsync(app, secretUrl);
+        await CreateScheduledSourceAsync(app, secretUrl, mediaType: "movie");
         var plugin = app.App.Services
             .GetRequiredService<PluginCatalog>()
             .Require<IScheduledPlugin>(SourceRssScheduleManager.PluginId);
@@ -37,13 +38,21 @@ public sealed class SourceRssScheduleTests
         Assert.True(result.Succeeded);
         Assert.StartsWith("batch=", result.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("schedule-private-passkey", result.Message, StringComparison.Ordinal);
-        Assert.Equal(secretUrl, Assert.Single(transport.Requests).AbsoluteUri);
+        Assert.Equal(secretUrl, transport.Requests[0].AbsoluteUri);
         var stored = Assert.IsType<SourceProfileAdminRecord>(await app.App.Services
             .GetRequiredService<SourceProfileStore>()
             .GetAsync("mikan-scheduled"));
         Assert.Equal("succeeded", stored.RssLastRunState);
         Assert.NotNull(stored.RssLastBatchId);
         Assert.Null(stored.RssLastFailureCode);
+        Assert.Equal("movie", stored.MediaType);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT media_type FROM ingest_tasks WHERE source_profile_id = 'mikan-scheduled';";
+            Assert.Equal("movie", await command.ExecuteScalarAsync());
+        }
 
         Assert.True(await app.App.Services
             .GetRequiredService<SourceProfileStore>()
@@ -237,12 +246,14 @@ public sealed class SourceRssScheduleTests
             current.DynamicTagTemplate,
             current.RssFeedUrl,
             current.RssScheduleEnabled,
-            current.RssScheduleCron);
+            current.RssScheduleCron,
+            MediaType: current.MediaType);
 
     private static async Task CreateScheduledSourceAsync(
         RunningApp app,
         string url,
-        string cron = "0 5/15 * * * ?")
+        string cron = "0 5/15 * * * ?",
+        string mediaType = "tv")
     {
         using var response = await app.Client.PostAsync(
             "/api/v1/sources",
@@ -259,6 +270,7 @@ public sealed class SourceRssScheduleTests
                     rss_feed_url = url,
                     rss_schedule_enabled = true,
                     rss_schedule_cron = cron,
+                    media_type = mediaType,
                 }),
                 Encoding.UTF8,
                 "application/json"));
@@ -284,7 +296,15 @@ public sealed class SourceRssScheduleTests
     private sealed class StaticFeedTransport(HttpStatusCode status) : ITorrentHttpTransport
     {
         private static readonly byte[] Feed = Encoding.UTF8.GetBytes(
-            "<rss><channel></channel></rss>");
+            """
+            <rss><channel><link>https://mikan.example/RSS?bangumiId=3951</link>
+              <item><title>Scheduled Movie [1080p]</title>
+                <link>https://mikan.example/Home/Episode/scheduled-movie</link>
+                <enclosure type="application/x-bittorrent" length="42"
+                  url="https://mikan.example/Download/scheduled-movie.torrent" />
+              </item>
+            </channel></rss>
+            """);
 
         public List<Uri> Requests { get; } = [];
 
@@ -296,6 +316,19 @@ public sealed class SourceRssScheduleTests
             _ = validatedAddresses;
             cancellationToken.ThrowIfCancellationRequested();
             Requests.Add(uri);
+            if (uri.AbsolutePath.StartsWith("/Home/Bangumi/", StringComparison.OrdinalIgnoreCase))
+            {
+                var page = Encoding.UTF8.GetBytes("""
+                    <p class="bangumi-info">
+                      <a href="https://bgm.tv/subject/547888">Bangumi</a>
+                    </p>
+                    """);
+                return ValueTask.FromResult(new TorrentHttpResponse(
+                    status,
+                    null,
+                    page.Length,
+                    new MemoryStream(page, writable: false)));
+            }
             return ValueTask.FromResult(new TorrentHttpResponse(
                 status,
                 null,

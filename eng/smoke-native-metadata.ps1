@@ -4,7 +4,7 @@ param(
 
     [string]$FixtureProject = '',
 
-    [int]$ExpectedSchemaVersion = 57
+    [int]$ExpectedSchemaVersion = 58
 )
 
 $ErrorActionPreference = 'Stop'

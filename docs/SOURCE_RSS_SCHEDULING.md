@@ -21,7 +21,9 @@
 `MikanRssIngestSchedulePlugin` 由 `PluginCatalog` 编译期显式注册，不扫描 DLL、程序集或脚本。`SourceRssScheduleManager` 的任务参数只有 `source_profile_id` 与 `source_profile_revision`：
 
 1. 启动时把上次异常退出遗留的 `running` 标记为 `failed/rss_schedule_interrupted`。
-2. 读取所有启用调度的来源并注册 `source-rss-*`；后台 worker 被禁用时不注册。
+2. 读取所有启用调度的来源并注册 `source-rss-*`；后台 worker 被禁用时不注册。Mikan
+   来源同时持久化 `media_type=tv|movie`，手动触发与自动调度均在执行前按 revision
+   重读该值，旧数据库升级默认 `tv`。
 3. 触发时按 ID+revision 重新取得启用来源和 RSS URL。revision 已变化时返回 `stale`，不访问网络。
 4. SQLite 原子把状态从非运行态改为 `running`；同来源已有执行时旁路本次触发。
 5. 通过 SourceProfile Host/DNS/redirect/Cookie 边界读取 feed，再进入现有 Mikan RSS 处理器。

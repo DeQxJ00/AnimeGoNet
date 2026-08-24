@@ -5,6 +5,7 @@ namespace AnimeGoNet.Core.Configuration;
 
 using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Media;
 
 public static partial class AnimeGoOptionsValidator
 {
@@ -120,6 +121,17 @@ public static partial class AnimeGoOptionsValidator
                 || !IsStableId(profile.Adapter))
             {
                 errors.Add($"Source profile '{profile.Id}' adapter is not a stable lowercase id.");
+            }
+
+            if (!MediaTypes.TryNormalize(profile.MediaType, out var mediaType)
+                || !string.Equals(profile.MediaType, mediaType, StringComparison.Ordinal))
+            {
+                errors.Add($"Source profile '{profile.Id}' media type must be tv or movie.");
+            }
+            else if (mediaType == MediaTypes.Movie
+                && !string.Equals(profile.Adapter, "mikan", StringComparison.Ordinal))
+            {
+                errors.Add($"Source profile '{profile.Id}' can only use movie media type when adapter is mikan.");
             }
 
             if (!profile.DownloaderId.Equals(profile.DownloaderId.ToLowerInvariant(), StringComparison.Ordinal)

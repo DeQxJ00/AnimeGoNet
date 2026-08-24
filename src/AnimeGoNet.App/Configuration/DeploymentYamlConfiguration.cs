@@ -352,6 +352,7 @@ internal static class DeploymentYamlConfiguration
         Add(values, "downloaders:bt:enabled", "true");
 
         Add(values, "sources:mikan:adapter", "mikan");
+        Add(values, "sources:mikan:media_type", "tv");
         Add(values, "sources:mikan:downloader_id", "bt");
         Alias(
             values,
@@ -624,6 +625,7 @@ internal static class DeploymentYamlConfiguration
               mikan:
                 display_name: {{Scalar(Configured(values, "sources:mikan:display_name", "mikan"))}}
                 adapter: mikan
+                media_type: {{Scalar(Configured(values, "sources:mikan:media_type", "tv"))}}
                 downloader_id: bt
                 file_strategy: {{LegacyFileStrategy(values)}}
                 allowed_torrent_hosts:
@@ -849,6 +851,7 @@ internal static class DeploymentYamlConfiguration
               mikan:
                 display_name: mikan
                 adapter: mikan
+                media_type: tv
                 downloader_id: bt
                 file_strategy: move
                 allowed_torrent_hosts:

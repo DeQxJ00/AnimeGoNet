@@ -1171,6 +1171,13 @@
               <input id="source-rss-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://mikanani.me/RSS/MyBangumi?token=...">
               <small id="source-rss-url-state">仅 Mikan 适配器可配置；保存值会直接回填。</small>
             </label>
+            <label>Mikan 媒体类型
+              <select id="source-media-type">
+                <option value="tv">TV 动画</option>
+                <option value="movie">动画电影</option>
+              </select>
+              <small>手动触发和自动调度都使用该类型；电影会走 TMDB Movie 并保存到电影目录。</small>
+            </label>
             <label class="configuration-clear"><input id="source-rss-url-clear" type="checkbox">明确清除 RSS URL</label>
             <label class="source-hosts">RSS 调度 Cron（秒 分 时 日 月 周）
               <input id="source-rss-cron" maxlength="256" autocomplete="off" spellcheck="false" value="0 0/15 * * * ?">

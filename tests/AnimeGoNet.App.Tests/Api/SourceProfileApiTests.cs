@@ -11,6 +11,50 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class SourceProfileApiTests
 {
     [Fact]
+    public async Task MikanMovieSourcePersistsTypeAndPreviewsMovieLibraryRoute()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "mikan-movie",
+            display_name = "Mikan movie",
+            adapter = "mikan",
+            downloader_id = "bt",
+            file_strategy = "move",
+            allowed_torrent_hosts = new List<string> { "mikanani.me" },
+            enabled = true,
+            media_type = "movie",
+        }));
+        using var created = JsonDocument.Parse(await create.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.Equal("movie", created.RootElement.GetProperty("media_type").GetString());
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/sources/mikan-movie/route-preview",
+            Json(new { title = "Movie preview", mikanid = 3951, bgmid = 547888 }));
+        using var route = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.Equal("movie", route.RootElement.GetProperty("media_type").GetString());
+        Assert.EndsWith(
+            Path.Combine("download", "movies"),
+            route.RootElement.GetProperty("save_path").GetString(),
+            StringComparison.OrdinalIgnoreCase);
+
+        using var invalid = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-movie",
+            display_name = "U2 movie",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = "link",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            enabled = true,
+            media_type = "movie",
+        }));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateAcceptsDiscoveredExternalSourceAdapterAndPreviewFailsClosedWhileDisabled()
     {
         await using var app = await RunningApp.StartAsync(
@@ -505,6 +549,7 @@ public sealed class SourceProfileApiTests
         Assert.Contains("Cookie 位置：设置与备份", html, StringComparison.Ordinal);
         Assert.Contains("管理来源与 Cookie", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-media-type\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-cron\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-schedule-enabled\"", html, StringComparison.Ordinal);
@@ -514,6 +559,7 @@ public sealed class SourceProfileApiTests
         Assert.Contains("秒 分 时 日 月 周", html, StringComparison.Ordinal);
         Assert.Contains("rss_feed_url_configured", script, StringComparison.Ordinal);
         Assert.Contains("rss_schedule_registered", script, StringComparison.Ordinal);
+        Assert.Contains("media_type", script, StringComparison.Ordinal);
         Assert.Contains("已配置并已回填", script, StringComparison.Ordinal);
         Assert.Contains("不填写 Cookie 名、分号或整段 Cookie Header", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);

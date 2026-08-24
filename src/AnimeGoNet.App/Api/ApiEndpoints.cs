@@ -12,6 +12,7 @@ using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Core.Rules;
 using AnimeGoNet.App.Torrents;
@@ -4044,7 +4045,8 @@ public static class ApiEndpoints
                 request.RssScheduleCron,
                 current: null,
                 options,
-                plugins);
+                plugins,
+                request.MediaType);
             var now = DateTimeOffset.UtcNow;
             var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
             await rules.EnsureDefaultAsync(
@@ -4132,7 +4134,8 @@ public static class ApiEndpoints
                 request.RssScheduleCron,
                 current,
                 options,
-                plugins);
+                plugins,
+                request.MediaType);
             var changedLockedFields = new List<string>();
             AddLockedChange("category", current.Category, definition.Category);
             AddLockedChange(
@@ -4252,7 +4255,8 @@ public static class ApiEndpoints
             new IngestItemInfo(
                 request.Title, null, request.SourceItemId, request.SourceWorkId,
                 request.MikanUrl, null, request.MikanId, request.BangumiId,
-                request.AniDbId, request.ImdbId));
+                request.AniDbId, request.ImdbId,
+                MediaType: profile.MediaType));
         var validation = await IngestCommandNormalizer.NormalizeAsync(
             plugins,
             profile.Adapter,
@@ -4279,7 +4283,9 @@ public static class ApiEndpoints
             profile.DownloaderId,
             downloaderExists && downloader!.Enabled,
             downloaderExists ? downloader!.DownloadPath : null,
-            options.Paths.SavePath,
+            profile.MediaType == MediaTypes.Movie
+                ? options.Paths.EffectiveMovieSavePath
+                : options.Paths.SavePath,
             profile.FileStrategy,
             profile.Category,
             profile.Tags,
@@ -4288,7 +4294,8 @@ public static class ApiEndpoints
             profile.RssFilterEnabled,
             profile.RssPriorityEnabled,
             profile.DuplicateNotificationEnabled,
-            ruleRevision));
+            ruleRevision,
+            profile.MediaType));
     }
 
     private static async Task<IResult> GetRssRules(
@@ -7397,7 +7404,7 @@ public static class ApiEndpoints
                 plugins,
                 cancellationToken).ConfigureAwait(false);
             var result = await processor
-                .ProcessAsync(feed, profile.Id, cancellationToken)
+                .ProcessAsync(feed, profile.Id, profile.MediaType, cancellationToken)
                 .ConfigureAwait(false);
             await profiles.CompleteScheduledRunAsync(
                 profile.Id,
@@ -7921,7 +7928,8 @@ public static class ApiEndpoints
             profile.RssLastStartedAtUtc,
             profile.RssLastCompletedAtUtc,
             profile.RssLastFailureCode,
-            profile.RssLastBatchId);
+            profile.RssLastBatchId,
+            profile.MediaType);
     }
 
     private static DownloaderInstanceResponse ToResponse(
@@ -8024,7 +8032,8 @@ public static class ApiEndpoints
         string? rssScheduleCron,
         SourceProfileAdminRecord? current,
         AnimeGoOptions options,
-        AnimeGo.Plugin.Abstractions.PluginCatalog plugins)
+        AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
+        string? mediaType)
     {
         var name = displayName?.Trim() ?? string.Empty;
         if (name.Length is < 1 or > 128)
@@ -8109,6 +8118,15 @@ public static class ApiEndpoints
             enabled,
             rssScheduleEnabled,
             normalizedRssFeedUrl);
+        if (!MediaTypes.TryNormalize(mediaType ?? current?.MediaType, out var normalizedMediaType))
+        {
+            throw new ArgumentException("media_type must be tv or movie.");
+        }
+        if (normalizedMediaType == MediaTypes.Movie && normalizedAdapter != "mikan")
+        {
+            throw new ArgumentException(
+                "media_type movie can only be configured for a Mikan adapter.");
+        }
         return new SourceProfileDefinition(
             name,
             normalizedAdapter,
@@ -8128,7 +8146,8 @@ public static class ApiEndpoints
             normalizedRssScheduleCron,
             duplicateNotificationEnabled
                 ?? current?.DuplicateNotificationEnabled
-                ?? true);
+                ?? true,
+            normalizedMediaType);
     }
 
     private static string RequireCanonicalStableId(string? value, string name)

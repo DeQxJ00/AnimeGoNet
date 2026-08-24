@@ -228,6 +228,8 @@ public sealed record SourceProfileSeed
 
     public required string Adapter { get; init; }
 
+    public string MediaType { get; init; } = AnimeGoNet.Core.Media.MediaTypes.Tv;
+
     public required string DownloaderId { get; init; }
 
     public required FileStrategy FileStrategy { get; init; }

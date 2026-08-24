@@ -1,5 +1,6 @@
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
@@ -9,6 +10,32 @@ namespace AnimeGoNet.Data.Tests.Sources;
 
 public sealed class SourceProfileStoreAdminTests
 {
+    [Fact]
+    public async Task MikanMovieMediaTypeIsPersistedAndNonMikanMovieIsRejected()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new SourceProfileStore(fixture.Database);
+        var created = await store.CreateAsync(
+            "mikan-movie",
+            Definition("Mikan movie", "mikan", "bt", "move", ["mikanani.me"]) with
+            {
+                MediaType = MediaTypes.Movie,
+            },
+            At(10));
+
+        Assert.Equal(MediaTypes.Movie, created.MediaType);
+        Assert.Equal(
+            MediaTypes.Movie,
+            (await store.GetEnabledAsync("mikan-movie"))?.MediaType);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(
+            "u2-movie",
+            Definition("U2 movie", "u2", "pt", "link", ["u2.invalid"]) with
+            {
+                MediaType = MediaTypes.Movie,
+            },
+            At(11)));
+    }
+
     [Fact]
     public async Task CreateUpdateAndListPreserveRevisionAndImmutableTaskRoute()
     {

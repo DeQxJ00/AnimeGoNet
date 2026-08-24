@@ -1,6 +1,7 @@
 using System.Globalization;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Data.Serialization;
 using AnimeGoNet.Data.Sqlite;
@@ -41,6 +42,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 seed.RssFeedUrl);
             var rssScheduleCron = SourceRssSchedulePolicy.NormalizeCron(
                 seed.RssScheduleCron);
+            var mediaType = NormalizeMediaType(seed.Adapter, seed.MediaType);
             SourceRssSchedulePolicy.ValidateEnabled(
                 seed.Adapter,
                 sourceEnabled: true,
@@ -65,14 +67,14 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     revision, enabled,
                     created_at_utc, updated_at_utc, mikan_identity_cookie,
                     dynamic_tag_template, dynamic_tag_template_initialized,
-                    rss_feed_url, rss_schedule_enabled, rss_schedule_cron)
+                    rss_feed_url, rss_schedule_enabled, rss_schedule_cron, media_type)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
                     $allowed_torrent_hosts_json, $category, $tags_json, $seeding_time_minutes,
                     $rss_filter_enabled, $rss_priority_enabled, $duplicate_notification_enabled, 1, 1,
                     $created_at_utc, $updated_at_utc, $mikan_identity_cookie,
                     $dynamic_tag_template, 1,
-                    $rss_feed_url, $rss_schedule_enabled, $rss_schedule_cron)
+                    $rss_feed_url, $rss_schedule_enabled, $rss_schedule_cron, $media_type)
                 ON CONFLICT(id) DO UPDATE SET
                     allowed_torrent_hosts_json = CASE
                         WHEN source_profiles.allowed_torrent_hosts_json = '[]'
@@ -154,6 +156,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 "$rss_schedule_enabled",
                 seed.RssScheduleEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$rss_schedule_cron", rssScheduleCron);
+            command.Parameters.AddWithValue("$media_type", mediaType);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -239,7 +242,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                    allowed_torrent_hosts_json, category, tags_json, seeding_time_minutes,
                    rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled, revision,
                    mikan_identity_cookie, dynamic_tag_template,
-                   rss_feed_url, rss_schedule_enabled, rss_schedule_cron
+                   rss_feed_url, rss_schedule_enabled, rss_schedule_cron, media_type
             FROM source_profiles
             WHERE id = $id AND enabled = 1;
             """;
@@ -267,7 +270,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.IsDBNull(14) ? null : reader.GetString(14),
             reader.GetBoolean(15),
             reader.GetString(16),
-            reader.GetInt64(10) != 0);
+            reader.GetInt64(10) != 0,
+            reader.GetString(17));
     }
 
     public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
@@ -313,12 +317,12 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 revision, enabled, created_at_utc, updated_at_utc,
                 mikan_identity_cookie, dynamic_tag_template,
                 dynamic_tag_template_initialized, rss_feed_url,
-                rss_schedule_enabled, rss_schedule_cron)
+                rss_schedule_enabled, rss_schedule_cron, media_type)
             VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts,
                     $category, $tags, $seeding_time, $filter, $priority, $duplicate_notification,
                     1, $enabled, $now, $now, $mikan_identity_cookie,
                     $dynamic_tag_template, 1, $rss_feed_url,
-                    $rss_schedule_enabled, $rss_schedule_cron);
+                    $rss_schedule_enabled, $rss_schedule_cron, $media_type);
             """;
         BindDefinition(command, normalized, definition, utcNow);
         try
@@ -357,6 +361,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 rss_feed_url = $rss_feed_url,
                 rss_schedule_enabled = $rss_schedule_enabled,
                 rss_schedule_cron = $rss_schedule_cron,
+                media_type = $media_type,
                 rss_last_run_state = 'never',
                 rss_last_started_at_utc = NULL,
                 rss_last_completed_at_utc = NULL,
@@ -590,7 +595,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                p.dynamic_tag_template, p.rss_feed_url, p.rss_schedule_enabled,
                p.rss_schedule_cron, p.rss_last_run_state,
                p.rss_last_started_at_utc, p.rss_last_completed_at_utc,
-               p.rss_last_failure_code, p.rss_last_batch_id
+               p.rss_last_failure_code, p.rss_last_batch_id, p.media_type
         FROM source_profiles p
         """;
 
@@ -626,7 +631,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             : DateTimeOffset.Parse(reader.GetString(25), CultureInfo.InvariantCulture),
         reader.IsDBNull(26) ? null : reader.GetString(26),
         reader.IsDBNull(27) ? null : reader.GetString(27),
-        reader.GetBoolean(11));
+        reader.GetBoolean(11),
+        reader.GetString(28));
 
     private static void BindDefinition(
         SqliteCommand command,
@@ -648,6 +654,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             definition.RssFeedUrl);
         var rssScheduleCron = SourceRssSchedulePolicy.NormalizeCron(
             definition.RssScheduleCron);
+        var mediaType = NormalizeMediaType(definition.Adapter, definition.MediaType);
         SourceRssSchedulePolicy.ValidateEnabled(
             definition.Adapter,
             definition.Enabled,
@@ -683,6 +690,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$rss_feed_url", (object?)rssFeedUrl ?? DBNull.Value);
         command.Parameters.AddWithValue("$rss_schedule_enabled", definition.RssScheduleEnabled);
         command.Parameters.AddWithValue("$rss_schedule_cron", rssScheduleCron);
+        command.Parameters.AddWithValue("$media_type", mediaType);
         command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
     }
 
@@ -727,6 +735,21 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 "Mikan identity Cookie can only be configured for a Mikan source profile.");
         }
 
+        return normalized;
+    }
+
+    private static string NormalizeMediaType(string adapter, string? value)
+    {
+        if (!MediaTypes.TryNormalize(value, out var normalized))
+        {
+            throw new ArgumentException("Source profile media type must be tv or movie.");
+        }
+        if (normalized == MediaTypes.Movie
+            && !string.Equals(adapter, "mikan", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Movie media type can only be configured for a Mikan source profile.");
+        }
         return normalized;
     }
 }
