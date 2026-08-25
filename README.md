@@ -65,29 +65,118 @@ docker pull ghcr.io/deqxj00/animegonet:1.0.0
 也可使用 `latest`、主次版本标签，或按 Actions 输出的不可变 `sha256` digest 固定部署；
 来源证明验证命令见 [CI / NativeAOT / Docker](docs/CI_CD.md)。
 
-```powershell
-$env:ANIMEGONET_ACCESS_KEY = '<strong-local-secret>'
-# 可选：单独保护 WebUI；留空时裸 WebUI 可直接访问。
-$env:ANIMEGONET_WEBUI_ACCESS_KEY = '<different-webui-secret>'
-docker compose -f docker-compose.animegonet.yml up --build
+下面是只运行 AnimeGoNet、不包含 qBittorrent 的最小 `compose.yaml`。首次启动后，在
+WebUI 的“下载工具配置”中添加已有的本机、NAS 或远程 qBittorrent 实例即可。
+
+```yaml
+services:
+  animegonet:
+    image: ${ANIMEGONET_IMAGE:-ghcr.io/deqxj00/animegonet:1.0.0}
+    container_name: animegonet
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      ASPNETCORE_ENVIRONMENT: Container
+      DOTNET_RUNNING_IN_CONTAINER: "true"
+      TZ: ${TZ:-Asia/Shanghai}
+      inner_plugin_mikan__access_key: ${ANIMEGONET_ACCESS_KEY:-123456}
+      webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}
+      data_path: /data
+      download_path: /download/incomplete
+      save_path: /download/anime
+      movie_save_path: /download/movies
+      background_workers_enabled: ${ANIMEGONET_BACKGROUND_WORKERS_ENABLED:-true}
+    ports:
+      - "${ANIMEGONET_BIND_ADDRESS:-127.0.0.1}:${ANIMEGONET_PORT:-7991}:7991"
+    volumes:
+      - type: bind
+        source: ${ANIMEGONET_DATA_ROOT:-./data}
+        target: /data
+      - type: bind
+        source: ${ANIMEGONET_DOWNLOAD_ROOT:-./download_temp}
+        target: /download/incomplete
+      - type: bind
+        source: ${ANIMEGONET_TV_ROOT:-./jellyfin_tv_data}
+        target: /download/anime
+      - type: bind
+        source: ${ANIMEGONET_MOVIE_ROOT:-./jellyfin_movie_data}
+        target: /download/movies
+    security_opt:
+      - no-new-privileges:true
 ```
 
-官方容器固定：
+```powershell
+docker compose up -d
+```
+
+请先创建四个宿主目录，并确保 `PUID:PGID` 对它们有读写权限。外部 qBittorrent 的
+完成目录必须与 `ANIMEGONET_DOWNLOAD_ROOT` 指向同一份共享存储；两边容器路径不同
+时，在下载器配置中填写对应的路径映射。
+
+### Docker 参数
+
+Compose 示例直接支持以下启动参数：
+
+| 参数 | 默认值 | 用途 |
+|---|---|---|
+| `ANIMEGONET_IMAGE` | `ghcr.io/deqxj00/animegonet:1.0.0` | 镜像标签或带 digest 的完整镜像地址 |
+| `ANIMEGONET_BIND_ADDRESS` | `127.0.0.1` | 宿主监听地址；需要局域网访问时改为 `0.0.0.0` |
+| `ANIMEGONET_PORT` | `7991` | 宿主 WebUI 端口 |
+| `PUID` / `PGID` | `1000` / `1000` | 容器进程及挂载目录使用的 Unix UID/GID |
+| `TZ` | `Asia/Shanghai` | 容器时区 |
+| `ANIMEGONET_DATA_ROOT` | `./data` | SQLite、配置、缓存、日志和备份目录 |
+| `ANIMEGONET_DOWNLOAD_ROOT` | `./download_temp` | qBittorrent 与 AnimeGoNet 共享的下载目录 |
+| `ANIMEGONET_TV_ROOT` | `./jellyfin_tv_data` | TV 整理目标目录 |
+| `ANIMEGONET_MOVIE_ROOT` | `./jellyfin_movie_data` | Movie 整理目标目录 |
+| `ANIMEGONET_ACCESS_KEY` | `123456` | AnimeGoHelper (Mikan) 等内部插件 API 密钥；公网部署必须修改 |
+| `ANIMEGONET_WEBUI_ACCESS_KEY` | 空 | 独立 WebUI 密钥；空值表示不启用 WebUI 鉴权 |
+| `ANIMEGONET_BACKGROUND_WORKERS_ENABLED` | `true` | 是否运行 RSS、下载、匹配和整理后台 Worker |
+
+容器还接受以下常用应用配置。它们可加入 `environment`；嵌套配置统一使用 .NET
+双下划线格式，例如 `downloaders__bt__base_url`：
+
+| 参数 | 用途 |
+|---|---|
+| `ANIMEGO_CONFIG` | 指定配置文件，容器内通常为 `/data/animego.yaml` |
+| `ANIMEGO_DEBUG` | 启用 Debug 控制台和文件日志 |
+| `ANIMEGO_WEB` | 是否启动 WebUI；设为 `false` 时仍可运行后台 Worker |
+| `ANIMEGO_CONFIG_BACKUP` | 启动时执行配置备份 |
+| `ANIMEGO_WEB_HOST` / `ANIMEGO_WEB_PORT` | 修改容器内部监听地址和端口；同时要调整 Compose 的端口映射 |
+| `outbound_proxy_url` / `outbound_proxy_hosts` | 统一 HTTP/SOCKS5 代理及允许走代理的域名/通配符列表 |
+| `mikan_base_url` | Mikan API/页面基础地址 |
+| `bangumi_base_url` | Bangumi API 基础地址 |
+| `tmdb_base_url` / `tmdb_image_base_url` | TMDB API 与图片基础地址 |
+| `tmdb_api_key` | TMDB API Key |
+| `ai_base_url` / `ai_api_key` / `ai_model` | AI API 地址、密钥与模型 |
+| `ai_reasoning_effort` | AI 推理程度 |
+| `ai_tmdb_mcp_url` / `ai_bangumi_mcp_url` | TMDB/Bangumi MCP 地址 |
+| `sources__mikan__mikan_identity_cookie` | Mikan Identity Cookie 中 `.AspNetCore.Identity.Application=` 后的内容 |
+| `downloaders__bt__base_url` | qBittorrent Web API 地址 |
+| `downloaders__bt__username` / `downloaders__bt__password` | qBittorrent 用户名和密码 |
+| `downloaders__bt__download_path` | qBittorrent 看到的下载路径 |
+| `downloaders__bt__enabled` | 是否启用该 qBittorrent 实例 |
+
+所有 YAML 嵌套键均可按 `父级__子级__字段` 形式覆盖。完整优先级、兼容别名、代理、
+下载器和敏感字段说明见
+[部署配置文档](docs/DEPLOYMENT_CONFIGURATION.md)。密码、Cookie、API Key 和
+passkey URL 建议放入未提交的 `.env` 或 Docker secrets，不要直接写进 Compose。
+
+容器内部固定路径为：
 
 - `data_path=/data`
 - `download_path=/download/incomplete`
 - `save_path=/download/anime`
 - `movie_save_path=/download/movies`
 
-Compose 将 `./data` 挂载到 `/data`，将同一个 `./download` 同时挂载给
-AnimeGoNet 和两个 qB 容器；首次启动生成的 `/data/animego.yaml` 因此可持久化。
-容器模式必须设置外部插件/API Access Key；WebUI AccessKey 独立且可选。
+首次启动生成的 `/data/animego.yaml`、SQLite 和私有配置都会持久化到
+`ANIMEGONET_DATA_ROOT`。内部插件 API Access Key 与 WebUI Access Key 相互独立。
 
-已有独立或远程 qBittorrent 时，使用
-[`docker-compose.external-qbittorrent.yml`](docker-compose.external-qbittorrent.yml)，
-并按[外部 qBittorrent 路径映射文档](docs/EXTERNAL_QBITTORRENT.md)把两端同一份共享
-存储映射为完全相同的容器路径 `/download`。地址、用户名、密码和 Access Key 只
-通过未跟踪环境变量或 secret 管理器传入。
+仓库还保留带两台 qBittorrent 的完整开发 Compose，以及显式环境变量形式的
+[`docker-compose.external-qbittorrent.yml`](docker-compose.external-qbittorrent.yml)。
+跨容器路径配置见[外部 qBittorrent 路径映射文档](docs/EXTERNAL_QBITTORRENT.md)。
 
 ## 测试
 

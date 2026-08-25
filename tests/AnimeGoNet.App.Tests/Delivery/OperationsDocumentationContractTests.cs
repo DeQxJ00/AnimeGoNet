@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using YamlDotNet.RepresentationModel;
 
 namespace AnimeGoNet.App.Tests.Delivery;
 
@@ -21,6 +22,50 @@ public sealed partial class OperationsDocumentationContractTests
         Assert.Contains("(docs/USER_MIGRATION.md)", readme, StringComparison.Ordinal);
         Assert.Contains("(docs/PLUGIN_OPERATIONS.md)", readme, StringComparison.Ordinal);
         Assert.Contains("(docs/OPERATIONS.md)", readme, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadmeProvidesAStandaloneAnimeGoNetComposeAndDocumentsRuntimeParameters()
+    {
+        var root = RepositoryRoot();
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        var dockerSection = readme.IndexOf("## Docker", StringComparison.Ordinal);
+        var composeStart = readme.IndexOf("```yaml", dockerSection, StringComparison.Ordinal);
+        var composeEnd = readme.IndexOf("```", composeStart + "```yaml".Length, StringComparison.Ordinal);
+
+        Assert.True(dockerSection >= 0 && composeStart > dockerSection && composeEnd > composeStart);
+        var compose = readme[(composeStart + "```yaml".Length)..composeEnd].Trim();
+        var parsed = new YamlStream();
+        parsed.Load(new StringReader(compose));
+
+        var rootMapping = Assert.IsType<YamlMappingNode>(Assert.Single(parsed.Documents).RootNode);
+        var services = Assert.IsType<YamlMappingNode>(rootMapping.Children[new YamlScalarNode("services")]);
+        var service = Assert.Single(services.Children);
+        Assert.Equal("animegonet", Assert.IsType<YamlScalarNode>(service.Key).Value);
+        Assert.DoesNotContain("qbittorrent:", compose, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ghcr.io/deqxj00/animegonet:1.0.0", compose, StringComparison.Ordinal);
+        Assert.Contains("target: /data", compose, StringComparison.Ordinal);
+        Assert.Contains("target: /download/incomplete", compose, StringComparison.Ordinal);
+        Assert.Contains("target: /download/anime", compose, StringComparison.Ordinal);
+        Assert.Contains("target: /download/movies", compose, StringComparison.Ordinal);
+
+        foreach (var parameter in new[]
+                 {
+                     "ANIMEGONET_IMAGE",
+                     "ANIMEGONET_BIND_ADDRESS",
+                     "ANIMEGONET_PORT",
+                     "ANIMEGONET_DATA_ROOT",
+                     "ANIMEGONET_DOWNLOAD_ROOT",
+                     "ANIMEGONET_TV_ROOT",
+                     "ANIMEGONET_MOVIE_ROOT",
+                     "ANIMEGONET_ACCESS_KEY",
+                     "ANIMEGONET_WEBUI_ACCESS_KEY",
+                     "downloaders__bt__base_url",
+                     "outbound_proxy_hosts",
+                 })
+        {
+            Assert.Contains($"`{parameter}`", readme, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
