@@ -69,6 +69,30 @@ public sealed partial class OperationsDocumentationContractTests
     }
 
     [Fact]
+    public void ReadmeEmbedsNonEmptyRuntimeWebUiScreenshots()
+    {
+        var root = RepositoryRoot();
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        var images = new[]
+        {
+            "webui-overview.jpg",
+            "webui-library.jpg",
+            "webui-tasks.jpg",
+            "webui-matching-logs.jpg",
+        };
+
+        foreach (var image in images)
+        {
+            var relativePath = $"docs/images/{image}";
+            var bytes = File.ReadAllBytes(Path.Combine(root, "docs", "images", image));
+
+            Assert.Contains($"]({relativePath})", readme, StringComparison.Ordinal);
+            Assert.True(bytes.Length > 50_000, $"Runtime screenshot is unexpectedly small: {relativePath}");
+            Assert.Equal(new byte[] { 255, 216, 255 }, bytes[..3]);
+        }
+    }
+
+    [Fact]
     public void MigrationGuideLocksBackupIsolationValidationAndRollbackBoundaries()
     {
         var text = Read("docs/USER_MIGRATION.md");

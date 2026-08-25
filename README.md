@@ -54,6 +54,16 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 部署配置的详细边界见
 [docs/DEPLOYMENT_CONFIGURATION.md](docs/DEPLOYMENT_CONFIGURATION.md)。
 
+## WebUI 预览
+
+| 运行总览 | 动画作品库 |
+|---|---|
+| ![AnimeGoNet 运行总览](docs/images/webui-overview.jpg) | ![AnimeGoNet 动画作品库](docs/images/webui-library.jpg) |
+
+| 匹配与整理任务 | 持久化匹配日志 |
+|---|---|
+| ![AnimeGoNet 匹配与整理任务](docs/images/webui-tasks.jpg) | ![AnimeGoNet 持久化匹配日志](docs/images/webui-matching-logs.jpg) |
+
 ## Docker
 
 正式版本的 amd64/arm64 镜像发布在 GHCR：
