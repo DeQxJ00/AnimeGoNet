@@ -2,6 +2,7 @@ using System.Net;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.Data.DataUpdate;
+using Microsoft.Data.Sqlite;
 
 namespace AnimeGoNet.App.Tests.DataUpdate;
 
@@ -137,6 +138,64 @@ public sealed class DataUpdateServiceTests
             fixture.Layout.DataUpdatePath,
             ".partial-*",
             SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
+    public async Task HttpTimeoutDoesNotCancelDatabaseImportAfterDownloadsComplete()
+    {
+        await using var fixture = await DataUpdateServiceFixture.CreateAsync(
+            TimeSpan.FromMilliseconds(100));
+        var release = fixture.AddRelease("2026.07.29.slow-import");
+        Task? releaseDatabaseLock = null;
+        fixture.Handler.Set(
+            release.EpisodeUrl,
+            () =>
+            {
+                var connection = new SqliteConnection(
+                    $"Data Source={fixture.Layout.DatabaseFile};Mode=ReadWrite;Pooling=False");
+                connection.Open();
+                using (var begin = connection.CreateCommand())
+                {
+                    begin.CommandText = "BEGIN IMMEDIATE;";
+                    begin.ExecuteNonQuery();
+                }
+                releaseDatabaseLock = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(300));
+                        using var commit = connection.CreateCommand();
+                        commit.CommandText = "COMMIT;";
+                        commit.ExecuteNonQuery();
+                    }
+                    finally
+                    {
+                        connection.Dispose();
+                    }
+                });
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(release.Episodes),
+                };
+            });
+
+        DataUpdateExecutionResult result;
+        try
+        {
+            result = await fixture.Service.ExecuteAsync(
+                DataUpdateTriggerKinds.Manual,
+                DataUpdateActions.DownloadImport);
+        }
+        finally
+        {
+            if (releaseDatabaseLock is not null)
+            {
+                await releaseDatabaseLock;
+            }
+        }
+
+        Assert.Equal(DataUpdateTransferStatuses.Completed, result.Status);
+        Assert.Equal(release.Version, (await fixture.Packages.GetStatusAsync()).ActiveVersion);
     }
 
     [Fact]
