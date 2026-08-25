@@ -46,6 +46,9 @@ cleanup() {
   if [[ "$playwright_image_owned" == "1" ]]; then
     docker image rm --force "$playwright_image" >/dev/null 2>&1 || true
   fi
+  docker run --rm \
+    --volume "$integration_root:/cleanup" \
+    busybox:1.37 chmod -R u+w /cleanup >/dev/null 2>&1 || true
   rm -rf -- "$integration_root"
 }
 trap cleanup EXIT

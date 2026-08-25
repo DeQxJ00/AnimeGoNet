@@ -119,6 +119,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
 
         Assert.Contains("mktemp -d", smoke, StringComparison.Ordinal);
         Assert.Contains("compose down --volumes --remove-orphans", smoke, StringComparison.Ordinal);
+        Assert.Contains(
+            "busybox:1.37 chmod -R u+w /cleanup",
+            smoke,
+            StringComparison.Ordinal);
         Assert.Contains("emporary password is provided for this session:", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/auth/login", smoke, StringComparison.Ordinal);
         Assert.Contains("--header \"Host: 127.0.0.1:8080\"", smoke, StringComparison.Ordinal);
