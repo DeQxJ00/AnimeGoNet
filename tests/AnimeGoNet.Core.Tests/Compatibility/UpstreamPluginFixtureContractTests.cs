@@ -78,8 +78,8 @@ public sealed partial class UpstreamPluginFixtureContractTests
             Assert.True(
                 fixtureHashes.TryGetValue(entry.UpstreamFile, out var expectedHash),
                 $"Missing fixture SHA-256 baseline: {entry.UpstreamFile}");
-            var path = Path.Combine(upstreamRoot, entry.UpstreamFile.Replace('/', Path.DirectorySeparatorChar));
-            var actualHash = Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(path)));
+            var actualHash = Convert.ToHexStringLower(
+                SHA256.HashData(await ReadGitBlobAsync(upstreamRoot, entry.UpstreamFile)));
             Assert.Equal(expectedHash, actualHash);
         }
     }
@@ -117,7 +117,7 @@ public sealed partial class UpstreamPluginFixtureContractTests
     {
         var text = File.ReadAllText(Path.Combine(root, "docs", "baseline", "FIXTURES.sha256.md"));
         return HashLineRegex()
-            .Matches(text)
+            .Matches(text.ReplaceLineEndings("\n"))
             .ToDictionary(
                 match => match.Groups[2].Value,
                 match => match.Groups[1].Value,
@@ -156,6 +156,22 @@ public sealed partial class UpstreamPluginFixtureContractTests
         await process.WaitForExitAsync();
         Assert.True(process.ExitCode == 0, error);
         return output.Trim();
+    }
+
+    private static async Task<byte[]> ReadGitBlobAsync(string repository, string path)
+    {
+        using var process = CreateGitProcess(repository);
+        process.StartInfo.ArgumentList.Add("show");
+        process.StartInfo.ArgumentList.Add($"HEAD:{path}");
+        Assert.True(process.Start());
+
+        using var output = new MemoryStream();
+        var copyOutput = process.StandardOutput.BaseStream.CopyToAsync(output);
+        var readError = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(copyOutput, readError, process.WaitForExitAsync());
+
+        Assert.True(process.ExitCode == 0, await readError);
+        return output.ToArray();
     }
 
     private static Process CreateGitProcess(string repository) =>

@@ -1,11 +1,47 @@
 using System.Text;
 using System.Security.Cryptography;
 using AnimeGoNet.App.Torrents;
+using YamlDotNet.RepresentationModel;
 
 namespace AnimeGoNet.App.Tests.Delivery;
 
 public sealed class DockerQbittorrentIntegrationContractTests
 {
+    [Fact]
+    public async Task StableTagsPublishAnAttestedMultiPlatformGhcrImage()
+    {
+        var root = RepositoryRoot();
+        var workflow = await File.ReadAllTextAsync(Path.Combine(
+            root,
+            ".github",
+            "workflows",
+            "animegonet-docker.yml"));
+        var parsed = new YamlStream();
+        parsed.Load(new StringReader(workflow));
+
+        Assert.Single(parsed.Documents);
+        Assert.Contains("tags: [\"v*\"]", workflow, StringComparison.Ordinal);
+        Assert.Contains("packages: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("id-token: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("attestations: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("docker/metadata-action@v6", workflow, StringComparison.Ordinal);
+        Assert.Contains("docker/login-action@v4", workflow, StringComparison.Ordinal);
+        Assert.Contains("images: ghcr.io/${{ steps.image.outputs.name }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("type=semver,pattern={{version}}", workflow, StringComparison.Ordinal);
+        Assert.Contains("type=semver,pattern={{major}}.{{minor}}", workflow, StringComparison.Ordinal);
+        Assert.Contains("type=semver,pattern={{major}}", workflow, StringComparison.Ordinal);
+        Assert.Contains("platforms: linux/amd64,linux/arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("publish:", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs: [multi-platform-build, smoke]", workflow, StringComparison.Ordinal);
+        Assert.Contains("GHCR release tag version must match Directory.Build.props", workflow, StringComparison.Ordinal);
+        Assert.Contains("push: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/attest@v4", workflow, StringComparison.Ordinal);
+        Assert.Contains("subject-digest: ${{ steps.build.outputs.digest }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("push-to-registry: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("create-storage-record: false", workflow, StringComparison.Ordinal);
+        Assert.Contains("${{ steps.build.outputs.digest }}", workflow, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task BaseContainerSmokeForcesRuntimeHardeningAndCleanSigterm()
     {
@@ -19,8 +55,17 @@ public sealed class DockerQbittorrentIntegrationContractTests
             ".github",
             "workflows",
             "animegonet-docker.yml"));
+        var normalizedDockerfile = dockerfile.ReplaceLineEndings("\n");
 
         Assert.Contains("USER 10001:10001", dockerfile, StringComparison.Ordinal);
+        Assert.Contains(
+            "mkdir --parents /app /data /download/incomplete /download/anime /download/movies",
+            normalizedDockerfile,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "save_path=/download/anime \\\n    movie_save_path=/download/movies",
+            normalizedDockerfile,
+            StringComparison.Ordinal);
         Assert.Contains(
             "COPY src/AnimeGo.Plugin.Abstractions/AnimeGo.Plugin.Abstractions.csproj src/AnimeGo.Plugin.Abstractions/",
             dockerfile,
@@ -61,7 +106,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
         Assert.Contains("{{.State.Health.Status}}", smoke, StringComparison.Ordinal);
         Assert.Contains("docker stop --signal SIGTERM --time 7", smoke, StringComparison.Ordinal);
         Assert.Contains("{{.State.ExitCode}}", smoke, StringComparison.Ordinal);
-        Assert.Contains("./eng/smoke-container.sh animegonet:ci", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "run: bash ./eng/smoke-container.sh animegonet:ci",
+            workflow,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("TestSpace", dockerfile + compose + smoke, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -107,6 +155,10 @@ public sealed class DockerQbittorrentIntegrationContractTests
 
         Assert.Contains("mktemp -d", smoke, StringComparison.Ordinal);
         Assert.Contains("compose down --volumes --remove-orphans", smoke, StringComparison.Ordinal);
+        Assert.Contains(
+            "busybox:1.37 chmod -R u+w /cleanup",
+            smoke,
+            StringComparison.Ordinal);
         Assert.Contains("emporary password is provided for this session:", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/auth/login", smoke, StringComparison.Ordinal);
         Assert.Contains("--header \"Host: 127.0.0.1:8080\"", smoke, StringComparison.Ordinal);

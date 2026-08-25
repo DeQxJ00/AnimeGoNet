@@ -69,6 +69,7 @@ public sealed class DataManifestParserTests
     public void ParsesVersionTwoManifestWithRequiredRelations()
     {
         var json = ValidManifest
+            .ReplaceLineEndings("\n")
             .Replace("\"schema_version\":1", "\"schema_version\":2", StringComparison.Ordinal)
             .Replace(
                 "\n  ],\n  \"totals\"",

@@ -56,6 +56,15 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 
 ## Docker
 
+正式版本的 amd64/arm64 镜像发布在 GHCR：
+
+```powershell
+docker pull ghcr.io/deqxj00/animegonet:1.0.0
+```
+
+也可使用 `latest`、主次版本标签，或按 Actions 输出的不可变 `sha256` digest 固定部署；
+来源证明验证命令见 [CI / NativeAOT / Docker](docs/CI_CD.md)。
+
 ```powershell
 $env:ANIMEGONET_ACCESS_KEY = '<strong-local-secret>'
 # 可选：单独保护 WebUI；留空时裸 WebUI 可直接访问。

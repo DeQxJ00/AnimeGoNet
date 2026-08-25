@@ -7,8 +7,6 @@
 - `.github/workflows/dotnet-ci.yml`：除三平台 .NET/WebUI 门禁外，用 Go 1.22 对只读 legacy bbolt exporter 的真实 fixture 运行测试。
 - `.github/workflows/animegonet-docker.yml`：使用 Buildx 构建 `linux/amd64`、`linux/arm64`，并加载 amd64 镜像验证 API、SQLite、NativeAOT 和挂载路径。
 
-原上游 Go 工作流保留作为行为基准，没有覆盖或删除。
-
 `.NET` build-test job 另把公开 `wetor/AnimeGo@c7475dfc55a374cd0dd08821bf17125dab1e3145`
 检出到独立 `upstream-animego` 子目录，只供 parity tests 读取。当前四个真实
 `.torrent` 测试直接解析原文件，但 DTO/断言/TRX 均不投影 announce 或 tracker；
@@ -34,27 +32,43 @@ fixture 不复制进 AnimeGoNet Git 历史。
 
 `eng/smoke-native-metadata.ps1` 在同一五 RID 矩阵中再次使用实际发布二进制：先关闭 workers 完成首次建库，再由 `AnimeGoNet.NativeMetadataSmokeFixture` 通过正式 Data Store 写入唯一的已下载单文件任务；随后打开 workers，并把 AI、TMDB MCP 与 TMDB API 全部固定到随机 `127.0.0.1` fixture。门禁要求一次任务级 AI 调用完成两轮对话和 MCP 工具调用，经 TMDB Series/Season/Episode 逐级验证后在 SQLite 与公开任务 API 中得到 `S02E07`、`ai_metadata` 和 `tmdb_verified`。qB 实例在该 smoke 中显式禁用；临时数据库、日志、fixture 进程和两个原生进程无论成功失败都回收，不读取用户 TestSpace 或真实凭据。
 
+`eng/smoke-native-cli.ps1` 的无 Web headless 进程完成建库和零监听检查后由测试直接发送
+SIGTERM；Unix runner 接受应用自行归零退出或标准的 `128 + SIGTERM = 143`，其他退出码、
+发送失败或七秒内未退出仍然失败。完整 Web 宿主 smoke 继续要求应用完成优雅关闭。
+
 每个 RID 在 `upload-artifact` 前运行 `eng/generate-release-metadata.ps1`。脚本只读取该 RID 的实际 publish 目录和本次 restore 的 `project.assets.json`，生成三项随 artifact 一起交付的确定性元数据：覆盖所有发布文件但不自包含的 `SHA256SUMS`、包含精确 NuGet 名称/版本/package SHA-512/SPDX 许可证和 purl 的 CycloneDX 1.5 `sbom.cdx.json`，以及 `THIRD-PARTY-LICENSES.txt`。NuGet 声明许可证文件时会把有界 UTF-8 原文纳入清单；缺失/未知许可证、非法 nuspec URL、包缓存缺失、符号链接、重复规范路径或不安全输入均使 job 失败。输出不包含本机包缓存路径、仓库路径、凭据或生成时间，重复执行字节一致。
 
-推送 `vMAJOR.MINOR.PATCH-SUFFIX` 标签后，只有五个 RID 的 publish、原生 smoke、
-插件模板和发布元数据任务全部成功，`prerelease` job 才会下载五份 Actions artifact。
+推送稳定标签 `vMAJOR.MINOR.PATCH` 或预发布标签 `vMAJOR.MINOR.PATCH-SUFFIX` 后，只有五个 RID 的 publish、原生 smoke、
+插件模板和发布元数据任务全部成功，`release` job 才会下载五份 Actions artifact。
 它逐 RID 调用 `eng/package-native-release.ps1`，重新验证内部 `SHA256SUMS` 的精确文件集，
 生成五个确定性 ZIP 及各自 `.sha256`，并要求包数完整后使用已有远端标签创建 GitHub
-Prerelease。`--verify-tag` 禁止工作流暗中创建标签，`--latest=false` 不把预发布误设为
-稳定最新版；工作流不使用覆盖资产的 `--clobber`。普通 branch/PR/workflow_dispatch
+Release；带后缀的标签会额外标记为 Prerelease。`--verify-tag` 禁止工作流暗中创建标签，`--latest=false` 不把预发布误设为
+稳定最新版；稳定标签保持正式 Release 语义，工作流不使用覆盖资产的 `--clobber`。普通 branch/PR/workflow_dispatch
 只构建 artifact，不发布 Release。
 
-AnimeGoNetData 日常工作流使用仓库变量 `ANIMEGONET_DATA_REPOSITORY`
-（必须是独立仓库且不能等于主程序仓库）、可选目标分支变量
-`ANIMEGONET_DATA_TARGET` 和仅对目标仓库有 Release 写权限的 secret
-`ANIMEGONET_DATA_TOKEN`。主仓库 workflow 权限仍为 `contents: read`。DataBuilder
-生成包含上游精确 UTC 秒的版本号与 `SHA256SUMS`；发布先建 draft，已有同名资产必须
-逐字节相等，缺失资产只允许补进 draft，远端集合和每个字节再次校验后才标记 public
-和 latest。已发布版本缺文件、多文件或内容不同会失败，工作流不使用 `--clobber`。
+AnimeGoNetData 的构建和 Release 发布由独立数据仓库自行负责，主程序仓库不再定义或
+调度该 Action。这里仍保留 DataBuilder、数据格式、离线导入和在线更新客户端，供独立
+数据仓库生成包以及 AnimeGoNet 主程序消费经过校验的发布资产。
 
 ## Docker 契约
 
 为保留上游 `Dockerfile`，新主程序使用 `Dockerfile.animegonet`。镜像为 .NET 10 NativeAOT、非 root 用户运行，并固定：
+
+普通分支和 Pull Request 只执行双架构构建门禁，不上传镜像。推送稳定标签
+`vMAJOR.MINOR.PATCH` 时，工作流将 `linux/amd64`、`linux/arm64` manifest 发布为
+`ghcr.io/deqxj00/animegonet:MAJOR.MINOR.PATCH`、`:MAJOR.MINOR`、`:MAJOR` 和
+`:latest`；预发布标签只生成完整预发布版本标签，不更新稳定别名。发布结果同时记录不可变
+`sha256` digest，并由 `actions/attest@v4` 生成和推送 GitHub/Sigstore 构建来源证明。
+镜像可按 digest 固定部署并验证：
+
+```bash
+docker pull ghcr.io/deqxj00/animegonet:1.0.0
+docker buildx imagetools inspect ghcr.io/deqxj00/animegonet:1.0.0
+gh attestation verify oci://ghcr.io/deqxj00/animegonet:1.0.0 -R DeQxJ00/AnimeGoNet
+```
+
+GHCR 软件包可见性由仓库所有者在 Package settings 中管理；工作流不会写入额外的
+registry 用户名、PAT 或其他长期凭据，只使用标签工作流的短期 `GITHUB_TOKEN`。
 
 - `data_path=/data`
 - `download_path=/download/incomplete`
@@ -111,8 +125,8 @@ Docker；Docker workflow 才执行这项门禁。
 Playwright WebUI 门禁。脱敏报告和明确边界见
 `docs/verification/2026-08-11-ubuntu-ct-docker-validation.md`。
 
-这份 CT 证据不替代 linux-arm64 Docker/原生 runner、win-arm64、osx-arm64 或实际
-GitHub Prerelease。双架构镜像仍要等 arm64 原生/Buildx 结果后才能整体标记完成。
+这份 CT 证据不替代 linux-arm64 容器运行或实际 GitHub Release。五 RID 原生 runner
+和 amd64/arm64 Buildx 构建已由 GitHub Actions 验证；arm64 容器运行仍单独标为未验证。
 
 ## 参考版本
 
@@ -124,4 +138,4 @@ GitHub Prerelease。双架构镜像仍要等 arm64 原生/Buildx 结果后才能
 - `docker/setup-buildx-action@v4`
 - `docker/build-push-action@v7`
 
-这些 major tag 和 runner label 在 2026-07-19 对照官方 action 仓库及 GitHub-hosted runner 文档确认；`actions/download-artifact@v8` 与 GitHub CLI `gh release create --verify-tag --prerelease` 在 2026-08-10 复核官方发布页/手册。
+这些 major tag 和 runner label 在 2026-07-19 对照官方 action 仓库及 GitHub-hosted runner 文档确认；`actions/download-artifact@v8` 与 GitHub CLI `gh release create --verify-tag` 在 2026-08-10 复核官方发布页/手册。

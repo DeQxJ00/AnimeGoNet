@@ -51,7 +51,7 @@ internal sealed class DataUpdateServiceFixture : IAsyncDisposable
 
     public DataUpdateService Service { get; }
 
-    public static async Task<DataUpdateServiceFixture> CreateAsync()
+    public static async Task<DataUpdateServiceFixture> CreateAsync(TimeSpan? httpTimeout = null)
     {
         var root = Path.Combine(
             Path.GetTempPath(),
@@ -63,7 +63,7 @@ internal sealed class DataUpdateServiceFixture : IAsyncDisposable
             DataUpdate = defaults.DataUpdate with
             {
                 ManifestUrl = new Uri("https://updates.test/manifest.json"),
-                HttpTimeout = TimeSpan.FromSeconds(10),
+                HttpTimeout = httpTimeout ?? TimeSpan.FromSeconds(10),
                 KeepVersions = 2,
             },
         };

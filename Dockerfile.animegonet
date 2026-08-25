@@ -42,7 +42,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 animegonet \
     && useradd --uid 10001 --gid animegonet --no-create-home animegonet \
-    && mkdir --parents /app /data /download/incomplete /download/anime \
+    && mkdir --parents /app /data /download/incomplete /download/anime /download/movies \
     && chown --recursive animegonet:animegonet /app /data /download
 
 WORKDIR /app
@@ -53,7 +53,7 @@ ENV ASPNETCORE_URLS=http://+:7991 \
     DOTNET_RUNNING_IN_CONTAINER=true \
     data_path=/data \
     download_path=/download/incomplete \
-    save_path=/download/anime
+    save_path=/download/anime \
     movie_save_path=/download/movies
 
 VOLUME ["/data", "/download"]

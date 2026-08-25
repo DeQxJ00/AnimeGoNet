@@ -219,9 +219,14 @@ public sealed class ConfigurationArchiveApiTests
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
 
         var oversized = new byte[ConfigurationArchiveService.MaximumArchiveBytes + 1];
-        using var tooLarge = await app.Client.PostAsync(
-            "/api/v1/configuration-archive/import/preview",
-            new ByteArrayContent(oversized));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            "/api/v1/configuration-archive/import/preview")
+        {
+            Content = new ByteArrayContent(oversized),
+        };
+        request.Headers.ExpectContinue = true;
+        using var tooLarge = await app.Client.SendAsync(request);
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, tooLarge.StatusCode);
     }
 

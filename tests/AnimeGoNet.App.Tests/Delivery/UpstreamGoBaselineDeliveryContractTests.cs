@@ -1,37 +1,9 @@
-using YamlDotNet.RepresentationModel;
-
 namespace AnimeGoNet.App.Tests.Delivery;
 
 public sealed class UpstreamGoBaselineDeliveryContractTests
 {
     private const string UpstreamCommit =
         "c7475dfc55a374cd0dd08821bf17125dab1e3145";
-
-    [Fact]
-    public async Task WorkflowPinsLinuxContainerCommitSerialExecutionAndAlwaysUploadsReport()
-    {
-        var root = RepositoryRoot();
-        var workflow = await File.ReadAllTextAsync(Path.Combine(
-            root,
-            ".github",
-            "workflows",
-            "upstream-go-baseline.yml"));
-        var parsed = new YamlStream();
-        parsed.Load(new StringReader(workflow));
-
-        Assert.Single(parsed.Documents);
-        Assert.Contains("container:", workflow, StringComparison.Ordinal);
-        Assert.Contains("image: golang:1.22.10-bookworm", workflow, StringComparison.Ordinal);
-        Assert.Contains("repository: wetor/AnimeGo", workflow, StringComparison.Ordinal);
-        Assert.Contains($"ref: {UpstreamCommit}", workflow, StringComparison.Ordinal);
-        Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
-        Assert.Contains("bash ./eng/capture-upstream-go-baseline.sh", workflow, StringComparison.Ordinal);
-        Assert.Contains("if: always()", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/upload-artifact@v7", workflow, StringComparison.Ordinal);
-        Assert.Contains("if-no-files-found: error", workflow, StringComparison.Ordinal);
-        Assert.Contains("retention-days: 30", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("TestSpace", workflow, StringComparison.OrdinalIgnoreCase);
-    }
 
     [Fact]
     public async Task CaptureScriptFailsClosedAndWritesStableHashedJsonReport()

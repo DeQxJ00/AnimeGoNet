@@ -93,9 +93,10 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 ?? throw Error(
                     "data_manifest_url_missing",
                     "A data update manifest URL is not configured.");
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(dataUpdateOptions.HttpTimeout);
-            var manifestBytes = await DownloadManifestAsync(manifestUrl, timeout.Token)
+            var manifestBytes = await DownloadManifestAsync(
+                    manifestUrl,
+                    dataUpdateOptions.HttpTimeout,
+                    cancellationToken)
                 .ConfigureAwait(false);
             var manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
             DataManifest manifest;
@@ -108,7 +109,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 throw Error(exception.Code, exception.Message, exception);
             }
 
-            var packageStatus = await _packages.GetStatusAsync(timeout.Token).ConfigureAwait(false);
+            var packageStatus = await _packages.GetStatusAsync(cancellationToken).ConfigureAwait(false);
             if (string.Equals(
                     packageStatus.ActiveVersion,
                     manifest.DataVersion,
@@ -122,7 +123,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     0,
                     0,
                     _timeProvider.GetUtcNow(),
-                    timeout.Token).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false);
                 return new DataUpdateExecutionResult(
                     runId,
                     DataUpdateTransferStatuses.UpToDate,
@@ -142,7 +143,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     0,
                     0,
                     _timeProvider.GetUtcNow(),
-                    timeout.Token).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false);
                 return new DataUpdateExecutionResult(
                     runId,
                     DataUpdateTransferStatuses.UpdateAvailable,
@@ -160,8 +161,8 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 manifestSha256,
                 0,
                 totalBytes,
-                timeout.Token).ConfigureAwait(false);
-            var download = await _transfers.GetDownloadAsync(manifest.DataVersion, timeout.Token)
+                cancellationToken).ConfigureAwait(false);
+            var download = await _transfers.GetDownloadAsync(manifest.DataVersion, cancellationToken)
                 .ConfigureAwait(false);
             string packageDirectory;
             if (download is not null
@@ -182,7 +183,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     runId,
                     downloadedBytes,
                     totalBytes,
-                    timeout.Token).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -198,9 +199,10 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                             runId,
                             progress,
                             totalBytes,
-                            timeout.Token);
+                            cancellationToken);
                     },
-                    timeout.Token).ConfigureAwait(false);
+                    dataUpdateOptions.HttpTimeout,
+                    cancellationToken).ConfigureAwait(false);
                 downloadedBytes = totalBytes;
                 await _transfers.SaveDownloadAsync(
                     new DownloadedDataPackage(
@@ -210,7 +212,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                         "verified",
                         _timeProvider.GetUtcNow(),
                         null),
-                    timeout.Token).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false);
             }
 
             if (requestedAction == DataUpdateActions.Download)
@@ -223,7 +225,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     downloadedBytes,
                     totalBytes,
                     _timeProvider.GetUtcNow(),
-                    timeout.Token).ConfigureAwait(false);
+                    cancellationToken).ConfigureAwait(false);
                 return new DataUpdateExecutionResult(
                     runId,
                     DataUpdateTransferStatuses.Downloaded,
@@ -240,7 +242,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 manifestSha256,
                 downloadedBytes,
                 totalBytes,
-                timeout.Token).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
             var import = await _packages.ImportAsync(
                 new DataPackageImportRequest(
                     manifest,
@@ -249,11 +251,11 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     _clientVersion,
                     dataUpdateOptions.KeepVersions,
                     _timeProvider.GetUtcNow()),
-                timeout.Token).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
             await _transfers.MarkImportedAsync(
                 manifest.DataVersion,
                 _timeProvider.GetUtcNow(),
-                timeout.Token).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
             await _transfers.CompleteAsync(
                 runId,
                 DataUpdateTransferStatuses.Completed,
@@ -262,7 +264,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 downloadedBytes,
                 totalBytes,
                 _timeProvider.GetUtcNow(),
-                timeout.Token).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
             return new DataUpdateExecutionResult(
                 runId,
                 DataUpdateTransferStatuses.Completed,
@@ -683,14 +685,16 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
 
     private async Task<byte[]> DownloadManifestAsync(
         Uri manifestUrl,
+        TimeSpan httpTimeout,
         CancellationToken cancellationToken)
     {
+        using var timeout = CreateHttpTimeout(httpTimeout, cancellationToken);
         using var request = new HttpRequestMessage(HttpMethod.Get, manifestUrl);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         using var response = await _httpClient.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
+            timeout.Token).ConfigureAwait(false);
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
         {
             throw Error("data_manifest_not_found", "The data update manifest was not found.");
@@ -705,12 +709,12 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         {
             throw Error("data_manifest_size_invalid", "The data manifest is too large.");
         }
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token)
             .ConfigureAwait(false);
         return await ReadBoundedAsync(
             stream,
             DataManifestParser.MaximumManifestBytes,
-            cancellationToken).ConfigureAwait(false);
+            timeout.Token).ConfigureAwait(false);
     }
 
     private async Task<string> DownloadPackageAsync(
@@ -719,6 +723,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         string manifestSha256,
         long totalBytes,
         Func<long, Task> reportProgress,
+        TimeSpan httpTimeout,
         CancellationToken cancellationToken)
     {
         var packagesRoot = Path.Combine(_layout.DataUpdatePath, "packages");
@@ -739,6 +744,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                     downloaded,
                     totalBytes,
                     reportProgress,
+                    httpTimeout,
                     cancellationToken).ConfigureAwait(false);
                 downloaded = checked(downloaded + assetBytes);
                 await reportProgress(downloaded).ConfigureAwait(false);
@@ -772,13 +778,15 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         long completedBefore,
         long totalBytes,
         Func<long, Task> reportProgress,
+        TimeSpan httpTimeout,
         CancellationToken cancellationToken)
     {
+        using var timeout = CreateHttpTimeout(httpTimeout, cancellationToken);
         using var request = new HttpRequestMessage(HttpMethod.Get, asset.Url);
         using var response = await _httpClient.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
+            timeout.Token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw Error(
@@ -793,7 +801,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 "A data update asset Content-Length does not match the manifest.");
         }
 
-        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken)
+        await using var source = await response.Content.ReadAsStreamAsync(timeout.Token)
             .ConfigureAwait(false);
         await using var destination = new FileStream(
             destinationPath,
@@ -810,7 +818,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         {
             while (true)
             {
-                var read = await source.ReadAsync(rented, cancellationToken).ConfigureAwait(false);
+                var read = await source.ReadAsync(rented, timeout.Token).ConfigureAwait(false);
                 if (read == 0)
                 {
                     break;
@@ -823,7 +831,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                         "A downloaded data asset exceeds its declared size.");
                 }
                 hash.AppendData(rented, 0, read);
-                await destination.WriteAsync(rented.AsMemory(0, read), cancellationToken)
+                await destination.WriteAsync(rented.AsMemory(0, read), timeout.Token)
                     .ConfigureAwait(false);
                 if (downloaded - lastReported >= ProgressCheckpointBytes)
                 {
@@ -836,7 +844,7 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
         {
             ArrayPool<byte>.Shared.Return(rented);
         }
-        await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await destination.FlushAsync(timeout.Token).ConfigureAwait(false);
         if (downloaded != asset.SizeBytes)
         {
             throw Error(
@@ -853,6 +861,15 @@ public sealed class DataUpdateService : IDataUpdateService, IDisposable
                 "A downloaded data asset SHA-256 does not match the manifest.");
         }
         return downloaded;
+    }
+
+    private static CancellationTokenSource CreateHttpTimeout(
+        TimeSpan httpTimeout,
+        CancellationToken cancellationToken)
+    {
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(httpTimeout);
+        return timeout;
     }
 
     private async Task<string> CommitVerifiedPackageAsync(

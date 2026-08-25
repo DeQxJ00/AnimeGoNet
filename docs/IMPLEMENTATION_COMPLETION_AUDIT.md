@@ -37,7 +37,7 @@ U2 已由所有者明确暂缓，不属于首版正式输入源。
 | 字幕关联、四类删除和精确去重 | 字幕随 EP 改名并保留语言/轨道后缀；四类删除冻结计划；只跳过同 TMDB+EP | 多文件真实 qB、删除失败恢复、安全路径与 completion claim tests |
 | Docker/跨容器路径模型 | 下载器保存根、应用 download/save 根和路径/硬链接探测均显式配置 | Ubuntu CT 双 qB 默认路径、共享目录/硬链接探测及全链通过 |
 | Mikan 真实数据完整链 | 私有 CSV 29 条均真实执行 Mikan/qB 清单/规则/SQLite/Bangumi/TMDB；下载可替换为显式 synthetic payload | 29/29 匹配；3 条真实 BT 整理；其余完整整理或正确按 TMDB+EP 去重；AI 0 token |
-| 可审查预发布 | 五 RID 成功后逐 RID 验证/打包 ZIP+SHA，再用已有标签创建 GitHub Prerelease | 打包器和工作流契约测试；首次远端标签/Release 仍为 `[~]` |
+| 可审查发布 | 五 RID 成功后逐 RID 验证/打包 ZIP+SHA，再用已有稳定或预发布标签创建 GitHub Release | 五 RID 远端 publish/smoke、打包器和工作流契约测试已通过；首次 `v1.0.0` 标签/Release 仍为 `[~]` |
 
 ## 当前验证快照
 
@@ -55,7 +55,7 @@ U2 已由所有者明确暂缓，不属于首版正式输入源。
 
 - Docker linux-arm64 构建和容器 E2E；linux-x64 已由 Ubuntu CT 验证。
 - `win-arm64`、`linux-arm64`、`osx-arm64` 原生 runner 结果。
-- 第一个实际 GitHub Prerelease 标签和 Release。
+- 第一个实际 GitHub `v1.0.0` 标签和正式 Release。
 - 独立 AnimeGoNetData 仓库的 token/变量及首次不可变 Release。
 
 这些项目不是缺少实现；对应 workflow、脚本和失败门禁已经提交。只有取得对应平台或

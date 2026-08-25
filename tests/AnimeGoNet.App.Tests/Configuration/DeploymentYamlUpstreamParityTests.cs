@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text;
 using AnimeGoNet.App.Configuration;
 using AnimeGoNet.Core.Configuration;
 
@@ -42,7 +44,7 @@ public sealed class DeploymentYamlUpstreamParityTests
             File.Exists(fixturePath),
             $"Pinned AnimeGo fixture {fileName} for {UpstreamCommit} is missing.");
 
-        var original = await File.ReadAllBytesAsync(fixturePath);
+        var original = await ReadGitBlobAsync(Path.GetFullPath(upstream), $"test/testdata/config/{fileName}");
         Assert.Equal(expectedSha256, Convert.ToHexString(SHA256.HashData(original)).ToLowerInvariant());
 
         var root = CreateRoot();
@@ -132,5 +134,32 @@ public sealed class DeploymentYamlUpstreamParityTests
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static async Task<byte[]> ReadGitBlobAsync(string repository, string path)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = repository,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardErrorEncoding = Encoding.UTF8,
+                UseShellExecute = false,
+            },
+        };
+        process.StartInfo.ArgumentList.Add("show");
+        process.StartInfo.ArgumentList.Add($"HEAD:{path}");
+        Assert.True(process.Start());
+
+        using var output = new MemoryStream();
+        var copyOutput = process.StandardOutput.BaseStream.CopyToAsync(output);
+        var readError = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(copyOutput, readError, process.WaitForExitAsync());
+
+        Assert.True(process.ExitCode == 0, await readError);
+        return output.ToArray();
     }
 }

@@ -40,7 +40,7 @@ test("NativeAOT release renders live dashboard and explicit TMDB fallback order"
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(authenticatedUrl(), { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveTitle("AnimeGoNet");
+  await expect(page).toHaveTitle("总览 · AnimeGoNet");
   await expect(page.locator("#health")).toHaveText("运行中");
   await expect(page.locator("#runtime")).toContainText("NativeAOT");
   await expect(page.locator("#schema")).toHaveText(/^v\d+$/);

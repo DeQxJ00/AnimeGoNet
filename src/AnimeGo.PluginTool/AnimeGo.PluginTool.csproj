@@ -7,6 +7,9 @@
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <!-- The tool reaches only AnimeGoNet.App.Plugins; .NET 10.0.11 still analyzes the
+         referenced Web assembly's unused MVC metadata path. Keep every other warning fatal. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3053</WarningsNotAsErrors>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>animego-plugin</ToolCommandName>

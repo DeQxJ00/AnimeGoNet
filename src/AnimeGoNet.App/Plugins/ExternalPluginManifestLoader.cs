@@ -144,6 +144,12 @@ public sealed class ExternalPluginManifestLoader
         var packagePath = Path.GetFullPath(packageDirectory);
         EnsureDirectChildPackage(packagePath);
         EnsureNotLink(packagePath);
+        if (!Directory.Exists(packagePath))
+        {
+            throw new ExternalPluginManifestException(
+                "plugin_manifest_missing",
+                "The package does not contain plugin.json.");
+        }
         EnsureSafePermissions(packagePath, isExecutable: false);
 
         var manifestPath = Path.Combine(packagePath, "plugin.json");

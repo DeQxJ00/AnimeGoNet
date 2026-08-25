@@ -330,8 +330,11 @@ public sealed class SchemaMigrationTests
             indexes);
     }
 
-    [Fact]
-    public async Task NativeSmokeDefaultTracksCurrentSchemaVersion()
+    [Theory]
+    [InlineData("smoke-native.ps1")]
+    [InlineData("smoke-native-metadata.ps1")]
+    [InlineData("smoke-legacy-data-migration.ps1")]
+    public async Task NativeSmokeDefaultsTrackCurrentSchemaVersion(string scriptName)
     {
         var scriptPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -341,7 +344,7 @@ public sealed class SchemaMigrationTests
             "..",
             "..",
             "eng",
-            "smoke-native.ps1"));
+            scriptName));
         Assert.True(File.Exists(scriptPath), $"Native smoke script was not found: {scriptPath}");
 
         var script = await File.ReadAllTextAsync(scriptPath);

@@ -213,7 +213,7 @@
 
 - [x] 实现六字段 Cron 调度、StartRun 和 NextTime：支持秒级六字段、`?`、list/range/step、英文月份/星期与标准 descriptor，DOM/DOW 沿用 Cron OR 语义；时区/DST、启动立即执行、三次重试、并发任务、热增删唤醒、稳定快照和取消退出均由可控时钟测试覆盖，宿主仅在后台 worker 开启时运行 coordinator。
 - [x] 实现 Bangumi/数据库/feed/plugin tasks：旧 Bangumi cache 下载由版本化 AnimeGoNetData 检查/下载/导入调度替代；目录数据库刷新、数据更新和逐 SourceProfile Mikan RSS feed 均由编译期内置 schedule plugin 执行。RSS 调度只携带来源 ID/revision，运行时从 SQLite 取得只写 URL；失败重试、审计、热增删、重启中断恢复和后台禁用门禁已覆盖，无 Python task 或反射发现。
-- [~] 优雅退出和取消传播实现及门禁已生成但跨平台未验证：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT、win-x64 NativeAOT 及 Ubuntu CT linux-x64 NativeAOT 的 SIGTERM 零退出和句柄/SQLite 保留已验证；linux-arm64、macOS arm64 待原生 CI 实机结果。
+- [x] 优雅退出和取消传播已通过跨平台门禁：宿主固定 5 秒停止期限；所有后台 Worker、调度等待/重试、qBittorrent 活动调用、配置热应用和 RSS winner 租约清理均响应宿主停止；WebSocket 长连接在 `ApplicationStopping` 时主动关闭。JIT、五 RID NativeAOT 及 Ubuntu CT linux-x64 NativeAOT 的 SIGTERM/进程退出、句柄与 SQLite 保留均已验证。
 - [x] 移植上游 HTTP API：计划原称“10 个”，权威 OpenAPI 实际列出 11 个 REST operation + 1 个 WebSocket operation；契约测试逐项比对基线，12/12 均有 AnimeGoNet 路由。最后缺失的 `/api/config` 已实现 `all/default/comment/raw` GET、`all/raw` PUT、legacy envelope/参数错误/Access-Key、写前强类型校验、可选不可覆盖备份和同目录原子替换；更新仅在重启后应用。
 - [x] 新增 `/api/v1/ingest` 通用批量 Torrent/URL 导入 API，沿用 `source + data[].torrent + data[].info`；旧 `/api/download/manager` 已转换到同一 command，并补齐未经修改 AnimeGoHelper 只提交 Episode URL 时的 `mikanid+groupid+bgmid` 解析与持久化；`/api/rss` 与现代 `/api/v1/rss/ingest` 均已接入来源规则、统一 staging 与后台 qB dispatch。
 - [x] 补齐 Mikan `/RSS/MyBangumi?token=...` 多番组聚合订阅：逐 item 从 Episode 页面解析 `mikanid+groupid`，同 URL 批内缓存，按 mikanid 拆成独立可审计子批次后分别执行五级过滤、有序优选、Bangumi 发现、去重和统一导入；单项身份失败隔离并保留稳定错误码。手动 WebUI 显示每个子批次的 mikanid/bgmid，真实私有 RSS 只读 smoke 已验证全部当前 item，未访问 Torrent/qB。
@@ -302,22 +302,22 @@
 - [x] 用 `测试数据.csv` 的 29 条真实 Mikan 输入完成可续跑链路审计：29/29 已真实执行 Mikan 输入、隔离 qB 投递/文件清单、规则筛选、SQLite 去重和 Bangumi/TMDB 映射；第 2–4 行另完成真实 BT 下载与 move 整理。为避免公网下载时间影响业务验收，第 5–30 行按显式 `synthetic_file` 测试模式在每次 `run-*` 隔离目录按 Torrent 清单生成测试文件，再走正式 move、重命名、NFO/sidecar、completion 与 `deleteFiles=false` 清理；其中 18 条完成整理、7 条按同 TMDB+EP 完成记录正确 `SkippedDuplicate`。全部命中 CSV 期望，AI 0 次/0 token；报告不含凭据、passkey、Torrent URL 或媒体绝对路径。合成载荷不记作真实下载。
 
 - [x] 完成 Host DI 和 CLI 行为：固定上游 `cmd/animego` 的 `config/debug/web/backup` 四个开关与对应 `ANIMEGO_*` 环境别名均已审计；兼容 Go 单短横线及现代双横线，裸 bool 等价 true，非法值在创建运行目录前失败；debug 同时放开宿主与滚动文件 Debug 日志，`web=false` 使用无监听 `IServer` 保留后台 worker，`-h/-help/--help` 不启动宿主。五 RID NativeAOT workflow 验证 help 和 headless 零 TCP 监听。
-- [~] Docker NativeAOT 双架构功能已生成但 arm64 未验证：双架构 Dockerfile、Buildx CI 和容器 smoke 均已建立；Ubuntu 24.04 x86_64 CT 已真实构建并运行 linux-x64 镜像，linux-arm64 构建/运行仍待原生或 Buildx runner 结果。
+- [~] Docker NativeAOT 双架构构建已验证但 arm64 运行未验证：双架构 Dockerfile、Buildx CI 和容器 smoke 均已建立；GitHub Buildx 已成功构建 linux/amd64 与 linux/arm64，Ubuntu 24.04 x86_64 CT 已真实运行 linux-x64 镜像，linux-arm64 容器运行仍待原生环境验收。
 - [x] 非 root、PUID/PGID、healthcheck、SIGTERM、只读根文件系统门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：smoke 强制任意非 root UID/GID、只读 rootfs、`/tmp` noexec tmpfs 与 no-new-privileges，并确认 `/data`/`/download`/`/tmp` 可写、healthcheck、7 秒 SIGTERM 零退出和 SQLite 保留。
 - [x] 添加连接外部下载器和内置 Compose 下载器的部署示例：规范 YAML、环境变量、本机 TestSpace、官方双 qB Compose 均已记录；外部/远程双 qB 示例只启动 AnimeGoNet，强制地址和凭据由未跟踪环境变量传入，明确两端同一共享存储必须映射成相同 `/download`，并记录连接测试、硬链接路径探测、显式 Torrent 验收和清理边界。
 - [x] 固定官方 Docker：`data_path=/data`、`download_path=/download/incomplete`、`save_path=/download/anime`。
 - [x] 提供写有上述绝对路径的 Docker 容器配置；Compose 卷与配置逐项一致，不依赖隐藏路径修正。
 - [x] 官方 Compose 已将 AnimeGoNet 与下载器的同一宿主目录统一挂载到 `/download`；Ubuntu 24.04 x86_64 CT 已真实验证 `/data`、`/download/incomplete/{bt|pt}`、`/download/anime` 的共享映射、写入和整理结果。
 - [x] 外部下载器 `client.download_path` 路径转换与错误诊断已验证：主程序读取 qB 默认保存路径并执行显式路径/硬链接能力探测；Ubuntu CT 双 qB 外部容器的 `/download` 跨容器映射与完整下载/整理通过。
-- [~] Linux x64/arm64 NativeAOT 构建、原生 smoke 与 artifact 门禁已生成但 arm64 未验证：Ubuntu 24.04 x86_64 CT 已实际构建并运行 linux-x64 NativeAOT 镜像、API/SQLite/WebUI/SIGTERM smoke；`ubuntu-24.04-arm` 的 linux-arm64 原生 runner 结果仍待验收，不以 x64 结果代替。
+- [x] Linux x64/arm64 NativeAOT 构建、原生 smoke 与 artifact 门禁已验证：Ubuntu 24.04 x86_64 CT 已实际构建并运行 linux-x64 NativeAOT 镜像，GitHub `ubuntu-24.04` 与 `ubuntu-24.04-arm` 原生 runner 均已完成 publish、API/SQLite/WebUI/SIGTERM smoke 与 artifact 上传。
 - [x] 外部 C# 插件目录挂载、非 root 启动和禁用回退门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：专用 linux-x64 NativeAOT source fixture 直接引用官方 SDK，包子目录只读且 `plugin-data` 可写；统一导入实际启动插件并记录非 root UID、确认包不可写，API 禁用后证明不再执行。其他 RID 由统一跨架构发布项继续跟踪。
-- [~] 五 RID NativeAOT artifact 发布链已生成但远端未验证完整：`win-x64` 本机 publish/smoke 与 Ubuntu CT linux-x64 NativeAOT 运行已通过；`win-arm64`、`linux-arm64`、`osx-arm64` 必须等待各自原生 GitHub runner，五份 artifact 尚未整体发布成功。
+- [x] 五 RID NativeAOT artifact 发布链已完成远端验证：`win-x64`、`win-arm64`、`linux-x64`、`linux-arm64`、`osx-arm64` 均由对应 GitHub 原生 runner 完成 publish、原生 smoke、发布元数据校验与 artifact 上传。
 - [x] 生成 checksums、SBOM、第三方许可证：五 RID NativeAOT workflow 在上传前从实际 publish 目录和精确 NuGet restore graph 确定性生成 `SHA256SUMS`、CycloneDX 1.5 `sbom.cdx.json` 与 `THIRD-PARTY-LICENSES.txt`；逐文件哈希、ordinal 排序、SPDX/许可证文件、路径脱敏和重复运行字节一致均有真实脚本测试。
 - [x] 完成新安装、旧配置升级、旧数据迁移演练：JIT/NativeAOT 新安装首次 YAML、目录和 SQLite 已通过隔离 smoke；win-x64 原生二进制完成 1.6.1 原字节备份→规范 1.7.1 重写→正常启动，五 RID CI 已加入相同双 smoke。旧 Bolt 以只读 Go schema-v1 JSON 导出后由 .NET schema v39 单事务导入；跨平台 CI 的组合 smoke 在同一隔离目录验证 3 条旧 sidecar 索引、六个 bucket、过期跳过、重复导入和重启保留。
 - [x] 全链路 JIT/AOT/Docker E2E 已在 Ubuntu 24.04 x86_64 CT 实跑通过：确定性合法 Torrent/WebSeed、Bangumi/TMDB fixture、统一导入、Mikan move、SQLite 去重、双 qB 路由、真实下载、Series/Season/Episode 验证、整理/NFO/三层 sidecar、作品库/下载/元数据 API、静态 WebUI Playwright 和精确 qB 清理均完成；Episode 以 Bangumi 日期证据匹配并最终验证 TMDB，AI 未调用。
 - [x] 发布镜像 Web UI Playwright E2E 已验证：固定 Playwright 1.62.0/Chromium，本机 win-x64 NativeAOT 2/2 通过；Ubuntu CT 在无宿主 Node 的条件下由官方 Playwright 容器对同一 linux-x64 NativeAOT 完整链路结果执行 1/1 页面断言并通过，无 console/page error。
 - [x] 编写用户迁移、部署、插件和运维文档：部署 YAML、Docker/外部 qB 路径和本机隔离验收之外，已补齐用户迁移、外部 C# 插件安装/升级/回滚、日常状态检查、停机备份/恢复、SQLite 校验、版本回退和故障处理手册；README 统一入口与文档链接/安全边界契约测试已通过。Ubuntu CT linux-x64 Docker 验证已记录，linux-arm64 与外部发布边界继续明确标记为未验证。
-- [~] 首个可用预发布自动化已生成但远端未验证：仅 `vMAJOR.MINOR.PATCH-SUFFIX` 标签在五 RID 全部成功后才下载完整 artifacts、逐 RID 验证并确定性打包，随后以 `--verify-tag --prerelease --latest=false` 创建不可覆盖的 GitHub Prerelease；实际标签推送与远端 Release 待仓库所有者执行/验收。
+- [~] 首个正式 Release 自动化已生成但标签发布未验证：`vMAJOR.MINOR.PATCH` 稳定标签或 `vMAJOR.MINOR.PATCH-SUFFIX` 预发布标签在五 RID 全部成功后下载完整 artifacts、逐 RID 验证并确定性打包；随后以 `--verify-tag` 创建不可覆盖的 GitHub Release，带后缀标签额外使用 `--prerelease --latest=false`。首次 `v1.0.0` 标签推送与远端 Release 待仓库所有者执行/验收。
 
 ## P11 — AnimeGoNetData
 
@@ -325,9 +325,9 @@
 - [x] 定义 `manifest.json`、subjects/episodes JSONL schema 和版本策略：v1 字段、兼容规则、不可变发布、确定性 gzip/JSONL、哈希/大小/数量/ID 范围与引用语义见 `docs/DATA_MANIFEST_V1.md`；主程序已有 NativeAOT-safe 严格 manifest 解析器。
 - [x] 定义并验证 `setting.data_update` 配置 schema、默认值、环境变量覆盖和热重载行为：主程序提供默认关闭、04:00 六字段 Cron、可空 manifest URL、自动下载/导入、保留 2 版和 300 秒超时的强类型绑定/校验；Web/API 使用 `data_path/config/application.private.json` 安全私有覆盖而不改写部署 YAML，采用 revision 原子写入。七个字段均支持环境变量只读锁；保存或恢复后共享运行快照与 Cron 任务立即热重排，其他配置字段仍明确要求重启。
 - [x] 实现 Bangumi Archive 下载、校验、清洗、分片和 gzip：官方 `aux/latest.json` 锁定 URL/文件名/时间/SHA-256，AOT DataBuilder 原子生成兼容 v1 客户端读取的 schema-v2 Subject/Episode/关系 assets、manifest 和离线包；关系只保留双端均为动画 Subject 的记录，原始 `relation_type` 保留供 P3 前传回溯。
-- [x] 建立每日检查 + 手动触发 GitHub Action：每日 23:00 UTC 检查官方 Archive，亦支持 `workflow_dispatch`；只读权限构建并上传短期 Actions artifact，不误发到主程序仓库。
+- [x] 保留独立数据仓库可调用的 DataBuilder 与手动生成入口；主仓库不再包含每日或手动 AnimeGoNetData Action，调度和发布由独立数据仓库负责。
 - [x] 建立数据唯一性、引用完整性、数量下限和确定性测试：重复 Subject/Episode ID、输出 Episode→Subject 引用、生产 30000/300000 下限、字节确定性及失败零暴露均有契约测试。
-- [~] AnimeGoNetData 不可变 Release 功能及门禁已生成但外部仓库未验证：DataBuilder 已确定性生成覆盖 manifest/在线资产/离线 ZIP 的 `SHA256SUMS`；每日 Action 只向独立 `AnimeGoNetData` 仓库创建 draft，逐字节复用或补齐 draft 资产，远端完整复验后才发布并更新 GitHub latest 指针，已发布 tag 永不覆盖。2026-08-11 已修复真实 workflow 中关系数量参数缺少 Bash 续行的阻断，提取 shell 语法与 DataBuilder 9/9 通过；外部仓库变量、最小权限 token 和首次真实 Release 仍待仓库所有者配置/验收。
+- [x] AnimeGoNetData 构建/发布 Action 已移出主仓库：独立数据仓库自行构建和发布数据包；主仓库只保留 DataBuilder、数据格式、离线导入、在线更新与完整性校验，不再创建主仓库的定时数据 Action。
 - [x] AnimeGoNet 实现检查更新、流式下载、校验和 staging SQLite 导入：schema v28 已加入版本、运行审计、独立 staging 与版本化 Bangumi Archive 表，schema v42 新增关系 staging/活动表；本地包导入会先验压缩文件大小/SHA-256，再以有界单行缓冲流式解 gzip/JSONL，校验字段、顺序、分片范围、计数、唯一 ID、Episode 引用与关系双端引用。schema v29 记录检查/下载/导入阶段与已验证下载目录；HTTP 使用 headers-first、有界 manifest 和 64 KiB 流式 asset 下载，逐资产验证长度/SHA-256 后才原子移动到托管包目录。schema v43 增加单文件 EP 最近日期补判的可追踪证据来源。
 - [x] 实现事务切换、上版保留、失败回滚和离线手工导入：存储核心原子切换 active/previous、保留 2–10 版、支持显式回滚和同版本不可变/幂等；离线 ZIP API/WebUI 只接受根目录 `manifest.json + 声明资产`，流式落盘后逐条验证路径、长度、SHA-256、gzip/JSONL、数量和引用，再进入相同事务导入。全部失败路径保持旧 active 并清理 partial。
 - [x] Web UI 增加数据版本、更新时间、检查/更新/回滚状态：静态 TypeScript 页面已接入状态刷新、手动检查、仅下载、下载并导入、已下载包延后导入和上一版回滚；显示调度策略、传输字节进度、稳定失败码、active/previous、已安装版本与本地下载包，未配置 manifest 或无可回滚版本时禁用对应动作。
