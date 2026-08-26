@@ -28,19 +28,23 @@ public sealed class U2AniDbMetadataResolver(
         int aid,
         string taskTitle,
         string? mappingUrlTemplate = null,
+        bool useTmdbMapping = true,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(aid, 0);
         ArgumentException.ThrowIfNullOrWhiteSpace(taskTitle);
 
-        var mappedId = await TryReadMappingAsync(aid, mappingUrlTemplate, cancellationToken).ConfigureAwait(false);
-        if (mappedId is > 0)
+        if (useTmdbMapping)
         {
-            var direct = await ResolveSeriesIdAsync(
-                mappedId.Value, taskTitle, "u2_anidb_mapping", cancellationToken).ConfigureAwait(false);
-            if (direct.IsSuccess)
+            var mappedId = await TryReadMappingAsync(aid, mappingUrlTemplate, cancellationToken).ConfigureAwait(false);
+            if (mappedId is > 0)
             {
-                return direct;
+                var direct = await ResolveSeriesIdAsync(
+                    mappedId.Value, taskTitle, "u2_anidb_mapping", cancellationToken).ConfigureAwait(false);
+                if (direct.IsSuccess)
+                {
+                    return direct;
+                }
             }
         }
 

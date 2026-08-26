@@ -63,8 +63,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
             return true;
         }
 
-        if (claim.PreferAniDbTmdbMapping
-            && string.Equals(claim.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
+        if (string.Equals(claim.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
             && claim.AniDbAnimeId is > 0
             && u2AniDbResolver is not null)
         {
@@ -76,6 +75,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
                     claim.AniDbAnimeId.Value,
                     claim.Title,
                     claim.AniDbTmdbMappingUrlTemplate,
+                    claim.PreferAniDbTmdbMapping,
                     cancellationToken).ConfigureAwait(false);
             }
             catch (TmdbClientException exception)
