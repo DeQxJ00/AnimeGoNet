@@ -31,6 +31,7 @@ public sealed class RunningApp : IAsyncDisposable
     public static async Task<RunningApp> StartAsync(
         string? accessKey = null,
         string? webUiAccessKey = null,
+        string? u2AccessKey = null,
         Func<AnimeGoOptions, AnimeGoOptions>? configure = null,
         ITorrentStagingService? stagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
@@ -59,6 +60,7 @@ public sealed class RunningApp : IAsyncDisposable
             options,
             accessKey,
             webUiAccessKey ?? accessKey,
+            u2AccessKey,
             torrentStagingService: stagingService,
             downloadClientRegistry: downloadClientRegistry,
             tmdbClient: tmdbClient,

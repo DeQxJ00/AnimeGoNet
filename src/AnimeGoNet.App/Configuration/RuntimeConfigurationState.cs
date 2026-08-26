@@ -6,6 +6,7 @@ public sealed record RuntimeConfigurationState(
     bool RunningInContainer,
     bool BackgroundWorkersEnabled,
     bool InnerPluginMikanAccessKeyConfigured,
+    bool InnerPluginU2AccessKeyConfigured = false,
     bool WebUiAccessKeyConfigured = false);
 
 public sealed record DeploymentConfigurationOptions(AnimeGoOptions Value);

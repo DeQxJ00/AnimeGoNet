@@ -29,6 +29,7 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal("127.0.0.1", snapshot.Values["web:host"]);
             Assert.Equal("7991", snapshot.Values["web:port"]);
             Assert.Equal("123456", snapshot.Values["inner_plugin_mikan:access_key"]);
+            Assert.Equal("123456", snapshot.Values["inner_plugin_u2:access_key"]);
             Assert.False(snapshot.Values.ContainsKey("web:access_key"));
             Assert.Equal(string.Empty, snapshot.Values["web:webui_access_key"]);
             Assert.Equal("move", snapshot.Values["sources:mikan:file_strategy"]);

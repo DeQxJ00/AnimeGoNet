@@ -171,7 +171,10 @@ internal static class ApiOpenApi
                 || path.Equals("api/rss", StringComparison.Ordinal)
                 || path.StartsWith("api/download/manager/", StringComparison.Ordinal)
                 || path.Equals("api/download/manager", StringComparison.Ordinal)
-                || path.Equals("api/v1/ingest", StringComparison.Ordinal));
+                || path.Equals("api/v1/ingest", StringComparison.Ordinal)
+                || path.Equals(
+                    "api/v1/plugins/inner_plugin_u2/ingest",
+                    StringComparison.Ordinal));
     }
 
     private static string TagForPath(string? relativePath)

@@ -1,9 +1,8 @@
 # 多输入源、下载器实例与规则路由
 
-> 首版范围（2026-08-09）：项目所有者已确认 U2 暂缓。首版正式输入源只有
-> Mikan；U2 不生成默认 SourceProfile、不选择默认文件策略，也不承诺站点业务
-> 验收。下文相关字段、adapter 和路由是已经存在的通用扩展骨架及历史设计记录，保留
-> 用于未来恢复范围，不代表首版支持。
+> U2 当前只交付 `inner_plugin_u2` 人工按钮链，不生成默认 SourceProfile、不选择默认
+> 文件策略，也不实现 RSS、站点登录或 Cookie 抓取。用户必须显式创建 U2 profile，
+> 选择下载器、Host 白名单和文件策略；AnimeGoHelper 只提交页面可见条目。
 
 ## 1. 目标
 
@@ -14,7 +13,7 @@ AnimeGoNet 支持多个命名下载器实例，并按输入源选择下载器和
 | 输入源 | 元数据约束 | 下载器实例 | 典型文件策略 |
 |---|---|---|---|
 | `mikan` | `bgmid` 必填；从 Mikan URL/RSS 取得 `mikanid` | `bt`（qBittorrent） | `move`（确认的默认值，不做种） |
-| `u2` | 首版暂缓；保留可空 `anidbid` 的协议骨架 | `pt`（仅回归夹具） | 未决定，不生成默认值 |
+| `u2` | `u2id` 必填；`anidbid` 可空；TV/Movie 人工确认 | 用户显式选择 | 用户显式选择，不生成默认值 |
 
 名称和绑定均可在 Web UI 修改；表中的 `bt`、`pt` 不是硬编码关键字。
 默认 Mikan profile 的 `file_strategy=move` 也是可修改的初始值，不是协议常量；变更只影响之后创建的任务，历史/进行中任务继续使用路由快照。Web 选择 `move` 时必须提示下载完成即移动、无法继续做种。
@@ -128,7 +127,7 @@ POST /api/v1/ingest
 - `mikan`：必须有正整数 `bgmid`，并从 URL/RSS 或 `source_work_id` 得到正整数 `mikanid`。
 - `u2`：`anidbid` 可空；非空时必须是正整数。
 
-保留旧 `/api/rss` 和 `/api/download/manager` 的 Mikan/AnimeGoHelper 行为，内部转换为同一个 ingest command，不复制第二套流水线。旧 AnimeGoHelper 没有显式传 `bgmid` 时允许 Mikan adapter 按上游方式解析补齐；新 `/api/v1/ingest` 的 Mikan 项按产品规则要求显式提供 `bgmid`。U2 沿用相同格式，仅替换 `source` 和对应 `info.anidbid`。
+保留旧 `/api/rss` 和 `/api/download/manager` 的 Mikan/AnimeGoHelper 行为，内部转换为同一个 ingest command，不复制第二套流水线。旧 AnimeGoHelper 没有显式传 `bgmid` 时允许 Mikan adapter 按上游方式解析补齐；新 `/api/v1/ingest` 的 Mikan 项按产品规则要求显式提供 `bgmid`。U2 油猴脚本改用专用 `/api/v1/plugins/inner_plugin_u2/ingest` v1 协议，后端完成强类型校验后再转换为同一个 ingest command。
 
 首版明确采用外部脚本/API模式：油猴、浏览器扩展或其他已登录程序取得标题、带个人 passkey 的 Torrent URL 和可选元数据 ID，再调用 AnimeGoNet。主程序不保存 U2 账号、Cookie，不执行网站登录、页面抓取、验证码或 2FA 流程。
 

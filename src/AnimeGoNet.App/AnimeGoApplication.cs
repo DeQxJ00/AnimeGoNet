@@ -41,6 +41,7 @@ using AnimeGoNet.Data.Notifications;
 using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
+using AnimeGoNet.Data.U2;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -54,6 +55,7 @@ public static class AnimeGoApplication
         AnimeGoOptions? options = null,
         string? accessKey = null,
         string? webUiAccessKey = null,
+        string? u2AccessKey = null,
         bool? runningInContainer = null,
         ITorrentStagingService? torrentStagingService = null,
         IDownloadClientRegistry? downloadClientRegistry = null,
@@ -225,6 +227,11 @@ public static class AnimeGoApplication
             "inner_plugin_mikan:access_key",
             "access_key",
             "web:access_key");
+        u2AccessKey ??= FirstConfigurationValue(
+            builder.Configuration,
+            "ANIMEGO_INNER_PLUGIN_U2_ACCESS_KEY",
+            "inner_plugin_u2_access_key",
+            "inner_plugin_u2:access_key");
         webUiAccessKey ??= FirstConfigurationValue(
             builder.Configuration,
             "ANIMEGO_WEBUI_ACCESS_KEY",
@@ -361,6 +368,7 @@ public static class AnimeGoApplication
             runningInContainer.Value,
             startBackgroundWorkers.Value,
             !string.IsNullOrWhiteSpace(accessKey),
+            !string.IsNullOrWhiteSpace(u2AccessKey),
             !string.IsNullOrWhiteSpace(webUiAccessKey)));
         builder.Services.AddSingleton<RuntimeResourceMetricsService>();
         builder.Services.AddSingleton(legacyDownloaderMigrationState);
@@ -459,6 +467,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<MikanTrustedOffsetStore>();
         builder.Services.AddSingleton<MikanManualSeriesMappingStore>();
         builder.Services.AddSingleton<MikanPluginCallLogStore>();
+        builder.Services.AddSingleton<U2PluginCallLogStore>();
         builder.Services.AddSingleton<MikanPublishGroupStore>();
         builder.Services.AddSingleton<NotificationStore>();
         builder.Services.AddSingleton(new WebhookNotificationSender(
@@ -612,11 +621,20 @@ public static class AnimeGoApplication
         app.Use(async (context, next) =>
         {
             var path = context.Request.Path;
-            var isPluginApi = IsPluginApiPath(path);
+            var isU2PluginApi = IsU2PluginApiPath(path);
+            var isPluginApi = isU2PluginApi || IsPluginApiPath(path);
             var isWebUiApi = !isPluginApi
                 && (path.StartsWithSegments("/api")
                     || path.StartsWithSegments("/websocket"));
-            if (isPluginApi
+            if (isU2PluginApi
+                && (string.IsNullOrWhiteSpace(u2AccessKey)
+                    || !HasValidPluginAccessKey(context.Request, u2AccessKey)))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+            if (!isU2PluginApi
+                && isPluginApi
                 && !string.IsNullOrWhiteSpace(accessKey)
                 && !HasValidPluginAccessKey(context.Request, accessKey))
             {
@@ -1642,6 +1660,9 @@ public static class AnimeGoApplication
         || path.StartsWithSegments("/api/rss")
         || path.StartsWithSegments("/api/download/manager")
         || path.Equals("/api/v1/ingest");
+
+    private static bool IsU2PluginApiPath(PathString path) =>
+        path.Equals("/api/v1/plugins/inner_plugin_u2/ingest");
 
     private static bool HasValidPluginAccessKey(
         HttpRequest request,

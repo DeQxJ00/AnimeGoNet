@@ -29,6 +29,10 @@ public sealed class ExternalQbittorrentDeploymentContractTests
             environment,
             "inner_plugin_mikan__access_key",
             "ANIMEGONET_ACCESS_KEY");
+        AssertRequiredVariable(
+            environment,
+            "inner_plugin_u2__access_key",
+            "ANIMEGONET_U2_ACCESS_KEY");
         AssertScalar(
             environment,
             "webui_access_key",

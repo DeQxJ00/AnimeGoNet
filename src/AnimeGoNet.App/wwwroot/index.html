@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260825-ai-test-responses-default">
+  <link rel="stylesheet" href="/styles.css?v=20260826-u2-plugin">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -229,6 +229,37 @@
           <div class="source-form-actions">
             <button id="web-api-compatibility-reload" type="button" class="secondary-button">重新读取</button>
             <button id="web-api-compatibility-save" type="submit" class="primary-button">保存 AccessKey 并备份</button>
+          </div>
+        </form>
+      </article>
+      <article class="configuration-card web-api-compatibility-card" aria-labelledby="u2-web-api-title">
+        <div class="web-api-compatibility-heading">
+          <div>
+            <p class="eyebrow">U2 userscript integration</p>
+            <h3 id="u2-web-api-title">Web API / AnimeGoHelper (U2) 油猴插件</h3>
+          </div>
+          <span>修改后需重启</span>
+        </div>
+        <p class="muted">U2 使用独立的 <code>inner_plugin_u2.access_key</code> 和专用 v1 导入入口；不会与 Mikan 或 WebUI 鉴权共用密钥。油猴脚本提交前必须人工确认 TV 动画或动画电影。</p>
+        <form id="u2-web-api-form">
+          <div class="source-form-grid">
+            <label class="source-hosts">油猴 API 地址
+              <input id="u2-web-api-url" type="url" readonly>
+              <small>脚本直接调用 <code>/api/v1/plugins/inner_plugin_u2/ingest</code>。</small>
+            </label>
+            <label>AccessKey（明文）
+              <input id="u2-web-api-access-key" type="text" maxlength="512" autocomplete="off" spellcheck="false">
+              <small>默认 123456；只用于 U2 内部插件入口。</small>
+            </label>
+            <label>PluginName
+              <input id="u2-web-api-plugin-name" type="text" value="inner_plugin_u2" readonly>
+              <small>固定内部插件名；请求体无需重复传 PluginName。</small>
+            </label>
+          </div>
+          <p id="u2-web-api-status" class="muted" role="status">正在读取部署配置…</p>
+          <div class="source-form-actions">
+            <button id="u2-web-api-reload" type="button" class="secondary-button">重新读取</button>
+            <button id="u2-web-api-save" type="submit" class="primary-button">保存 AccessKey 并备份</button>
           </div>
         </form>
       </article>
@@ -1440,6 +1471,31 @@
       </div>
     </section>
 
+    <section id="u2-plugin-call-workspace" aria-labelledby="u2-plugin-call-title" data-workspace="sources" data-subview="u2-plugin-calls" data-nav-label="U2 插件调用日志">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">AnimeGoHelper U2 audit</p>
+          <h2 id="u2-plugin-call-title">U2 插件调用日志</h2>
+        </div>
+        <button id="u2-plugin-call-reload" type="button" class="secondary-button">刷新日志</button>
+      </div>
+      <p class="muted">逐项记录 U2 标题、u2id、AniDB ID、发布分类、人工确认的媒体类型、任务 ID 与安全错误码。详情页可直接打开；不保存 AccessKey、Cookie、Torrent URL 或 passkey。</p>
+      <div class="plugin-call-toolbar">
+        <label>结果
+          <select id="u2-plugin-call-result">
+            <option value="">全部</option>
+            <option value="success">成功</option>
+            <option value="partial">部分成功</option>
+            <option value="failed">失败</option>
+          </select>
+        </label>
+        <span id="u2-plugin-call-count" class="muted">正在统计…</span>
+      </div>
+      <div id="u2-plugin-call-list" class="plugin-call-list" aria-live="polite" aria-busy="true" data-ui-state="loading">
+        <p class="ui-state ui-state--loading muted empty" role="status" aria-atomic="true">正在读取 U2 插件调用日志…</p>
+      </div>
+    </section>
+
     <section id="trusted-offset-workspace" aria-labelledby="trusted-offsets-title" data-workspace="sources" data-subview="mikan-offsets" data-nav-label="Mikan 可信 Offset">
       <div class="section-heading">
         <div>
@@ -2089,6 +2145,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260825-ai-test-responses-default"></script>
+    <script type="module" src="/app.js?v=20260826-u2-plugin"></script>
 </body>
 </html>

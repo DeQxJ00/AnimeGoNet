@@ -2,10 +2,10 @@
 
 AnimeGoNet 是 `wetor/AnimeGo develop` 业务行为的 .NET 10 / NativeAOT
 移植。主程序使用 ASP.NET Core Minimal API、SQLite 显式 SQL 和静态
-TypeScript/HTML/CSS WebUI；首版下载器只支持 qBittorrent，可配置多个命名实例，
-正式输入源仅交付 Mikan。U2 已由项目所有者确认为首版暂缓；现有通用
-adapter/API/路由骨架只作为未来扩展兼容面保留，不声明为首版可用功能。Python 插件
-已移除，官方插件均为编译期注册的 C# 实现。
+TypeScript/HTML/CSS WebUI；首版下载器只支持 qBittorrent，可配置多个命名实例。
+Mikan 提供 RSS、手动导入和 AnimeGoHelper；U2 提供 `inner_plugin_u2` 专用手动导入
+API 与 AnimeGoHelper 油猴脚本，不包含 U2 RSS 或站点自动抓取。Python 插件已移除，
+官方插件均为编译期注册的 C# 实现。
 
 当前开发基线和未完成项以 [TODO.md](TODO.md) 为准，上游逐项映射见
 [docs/PORTING_CHECKLIST.md](docs/PORTING_CHECKLIST.md)。
@@ -93,6 +93,7 @@ services:
       DOTNET_RUNNING_IN_CONTAINER: "true"
       TZ: ${TZ:-Asia/Shanghai}
       inner_plugin_mikan__access_key: ${ANIMEGONET_ACCESS_KEY:-123456}
+      inner_plugin_u2__access_key: ${ANIMEGONET_U2_ACCESS_KEY:-123456}
       webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}
       data_path: /data
       download_path: /download/incomplete
@@ -141,7 +142,8 @@ Compose 示例直接支持以下启动参数：
 | `ANIMEGONET_DOWNLOAD_ROOT` | `./download_temp` | qBittorrent 与 AnimeGoNet 共享的下载目录 |
 | `ANIMEGONET_TV_ROOT` | `./jellyfin_tv_data` | TV 整理目标目录 |
 | `ANIMEGONET_MOVIE_ROOT` | `./jellyfin_movie_data` | Movie 整理目标目录 |
-| `ANIMEGONET_ACCESS_KEY` | `123456` | AnimeGoHelper (Mikan) 等内部插件 API 密钥；公网部署必须修改 |
+| `ANIMEGONET_ACCESS_KEY` | `123456` | AnimeGoHelper (Mikan) 内部插件 API 密钥；公网部署必须修改 |
+| `ANIMEGONET_U2_ACCESS_KEY` | `123456` | `inner_plugin_u2` 专用 API 密钥；公网部署必须修改 |
 | `ANIMEGONET_WEBUI_ACCESS_KEY` | 空 | 独立 WebUI 密钥；空值表示不启用 WebUI 鉴权 |
 | `ANIMEGONET_BACKGROUND_WORKERS_ENABLED` | `true` | 是否运行 RSS、下载、匹配和整理后台 Worker |
 

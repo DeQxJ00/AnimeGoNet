@@ -24,6 +24,7 @@ fi
 export ANIMEGONET_IMAGE="$image"
 export ANIMEGONET_INTEGRATION_ROOT="$integration_root"
 export ANIMEGONET_ACCESS_KEY="$access_key"
+export ANIMEGONET_U2_ACCESS_KEY="${ANIMEGONET_U2_ACCESS_KEY:-$access_key}"
 export ANIMEGONET_WEBUI_ACCESS_KEY="$webui_access_key"
 export ANIMEGONET_UID="$test_uid"
 export ANIMEGONET_GID="$test_gid"

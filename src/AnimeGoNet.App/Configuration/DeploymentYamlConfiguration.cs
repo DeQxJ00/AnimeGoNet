@@ -825,6 +825,10 @@ internal static class DeploymentYamlConfiguration
             inner_plugin_mikan:
               access_key: '123456'
 
+            # 内置 U2 插件与 AnimeGoHelper[U2快速下载] 的独立鉴权。
+            inner_plugin_u2:
+              access_key: '123456'
+
             # 唯一出站代理。仅匹配 hosts 的目标使用代理；其余保持直连。
             outbound_proxy:
               url: ''

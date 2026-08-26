@@ -1,29 +1,22 @@
 namespace AnimeGoNet.App.Tests.Delivery;
 
-public sealed class DeferredU2ScopeContractTests
+public sealed class U2PluginScopeContractTests
 {
     [Fact]
-    public void FirstReleaseDocsDeferU2WithoutDeletingTheGenericScaffolding()
+    public void ManualU2PluginIsDeliveredWithoutSiteAutomationOrImplicitDefaults()
     {
         var root = RepositoryRoot();
         var todo = Read(root, "TODO.md");
         var readme = Read(root, "README.md");
         var routing = Read(root, "docs/SOURCE_ROUTING.md");
         var checklist = Read(root, "docs/PORTING_CHECKLIST.md");
-        var decision = Read(root, "docs/verification/2026-08-09-u2-deferred.md");
 
-        var decisionLine = Assert.Single(
-            todo.Split('\n'),
-            line => line.Contains("确认 U2 首版暂缓", StringComparison.Ordinal));
-        Assert.StartsWith("- [x]", decisionLine.Trim(), StringComparison.Ordinal);
-        Assert.DoesNotContain("确认 U2 默认文件策略", todo, StringComparison.Ordinal);
-
-        Assert.Contains("正式输入源仅交付 Mikan", readme, StringComparison.Ordinal);
-        Assert.Contains("U2 已由项目所有者确认为首版暂缓", readme, StringComparison.Ordinal);
+        Assert.Contains("inner_plugin_u2", todo, StringComparison.Ordinal);
+        Assert.Contains("inner_plugin_u2", readme, StringComparison.Ordinal);
+        Assert.Contains("不包含 U2 RSS 或站点自动抓取", readme, StringComparison.Ordinal);
         Assert.Contains("不生成默认 SourceProfile", routing, StringComparison.Ordinal);
-        Assert.Contains("| 外部 U2 调用 | 保留的通用 source adapter/API/路由骨架 | 扩展 | 暂缓 |", checklist, StringComparison.Ordinal);
-        Assert.Contains("| U2 source adapter | 保留编译期扩展骨架 | 扩展 | 暂缓 |", checklist, StringComparison.Ordinal);
-        Assert.Contains("existing compile-time adapter", decision, StringComparison.Ordinal);
+        Assert.Contains("| 外部 U2 调用 | `inner_plugin_u2` 专用 API + AnimeGoHelper U2 油猴脚本 | 扩展 | 已验证 |", checklist, StringComparison.Ordinal);
+        Assert.Contains("| U2 source adapter | 编译期 adapter + `inner_plugin_u2` 手动入口 | 扩展 | 已验证 |", checklist, StringComparison.Ordinal);
 
         var catalog = Read(root, "src/AnimeGoNet.Core/Plugins/BuiltInPluginCatalog.cs");
         Assert.Contains("new U2SourceAdapter()", catalog, StringComparison.Ordinal);

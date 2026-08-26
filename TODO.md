@@ -35,14 +35,14 @@
 - [x] 确认重复集默认只认首个成功完成记录；后续同集在 RSS 解析阶段命中完成记录即停止，删除该业务记录后允许重新进入流程。
 - [x] 确认附属文件首版只整理字幕；唯一匹配 EP 时随视频重命名并保留多语言/轨道后缀，无法对应时季度已知则进入 `Other`。
 - [x] 确认支持多个命名下载器实例，并按输入源配置下载器、元数据字段、过滤/匹配规则、文件/做种策略；Mikan/U2 使用同一通用导入流水线和 API 契约。
-- [x] 原多源示例路由已完成通用骨架：Mikan（bgmid必填）→ `bt` qBittorrent；U2 → `pt` 仅保留 adapter/API/路由回归夹具，不作为首版支持承诺。
+- [x] 多源路由已完成：Mikan 与 U2 均使用 revision 化 SourceProfile 绑定命名 qBittorrent；U2 的站点入口采用 `inner_plugin_u2` 手动提交，不包含 U2 RSS 自动抓取。
 - [x] 确认项目只支持 qBittorrent 下载器及其多命名实例；取消 Transmission 适配计划，旧类型仅作不支持诊断。
-- [x] U2 原外部油猴/扩展/API 提交设计已记录，但项目所有者现已确认首版暂缓；主程序不新增站点登录、抓取、账号/Cookie 或默认来源配置。
+- [x] U2 油猴/API 使用专用 v1 协议提交 u2id、标题、详情 URL、带 passkey 的 Torrent URL、AniDB ID、发布分类和人工确认的 TV/Movie；主程序不登录 U2、不读取 Cookie、不实现站点自动抓取。
 - [x] 确认沿用并强类型化 Mikan `source + data[].torrent + data[].info` 批量格式，所有来源统一调用 `/api/v1/ingest`；旧 API 转同一 command。
 - [x] 确认跨输入源按 `(TMDB Series, Season, Episode)` 全局去重；只跳过已完成 EP，同剧集和多文件 Torrent 中的其他 EP 不受影响。
 - [x] 确认 Mikan RSS 同集优选的黑白名单是前置资格过滤，单候选也执行；只有资格过滤后同一 `mikanid+来源EP` 仍有多个候选时才运行可配置优先级组。
 - [x] 确认默认 Mikan SourceProfile 使用 `move`：下载完成后移动到媒体库、不继续做种；Web可改其他策略且只影响新任务。
-- [x] 确认 U2 首版暂缓：不选择默认文件策略、不生成默认 SourceProfile、不做站点业务验收；现有通用 adapter/API/路由骨架保留，未来恢复范围时重新确认策略。
+- [x] 确认 U2 手动插件不选择默认文件策略且不静默生成 SourceProfile；用户在 WebUI 创建启用的 U2 SourceProfile 并显式选择下载器/策略，油猴脚本填写其 ID。
 - [x] Linux Go 容器基线 job 已验证：Ubuntu 24.04 x86_64 CT 使用官方 `golang:1.22.10-bookworm` 与上游 `c7475df`，以 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -p 1 -count=1 -json ./...` 串行执行；结果 exit 0、3109 条事件、100 个上游 skip，`events.jsonl`、stderr、稳定 summary 和 SHA-256 均已取回校验。Docker Hub 下载使用所有者提供的代理，官方摘要和清理已记录。
 - [x] 生成上游 fixture SHA-256 清单和 OpenAPI 快照。
 
@@ -181,7 +181,7 @@
 - [x] 实现下载器路径可见性与硬链接能力探测：仅在显式 API/WebUI 操作时向实例 `download_path` 和全局 `save_path` 写入同名随机临时文件，验证后尽力清理；缺目录、权限、跨文件系统/挂载和平台不支持均返回稳定脱敏错误码，Windows/Linux/macOS 使用 AOT-safe 原生调用。
 - [x] 建立隔离 Docker Compose 下载环境：专用 Compose 只绑定随机回环端口，使用临时 data/download/qB profile 根目录、非 root AnimeGoNet、只读根文件系统和退出清理；不复用 TestSpace 或生产卷。
 - [x] qBittorrent 真实容器 smoke 已接入 Docker CI 并在 Ubuntu 24.04 x86_64 CT 实跑通过：从首启日志读取临时密码后设置隔离测试密码，逐实例覆盖登录、版本、默认路径、reconnect、add/list/files/file-priority/start/stop/delete；合法 128 KiB WebSeed 完成统一导入→真实下载→SQLite→move/NFO/sidecar/completion→`deleteFiles=false` cleanup，唯一 category/tag/hash、容器、镜像和临时目录均精确清理。
-- [x] 双实例容器统一导入门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：隔离 fixture 提供不同 info-hash，AnimeGoNet 后台 worker 通过 `/api/v1/ingest` 将 `mikan-ci` 实际投递到 `bt`、将测试用 U2 route 骨架实际投递到 `pt`；staged 响应不泄露 URL，目标实例 hash/category/tag/暂停状态/保存路径正确，另一实例不存在同 hash，测试任务/文件/tag/category 已精确删除。U2 首版业务仍暂缓。
+- [x] 双实例容器统一导入门禁已在 Ubuntu 24.04 x86_64 CT 实跑通过：隔离 fixture 提供不同 info-hash，AnimeGoNet 后台 worker 通过统一导入将 `mikan-ci` 实际投递到 `bt`、将 U2 route 实际投递到 `pt`；staged 响应不泄露 URL，目标实例 hash/category/tag/暂停状态/保存路径正确，另一实例不存在同 hash，测试任务/文件/tag/category 已精确删除。U2 专用油猴入口另由 API/DOM 契约验证，尚未执行私人 Tracker 真实下载。
 - [x] 旧 YAML/环境变量出现 Transmission 时读取并生成 `UnsupportedDownloaderType`：按 `ANIMEGO_CLIENT`→显式 `ANIMEGO_CONFIG`/`--config`→`data_path/animego.yaml` 检测，只读取 `setting.client.client` 且不回显凭据；诊断未解除时强制关闭 workers、替换为空下载器 registry、拒绝导入/恢复/连接与路径测试，Web/API 保持可用并显示修复原因，绝不静默转成 qB。
 
 ## P8 — 下载、重命名、刮削
@@ -294,6 +294,7 @@
 - [x] 用未修改 AnimeGoHelper 原脚本 + Tampermonkey API/Mikan 隔离 fixture 页验证“单集”“全集”“上传/获取过滤配置”；两条 Chromium 用例同时校验 SHA-256 Access-Key、真实旧请求体/响应 envelope 和零 console/page error。
 - [x] 一级“插件”拆分“内部插件 / 外部插件”；内部插件页提供 `Web API / AnimeGoHelper (Mikan) 油猴插件`，明文回填/修改部署 AccessKey（新部署默认 `123456`）、自动显示 `/api` 地址、固定 `PluginName=inner_plugin_mikan`，并保留旧 `filter/mikan_tool.py` 后端别名。
 - [x] 为 AnimeGoHelper 的 Mikan “单 / 全”入口增加持久化调用审计：明确区分单集、批量单集、全集与选集，记录 TV/Movie、接收/未接收数量、耗时、稳定错误码及逐项标题、Mikan 身份和任务 ID；schema v64 补充逐项标题，“输入源 → Mikan → 插件调用日志”可按模式和结果筛选、展开明细并跳转关联任务。审计不保存 Cookie、AccessKey、RSS/Torrent URL 或 passkey。
+- [x] 新增 `inner_plugin_u2`：专用 AccessKey 和 `/api/v1/plugins/inner_plugin_u2/ingest` v1 入口逐项校验 u2id、详情/下载 URL 同源同 ID、AniDB、分类及人工确认的 TV/Movie；标题含 `movie` 只负责在油猴确认框预选 Movie，其余预选 TV，任何提交均须人工确认。schema v66 持久审计可筛选、展开详情并跳转任务，不保存 Torrent URL、AccessKey 或 passkey。
 - [x] 增加 schema v63 Mikan 字幕组对照表：仅以 Episode/RSS 已确认的 `mikanid+groupid` 请求可配置 Mikan Base URL 的 `/Home/Bangumi/{mikanid}`，复用作品页“字幕组列表”解析器并按 groupid 精确取名，成功长期保存、失败 6 小时退避；不再依赖 PublishGroup 页面或“作品年表”标题。人工名称优先且不会被后台覆盖，可显式恢复自动获取；“输入源 → Mikan → 字幕组对照”支持逐项编辑，动画库已下载 Episode 在有任务证据时显示字幕组名称和 groupid。
 - [x] 将外部插件/API 与 WebUI 鉴权完全拆分：`inner_plugin_mikan.access_key` 仅保护 AnimeGoHelper、兼容插件接口和精确的统一导入端点，`web.webui_access_key` 独立保护其余管理 API/日志 WebSocket且默认留空；两把密钥使用不同 header/query、不能交叉授权。应用配置页明文回填并保存备份，不再展示专用地址；裸地址由登录窗口/顶部 AccessKey 入口完成鉴权，旧查询参数书签继续兼容。旧 `web.access_key` 只作启动兼容读取，WebUI 保存时迁移删除；Mikan URL 解析与 RSS 手动导入保持在 WebUI 边界。
 

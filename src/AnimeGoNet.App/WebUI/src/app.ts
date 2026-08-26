@@ -323,6 +323,7 @@ interface RuntimeConfiguration {
     running_in_container: boolean;
     background_workers_enabled: boolean;
     inner_plugin_mikan_access_key_configured: boolean;
+    inner_plugin_u2_access_key_configured: boolean;
     webui_access_key_configured: boolean;
     web_host: string;
     web_port: number;
@@ -1441,6 +1442,42 @@ interface MikanPluginCallLogList {
   items: MikanPluginCallLog[];
 }
 
+interface U2PluginCallLogItem {
+  index: number;
+  u2id: number | null;
+  title: string;
+  details_url: string;
+  anidbid: number | null;
+  category_id: number | null;
+  category_name: string | null;
+  media_type: "tv" | "movie" | "unknown";
+  task_id: string | null;
+  status: string;
+  failure_code: string | null;
+}
+
+interface U2PluginCallLog {
+  id: string;
+  endpoint: string;
+  source_profile_id: string;
+  result: "success" | "partial" | "failed";
+  requested_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  failure_code: string | null;
+  duration_ms: number;
+  started_at_utc: string;
+  completed_at_utc: string;
+  items: U2PluginCallLogItem[];
+}
+
+interface U2PluginCallLogList {
+  page: number;
+  page_size: number;
+  total_count: number;
+  items: U2PluginCallLog[];
+}
+
 interface MikanPublishGroupItem {
   groupid: number;
   group_name: string | null;
@@ -2291,6 +2328,13 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
           { id: "mikan-legacy-filter", label: "五级过滤" },
         ],
       },
+      {
+        id: "u2",
+        label: "U2",
+        children: [
+          { id: "u2-plugin-calls", label: "插件调用日志" },
+        ],
+      },
     ],
   },
   "bangumi-cache": {
@@ -2505,6 +2549,9 @@ function selectWorkspace(
   if (workspace === "logs" && selectedSubview === "matching") void loadMatchingLogs();
   if (workspace === "sources" && selectedSubview === "mikan-plugin-calls") {
     void loadMikanPluginCallLogs();
+  }
+  if (workspace === "sources" && selectedSubview === "u2-plugin-calls") {
+    void loadU2PluginCallLogs();
   }
   if (workspace === "sources" && selectedSubview === "mikan-groups") {
     void loadMikanPublishGroups();
@@ -6196,6 +6243,13 @@ function animeGoHelperApiUrl(): string {
   return new URL("/api", window.location.origin).href.replace(/\/$/, "");
 }
 
+function animeGoHelperU2ApiUrl(): string {
+  return new URL(
+    "/api/v1/plugins/inner_plugin_u2/ingest",
+    window.location.origin,
+  ).href;
+}
+
 async function loadWebUiAuthentication(): Promise<void> {
   const status = element<HTMLElement>("#webui-authentication-status");
   const hostInput = element<HTMLInputElement>("#webui-listen-host");
@@ -6481,6 +6535,82 @@ async function saveWebApiCompatibility(event: SubmitEvent): Promise<void> {
     status.textContent = "AccessKey 已写入并备份部署配置；请重启 AnimeGoNet。油猴插件填写这里的同一明文值，PluginName 保持 inner_plugin_mikan。";
   } catch (error) {
     status.textContent = `AccessKey 保存失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
+}
+
+async function loadU2WebApiCompatibility(): Promise<void> {
+  const status = element<HTMLElement>("#u2-web-api-status");
+  const keyInput = element<HTMLInputElement>("#u2-web-api-access-key");
+  const reload = element<HTMLButtonElement>("#u2-web-api-reload");
+  const save = element<HTMLButtonElement>("#u2-web-api-save");
+  element<HTMLInputElement>("#u2-web-api-url").value = animeGoHelperU2ApiUrl();
+  element<HTMLInputElement>("#u2-web-api-plugin-name").value = "inner_plugin_u2";
+  status.textContent = "正在读取 inner_plugin_u2.access_key…";
+  reload.disabled = true;
+  save.disabled = true;
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const plugin = configuration.inner_plugin_u2 === undefined
+      ? {} as JsonObject
+      : jsonObject(configuration.inner_plugin_u2, "inner_plugin_u2 配置");
+    if (plugin.access_key !== undefined && typeof plugin.access_key !== "string") {
+      throw new Error("inner_plugin_u2.access_key 不是字符串");
+    }
+    keyInput.value = plugin.access_key ?? "";
+    status.textContent = plugin.access_key
+      ? "已回填 inner_plugin_u2.access_key；保存会自动备份 animego.yaml，重启后生效。"
+      : "当前未配置 U2 AccessKey；新部署模板默认使用 123456。";
+  } catch (error) {
+    keyInput.value = "";
+    status.textContent = `U2 AccessKey 读取失败：${errorMessage(error, "未知错误")}`;
+  } finally {
+    reload.disabled = false;
+    save.disabled = false;
+  }
+}
+
+async function saveU2WebApiCompatibility(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const status = element<HTMLElement>("#u2-web-api-status");
+  const reload = element<HTMLButtonElement>("#u2-web-api-reload");
+  const save = element<HTMLButtonElement>("#u2-web-api-save");
+  const requestedKey = element<HTMLInputElement>("#u2-web-api-access-key").value;
+  if (!requestedKey) {
+    status.textContent = "U2 AccessKey 不能为空。";
+    return;
+  }
+  reload.disabled = true;
+  save.disabled = true;
+  status.textContent = "正在重新读取、校验并备份部署配置…";
+  try {
+    const configuration = await readDeploymentConfiguration();
+    const plugin = configuration.inner_plugin_u2 === undefined
+      ? {} as JsonObject
+      : jsonObject(configuration.inner_plugin_u2, "inner_plugin_u2 配置");
+    if (plugin.access_key === requestedKey) {
+      status.textContent = "AccessKey 没有变化，无需保存。";
+      return;
+    }
+    plugin.access_key = requestedKey;
+    configuration.inner_plugin_u2 = plugin;
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await authenticatedFetch("/api/config?key=all&backup=true", {
+      method: "PUT",
+      headers: requestHeaders,
+      body: JSON.stringify({ key: "all", backup: true, config: configuration }),
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const envelope = await response.json() as LegacyApiEnvelope<unknown>;
+    if (envelope.code !== 200) {
+      throw new Error(envelope.msg || `配置接口返回 code ${envelope.code}`);
+    }
+    status.textContent = "U2 AccessKey 已写入并备份；请重启 AnimeGoNet，并在 U2 油猴脚本填写同一明文值。";
+  } catch (error) {
+    status.textContent = `U2 AccessKey 保存失败：${errorMessage(error, "未知错误")}`;
   } finally {
     reload.disabled = false;
     save.disabled = false;
@@ -8270,6 +8400,118 @@ async function loadMikanPluginCallLogs(): Promise<void> {
       container,
       "error",
       `插件调用日志读取失败：${errorMessage(error, "未知错误")}`,
+    );
+  }
+}
+
+async function loadU2PluginCallLogs(): Promise<void> {
+  const container = element<HTMLElement>("#u2-plugin-call-list");
+  setRegionState(container, "loading");
+  const result = element<HTMLSelectElement>("#u2-plugin-call-result").value;
+  const query = new URLSearchParams({ page: "1", page_size: "100" });
+  if (result) query.set("result", result);
+  try {
+    const response = await authenticatedFetch(
+      `/api/v1/logs/u2-plugin-calls?${query}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const body = await response.json() as U2PluginCallLogList;
+    element<HTMLElement>("#u2-plugin-call-count").textContent =
+      `共 ${body.total_count.toLocaleString("zh-CN")} 次调用`;
+    if (body.items.length === 0) {
+      renderRegionMessage(container, "empty", "暂无符合条件的 U2 插件调用记录");
+      return;
+    }
+    renderRegionContent(container, ...body.items.map(item => {
+      const card = document.createElement("details");
+      card.className = `plugin-call-card ${item.result}`;
+      const summary = document.createElement("summary");
+      const heading = document.createElement("strong");
+      heading.textContent = `U2 · ${item.source_profile_id}`;
+      const status = document.createElement("span");
+      status.className = `badge ${item.result}`;
+      status.textContent = item.result === "success" ? "成功"
+        : item.result === "partial" ? "部分成功" : "失败";
+      const counts = document.createElement("span");
+      counts.className = "muted";
+      counts.textContent = `请求 ${item.requested_count} · 接收 ${item.accepted_count} · 未接收 ${item.rejected_count}`;
+      const audit = document.createElement("span");
+      audit.className = "muted";
+      audit.textContent = `${new Date(item.completed_at_utc).toLocaleString()} · ${item.duration_ms} ms`;
+      summary.append(heading, status, counts, audit);
+      const bodyElement = document.createElement("div");
+      bodyElement.className = "plugin-call-body";
+      const endpoint = document.createElement("p");
+      endpoint.textContent = `入口 ${item.endpoint}${item.failure_code ? ` · ${item.failure_code}` : ""}`;
+      bodyElement.append(endpoint);
+      if (item.items.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = "本次调用没有生成项目明细。";
+        bodyElement.append(empty);
+      } else {
+        const table = document.createElement("table");
+        table.className = "compact-table";
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["标题 / U2", "AniDB", "分类", "类型", "状态", "关联任务"].forEach(label => {
+          const cell = document.createElement("th");
+          cell.textContent = label;
+          headRow.append(cell);
+        });
+        head.append(headRow);
+        const tableBody = document.createElement("tbody");
+        item.items.forEach(detail => {
+          const row = document.createElement("tr");
+          const titleCell = document.createElement("td");
+          const detailsLink = document.createElement("a");
+          detailsLink.href = detail.details_url;
+          detailsLink.target = "_blank";
+          detailsLink.rel = "noopener noreferrer";
+          detailsLink.textContent = `${detail.title} · #${detail.u2id ?? "—"}`;
+          detailsLink.title = detail.title;
+          titleCell.append(detailsLink);
+          row.append(titleCell);
+          [
+            detail.anidbid === null ? "—" : String(detail.anidbid),
+            `${detail.category_name ?? "—"}${detail.category_id === null ? "" : ` · ${detail.category_id}`}`,
+            detail.media_type === "movie" ? "Movie" : detail.media_type === "tv" ? "TV" : "未知",
+            `${detail.status}${detail.failure_code ? ` · ${detail.failure_code}` : ""}`,
+          ].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.append(cell);
+          });
+          const taskCell = document.createElement("td");
+          if (detail.task_id === null) {
+            taskCell.textContent = "—";
+          } else {
+            const taskLink = document.createElement("a");
+            taskLink.className = "download-metadata-link";
+            taskLink.href = "#/tasks/metadata";
+            taskLink.textContent = `查看任务 · ${detail.task_id.slice(0, 8)}`;
+            taskLink.title = detail.task_id;
+            taskLink.addEventListener("click", event => {
+              event.preventDefault();
+              openMetadataTaskFromMatchingLog(detail.task_id!);
+            });
+            taskCell.append(taskLink);
+          }
+          row.append(taskCell);
+          tableBody.append(row);
+        });
+        table.append(head, tableBody);
+        bodyElement.append(table);
+      }
+      card.append(summary, bodyElement);
+      return card;
+    }));
+  } catch (error) {
+    renderRegionMessage(
+      container,
+      "error",
+      `U2 插件调用日志读取失败：${errorMessage(error, "未知错误")}`,
     );
   }
 }
@@ -13519,6 +13761,10 @@ element<HTMLButtonElement>("#mikan-plugin-call-reload").addEventListener(
   "click",
   () => void loadMikanPluginCallLogs(),
 );
+element<HTMLButtonElement>("#u2-plugin-call-reload").addEventListener(
+  "click",
+  () => void loadU2PluginCallLogs(),
+);
 element<HTMLButtonElement>("#mikan-publish-group-reload").addEventListener(
   "click",
   () => void loadMikanPublishGroups(),
@@ -13530,6 +13776,10 @@ element<HTMLSelectElement>("#mikan-plugin-call-mode").addEventListener(
 element<HTMLSelectElement>("#mikan-plugin-call-result").addEventListener(
   "change",
   () => void loadMikanPluginCallLogs(),
+);
+element<HTMLSelectElement>("#u2-plugin-call-result").addEventListener(
+  "change",
+  () => void loadU2PluginCallLogs(),
 );
 element<HTMLSelectElement>("#trusted-offset-blacklist-scope").addEventListener(
   "change",
@@ -13576,6 +13826,7 @@ element<HTMLButtonElement>("#configuration-reload").addEventListener("click", ()
     loadConfiguration(),
     loadDeploymentDataPath(),
     loadWebApiCompatibility(),
+    loadU2WebApiCompatibility(),
     loadWebUiAuthentication(),
   ]);
 });
@@ -13602,6 +13853,14 @@ element<HTMLButtonElement>("#web-api-compatibility-reload").addEventListener(
 element<HTMLFormElement>("#web-api-compatibility-form").addEventListener(
   "submit",
   (event) => void saveWebApiCompatibility(event),
+);
+element<HTMLButtonElement>("#u2-web-api-reload").addEventListener(
+  "click",
+  () => void loadU2WebApiCompatibility(),
+);
+element<HTMLFormElement>("#u2-web-api-form").addEventListener(
+  "submit",
+  (event) => void saveU2WebApiCompatibility(event),
 );
 element<HTMLButtonElement>("#configuration-edit-paths").addEventListener(
   "click",
@@ -14223,6 +14482,7 @@ void loadMovieLibrary();
 void loadConfiguration().then(() => loadDeploymentDataPath());
 void loadWebUiAuthentication();
 void loadWebApiCompatibility();
+void loadU2WebApiCompatibility();
 void loadConfigurationBackups();
 void loadConfigurationBackupAutomation();
 void loadDownloads();
@@ -14235,6 +14495,7 @@ void loadLegacyMikanFilter();
 void loadTrustedOffsets();
 void loadMikanManualSeriesMappings();
 void loadMikanPluginCallLogs();
+void loadU2PluginCallLogs();
 void loadMikanPublishGroups();
 updateTrustedOffsetBlacklistFields();
 void loadTrustedOffsetBlacklist();

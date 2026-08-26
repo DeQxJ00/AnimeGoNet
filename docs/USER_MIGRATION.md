@@ -83,8 +83,9 @@ Bolt 缓存不是规范业务数据库。需要时按
 2. `GET /ping` 返回成功；带 Access Key 请求 `GET /api/v1/status`，检查
    `database_schema_version`、`native_aot`、来源、下载器和外部插件诊断。
 3. WebUI 中逐一执行下载器连接/路径探测，确认路径映射后再启用后台 worker。
-4. 核对 Mikan 来源路由预览进入预期 qB 实例并使用预期文件策略。U2 首版暂缓，
-   不应为新安装创建默认来源；历史自定义 profile 只作为未来兼容数据保留。
+4. 核对 Mikan 来源路由预览进入预期 qB 实例并使用预期文件策略。使用 U2 插件时，
+   显式创建 adapter=`u2` 的 profile、选择下载器/文件策略/Host 白名单，并把该 ID
+   填入 AnimeGoHelper U2 设置；新安装不会静默创建默认 U2 来源。
 5. 只用明确、合法、可清理的测试 Torrent 完成一次导入；不得借迁移测试触碰私人任务。
 6. 核对 TMDB Series/Season/Episode、整理目标、NFO、字幕语言后缀和完成记录。
 

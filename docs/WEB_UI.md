@@ -6,9 +6,9 @@ WebUI 在 `:root` 明确使用 `16px` 作为 `rem` 基准，避免 Chrome“字�
 
 一级菜单“通知”包含“通知渠道”和“发送记录”。渠道编辑器直接回填本地凭据，提供 Bark详细参数以及通用 Webhook、Discord、Slack、Telegram、Server酱、PushPlus原生配置；测试按钮会真实发送并记录 HTTP状态、稳定错误码、耗时和响应摘要。
 
-首版正式输入源仅为 Mikan。页面中仍能显示或编辑历史/自定义 U2 adapter 值，
-是因为通用 SourceProfile 骨架需要保持数据兼容；项目所有者已确认 U2 首版暂缓，
-不提供默认 profile、默认文件策略或站点业务支持。
+U2 采用人工按钮链：内部插件页配置 `inner_plugin_u2.access_key`，输入源页创建并
+显式配置 U2 SourceProfile；“输入源 → U2 → 插件调用日志”查看逐项结果。程序不提供
+默认 U2 profile/文件策略，也不实现 U2 RSS、站点登录或 Cookie 抓取。
 
 本文固定首版本地 Web UI 的动画作品列表、季度详情和排序语义。页面展示的是 AnimeGoNet 已纳管的作品，不把下载器任务列表当成媒体库。
 

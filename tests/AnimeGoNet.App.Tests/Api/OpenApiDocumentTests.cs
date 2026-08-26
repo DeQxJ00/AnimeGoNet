@@ -89,6 +89,16 @@ public sealed partial class OpenApiDocumentTests
                 .ValueKind);
         Assert.True(ingest.GetProperty("responses").TryGetProperty("200", out _));
 
+        var u2Ingest = Operation(
+            root,
+            "/api/v1/plugins/inner_plugin_u2/ingest",
+            "post");
+        Assert.Equal(
+            ["AnimeGoAccessKey", "LegacyAccessKey", "LegacyAccessKeyQuery"],
+            u2Ingest.GetProperty("security").EnumerateArray().Skip(1)
+                .Select(item => Assert.Single(item.EnumerateObject()).Name));
+        Assert.True(u2Ingest.GetProperty("requestBody").GetProperty("required").GetBoolean());
+
         var manualIngest = Operation(root, "/api/v1/ingest/manual", "post");
         Assert.Equal(
             ["AnimeGoWebUiAccessKey", "WebUiAccessKey", "WebUiAccessKeyQuery"],

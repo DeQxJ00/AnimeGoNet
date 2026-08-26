@@ -495,6 +495,7 @@ public sealed record DeploymentConfigurationResponse(
     [property: JsonPropertyName("running_in_container")] bool RunningInContainer,
     [property: JsonPropertyName("background_workers_enabled")] bool BackgroundWorkersEnabled,
     [property: JsonPropertyName("inner_plugin_mikan_access_key_configured")] bool InnerPluginMikanAccessKeyConfigured,
+    [property: JsonPropertyName("inner_plugin_u2_access_key_configured")] bool InnerPluginU2AccessKeyConfigured,
     [property: JsonPropertyName("webui_access_key_configured")] bool WebUiAccessKeyConfigured,
     [property: JsonPropertyName("web_host")] string WebHost,
     [property: JsonPropertyName("web_port")] int WebPort,
@@ -582,6 +583,42 @@ public sealed record TorrentFetchConfigurationResponse(
 public sealed record IngestBatchRequest(
     [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("data")] IReadOnlyList<IngestItemRequest?>? Data);
+
+public sealed record U2PluginIngestRequest(
+    [property: JsonPropertyName("schema_version")] int SchemaVersion,
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("items")] IReadOnlyList<U2PluginIngestItemRequest?>? Items);
+
+public sealed record U2PluginIngestItemRequest(
+    [property: JsonPropertyName("u2id")] int U2Id,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("details_url")] string? DetailsUrl,
+    [property: JsonPropertyName("torrent_url")] string? TorrentUrl,
+    [property: JsonPropertyName("anidbid")] int? AniDbId,
+    [property: JsonPropertyName("category")] U2PluginCategoryRequest? Category,
+    [property: JsonPropertyName("media_type")] string? MediaType);
+
+public sealed record U2PluginCategoryRequest(
+    [property: JsonPropertyName("id")] int? Id,
+    [property: JsonPropertyName("name")] string? Name);
+
+public sealed record U2PluginIngestResponse(
+    [property: JsonPropertyName("plugin")] string Plugin,
+    [property: JsonPropertyName("schema_version")] int SchemaVersion,
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("accepted_count")] int AcceptedCount,
+    [property: JsonPropertyName("rejected_count")] int RejectedCount,
+    [property: JsonPropertyName("items")] IReadOnlyList<U2PluginIngestItemResponse> Items);
+
+public sealed record U2PluginIngestItemResponse(
+    [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("u2id")] int? U2Id,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("ingest_id")] string? IngestId,
+    [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
+    [property: JsonPropertyName("source_profile_revision")] long? SourceProfileRevision,
+    [property: JsonPropertyName("downloader_id")] string? DownloaderId,
+    [property: JsonPropertyName("errors")] IReadOnlyList<string> Errors);
 
 public sealed record MikanEpisodeResolveRequest(
     [property: JsonPropertyName("source_profile_id")] string? SourceProfileId,
@@ -862,6 +899,39 @@ public sealed record MikanPluginCallLogItemResponse(
     [property: JsonPropertyName("task_id")] string? TaskId,
     [property: JsonPropertyName("mikanid")] int? MikanId,
     [property: JsonPropertyName("groupid")] int? GroupId,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("failure_code")] string? FailureCode);
+
+public sealed record U2PluginCallLogListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_count")] int TotalCount,
+    [property: JsonPropertyName("items")] IReadOnlyList<U2PluginCallLogResponse> Items);
+
+public sealed record U2PluginCallLogResponse(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("endpoint")] string Endpoint,
+    [property: JsonPropertyName("source_profile_id")] string SourceProfileId,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("requested_count")] int RequestedCount,
+    [property: JsonPropertyName("accepted_count")] int AcceptedCount,
+    [property: JsonPropertyName("rejected_count")] int RejectedCount,
+    [property: JsonPropertyName("failure_code")] string? FailureCode,
+    [property: JsonPropertyName("duration_ms")] long DurationMilliseconds,
+    [property: JsonPropertyName("started_at_utc")] DateTimeOffset StartedAtUtc,
+    [property: JsonPropertyName("completed_at_utc")] DateTimeOffset CompletedAtUtc,
+    [property: JsonPropertyName("items")] IReadOnlyList<U2PluginCallLogItemResponse> Items);
+
+public sealed record U2PluginCallLogItemResponse(
+    [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("u2id")] int? U2Id,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("details_url")] string DetailsUrl,
+    [property: JsonPropertyName("anidbid")] int? AniDbId,
+    [property: JsonPropertyName("category_id")] int? CategoryId,
+    [property: JsonPropertyName("category_name")] string? CategoryName,
+    [property: JsonPropertyName("media_type")] string MediaType,
+    [property: JsonPropertyName("task_id")] string? TaskId,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("failure_code")] string? FailureCode);
 

@@ -39,6 +39,7 @@ using AnimeGoNet.Data.Notifications;
 using AnimeGoNet.Data.Rules;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
+using AnimeGoNet.Data.U2;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -161,6 +162,7 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/metadata/tasks/{taskId}/attempts", MetadataTaskAttempts);
         app.MapGet("/api/v1/logs/ai-invocations", AiInvocationLogs);
         app.MapGet("/api/v1/logs/mikan-plugin-calls", ListMikanPluginCallLogs);
+        app.MapGet("/api/v1/logs/u2-plugin-calls", ListU2PluginCallLogs);
         app.MapGet("/api/v1/logs/ai-invocations/{runId}/debug", AiInvocationDebug);
         app.MapDelete("/api/v1/logs/ai-invocations/{runId}/debug", DeleteAiInvocationDebug);
         app.MapGet("/api/v1/notifications/channels", ListNotificationChannels);
@@ -218,6 +220,7 @@ public static class ApiEndpoints
             "/api/v1/metadata/pending-tmdb/{bangumiSubjectId:int}/recover",
             RecoverPendingTmdb);
         app.MapPost("/api/v1/ingest", Ingest);
+        app.MapPost("/api/v1/plugins/inner_plugin_u2/ingest", IngestU2Plugin);
         app.MapPost("/api/v1/ingest/manual", Ingest);
         app.MapPost("/api/v1/ingest/mikan/resolve", ResolveMikanEpisode);
         app.MapPost("/api/v1/rss/ingest", RssIngest);
@@ -755,8 +758,11 @@ public static class ApiEndpoints
             "port": "WebUI 监听端口，范围 0-65535；0 由系统分配临时端口",
             "webui_access_key": "WebUI 管理接口访问密钥；可留空"
           },
-          "inner_plugin_mikan": {
+            "inner_plugin_mikan": {
             "access_key": "AnimeGoHelper (Mikan) 与统一导入 API 访问密钥"
+          },
+          "inner_plugin_u2": {
+            "access_key": "AnimeGoHelper (U2) 专用导入 API 访问密钥"
           },
           "downloaders": "按稳定 ID 配置 qBittorrent 实例",
           "sources": "按输入源绑定下载器、规则与文件策略",
@@ -2040,6 +2046,7 @@ public static class ApiEndpoints
                 runtime.RunningInContainer,
                 runtime.BackgroundWorkersEnabled,
                 runtime.InnerPluginMikanAccessKeyConfigured,
+                runtime.InnerPluginU2AccessKeyConfigured,
                 runtime.WebUiAccessKeyConfigured,
                 options.Web.Host,
                 options.Web.Port,
@@ -5686,6 +5693,57 @@ public static class ApiEndpoints
                     item.FailureCode)).ToArray())).ToArray()));
     }
 
+    private static async Task<IResult> ListU2PluginCallLogs(
+        int? page,
+        int? page_size,
+        string? result,
+        U2PluginCallLogStore logs,
+        CancellationToken cancellationToken)
+    {
+        var effectivePage = page ?? 1;
+        var effectivePageSize = page_size ?? 50;
+        if (effectivePage < 1
+            || effectivePageSize is < 1 or > 200
+            || (!string.IsNullOrWhiteSpace(result)
+                && result.Trim().ToLowerInvariant() is not ("success" or "partial" or "failed")))
+        {
+            return TypedResults.BadRequest(Error(
+                "u2_plugin_call_log_filter_invalid",
+                "U2 plugin call log filter is invalid."));
+        }
+
+        var pageResult = await logs.ListAsync(
+            effectivePage, effectivePageSize, result, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new U2PluginCallLogListResponse(
+            pageResult.Page,
+            pageResult.PageSize,
+            pageResult.TotalCount,
+            pageResult.Items.Select(entry => new U2PluginCallLogResponse(
+                entry.Id,
+                entry.Endpoint,
+                entry.SourceProfileId,
+                entry.Result,
+                entry.RequestedCount,
+                entry.AcceptedCount,
+                entry.RejectedCount,
+                entry.FailureCode,
+                entry.DurationMilliseconds,
+                entry.StartedAtUtc,
+                entry.CompletedAtUtc,
+                entry.Items.Select(item => new U2PluginCallLogItemResponse(
+                    item.Index,
+                    item.U2Id,
+                    item.Title,
+                    item.DetailsUrl,
+                    item.AniDbId,
+                    item.CategoryId,
+                    item.CategoryName,
+                    item.MediaType,
+                    item.TaskId,
+                    item.Status,
+                    item.FailureCode)).ToArray())).ToArray()));
+    }
+
     private static async Task<IResult> DeleteMikanManualSeriesMapping(
         int mikanId,
         int groupId,
@@ -7484,6 +7542,219 @@ public static class ApiEndpoints
             requireModernMetadata: true,
             cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(response);
+    }
+
+    private static async Task<Ok<U2PluginIngestResponse>> IngestU2Plugin(
+        U2PluginIngestRequest request,
+        UnifiedIngestProcessor processor,
+        SourceProfileStore profiles,
+        U2PluginCallLogStore audit,
+        CancellationToken cancellationToken)
+    {
+        const string endpoint = "/api/v1/plugins/inner_plugin_u2/ingest";
+        var startedAt = DateTimeOffset.UtcNow;
+        var timer = Stopwatch.StartNew();
+        var sourceProfileId = string.IsNullOrWhiteSpace(request.SourceProfileId)
+            ? "u2"
+            : request.SourceProfileId.Trim().ToLowerInvariant();
+        var requestedItems = request.Items ?? [];
+        var responses = new List<U2PluginIngestItemResponse>();
+        var auditItems = new List<U2PluginCallLogItem>();
+
+        var requestFailure = request.SchemaVersion != 1
+            ? "u2_schema_version_unsupported"
+            : sourceProfileId.Length > 128
+                ? "u2_source_profile_invalid"
+                : requestedItems.Count is < 1 or > 100
+                    ? "u2_item_count_invalid"
+                    : null;
+        var profile = requestFailure is null
+            ? await profiles.GetEnabledAsync(sourceProfileId, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (requestFailure is null && profile is null)
+        {
+            requestFailure = "u2_source_profile_missing";
+        }
+        else if (requestFailure is null
+            && !string.Equals(profile!.Adapter, "u2", StringComparison.OrdinalIgnoreCase))
+        {
+            requestFailure = "u2_source_profile_adapter_invalid";
+        }
+
+        for (var index = 0; index < requestedItems.Count; index++)
+        {
+            var item = requestedItems[index];
+            IReadOnlyList<string> validation = requestFailure is null
+                ? ValidateU2PluginItem(item)
+                : [requestFailure];
+            UnifiedIngestItemResult? result = null;
+            if (validation.Count == 0 && item is not null)
+            {
+                var command = new IngestItemCommand(
+                    item.TorrentUrl,
+                    new IngestItemInfo(
+                        item.Title,
+                        null,
+                        item.U2Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        item.AniDbId is > 0 ? $"anidb:{item.AniDbId.Value}" : null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        item.AniDbId,
+                        null,
+                        null,
+                        item.MediaType));
+                result = await processor.ProcessAsync(
+                    sourceProfileId,
+                    command,
+                    requireModernMetadata: true,
+                    cancellationToken).ConfigureAwait(false);
+                validation = result.Errors;
+            }
+
+            var status = result?.Status ?? "rejected";
+            var failureCode = validation.Count == 0 ? null : U2FailureCode(validation[0]);
+            responses.Add(new U2PluginIngestItemResponse(
+                index,
+                item is { U2Id: > 0 } ? item.U2Id : null,
+                status,
+                result?.IngestId,
+                result?.SourceProfileId,
+                result?.SourceProfileRevision,
+                result?.DownloaderId,
+                validation));
+            auditItems.Add(new U2PluginCallLogItem(
+                index,
+                item is { U2Id: > 0 } ? item.U2Id : null,
+                NormalizeU2AuditText(item?.Title, 1000) ?? "(missing title)",
+                NormalizeU2AuditDetailsUrl(item?.DetailsUrl, item?.U2Id),
+                item?.AniDbId is > 0 ? item.AniDbId : null,
+                item?.Category?.Id is > 0 ? item.Category.Id : null,
+                NormalizeU2AuditText(item?.Category?.Name, 100),
+                AnimeGoNet.Core.Media.MediaTypes.TryNormalize(item?.MediaType, out var mediaType)
+                    ? mediaType
+                    : "unknown",
+                result?.IngestId,
+                status,
+                failureCode));
+        }
+
+        var accepted = responses.Count(item => item.IngestId is not null);
+        var rejected = responses.Count - accepted;
+        var callResult = accepted == responses.Count && responses.Count > 0
+            ? "success"
+            : accepted > 0 ? "partial" : "failed";
+        var callFailure = auditItems.FirstOrDefault(item => item.FailureCode is not null)?.FailureCode
+            ?? requestFailure;
+        var completedAt = DateTimeOffset.UtcNow;
+        await audit.RecordAsync(new U2PluginCallLog(
+            Guid.NewGuid().ToString("N"),
+            endpoint,
+            sourceProfileId,
+            callResult,
+            requestedItems.Count,
+            accepted,
+            rejected,
+            callFailure,
+            timer.ElapsedMilliseconds,
+            startedAt,
+            completedAt,
+            auditItems), cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new U2PluginIngestResponse(
+            "inner_plugin_u2",
+            1,
+            sourceProfileId,
+            accepted,
+            rejected,
+            responses));
+    }
+
+    private static List<string> ValidateU2PluginItem(U2PluginIngestItemRequest? item)
+    {
+        var errors = new List<string>();
+        if (item is null) return ["u2_item_required"];
+        if (item.U2Id <= 0) errors.Add("u2id_invalid");
+        if (string.IsNullOrWhiteSpace(item.Title) || item.Title.Length > 1000)
+            errors.Add("u2_title_invalid");
+        if (item.AniDbId is <= 0) errors.Add("u2_anidbid_invalid");
+        if (item.Category?.Id is <= 0) errors.Add("u2_category_id_invalid");
+        if (item.Category?.Name is { Length: > 100 }) errors.Add("u2_category_name_invalid");
+        if (!AnimeGoNet.Core.Media.MediaTypes.TryNormalize(item.MediaType, out _))
+            errors.Add("u2_media_type_invalid");
+
+        if (!TryU2Url(item.DetailsUrl, "/details.php", item.U2Id, out var details))
+            errors.Add("u2_details_url_invalid");
+        if (!TryU2Url(item.TorrentUrl, "/download.php", item.U2Id, out var torrent))
+        {
+            errors.Add("u2_torrent_url_invalid");
+        }
+        else if (string.IsNullOrWhiteSpace(torrent!.Query.TrimStart('?'))
+            || string.IsNullOrWhiteSpace(ParseQueryValue(torrent.Query, "passkey")))
+        {
+            errors.Add("u2_torrent_passkey_missing");
+        }
+        if (details is not null && torrent is not null
+            && !string.Equals(details.IdnHost, torrent.IdnHost, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("u2_url_host_mismatch");
+        }
+        return errors;
+    }
+
+    private static bool TryU2Url(string? value, string expectedPath, int u2Id, out Uri? uri)
+    {
+        uri = null;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var parsed)
+            || parsed.Scheme is not ("http" or "https")
+            || !string.IsNullOrEmpty(parsed.UserInfo)
+            || !string.Equals(parsed.AbsolutePath, expectedPath, StringComparison.OrdinalIgnoreCase)
+            || !int.TryParse(ParseQueryValue(parsed.Query, "id"), out var parsedId)
+            || parsedId <= 0
+            || parsedId != u2Id)
+        {
+            return false;
+        }
+        uri = parsed;
+        return true;
+    }
+
+    private static string? ParseQueryValue(string query, string key)
+    {
+        foreach (var entry in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = entry.Split('=', 2);
+            if (string.Equals(Uri.UnescapeDataString(parts[0]), key, StringComparison.OrdinalIgnoreCase))
+                return parts.Length == 2 ? Uri.UnescapeDataString(parts[1]) : string.Empty;
+        }
+        return null;
+    }
+
+    private static string U2FailureCode(string value)
+    {
+        var separator = value.IndexOf(':');
+        var candidate = (separator >= 0 ? value[..separator] : value).Trim();
+        return candidate.Length is > 0 and <= 100 && candidate.All(character =>
+            char.IsAsciiLetterOrDigit(character) || character is '_' or '-')
+            ? candidate.ToLowerInvariant()
+            : "u2_ingest_rejected";
+    }
+
+    private static string NormalizeU2AuditDetailsUrl(string? value, int? u2Id)
+    {
+        if (u2Id is not > 0
+            || !TryU2Url(value, "/details.php", u2Id.Value, out var uri)) return "about:blank";
+        var authority = uri!.IsDefaultPort
+            ? $"{uri.Scheme}://{uri.IdnHost}"
+            : $"{uri.Scheme}://{uri.IdnHost}:{uri.Port}";
+        return $"{authority}/details.php?id={u2Id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    private static string? NormalizeU2AuditText(string? value, int maximumLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim();
+        return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength];
     }
 
     private static async Task<Results<

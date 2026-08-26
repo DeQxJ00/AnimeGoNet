@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 65;
+    public const int CurrentVersion = 66;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -147,7 +147,47 @@ public static class DatabaseSchema
             65,
             "non_zero_trusted_episode_offsets",
             NonZeroTrustedEpisodeOffsets),
+        new SchemaMigration(
+            66,
+            "u2_plugin_call_audit",
+            U2PluginCallAudit),
     ];
+
+    private const string U2PluginCallAudit = """
+        CREATE TABLE u2_plugin_call_logs (
+            id TEXT PRIMARY KEY,
+            endpoint TEXT NOT NULL,
+            source_profile_id TEXT NOT NULL,
+            result TEXT NOT NULL,
+            requested_count INTEGER NOT NULL,
+            accepted_count INTEGER NOT NULL,
+            rejected_count INTEGER NOT NULL,
+            failure_code TEXT NULL,
+            duration_ms INTEGER NOT NULL,
+            started_at_utc TEXT NOT NULL,
+            completed_at_utc TEXT NOT NULL
+        );
+
+        CREATE INDEX ix_u2_plugin_call_logs_completed
+        ON u2_plugin_call_logs(completed_at_utc DESC);
+
+        CREATE TABLE u2_plugin_call_log_items (
+            call_id TEXT NOT NULL,
+            item_index INTEGER NOT NULL,
+            u2id INTEGER NULL,
+            title TEXT NOT NULL,
+            details_url TEXT NOT NULL,
+            anidbid INTEGER NULL,
+            category_id INTEGER NULL,
+            category_name TEXT NULL,
+            media_type TEXT NOT NULL,
+            task_id TEXT NULL,
+            status TEXT NOT NULL,
+            failure_code TEXT NULL,
+            PRIMARY KEY (call_id, item_index),
+            FOREIGN KEY (call_id) REFERENCES u2_plugin_call_logs(id) ON DELETE CASCADE
+        );
+        """;
 
     private const string NonZeroTrustedEpisodeOffsets = """
         DELETE FROM mikan_trusted_offsets WHERE episode_offset = 0;
