@@ -535,6 +535,13 @@ public sealed class SourceProfileApiTests
 
         Assert.Contains("id=\"source-list\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-new-u2\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-u2-guidance\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-source-adapter-scope=\"mikan\"", html, StringComparison.Ordinal);
+        Assert.Contains("打开 U2 插件设置", html, StringComparison.Ordinal);
+        Assert.Contains("animegonet-u2", script, StringComparison.Ordinal);
+        Assert.Contains("u2.dmhy.org", script, StringComparison.Ordinal);
+        Assert.Contains("U2 手动插件", script, StringComparison.Ordinal);
         Assert.Contains("id=\"source-downloader\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-hosts\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-category\"", html, StringComparison.Ordinal);

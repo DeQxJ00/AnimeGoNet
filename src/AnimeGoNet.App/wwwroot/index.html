@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260826-u2-plugin">
+  <link rel="stylesheet" href="/styles.css?v=20260826-u2-source-profile">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1158,7 +1158,10 @@
           <p class="eyebrow">Input routing</p>
           <h2 id="sources-title">输入源</h2>
         </div>
-        <button id="source-new" type="button" class="secondary-button">新增来源</button>
+        <div class="source-heading-actions">
+          <button id="source-new" type="button" class="secondary-button">新增 Mikan 来源</button>
+          <button id="source-new-u2" type="button" class="primary-button">新增 U2 来源</button>
+        </div>
       </div>
       <p id="source-status" class="muted" role="status">正在读取来源配置…</p>
       <div class="source-workspace">
@@ -1200,35 +1203,45 @@
             <label class="source-hosts">允许的 Torrent Host
               <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
             </label>
-            <label class="source-hosts">Mikan 登录 Cookie 值
+            <label class="source-hosts" data-source-adapter-scope="mikan">Mikan 登录 Cookie 值
               <input id="source-mikan-cookie" autocomplete="off" spellcheck="false" placeholder="只粘贴等号后的内容">
               <small id="source-mikan-cookie-state">只填写 <code>.AspNetCore.Identity.Application=</code> 后面的内容，不填写 Cookie 名或整段 Cookie Header。</small>
             </label>
-            <label class="configuration-clear"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
-            <label class="source-hosts">Mikan RSS URL（可能包含 passkey）
+            <label class="configuration-clear" data-source-adapter-scope="mikan"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
+            <label class="source-hosts" data-source-adapter-scope="mikan">Mikan RSS URL（可能包含 passkey）
               <input id="source-rss-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://mikanani.me/RSS/MyBangumi?token=...">
               <small id="source-rss-url-state">仅 Mikan 适配器可配置；保存值会直接回填。</small>
             </label>
-            <label>Mikan 媒体类型
+            <label>默认媒体类型
               <select id="source-media-type">
                 <option value="tv">TV 动画</option>
                 <option value="movie">动画电影</option>
               </select>
-              <small>手动触发和自动调度都使用该类型；电影会走 TMDB Movie 并保存到电影目录。</small>
+              <small id="source-media-type-state">Mikan 手动触发和自动调度使用该类型；电影会走 TMDB Movie 并保存到电影目录。</small>
             </label>
-            <label class="configuration-clear"><input id="source-rss-url-clear" type="checkbox">明确清除 RSS URL</label>
-            <label class="source-hosts">RSS 调度 Cron（秒 分 时 日 月 周）
+            <label class="configuration-clear" data-source-adapter-scope="mikan"><input id="source-rss-url-clear" type="checkbox">明确清除 RSS URL</label>
+            <label class="source-hosts" data-source-adapter-scope="mikan">RSS 调度 Cron（秒 分 时 日 月 周）
               <input id="source-rss-cron" maxlength="256" autocomplete="off" spellcheck="false" value="0 0/15 * * * ?">
               <small>默认每 15 分钟；调度只传来源 ID/revision，不传 URL 或 passkey。</small>
             </label>
-            <p id="source-rss-schedule-state" class="muted source-hosts">RSS 自动调度未启用。</p>
+            <p id="source-rss-schedule-state" class="muted source-hosts" data-source-adapter-scope="mikan">RSS 自动调度未启用。</p>
           </div>
+          <aside id="source-u2-guidance" class="source-u2-guidance" hidden>
+            <div>
+              <strong>U2 来源路由</strong>
+              <p>这里的稳定 ID 必须与 AnimeGoHelper U2 设置中的 <code>source_profile_id</code> 一致。AccessKey 在“插件 → 内部插件”管理；U2 passkey 只保存在油猴脚本中。</p>
+            </div>
+            <div class="source-u2-guidance-actions">
+              <button id="source-u2-open-plugin" type="button" class="secondary-button">打开 U2 插件设置</button>
+              <button id="source-u2-open-logs" type="button" class="secondary-button">查看 U2 调用日志</button>
+            </div>
+          </aside>
           <div class="source-switches">
             <label><input id="source-enabled" type="checkbox">启用来源</label>
-            <label><input id="source-filter-enabled" type="checkbox">执行旧 Mikan 过滤</label>
-            <label><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
+            <label data-source-adapter-scope="mikan"><input id="source-filter-enabled" type="checkbox">执行旧 Mikan 过滤</label>
+            <label data-source-adapter-scope="mikan"><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
             <label><input id="source-duplicate-notification-enabled" type="checkbox" checked>重复命中时通知</label>
-            <label><input id="source-rss-schedule-enabled" type="checkbox">自动读取 Mikan RSS</label>
+            <label data-source-adapter-scope="mikan"><input id="source-rss-schedule-enabled" type="checkbox">自动读取 Mikan RSS</label>
           </div>
           <p class="muted">重复通知写入脱敏实时日志；关闭只抑制通知，不会允许重复下载。</p>
           <details class="route-preview">
@@ -1236,8 +1249,8 @@
             <p class="muted">只执行当前 adapter 字段校验和路由计算，不抓 Torrent、不写任务、不连接 qB。</p>
             <div class="route-preview-fields">
               <label>作品 ID<input id="route-source-work-id" autocomplete="off"></label>
-              <label>mikanid<input id="route-mikanid" type="number" min="1"></label>
-              <label>bgmid<input id="route-bgmid" type="number" min="1"></label>
+              <label data-source-adapter-scope="mikan">mikanid<input id="route-mikanid" type="number" min="1"></label>
+              <label data-source-adapter-scope="mikan">bgmid<input id="route-bgmid" type="number" min="1"></label>
               <label>anidbid<input id="route-anidbid" type="number" min="1"></label>
               <label>imdbid<input id="route-imdbid" placeholder="tt1234567" autocomplete="off"></label>
             </div>
@@ -2145,6 +2158,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260826-u2-plugin"></script>
+    <script type="module" src="/app.js?v=20260826-u2-source-profile"></script>
 </body>
 </html>

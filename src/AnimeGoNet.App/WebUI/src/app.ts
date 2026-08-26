@@ -11251,6 +11251,10 @@ function updateSourceCredentialInputs(): void {
   const clear = element<HTMLInputElement>("#source-mikan-cookie-clear");
   const current = activeSource();
   const isMikan = adapter === "mikan";
+  const isU2 = adapter === "u2";
+  document.querySelectorAll<HTMLElement>('[data-source-adapter-scope="mikan"]')
+    .forEach(field => { field.hidden = !isMikan; });
+  element<HTMLElement>("#source-u2-guidance").hidden = !isU2;
   const cookieLock = current?.locked_fields.find(
     (lock) => lock.field === "mikan_identity_cookie",
   );
@@ -11274,10 +11278,24 @@ function updateSourceCredentialInputs(): void {
   rssUrl.disabled = !isMikan || clearRssUrl.checked;
   clearRssUrl.disabled = !isMikan || current === null;
   rssCron.disabled = !isMikan;
-  mediaType.disabled = !isMikan;
+  mediaType.disabled = false;
   scheduleEnabled.disabled = !isMikan || !sourceEnabled;
   if (!isMikan || clearRssUrl.checked) rssUrl.value = "";
-  if (!isMikan) mediaType.value = "tv";
+  element<HTMLElement>("#source-media-type-state").textContent = isU2
+    ? "油猴脚本每次人工确认的 TV/Movie 优先；这里是其他 U2 调用未明确传入类型时的默认值。"
+    : isMikan
+    ? "Mikan 手动触发和自动调度使用该类型；电影会走 TMDB Movie 并保存到电影目录。"
+    : "调用未明确传入媒体类型时使用该默认值。";
+  const filterEnabled = element<HTMLInputElement>("#source-filter-enabled");
+  const priorityEnabled = element<HTMLInputElement>("#source-priority-enabled");
+  filterEnabled.disabled = !isMikan;
+  priorityEnabled.disabled = !isMikan;
+  if (!isMikan) {
+    filterEnabled.checked = false;
+    priorityEnabled.checked = false;
+    element<HTMLInputElement>("#route-mikanid").value = "";
+    element<HTMLInputElement>("#route-bgmid").value = "";
+  }
   if (!isMikan || !sourceEnabled || clearRssUrl.checked) scheduleEnabled.checked = false;
   element<HTMLElement>("#source-rss-url-state").textContent = !isMikan
     ? "仅 Mikan 适配器可配置 RSS URL。"
@@ -11305,37 +11323,46 @@ function updateSourceCredentialInputs(): void {
   }
 }
 
-function populateSourceForm(profile: SourceProfile | null): void {
+function populateSourceForm(
+  profile: SourceProfile | null,
+  templateAdapter: "mikan" | "u2" = "mikan",
+): void {
   activeSourceId = profile?.id ?? null;
   const id = element<HTMLInputElement>("#source-id");
   const adapter = element<HTMLSelectElement>("#source-adapter");
   id.disabled = profile !== null;
   adapter.disabled = profile !== null;
-  id.value = profile?.id ?? "";
-  element<HTMLInputElement>("#source-name").value = profile?.display_name ?? "";
-  adapter.value = profile?.adapter ?? "u2";
-  element<HTMLInputElement>("#source-downloader").value = profile?.downloader_id ?? "pt";
-  element<HTMLSelectElement>("#source-strategy").value = profile?.file_strategy ?? "link";
+  const isU2Template = profile === null && templateAdapter === "u2";
+  id.value = profile?.id ?? (isU2Template ? "u2" : "");
+  element<HTMLInputElement>("#source-name").value = profile?.display_name ?? (isU2Template ? "U2" : "");
+  adapter.value = profile?.adapter ?? templateAdapter;
+  element<HTMLInputElement>("#source-downloader").value =
+    profile?.downloader_id ?? (isU2Template ? "pt" : "bt");
+  element<HTMLSelectElement>("#source-strategy").value =
+    profile?.file_strategy ?? (isU2Template ? "link" : "move");
   const category = element<HTMLInputElement>("#source-category");
   const dynamicTag = element<HTMLInputElement>("#source-dynamic-tag");
   const categoryLock = profile?.locked_fields.find((lock) => lock.field === "category");
   const dynamicTagLock = profile?.locked_fields.find(
     (lock) => lock.field === "dynamic_tag_template",
   );
-  category.value = profile?.category ?? "animegonet";
+  category.value = profile?.category ?? (isU2Template ? "animegonet-u2" : "animegonet");
   category.disabled = categoryLock !== undefined;
   category.title = categoryLock
     ? `部署锁：${categoryLock.controlling_keys.join(" / ")}`
     : "";
-  element<HTMLInputElement>("#source-tags").value = profile?.tags.join(", ") ?? "";
+  element<HTMLInputElement>("#source-tags").value =
+    profile?.tags.join(", ") ?? (isU2Template ? "u2" : "");
   dynamicTag.value = profile?.dynamic_tag_template ?? "";
   dynamicTag.disabled = dynamicTagLock !== undefined;
   dynamicTag.title = dynamicTagLock
     ? `部署锁：${dynamicTagLock.controlling_keys.join(" / ")}`
     : "";
   element<HTMLInputElement>("#source-seeding-time").value =
-    String(profile?.seeding_time_minutes ?? 0);
-  element<HTMLTextAreaElement>("#source-hosts").value = profile?.allowed_torrent_hosts.join("\n") ?? "";
+    String(profile?.seeding_time_minutes ?? (isU2Template ? -1 : 0));
+  element<HTMLTextAreaElement>("#source-hosts").value =
+    profile?.allowed_torrent_hosts.join("\n")
+      ?? (isU2Template ? "u2.dmhy.org" : "mikanani.me\nmikanime.tv");
   element<HTMLInputElement>("#source-enabled").checked = profile?.enabled ?? true;
   element<HTMLInputElement>("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
   element<HTMLInputElement>("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;
@@ -11383,7 +11410,12 @@ function renderSourceList(): void {
     const lockState = profile.locked_fields.length > 0
       ? ` · 部署锁 ${profile.locked_fields.map((lock) => lock.field).join("/")}`
       : "";
-    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.media_type === "movie" ? "动画电影" : "TV 动画"} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"}${lockState} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · 任务 ${profile.ingest_task_count} / RSS ${profile.rss_batch_count}`;
+    const adapterState = profile.adapter === "mikan"
+      ? `Mikan Cookie ${profile.mikan_identity_cookie_configured ? "已配置" : "未配置"} · RSS 调度 ${profile.rss_schedule_enabled ? profile.rss_last_run_state : "关闭"} · RSS ${profile.rss_batch_count}`
+      : profile.adapter === "u2"
+      ? `U2 手动插件 · Host ${profile.allowed_torrent_hosts.join(", ") || "未配置"}`
+      : `外部适配器 ${profile.adapter}`;
+    route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.media_type === "movie" ? "动画电影" : "TV 动画"} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · ${adapterState}${lockState} · 任务 ${profile.ingest_task_count}`;
     card.append(heading, route);
     card.addEventListener("click", () => populateSourceForm(profile));
     return card;
@@ -14014,7 +14046,22 @@ for (const addButton of document.querySelectorAll<HTMLButtonElement>("[data-lega
     addLegacyMikanRule(Number(addButton.dataset.legacyAddTier));
   });
 }
-element<HTMLButtonElement>("#source-new").addEventListener("click", () => populateSourceForm(null));
+element<HTMLButtonElement>("#source-new").addEventListener(
+  "click",
+  () => populateSourceForm(null, "mikan"),
+);
+element<HTMLButtonElement>("#source-new-u2").addEventListener(
+  "click",
+  () => populateSourceForm(null, "u2"),
+);
+element<HTMLButtonElement>("#source-u2-open-plugin").addEventListener(
+  "click",
+  () => selectWorkspace("plugins", "internal"),
+);
+element<HTMLButtonElement>("#source-u2-open-logs").addEventListener(
+  "click",
+  () => selectWorkspace("sources", "u2-plugin-calls"),
+);
 element<HTMLFormElement>("#source-form").addEventListener("submit", (event) => void saveSource(event));
 element<HTMLSelectElement>("#source-adapter").addEventListener(
   "change",
