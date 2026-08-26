@@ -433,6 +433,8 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.equal(scrollbar.getAttribute("role"), "scrollbar");
   assert.equal(scrollbar.getAttribute("aria-controls"), "other-readaptation-review-files");
   assert.match(app, /other-readaptation\/review/);
+  assert.match(app, /other-attention\/ignore/);
+  assert.match(app, /"忽略处理"/);
   assert.match(app, /readaptation-review-table/);
   assert.match(app, /\["信息项", "适配前", "适配后"\]/);
   assert.match(app, /"TMDB Series"/);

@@ -1113,6 +1113,11 @@ public sealed record OtherFileReadaptationStartResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("file_count")] int FileCount);
 
+public sealed record OtherAttentionIgnoreResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("ignored_file_count")] int IgnoredFileCount);
+
 public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("review_state")] string ReviewState);

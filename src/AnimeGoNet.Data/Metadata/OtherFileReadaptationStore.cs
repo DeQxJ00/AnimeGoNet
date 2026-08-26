@@ -84,6 +84,14 @@ public enum OtherFileReadaptationReviewResult
     NotCompleted,
 }
 
+public enum OtherAttentionIgnoreResult
+{
+    Ignored,
+    NotFound,
+    NotEligible,
+    NothingToIgnore,
+}
+
 public enum OtherFileReadaptationManualOverrideResult
 {
     OrganizationQueued,
@@ -94,6 +102,73 @@ public enum OtherFileReadaptationManualOverrideResult
 
 public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
 {
+    public async Task<(OtherAttentionIgnoreResult Result, int FileCount)> IgnoreAsync(
+        string taskId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        string? status;
+        var active = false;
+        await using (var task = connection.CreateCommand())
+        {
+            task.Transaction = transaction;
+            task.CommandText = """
+                SELECT status, EXISTS (
+                    SELECT 1 FROM other_file_readaptation_jobs
+                    WHERE task_id = $task_id AND state = 'pending')
+                FROM ingest_tasks WHERE id = $task_id;
+                """;
+            task.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await task.ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (OtherAttentionIgnoreResult.NotFound, 0);
+            }
+
+            status = reader.GetString(0);
+            active = reader.GetInt64(1) == 1;
+        }
+
+        if (!string.Equals(status, "organized", StringComparison.Ordinal) || active)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return (OtherAttentionIgnoreResult.NotEligible, 0);
+        }
+
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE task_files
+            SET disposition = 'ignored'
+            WHERE task_id = $task_id AND disposition = 'other';
+            UPDATE ingest_tasks
+            SET updated_at_utc = $now
+            WHERE id = $task_id AND changes() > 0;
+            """;
+        update.Parameters.AddWithValue("$task_id", taskId);
+        update.Parameters.AddWithValue(
+            "$now",
+            utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        var affected = await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        var fileCount = Math.Max(0, affected - (affected > 0 ? 1 : 0));
+        if (fileCount == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return (OtherAttentionIgnoreResult.NothingToIgnore, 0);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return (OtherAttentionIgnoreResult.Ignored, fileCount);
+    }
+
     public async Task<OtherFileReadaptationReviewPreview?> GetReviewPreviewAsync(
         string taskId,
         CancellationToken cancellationToken = default)

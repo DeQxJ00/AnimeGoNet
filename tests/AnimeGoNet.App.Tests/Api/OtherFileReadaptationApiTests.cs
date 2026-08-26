@@ -286,6 +286,34 @@ public sealed class OtherFileReadaptationApiTests
         using var deletePreview = await app.Client.GetAsync($"/api/v1/delete/tasks/{taskId}/preview");
         using var deleteJson = JsonDocument.Parse(await deletePreview.Content.ReadAsStreamAsync());
         Assert.True(deleteJson.RootElement.GetProperty("task_record_deletion_allowed").GetBoolean());
+
+        await using (var restoreOther = await database.OpenConnectionAsync())
+        await using (var restore = restoreOther.CreateCommand())
+        {
+            restore.CommandText = """
+                UPDATE task_files SET disposition = 'other' WHERE task_id = $task_id;
+                UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
+                """;
+            restore.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(2, await restore.ExecuteNonQueryAsync());
+        }
+
+        using var ignore = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{taskId}/other-attention/ignore",
+            null);
+        Assert.Equal(HttpStatusCode.OK, ignore.StatusCode);
+        using var ignoreJson = JsonDocument.Parse(await ignore.Content.ReadAsStreamAsync());
+        Assert.Equal("ignored", ignoreJson.RootElement.GetProperty("result").GetString());
+        Assert.Equal(1, ignoreJson.RootElement.GetProperty("ignored_file_count").GetInt32());
+
+        await using var ignoredConnection = await database.OpenConnectionAsync();
+        await using var ignored = ignoredConnection.CreateCommand();
+        ignored.CommandText = "SELECT disposition, other_reason FROM task_files WHERE task_id = $task_id;";
+        ignored.Parameters.AddWithValue("$task_id", taskId);
+        await using var ignoredReader = await ignored.ExecuteReaderAsync();
+        Assert.True(await ignoredReader.ReadAsync());
+        Assert.Equal("ignored", ignoredReader.GetString(0));
+        Assert.Equal("episode_already_completed", ignoredReader.GetString(1));
     }
 
     private static async Task<string> ReadFileIdAsync(AnimeGoSqliteDatabase database, string taskId)

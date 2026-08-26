@@ -143,6 +143,9 @@ public static class ApiEndpoints
             "/api/v1/metadata/tasks/{taskId}/other-readaptation",
             StartOtherFileReadaptation);
         app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/other-attention/ignore",
+            IgnoreOtherAttention);
+        app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
             ApproveOtherFileReadaptationReview);
         app.MapGet(
@@ -5468,6 +5471,34 @@ public static class ApiEndpoints
             _ => TypedResults.Conflict(Error(
                 "other_readaptation_not_eligible",
                 "The task changed and can no longer re-adapt Other files.")),
+        };
+    }
+
+    private static async Task<IResult> IgnoreOtherAttention(
+        string taskId,
+        OtherFileReadaptationStore readaptation,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return TypedResults.BadRequest(Error("task_id_required", "taskId is required."));
+        }
+
+        var outcome = await readaptation.IgnoreAsync(
+            taskId,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return outcome.Result switch
+        {
+            OtherAttentionIgnoreResult.Ignored => TypedResults.Ok(
+                new OtherAttentionIgnoreResponse(taskId, "ignored", outcome.FileCount)),
+            OtherAttentionIgnoreResult.NotFound => TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found.")),
+            OtherAttentionIgnoreResult.NothingToIgnore => TypedResults.Conflict(Error(
+                "other_attention_empty", "The task has no Other files to ignore.")),
+            _ => TypedResults.Conflict(Error(
+                "other_attention_not_eligible",
+                "Only organized tasks without an active readaptation can ignore Other handling.")),
         };
     }
 

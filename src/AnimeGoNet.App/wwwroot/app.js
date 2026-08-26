@@ -6618,6 +6618,29 @@ async function readaptOtherFiles(taskId, button) {
         }, 5000);
     }
 }
+async function ignoreOtherAttention(taskId, button) {
+    if (!window.confirm("将当前任务的全部 Other 标记为已忽略？文件会继续保留在 Extras 目录，之后不再计入 Other 待处理。")) {
+        return;
+    }
+    const defaultLabel = button.textContent ?? "忽略处理";
+    button.disabled = true;
+    button.textContent = "正在忽略…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/other-attention/ignore`, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        await loadMetadataTasks();
+        await loadOverviewStatistics();
+    }
+    catch (error) {
+        button.disabled = false;
+        button.textContent = errorMessage(error, "忽略处理失败");
+        window.setTimeout(() => {
+            if (button.isConnected)
+                button.textContent = defaultLabel;
+        }, 5000);
+    }
+}
 const readaptationDispositionLabels = {
     episode: "正片",
     duplicate: "重复跳过",
@@ -7835,6 +7858,12 @@ async function loadMetadataTasks(background = false) {
                 readapt.textContent = "重新适配 Other";
                 readapt.addEventListener("click", () => void readaptOtherFiles(item.task_id, readapt));
                 actions.append(readapt);
+                const ignore = document.createElement("button");
+                ignore.type = "button";
+                ignore.className = "secondary-button";
+                ignore.textContent = "忽略处理";
+                ignore.addEventListener("click", () => void ignoreOtherAttention(item.task_id, ignore));
+                actions.append(ignore);
             }
             if (item.status === "organized" && item.readaptation_review_state === "pending") {
                 const approve = document.createElement("button");
