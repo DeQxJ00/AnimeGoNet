@@ -344,7 +344,8 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-data-path\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-download-path\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-save-path\"", html, StringComparison.Ordinal);
-        Assert.Contains("每个 qBittorrent 实例的下载目录仍必须位于全局下载根目录内", html, StringComparison.Ordinal);
+        Assert.Contains("PT 长期做种目录在“下载工具配置”中设置", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"downloader-config-path-label\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-mikan-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-tmdb-image-url\"", html, StringComparison.Ordinal);

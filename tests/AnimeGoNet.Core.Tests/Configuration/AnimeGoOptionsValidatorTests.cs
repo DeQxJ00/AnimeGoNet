@@ -48,7 +48,7 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
-    public void RejectsDownloaderOutsideSharedDownloadRoot()
+    public void AllowsDownloaderOutsideSharedDownloadRootForLongTermSeeding()
     {
         var defaults = AnimeGoDefaults.CreateDocker();
         var options = defaults with
@@ -61,7 +61,24 @@ public sealed class AnimeGoOptionsValidatorTests
 
         var errors = AnimeGoOptionsValidator.Validate(options);
 
-        Assert.Contains(errors, error => error.Contains("inside download_path", StringComparison.Ordinal));
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void RejectsRelativeDownloaderPath()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var options = defaults with
+        {
+            Downloaders = new Dictionary<string, QbittorrentInstanceOptions>
+            {
+                ["pt"] = defaults.Downloaders["pt"] with { DownloadPath = "relative/pt-seeding" },
+            },
+        };
+
+        var errors = AnimeGoOptionsValidator.Validate(options);
+
+        Assert.Contains(errors, error => error.Contains("must be absolute", StringComparison.Ordinal));
     }
 
     [Fact]

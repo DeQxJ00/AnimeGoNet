@@ -539,13 +539,12 @@ public sealed partial class ConfigurationArchiveService(
                 || baseUrl.Scheme is not ("http" or "https")
                 || !string.IsNullOrEmpty(baseUrl.UserInfo)
                 || !PathBoundary.IsAbsolute(downloader.DownloadPath)
-                || !PathBoundary.IsWithin(options.Paths.DownloadPath, downloader.DownloadPath)
                 || downloader.Username?.Length > 1024
                 || downloader.Password?.Length > 1024)
             {
                 throw new ConfigurationArchiveException(
                     "configuration_archive_downloader_invalid",
-                    $"Downloader '{id}' is invalid or its path is outside the configured download root.");
+                    $"Downloader '{id}' is invalid or its download path is not absolute.");
             }
         }
         foreach (var (id, plugin) in document.ExternalPlugins)

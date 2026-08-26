@@ -8217,6 +8217,12 @@ function openDownloaderConfig(instance) {
     element("#downloader-config-username").value = instance?.username ?? "";
     element("#downloader-config-password").value = instance?.password ?? "";
     element("#downloader-config-path").value = instance?.download_path ?? "";
+    const isPt = (instance?.id ?? "").toLowerCase() === "pt";
+    element("#downloader-config-path-label").textContent =
+        isPt ? "长期做种下载目录" : "下载目录";
+    element("#downloader-config-path-help").textContent = isPt
+        ? "PT 独立长期目录；可位于全局 download_path 外。使用硬链接整理时须与 TV/Movie 媒体库位于同一文件系统。"
+        : "AnimeGoNet 与 qBittorrent 必须能访问同一绝对路径；可使用全局 download_path，也可独立挂载。";
     element("#downloader-config-enabled").checked = instance?.enabled ?? true;
     element("#downloader-config-clear-password").checked = false;
     applyDownloaderFieldLocks(instance);

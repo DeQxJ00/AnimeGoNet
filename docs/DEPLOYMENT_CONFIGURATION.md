@@ -302,8 +302,10 @@ allowlist、DNS 地址、redirect 和 HTTPS downgrade；forward proxy 自行解�
 因此只有直连分支承诺连接钉在预先校验的 IP。
 
 `downloaders` 和 `sources` 是按 ID 命名的 mapping。不同来源通过
-`downloader_id` 绑定不同 qBittorrent 实例。所有下载器 `download_path` 必须位于
-全局 `paths.download_path` 内。Mikan 默认整理语义固定为 `move`，因此做种分钟
+`downloader_id` 绑定不同 qBittorrent 实例。每个下载器 `download_path` 是独立的绝对路径；
+BT 可以沿用全局 `paths.download_path`，PT 建议配置为长期做种目录并可位于另一挂载点。
+AnimeGoNet 与 qBittorrent 必须看到同一目录；使用 `link`/`link_delete` 时，PT 下载目录还须
+与目标媒体库位于同一文件系统以建立硬链接。Mikan 默认整理语义固定为 `move`，因此做种分钟
 必须为 0。
 
 `sources.<id>.duplicate_notification_enabled` 默认 `true`，只控制发现重复时是否向

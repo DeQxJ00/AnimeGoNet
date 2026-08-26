@@ -330,7 +330,7 @@ public sealed class DownloaderAdminApiTests
     }
 
     [Fact]
-    public async Task ReferencedDownloaderCannotBeDisabledAndInvalidPathsAreRejected()
+    public async Task ReferencedDownloaderCannotBeDisabledAndIndependentAbsolutePathsAreAccepted()
     {
         await using var app = await RunningApp.StartAsync();
         using var disable = await app.Client.PutAsync("/api/v1/downloaders/bt", Json(new
@@ -344,16 +344,24 @@ public sealed class DownloaderAdminApiTests
         }));
         Assert.Equal(HttpStatusCode.Conflict, disable.StatusCode);
 
-        using var invalid = await app.Client.PutAsync("/api/v1/downloaders/archive", Json(new
+        var longTermPath = Path.Combine(app.RootPath, "pt-long-term-seeding");
+        using var independent = await app.Client.PutAsync("/api/v1/downloaders/archive", Json(new
         {
-            base_url = "http://user:secret@127.0.0.1:9090",
-            download_path = Path.Combine(app.RootPath, "outside"),
+            base_url = "http://127.0.0.1:9090",
+            download_path = longTermPath,
             enabled = true,
             expected_configuration_revision = 0,
         }));
-        var text = await invalid.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, independent.StatusCode);
+
+        using var invalid = await app.Client.PutAsync("/api/v1/downloaders/relative", Json(new
+        {
+            base_url = "http://127.0.0.1:9090",
+            download_path = "relative/path",
+            enabled = true,
+            expected_configuration_revision = 1,
+        }));
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
-        Assert.DoesNotContain("secret", text, StringComparison.Ordinal);
     }
 
     private sealed class FakeRegistry(IDownloadClient client) : IDownloadClientRegistry

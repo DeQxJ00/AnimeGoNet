@@ -3674,10 +3674,9 @@ public static class ApiEndpoints
             }
             var baseUrl = ValidateDownloaderBaseUrl(request.BaseUrl);
             var downloadPath = request.DownloadPath?.Trim() ?? string.Empty;
-            if (!PathBoundary.IsAbsolute(downloadPath)
-                || !PathBoundary.IsWithin(options.Paths.DownloadPath, downloadPath))
+            if (!PathBoundary.IsAbsolute(downloadPath))
             {
-                throw new ArgumentException("download_path must be inside the configured download root.");
+                throw new ArgumentException("download_path must be an absolute path visible to AnimeGoNet and qBittorrent.");
             }
             if (request.ClearPassword && request.Password is not null)
                 throw new ArgumentException("password and clear_password cannot be supplied together.");

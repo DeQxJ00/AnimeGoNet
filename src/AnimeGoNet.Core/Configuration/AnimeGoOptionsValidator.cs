@@ -91,9 +91,9 @@ public static partial class AnimeGoOptionsValidator
                     $"Downloader '{rawId}' base URL must be an absolute HTTP(S) URL without credentials, query or fragment.");
             }
 
-            if (!PathBoundary.IsWithin(options.Paths.DownloadPath, downloader.DownloadPath))
+            if (!PathBoundary.IsAbsolute(downloader.DownloadPath))
             {
-                errors.Add($"Downloader '{rawId}' download path must be inside download_path.");
+                errors.Add($"Downloader '{rawId}' download path must be absolute.");
             }
         }
 
