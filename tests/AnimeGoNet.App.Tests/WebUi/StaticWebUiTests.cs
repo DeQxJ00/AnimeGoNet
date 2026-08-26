@@ -139,6 +139,7 @@ public sealed class StaticWebUiTests
     [InlineData("/", "text/html", "web-api-compatibility-access-key")]
     [InlineData("/", "text/html", "inner_plugin_mikan")]
     [InlineData("/", "text/html", "inner_plugin_mikan.access_key")]
+    [InlineData("/", "text/html", "http://主机:端口/api")]
     [InlineData("/", "text/html", "inner_plugin_u2.access_key")]
     [InlineData("/", "text/html", "u2-plugin-call-list")]
     [InlineData("/app.js", "text/javascript", "/api/v1/logs/u2-plugin-calls")]
