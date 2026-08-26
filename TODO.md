@@ -33,7 +33,7 @@
 - [x] 确认作品详情必须展示 TMDB Series/Season/Episode 分别在哪个阶段取得。
 - [x] 确认 Web UI 同时支持四类独立删除：业务记录、下载器任务、下载源文件、媒体库文件，并可预览后组合执行。
 - [x] 确认重复集默认只认首个成功完成记录；后续同集在 RSS 解析阶段命中完成记录即停止，删除该业务记录后允许重新进入流程。
-- [x] 确认附属文件首版只整理字幕；唯一匹配 EP 时随视频重命名并保留多语言/轨道后缀，无法对应时季度已知则进入 `Other`。
+- [x] 确认附属文件整理语义：唯一匹配 EP 的字幕随视频重命名并保留多语言/轨道后缀；同一 Torrent 已有成功匹配的视频时，无法匹配 EP 的非视频附件归类为 `Extras`、保留原名进入 `Sxx/Extras`，不计入 Other；无法匹配 EP 的视频仍进入 `Other`。
 - [x] 确认支持多个命名下载器实例，并按输入源配置下载器、元数据字段、过滤/匹配规则、文件/做种策略；Mikan/U2 使用同一通用导入流水线和 API 契约。
 - [x] 多源路由已完成：Mikan 与 U2 均使用 revision 化 SourceProfile 绑定命名 qBittorrent；U2 的站点入口采用 `inner_plugin_u2` 手动提交，不包含 U2 RSS 自动抓取。
 - [x] 确认项目只支持 qBittorrent 下载器及其多命名实例；取消 Transmission 适配计划，旧类型仅作不支持诊断。
@@ -129,7 +129,7 @@
 - [x] 实现 AOT-safe 本地 Streamable HTTP MCP 客户端和 function-calling 工具循环；BGM/TMDB 工具使用命名空间，覆盖同步 JSON、`tools/call` 202 后按 session GET SSE、request id 校验、工具 schema 缓存、超时、取消、响应上限和失败隔离。AI/MCP 的 DNS、连接、一般网络、鉴权、限流、服务端、HTTP拒绝、SSE、协议、工具 `isError` 与模型未使用必需 TMDB MCP 均有独立稳定错误码，不再伪装成普通匹配失败；真实 MCP 回放已验证。
 - [x] 实现可空 `anidbid` → `tmdbtv` 候选查询：URL 固定、模型零参数、响应有界、禁止重定向/代理并将 DNS 连接钉在公网地址；候选仍需 TMDB MCP 与主程序 API 验证。
 - [x] 实现可空 `imdbid` 规范化和固定零参数 `lookup_imdb_tmdb_tv`：主程序调用 TMDB MCP external ID/find，程序侧删除 Movie 结果，只返回正整数 TV Series 候选，最终 Series/Season/Episode 逐级验证。
-- [x] AI 和确定性匹配均拒绝 Season 0；Series/Season 已确认但 Episode 未匹配的小数集、特别篇、普通 TMDB EP 不存在、AI 未匹配和孤立字幕均持久化 `Other` 及稳定原因，实际保留原名整理到 `<TmdbName>/Sxx/Other/`；不生成 Episode completion/alias/claim 或 `Eyyy.e_json` 伪进度。AI 仅在统一开关开启且任务此前未尝试时调用，季度阶段尝试后不会在 Episode 阶段重复调用。
+- [x] AI 和确定性匹配均拒绝 Season 0；Series/Season 已确认但视频 Episode 未匹配的小数集、特别篇、普通 TMDB EP 不存在和 AI 未匹配均持久化 `Other` 及稳定原因，实际保留原名整理到 `<TmdbName>/Sxx/Extras/`；同任务已有成功视频时，孤立字幕及其他非视频附件使用独立 `Extras` 分类且不计入 Other；两者均不生成 Episode completion/alias/claim 或 `Eyyy.e_json` 伪进度。AI 仅在统一开关开启且任务此前未尝试时调用，季度阶段尝试后不会在 Episode 阶段重复调用。
 - [x] 将确定性季度失败策略固定为 Skip=4、Backtrace=3、TitleSeason=2、FirstSeason=1；四级确定性策略已按优先级接入并验证早停/错误降级，独立统一 AI 阶段已接入且 Series/Season/Episode 结果必须经 TMDB 验证。
 - [x] 为 P3 建立完整图/故障 fixture：无前传直接穷尽；缺日期仍继续遍历；同层多前传按开播日期降序/ID 升序；关系循环由 visited 终止；回溯到首部仍不匹配会穷尽日文/中文名及每名清理词；TMDB 网络失败保留稳定类型/码且不伪装成无匹配；Bangumi 请求失败向编排层传播；取消立即中断且不产生 fallback 结果。
 - [x] 为 AI 禁用/未配置/超时/限流/畸形 JSON/伪造 ID/多候选/文件数量冲突/缓存建立 fake-server 测试：统一开关关闭时零请求/零审计；配置缺失在联网前失败；超时、429 重试与耗尽、认证和外层/模型 JSON 错误使用稳定安全分类；多个 provider `choices` 作为歧义拒绝；不存在的 TMDB Series 经权威二次验证拒绝；单文件 AI 回显文件名即使被改写也不覆盖原始文件身份，多文件乱序继续在 TMDB 访问前拒绝；同 MCP endpoint 的工具 schema 只发现一次但每次会话仍重新初始化。

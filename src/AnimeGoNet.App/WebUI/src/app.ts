@@ -9258,6 +9258,7 @@ const readaptationDispositionLabels: Record<string, string> = {
   episode: "正片",
   duplicate: "重复跳过",
   other: "Other",
+  extras: "Extras 附件",
   pending: "待处理",
   ignored: "忽略",
   subtitle: "字幕",
@@ -9877,7 +9878,7 @@ async function loadMetadataDetail(
           : "尚无经验证的 TMDB 映射";
         const canonicalEpisode = document.createElement("p");
         canonicalEpisode.textContent = file.tmdb_episode_number === null
-          ? `${file.disposition} · ${textOrDash(file.other_reason)}`
+          ? `${readaptationDisposition(file.disposition)} · ${textOrDash(file.other_reason)}`
           : `TMDB ${file.tmdb_series_id} · S${String(file.tmdb_season_number).padStart(2, "0")}E${String(file.tmdb_episode_number).padStart(3, "0")} · ${textOrDash(file.tmdb_episode_name)}`;
         canonical.append(canonicalName, canonicalEpisode);
         if (file.episode_strategy) {

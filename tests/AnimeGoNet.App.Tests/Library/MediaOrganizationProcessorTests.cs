@@ -377,15 +377,17 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     [Theory]
-    [InlineData("Show [48.5].mkv", "48.5", "fractional_episode")]
-    [InlineData("Show [SP01].mkv", "sp01", "special_episode")]
-    [InlineData("Show unmatched.mkv", null, "tmdb_episode_not_found")]
-    [InlineData("Show AI other.mkv", null, "ai_episode_unmatched")]
-    [InlineData("Show commentary.zh-Hans.ass", null, "subtitle_unmatched")]
+    [InlineData("Show [48.5].mkv", "48.5", "fractional_episode", "other")]
+    [InlineData("Show [SP01].mkv", "sp01", "special_episode", "other")]
+    [InlineData("Show unmatched.mkv", null, "tmdb_episode_not_found", "other")]
+    [InlineData("Show AI other.mkv", null, "ai_episode_unmatched", "other")]
+    [InlineData("Show commentary.zh-Hans.ass", null, "subtitle_unmatched", "other")]
+    [InlineData("Show [Fonts].7z", null, "episode_not_parsed", "extras")]
     public async Task ConfirmedSeasonOtherMovesOriginalNameWithoutInventingEpisodeProgress(
         string relativePath,
         string? sourceEpisode,
-        string otherReason)
+        string otherReason,
+        string disposition)
     {
         var client = new FakeDownloadClient();
         await using var app = await RunningApp.StartAsync(
@@ -407,7 +409,7 @@ public sealed class MediaOrganizationProcessorTests
                     file_episode_candidate = NULL,
                     tmdb_episode_number = NULL,
                     tmdb_episode_id = NULL,
-                    disposition = 'other',
+                    disposition = $disposition,
                     other_reason = $other_reason,
                     episode_resolution_source = NULL,
                     episode_resolution_run_id = NULL,
@@ -420,6 +422,7 @@ public sealed class MediaOrganizationProcessorTests
                 "$source_episode",
                 (object?)sourceEpisode ?? DBNull.Value);
             update.Parameters.AddWithValue("$other_reason", otherReason);
+            update.Parameters.AddWithValue("$disposition", disposition);
             Assert.Equal(1, await update.ExecuteNonQueryAsync());
         }
 
@@ -451,7 +454,7 @@ public sealed class MediaOrganizationProcessorTests
         Assert.Equal(0, reader.GetInt32(0));
         Assert.Equal(0, reader.GetInt32(1));
         Assert.Equal(0, reader.GetInt32(2));
-        Assert.Equal("other", reader.GetString(3));
+        Assert.Equal(disposition, reader.GetString(3));
         Assert.Equal(otherReason, reader.GetString(4));
     }
 

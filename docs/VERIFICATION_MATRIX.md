@@ -50,7 +50,7 @@ runner 和外部 Release 仍未验证。详见
 | 下载状态机 | init/wait/download/seed/complete/pause/error/restart、0/-1/正数做种目标 | U/C/I | schema v33 目标/累计秒数/完成时间持久化；状态和累计值不回退；整理只按持久化门禁推进 |
 | 去重 | RSS alias早停、全局TMDB Episode键、包内逐文件跳过、事务复查、来源级通知开关、删除记录后重下 | U/I/E | 跨来源只认第一个完整成功Episode；其他Episode不受影响，无并发双写；schema v38 通知默认开启并固化到路由快照，关闭不绕过去重，RSS/TMDB 命中事件经脱敏 WebSocket 可见 |
 | 重命名 | TMDB 名称/Season/Episode、来源字段保留、单/多文件、Other、非法字符、冲突 | U/P/I | 验证成功统一用 TMDB 路径；已知季度的未匹配 Episode 归类为 `Other` 并进入 `Extras`，未知季度或冲突文件不落盘 |
-| 字幕 | 同stem、多语言/轨道后缀、按EP唯一绑定、idx/sub、歧义、Other | U/P/I/E | 匹配字幕随视频继承TMDB EP且后缀不丢；未匹配字幕不猜测，其他附件不移动 |
+| 字幕与附件 | 同stem、多语言/轨道后缀、按EP唯一绑定、idx/sub、歧义、Extras | U/P/I/E | 匹配字幕随视频继承TMDB EP且后缀不丢；已有成功视频时，未匹配字幕及其他非视频附件不猜测、归类为 Extras、保留原名移动且不计入 Other |
 | 文件策略 | link/link_delete/move/wait_move、跨盘、失败回滚 | U/I/E | 测试根外零写入/删除 |
 | 刮削 | `tvshow.nfo` 新建/更新、正常 TMDB 默认不写 Bgm、显式开关恢复 TMDB+Bgm、兜底 `tmdbid=0`+Bgm、恢复重写作业投影、Unicode | U/P/I | 三种 ID 输出模式均有 XML 断言；兜底关闭或前置条件失败时断言没有失败 NFO；恢复作业四态、尝试/重试/完成时间在任务详情可见且不泄露 save root |
 | 调度 | 六字段 Cron、NextTime、StartRun、取消、异常隔离 | U/C/E | 虚拟时间稳定，退出不挂起 |
@@ -151,7 +151,7 @@ Mikan RSS winner 的作品身份补全还必须覆盖：
 3. 大小写不同的字幕扩展名、嵌套相对目录和 `.idx/.sub` 成对字幕正确处理。
 4. stem 不同但字幕文件名能解析出唯一来源 EP 时绑定；同一任务存在多个候选时标记 `SubtitleAmbiguous`，不得按顺序猜测。
 5. 已绑定字幕继承视频的人工 Episode Offset 或 AI 最终 TMDB Episode，不独立再偏移或调用 AI。
-6. 未匹配字幕在季度已知时归类为 `Other` 并保留原名进入 `Sxx/Extras`，季度未知时留在下载目录；字体、图片、校验文件及其他非字幕附件始终不移动。
+6. 同一 Torrent 已有成功匹配的视频时，未匹配字幕、字体、图片、校验文件、压缩包及其他非视频附件归类为 `Extras` 并保留原名进入 `Sxx/Extras`，不计入 Other；无法匹配 EP 的视频仍归类为 `Other`。没有成功视频的纯附件异常任务继续保留为 Other。
 
 ## TMDB 季度回溯场景
 

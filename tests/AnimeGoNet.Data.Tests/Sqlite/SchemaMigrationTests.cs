@@ -297,6 +297,87 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task ExtrasDispositionMigrationConvertsOnlyAttachmentsBesideMatchedVideos()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations.Take(66).ToArray(),
+            CancellationToken.None);
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc, media_type)
+                VALUES (
+                    'tv-source', 'TV', 'mikan', 'bt', 'move',
+                    0, 0, 1, 1, '2026-08-26T00:00:00Z',
+                    '2026-08-26T00:00:00Z', 'tv');
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc,
+                    media_type)
+                VALUES
+                    ('matched-task', 'tv-source', 1, 'mikan', 'Matched',
+                     'matched-fingerprint', 'bt', '{}', 'organized',
+                     '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z', 'tv'),
+                    ('attachment-only-task', 'tv-source', 1, 'mikan', 'Attachment only',
+                     'attachment-fingerprint', 'bt', '{}', 'organized',
+                     '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z', 'tv');
+
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, disposition, other_reason)
+                VALUES
+                    ('video', 'matched-task', 'Medalist 14.mkv', 100, 'episode', NULL),
+                    ('archive', 'matched-task', 'Medalist [Fonts].7z', 20, 'other', 'episode_not_parsed'),
+                    ('unmatched-video', 'matched-task', 'Medalist SP.mkv', 30, 'other', 'special_episode'),
+                    ('lonely-archive', 'attachment-only-task', 'Fonts.7z', 10, 'other', 'episode_not_parsed');
+
+                INSERT INTO file_operations (
+                    id, task_file_id, strategy, source_path, target_path, state,
+                    bytes_verified, created_at_utc, updated_at_utc)
+                VALUES (
+                    'archive-operation', 'archive', 'move', 'source.7z', 'target.7z',
+                    'completed', 20, '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z');
+                """;
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations,
+            CancellationToken.None);
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT
+                (SELECT disposition FROM task_files WHERE id = 'archive'),
+                (SELECT other_reason FROM task_files WHERE id = 'archive'),
+                (SELECT disposition FROM task_files WHERE id = 'unmatched-video'),
+                (SELECT disposition FROM task_files WHERE id = 'lonely-archive'),
+                (SELECT COUNT(*) FROM file_operations WHERE task_file_id = 'archive'),
+                (SELECT COUNT(*) FROM pragma_foreign_key_check),
+                (SELECT COUNT(*) FROM sqlite_schema WHERE sql LIKE '%task_files_v66%');
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("extras", reader.GetString(0));
+        Assert.Equal("episode_not_parsed", reader.GetString(1));
+        Assert.Equal("other", reader.GetString(2));
+        Assert.Equal("other", reader.GetString(3));
+        Assert.Equal(1, reader.GetInt32(4));
+        Assert.Equal(0, reader.GetInt32(5));
+        Assert.Equal(0, reader.GetInt32(6));
+    }
+
+    [Fact]
     public async Task LibraryMetadataAuditMigrationCreatesTargetedIndexes()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

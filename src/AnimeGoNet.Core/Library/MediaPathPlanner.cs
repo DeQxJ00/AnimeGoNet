@@ -24,11 +24,13 @@ public static class MediaPathPlanner
         var fileName = input.Disposition switch
         {
             "episode" => PlanEpisodeFileName(input),
-            "other" => SanitizeSegment(GetFileName(input.OriginalRelativePath)),
-            _ => throw new ArgumentException("Only episode and other files can be organized.", nameof(input)),
+            "other" or "extras" => SanitizeSegment(GetFileName(input.OriginalRelativePath)),
+            _ => throw new ArgumentException(
+                "Only episode, other, and extras files can be organized.",
+                nameof(input)),
         };
 
-        return input.Disposition == "other"
+        return input.Disposition is "other" or "extras"
             ? Path.Combine(series, season, "Extras", fileName)
             : Path.Combine(series, season, fileName);
     }

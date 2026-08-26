@@ -1456,9 +1456,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 throw new ArgumentException("Task file TMDB Season identity is invalid.", nameof(fileResolutions));
             }
 
-            if (resolution.Disposition is not ("episode" or "other"))
+            if (resolution.Disposition is not ("episode" or "other" or "extras"))
             {
-                throw new ArgumentException("Episode resolution disposition must be episode or other.", nameof(fileResolutions));
+                throw new ArgumentException(
+                    "Episode resolution disposition must be episode, other, or extras.",
+                    nameof(fileResolutions));
             }
 
             if (resolution.Disposition == "episode")
@@ -1489,7 +1491,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                     || resolution.ResolutionSource is not null
                     || resolution.ResolutionAttemptId is not null)
                 {
-                    throw new ArgumentException("Other resolution requires a reason and no TMDB Episode.", nameof(fileResolutions));
+                    throw new ArgumentException(
+                        "Other and Extras resolutions require a reason and no TMDB Episode.",
+                        nameof(fileResolutions));
                 }
 
                 ValidateIdentifier(resolution.OtherReason, nameof(fileResolutions));

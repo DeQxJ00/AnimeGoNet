@@ -98,7 +98,7 @@ Web UI 的“删除业务记录”必须细分出“删除已下载完成记录�
 
 ### 1.4 字幕随集整理
 
-附属文件首版只处理字幕；字体、图片、校验文件、歌词、章节和其他附件不跟随移动。字幕扩展名至少识别 `.ass`、`.ssa`、`.srt`、`.vtt`、`.sub`、`.idx` 和 `.sup`，比较时不区分大小写；`.idx/.sub` 作为一组处理。
+字幕会优先尝试关联正片；字体、图片、校验文件、歌词、章节、压缩包和其他非视频附件不参与 Episode 匹配。字幕扩展名至少识别 `.ass`、`.ssa`、`.srt`、`.vtt`、`.sub`、`.idx` 和 `.sup`，比较时不区分大小写；`.idx/.sub` 作为一组处理。
 
 字幕按以下证据顺序绑定 Episode：
 
@@ -108,7 +108,7 @@ Web UI 的“删除业务记录”必须细分出“删除已下载完成记录�
 
 只有得到唯一候选才绑定，存在多个候选时不得按文件顺序或容量猜测。字幕绑定成功后直接继承对应视频已验证的 TMDB Series/Season/Episode，不独立调用 AI，也不再次应用 Episode Offset。视频目标为 `E013.mkv` 时，`原视频名.zh-Hans.forced.ass` 重命名为 `E013.zh-Hans.forced.ass`；无法识别的原后缀也应原样保留在 `E013` 与字幕扩展名之间，避免多语言轨道互相覆盖。
 
-未能唯一绑定的字幕在 Series 和普通 Season 已确认时，归类为 `Other`，保留原文件名放入 `<TmdbSeriesName>/Sxx/Extras/` 并记录 `SubtitleUnmatched` 或 `SubtitleAmbiguous`；季度未知时留在下载目录。其他非字幕附件首版始终留在下载目录，不放入 `Extras`。
+同一 Torrent 至少有一个视频成功得到经 TMDB 验证的 Episode 时，未能唯一绑定的字幕及其他未匹配非视频附件归类为 `Extras`，保留原文件名放入 `<TmdbSeriesName>/Sxx/Extras/`，并保留 `SubtitleUnmatched`、`SubtitleAmbiguous` 或 `non_video_attachment` 等审计原因。非视频附件即使文件名含有看似有效的数字，也不参与 TMDB Episode 请求或占用 Episode claim。`Extras` 会下载和整理，但不计入 Other 数量、Other 提醒或 Other 重新适配。无法匹配 Episode 的视频仍归类为 `Other`；完全没有成功视频的附件任务也继续保留为 `Other`，避免异常任务被静默隐藏。
 
 ## 2. 业务兜底配置
 

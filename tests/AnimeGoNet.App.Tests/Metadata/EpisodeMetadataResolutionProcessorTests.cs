@@ -694,7 +694,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     [Theory]
     [InlineData("Show [48.5].mkv", "48.5", "fractional_episode")]
     [InlineData("Show [SP01].mkv", "sp01", "special_episode")]
-    [InlineData("poster.jpg", null, "episode_not_parsed")]
+    [InlineData("poster.jpg", null, "non_video_attachment")]
     public async Task NonIntegerOrUnknownFileGoesToOtherWithoutTmdbRequest(
         string path,
         string? sourceEpisode,
@@ -712,6 +712,50 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Null(file.EpisodeNumber);
         Assert.Equal(expectedReason, file.OtherReason);
         Assert.Empty(tmdb.EpisodeRequests);
+    }
+
+    [Fact]
+    public async Task MatchedVideoMakesUnmatchedNonVideoFilesExtrasWithoutOtherAttention()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number,
+                72517,
+                2,
+                number,
+                $"Episode {number}",
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Medalist 14.mkv", "14", "14"),
+            ("Medalist 14 [Fonts].7z", "14", "14"),
+            ("Medalist [Subtitles].7z", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var files = await ReadFilesAsync(app, taskId);
+        var video = files.Single(file => file.Path.EndsWith(".mkv", StringComparison.Ordinal));
+        Assert.Equal("episode", video.Disposition);
+        Assert.Equal(14, video.EpisodeNumber);
+        Assert.All(files.Where(file => file.Path.EndsWith(".7z", StringComparison.Ordinal)), file =>
+        {
+            Assert.Equal("extras", file.Disposition);
+            Assert.Equal("non_video_attachment", file.OtherReason);
+            Assert.Null(file.EpisodeNumber);
+        });
+        Assert.Equal([14], tmdb.EpisodeRequests);
+
+        var task = Assert.Single(
+            await app.App.Services.GetRequiredService<MetadataResolutionStore>()
+                .ListTasksAsync(),
+            item => item.TaskId == taskId);
+        Assert.Equal(0, task.OtherFileCount);
+        Assert.Equal(1, task.EpisodeFileCount);
     }
 
     [Fact]

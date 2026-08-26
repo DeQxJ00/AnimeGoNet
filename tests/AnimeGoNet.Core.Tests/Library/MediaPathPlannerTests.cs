@@ -31,6 +31,21 @@ public sealed class MediaPathPlannerTests
     }
 
     [Fact]
+    public void ExtrasPreservesAttachmentNameBelowConfirmedSeason()
+    {
+        var result = MediaPathPlanner.PlanRelativePath(new MediaPathInput(
+            "Medalist",
+            2,
+            "extras",
+            null,
+            "Release/Medalist [Fonts].7z"));
+
+        Assert.Equal(
+            Path.Combine("Medalist", "S02", "Extras", "Medalist [Fonts].7z"),
+            result);
+    }
+
+    [Fact]
     public void AssociatedSubtitleKeepsLanguageAndTrackSuffix()
     {
         var result = MediaPathPlanner.PlanRelativePath(new MediaPathInput(

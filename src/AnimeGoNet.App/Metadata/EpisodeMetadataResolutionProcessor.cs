@@ -177,6 +177,26 @@ public sealed class EpisodeMetadataResolutionProcessor(
         foreach (var file in claim.Files.Where(file => !subtitleIds.Contains(file.FileId)))
         {
             var targetSeasonNumber = file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
+            if (!SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            {
+                const string reason = "non_video_attachment";
+                await RecordAsync(
+                    claim,
+                    "non_video_attachment",
+                    null,
+                    "other",
+                    reason,
+                    retryable: false,
+                    0,
+                    cancellationToken).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    "other",
+                    reason));
+                continue;
+            }
+
             if (manualOffset is null && file.PreResolvedOtherReason is not null)
             {
                 await RecordAsync(
@@ -460,6 +480,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     association.RenameSuffix));
             }
         }
+
+        ClassifyNonVideoExtras(claim, results);
 
         var validatedSeasons = new List<TmdbSeason>();
         foreach (var seasonNumber in claim.Files
@@ -962,6 +984,30 @@ public sealed class EpisodeMetadataResolutionProcessor(
         }
 
         return file.SourceEpisode is null ? "episode_not_parsed" : "special_episode";
+    }
+
+    private static void ClassifyNonVideoExtras(
+        MetadataEpisodeTaskClaim claim,
+        List<MetadataEpisodeFileResolution> results)
+    {
+        var filesById = claim.Files.ToDictionary(file => file.FileId, StringComparer.Ordinal);
+        var hasMatchedVideo = results.Any(result =>
+            result.ResolvedEpisodeNumber is > 0
+            && SubtitleAssociationResolver.IsVideo(filesById[result.FileId].RelativePath));
+        if (!hasMatchedVideo)
+        {
+            return;
+        }
+
+        for (var index = 0; index < results.Count; index++)
+        {
+            var result = results[index];
+            if (result.Disposition == "other"
+                && !SubtitleAssociationResolver.IsVideo(filesById[result.FileId].RelativePath))
+            {
+                results[index] = result with { Disposition = "extras" };
+            }
+        }
     }
 
     private long ElapsedMilliseconds(long startedTimestamp) =>
