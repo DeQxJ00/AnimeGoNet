@@ -3845,9 +3845,6 @@ async function loadConfiguration() {
 function animeGoHelperApiUrl() {
     return new URL("/api", window.location.origin).href.replace(/\/$/, "");
 }
-function animeGoHelperU2ApiUrl() {
-    return new URL("/api/v1/plugins/inner_plugin_u2/ingest", window.location.origin).href;
-}
 async function loadWebUiAuthentication() {
     const status = element("#webui-authentication-status");
     const hostInput = element("#webui-listen-host");
@@ -4151,7 +4148,7 @@ async function loadU2WebApiCompatibility() {
     const keyInput = element("#u2-web-api-access-key");
     const reload = element("#u2-web-api-reload");
     const save = element("#u2-web-api-save");
-    element("#u2-web-api-url").value = animeGoHelperU2ApiUrl();
+    element("#u2-web-api-url").value = animeGoHelperApiUrl();
     element("#u2-web-api-plugin-name").value = "inner_plugin_u2";
     status.textContent = "正在读取 inner_plugin_u2.access_key…";
     reload.disabled = true;

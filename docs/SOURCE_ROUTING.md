@@ -127,7 +127,7 @@ POST /api/v1/ingest
 - `mikan`：必须有正整数 `bgmid`，并从 URL/RSS 或 `source_work_id` 得到正整数 `mikanid`。
 - `u2`：`anidbid` 可空；非空时必须是正整数。
 
-保留旧 `/api/rss` 和 `/api/download/manager` 的 Mikan/AnimeGoHelper 行为，内部转换为同一个 ingest command，不复制第二套流水线。旧 AnimeGoHelper 没有显式传 `bgmid` 时允许 Mikan adapter 按上游方式解析补齐；新 `/api/v1/ingest` 的 Mikan 项按产品规则要求显式提供 `bgmid`。U2 油猴脚本改用专用 `/api/v1/plugins/inner_plugin_u2/ingest` v1 协议，后端完成强类型校验后再转换为同一个 ingest command。
+保留旧 `/api/rss` 和 `/api/download/manager` 的 Mikan/AnimeGoHelper 行为，内部转换为同一个 ingest command，不复制第二套流水线。旧 AnimeGoHelper 没有显式传 `bgmid` 时允许 Mikan adapter 按上游方式解析补齐；新 `/api/v1/ingest` 的 Mikan 项按产品规则要求显式提供 `bgmid`。两个油猴脚本都保存同一格式的 `/api` 基础地址；U2 脚本在内部追加专用 `/v1/plugins/inner_plugin_u2/ingest` 路径，后端完成强类型校验后再转换为同一个 ingest command。
 
 首版明确采用外部脚本/API模式：油猴、浏览器扩展或其他已登录程序取得标题、带个人 passkey 的 Torrent URL 和可选元数据 ID，再调用 AnimeGoNet。主程序不保存 U2 账号、Cookie，不执行网站登录、页面抓取、验证码或 2FA 流程。
 

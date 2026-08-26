@@ -80,6 +80,22 @@ test("WebUI authentication uses the login dialog instead of a dedicated URL fiel
   assert.match(app, /监听端口必须是 0–65535 之间的整数/);
 });
 
+test("Mikan and U2 show the same AnimeGoHelper API base URL", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  assert.ok(document.querySelector("#web-api-compatibility-url"));
+  assert.ok(document.querySelector("#u2-web-api-url"));
+  assert.match(app, /#web-api-compatibility-url"\)\.value = animeGoHelperApiUrl\(\)/);
+  assert.match(app, /#u2-web-api-url"\)\.value = animeGoHelperApiUrl\(\)/);
+  assert.doesNotMatch(app, /function animeGoHelperU2ApiUrl/);
+  assert.match(
+    document.querySelector("#u2-web-api-url")?.closest("label")?.textContent ?? "",
+    /脚本会自动追加 U2 专用/,
+  );
+});
+
 test("configuration archive exposes explicit daily backup automation", async () => {
   const [document, app] = await Promise.all([
     page(),
