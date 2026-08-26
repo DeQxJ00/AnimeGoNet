@@ -211,7 +211,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 results.Add(new MetadataEpisodeFileResolution(
                     file.FileId,
                     null,
-                    "other",
+                    UnmatchedVideoDisposition(file),
                     file.PreResolvedOtherReason));
                 continue;
             }
@@ -247,7 +247,11 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     strategy,
                     priority,
                     "other", reason, retryable: false, 0, cancellationToken).ConfigureAwait(false);
-                results.Add(new MetadataEpisodeFileResolution(file.FileId, null, "other", reason));
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    UnmatchedVideoDisposition(file),
+                    reason));
                 continue;
             }
             else
@@ -297,11 +301,11 @@ public sealed class EpisodeMetadataResolutionProcessor(
                         retryable: false,
                         0,
                         cancellationToken).ConfigureAwait(false);
-                    results.Add(new MetadataEpisodeFileResolution(
-                        file.FileId,
-                        null,
-                        "other",
-                        reason));
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    UnmatchedVideoDisposition(file),
+                    reason));
                     continue;
                 }
 
@@ -383,7 +387,11 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 const string reason = "tmdb_episode_not_found";
                 await RecordAsync(claim, "tmdb_episode_number", null, "other", reason,
                     false, ElapsedMilliseconds(started), cancellationToken).ConfigureAwait(false);
-                results.Add(new MetadataEpisodeFileResolution(file.FileId, null, "other", reason));
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    UnmatchedVideoDisposition(file),
+                    reason));
                 continue;
             }
 
@@ -985,6 +993,21 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
         return file.SourceEpisode is null ? "episode_not_parsed" : "special_episode";
     }
+
+    private static string UnmatchedVideoDisposition(MetadataTaskFileProjection file)
+    {
+        if (!SubtitleAssociationResolver.IsVideo(file.RelativePath))
+        {
+            return "other";
+        }
+
+        return ContainsMovieHint(file.RelativePath) ? "other" : "extras";
+    }
+
+    private static bool ContainsMovieHint(string relativePath) =>
+        relativePath.Contains("劇場版", StringComparison.OrdinalIgnoreCase)
+        || relativePath.Contains("剧场版", StringComparison.OrdinalIgnoreCase)
+        || relativePath.Contains("movie", StringComparison.OrdinalIgnoreCase);
 
     private static void ClassifyNonVideoExtras(
         MetadataEpisodeTaskClaim claim,

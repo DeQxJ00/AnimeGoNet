@@ -38,6 +38,11 @@ U2 采用人工按钮链：内部插件页配置 `inner_plugin_u2.access_key`，
 
 EP 网格的全集合来自已验证 TMDB Season 的 Episode 列表。来源站集号、文件名集号、Bangumi/AniDB Episode、RSS 项目数、Torrent 文件数量和 `Other` 文件都不能生成或扩大 EP 网格。
 
+Series/Season 已确认后，NCOP、SP、小数集号或无法确认普通 EP 的视频统一整理并显示为
+`Extras`，不计入 Other 待处理。TV 任务中的文件名若含 `劇場版`、`剧场版` 或不区分
+大小写的 `movie`，则保留为 Other，作为人工“TV+Movie 后处理”的候选入口；程序不会
+据关键词自动决定 Movie TMDB 身份。
+
 状态判定固定为：
 
 - `Downloaded`：规范键 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)` 存在有效的下载完成记录，并且下载、整理、重命名及必要的 NFO/目录数据库写入已全部成功。

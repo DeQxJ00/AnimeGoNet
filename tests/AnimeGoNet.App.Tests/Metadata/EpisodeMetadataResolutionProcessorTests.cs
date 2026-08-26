@@ -695,7 +695,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     [InlineData("Show [48.5].mkv", "48.5", "fractional_episode")]
     [InlineData("Show [SP01].mkv", "sp01", "special_episode")]
     [InlineData("poster.jpg", null, "non_video_attachment")]
-    public async Task NonIntegerOrUnknownFileGoesToOtherWithoutTmdbRequest(
+    public async Task NonIntegerOrUnknownFileGoesToExtrasWithoutTmdbRequest(
         string path,
         string? sourceEpisode,
         string expectedReason)
@@ -708,9 +708,30 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
 
         var file = Assert.Single(await ReadFilesAsync(app, taskId));
-        Assert.Equal("other", file.Disposition);
+        Assert.Equal(path.EndsWith(".jpg", StringComparison.Ordinal) ? "other" : "extras", file.Disposition);
         Assert.Null(file.EpisodeNumber);
         Assert.Equal(expectedReason, file.OtherReason);
+        Assert.Empty(tmdb.EpisodeRequests);
+    }
+
+    [Theory]
+    [InlineData("Show 劇場版.mkv")]
+    [InlineData("Show 剧场版.mkv")]
+    [InlineData("SHOW MOVIE.mkv")]
+    public async Task MovieHintInsideTvTaskRemainsOtherForMixedMediaPostprocessing(
+        string path)
+    {
+        var tmdb = new FakeTmdbClient();
+        await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
+        var taskId = await PrepareFilesAsync(app, (path, null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("other", file.Disposition);
+        Assert.Equal("episode_not_parsed", file.OtherReason);
         Assert.Empty(tmdb.EpisodeRequests);
     }
 
@@ -797,7 +818,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
-    public async Task MissingAutomaticTmdbEpisodeGoesToOtherInConfirmedSeason()
+    public async Task MissingAutomaticTmdbEpisodeGoesToExtrasInConfirmedSeason()
     {
         var tmdb = new FakeTmdbClient { EpisodeFactory = _ => null };
         await using var app = await StartSeasonResolvedTaskAsync(tmdb, episodeOffset: null);
@@ -807,7 +828,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.True(await app.App.Services.GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
 
         var file = Assert.Single(await ReadFilesAsync(app, taskId));
-        Assert.Equal("other", file.Disposition);
+        Assert.Equal("extras", file.Disposition);
         Assert.Equal("tmdb_episode_not_found", file.OtherReason);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
     }
@@ -969,7 +990,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
 
         var files = await ReadFilesAsync(app, taskId);
         Assert.Equal(4, files[0].EpisodeNumber);
-        Assert.Equal("other", files[1].Disposition);
+        Assert.Equal("extras", files[1].Disposition);
         Assert.Equal([4, 9, 5], tmdb.EpisodeRequests);
         Assert.Equal(
             "ai_confirmed_episode_changed",
@@ -997,7 +1018,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
 
         var file = Assert.Single(await ReadFilesAsync(app, taskId));
-        Assert.Equal("other", file.Disposition);
+        Assert.Equal("extras", file.Disposition);
         Assert.Equal("ai_provider_not_configured", file.OtherReason);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
         Assert.Equal(
@@ -1049,7 +1070,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
 
         Assert.Empty(ai.Requests);
-        Assert.Equal("other", Assert.Single(await ReadFilesAsync(app, taskId)).Disposition);
+        Assert.Equal("extras", Assert.Single(await ReadFilesAsync(app, taskId)).Disposition);
     }
 
     [Fact]
