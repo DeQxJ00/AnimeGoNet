@@ -1252,7 +1252,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
-    public async Task SeasonAiKnownSeasonOtherDoesNotInvokeEpisodeAiAgain()
+    public async Task SeasonAiKnownSeasonExtrasDoesNotInvokeEpisodeAiAgain()
     {
         var tmdb = new FakeTmdbClient(Series, [SeasonOne, SeasonTwo]);
         var bangumi = new FakeBangumiClient(new BangumiSubject(
@@ -1291,7 +1291,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
 
         var state = await ReadTaskFileStateAsync(app, taskId);
-        Assert.Equal("other", state.Disposition);
+        Assert.Equal("extras", state.Disposition);
         Assert.Equal("ai_episode_unmatched", state.OtherReason);
         Assert.Null(state.EpisodeNumber);
         Assert.Single(ai.Requests);

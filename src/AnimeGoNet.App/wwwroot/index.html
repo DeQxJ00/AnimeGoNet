@@ -2108,6 +2108,37 @@
     </article>
   </dialog>
 
+  <dialog id="mixed-media-postprocess-dialog" aria-labelledby="mixed-media-postprocess-title">
+    <article class="mixed-media-postprocess-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">TV + Movie postprocess</p>
+          <h2 id="mixed-media-postprocess-title">TV+Movie 后处理</h2>
+        </div>
+        <button id="mixed-media-postprocess-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <p id="mixed-media-postprocess-summary" class="muted"></p>
+      <fieldset class="mixed-media-file-picker">
+        <legend>1. 选择一个需要迁移为 Movie 的视频文件</legend>
+        <p class="muted">含 劇場版 / 剧场版 / Movie 的文件会预选；漏判时可手工选择。一次确认一个 Movie，多个 Movie 请重复操作。</p>
+        <div id="mixed-media-postprocess-files" class="mixed-media-file-list"></div>
+      </fieldset>
+      <section class="mixed-media-movie-search" aria-labelledby="mixed-media-movie-search-title">
+        <h3 id="mixed-media-movie-search-title">2. 搜索并确认 TMDB Movie</h3>
+        <div class="mixed-media-search-row">
+          <label>Movie 名称<input id="mixed-media-movie-query" maxlength="256" autocomplete="off"></label>
+          <button id="mixed-media-movie-search" type="button" class="secondary-button">搜索 TMDB Movie</button>
+        </div>
+        <div id="mixed-media-movie-results" class="mixed-media-movie-results" aria-live="polite"></div>
+      </section>
+      <p id="mixed-media-postprocess-message" class="delete-message" aria-live="polite"></p>
+      <div class="delete-actions">
+        <button id="mixed-media-postprocess-cancel" type="button" class="secondary-button">取消</button>
+        <button id="mixed-media-postprocess-confirm" type="button" class="primary-button" disabled>确认迁移到 Movie</button>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="downloader-config-dialog" aria-labelledby="downloader-config-title">
     <form id="downloader-config-form" class="downloader-config-panel">
       <div class="delete-heading">

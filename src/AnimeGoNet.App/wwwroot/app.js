@@ -123,6 +123,10 @@ const otherReadaptationReviewScrollbarThumb = element("#other-readaptation-revie
 const otherReadaptationReviewConfirm = element("#other-readaptation-review-confirm");
 const otherReadaptationReviewCancel = element("#other-readaptation-review-cancel");
 const otherReadaptationReviewReject = element("#other-readaptation-review-reject");
+const mixedMediaPostprocessDialog = element("#mixed-media-postprocess-dialog");
+const mixedMediaPostprocessConfirm = element("#mixed-media-postprocess-confirm");
+let activeMixedMediaPreview = null;
+let selectedMixedMediaMovie = null;
 let activeDeletePreview = null;
 let activeOtherReadaptationReview = null;
 let otherReadaptationReviewSubmitting = false;
@@ -6641,6 +6645,150 @@ async function ignoreOtherAttention(taskId, button) {
         }, 5000);
     }
 }
+function updateMixedMediaConfirmState() {
+    const selectedFile = document.querySelector('input[name="mixed-media-task-file"]:checked');
+    mixedMediaPostprocessConfirm.disabled =
+        activeMixedMediaPreview?.eligible !== true
+            || selectedFile === null
+            || selectedMixedMediaMovie === null;
+}
+async function openMixedMediaPostprocess(taskId) {
+    const message = element("#mixed-media-postprocess-message");
+    const summary = element("#mixed-media-postprocess-summary");
+    const files = element("#mixed-media-postprocess-files");
+    const results = element("#mixed-media-movie-results");
+    message.textContent = "";
+    summary.textContent = "正在读取已整理文件…";
+    files.replaceChildren();
+    results.replaceChildren();
+    activeMixedMediaPreview = null;
+    selectedMixedMediaMovie = null;
+    updateMixedMediaConfirmState();
+    mixedMediaPostprocessDialog.showModal();
+    try {
+        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/mixed-media-postprocess/preview`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const preview = await response.json();
+        activeMixedMediaPreview = preview;
+        summary.textContent = preview.eligible
+            ? `${preview.title} · 选择错误归入 TV 的 Movie 文件，再搜索其独立 TMDB Movie。`
+            : `${preview.title} · ${preview.reason ?? "当前不可执行后处理"}`;
+        const recommended = preview.files.find(file => file.movie_hint && file.source_available);
+        for (const file of preview.files) {
+            const label = document.createElement("label");
+            label.className = "mixed-media-file-option";
+            const input = document.createElement("input");
+            input.type = "radio";
+            input.name = "mixed-media-task-file";
+            input.value = file.task_file_id;
+            input.disabled = !preview.eligible || !file.source_available;
+            input.checked = recommended?.task_file_id === file.task_file_id;
+            input.addEventListener("change", updateMixedMediaConfirmState);
+            const body = document.createElement("span");
+            const title = document.createElement("strong");
+            title.textContent = `${file.movie_hint ? "Movie 候选 · " : ""}${file.source_name}`;
+            const detail = document.createElement("small");
+            detail.textContent = `${readaptationDisposition(file.disposition)} · ${formatBytes(file.size_bytes)} · `
+                + `${file.tmdb_series_id === null ? "无 TV TMDB" : `TV TMDB ${file.tmdb_series_id}`}`
+                + `${file.tmdb_episode_number === null ? "" : ` · S${String(file.tmdb_season_number).padStart(2, "0")}E${String(file.tmdb_episode_number).padStart(3, "0")}`}`
+                + `${file.source_available ? "" : " · 源文件不可用"}`;
+            body.append(title, document.createElement("br"), detail);
+            label.append(input, body);
+            files.append(label);
+        }
+        element("#mixed-media-movie-query").value = preview.title;
+        updateMixedMediaConfirmState();
+    }
+    catch (error) {
+        summary.textContent = "后处理预览读取失败";
+        message.textContent = errorMessage(error, "未知错误");
+    }
+}
+async function searchMixedMediaMovies() {
+    const query = element("#mixed-media-movie-query").value.trim();
+    const results = element("#mixed-media-movie-results");
+    const message = element("#mixed-media-postprocess-message");
+    if (!query) {
+        message.textContent = "请输入 Movie 名称。";
+        return;
+    }
+    message.textContent = "正在搜索并读取 TMDB Movie 候选…";
+    results.replaceChildren();
+    selectedMixedMediaMovie = null;
+    updateMixedMediaConfirmState();
+    try {
+        const response = await authenticatedFetch(`/api/v1/tmdb/movies/search?query=${encodeURIComponent(query)}`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const body = await response.json();
+        message.textContent = body.items.length === 0
+            ? "TMDB 没有返回 Movie 候选。"
+            : "请选择一个候选；提交时后端会再次按 ID 验证。";
+        for (const movie of body.items) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "mixed-media-movie-result";
+            const marker = document.createElement("span");
+            marker.textContent = "○";
+            const text = document.createElement("span");
+            const title = document.createElement("strong");
+            title.textContent = `${movie.title} · TMDB ${movie.tmdb_movie_id}`;
+            const detail = document.createElement("small");
+            detail.textContent = `${movie.original_title || "无原名"} · 上映 ${movie.release_date ?? "未知"}`;
+            text.append(title, document.createElement("br"), detail);
+            button.append(marker, text);
+            button.addEventListener("click", () => {
+                results.querySelectorAll(".mixed-media-movie-result")
+                    .forEach(item => {
+                    item.classList.remove("selected");
+                    const itemMarker = item.firstElementChild;
+                    if (itemMarker)
+                        itemMarker.textContent = "○";
+                });
+                button.classList.add("selected");
+                marker.textContent = "●";
+                selectedMixedMediaMovie = movie;
+                updateMixedMediaConfirmState();
+            });
+            results.append(button);
+        }
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "TMDB Movie 搜索失败");
+    }
+}
+async function confirmMixedMediaPostprocess() {
+    const preview = activeMixedMediaPreview;
+    const movie = selectedMixedMediaMovie;
+    const selectedFile = document.querySelector('input[name="mixed-media-task-file"]:checked');
+    if (!preview || !movie || !selectedFile)
+        return;
+    const message = element("#mixed-media-postprocess-message");
+    mixedMediaPostprocessConfirm.disabled = true;
+    message.textContent = "正在验证 TMDB Movie 并创建迁移任务…";
+    try {
+        const requestHeaders = new Headers(headers);
+        requestHeaders.set("Content-Type", "application/json");
+        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(preview.task_id)}/mixed-media-postprocess`, {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({
+                task_file_id: selectedFile.value,
+                tmdb_movie_id: movie.tmdb_movie_id,
+            }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        message.textContent = "已创建 Movie 迁移任务；后台将移动文件、写入 movie.nfo 并更新 Movie 作品库。";
+        await loadMetadataTasks();
+        window.setTimeout(() => mixedMediaPostprocessDialog.close(), 1200);
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "TV+Movie 后处理失败");
+        updateMixedMediaConfirmState();
+    }
+}
 const readaptationDispositionLabels = {
     episode: "正片",
     duplicate: "重复跳过",
@@ -7864,6 +8012,14 @@ async function loadMetadataTasks(background = false) {
                 ignore.textContent = "忽略处理";
                 ignore.addEventListener("click", () => void ignoreOtherAttention(item.task_id, ignore));
                 actions.append(ignore);
+            }
+            if (item.status === "organized") {
+                const mixed = document.createElement("button");
+                mixed.type = "button";
+                mixed.className = "secondary-button";
+                mixed.textContent = "TV+Movie 后处理";
+                mixed.addEventListener("click", () => void openMixedMediaPostprocess(item.task_id));
+                actions.append(mixed);
             }
             if (item.status === "organized" && item.readaptation_review_state === "pending") {
                 const approve = document.createElement("button");
@@ -10917,6 +11073,10 @@ element("#other-readaptation-review-close").addEventListener("click", () => {
     if (!otherReadaptationReviewSubmitting)
         otherReadaptationReviewDialog.close();
 });
+element("#mixed-media-postprocess-close").addEventListener("click", () => mixedMediaPostprocessDialog.close());
+element("#mixed-media-postprocess-cancel").addEventListener("click", () => mixedMediaPostprocessDialog.close());
+element("#mixed-media-movie-search").addEventListener("click", () => void searchMixedMediaMovies());
+mixedMediaPostprocessConfirm.addEventListener("click", () => void confirmMixedMediaPostprocess());
 otherReadaptationReviewCancel.addEventListener("click", () => {
     if (!otherReadaptationReviewSubmitting)
         otherReadaptationReviewDialog.close();

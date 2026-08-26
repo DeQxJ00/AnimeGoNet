@@ -301,11 +301,11 @@ public sealed class EpisodeMetadataResolutionProcessor(
                         retryable: false,
                         0,
                         cancellationToken).ConfigureAwait(false);
-                results.Add(new MetadataEpisodeFileResolution(
-                    file.FileId,
-                    null,
-                    UnmatchedVideoDisposition(file),
-                    reason));
+                    results.Add(new MetadataEpisodeFileResolution(
+                        file.FileId,
+                        null,
+                        UnmatchedVideoDisposition(file),
+                        reason));
                     continue;
                 }
 

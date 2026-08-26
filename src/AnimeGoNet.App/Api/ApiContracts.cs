@@ -1118,6 +1118,46 @@ public sealed record OtherAttentionIgnoreResponse(
     [property: JsonPropertyName("result")] string Result,
     [property: JsonPropertyName("ignored_file_count")] int IgnoredFileCount);
 
+public sealed record MixedMediaPostprocessFileResponse(
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("source_name")] string SourceName,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("disposition")] string Disposition,
+    [property: JsonPropertyName("other_reason")] string? OtherReason,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_episode_number")] int? TmdbEpisodeNumber,
+    [property: JsonPropertyName("movie_hint")] bool MovieHint,
+    [property: JsonPropertyName("source_available")] bool SourceAvailable);
+
+public sealed record MixedMediaPostprocessPreviewResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("eligible")] bool Eligible,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("files")] IReadOnlyList<MixedMediaPostprocessFileResponse> Files);
+
+public sealed record TmdbMovieSearchItemResponse(
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("original_title")] string OriginalTitle,
+    [property: JsonPropertyName("release_date")] DateOnly? ReleaseDate,
+    [property: JsonPropertyName("poster_path")] string? PosterPath);
+
+public sealed record TmdbMovieSearchResponse(
+    [property: JsonPropertyName("query")] string Query,
+    [property: JsonPropertyName("items")] IReadOnlyList<TmdbMovieSearchItemResponse> Items);
+
+public sealed record MixedMediaPostprocessRequest(
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId);
+
+public sealed record MixedMediaPostprocessStartResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("status")] string Status);
+
 public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("review_state")] string ReviewState);

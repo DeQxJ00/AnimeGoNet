@@ -11,11 +11,133 @@ using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sources;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Text;
+using System.Text.Json;
 
 namespace AnimeGoNet.App.Tests.Metadata;
 
 public sealed class MovieMetadataResolutionProcessorTests
 {
+    [Fact]
+    public async Task OrganizedTvCollectionCanMoveUnhintedVideoThroughValidatedPostprocess()
+    {
+        var tmdb = new FakeTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var profile = Assert.IsType<SourceProfileRecord>(await app.App.Services
+            .GetRequiredService<SourceProfileStore>().GetEnabledAsync("mikan"));
+        const string fileName = "合集 电影正片.mkv";
+        var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
+            "mikan",
+            new IngestItemCommand(
+                "https://mikanani.me/Download/mixed.torrent",
+                new IngestItemInfo(
+                    "TV 与 Movie 合集", null, "mixed-item", "3951",
+                    "https://mikanani.me/Home/Episode/0123456789abcdef0123456789abcdef01234567",
+                    null, 3951, 547888, null, null, 583, MediaTypes.Tv))).Item);
+        var tasks = app.App.Services.GetRequiredService<IngestTaskStore>();
+        var task = await tasks.AddStagedAsync(
+            normalized,
+            profile,
+            new TorrentMetadata("TV 与 Movie 合集", new string('b', 40), 5, [new TorrentFile(fileName, 5, false)]),
+            "mixed.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(10));
+        var dispatch = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+        await tasks.CompleteDispatchAsync(
+            dispatch,
+            new DownloadTaskSnapshot(new string('b', 40), "TV 与 Movie 合集", DownloadTaskState.Complete, 1, 5, 5, 0, null),
+            Path.Combine(paths.DownloadPath, "bt"),
+            paths.SavePath,
+            DateTimeOffset.UtcNow);
+
+        var source = Path.Combine(paths.SavePath, "Series", "S01", "Extras", fileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        await File.WriteAllBytesAsync(source, [1, 2, 3, 4, 5]);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var setup = connection.CreateCommand())
+        {
+            setup.CommandText = """
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, canonical_name, original_name,
+                    needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES ('mixed-series', 65942, 'Series', 'Series', 0, $now, $now);
+                UPDATE task_files
+                SET disposition = 'other', other_reason = 'episode_not_parsed',
+                    tmdb_series_id = 65942, tmdb_season_number = 1,
+                    download_wanted = 1
+                WHERE task_id = $task_id;
+                UPDATE download_jobs
+                SET preparation_state = 'completed', organization_state = 'completed',
+                    organization_phase = 'completed', organization_total_units = 1,
+                    organization_completed_units = 1, state = 'complete', progress = 1
+                WHERE task_id = $task_id;
+                UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
+                INSERT INTO file_operations (
+                    id, task_file_id, strategy, source_path, target_path, state,
+                    bytes_verified, failure_reason, created_at_utc, updated_at_utc)
+                SELECT 'mixed-operation', id, 'move', $source, $source,
+                       'completed', 5, NULL, $now, $now
+                FROM task_files WHERE task_id = $task_id;
+                """;
+            setup.Parameters.AddWithValue("$task_id", task.Id);
+            setup.Parameters.AddWithValue("$source", source);
+            setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(5, await setup.ExecuteNonQueryAsync());
+        }
+
+        using var preview = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess/preview");
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.True(previewJson.RootElement.GetProperty("eligible").GetBoolean());
+        var file = previewJson.RootElement.GetProperty("files")[0];
+        Assert.False(file.GetProperty("movie_hint").GetBoolean());
+        var taskFileId = file.GetProperty("task_file_id").GetString()!;
+
+        using var search = await app.Client.GetAsync(
+            "/api/v1/tmdb/movies/search?query=Spirited%20Away");
+        Assert.Equal(HttpStatusCode.OK, search.StatusCode);
+        using var searchJson = JsonDocument.Parse(await search.Content.ReadAsStreamAsync());
+        Assert.Equal(129, searchJson.RootElement.GetProperty("items")[0]
+            .GetProperty("tmdb_movie_id").GetInt32());
+
+        using var start = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess",
+            new StringContent(
+                $$"""{"task_file_id":"{{taskFileId}}","tmdb_movie_id":129}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.OK, start.StatusCode);
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var targetDirectory = Path.Combine(paths.EffectiveMovieSavePath, "千与千寻 (2001)");
+        Assert.False(File.Exists(source));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "movie.nfo")));
+        await using var verify = await database.OpenConnectionAsync();
+        await using var query = verify.CreateCommand();
+        query.CommandText = """
+            SELECT task.status, file.disposition, file.tmdb_movie_id,
+                   (SELECT COUNT(*) FROM movie_completion_records WHERE tmdb_movie_id = 129)
+            FROM ingest_tasks AS task
+            JOIN task_files AS file ON file.task_id = task.id
+            WHERE task.id = $task_id;
+            """;
+        query.Parameters.AddWithValue("$task_id", task.Id);
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("organized", reader.GetString(0));
+        Assert.Equal("movie", reader.GetString(1));
+        Assert.Equal(129, reader.GetInt32(2));
+        Assert.Equal(1, reader.GetInt32(3));
+    }
+
     [Fact]
     public async Task SingleVideoMovieIsVerifiedAndNeverProjectedAsTvEpisode()
     {

@@ -25,6 +25,7 @@ public sealed class MediaOrganizationProcessor(
     DirectoryDatabaseWriter directoryDatabaseWriter,
     DirectoryDatabaseIndexStore directoryDatabaseIndex,
     PluginCatalog plugins,
+    AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -145,9 +146,11 @@ public sealed class MediaOrganizationProcessor(
                 MediaOrganizationPhases.SubtitleTransfer,
                 cancellationToken).ConfigureAwait(false);
 
-            if (claim.MediaType == "movie")
+            var movieFiles = claim.Files.Where(file => file.MediaType == "movie").ToArray();
+            var tvFiles = claim.Files.Where(file => file.MediaType != "movie").ToArray();
+            if (movieFiles.Length > 0)
             {
-                var movieGroups = claim.Files
+                var movieGroups = movieFiles
                     .GroupBy(file => (
                         MovieId: file.TmdbMovieId!.Value,
                         Title: file.CanonicalSeriesName,
@@ -166,7 +169,7 @@ public sealed class MediaOrganizationProcessor(
                 {
                     var movie = movieGroups[index];
                     await movieNfoWriter.WriteAsync(
-                        claim.SaveRootPath,
+                        options.Paths.EffectiveMovieSavePath,
                         new AnimeGoNet.Core.Metadata.TmdbMovie(
                             movie.MovieId,
                             movie.Title,
@@ -183,9 +186,9 @@ public sealed class MediaOrganizationProcessor(
                         cancellationToken).ConfigureAwait(false);
                 }
             }
-            else
+            if (tvFiles.Length > 0)
             {
-                var seriesGroups = claim.Files
+                var seriesGroups = tvFiles
                     .GroupBy(file => (file.TmdbSeriesId, file.CanonicalSeriesName))
                     .Select(group => group.Key)
                     .ToArray();
@@ -211,7 +214,7 @@ public sealed class MediaOrganizationProcessor(
                         cancellationToken).ConfigureAwait(false);
                 }
 
-                var seasonGroups = claim.Files.GroupBy(file =>
+                var seasonGroups = tvFiles.GroupBy(file =>
                         (file.TmdbSeriesId, file.CanonicalSeriesName, file.SeasonNumber))
                     .ToArray();
                 await store.UpdateProgressAsync(
@@ -307,6 +310,9 @@ public sealed class MediaOrganizationProcessor(
             var sourceRoot = file.SourceOverridePath is null
                 ? claim.DownloadRootPath
                 : claim.SaveRootPath;
+            var targetRoot = file.MediaType == "movie"
+                ? options.Paths.EffectiveMovieSavePath
+                : claim.SaveRootPath;
             var sourcePath = file.SourceOverridePath is null
                 ? ResolvePortableDownloaderPath(sourceRoot, operation.SourcePath)
                 : operation.SourcePath;
@@ -331,22 +337,23 @@ public sealed class MediaOrganizationProcessor(
             }
             else
             {
-                bytesVerified = claim.FileStrategy is "link" or "link_delete"
-                ? (await linker.LinkAsync(new SafeFileLinkRequest(
-                    sourceRoot,
-                    claim.SaveRootPath,
-                    sourcePath,
-                    operation.TargetPath,
-                    file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
-                : (await mover.MoveAsync(new SafeFileMoveRequest(
-                    operation.OperationId,
-                    sourceRoot,
-                    claim.SaveRootPath,
-                    sourcePath,
-                    operation.TargetPath,
-                    file.SizeBytes,
-                    ForceCopyAndVerify: file.PreserveSource,
-                    PreserveSource: file.PreserveSource), cancellationToken).ConfigureAwait(false)).BytesVerified;
+                bytesVerified = file.SourceOverridePath is null
+                    && claim.FileStrategy is ("link" or "link_delete")
+                    ? (await linker.LinkAsync(new SafeFileLinkRequest(
+                        sourceRoot,
+                        targetRoot,
+                        sourcePath,
+                        operation.TargetPath,
+                        file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
+                    : (await mover.MoveAsync(new SafeFileMoveRequest(
+                        operation.OperationId,
+                        sourceRoot,
+                        targetRoot,
+                        sourcePath,
+                        operation.TargetPath,
+                        file.SizeBytes,
+                        ForceCopyAndVerify: file.PreserveSource,
+                        PreserveSource: file.PreserveSource), cancellationToken).ConfigureAwait(false)).BytesVerified;
             }
             await store.CompleteFileAsync(
                 claim,
@@ -409,7 +416,7 @@ public sealed class MediaOrganizationProcessor(
             return new MediaOperationPlan(
                 file.TaskFileId,
                 movieSource,
-                PathBoundary.Combine(claim.SaveRootPath, relativeTarget));
+                PathBoundary.Combine(options.Paths.EffectiveMovieSavePath, relativeTarget));
         }
 
         var rename = await plugins.Require<IRenamePlugin>("anime-library").RenameAsync(

@@ -35,6 +35,7 @@ internal static class ApiOpenApi
         "rss-rules",
         "sources",
         "status",
+        "tmdb",
     ];
 
     public static IServiceCollection AddAnimeGoOpenApi(this IServiceCollection services)

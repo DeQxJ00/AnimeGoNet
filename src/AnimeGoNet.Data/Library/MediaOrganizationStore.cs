@@ -203,7 +203,9 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                        file.rename_suffix, file.associated_task_file_id
                        , file.source_episode, readaptation.source_media_path,
                        COALESCE(readaptation.preserve_source, 0),
-                       task.media_type, file.tmdb_movie_id, movie.release_date,
+                       CASE WHEN file.disposition = 'movie' THEN 'movie'
+                            ELSE task.media_type END,
+                       file.tmdb_movie_id, movie.release_date,
                        movie.original_title
                 FROM task_files AS file
                 JOIN ingest_tasks AS task ON task.id = file.task_id
@@ -223,8 +225,11 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                  AND movie.tmdb_movie_id = file.tmdb_movie_id
                 WHERE file.task_id = $task_id
                   AND file.disposition IN ('episode', 'movie', 'other', 'extras')
-                  AND ((task.media_type = 'tv' AND series.id IS NOT NULL)
-                       OR (task.media_type = 'movie' AND movie.id IS NOT NULL))
+                  AND ((file.disposition = 'movie' AND movie.id IS NOT NULL)
+                       OR (file.disposition <> 'movie'
+                           AND task.media_type = 'tv' AND series.id IS NOT NULL)
+                       OR (file.disposition <> 'movie'
+                           AND task.media_type = 'movie' AND movie.id IS NOT NULL))
                   AND COALESCE(file.download_wanted, 1) = 1
                   AND (
                       NOT EXISTS (

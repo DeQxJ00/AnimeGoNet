@@ -435,6 +435,13 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(app, /other-readaptation\/review/);
   assert.match(app, /other-attention\/ignore/);
   assert.match(app, /"忽略处理"/);
+  assert.match(app, /mixed-media-postprocess\/preview/);
+  assert.match(app, /tmdb\/movies\/search/);
+  assert.match(app, /"TV\+Movie 后处理"/);
+  const mixedDialog = document.querySelector("#mixed-media-postprocess-dialog");
+  assert.ok(mixedDialog);
+  assert.equal(mixedDialog.getAttribute("aria-labelledby"), "mixed-media-postprocess-title");
+  assert.ok(mixedDialog.querySelector("#mixed-media-postprocess-confirm"));
   assert.match(app, /readaptation-review-table/);
   assert.match(app, /\["信息项", "适配前", "适配后"\]/);
   assert.match(app, /"TMDB Series"/);

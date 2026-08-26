@@ -145,6 +145,13 @@ public static class ApiEndpoints
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-attention/ignore",
             IgnoreOtherAttention);
+        app.MapGet(
+            "/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess/preview",
+            PreviewMixedMediaPostprocess);
+        app.MapPost(
+            "/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess",
+            StartMixedMediaPostprocess);
+        app.MapGet("/api/v1/tmdb/movies/search", SearchTmdbMovies);
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
             ApproveOtherFileReadaptationReview);
@@ -5499,6 +5506,146 @@ public static class ApiEndpoints
             _ => TypedResults.Conflict(Error(
                 "other_attention_not_eligible",
                 "Only organized tasks without an active readaptation can ignore Other handling.")),
+        };
+    }
+
+    private static async Task<IResult> PreviewMixedMediaPostprocess(
+        string taskId,
+        MixedMediaPostprocessStore postprocess,
+        CancellationToken cancellationToken)
+    {
+        var preview = await postprocess.PreviewAsync(taskId, cancellationToken)
+            .ConfigureAwait(false);
+        if (preview is null)
+        {
+            return TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found."));
+        }
+
+        var eligible = preview.TaskStatus == "organized"
+            && preview.MediaType == "tv"
+            && !preview.HasActivePostprocess
+            && preview.Files.Count > 0;
+        var reason = eligible
+            ? null
+            : preview.TaskStatus != "organized"
+                ? "任务尚未整理完成。"
+                : preview.MediaType != "tv"
+                    ? "只有按 TV 处理的任务需要 TV+Movie 后处理。"
+                    : preview.HasActivePostprocess
+                        ? "任务已有正在执行的后处理。"
+                        : "没有可迁移的已整理视频文件。";
+        return TypedResults.Ok(new MixedMediaPostprocessPreviewResponse(
+            preview.TaskId,
+            preview.Title,
+            eligible,
+            reason,
+            preview.Files.Select(file => new MixedMediaPostprocessFileResponse(
+                file.TaskFileId,
+                file.SourceName,
+                file.SizeBytes,
+                file.Disposition,
+                file.OtherReason,
+                file.TmdbSeriesId,
+                file.TmdbSeasonNumber,
+                file.TmdbEpisodeNumber,
+                file.MovieHint,
+                File.Exists(file.SourceMediaPath)
+                    && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes)).ToArray()));
+    }
+
+    private static async Task<IResult> SearchTmdbMovies(
+        [FromQuery] string? query,
+        ITmdbMovieClient tmdb,
+        CancellationToken cancellationToken)
+    {
+        var normalized = query?.Trim() ?? string.Empty;
+        if (normalized.Length is < 1 or > 256)
+        {
+            return TypedResults.BadRequest(Error(
+                "tmdb_movie_query_invalid", "Movie search query must contain 1 to 256 characters."));
+        }
+
+        try
+        {
+            var matches = await tmdb.SearchMoviesAsync(normalized, cancellationToken)
+                .ConfigureAwait(false);
+            return TypedResults.Ok(new TmdbMovieSearchResponse(
+                normalized,
+                matches.Take(20).Select(movie => new TmdbMovieSearchItemResponse(
+                    movie.Id,
+                    movie.Title,
+                    movie.OriginalTitle,
+                    movie.ReleaseDate,
+                    movie.PosterPath)).ToArray()));
+        }
+        catch (TmdbClientException exception)
+        {
+            return TypedResults.Problem(
+                statusCode: exception.Kind is MetadataFailureKind.Network
+                    or MetadataFailureKind.RemoteService ? 503 : 422,
+                title: "TMDB Movie search failed",
+                detail: exception.SafeCode);
+        }
+    }
+
+    private static async Task<IResult> StartMixedMediaPostprocess(
+        string taskId,
+        MixedMediaPostprocessRequest request,
+        MixedMediaPostprocessStore postprocess,
+        ITmdbMovieClient tmdb,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.TaskFileId) || request.TmdbMovieId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "mixed_media_request_invalid",
+                "task_file_id and a positive tmdb_movie_id are required."));
+        }
+
+        TmdbMovie? movie;
+        try
+        {
+            movie = await tmdb.GetMovieAsync(request.TmdbMovieId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (TmdbClientException exception)
+        {
+            return TypedResults.Problem(
+                statusCode: exception.Kind is MetadataFailureKind.Network
+                    or MetadataFailureKind.RemoteService ? 503 : 422,
+                title: "TMDB Movie validation failed",
+                detail: exception.SafeCode);
+        }
+        if (movie is null || movie.Id != request.TmdbMovieId)
+        {
+            return TypedResults.UnprocessableEntity(Error(
+                "tmdb_movie_not_found", "TMDB Movie could not be validated."));
+        }
+
+        var result = await postprocess.StartAsync(
+            taskId,
+            request.TaskFileId,
+            movie,
+            DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+        return result switch
+        {
+            MixedMediaPostprocessResult.Started => TypedResults.Ok(
+                new MixedMediaPostprocessStartResponse(
+                    taskId, request.TaskFileId, request.TmdbMovieId, "downloaded")),
+            MixedMediaPostprocessResult.NotFound => TypedResults.NotFound(Error(
+                "metadata_task_not_found", "Metadata task was not found.")),
+            MixedMediaPostprocessResult.FileNotEligible => TypedResults.Conflict(Error(
+                "mixed_media_file_not_eligible",
+                "The selected file is missing, changed, or not an eligible organized video.")),
+            MixedMediaPostprocessResult.MovieAlreadyCompleted => TypedResults.Conflict(Error(
+                "movie_already_completed", "This TMDB Movie is already completed.")),
+            MixedMediaPostprocessResult.MovieClaimed => TypedResults.Conflict(Error(
+                "movie_claimed_by_another_task", "This TMDB Movie is being handled by another task.")),
+            _ => TypedResults.Conflict(Error(
+                "mixed_media_postprocess_not_eligible",
+                "The TV task is not currently eligible for mixed-media postprocessing.")),
         };
     }
 
