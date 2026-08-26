@@ -475,6 +475,9 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.ok(mixedDialog);
   assert.equal(mixedDialog.getAttribute("aria-labelledby"), "mixed-media-postprocess-title");
   assert.ok(mixedDialog.querySelector("#mixed-media-postprocess-confirm"));
+  assert.match(mixedDialog.textContent, /可多选/);
+  assert.match(app, /input\.type = "checkbox"/);
+  assert.match(app, /task_file_ids: selectedFiles/);
   assert.match(app, /readaptation-review-table/);
   assert.match(app, /\["信息项", "适配前", "适配后"\]/);
   assert.match(app, /"TMDB Series"/);

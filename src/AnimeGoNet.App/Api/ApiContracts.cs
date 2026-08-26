@@ -1154,14 +1154,31 @@ public sealed record TmdbMovieSearchResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<TmdbMovieSearchItemResponse> Items);
 
 public sealed record MixedMediaPostprocessRequest(
-    [property: JsonPropertyName("task_file_id")] string TaskFileId,
-    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId);
+    [property: JsonPropertyName("task_file_ids")] IReadOnlyList<string>? TaskFileIds,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("task_file_id")] string? LegacyTaskFileId)
+{
+    public IReadOnlyList<string> SelectedTaskFileIds =>
+        (TaskFileIds is { Count: > 0 }
+            ? TaskFileIds
+            : string.IsNullOrWhiteSpace(LegacyTaskFileId)
+                ? []
+                : [LegacyTaskFileId.Trim()])
+        .Where(fileId => !string.IsNullOrWhiteSpace(fileId))
+        .Select(fileId => fileId.Trim())
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+}
 
 public sealed record MixedMediaPostprocessStartResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
-    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("task_file_ids")] IReadOnlyList<string> TaskFileIds,
     [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
-    [property: JsonPropertyName("status")] string Status);
+    [property: JsonPropertyName("status")] string Status)
+{
+    [JsonPropertyName("task_file_id")]
+    public string TaskFileId => TaskFileIds[0];
+}
 
 public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,

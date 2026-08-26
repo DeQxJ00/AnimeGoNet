@@ -9628,12 +9628,12 @@ async function ignoreOtherAttention(
 }
 
 function updateMixedMediaConfirmState(): void {
-  const selectedFile = document.querySelector<HTMLInputElement>(
+  const selectedFiles = document.querySelectorAll<HTMLInputElement>(
     'input[name="mixed-media-task-file"]:checked',
   );
   mixedMediaPostprocessConfirm.disabled =
     activeMixedMediaPreview?.eligible !== true
-    || selectedFile === null
+    || selectedFiles.length === 0
     || selectedMixedMediaMovie === null;
 }
 
@@ -9659,18 +9659,22 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
     const preview = await response.json() as MixedMediaPostprocessPreview;
     activeMixedMediaPreview = preview;
     summary.textContent = preview.eligible
-      ? `${preview.title} · 选择错误归入 TV 的 Movie 文件，再搜索其独立 TMDB Movie。`
+      ? `${preview.title} · 可多选需要迁移的 Movie 正片或特典文件，再搜索其独立 TMDB Movie。`
       : `${preview.title} · ${preview.reason ?? "当前不可执行后处理"}`;
-    const recommended = preview.files.find(file => file.movie_hint && file.source_available);
+    const recommended = new Set(
+      preview.files
+        .filter(file => file.movie_hint && file.source_available)
+        .map(file => file.task_file_id),
+    );
     for (const file of preview.files) {
       const label = document.createElement("label");
       label.className = "mixed-media-file-option";
       const input = document.createElement("input");
-      input.type = "radio";
+      input.type = "checkbox";
       input.name = "mixed-media-task-file";
       input.value = file.task_file_id;
       input.disabled = !preview.eligible || !file.source_available;
-      input.checked = recommended?.task_file_id === file.task_file_id;
+      input.checked = recommended.has(file.task_file_id);
       input.addEventListener("change", updateMixedMediaConfirmState);
       const body = document.createElement("span");
       const title = document.createElement("strong");
@@ -9749,10 +9753,10 @@ async function searchMixedMediaMovies(): Promise<void> {
 async function confirmMixedMediaPostprocess(): Promise<void> {
   const preview = activeMixedMediaPreview;
   const movie = selectedMixedMediaMovie;
-  const selectedFile = document.querySelector<HTMLInputElement>(
+  const selectedFiles = Array.from(document.querySelectorAll<HTMLInputElement>(
     'input[name="mixed-media-task-file"]:checked',
-  );
-  if (!preview || !movie || !selectedFile) return;
+  )).map(input => input.value);
+  if (!preview || !movie || selectedFiles.length === 0) return;
   const message = element<HTMLElement>("#mixed-media-postprocess-message");
   mixedMediaPostprocessConfirm.disabled = true;
   message.textContent = "正在验证 TMDB Movie 并创建迁移任务…";
@@ -9765,13 +9769,13 @@ async function confirmMixedMediaPostprocess(): Promise<void> {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify({
-          task_file_id: selectedFile.value,
+          task_file_ids: selectedFiles,
           tmdb_movie_id: movie.tmdb_movie_id,
         }),
       },
     );
     if (!response.ok) throw new Error(await responseError(response));
-    message.textContent = "已创建 Movie 迁移任务；后台将移动文件、写入 movie.nfo 并更新 Movie 作品库。";
+    message.textContent = `已创建 ${selectedFiles.length} 个文件的 Movie 迁移任务；后台将移动文件、写入 movie.nfo 并更新 Movie 作品库。`;
     await loadMetadataTasks();
     window.setTimeout(() => mixedMediaPostprocessDialog.close(), 1200);
   } catch (error) {

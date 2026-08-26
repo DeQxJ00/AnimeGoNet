@@ -408,6 +408,20 @@ public sealed class MediaOrganizationProcessor(
 
             var movieSource = file.SourceOverridePath
                 ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
+            if (file.AssociatedFileId is not null && file.RenameSuffix is null)
+            {
+                var movieDirectory = MoviePathPlanner.DirectoryName(
+                    file.CanonicalSeriesName,
+                    file.MovieReleaseDate);
+                var originalName = Path.GetFileName(file.RelativePath.Replace('\\', Path.DirectorySeparatorChar));
+                var extraName = MediaPathPlanner.SanitizeSegment(originalName);
+                return new MediaOperationPlan(
+                    file.TaskFileId,
+                    movieSource,
+                    PathBoundary.Combine(
+                        options.Paths.EffectiveMovieSavePath,
+                        Path.Combine(movieDirectory, extraName)));
+            }
             var relativeTarget = MoviePathPlanner.PlanRelativePath(new MoviePathInput(
                 file.CanonicalSeriesName,
                 file.MovieReleaseDate,

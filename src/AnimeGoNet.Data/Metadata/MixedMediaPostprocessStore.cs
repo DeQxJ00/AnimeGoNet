@@ -124,16 +124,33 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
             taskId, title!, status!, mediaType!, active, files);
     }
 
-    public async Task<MixedMediaPostprocessResult> StartAsync(
+    public Task<MixedMediaPostprocessResult> StartAsync(
         string taskId,
         string taskFileId,
+        TmdbMovie movie,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default) =>
+        StartAsync(taskId, new[] { taskFileId }, movie, utcNow, cancellationToken);
+
+    public async Task<MixedMediaPostprocessResult> StartAsync(
+        string taskId,
+        IReadOnlyList<string> taskFileIds,
         TmdbMovie movie,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(taskFileId);
+        ArgumentNullException.ThrowIfNull(taskFileIds);
         ArgumentNullException.ThrowIfNull(movie);
+        var normalizedFileIds = taskFileIds
+            .Where(fileId => !string.IsNullOrWhiteSpace(fileId))
+            .Select(fileId => fileId.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (normalizedFileIds.Length == 0)
+        {
+            throw new ArgumentException("At least one task file is required.", nameof(taskFileIds));
+        }
         if (movie.Id <= 0 || string.IsNullOrWhiteSpace(movie.Title))
         {
             throw new ArgumentException("A validated TMDB Movie is required.", nameof(movie));
@@ -149,9 +166,14 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
         {
             return MixedMediaPostprocessResult.NotEligible;
         }
-        var selected = preview.Files.SingleOrDefault(file => file.TaskFileId == taskFileId);
-        if (selected is null || !File.Exists(selected.SourceMediaPath)
-            || new FileInfo(selected.SourceMediaPath).Length != selected.SizeBytes)
+        var filesById = preview.Files.ToDictionary(file => file.TaskFileId, StringComparer.Ordinal);
+        var selected = normalizedFileIds
+            .Where(filesById.ContainsKey)
+            .Select(fileId => filesById[fileId])
+            .ToArray();
+        if (selected.Length != normalizedFileIds.Length
+            || selected.Any(file => !File.Exists(file.SourceMediaPath)
+                || new FileInfo(file.SourceMediaPath).Length != file.SizeBytes))
         {
             return MixedMediaPostprocessResult.FileNotEligible;
         }
@@ -162,8 +184,9 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
         await using var transaction = (SqliteTransaction)await connection
             .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        await using (var eligibility = connection.CreateCommand())
+        foreach (var candidate in selected)
         {
+            await using var eligibility = connection.CreateCommand();
             eligibility.Transaction = transaction;
             eligibility.CommandText = """
                 SELECT COUNT(*)
@@ -183,9 +206,9 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                     WHERE active.task_id = task.id AND active.state = 'pending');
                 """;
             eligibility.Parameters.AddWithValue("$task_id", taskId);
-            eligibility.Parameters.AddWithValue("$file_id", taskFileId);
-            eligibility.Parameters.AddWithValue("$source_path", selected.SourceMediaPath);
-            eligibility.Parameters.AddWithValue("$size_bytes", selected.SizeBytes);
+            eligibility.Parameters.AddWithValue("$file_id", candidate.TaskFileId);
+            eligibility.Parameters.AddWithValue("$source_path", candidate.SourceMediaPath);
+            eligibility.Parameters.AddWithValue("$size_bytes", candidate.SizeBytes);
             if (Convert.ToInt64(
                     await eligibility.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
                     CultureInfo.InvariantCulture) != 1)
@@ -256,7 +279,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                 """;
             claim.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
             claim.Parameters.AddWithValue("$tmdb_id", movie.Id);
-            claim.Parameters.AddWithValue("$file_id", taskFileId);
+            claim.Parameters.AddWithValue("$file_id", selected[0].TaskFileId);
             claim.Parameters.AddWithValue("$now", now);
             claim.Parameters.AddWithValue(
                 "$expires",
@@ -268,8 +291,9 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
             }
         }
 
-        await using (var convert = connection.CreateCommand())
+        foreach (var candidate in selected)
         {
+            await using var convert = connection.CreateCommand();
             convert.Transaction = transaction;
             convert.CommandText = """
                 DELETE FROM completion_records
@@ -294,7 +318,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                     tmdb_movie_id = $tmdb_id,
                     tmdb_series_id = NULL, tmdb_season_number = NULL,
                     tmdb_episode_number = NULL, tmdb_episode_id = NULL,
-                    associated_task_file_id = NULL, rename_suffix = NULL,
+                    associated_task_file_id = $associated_file_id, rename_suffix = NULL,
                     episode_resolution_source = NULL,
                     episode_resolution_run_id = NULL,
                     episode_resolution_attempt_id = NULL
@@ -317,19 +341,24 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                 WHERE id = $task_id AND status = 'organized';
                 """;
             convert.Parameters.AddWithValue("$task_id", taskId);
-            convert.Parameters.AddWithValue("$file_id", taskFileId);
+            convert.Parameters.AddWithValue("$file_id", candidate.TaskFileId);
             convert.Parameters.AddWithValue("$tmdb_id", movie.Id);
             convert.Parameters.AddWithValue("$job_id", Guid.NewGuid().ToString("N"));
-            convert.Parameters.AddWithValue("$source_path", selected.SourceMediaPath);
+            convert.Parameters.AddWithValue(
+                "$associated_file_id",
+                candidate.TaskFileId == selected[0].TaskFileId
+                    ? DBNull.Value
+                    : selected[0].TaskFileId);
+            convert.Parameters.AddWithValue("$source_path", candidate.SourceMediaPath);
             convert.Parameters.AddWithValue(
                 "$original_reason",
-                (object?)selected.OtherReason ?? "mixed_media_manual_postprocess");
-            convert.Parameters.AddWithValue("$preserve_source", selected.SharedPathReferenceCount > 1 ? 1 : 0);
-            convert.Parameters.AddWithValue("$original_disposition", selected.Disposition);
-            convert.Parameters.AddWithValue("$series", (object?)selected.TmdbSeriesId ?? DBNull.Value);
-            convert.Parameters.AddWithValue("$season", (object?)selected.TmdbSeasonNumber ?? DBNull.Value);
-            convert.Parameters.AddWithValue("$episode", (object?)selected.TmdbEpisodeNumber ?? DBNull.Value);
-            convert.Parameters.AddWithValue("$was_episode", selected.Disposition == "episode" ? 1 : 0);
+                (object?)candidate.OtherReason ?? "mixed_media_manual_postprocess");
+            convert.Parameters.AddWithValue("$preserve_source", candidate.SharedPathReferenceCount > 1 ? 1 : 0);
+            convert.Parameters.AddWithValue("$original_disposition", candidate.Disposition);
+            convert.Parameters.AddWithValue("$series", (object?)candidate.TmdbSeriesId ?? DBNull.Value);
+            convert.Parameters.AddWithValue("$season", (object?)candidate.TmdbSeasonNumber ?? DBNull.Value);
+            convert.Parameters.AddWithValue("$episode", (object?)candidate.TmdbEpisodeNumber ?? DBNull.Value);
+            convert.Parameters.AddWithValue("$was_episode", candidate.Disposition == "episode" ? 1 : 0);
             convert.Parameters.AddWithValue("$now", now);
             await convert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }

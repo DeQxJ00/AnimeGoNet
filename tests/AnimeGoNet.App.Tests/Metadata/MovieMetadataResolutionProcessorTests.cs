@@ -28,6 +28,7 @@ public sealed class MovieMetadataResolutionProcessorTests
         var profile = Assert.IsType<SourceProfileRecord>(await app.App.Services
             .GetRequiredService<SourceProfileStore>().GetEnabledAsync("mikan"));
         const string fileName = "合集 电影正片.mkv";
+        const string extraFileName = "Movie 特典.mkv";
         var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
             "mikan",
             new IngestItemCommand(
@@ -43,6 +44,19 @@ public sealed class MovieMetadataResolutionProcessorTests
             new TorrentMetadata("TV 与 Movie 合集", new string('b', 40), 5, [new TorrentFile(fileName, 5, false)]),
             "mixed.torrent",
             DateTimeOffset.UtcNow.AddMinutes(10));
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var addExtra = await database.OpenConnectionAsync())
+        await using (var insertExtra = addExtra.CreateCommand())
+        {
+            insertExtra.CommandText = """
+                INSERT INTO task_files (id, task_id, relative_path, size_bytes, disposition,
+                                        download_file_index, download_priority, download_wanted)
+                VALUES ('mixed-extra', $task_id, $path, 4, 'other', 1, 1, 1);
+                """;
+            insertExtra.Parameters.AddWithValue("$task_id", task.Id);
+            insertExtra.Parameters.AddWithValue("$path", extraFileName);
+            Assert.Equal(1, await insertExtra.ExecuteNonQueryAsync());
+        }
         var dispatch = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
             DateTimeOffset.UtcNow,
             TimeSpan.FromMinutes(1)));
@@ -54,9 +68,10 @@ public sealed class MovieMetadataResolutionProcessorTests
             DateTimeOffset.UtcNow);
 
         var source = Path.Combine(paths.SavePath, "Series", "S01", "Extras", fileName);
+        var extraSource = Path.Combine(paths.SavePath, "Series", "S01", "Extras", extraFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         await File.WriteAllBytesAsync(source, [1, 2, 3, 4, 5]);
-        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await File.WriteAllBytesAsync(extraSource, [6, 7, 8, 9]);
         await using (var connection = await database.OpenConnectionAsync())
         await using (var setup = connection.CreateCommand())
         {
@@ -79,14 +94,19 @@ public sealed class MovieMetadataResolutionProcessorTests
                 INSERT INTO file_operations (
                     id, task_file_id, strategy, source_path, target_path, state,
                     bytes_verified, failure_reason, created_at_utc, updated_at_utc)
-                SELECT 'mixed-operation', id, 'move', $source, $source,
-                       'completed', 5, NULL, $now, $now
+                SELECT 'mixed-operation-' || id, id, 'move',
+                       CASE WHEN relative_path = $file_name THEN $source ELSE $extra_source END,
+                       CASE WHEN relative_path = $file_name THEN $source ELSE $extra_source END,
+                       'completed', CASE WHEN relative_path = $file_name THEN 5 ELSE 4 END,
+                       NULL, $now, $now
                 FROM task_files WHERE task_id = $task_id;
                 """;
             setup.Parameters.AddWithValue("$task_id", task.Id);
             setup.Parameters.AddWithValue("$source", source);
+            setup.Parameters.AddWithValue("$extra_source", extraSource);
+            setup.Parameters.AddWithValue("$file_name", fileName);
             setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
-            Assert.Equal(5, await setup.ExecuteNonQueryAsync());
+            Assert.Equal(7, await setup.ExecuteNonQueryAsync());
         }
 
         using var preview = await app.Client.GetAsync(
@@ -94,9 +114,14 @@ public sealed class MovieMetadataResolutionProcessorTests
         Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
         using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
         Assert.True(previewJson.RootElement.GetProperty("eligible").GetBoolean());
-        var file = previewJson.RootElement.GetProperty("files")[0];
+        var files = previewJson.RootElement.GetProperty("files");
+        Assert.Equal(2, files.GetArrayLength());
+        var file = files.EnumerateArray().Single(item => item.GetProperty("source_name").GetString() == fileName);
+        var extra = files.EnumerateArray().Single(item => item.GetProperty("source_name").GetString() == extraFileName);
         Assert.False(file.GetProperty("movie_hint").GetBoolean());
         var taskFileId = file.GetProperty("task_file_id").GetString()!;
+        Assert.True(extra.GetProperty("movie_hint").GetBoolean());
+        var extraTaskFileId = extra.GetProperty("task_file_id").GetString()!;
 
         using var search = await app.Client.GetAsync(
             "/api/v1/tmdb/movies/search?query=Spirited%20Away");
@@ -108,7 +133,7 @@ public sealed class MovieMetadataResolutionProcessorTests
         using var start = await app.Client.PostAsync(
             $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess",
             new StringContent(
-                $$"""{"task_file_id":"{{taskFileId}}","tmdb_movie_id":129}""",
+                $$"""{"task_file_ids":["{{taskFileId}}","{{extraTaskFileId}}"],"tmdb_movie_id":129}""",
                 Encoding.UTF8,
                 "application/json"));
         Assert.Equal(HttpStatusCode.OK, start.StatusCode);
@@ -118,7 +143,9 @@ public sealed class MovieMetadataResolutionProcessorTests
 
         var targetDirectory = Path.Combine(paths.EffectiveMovieSavePath, "千与千寻 (2001)");
         Assert.False(File.Exists(source));
+        Assert.False(File.Exists(extraSource));
         Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, extraFileName)));
         Assert.True(File.Exists(Path.Combine(targetDirectory, "movie.nfo")));
         await using var verify = await database.OpenConnectionAsync();
         await using var query = verify.CreateCommand();

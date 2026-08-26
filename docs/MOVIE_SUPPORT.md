@@ -54,8 +54,10 @@
 4. 每个候选先来自 `/3/discover/movie?with_genres=16`，随后必须由 `/3/movie/{id}` 验证。
 5. 通过 Movie ID 独立去重，整理到 `movie_save_path`，字幕随主文件改名并保留语言后缀，写入 `movie.nfo`。
 6. TV+Movie 合集不在下载前拆分。按 TV 完成后，可在“匹配与整理 → TV+Movie 后处理”
-   选择一个实际视频文件，通过可视化 TMDB Movie 搜索人工确认身份，再从 TV 媒体库迁移到
-   `movie_save_path`。关键词只预选文件，后端仍会再次验证 TMDB Movie ID。
+   多选实际视频文件（包括带 Movie 关键词的正片或特典），通过可视化 TMDB Movie 搜索人工
+   确认身份，再一起从 TV 媒体库迁移到 `movie_save_path`。关键词只预选文件，后端仍会
+   再次验证 TMDB Movie ID；首个选中文件作为 Movie 主文件，其余选中文件保留原名放入同一
+   Movie 目录，不重复生成 Movie 完成记录。
 7. 下载任务和“动画电影”库显示 Movie ID、标题、上映日期和完成状态，不显示伪造 EP 进度。
 8. 电影主文件和唯一绑定字幕持久化为 `task_files.disposition=movie`；它不是 TV 的
    `Other`，因此不进入 Other 计数、提醒或重新适配。schema v59 会把历史电影任务中的

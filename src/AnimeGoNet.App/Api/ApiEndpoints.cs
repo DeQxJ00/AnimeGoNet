@@ -5715,11 +5715,12 @@ public static class ApiEndpoints
         ITmdbMovieClient tmdb,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.TaskFileId) || request.TmdbMovieId <= 0)
+        var taskFileIds = request.SelectedTaskFileIds;
+        if (taskFileIds.Count == 0 || request.TmdbMovieId <= 0)
         {
             return TypedResults.BadRequest(Error(
                 "mixed_media_request_invalid",
-                "task_file_id and a positive tmdb_movie_id are required."));
+                "task_file_ids and a positive tmdb_movie_id are required."));
         }
 
         TmdbMovie? movie;
@@ -5744,7 +5745,7 @@ public static class ApiEndpoints
 
         var result = await postprocess.StartAsync(
             taskId,
-            request.TaskFileId,
+            taskFileIds,
             movie,
             DateTimeOffset.UtcNow,
             cancellationToken).ConfigureAwait(false);
@@ -5752,7 +5753,7 @@ public static class ApiEndpoints
         {
             MixedMediaPostprocessResult.Started => TypedResults.Ok(
                 new MixedMediaPostprocessStartResponse(
-                    taskId, request.TaskFileId, request.TmdbMovieId, "downloaded")),
+                    taskId, taskFileIds, request.TmdbMovieId, "downloaded")),
             MixedMediaPostprocessResult.NotFound => TypedResults.NotFound(Error(
                 "metadata_task_not_found", "Metadata task was not found.")),
             MixedMediaPostprocessResult.FileNotEligible => TypedResults.Conflict(Error(
