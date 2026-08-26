@@ -2,6 +2,7 @@ import { ApiClient } from "./api-client.js";
 import { clearStoredWebUiAccessKey, createAuthenticatedFetch, loadWebUiAccessKey, sha256LowerHex, storeWebUiAccessKey, } from "./webui-auth.js";
 import { renderRegionContent, renderRegionMessage, setRegionState, shouldReplacePolledRegion, } from "./ui-state.js";
 import { classifyLiveLogEntry, classifyLiveLogHttpDirection, filterLiveLogEntries, parseLiveLogEntry, } from "./log-view.js";
+let activeSubtitleImport = null;
 function element(selector) {
     const found = document.querySelector(selector);
     if (!found)
@@ -256,14 +257,6 @@ const workspaceDefinitions = {
             },
         ],
     },
-    "bangumi-cache": {
-        title: "Bangumi缓存",
-        description: "管理 AnimeGoNetData 离线 Bangumi Subject、Episode 与前传关系档案。",
-        defaultSubview: "versions",
-        tabs: [
-            { id: "versions", label: "数据版本与更新" },
-        ],
-    },
     "download-tools": {
         title: "下载工具配置",
         description: "管理 qBittorrent 实例、连接验证和跨容器路径映射。",
@@ -321,11 +314,13 @@ const workspaceDefinitions = {
         ],
     },
     system: {
-        title: "系统缓存",
-        description: "维护通用 HTTP 缓存和后台基础设施。",
-        defaultSubview: "cache",
+        title: "缓存",
+        description: "管理 Bangumi、AniDB 以及其他本地缓存。",
+        defaultSubview: "bangumi",
         tabs: [
-            { id: "cache", label: "缓存管理" },
+            { id: "bangumi", label: "Bangumi缓存" },
+            { id: "anidb", label: "AniDB缓存" },
+            { id: "other", label: "其他缓存管理" },
         ],
     },
 };
@@ -454,11 +449,14 @@ function selectWorkspace(workspace, subview, updateHash = true) {
     if (workspace === "library" && selectedSubview === "pending") {
         void loadPendingTmdb();
     }
-    if (workspace === "bangumi-cache")
+    if (workspace === "system" && selectedSubview === "bangumi")
         void loadBangumiArchiveUsage(true);
-    if (workspace === "bangumi-cache" && selectedSubview === "versions"
+    if (workspace === "system" && selectedSubview === "bangumi"
         && !dataUpdateActionRunning) {
         void loadDataUpdate(true);
+    }
+    if (workspace === "system" && selectedSubview === "anidb") {
+        void loadAnidbTitleCache(true);
     }
     if (workspace === "logs" && selectedSubview === "ai-invocations")
         void loadAiInvocationLogs();
@@ -1225,7 +1223,7 @@ async function loadDataUpdate(silent = false) {
             ["前传关系命中", `${status.archive_usage.relation_hits} 次`],
             ["最近命中", dataUpdateTime(status.archive_usage.last_hit_at_utc)],
         ]));
-        if (workspaceFromHash().workspace === "bangumi-cache") {
+        if (isSubviewVisible("system", "bangumi")) {
             await loadBangumiArchiveUsage(silent);
         }
         renderDataUpdateTransfer(status);
@@ -1302,6 +1300,144 @@ async function importOfflineDataPackage(event) {
     finally {
         setDataUpdateBusy(false);
         await loadDataUpdate(true);
+    }
+}
+let anidbCachePage = 1;
+let anidbCachePageSize = 25;
+let anidbCacheTotalItems = 0;
+let anidbCacheBusy = false;
+function anidbCacheMessage(text, alert = false) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.className = "muted empty";
+    cell.textContent = text;
+    if (alert)
+        cell.setAttribute("role", "alert");
+    row.append(cell);
+    return row;
+}
+function renderAnidbTitles(page) {
+    const target = element("#anidb-cache-list");
+    target.replaceChildren(...(page.items.length === 0
+        ? [anidbCacheMessage("没有符合条件的 AniDB 标题。")]
+        : page.items.map(item => {
+            const row = document.createElement("tr");
+            for (const value of [String(item.aid), item.title_type, item.language, item.title]) {
+                const cell = document.createElement("td");
+                cell.textContent = value;
+                row.append(cell);
+            }
+            return row;
+        })));
+    anidbCacheTotalItems = page.total_items;
+    const totalPages = Math.max(1, Math.ceil(page.total_items / page.page_size));
+    element("#anidb-cache-page").textContent =
+        `第 ${page.page} / ${totalPages} 页 · 共 ${page.total_items} 条`;
+    element("#anidb-cache-previous").disabled = page.page <= 1;
+    element("#anidb-cache-next").disabled = page.page >= totalPages;
+}
+async function loadAnidbTitles() {
+    const aidValue = element("#anidb-cache-aid").valueAsNumber;
+    const queryValue = element("#anidb-cache-query").value.trim();
+    const query = new URLSearchParams({
+        page: String(anidbCachePage),
+        page_size: String(anidbCachePageSize),
+    });
+    if (Number.isInteger(aidValue) && aidValue > 0)
+        query.set("aid", String(aidValue));
+    else if (queryValue)
+        query.set("query", queryValue);
+    try {
+        const response = await authenticatedFetch(`/api/v1/cache/anidb/titles?${query.toString()}`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        renderAnidbTitles(await response.json());
+    }
+    catch (error) {
+        element("#anidb-cache-list").replaceChildren(anidbCacheMessage(errorMessage(error, "AniDB 标题读取失败"), true));
+    }
+}
+async function loadAnidbTitleCache(silent = false) {
+    const message = element("#anidb-cache-status");
+    if (!silent)
+        message.textContent = "正在读取 AniDB 缓存状态…";
+    try {
+        const response = await authenticatedFetch("/api/v1/cache/anidb", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const status = await response.json();
+        element("#anidb-cache-interval").value = String(status.refresh_interval_hours);
+        message.textContent = status.last_status === "failed"
+            ? `最近更新失败 · ${status.last_failure_code ?? "未知原因"} · 继续使用旧缓存`
+            : `状态 ${status.last_status} · 每 ${status.refresh_interval_hours} 小时检查一次`;
+        element("#anidb-cache-summary").replaceChildren(configurationCard("缓存规模", [
+            ["动画", `${status.anime_count} 部`],
+            ["标题", `${status.title_count} 条`],
+            ["压缩包大小", formatBytes(status.source_size_bytes)],
+            ["最近导入", dataUpdateTime(status.imported_at_utc)],
+        ]), configurationCard("更新状态", [
+            ["来源", status.source_url],
+            ["本地文件", status.archive_path],
+            ["最近检查", dataUpdateTime(status.last_attempt_at_utc)],
+            ["下次检查", dataUpdateTime(status.next_check_at_utc)],
+        ]));
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "AniDB 缓存状态读取失败");
+    }
+}
+async function refreshAnidbTitleCache() {
+    if (anidbCacheBusy)
+        return;
+    anidbCacheBusy = true;
+    const button = element("#anidb-cache-refresh");
+    const message = element("#anidb-cache-status");
+    button.disabled = true;
+    message.textContent = "正在下载、校验并导入 AniDB 标题库…";
+    try {
+        const response = await authenticatedFetch("/api/v1/cache/anidb/refresh", {
+            method: "POST", headers,
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        message.textContent = "AniDB 标题缓存已更新。";
+        anidbCachePage = 1;
+        await Promise.all([loadAnidbTitleCache(true), loadAnidbTitles()]);
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "AniDB 标题缓存更新失败");
+    }
+    finally {
+        anidbCacheBusy = false;
+        button.disabled = false;
+    }
+}
+async function saveAnidbCacheSettings(event) {
+    event.preventDefault();
+    const input = element("#anidb-cache-interval");
+    const status = element("#anidb-cache-settings-status");
+    const hours = input.valueAsNumber;
+    if (!Number.isInteger(hours) || hours < 1 || hours > 720) {
+        status.textContent = "请输入 1 到 720 之间的整数小时。";
+        return;
+    }
+    const headersWithBody = new Headers(headers);
+    headersWithBody.set("Content-Type", "application/json");
+    status.textContent = "正在保存…";
+    try {
+        const response = await authenticatedFetch("/api/v1/cache/anidb/settings", {
+            method: "PUT",
+            headers: headersWithBody,
+            body: JSON.stringify({ refresh_interval_hours: hours }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        status.textContent = `已保存：每 ${hours} 小时检查一次。`;
+        await loadAnidbTitleCache(true);
+    }
+    catch (error) {
+        status.textContent = `保存失败：${errorMessage(error, "未知错误")}`;
     }
 }
 function setCacheBusy(busy) {
@@ -2910,6 +3046,7 @@ function renderLibraryDetail(detail, focus) {
         : `已识别 ${detail.mikan_bindings.length} 条 Mikan 作品关联；字幕组可从作品页选择`;
     element("#library-detail-refresh").disabled = false;
     element("#library-detail-external-import").disabled = false;
+    element("#library-detail-subtitle-import").disabled = false;
     element("#library-detail-delete-content").disabled = false;
     element("#library-detail-delete").disabled = false;
     element("#library-detail-action-status").textContent =
@@ -2941,6 +3078,7 @@ async function loadLibraryDetail(tmdbSeriesId, seasonNumber, focus = false) {
     element("#library-detail-mikan-completion").disabled = true;
     element("#library-detail-refresh").disabled = true;
     element("#library-detail-external-import").disabled = true;
+    element("#library-detail-subtitle-import").disabled = true;
     element("#library-detail-delete-content").disabled = true;
     element("#library-detail-delete").disabled = true;
     element("#library-detail-action-status").textContent = "";
@@ -3493,6 +3631,134 @@ async function importExternalMedia(scope) {
         }
     }
 }
+function renderSubtitleImportCandidates() {
+    const panel = element("#library-subtitle-import-panel");
+    const list = element("#library-subtitle-import-list");
+    const session = activeSubtitleImport;
+    panel.hidden = !session;
+    if (!session) {
+        list.replaceChildren();
+        return;
+    }
+    list.replaceChildren(...session.candidates.map((candidate) => {
+        const row = document.createElement("div");
+        row.className = "library-subtitle-import-row";
+        row.draggable = true;
+        row.dataset.candidateId = candidate.id;
+        row.addEventListener("dragstart", () => row.classList.add("dragging"));
+        row.addEventListener("dragend", () => row.classList.remove("dragging"));
+        row.addEventListener("dragover", (event) => event.preventDefault());
+        row.addEventListener("drop", (event) => {
+            event.preventDefault();
+            const sourceId = (event.dataTransfer?.getData("text/plain") || "");
+            const source = list.querySelector(`[data-candidate-id="${CSS.escape(sourceId)}"]`);
+            if (source && source !== row)
+                list.insertBefore(source, row);
+        });
+        row.addEventListener("dragstart", (event) => event.dataTransfer?.setData("text/plain", candidate.id));
+        const enabled = document.createElement("input");
+        enabled.type = "checkbox";
+        enabled.checked = candidate.selected_episode !== null;
+        enabled.dataset.subtitleEnabled = candidate.id;
+        const name = document.createElement("span");
+        name.className = "library-subtitle-import-name";
+        name.title = candidate.relative_path;
+        name.textContent = `${candidate.file_name} · ${formatBytes(candidate.size_bytes)}`;
+        const parsed = document.createElement("span");
+        parsed.className = "muted";
+        parsed.textContent = candidate.parsed_range ? `读取 EP ${candidate.parsed_range}` : "未读取 EP";
+        const episode = document.createElement("input");
+        episode.type = "number";
+        episode.min = "1";
+        episode.max = "9999";
+        episode.step = "1";
+        episode.value = candidate.selected_episode?.toString() ?? "";
+        episode.placeholder = "EP";
+        episode.dataset.subtitleEpisode = candidate.id;
+        row.append(enabled, name, parsed, episode);
+        return row;
+    }));
+    element("#library-subtitle-import-status").textContent =
+        `${session.candidates.length} 个字幕文件 · 已默认勾选可识别 EP 的文件`;
+}
+async function importSubtitleArchive() {
+    const detail = activeLibraryDetail;
+    const fileInput = element("#library-subtitle-archive-file");
+    if (!detail || !fileInput.files?.[0])
+        return;
+    const file = fileInput.files[0];
+    const status = element("#library-subtitle-import-status");
+    status.textContent = "正在读取字幕压缩包…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/library/subtitle-archives/import?tmdbSeriesId=${detail.tmdb_series_id}&seasonNumber=${detail.tmdb_season_number}`, { method: "POST", headers: { ...headers, "Content-Type": "application/zip" }, body: file });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        activeSubtitleImport = await response.json();
+        renderSubtitleImportCandidates();
+    }
+    catch (error) {
+        activeSubtitleImport = null;
+        element("#library-subtitle-import-panel").hidden = false;
+        status.textContent = `读取失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        fileInput.value = "";
+    }
+}
+async function confirmSubtitleArchiveImport() {
+    if (!activeSubtitleImport)
+        return;
+    const detail = activeLibraryDetail;
+    const list = element("#library-subtitle-import-list");
+    const assignments = activeSubtitleImport.candidates.flatMap((candidate) => {
+        const enabled = list.querySelector(`[data-subtitle-enabled="${CSS.escape(candidate.id)}"]`);
+        if (!enabled?.checked)
+            return [];
+        const input = list.querySelector(`[data-subtitle-episode="${CSS.escape(candidate.id)}"]`);
+        const episode = input?.value ? Number(input.value) : null;
+        return [{ candidate_id: candidate.id, episode_number: episode !== null && Number.isInteger(episode) && episode > 0 ? episode : null }];
+    });
+    const status = element("#library-subtitle-import-status");
+    status.textContent = "正在导入并整理字幕…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/library/subtitle-archives/${activeSubtitleImport.session_id}/confirm`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ assignments }) });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        status.textContent = `已导入 ${result.imported_count} 个字幕；Extras ${result.extras_count} 个。`;
+        activeSubtitleImport = null;
+        renderSubtitleImportCandidates();
+        if (detail)
+            await loadLibraryDetail(detail.tmdb_series_id, detail.tmdb_season_number);
+    }
+    catch (error) {
+        status.textContent = `导入失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function aiSubtitleArchiveMatch() {
+    if (!activeSubtitleImport)
+        return;
+    const status = element("#library-subtitle-import-status");
+    status.textContent = "正在使用独立字幕提示词请求 AI…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/library/subtitle-archives/${activeSubtitleImport.session_id}/ai-match`, { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const result = await response.json();
+        for (const assignment of result.assignments) {
+            const input = document.querySelector(`[data-subtitle-episode="${CSS.escape(assignment.candidate_id)}"]`);
+            const enabled = document.querySelector(`[data-subtitle-enabled="${CSS.escape(assignment.candidate_id)}"]`);
+            if (input && assignment.episode_number)
+                input.value = String(assignment.episode_number);
+            if (enabled)
+                enabled.checked = Boolean(assignment.episode_number);
+        }
+        status.textContent = `AI 已返回 ${result.assignments.length} 个候选（${result.prompt_version}），请人工复核后确认导入。`;
+    }
+    catch (error) {
+        status.textContent = `AI 匹配失败：${errorMessage(error, "未知错误")}`;
+    }
+}
 async function deleteLibrarySeason() {
     if (!activeLibraryDetail)
         return;
@@ -3958,6 +4224,24 @@ async function saveWebUiAuthentication(event) {
     finally {
         reload.disabled = false;
         save.disabled = false;
+    }
+}
+async function restartRuntime() {
+    if (!window.confirm("确定重启 AnimeGoNet？当前请求会返回后进程停止；请确认有服务管理器或手动方式负责重新启动。"))
+        return;
+    const status = element("#webui-authentication-status");
+    const button = element("#webui-restart");
+    button.disabled = true;
+    status.textContent = "正在请求重启…";
+    try {
+        const response = await authenticatedFetch("/api/v1/runtime/restart", { method: "POST", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        status.textContent = "已接受重启请求；等待进程管理器重新启动。";
+    }
+    catch (error) {
+        status.textContent = `重启请求失败：${errorMessage(error, "未知错误")}`;
+        button.disabled = false;
     }
 }
 async function readDeploymentConfiguration() {
@@ -8599,6 +8883,8 @@ function updateSourceCredentialInputs() {
     const isU2 = adapter === "u2";
     document.querySelectorAll('[data-source-adapter-scope="mikan"]')
         .forEach(field => { field.hidden = !isMikan; });
+    document.querySelectorAll('[data-source-adapter-scope="u2"]')
+        .forEach(field => { field.hidden = !isU2; });
     element("#source-u2-guidance").hidden = !isU2;
     const cookieLock = current?.locked_fields.find((lock) => lock.field === "mikan_identity_cookie");
     input.disabled = !isMikan || clear.checked || cookieLock !== undefined;
@@ -8717,6 +9003,8 @@ function populateSourceForm(profile, templateAdapter = "mikan") {
         profile?.rss_schedule_cron ?? "0 0/15 * * * ?";
     element("#source-rss-schedule-enabled").checked =
         profile?.rss_schedule_enabled ?? false;
+    element("#source-prefer-anidb-tmdb").checked =
+        profile?.prefer_anidb_tmdb_mapping ?? (isU2Template || adapter.value === "u2");
     const remove = element("#source-delete");
     remove.disabled = profile === null || profile.is_default;
     remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
@@ -9461,6 +9749,7 @@ async function saveSource(event) {
         rss_schedule_enabled: element("#source-rss-schedule-enabled").checked,
         rss_schedule_cron: element("#source-rss-cron").value.trim(),
         media_type: element("#source-media-type").value,
+        prefer_anidb_tmdb_mapping: element("#source-prefer-anidb-tmdb").checked,
     };
     const payload = current
         ? {
@@ -10857,6 +11146,10 @@ element("#library-detail-close").addEventListener("click", () => {
 element("#library-detail-refresh").addEventListener("click", () => void refreshLibrarySeason());
 element("#library-detail-mikan-completion").addEventListener("click", openMikanSeasonCompletion);
 element("#library-detail-external-import").addEventListener("click", () => void importExternalMedia("season"));
+element("#library-detail-subtitle-import").addEventListener("click", () => element("#library-subtitle-archive-file").click());
+element("#library-subtitle-archive-file").addEventListener("change", () => void importSubtitleArchive());
+element("#library-subtitle-import-confirm").addEventListener("click", () => void confirmSubtitleArchiveImport());
+element("#library-subtitle-import-ai").addEventListener("click", () => void aiSubtitleArchiveMatch());
 element("#library-detail-delete").addEventListener("click", () => void deleteLibrarySeason());
 element("#library-detail-delete-content").addEventListener("click", openLibraryContentDeletion);
 element("#mikan-season-completion-close").addEventListener("click", closeMikanSeasonCompletion);
@@ -10909,6 +11202,7 @@ element("#deployment-data-path-reload").addEventListener("click", () => void loa
 element("#deployment-data-path-form").addEventListener("submit", (event) => void saveDeploymentDataPath(event));
 element("#webui-authentication-reload").addEventListener("click", () => void loadWebUiAuthentication());
 element("#webui-authentication-form").addEventListener("submit", (event) => void saveWebUiAuthentication(event));
+element("#webui-restart").addEventListener("click", () => void restartRuntime());
 element("#web-api-compatibility-reload").addEventListener("click", () => void loadWebApiCompatibility());
 element("#web-api-compatibility-form").addEventListener("submit", (event) => void saveWebApiCompatibility(event));
 element("#u2-web-api-reload").addEventListener("click", () => void loadU2WebApiCompatibility());
@@ -11058,6 +11352,33 @@ element("#data-update-offline-package").addEventListener("change", () => {
             || element("#data-update-offline-package").files?.length !== 1;
 });
 element("#data-update-offline-form").addEventListener("submit", (event) => void importOfflineDataPackage(event));
+element("#anidb-cache-reload").addEventListener("click", () => void loadAnidbTitleCache());
+element("#anidb-cache-refresh").addEventListener("click", () => void refreshAnidbTitleCache());
+element("#anidb-cache-settings").addEventListener("submit", event => void saveAnidbCacheSettings(event));
+element("#anidb-cache-search").addEventListener("submit", event => {
+    event.preventDefault();
+    anidbCachePage = 1;
+    anidbCachePageSize = Number(element("#anidb-cache-page-size").value);
+    void loadAnidbTitles();
+});
+element("#anidb-cache-clear").addEventListener("click", () => {
+    element("#anidb-cache-search").reset();
+    anidbCachePage = 1;
+    anidbCachePageSize = 25;
+    void loadAnidbTitles();
+});
+element("#anidb-cache-previous").addEventListener("click", () => {
+    if (anidbCachePage <= 1)
+        return;
+    anidbCachePage--;
+    void loadAnidbTitles();
+});
+element("#anidb-cache-next").addEventListener("click", () => {
+    if (anidbCachePage * anidbCachePageSize >= anidbCacheTotalItems)
+        return;
+    anidbCachePage++;
+    void loadAnidbTitles();
+});
 element("#cache-database").addEventListener("change", event => {
     cacheDatabase = event.currentTarget.value;
     activeCacheBucketId = null;
@@ -11297,6 +11618,7 @@ void loadAiTestPrompt();
 void loadStatus();
 void loadDirectoryDatabase();
 void loadDataUpdate();
+void loadAnidbTitleCache();
 void loadCacheBuckets();
 connectLiveLogs();
 void loadLibrary();
@@ -11343,7 +11665,7 @@ window.setInterval(() => {
     }
 }, 10000);
 window.setInterval(() => {
-    if (isSubviewVisible("bangumi-cache", "versions")
+    if (isSubviewVisible("system", "bangumi")
         && !dataUpdateActionRunning
         && !hasFocusedEditorWithin("#data-update") && !hasOpenDialog()) {
         void loadDataUpdate(true);

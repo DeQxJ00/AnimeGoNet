@@ -286,7 +286,7 @@ SSRF 公网地址门禁。
 `metadata.mikan.bangumi_identity_cache_hours` 控制 `mikanid→bgmid`。两项默认均为
 `8760` 小时（1 年），允许 `0` 表示永久，最大 87600 小时（10 年）；只缓存成功且 ID
 完整的结果，失败不做 negative cache。对应 bucket 为 `bolt/mikan_episode_identity` 和
-`bolt/mikan_bangumi_identity`，均可在 WebUI“系统缓存”中逐项检查和删除。WebUI 修改后
+`bolt/mikan_bangumi_identity`，均可在 WebUI“缓存 / 其他缓存管理”中逐项检查和删除。WebUI 修改后
 需重启，部署 YAML、环境变量或命令行显式设置时页面只读。
 
 `metadata.tmdb.image_base_url` 必须是以 `/` 结尾的 HTTP(S) base。官方默认值包含

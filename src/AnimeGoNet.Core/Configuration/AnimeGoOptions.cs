@@ -230,6 +230,8 @@ public sealed record SourceProfileSeed
 
     public string MediaType { get; init; } = AnimeGoNet.Core.Media.MediaTypes.Tv;
 
+    public bool PreferAniDbTmdbMapping { get; init; }
+
     public required string DownloaderId { get; init; }
 
     public required FileStrategy FileStrategy { get; init; }

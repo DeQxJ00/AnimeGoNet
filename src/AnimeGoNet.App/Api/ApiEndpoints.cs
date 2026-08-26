@@ -43,6 +43,7 @@ using AnimeGoNet.Data.U2;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Hosting;
 
 namespace AnimeGoNet.App.Api;
 
@@ -54,6 +55,7 @@ public static class ApiEndpoints
         app.MapGet("/ping", Ping);
         app.MapGet("/sha256", Sha256);
         app.MapGet("/api/v1/status", Status);
+        app.MapPost("/api/v1/runtime/restart", RestartRuntime);
         app.MapGet("/api/v1/ai-test/prompt", GetAiMetadataTestPrompt);
         AiTesterApiEndpoints.Map(app);
         app.MapGet("/api/v1/plugins", ExternalPluginConfigurations);
@@ -78,6 +80,10 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/cache/entries", CacheBrowserEntries);
         app.MapGet("/api/v1/cache/entries/{entryId}", GetCacheBrowserEntry);
         app.MapDelete("/api/v1/cache/entries/{entryId}", DeleteCacheBrowserEntry);
+        app.MapGet("/api/v1/cache/anidb", GetAnidbTitleCacheStatus);
+        app.MapGet("/api/v1/cache/anidb/titles", ListAnidbTitles);
+        app.MapPost("/api/v1/cache/anidb/refresh", RefreshAnidbTitleCache);
+        app.MapPut("/api/v1/cache/anidb/settings", PutAnidbTitleCacheSettings);
         app.MapGet("/api/v1/downloads", Downloads);
         app.MapGet("/api/v1/downloads/{jobId}", DownloadDetail);
         app.MapPost("/api/v1/downloads/{jobId}/pause", PauseDownload);
@@ -185,6 +191,9 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/library/movies", LibraryMovies);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
+        app.MapPost("/api/v1/library/subtitle-archives/import", ImportSubtitleArchive);
+        app.MapPost("/api/v1/library/subtitle-archives/{sessionId}/ai-match", AiMatchSubtitleArchive);
+        app.MapPost("/api/v1/library/subtitle-archives/{sessionId}/confirm", ConfirmSubtitleArchive);
         app.MapGet("/api/v1/library/directory-database", DirectoryDatabaseStatus);
         app.MapPost("/api/v1/library/directory-database/refresh", RefreshDirectoryDatabase);
         app.MapGet("/api/v1/data-update", GetDataUpdateStatus);
@@ -884,6 +893,114 @@ public static class ApiEndpoints
                 usage.EpisodeHits,
                 usage.RelationHits,
                 usage.LastHitAtUtc)));
+    }
+
+    private static async Task<Ok<AnidbTitleCacheStatusResponse>> GetAnidbTitleCacheStatus(
+        AnidbTitleCacheStore store,
+        DirectoryLayout layout,
+        CancellationToken cancellationToken)
+    {
+        var status = await store.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(new AnidbTitleCacheStatusResponse(
+            status.SourceUrl,
+            Path.Combine(layout.CachePath, "anidb", "anime-titles.xml.gz"),
+            status.RefreshIntervalHours,
+            status.LastAttemptAtUtc,
+            status.DownloadedAtUtc,
+            status.ImportedAtUtc,
+            status.NextCheckAtUtc,
+            status.AnimeCount,
+            status.TitleCount,
+            status.SourceSizeBytes,
+            status.LastStatus,
+            status.LastFailureCode));
+    }
+
+    private static async Task<IResult> ListAnidbTitles(
+        [FromQuery] int? page,
+        [FromQuery(Name = "page_size")] int? pageSize,
+        [FromQuery] string? query,
+        [FromQuery] int? aid,
+        AnidbTitleCacheStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await store.ListAsync(
+                page ?? 1, pageSize ?? 25, query, aid, cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new AnidbTitleCacheListResponse(
+                result.Page,
+                result.PageSize,
+                result.TotalItems,
+                result.Query,
+                result.Aid,
+                result.Items.Select(item => new AnidbTitleCacheEntryResponse(
+                    item.Aid, item.Language, item.TitleType, item.Title)).ToArray()));
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return TypedResults.BadRequest(Error(
+                "anidb_title_query_invalid",
+                "page and aid must be positive; page_size must be between 1 and 100."));
+        }
+    }
+
+    private static async Task<IResult> RefreshAnidbTitleCache(
+        IAnidbTitleCacheService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await service.RefreshAsync(force: true, cancellationToken)
+                .ConfigureAwait(false);
+            return TypedResults.Ok(new AnidbTitleCacheRefreshResponse(
+                result.Status,
+                result.AnimeCount,
+                result.TitleCount,
+                result.SourceSizeBytes,
+                result.NextCheckAtUtc));
+        }
+        catch (AnidbTitleCacheException exception)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                title: exception.Code,
+                detail: exception.Message);
+        }
+    }
+
+    private static async Task<IResult> PutAnidbTitleCacheSettings(
+        AnidbTitleCacheSettingsRequest request,
+        AnidbTitleCacheStore store,
+        DirectoryLayout layout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var status = await store.SetRefreshIntervalHoursAsync(
+                request.RefreshIntervalHours,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new AnidbTitleCacheStatusResponse(
+                status.SourceUrl,
+                Path.Combine(layout.CachePath, "anidb", "anime-titles.xml.gz"),
+                status.RefreshIntervalHours,
+                status.LastAttemptAtUtc,
+                status.DownloadedAtUtc,
+                status.ImportedAtUtc,
+                status.NextCheckAtUtc,
+                status.AnimeCount,
+                status.TitleCount,
+                status.SourceSizeBytes,
+                status.LastStatus,
+                status.LastFailureCode));
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return TypedResults.BadRequest(Error(
+                "anidb_title_interval_invalid",
+                "refresh_interval_hours must be between 1 and 720."));
+        }
     }
 
     private static async Task<IResult> ListBangumiArchiveUsage(
@@ -4079,7 +4196,8 @@ public static class ApiEndpoints
                 current: null,
                 options,
                 plugins,
-                request.MediaType);
+                request.MediaType,
+                request.PreferAniDbTmdbMapping);
             var now = DateTimeOffset.UtcNow;
             var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
             await rules.EnsureDefaultAsync(
@@ -4168,7 +4286,8 @@ public static class ApiEndpoints
                 current,
                 options,
                 plugins,
-                request.MediaType);
+                request.MediaType,
+                request.PreferAniDbTmdbMapping);
             var changedLockedFields = new List<string>();
             AddLockedChange("category", current.Category, definition.Category);
             AddLockedChange(
@@ -6839,6 +6958,17 @@ public static class ApiEndpoints
         }
     }
 
+    private static IResult RestartRuntime(IHostApplicationLifetime lifetime)
+    {
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
+            lifetime.StopApplication();
+        });
+        return Results.Accepted(
+            value: new RuntimeRestartResponse(true, "AnimeGoNet 将在当前请求返回后停止；请由服务管理器重新启动."));
+    }
+
     private static async Task<IResult> ImportExternalMedia(
         AnimeGoOptions options,
         ExternalMediaImportStore importer,
@@ -6863,6 +6993,119 @@ public static class ApiEndpoints
             return TypedResults.Conflict(Error(
                 "external_media_scan_denied",
                 "The configured media library could not be read."));
+        }
+    }
+
+    private static async Task<IResult> ImportSubtitleArchive(
+        HttpContext context,
+        [FromQuery] int tmdbSeriesId,
+        [FromQuery] int seasonNumber,
+        AnimeLibraryStore library,
+        SubtitleArchiveImportService importer,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbSeriesId <= 0 || seasonNumber <= 0)
+        {
+            return TypedResults.BadRequest(Error("subtitle_import_identity_invalid",
+                "TMDB Series ID and season number must be positive."));
+        }
+        var mediaType = context.Request.ContentType?.Split(';', 2)[0].Trim();
+        if (!string.Equals(mediaType, "application/zip", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(mediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.BadRequest(Error("subtitle_import_content_type_invalid",
+                "字幕压缩包必须以 ZIP 请求体上传。"));
+        }
+        if (context.Request.ContentLength is > 512L * 1024 * 1024)
+        {
+            return Results.Json(Error("subtitle_import_archive_too_large", "字幕压缩包不能超过 512 MiB。"),
+                ApiJsonContext.Default.ApiErrorResponse, statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+        var detail = await library.GetSeasonAsync(tmdbSeriesId, seasonNumber, cancellationToken)
+            .ConfigureAwait(false);
+        if (detail is null)
+        {
+            return TypedResults.NotFound(Error("library_season_not_found", "指定季度不存在。"));
+        }
+        try
+        {
+            var result = await importer.ImportAsync(
+                context.Request.Body,
+                context.Request.Headers.ContentDisposition.ToString() is { Length: > 0 } name
+                    ? name : "subtitle.zip",
+                tmdbSeriesId,
+                seasonNumber,
+                detail.Season.DisplayName,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new SubtitleArchiveImportResponse(
+                result.SessionId, result.ArchiveName, result.TmdbSeriesId, result.SeasonNumber,
+                result.SeriesName, result.Candidates));
+        }
+        catch (InvalidDataException exception)
+        {
+            return TypedResults.BadRequest(Error("subtitle_import_archive_invalid", exception.Message));
+        }
+    }
+
+    private static async Task<IResult> ConfirmSubtitleArchive(
+        string sessionId,
+        SubtitleArchiveConfirmRequest request,
+        SubtitleArchiveImportService importer,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (request.Assignments is null)
+        {
+            return TypedResults.BadRequest(Error("subtitle_import_assignments_missing", "请至少提交一个字幕匹配项。"));
+        }
+        var result = await importer.ConfirmAsync(
+            sessionId,
+            request.Assignments,
+            options.Paths.SavePath,
+            cancellationToken).ConfigureAwait(false);
+        return result is null
+            ? TypedResults.NotFound(Error("subtitle_import_session_not_found", "字幕导入会话已过期或不存在。"))
+            : TypedResults.Ok(new SubtitleArchiveConfirmResponse(
+                result.SessionId, result.ImportedCount, result.ExtrasCount, result.ImportedPaths));
+    }
+
+    private static async Task<IResult> AiMatchSubtitleArchive(
+        string sessionId,
+        SubtitleArchiveImportService importer,
+        IAiMetadataMatcher matcher,
+        CancellationToken cancellationToken)
+    {
+        var session = await importer.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return TypedResults.NotFound(Error("subtitle_import_session_not_found", "字幕导入会话已过期或不存在。"));
+        }
+        var input = new AiMetadataMatchInput(
+            session.SeriesName,
+            session.Candidates.Select(value => new AiMetadataFileInput(value.FileName, value.SizeBytes)).ToArray(),
+            null, null, null, session.Candidates.Count, null, null, false)
+        {
+            PromptTemplateOverride = SubtitleAiPrompt.Template,
+        };
+        try
+        {
+            var response = await matcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
+            var byName = session.Candidates.ToDictionary(value => value.FileName, StringComparer.OrdinalIgnoreCase);
+            var assignments = response.Files is null
+                ? Array.Empty<SubtitleArchiveAssignment>()
+                : response.Files
+                    .Where(value => value.Matched == true && value.Episode is > 0 && value.Name is not null)
+                    .Where(value => byName.ContainsKey(value.Name!))
+                    .Select(value => new SubtitleArchiveAssignment(
+                        byName[value.Name!].Id, value.Episode))
+                    .ToArray();
+            return TypedResults.Ok(new SubtitleArchiveAiMatchResponse(
+                SubtitleAiPrompt.Version, assignments, response.Reason, response.Usage));
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.SafeCode, "字幕 AI 匹配失败。"));
         }
     }
 
@@ -8763,7 +9006,8 @@ public static class ApiEndpoints
             profile.RssLastCompletedAtUtc,
             profile.RssLastFailureCode,
             profile.RssLastBatchId,
-            profile.MediaType);
+            profile.MediaType,
+            profile.PreferAniDbTmdbMapping);
     }
 
     private static DownloaderInstanceResponse ToResponse(
@@ -8867,7 +9111,8 @@ public static class ApiEndpoints
         SourceProfileAdminRecord? current,
         AnimeGoOptions options,
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
-        string? mediaType)
+        string? mediaType,
+        bool? preferAniDbTmdbMapping)
     {
         var name = displayName?.Trim() ?? string.Empty;
         if (name.Length is < 1 or > 128)
@@ -8961,6 +9206,8 @@ public static class ApiEndpoints
             throw new ArgumentException(
                 "media_type movie can only be configured for a Mikan adapter.");
         }
+        var preferMapping = normalizedAdapter == "u2"
+            && (preferAniDbTmdbMapping ?? current?.PreferAniDbTmdbMapping ?? true);
         return new SourceProfileDefinition(
             name,
             normalizedAdapter,
@@ -8981,7 +9228,8 @@ public static class ApiEndpoints
             duplicateNotificationEnabled
                 ?? current?.DuplicateNotificationEnabled
                 ?? true,
-            normalizedMediaType);
+            normalizedMediaType,
+            preferMapping);
     }
 
     private static string RequireCanonicalStableId(string? value, string name)

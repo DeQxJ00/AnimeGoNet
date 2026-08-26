@@ -668,6 +668,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             writer.WriteBoolean(
                 "duplicate_notification_enabled",
                 profile.DuplicateNotificationEnabled);
+            writer.WriteBoolean(
+                "prefer_anidb_tmdb_mapping",
+                profile.PreferAniDbTmdbMapping);
             writer.WriteEndObject();
         }
 

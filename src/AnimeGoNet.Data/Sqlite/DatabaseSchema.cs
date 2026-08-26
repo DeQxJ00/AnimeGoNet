@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 67;
+    public const int CurrentVersion = 70;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -156,7 +156,77 @@ public static class DatabaseSchema
             "non_video_extras_disposition",
             NonVideoExtrasDisposition,
             RequiresForeignKeysDisabled: true),
+        new SchemaMigration(
+            68,
+            "anidb_title_cache",
+            AnidbTitleCache),
+        new SchemaMigration(
+            69,
+            "configurable_anidb_title_cache_interval",
+            ConfigurableAnidbTitleCacheInterval),
+        new SchemaMigration(
+            70,
+            "u2_anidb_tmdb_mapping_preference",
+            U2AniDbTmdbMappingPreference),
     ];
+
+    private const string ConfigurableAnidbTitleCacheInterval = """
+        ALTER TABLE anidb_title_cache_state
+            ADD COLUMN refresh_interval_hours INTEGER NOT NULL DEFAULT 24
+                CHECK (refresh_interval_hours BETWEEN 1 AND 720);
+        """;
+
+    private const string U2AniDbTmdbMappingPreference = """
+        ALTER TABLE source_profiles
+            ADD COLUMN prefer_anidb_tmdb_mapping INTEGER NOT NULL DEFAULT 0
+                CHECK (prefer_anidb_tmdb_mapping IN (0, 1));
+        UPDATE source_profiles
+        SET prefer_anidb_tmdb_mapping = 1
+        WHERE adapter = 'u2';
+        """;
+
+
+    private const string AnidbTitleCache = """
+        CREATE TABLE anidb_title_cache_state (
+            singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+            source_url TEXT NOT NULL,
+            etag TEXT,
+            last_modified TEXT,
+            last_attempt_at_utc TEXT,
+            downloaded_at_utc TEXT,
+            imported_at_utc TEXT,
+            next_check_at_utc TEXT,
+            anime_count INTEGER NOT NULL DEFAULT 0 CHECK (anime_count >= 0),
+            title_count INTEGER NOT NULL DEFAULT 0 CHECK (title_count >= 0),
+            source_size_bytes INTEGER NOT NULL DEFAULT 0 CHECK (source_size_bytes >= 0),
+            last_status TEXT NOT NULL DEFAULT 'empty'
+                CHECK (last_status IN ('empty', 'checking', 'not_modified', 'completed', 'failed')),
+            last_failure_code TEXT,
+            CHECK (last_failure_code IS NULL OR length(last_failure_code) BETWEEN 1 AND 128)
+        ) STRICT;
+
+        INSERT INTO anidb_title_cache_state (singleton, source_url)
+        VALUES (1, 'https://anidb.net/api/anime-titles.xml.gz');
+
+        CREATE TABLE anidb_titles (
+            aid INTEGER NOT NULL CHECK (aid > 0),
+            language TEXT NOT NULL,
+            title_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            normalized_title TEXT NOT NULL,
+            PRIMARY KEY (aid, language, title_type, title),
+            CHECK (length(language) BETWEEN 1 AND 16),
+            CHECK (length(title_type) BETWEEN 1 AND 16),
+            CHECK (length(title) > 0),
+            CHECK (length(normalized_title) > 0)
+        ) STRICT;
+
+        CREATE INDEX ix_anidb_titles_aid
+            ON anidb_titles(aid, title_type, language, title);
+
+        CREATE INDEX ix_anidb_titles_normalized
+            ON anidb_titles(normalized_title, aid);
+        """;
 
     private const string NonVideoExtrasDisposition = """
         DROP TRIGGER tr_notification_ingest_status;

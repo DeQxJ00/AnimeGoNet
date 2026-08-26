@@ -433,6 +433,23 @@ test("Bangumi archive hit details are collapsed by default and use a compact tab
   assert.match(css, /\.data-update-usage-detail\[open\]/);
 });
 
+test("cache workspace groups Bangumi, AniDB and other caches", async () => {
+  const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
+  assert.equal(
+    document.querySelector('[data-workspace-target="system"]')?.textContent?.trim(),
+    "◉缓存",
+  );
+  assert.equal(document.querySelector('[data-workspace-target="bangumi-cache"]'), null);
+  assert.ok(document.querySelector('[data-workspace="system"][data-subview="bangumi"]'));
+  assert.ok(document.querySelector('[data-workspace="system"][data-subview="anidb"]'));
+  assert.ok(document.querySelector('[data-workspace="system"][data-subview="other"]'));
+  assert.match(app, /title: "缓存"/);
+  assert.match(app, /\{ id: "bangumi", label: "Bangumi缓存" \}/);
+  assert.match(app, /\{ id: "anidb", label: "AniDB缓存" \}/);
+  assert.match(app, /\{ id: "other", label: "其他缓存管理" \}/);
+  assert.match(app, /\/api\/v1\/cache\/anidb\/refresh/);
+});
+
 test("Other readaptation review confirms a server-provided before and after comparison", async () => {
   const [document, app, css] = await Promise.all([
     page(),

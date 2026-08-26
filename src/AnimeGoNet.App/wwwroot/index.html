@@ -20,14 +20,13 @@
         <button type="button" data-workspace-target="library"><span aria-hidden="true">▣</span>动画库</button>
         <button type="button" data-workspace-target="tasks"><span aria-hidden="true">↻</span>任务中心</button>
         <button type="button" data-workspace-target="sources"><span aria-hidden="true">⇄</span>输入源</button>
-        <button type="button" data-workspace-target="bangumi-cache"><span aria-hidden="true">▤</span>Bangumi缓存</button>
         <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
         <button type="button" data-workspace-target="plugins"><span aria-hidden="true">⊞</span>插件</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
         <button type="button" data-workspace-target="notifications"><span aria-hidden="true">♢</span>通知</button>
         <button type="button" data-workspace-target="logs"><span aria-hidden="true">≡</span>日志</button>
-        <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>系统缓存</button>
+        <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>缓存</button>
       </nav>
       <p class="sidebar-footnote">配置编辑页直接回填本机已保存值；日志与运行轨迹继续脱敏。</p>
     </aside>
@@ -356,12 +355,26 @@
           <a id="library-detail-tmdb-link" class="secondary-button library-tmdb-link" href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" hidden>↗ 打开 TMDB 季度</a>
           <button id="library-detail-mikan-completion" type="button" class="primary-button">下载全部 / 补全 EP</button>
           <button id="library-detail-external-import" type="button" class="secondary-button">扫描本季度外部媒体</button>
+          <button id="library-detail-subtitle-import" type="button" class="secondary-button">导入字幕压缩包</button>
+          <input id="library-subtitle-archive-file" type="file" accept=".zip,application/zip" aria-label="选择字幕 ZIP 压缩包" hidden>
           <button id="library-detail-refresh" type="button" class="secondary-button">从 TMDB 刷新</button>
           <button id="library-detail-delete-content" type="button" class="danger-button">删除任务/文件…</button>
           <button id="library-detail-delete" type="button" class="secondary-button">仅删除无引用投影</button>
           <span id="library-detail-action-status" class="muted" role="status"></span>
         </div>
         <div id="library-detail-external-import-result" class="external-import-result" aria-live="polite" hidden></div>
+        <section id="library-subtitle-import-panel" class="library-subtitle-import" hidden aria-live="polite">
+          <div class="library-subtitle-import-heading">
+            <h4>字幕匹配列表</h4>
+            <span id="library-subtitle-import-status" class="muted"></span>
+          </div>
+          <p class="muted">默认使用文件名读取 EP；可修改 EP 或拖拽行调整顺序。未勾选文件不会导入。AI 匹配需要单独点击，使用独立字幕提示词。</p>
+          <div id="library-subtitle-import-list" class="library-subtitle-import-list"></div>
+          <div class="library-subtitle-import-actions">
+            <button id="library-subtitle-import-ai" type="button" class="secondary-button">AI 匹配字幕</button>
+            <button id="library-subtitle-import-confirm" type="button" class="primary-button">确认导入已勾选</button>
+          </div>
+        </section>
         <div id="library-audit" class="library-audit" aria-live="polite"></div>
         <div class="library-episode-toolbar">
           <label>EP 状态
@@ -469,6 +482,7 @@
           <div class="source-form-actions">
             <button id="webui-authentication-reload" type="button" class="secondary-button">重新读取</button>
             <button id="webui-authentication-save" type="submit" class="primary-button">保存监听与鉴权并备份</button>
+            <button id="webui-restart" type="button" class="danger-button">重启 AnimeGoNet</button>
           </div>
         </form>
       </article>
@@ -528,7 +542,7 @@
       </div>
     </section>
 
-    <section id="data-update" aria-labelledby="data-update-title" data-workspace="bangumi-cache" data-subview="versions" data-nav-label="数据版本与更新">
+    <section id="data-update" aria-labelledby="data-update-title" data-workspace="system" data-subview="bangumi" data-nav-label="Bangumi缓存">
       <div class="section-heading data-update-heading">
         <div>
           <p class="eyebrow">AnimeGoNetData</p>
@@ -625,7 +639,60 @@
       </div>
     </section>
 
-    <section id="cache-browser" aria-labelledby="cache-browser-title" data-workspace="system" data-subview="cache" data-nav-label="缓存管理">
+    <section id="anidb-cache" aria-labelledby="anidb-cache-title" data-workspace="system" data-subview="anidb" data-nav-label="AniDB缓存">
+      <div class="section-heading anidb-cache-heading">
+        <div>
+          <p class="eyebrow">AniDB anime titles archive</p>
+          <h2 id="anidb-cache-title">AniDB 标题缓存</h2>
+        </div>
+        <div class="anidb-cache-actions">
+          <button id="anidb-cache-reload" type="button" class="secondary-button">刷新状态</button>
+          <button id="anidb-cache-refresh" type="button" class="primary-button">立即下载并更新</button>
+        </div>
+      </div>
+      <p class="muted">按下方间隔检查 AniDB 官方 <code>anime-titles.xml.gz</code>。下载和 XML 校验全部成功后才原子替换 SQLite 标题索引；失败继续使用上一版。</p>
+      <p id="anidb-cache-status" class="muted" role="status">正在读取 AniDB 缓存状态…</p>
+      <div id="anidb-cache-summary" class="data-update-summary" aria-live="polite"></div>
+      <form id="anidb-cache-settings" class="anidb-cache-settings">
+        <label>自动更新时间间隔（小时）
+          <input id="anidb-cache-interval" type="number" min="1" max="720" step="1" value="24" required>
+        </label>
+        <button type="submit" class="secondary-button">保存更新时间</button>
+        <span id="anidb-cache-settings-status" class="muted" role="status"></span>
+      </form>
+      <form id="anidb-cache-search" class="anidb-cache-search">
+        <label>AID
+          <input id="anidb-cache-aid" type="number" min="1" step="1" placeholder="例如 1">
+        </label>
+        <label class="wide">标题
+          <input id="anidb-cache-query" type="search" maxlength="200" placeholder="主标题、官方译名、简称或别名">
+        </label>
+        <label>每页
+          <select id="anidb-cache-page-size">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <button type="submit" class="primary-button">查询</button>
+        <button id="anidb-cache-clear" type="button" class="secondary-button">清除</button>
+      </form>
+      <div class="data-update-usage-table-wrap">
+        <table class="data-update-usage-table">
+          <thead><tr><th>AID</th><th>类型</th><th>语言</th><th>标题</th></tr></thead>
+          <tbody id="anidb-cache-list" aria-live="polite">
+            <tr><td class="muted empty" colspan="4">尚未查询标题缓存。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <nav class="data-update-usage-pagination" aria-label="AniDB 标题缓存分页">
+        <button id="anidb-cache-previous" type="button" class="secondary-button" disabled>上一页</button>
+        <span id="anidb-cache-page">第 1 / 1 页</span>
+        <button id="anidb-cache-next" type="button" class="secondary-button" disabled>下一页</button>
+      </nav>
+    </section>
+
+    <section id="cache-browser" aria-labelledby="cache-browser-title" data-workspace="system" data-subview="other" data-nav-label="其他缓存管理">
       <div class="section-heading cache-browser-heading">
         <div>
           <p class="eyebrow">Safe SQLite cache view</p>
@@ -1242,6 +1309,11 @@
             <label data-source-adapter-scope="mikan"><input id="source-priority-enabled" type="checkbox">执行同集有序优选</label>
             <label><input id="source-duplicate-notification-enabled" type="checkbox" checked>重复命中时通知</label>
             <label data-source-adapter-scope="mikan"><input id="source-rss-schedule-enabled" type="checkbox">自动读取 Mikan RSS</label>
+            <label data-source-adapter-scope="u2" class="source-u2-mapping-option">
+              <input id="source-prefer-anidb-tmdb" type="checkbox">
+              优先使用 AniDB 映射 TMDB
+              <small>启用时（会减少 AI 调用但可能增加错误概率），优先从默认 AniDB 映射列表读取 TMDB ID，再用 AniDB 官方标题缓存搜索；作品/季度/文件名 EP 可验证时不进入 AI，无法完整验证才进入 AI。关闭时 U2 标题搜索无果更容易进入 AI。</small>
+            </label>
           </div>
           <p class="muted">重复通知写入脱敏实时日志；关闭只抑制通知，不会允许重复下载。</p>
           <details class="route-preview">

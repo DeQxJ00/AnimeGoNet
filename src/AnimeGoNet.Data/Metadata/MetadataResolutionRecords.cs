@@ -22,7 +22,8 @@ public sealed record MetadataTaskClaim(
     string? SourceId = null,
     bool DuplicateNotificationEnabled = true,
     bool IsForcedReadaptation = false,
-    string MediaType = "tv");
+    string MediaType = "tv",
+    bool PreferAniDbTmdbMapping = false);
 
 public sealed record MetadataAttempt(
     string Stage,

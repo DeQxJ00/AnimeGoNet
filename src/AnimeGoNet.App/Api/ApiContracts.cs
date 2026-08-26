@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AnimeGoNet.Core.Sources;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Media;
+using AnimeGoNet.App.Library;
 
 namespace AnimeGoNet.App.Api;
 
@@ -106,6 +107,10 @@ public sealed record CacheBrowserDeleteResponse(
     [property: JsonPropertyName("deleted")] bool Deleted);
 
 public sealed record PingData(string Version, long Time);
+
+public sealed record RuntimeRestartResponse(
+    [property: JsonPropertyName("accepted")] bool Accepted,
+    [property: JsonPropertyName("message")] string Message);
 
 public sealed record AiMetadataTestFileRequest(
     [property: JsonPropertyName("name")] string? Name,
@@ -1632,6 +1637,29 @@ public sealed record ExternalMediaImportItemResponse(
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("reason_code")] string? ReasonCode);
 
+public sealed record SubtitleArchiveImportResponse(
+    [property: JsonPropertyName("session_id")] string SessionId,
+    [property: JsonPropertyName("archive_name")] string ArchiveName,
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("season_number")] int SeasonNumber,
+    [property: JsonPropertyName("series_name")] string SeriesName,
+    [property: JsonPropertyName("candidates")] IReadOnlyList<SubtitleArchiveCandidate> Candidates);
+
+public sealed record SubtitleArchiveConfirmRequest(
+    [property: JsonPropertyName("assignments")] IReadOnlyList<SubtitleArchiveAssignment>? Assignments);
+
+public sealed record SubtitleArchiveConfirmResponse(
+    [property: JsonPropertyName("session_id")] string SessionId,
+    [property: JsonPropertyName("imported_count")] int ImportedCount,
+    [property: JsonPropertyName("extras_count")] int ExtrasCount,
+    [property: JsonPropertyName("imported_paths")] IReadOnlyList<string> ImportedPaths);
+
+public sealed record SubtitleArchiveAiMatchResponse(
+    [property: JsonPropertyName("prompt_version")] string PromptVersion,
+    [property: JsonPropertyName("assignments")] IReadOnlyList<SubtitleArchiveAssignment> Assignments,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("usage")] AiMetadataProviderUsage? Usage);
+
 public sealed record PendingTmdbListResponse(
     [property: JsonPropertyName("items")] IReadOnlyList<PendingTmdbListItem> Items);
 
@@ -1847,7 +1875,8 @@ public sealed record SourceProfileCreateRequest(
     [property: JsonPropertyName("rss_feed_url")] string? RssFeedUrl = null,
     [property: JsonPropertyName("rss_schedule_enabled")] bool? RssScheduleEnabled = null,
     [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null,
-    [property: JsonPropertyName("media_type")] string? MediaType = null);
+    [property: JsonPropertyName("media_type")] string? MediaType = null,
+    [property: JsonPropertyName("prefer_anidb_tmdb_mapping")] bool? PreferAniDbTmdbMapping = null);
 
 public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("display_name")] string? DisplayName,
@@ -1870,7 +1899,8 @@ public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("clear_rss_feed_url")] bool ClearRssFeedUrl = false,
     [property: JsonPropertyName("rss_schedule_enabled")] bool? RssScheduleEnabled = null,
     [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null,
-    [property: JsonPropertyName("media_type")] string? MediaType = null);
+    [property: JsonPropertyName("media_type")] string? MediaType = null,
+    [property: JsonPropertyName("prefer_anidb_tmdb_mapping")] bool? PreferAniDbTmdbMapping = null);
 
 public sealed record SourceProfileResponse(
     [property: JsonPropertyName("id")] string Id,
@@ -1912,7 +1942,8 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("rss_last_completed_at_utc")] DateTimeOffset? RssLastCompletedAtUtc = null,
     [property: JsonPropertyName("rss_last_failure_code")] string? RssLastFailureCode = null,
     [property: JsonPropertyName("rss_last_batch_id")] string? RssLastBatchId = null,
-    [property: JsonPropertyName("media_type")] string MediaType = MediaTypes.Tv);
+    [property: JsonPropertyName("media_type")] string MediaType = MediaTypes.Tv,
+    [property: JsonPropertyName("prefer_anidb_tmdb_mapping")] bool PreferAniDbTmdbMapping = false);
 
 public sealed record SourceProfileFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -2187,3 +2218,41 @@ public sealed record DataUpdateActionResponse(
     [property: JsonPropertyName("active_version")] string? ActiveVersion,
     [property: JsonPropertyName("downloaded")] bool Downloaded,
     [property: JsonPropertyName("imported")] bool Imported);
+
+public sealed record AnidbTitleCacheStatusResponse(
+    [property: JsonPropertyName("source_url")] string SourceUrl,
+    [property: JsonPropertyName("archive_path")] string ArchivePath,
+    [property: JsonPropertyName("refresh_interval_hours")] int RefreshIntervalHours,
+    [property: JsonPropertyName("last_attempt_at_utc")] DateTimeOffset? LastAttemptAtUtc,
+    [property: JsonPropertyName("downloaded_at_utc")] DateTimeOffset? DownloadedAtUtc,
+    [property: JsonPropertyName("imported_at_utc")] DateTimeOffset? ImportedAtUtc,
+    [property: JsonPropertyName("next_check_at_utc")] DateTimeOffset? NextCheckAtUtc,
+    [property: JsonPropertyName("anime_count")] long AnimeCount,
+    [property: JsonPropertyName("title_count")] long TitleCount,
+    [property: JsonPropertyName("source_size_bytes")] long SourceSizeBytes,
+    [property: JsonPropertyName("last_status")] string LastStatus,
+    [property: JsonPropertyName("last_failure_code")] string? LastFailureCode);
+
+public sealed record AnidbTitleCacheEntryResponse(
+    [property: JsonPropertyName("aid")] int Aid,
+    [property: JsonPropertyName("language")] string Language,
+    [property: JsonPropertyName("title_type")] string TitleType,
+    [property: JsonPropertyName("title")] string Title);
+
+public sealed record AnidbTitleCacheListResponse(
+    [property: JsonPropertyName("page")] int Page,
+    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: JsonPropertyName("total_items")] long TotalItems,
+    [property: JsonPropertyName("query")] string? Query,
+    [property: JsonPropertyName("aid")] int? Aid,
+    [property: JsonPropertyName("items")] IReadOnlyList<AnidbTitleCacheEntryResponse> Items);
+
+public sealed record AnidbTitleCacheRefreshResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("anime_count")] long AnimeCount,
+    [property: JsonPropertyName("title_count")] long TitleCount,
+    [property: JsonPropertyName("source_size_bytes")] long SourceSizeBytes,
+    [property: JsonPropertyName("next_check_at_utc")] DateTimeOffset NextCheckAtUtc);
+
+public sealed record AnidbTitleCacheSettingsRequest(
+    [property: JsonPropertyName("refresh_interval_hours")] int RefreshIntervalHours);

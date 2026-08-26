@@ -197,6 +197,7 @@ public static class AnimeGoApplication
                 ? SourceProfileDeploymentLocks.Empty
                 : SourceProfileDeploymentLocks.FromCurrentProcess(args);
         var layout = DirectoryLayout.From(options.Paths);
+        builder.Services.AddSingleton(layout);
         layout.CreateDataDirectories();
         var externalPluginLoader = new ExternalPluginManifestLoader(layout.PluginsPath);
         var externalPluginDiscovery = await externalPluginLoader
@@ -283,6 +284,7 @@ public static class AnimeGoApplication
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var dataPackages = new DataPackageStore(database);
         var bangumiArchive = new BangumiArchiveStore(database);
+        var anidbTitleCache = new AnidbTitleCacheStore(database);
         var dataUpdateTransfers = new DataUpdateTransferStore(database);
         var ownsDataUpdateHttpClient = dataUpdateHttpClient is null;
         dataUpdateHttpClient ??= OutboundHttpClientFactory.Create(
@@ -296,6 +298,15 @@ public static class AnimeGoApplication
             dataPackages,
             dataUpdateTransfers,
             ownsHttpClient: ownsDataUpdateHttpClient);
+        var anidbHttpClient = OutboundHttpClientFactory.Create(
+            options.OutboundProxy,
+            outboundHttpLogs,
+            "AniDB titles");
+        var anidbTitleCacheService = new AnidbTitleCacheService(
+            anidbHttpClient,
+            layout,
+            anidbTitleCache,
+            ownsHttpClient: true);
         var directoryDatabaseScanner = new DirectoryDatabaseScanner();
         var directoryDatabaseIndex = new DirectoryDatabaseIndexStore(
             database,
@@ -395,6 +406,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<ConfigurationBackupAutomationRunner>();
         builder.Services.AddSingleton(database);
         builder.Services.AddSingleton(dataPackages);
+        builder.Services.AddSingleton(anidbTitleCache);
+        builder.Services.AddSingleton<IAnidbTitleCacheService>(anidbTitleCacheService);
         builder.Services.AddSingleton(dataUpdateTransfers);
         builder.Services.AddSingleton<IDataUpdateService>(dataUpdates);
         builder.Services.AddSingleton<MikanRssFeedPlugin>();
@@ -538,6 +551,16 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<TmdbSeriesResolver>();
         builder.Services.AddSingleton<TmdbSeriesSeasonResolver>();
         builder.Services.AddSingleton<TmdbMovieResolver>();
+        builder.Services.AddSingleton<SubtitleArchiveImportService>();
+        builder.Services.AddSingleton<U2AniDbMetadataResolver>(services =>
+            new U2AniDbMetadataResolver(
+                MetadataHttpClientFactory.Create(
+                    options.OutboundProxy,
+                    outboundHttpLogs,
+                    "AniDB TMDB mapping"),
+                anidbTitleCache,
+                services.GetRequiredService<TmdbSeriesResolver>(),
+                services.GetRequiredService<ITmdbClient>()));
         if (bangumiSubjectClient is null)
         {
             var upstream = new BangumiSubjectClient(
@@ -607,6 +630,7 @@ public static class AnimeGoApplication
             builder.Services.AddHostedService<NotificationWorker>();
             builder.Services.AddHostedService<ConfigurationBackupAutomationWorker>();
             builder.Services.AddHostedService<MikanPublishGroupWorker>();
+            builder.Services.AddHostedService<AnidbTitleCacheWorker>();
         }
         builder.Services.Configure<JsonOptions>(json =>
             json.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default));

@@ -15,13 +15,15 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains("id=\"workspace-tabs\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"sidebar-toggle\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain(">Mikan 手动设置</button>", html, StringComparison.Ordinal);
-        Assert.Contains(">Bangumi缓存</button>", html, StringComparison.Ordinal);
-        Assert.Contains("title: \"Bangumi缓存\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-workspace-target=\"bangumi-cache\"", html, StringComparison.Ordinal);
+        Assert.Contains("{ id: \"bangumi\", label: \"Bangumi缓存\" }", script, StringComparison.Ordinal);
+        Assert.Contains("{ id: \"anidb\", label: \"AniDB缓存\" }", script, StringComparison.Ordinal);
+        Assert.Contains("{ id: \"other\", label: \"其他缓存管理\" }", script, StringComparison.Ordinal);
         Assert.Contains("AnimeGoNetData 本地缓存使用记录", script, StringComparison.Ordinal);
         Assert.Contains("本地缓存逐条命中明细", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/data-update/archive-usage", script, StringComparison.Ordinal);
         Assert.Contains(
-            "data-workspace=\"bangumi-cache\" data-subview=\"versions\"",
+            "data-workspace=\"system\" data-subview=\"bangumi\"",
             html,
             StringComparison.Ordinal);
         Assert.Contains(">下载工具配置</button>", html, StringComparison.Ordinal);
@@ -107,8 +109,8 @@ public sealed class WorkspaceNavigationTests
             "data-workspace=\"logs\" data-subview=\"ai-invocations\"",
             html,
             StringComparison.Ordinal);
-        Assert.Contains(">系统缓存</button>", html, StringComparison.Ordinal);
-        Assert.Contains("title: \"系统缓存\"", script, StringComparison.Ordinal);
+        Assert.Contains(">缓存</button>", html, StringComparison.Ordinal);
+        Assert.Contains("title: \"缓存\"", script, StringComparison.Ordinal);
         Assert.Contains("查看完整内容", script, StringComparison.Ordinal);
         Assert.Contains("id=\"cache-entry-dialog\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Mikan 自动化", html + script, StringComparison.Ordinal);
@@ -118,7 +120,6 @@ public sealed class WorkspaceNavigationTests
             "library",
             "tasks",
             "sources",
-            "bangumi-cache",
             "download-tools",
             "plugins",
             "connections",

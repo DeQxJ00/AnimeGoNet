@@ -20,6 +20,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
     ITmdbClient tmdb,
     TmdbMovieResolver movieResolver,
     AnimeGoOptions options,
+    U2AniDbMetadataResolver? u2AniDbResolver = null,
     TimeProvider? timeProvider = null,
     IBangumiEpisodeClient? bangumiEpisodes = null,
     MetadataRefreshScope? refreshScope = null)
@@ -60,6 +61,50 @@ public sealed class AutomaticMetadataResolutionProcessor(
         if (await TryCompleteTrustedOffsetAsync(claim, cancellationToken).ConfigureAwait(false))
         {
             return true;
+        }
+
+        if (claim.PreferAniDbTmdbMapping
+            && string.Equals(claim.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
+            && claim.AniDbAnimeId is > 0
+            && u2AniDbResolver is not null)
+        {
+            var started = _timeProvider.GetTimestamp();
+            U2AniDbResolution? preferred = null;
+            try
+            {
+                preferred = await u2AniDbResolver.ResolveAsync(
+                    claim.AniDbAnimeId.Value,
+                    claim.Title,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (TmdbClientException exception)
+            {
+                await RecordAsync(claim, "series", "u2_anidb_preference", null, "error",
+                    exception.SafeCode, IsRetryable(exception.Kind), started, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (preferred is { IsSuccess: true })
+            {
+                await RecordAsync(claim, "series", preferred.Strategy, null, "matched", null,
+                    false, started, cancellationToken).ConfigureAwait(false);
+                await RecordAsync(claim, "season", preferred.Strategy, null, "matched", null,
+                    false, started, cancellationToken).ConfigureAwait(false);
+                await CompleteSeasonAsync(
+                    claim,
+                    preferred.Details!.Series,
+                    preferred.Season!,
+                    preferred.Strategy,
+                    null,
+                    started,
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            if (preferred is not null)
+            {
+                await RecordAsync(claim, "series", preferred.Strategy, null, "not_matched",
+                    preferred.FailureCode, false, started, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         BangumiSubject? subject = null;
