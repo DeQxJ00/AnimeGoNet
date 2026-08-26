@@ -671,6 +671,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             writer.WriteBoolean(
                 "prefer_anidb_tmdb_mapping",
                 profile.PreferAniDbTmdbMapping);
+            writer.WriteString(
+                "anidb_tmdb_mapping_url_template",
+                profile.AniDbTmdbMappingUrlTemplate);
             writer.WriteEndObject();
         }
 

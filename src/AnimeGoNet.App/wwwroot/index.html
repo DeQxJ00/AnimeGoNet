@@ -1311,8 +1311,9 @@
             <label data-source-adapter-scope="mikan"><input id="source-rss-schedule-enabled" type="checkbox">自动读取 Mikan RSS</label>
             <label data-source-adapter-scope="u2" class="source-u2-mapping-option">
               <input id="source-prefer-anidb-tmdb" type="checkbox">
-              优先使用 AniDB 映射 TMDB
-              <small>启用时（会减少 AI 调用但可能增加错误概率），优先从默认 AniDB 映射列表读取 TMDB ID，再用 AniDB 官方标题缓存搜索；作品/季度/文件名 EP 可验证时不进入 AI，无法完整验证才进入 AI。关闭时 U2 标题搜索无果更容易进入 AI。</small>
+              <span>优先使用 AniDB 映射 TMDB</span>
+              <input id="source-anidb-tmdb-mapping-url" type="url" maxlength="2048" placeholder="https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json" spellcheck="false">
+              <small>启用时（会减少 AI 调用但可能增加错误概率），先按这里的 URL 模板读取 TMDB ID，再用 AniDB 官方标题缓存搜索；作品/季度/文件名 EP 可验证时不进入 AI，无法完整验证才进入 AI。关闭后跳过 AniDB 映射，直接走 AniDB 标题缓存搜索，搜索无果时再进入 AI。URL 必须包含 <code>{anidbid}</code>；留空使用默认值。</small>
             </label>
           </div>
           <p class="muted">重复通知写入脱敏实时日志；关闭只抑制通知，不会允许重复下载。</p>

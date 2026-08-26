@@ -27,12 +27,13 @@ public sealed class U2AniDbMetadataResolver(
     public async Task<U2AniDbResolution> ResolveAsync(
         int aid,
         string taskTitle,
+        string? mappingUrlTemplate = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(aid, 0);
         ArgumentException.ThrowIfNullOrWhiteSpace(taskTitle);
 
-        var mappedId = await TryReadMappingAsync(aid, cancellationToken).ConfigureAwait(false);
+        var mappedId = await TryReadMappingAsync(aid, mappingUrlTemplate, cancellationToken).ConfigureAwait(false);
         if (mappedId is > 0)
         {
             var direct = await ResolveSeriesIdAsync(
@@ -117,9 +118,13 @@ public sealed class U2AniDbMetadataResolver(
 
     private async Task<int?> TryReadMappingAsync(
         int aid,
+        string? mappingUrlTemplate,
         CancellationToken cancellationToken)
     {
-        var url = MappingUrlTemplate.Replace(
+        var template = string.IsNullOrWhiteSpace(mappingUrlTemplate)
+            ? MappingUrlTemplate
+            : mappingUrlTemplate.Trim();
+        var url = template.Replace(
             "{anidbid}", aid.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
         try
         {

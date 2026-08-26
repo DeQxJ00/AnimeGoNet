@@ -9007,6 +9007,8 @@ function populateSourceForm(profile, templateAdapter = "mikan") {
         profile?.rss_schedule_enabled ?? false;
     element("#source-prefer-anidb-tmdb").checked =
         profile?.prefer_anidb_tmdb_mapping ?? (isU2Template || adapter.value === "u2");
+    element("#source-anidb-tmdb-mapping-url").value =
+        profile?.anidb_tmdb_mapping_url_template ?? "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
     const remove = element("#source-delete");
     remove.disabled = profile === null || profile.is_default;
     remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
@@ -9752,6 +9754,7 @@ async function saveSource(event) {
         rss_schedule_cron: element("#source-rss-cron").value.trim(),
         media_type: element("#source-media-type").value,
         prefer_anidb_tmdb_mapping: element("#source-prefer-anidb-tmdb").checked,
+        anidb_tmdb_mapping_url_template: element("#source-anidb-tmdb-mapping-url").value.trim(),
     };
     const payload = current
         ? {

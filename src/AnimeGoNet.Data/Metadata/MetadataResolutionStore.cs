@@ -80,6 +80,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var duplicateNotificationEnabled = true;
         var mediaType = "tv";
         var preferAniDbTmdbMapping = false;
+        string? aniDbTmdbMappingUrlTemplate = null;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -123,7 +124,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        COALESCE(json_extract(
                            task.route_snapshot_json,
                            '$.prefer_anidb_tmdb_mapping'), 0),
-                       task.media_type
+                       task.media_type,
+                       json_extract(task.route_snapshot_json, '$.anidb_tmdb_mapping_url_template')
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 JOIN task_files AS file ON file.task_id = task.id AND file.disposition = 'pending'
@@ -171,6 +173,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 duplicateNotificationEnabled = reader.GetInt64(20) == 1;
                 preferAniDbTmdbMapping = reader.GetInt64(21) == 1;
                 mediaType = reader.GetString(22);
+                aniDbTmdbMappingUrlTemplate = reader.IsDBNull(23) ? null : reader.GetString(23);
             }
         }
 
@@ -270,7 +273,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 DuplicateNotificationEnabled: duplicateNotificationEnabled,
                 IsForcedReadaptation: isOtherReadaptation,
                 MediaType: mediaType,
-                PreferAniDbTmdbMapping: preferAniDbTmdbMapping),
+                PreferAniDbTmdbMapping: preferAniDbTmdbMapping,
+                AniDbTmdbMappingUrlTemplate: aniDbTmdbMappingUrlTemplate),
             tmdbSeriesId,
             tmdbSeasonNumber,
             files,
@@ -377,6 +381,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         var isForcedReadaptation = false;
         var mediaType = "tv";
         var preferAniDbTmdbMapping = false;
+        string? aniDbTmdbMappingUrlTemplate = null;
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
@@ -392,7 +397,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        task.media_type,
                        COALESCE(json_extract(
                            task.route_snapshot_json,
-                           '$.prefer_anidb_tmdb_mapping'), 0)
+                           '$.prefer_anidb_tmdb_mapping'), 0),
+                       json_extract(task.route_snapshot_json, '$.anidb_tmdb_mapping_url_template')
                 FROM ingest_tasks AS task
                 JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 WHERE (
@@ -445,6 +451,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 torrentFileCount = reader.GetInt32(10);
                 isForcedReadaptation = reader.GetInt64(11) == 1;
                 mediaType = reader.GetString(12);
+                aniDbTmdbMappingUrlTemplate = reader.IsDBNull(14) ? null : reader.GetString(14);
                 preferAniDbTmdbMapping = reader.GetInt64(13) == 1;
             }
         }
@@ -555,7 +562,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             torrentFileCount,
             IsForcedReadaptation: isForcedReadaptation,
             MediaType: mediaType,
-            PreferAniDbTmdbMapping: preferAniDbTmdbMapping);
+            PreferAniDbTmdbMapping: preferAniDbTmdbMapping,
+            AniDbTmdbMappingUrlTemplate: aniDbTmdbMappingUrlTemplate);
     }
 
     public async Task<string> RecordAttemptAsync(

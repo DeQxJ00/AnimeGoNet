@@ -1890,6 +1890,7 @@ interface SourceProfile {
   rss_last_batch_id: string | null;
   media_type: "tv" | "movie";
   prefer_anidb_tmdb_mapping: boolean;
+  anidb_tmdb_mapping_url_template: string;
   revision: number;
   ingest_task_count: number;
   rss_batch_count: number;
@@ -11934,6 +11935,8 @@ function populateSourceForm(
     profile?.rss_schedule_enabled ?? false;
   element<HTMLInputElement>("#source-prefer-anidb-tmdb").checked =
     profile?.prefer_anidb_tmdb_mapping ?? (isU2Template || adapter.value === "u2");
+  element<HTMLInputElement>("#source-anidb-tmdb-mapping-url").value =
+    profile?.anidb_tmdb_mapping_url_template ?? "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
   const remove = element<HTMLButtonElement>("#source-delete");
   remove.disabled = profile === null || profile.is_default;
   remove.title = profile?.is_default ? "默认 Mikan 来源不可删除" : "";
@@ -12757,6 +12760,8 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     media_type: element<HTMLSelectElement>("#source-media-type").value,
     prefer_anidb_tmdb_mapping:
       element<HTMLInputElement>("#source-prefer-anidb-tmdb").checked,
+    anidb_tmdb_mapping_url_template:
+      element<HTMLInputElement>("#source-anidb-tmdb-mapping-url").value.trim(),
   };
   const payload = current
     ? {

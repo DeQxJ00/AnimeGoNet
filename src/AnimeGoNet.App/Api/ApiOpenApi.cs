@@ -33,6 +33,7 @@ internal static class ApiOpenApi
         "plugins",
         "rss",
         "rss-rules",
+        "runtime",
         "sources",
         "status",
         "tmdb",

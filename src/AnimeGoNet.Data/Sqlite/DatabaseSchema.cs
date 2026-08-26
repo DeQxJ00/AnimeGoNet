@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 70;
+    public const int CurrentVersion = 71;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -168,6 +168,10 @@ public static class DatabaseSchema
             70,
             "u2_anidb_tmdb_mapping_preference",
             U2AniDbTmdbMappingPreference),
+        new SchemaMigration(
+            71,
+            "u2_anidb_tmdb_mapping_url",
+            U2AniDbTmdbMappingUrl),
     ];
 
     private const string ConfigurableAnidbTitleCacheInterval = """
@@ -183,6 +187,12 @@ public static class DatabaseSchema
         UPDATE source_profiles
         SET prefer_anidb_tmdb_mapping = 1
         WHERE adapter = 'u2';
+        """;
+
+    private const string U2AniDbTmdbMappingUrl = """
+        ALTER TABLE source_profiles
+            ADD COLUMN anidb_tmdb_mapping_url_template TEXT NOT NULL
+                DEFAULT 'https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json';
         """;
 
 

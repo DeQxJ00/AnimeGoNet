@@ -232,6 +232,9 @@ public sealed record SourceProfileSeed
 
     public bool PreferAniDbTmdbMapping { get; init; }
 
+    public string AniDbTmdbMappingUrlTemplate { get; init; } =
+        AiMatchingOptions.FixedAniDbMappingUrlTemplate;
+
     public required string DownloaderId { get; init; }
 
     public required FileStrategy FileStrategy { get; init; }

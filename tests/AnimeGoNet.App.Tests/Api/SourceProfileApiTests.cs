@@ -109,6 +109,7 @@ public sealed class SourceProfileApiTests
             rss_filter_enabled = true,
             rss_priority_enabled = true,
             enabled = true,
+            anidb_tmdb_mapping_url_template = "https://mapping.invalid/anidb/{anidbid}.json",
         }));
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         using var created = JsonDocument.Parse(await create.Content.ReadAsStreamAsync());
@@ -122,6 +123,9 @@ public sealed class SourceProfileApiTests
         Assert.Equal(1440, created.RootElement.GetProperty("seeding_time_minutes").GetInt32());
         Assert.True(
             created.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
+        Assert.Equal(
+            "https://mapping.invalid/anidb/{anidbid}.json",
+            created.RootElement.GetProperty("anidb_tmdb_mapping_url_template").GetString());
         Assert.Equal("/api/v1/sources/u2", create.Headers.Location?.OriginalString);
 
         using var rules = await app.Client.GetAsync("/api/v1/rss-rules/u2");
@@ -556,6 +560,7 @@ public sealed class SourceProfileApiTests
         Assert.Contains("Cookie 位置：设置与备份", html, StringComparison.Ordinal);
         Assert.Contains("管理来源与 Cookie", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-anidb-tmdb-mapping-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-media-type\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-cron\"", html, StringComparison.Ordinal);

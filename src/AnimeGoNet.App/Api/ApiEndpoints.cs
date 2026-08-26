@@ -4197,7 +4197,8 @@ public static class ApiEndpoints
                 options,
                 plugins,
                 request.MediaType,
-                request.PreferAniDbTmdbMapping);
+                request.PreferAniDbTmdbMapping,
+                request.AniDbTmdbMappingUrlTemplate);
             var now = DateTimeOffset.UtcNow;
             var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
             await rules.EnsureDefaultAsync(
@@ -4287,7 +4288,8 @@ public static class ApiEndpoints
                 options,
                 plugins,
                 request.MediaType,
-                request.PreferAniDbTmdbMapping);
+                request.PreferAniDbTmdbMapping,
+                request.AniDbTmdbMappingUrlTemplate);
             var changedLockedFields = new List<string>();
             AddLockedChange("category", current.Category, definition.Category);
             AddLockedChange(
@@ -9008,7 +9010,8 @@ public static class ApiEndpoints
             profile.RssLastFailureCode,
             profile.RssLastBatchId,
             profile.MediaType,
-            profile.PreferAniDbTmdbMapping);
+            profile.PreferAniDbTmdbMapping,
+            profile.AniDbTmdbMappingUrlTemplate);
     }
 
     private static DownloaderInstanceResponse ToResponse(
@@ -9113,7 +9116,8 @@ public static class ApiEndpoints
         AnimeGoOptions options,
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         string? mediaType,
-        bool? preferAniDbTmdbMapping)
+        bool? preferAniDbTmdbMapping,
+        string? aniDbTmdbMappingUrlTemplate)
     {
         var name = displayName?.Trim() ?? string.Empty;
         if (name.Length is < 1 or > 128)
@@ -9209,6 +9213,8 @@ public static class ApiEndpoints
         }
         var preferMapping = normalizedAdapter == "u2"
             && (preferAniDbTmdbMapping ?? current?.PreferAniDbTmdbMapping ?? true);
+        var normalizedAniDbMappingUrlTemplate = NormalizeAniDbTmdbMappingUrlTemplate(
+            aniDbTmdbMappingUrlTemplate ?? current?.AniDbTmdbMappingUrlTemplate);
         return new SourceProfileDefinition(
             name,
             normalizedAdapter,
@@ -9230,7 +9236,27 @@ public static class ApiEndpoints
                 ?? current?.DuplicateNotificationEnabled
                 ?? true,
             normalizedMediaType,
-            preferMapping);
+            preferMapping,
+            normalizedAniDbMappingUrlTemplate);
+    }
+
+    private static string NormalizeAniDbTmdbMappingUrlTemplate(string? value)
+    {
+        var template = string.IsNullOrWhiteSpace(value)
+            ? AiMatchingOptions.FixedAniDbMappingUrlTemplate
+            : value.Trim();
+        if (template.Length > 2048
+            || !template.Contains("{anidbid}", StringComparison.OrdinalIgnoreCase)
+            || !Uri.TryCreate(
+                template.Replace("{anidbid}", "1", StringComparison.OrdinalIgnoreCase),
+                UriKind.Absolute,
+                out var uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            throw new ArgumentException(
+                "anidb_tmdb_mapping_url_template must be an absolute HTTP(S) URL containing {anidbid}.");
+        }
+        return template;
     }
 
     private static string RequireCanonicalStableId(string? value, string name)

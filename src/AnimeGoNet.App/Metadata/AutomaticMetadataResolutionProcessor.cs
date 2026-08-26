@@ -75,6 +75,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 preferred = await u2AniDbResolver.ResolveAsync(
                     claim.AniDbAnimeId.Value,
                     claim.Title,
+                    claim.AniDbTmdbMappingUrlTemplate,
                     cancellationToken).ConfigureAwait(false);
             }
             catch (TmdbClientException exception)

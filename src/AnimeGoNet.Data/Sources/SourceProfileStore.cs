@@ -68,7 +68,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     created_at_utc, updated_at_utc, mikan_identity_cookie,
                     dynamic_tag_template, dynamic_tag_template_initialized,
                     rss_feed_url, rss_schedule_enabled, rss_schedule_cron, media_type,
-                    prefer_anidb_tmdb_mapping)
+                    prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
                     $allowed_torrent_hosts_json, $category, $tags_json, $seeding_time_minutes,
@@ -76,7 +76,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     $created_at_utc, $updated_at_utc, $mikan_identity_cookie,
                     $dynamic_tag_template, 1,
                     $rss_feed_url, $rss_schedule_enabled, $rss_schedule_cron, $media_type,
-                    $prefer_anidb_tmdb_mapping)
+                    $prefer_anidb_tmdb_mapping, $anidb_tmdb_mapping_url_template)
                 ON CONFLICT(id) DO UPDATE SET
                     allowed_torrent_hosts_json = CASE
                         WHEN source_profiles.allowed_torrent_hosts_json = '[]'
@@ -160,6 +160,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             command.Parameters.AddWithValue("$rss_schedule_cron", rssScheduleCron);
             command.Parameters.AddWithValue("$media_type", mediaType);
             command.Parameters.AddWithValue("$prefer_anidb_tmdb_mapping", seed.PreferAniDbTmdbMapping ? 1 : 0);
+            command.Parameters.AddWithValue(
+                "$anidb_tmdb_mapping_url_template",
+                NormalizeAniDbTmdbMappingUrlTemplate(seed.AniDbTmdbMappingUrlTemplate));
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -246,7 +249,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                    rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled, revision,
                    mikan_identity_cookie, dynamic_tag_template,
                    rss_feed_url, rss_schedule_enabled, rss_schedule_cron, media_type,
-                   prefer_anidb_tmdb_mapping
+                   prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template
             FROM source_profiles
             WHERE id = $id AND enabled = 1;
             """;
@@ -276,7 +279,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetString(16),
             reader.GetInt64(10) != 0,
             reader.GetString(17),
-            reader.GetInt64(18) != 0);
+            reader.GetInt64(18) != 0,
+            reader.GetString(19));
     }
 
     public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
@@ -323,13 +327,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 mikan_identity_cookie, dynamic_tag_template,
                 dynamic_tag_template_initialized, rss_feed_url,
                 rss_schedule_enabled, rss_schedule_cron, media_type,
-                prefer_anidb_tmdb_mapping)
+                prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template)
             VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts,
                     $category, $tags, $seeding_time, $filter, $priority, $duplicate_notification,
                     1, $enabled, $now, $now, $mikan_identity_cookie,
                     $dynamic_tag_template, 1, $rss_feed_url,
                     $rss_schedule_enabled, $rss_schedule_cron, $media_type,
-                    $prefer_anidb_tmdb_mapping);
+                    $prefer_anidb_tmdb_mapping, $anidb_tmdb_mapping_url_template);
             """;
         BindDefinition(command, normalized, definition, utcNow);
         try
@@ -370,6 +374,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 rss_schedule_cron = $rss_schedule_cron,
                 media_type = $media_type,
                 prefer_anidb_tmdb_mapping = $prefer_anidb_tmdb_mapping,
+                anidb_tmdb_mapping_url_template = $anidb_tmdb_mapping_url_template,
                 rss_last_run_state = 'never',
                 rss_last_started_at_utc = NULL,
                 rss_last_completed_at_utc = NULL,
@@ -604,7 +609,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                p.rss_schedule_cron, p.rss_last_run_state,
                p.rss_last_started_at_utc, p.rss_last_completed_at_utc,
                p.rss_last_failure_code, p.rss_last_batch_id, p.media_type,
-               p.prefer_anidb_tmdb_mapping
+               p.prefer_anidb_tmdb_mapping, p.anidb_tmdb_mapping_url_template
         FROM source_profiles p
         """;
 
@@ -642,7 +647,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         reader.IsDBNull(27) ? null : reader.GetString(27),
         reader.GetBoolean(11),
         reader.GetString(28),
-        reader.GetInt64(29) != 0);
+        reader.GetInt64(29) != 0,
+        reader.GetString(30));
 
     private static void BindDefinition(
         SqliteCommand command,
@@ -704,6 +710,9 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue(
             "$prefer_anidb_tmdb_mapping",
             definition.Adapter == "u2" && definition.PreferAniDbTmdbMapping ? 1 : 0);
+        command.Parameters.AddWithValue(
+            "$anidb_tmdb_mapping_url_template",
+            NormalizeAniDbTmdbMappingUrlTemplate(definition.AniDbTmdbMappingUrlTemplate));
         command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
     }
 
@@ -722,6 +731,22 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         return value.Trim().ToLowerInvariant();
+    }
+
+    private static string NormalizeAniDbTmdbMappingUrlTemplate(string? value)
+    {
+        var template = string.IsNullOrWhiteSpace(value)
+            ? "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json"
+            : value.Trim();
+        if (template.Length > 2048
+            || !template.Contains("{anidbid}", StringComparison.OrdinalIgnoreCase)
+            || !Uri.TryCreate(template.Replace("{anidbid}", "1", StringComparison.OrdinalIgnoreCase), UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            throw new ArgumentException(
+                "anidb_tmdb_mapping_url_template must be an absolute HTTP(S) URL containing {anidbid}.");
+        }
+        return template;
     }
 
     private static string Format(DateTimeOffset value) =>
