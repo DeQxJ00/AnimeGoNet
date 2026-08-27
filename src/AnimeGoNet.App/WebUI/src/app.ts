@@ -2216,7 +2216,6 @@ type WorkspaceId =
   | "connections"
   | "tools"
   | "notifications"
-  | "logs"
   | "system";
 
 interface AiTesterUsage {
@@ -2401,11 +2400,14 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
   },
   tasks: {
     title: "任务中心",
-    description: "查看下载、匹配、整理和失败原因。",
+    description: "查看匹配、整理、下载以及相关运行与 AI 审计日志。",
     defaultSubview: "metadata",
     tabs: [
       { id: "metadata", label: "匹配与整理" },
       { id: "downloads", label: "下载任务" },
+      { id: "matching", label: "匹配日志" },
+      { id: "ai-invocations", label: "AI 调用日志" },
+      { id: "runtime", label: "运行日志" },
     ],
   },
   sources: {
@@ -2484,16 +2486,6 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
       { id: "deliveries", label: "发送记录" },
     ],
   },
-  logs: {
-    title: "日志",
-    description: "筛选运行诊断，并查看持久化的匹配流程与 AI 调用审计。",
-    defaultSubview: "runtime",
-    tabs: [
-      { id: "runtime", label: "运行日志" },
-      { id: "matching", label: "匹配日志" },
-      { id: "ai-invocations", label: "AI 调用日志" },
-    ],
-  },
   system: {
     title: "缓存",
     description: "管理 Bangumi、AniDB 以及其他本地缓存。",
@@ -2518,7 +2510,8 @@ function workspaceFromHash(): { workspace: WorkspaceId; subview: string } {
   const [rawWorkspace = "", rawSubview = ""] = window.location.hash
     .replace(/^#\/?/, "")
     .split("/", 2);
-  const workspace = isWorkspaceId(rawWorkspace) ? rawWorkspace : "overview";
+  const compatibleWorkspace = rawWorkspace === "logs" ? "tasks" : rawWorkspace;
+  const workspace = isWorkspaceId(compatibleWorkspace) ? compatibleWorkspace : "overview";
   const definition = workspaceDefinitions[workspace];
   const subview = workspaceLeafTabs(definition).some(tab => tab.id === rawSubview)
     ? rawSubview
@@ -2643,8 +2636,8 @@ function selectWorkspace(
   if (workspace === "system" && selectedSubview === "anidb") {
     void loadAnidbTitleCache(true);
   }
-  if (workspace === "logs" && selectedSubview === "ai-invocations") void loadAiInvocationLogs();
-  if (workspace === "logs" && selectedSubview === "matching") void loadMatchingLogs();
+  if (workspace === "tasks" && selectedSubview === "ai-invocations") void loadAiInvocationLogs();
+  if (workspace === "tasks" && selectedSubview === "matching") void loadMatchingLogs();
   if (workspace === "sources" && selectedSubview === "mikan-plugin-calls") {
     void loadMikanPluginCallLogs();
   }
@@ -2678,7 +2671,11 @@ function initializeWorkspaceNavigation(): void {
   });
   window.addEventListener("hashchange", () => {
     const target = workspaceFromHash();
-    selectWorkspace(target.workspace, target.subview, false);
+    selectWorkspace(
+      target.workspace,
+      target.subview,
+      window.location.hash.startsWith("#/logs/"),
+    );
   });
   const initial = workspaceFromHash();
   selectWorkspace(initial.workspace, initial.subview, true);
@@ -10980,7 +10977,7 @@ let pendingMatchingLogTaskId: string | null = null;
 function openMatchingLogTask(taskId: string): void {
   pendingMatchingLogTaskId = taskId;
   element<HTMLInputElement>("#matching-log-search").value = taskId;
-  selectWorkspace("logs", "matching");
+  selectWorkspace("tasks", "matching");
 }
 
 function matchingLogStage(
@@ -14344,7 +14341,7 @@ element<HTMLButtonElement>("#overview-downloaders-offline").addEventListener(
 for (const id of ["overview-runtime-memory", "overview-runtime-cpu"] as const) {
   element<HTMLButtonElement>(`#${id}`).addEventListener(
     "click",
-    () => selectWorkspace("logs", "runtime"),
+    () => selectWorkspace("tasks", "runtime"),
   );
 }
 element<HTMLButtonElement>("#overview-data-path-size").addEventListener(

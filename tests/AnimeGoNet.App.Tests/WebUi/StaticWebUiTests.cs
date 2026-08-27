@@ -155,7 +155,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "delete web.access_key")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260827-u2-blocking-file-reasons")]
+    [InlineData("/", "text/html", "/app.js?v=20260828-merged-task-logs")]
     [InlineData("/", "text/html", "other-readaptation-review-reject")]
     [InlineData("/", "text/html", "拒绝并保留 Other")]
     [InlineData("/app.js", "text/javascript", "/ai-series-change-review/accept")]

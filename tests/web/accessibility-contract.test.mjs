@@ -221,7 +221,7 @@ test("overview exposes operational statistics as direct navigation and filters",
   assert.match(app, /resources\.working_set_bytes/);
   assert.match(app, /resources\.cpu_percent/);
   assert.match(app, /resources\.data_path_bytes/);
-  assert.match(app, /selectWorkspace\("logs", "runtime"\)/);
+  assert.match(app, /selectWorkspace\("tasks", "runtime"\)/);
   assert.match(app, /selectWorkspace\("connections", "paths"\)/);
   assert.match(app, /loadOverviewStatistics/);
   assert.match(app, /Promise\.allSettled/);
@@ -261,7 +261,7 @@ test("downloads expose verified TMDB metadata and link to persistent matching lo
     readFile(cssPath, "utf8"),
   ]);
   assert.equal(
-    document.querySelector('[data-workspace="logs"][data-subview="matching"]')
+    document.querySelector('[data-workspace="tasks"][data-subview="matching"]')
       ?.getAttribute("data-nav-label"),
     "匹配日志",
   );

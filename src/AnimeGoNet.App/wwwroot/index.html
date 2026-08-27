@@ -25,7 +25,6 @@
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
         <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试</button>
         <button type="button" data-workspace-target="notifications"><span aria-hidden="true">♢</span>通知</button>
-        <button type="button" data-workspace-target="logs"><span aria-hidden="true">≡</span>日志</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>缓存</button>
       </nav>
       <p class="sidebar-footnote">配置编辑页直接回填本机已保存值；日志与运行轨迹继续脱敏。</p>
@@ -787,7 +786,7 @@
       <div id="notification-delivery-list" class="notification-delivery-list" aria-live="polite"><p class="muted empty">正在读取发送记录…</p></div>
     </section>
 
-    <section id="live-logs" aria-labelledby="live-logs-title" data-workspace="logs" data-subview="runtime" data-nav-label="运行日志">
+    <section id="live-logs" aria-labelledby="live-logs-title" data-workspace="tasks" data-subview="runtime" data-nav-label="运行日志">
       <div class="section-heading live-log-heading">
         <div>
           <p class="eyebrow">Realtime diagnostics</p>
@@ -867,7 +866,7 @@
       </div>
     </section>
 
-    <section id="ai-invocation-logs" aria-labelledby="ai-invocation-logs-title" data-workspace="logs" data-subview="ai-invocations" data-nav-label="AI 调用日志">
+    <section id="ai-invocation-logs" aria-labelledby="ai-invocation-logs-title" data-workspace="tasks" data-subview="ai-invocations" data-nav-label="AI 调用日志">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Persistent AI audit</p>
@@ -919,7 +918,7 @@
       </nav>
     </section>
 
-    <section id="matching-logs" aria-labelledby="matching-logs-title" data-workspace="logs" data-subview="matching" data-nav-label="匹配日志">
+    <section id="matching-logs" aria-labelledby="matching-logs-title" data-workspace="tasks" data-subview="matching" data-nav-label="匹配日志">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Persistent metadata pipeline</p>
@@ -2308,6 +2307,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260827-u2-blocking-file-reasons"></script>
+    <script type="module" src="/app.js?v=20260828-merged-task-logs"></script>
 </body>
 </html>

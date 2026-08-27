@@ -100,14 +100,13 @@ public sealed class WorkspaceNavigationTests
         Assert.Contains(">AI 匹配测试</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"AI 匹配测试\"", script, StringComparison.Ordinal);
         Assert.Contains("id: \"ai-subtitle\", label: \"AI 字幕匹配\"", script, StringComparison.Ordinal);
-        Assert.Contains(">日志</button>", html, StringComparison.Ordinal);
-        Assert.Contains("title: \"日志\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-workspace-target=\"logs\"", html, StringComparison.Ordinal);
         Assert.Contains(
-            "data-workspace=\"logs\" data-subview=\"runtime\"",
+            "data-workspace=\"tasks\" data-subview=\"runtime\"",
             html,
             StringComparison.Ordinal);
         Assert.Contains(
-            "data-workspace=\"logs\" data-subview=\"ai-invocations\"",
+            "data-workspace=\"tasks\" data-subview=\"ai-invocations\"",
             html,
             StringComparison.Ordinal);
         Assert.Contains(">缓存</button>", html, StringComparison.Ordinal);
@@ -126,7 +125,6 @@ public sealed class WorkspaceNavigationTests
             "connections",
             "tools",
             "notifications",
-            "logs",
             "system",
         })
         {
@@ -149,7 +147,23 @@ public sealed class WorkspaceNavigationTests
         var downloadsTab = script.IndexOf(
             "{ id: \"downloads\", label: \"下载任务\" }",
             StringComparison.Ordinal);
-        Assert.True(metadataTab >= 0 && downloadsTab > metadataTab);
+        var matchingLogTab = script.IndexOf(
+            "{ id: \"matching\", label: \"匹配日志\" }",
+            StringComparison.Ordinal);
+        var aiLogTab = script.IndexOf(
+            "{ id: \"ai-invocations\", label: \"AI 调用日志\" }",
+            StringComparison.Ordinal);
+        var runtimeLogTab = script.IndexOf(
+            "{ id: \"runtime\", label: \"运行日志\" }",
+            StringComparison.Ordinal);
+        Assert.True(
+            metadataTab >= 0
+            && downloadsTab > metadataTab
+            && matchingLogTab > downloadsTab
+            && aiLogTab > matchingLogTab
+            && runtimeLogTab > aiLogTab);
+        Assert.Contains("rawWorkspace === \"logs\" ? \"tasks\"", script, StringComparison.Ordinal);
+        Assert.Contains("window.location.hash.startsWith(\"#/logs/\")", script, StringComparison.Ordinal);
         Assert.Contains("id=\"download-sort\"", html, StringComparison.Ordinal);
         Assert.Contains(">任务加入时间</option>", html, StringComparison.Ordinal);
         Assert.Contains("id=\"download-direction\"", html, StringComparison.Ordinal);
