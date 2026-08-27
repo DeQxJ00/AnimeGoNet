@@ -49,6 +49,48 @@ public sealed class DownloadPreparationProcessorTests
     }
 
     [Fact]
+    public async Task PartialDuplicateTorrentIgnoresHiddenPaddingAndDownloadsOnlyMissingEpisodes()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files =
+            [
+                new DownloadFileSnapshot(0, "Show/EP67.mkv", 100, 0, 1),
+                new DownloadFileSnapshot(1, "Show/EP68.mkv", 200, 0, 1),
+            ],
+        };
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var taskId = await PrepareTaskAsync(
+            app,
+            [
+                ("Show/.pad/123", 123L, "extras"),
+                ("Show/EP67.mkv", 100L, "duplicate"),
+                ("Show/EP68.mkv", 200L, "episode"),
+            ]);
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.Completed, result);
+        Assert.Equal([[0], [1]], client.PriorityCalls.Select(call => call.Indexes).ToArray());
+        Assert.Equal([0, 1], client.PriorityCalls.Select(call => call.Priority).ToArray());
+        Assert.Single(client.Resumed);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("download_queued", state.TaskStatus);
+        Assert.Equal("completed", state.PreparationPhase);
+        Assert.Collection(
+            state.Files.OrderBy(file => file.RelativePath),
+            padding =>
+            {
+                Assert.Contains("/.pad/", padding.RelativePath, StringComparison.Ordinal);
+                Assert.Null(padding.Index);
+                Assert.Null(padding.Priority);
+                Assert.Null(padding.Wanted);
+            },
+            duplicate => Assert.Equal((0, 0, false), (duplicate.Index, duplicate.Priority, duplicate.Wanted)),
+            wanted => Assert.Equal((1, 1, true), (wanted.Index, wanted.Priority, wanted.Wanted)));
+    }
+
+    [Fact]
     public async Task AllDuplicateTorrentStaysStoppedAndIsRemovedWithoutDeletingFiles()
     {
         var client = new FakeDownloadClient

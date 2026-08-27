@@ -63,6 +63,23 @@ public sealed class DownloadPreparationStoreTests
         Assert.Equal(2, recovered.AttemptCount);
     }
 
+    [Fact]
+    public async Task ClaimRepairsAndExcludesLegacyDotPadRows()
+    {
+        await using var fixture = await PreparationFixture.CreateAsync(
+        [
+            new TorrentFile("Show/episode.mkv", 5, false),
+            new TorrentFile("Show/.pad/3", 3, false),
+        ]);
+
+        var claim = Assert.IsType<DownloadPreparationClaim>(await fixture.Store.TryClaimNextAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+
+        var file = Assert.Single(claim.Files);
+        Assert.Equal("Show/episode.mkv", file.RelativePath);
+    }
+
     private sealed class PreparationFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _database;
@@ -81,7 +98,8 @@ public sealed class DownloadPreparationStoreTests
 
         public string TaskId { get; }
 
-        public static async Task<PreparationFixture> CreateAsync()
+        public static async Task<PreparationFixture> CreateAsync(
+            IReadOnlyList<TorrentFile>? torrentFiles = null)
         {
             var database = await SqliteDatabaseFixture.CreateAsync();
             var profiles = new SourceProfileStore(database.Database);
@@ -93,11 +111,12 @@ public sealed class DownloadPreparationStoreTests
                     "https://mikanani.me/passkey/preparation.torrent",
                     new IngestItemInfo("Episode", null, "one", "3951", null, null, 3951, 547888, null, null))).Item);
             var hash = new string('e', 40);
+            torrentFiles ??= [new TorrentFile("episode.mkv", 5, false)];
             var tasks = new IngestTaskStore(database.Database);
             var staged = await tasks.AddStagedAsync(
                 normalized,
                 profile,
-                new TorrentMetadata("episode.mkv", hash, 5, [new TorrentFile("episode.mkv", 5, false)]),
+                new TorrentMetadata("episode.mkv", hash, torrentFiles.Sum(file => file.Size), torrentFiles),
                 "preparation.torrent",
                 DateTimeOffset.UtcNow.AddMinutes(15));
             var dispatch = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
@@ -113,10 +132,13 @@ public sealed class DownloadPreparationStoreTests
             await using var ready = connection.CreateCommand();
             ready.CommandText = """
                 UPDATE ingest_tasks SET status = 'metadata_resolved' WHERE id = $task_id;
-                UPDATE task_files SET disposition = 'episode' WHERE task_id = $task_id;
+                UPDATE task_files SET disposition = 'episode'
+                WHERE task_id = $task_id AND other_reason IS NULL;
                 """;
             ready.Parameters.AddWithValue("$task_id", staged.Id);
-            Assert.Equal(2, await ready.ExecuteNonQueryAsync());
+            Assert.Equal(
+                1 + torrentFiles.Count(file => !file.IsPadding),
+                await ready.ExecuteNonQueryAsync());
             return new PreparationFixture(database, new DownloadPreparationStore(database.Database), staged.Id);
         }
 

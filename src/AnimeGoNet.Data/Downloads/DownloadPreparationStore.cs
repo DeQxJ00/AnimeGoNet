@@ -155,6 +155,33 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
         }
 
         var files = new List<DownloadPreparationFile>();
+        await using (var repairPaddingFiles = connection.CreateCommand())
+        {
+            repairPaddingFiles.Transaction = transaction;
+            repairPaddingFiles.CommandText = """
+                UPDATE task_files
+                SET disposition = 'ignored',
+                    other_reason = 'padding_file',
+                    source_episode = NULL,
+                    file_episode_candidate = NULL,
+                    tmdb_series_id = NULL,
+                    tmdb_season_number = NULL,
+                    tmdb_episode_number = NULL,
+                    tmdb_episode_id = NULL,
+                    download_file_index = NULL,
+                    download_priority = NULL,
+                    download_wanted = NULL
+                WHERE task_id = $task_id
+                  AND (
+                    other_reason = 'padding_file'
+                    OR instr(replace(relative_path, '\\', '/'), '/.pad/') > 0
+                    OR instr(replace(relative_path, '\\', '/'), '/_____padding_file') > 0
+                  );
+                """;
+            repairPaddingFiles.Parameters.AddWithValue("$task_id", taskId);
+            await repairPaddingFiles.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await using (var queryFiles = connection.CreateCommand())
         {
             queryFiles.Transaction = transaction;
@@ -162,6 +189,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
                 SELECT id, relative_path, size_bytes, disposition, other_reason
                 FROM task_files
                 WHERE task_id = $task_id
+                  AND (other_reason IS NULL OR other_reason <> 'padding_file')
                 ORDER BY relative_path, id;
                 """;
             queryFiles.Parameters.AddWithValue("$task_id", taskId);

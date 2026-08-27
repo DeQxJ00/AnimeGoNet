@@ -45,6 +45,26 @@ public sealed class TorrentMetainfoParserTests
             file => Assert.True(file.IsPadding));
     }
 
+    [Fact]
+    public void MarksStandardDotPadFilesAndPaddingAttribute()
+    {
+        const string files = "ld6:lengthi3e4:pathl8:ep01.mkveed4:attr1:p6:lengthi2e4:pathl4:.pad1:2eee";
+        var bytes = Encoding.UTF8.GetBytes(
+            $"d4:infod5:files{files}4:name4:Show12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee");
+
+        var result = TorrentMetainfoParser.Parse(bytes);
+
+        Assert.Equal(5, result.TotalSize);
+        Assert.Collection(
+            result.Files,
+            file => Assert.False(file.IsPadding),
+            file =>
+            {
+                Assert.Equal("Show/.pad/2", file.RelativePath);
+                Assert.True(file.IsPadding);
+            });
+    }
+
     [Theory]
     [InlineData("d4:infod6:lengthi1e4:name5:../x1e")]
     [InlineData("d4:infod6:lengthi1e4:name1:x12:piece lengthi1e6:pieces20:aaaaaaaaaaaaaaaaaaaaeejunk")]

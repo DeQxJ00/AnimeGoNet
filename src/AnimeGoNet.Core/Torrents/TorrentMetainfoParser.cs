@@ -122,14 +122,23 @@ public static class TorrentMetainfoParser
             }
 
             var relativePath = string.Join('/', components);
-            files.Add(new TorrentFile(relativePath, length, IsPaddingPath(relativePath)));
+            files.Add(new TorrentFile(
+                relativePath,
+                length,
+                IsPaddingPath(relativePath) || HasPaddingAttribute(file)));
         }
 
         return (files, totalSize);
     }
 
     private static bool IsPaddingPath(string path) =>
-        path.Split('/').Any(component => component.StartsWith("_____padding_file", StringComparison.Ordinal));
+        path.Split('/').Any(component =>
+            component.Equals(".pad", StringComparison.Ordinal)
+            || component.StartsWith("_____padding_file", StringComparison.Ordinal));
+
+    private static bool HasPaddingAttribute(BDictionary file) =>
+        file.Find("attr")?.Value is BBytes attributes
+        && attributes.Value.AsSpan().Contains((byte)'p');
 
     private static void ValidatePathComponent(string value, string label)
     {

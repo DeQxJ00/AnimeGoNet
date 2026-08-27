@@ -367,6 +367,6 @@ Season 验证成功。
 
 qBittorrent 确认接收 Torrent 后，任务进入 `download_preparing`，而不是直接开始传输。dispatcher 对新添加和已存在的同 hash 任务都显式调用暂停；Series/Season/Episode worker 在该阶段完成 TMDB 验证、`Other` 分类和逐集 claim。元数据全部完成后，download preparation worker 再次暂停任务，并要求 qB 返回的文件数量、唯一 index、规范化相对路径和容量与暂存时解析的清单逐项一致。
 
-`duplicate` 与 `ignored` 文件设置为 priority 0，`episode` 与 `other` 文件设置为 priority 1；只有至少一个 wanted 文件时才恢复任务并进入 `download_queued`。全部文件都被去重时不调用恢复，持久化 `download_skipped_duplicate`，并以 `deleteFiles=false` 尝试移除 qB 任务。文件元数据尚未就绪、清单不一致、下载器离线或请求失败均保留 paused 语义，通过 SQLite preparation lease、attempt 和 next-attempt 安全重试；进程崩溃后的过期租约可恢复。
+`duplicate` 与 `ignored` 文件设置为 priority 0，`episode` 与 `other` 文件设置为 priority 1；只有至少一个 wanted 文件时才恢复任务并进入 `download_queued`。Torrent 中通过 `attr=p`、`.pad` 路径或兼容 `_____padding_file` 路径标记的 padding file 是分片对齐元数据，不进入 Extras，也不参与 qB 文件清单数量核对或优先级分配；下载准备会同时修复旧库中曾被误记为附件的 `.pad` 行。全部实际文件都被去重时不调用恢复，持久化 `download_skipped_duplicate`，并以 `deleteFiles=false` 尝试移除 qB 任务。文件元数据尚未就绪、实际文件清单不一致、下载器离线或请求失败均保留 paused 语义，通过 SQLite preparation lease、attempt 和 next-attempt 安全重试；进程崩溃后的过期租约可恢复。
 
 默认单元/集成测试只使用 fake client 和临时 SQLite，不接触 portable qBittorrent。真实 `filePrio`、恢复、全重复清理和跨容器路径 E2E 仍必须使用明确的可丢弃 Torrent fixture、可识别 category/tag 和书面清理步骤后显式运行。
