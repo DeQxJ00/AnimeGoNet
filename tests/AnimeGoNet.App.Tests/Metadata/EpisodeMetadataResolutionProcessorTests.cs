@@ -1034,8 +1034,10 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select((file, index) => new AiMetadataFileCandidate(
-                    file.Name, true, 2, index + 1, null)).ToArray(),
+                [
+                    new(input.Files[0].Name, true, 2, 2, null),
+                    new(input.Files[1].Name, true, 2, 1, null),
+                ],
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
@@ -1055,7 +1057,51 @@ public sealed class EpisodeMetadataResolutionProcessorTests
 
         Assert.Single(ai.Requests);
         Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
-        Assert.All(await ReadFilesAsync(app, taskId), file => Assert.Equal("episode", file.Disposition));
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.All(files, file => Assert.Equal("episode", file.Disposition));
+        Assert.Equal(2, files.Single(file => file.Path == "Show 01.mkv").EpisodeNumber);
+        Assert.Equal(1, files.Single(file => file.Path == "Show 02.mkv").EpisodeNumber);
+    }
+
+    [Fact]
+    public async Task U2AiFailureDoesNotRelabelTmdbValidatedLocalCandidatesAsParseFailures()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            Failure = new AiMetadataMatcherException(
+                MetadataFailureKind.Configuration,
+                "ai_provider_not_configured"),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Show 01.mkv", "1", "1"),
+            ("Show unknown.mkv", null, null));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Equal(
+            "u2_episode_candidate_tmdb_verified_ai_required",
+            files.Single(file => file.Path == "Show 01.mkv").OtherReason);
+        Assert.Equal(
+            "ai_provider_not_configured",
+            files.Single(file => file.Path == "Show unknown.mkv").OtherReason);
+        Assert.Equal(
+            "ai_provider_not_configured",
+            await ReadLatestAttemptErrorAsync(app, taskId, "ai_metadata"));
     }
 
     [Fact]

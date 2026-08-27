@@ -2604,6 +2604,12 @@ function metadataAttemptFileReason(attempt) {
             role: "受同批阻塞影响的文件",
             explanation: "该文件自身已完成 EP 提取；因同一 Torrent 的其他文件阻塞而随整批进入 AI。",
         },
+        u2_episode_candidate_tmdb_verified_ai_required: {
+          badge: "TMDB 候选已验证",
+          title: "本地 EP 候选已通过 TMDB 验证",
+          detail: "整批 Torrent 未满足确定性通过条件，仍由 AI 重新判断全部文件；此本地 EP 不会锁定或覆盖 AI 结果。",
+          tone: "info",
+        },
     };
     const presentation = presentations[attempt.error_code] ?? null;
     return {

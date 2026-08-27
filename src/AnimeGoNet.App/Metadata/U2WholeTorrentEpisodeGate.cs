@@ -11,7 +11,8 @@ internal sealed record U2WholeTorrentEpisodeDecision(
     bool RequiresAi,
     string? Reason,
     IReadOnlySet<string> ExplicitExtraFileIds,
-    IReadOnlySet<string> BlockingFileIds);
+    IReadOnlySet<string> BlockingFileIds,
+    IReadOnlySet<string> TmdbValidatedCandidateFileIds);
 
 internal static class U2WholeTorrentEpisodeGate
 {
@@ -26,6 +27,7 @@ internal static class U2WholeTorrentEpisodeGate
                 false,
                 false,
                 null,
+                EmptyFileIds(),
                 EmptyFileIds(),
                 EmptyFileIds());
         }
@@ -44,7 +46,11 @@ internal static class U2WholeTorrentEpisodeGate
             || season.SeriesId != claim.TmdbSeriesId
             || season.SeasonNumber != claim.TmdbSeasonNumber)
         {
-            return RequiresAi("u2_regular_season_not_verified", extras, videos.Select(file => file.FileId));
+            return RequiresAi(
+                "u2_regular_season_not_verified",
+                extras,
+                videos.Select(file => file.FileId),
+                EmptyFileIds());
         }
 
         var candidates = videos
@@ -58,41 +64,15 @@ internal static class U2WholeTorrentEpisodeGate
                         ? value
                         : (int?)null))
             .ToArray();
-        if (candidates
+        var duplicateCandidates = candidates
             .Where(value => value.Episode is > 0)
             .GroupBy(value => value.Episode!.Value)
-            .Any(group => group.Count() > 1))
-        {
-            var duplicateFileIds = candidates
-                .Where(value => value.Episode is > 0)
-                .GroupBy(value => value.Episode!.Value)
-                .Where(group => group.Count() > 1)
-                .SelectMany(group => group.Select(value => value.File.FileId));
-            return RequiresAi("u2_duplicate_episode_candidate", extras, duplicateFileIds);
-        }
+            .Where(group => group.Count() > 1)
+            .ToArray();
 
         var mainVideos = candidates
             .Where(value => !extras.Contains(value.File.FileId))
             .ToArray();
-        if (mainVideos.Length <= 1)
-        {
-            return RequiresAi(
-                "u2_single_or_non_season_torrent",
-                extras,
-                mainVideos.Select(value => value.File.FileId));
-        }
-
-        if (mainVideos.Any(value => value.Episode is null))
-        {
-            return RequiresAi(
-                "u2_main_video_episode_not_parsed",
-                extras,
-                mainVideos
-                    .Where(value => value.Episode is null)
-                    .Select(value => value.File.FileId));
-        }
-
-        var torrentEpisodes = mainVideos.Select(value => value.Episode!.Value).ToArray();
         var tmdbEpisodes = (season.Episodes ?? [])
             .Where(episode => episode.SeriesId == claim.TmdbSeriesId
                 && episode.SeasonNumber == claim.TmdbSeasonNumber
@@ -106,30 +86,98 @@ internal static class U2WholeTorrentEpisodeGate
             return RequiresAi(
                 "u2_tmdb_season_episode_snapshot_empty",
                 extras,
-                mainVideos.Select(value => value.File.FileId));
+                mainVideos.Select(value => value.File.FileId),
+                EmptyFileIds());
         }
+
+        var tmdbEpisodeSet = tmdbEpisodes.ToHashSet();
+        var duplicateEpisodeNumbers = duplicateCandidates
+            .Select(group => group.Key)
+            .ToHashSet();
+        var validatedCandidateFileIds = mainVideos
+            .Where(value => value.Episode is > 0
+                && !duplicateEpisodeNumbers.Contains(value.Episode.Value)
+                && tmdbEpisodeSet.Contains(value.Episode.Value))
+            .Select(value => value.File.FileId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (duplicateCandidates.Length > 0)
+        {
+            var duplicateFileIds = duplicateCandidates
+                .SelectMany(group => group.Select(value => value.File.FileId));
+            return RequiresAi(
+                "u2_duplicate_episode_candidate",
+                extras,
+                duplicateFileIds,
+                validatedCandidateFileIds);
+        }
+        var candidatesMissingFromTmdb = mainVideos
+            .Where(value => value.Episode is > 0
+                && !tmdbEpisodeSet.Contains(value.Episode.Value))
+            .Select(value => value.File.FileId)
+            .ToArray();
+        if (candidatesMissingFromTmdb.Length > 0)
+        {
+            return RequiresAi(
+                "u2_episode_candidate_not_in_tmdb_season",
+                extras,
+                candidatesMissingFromTmdb,
+                validatedCandidateFileIds);
+        }
+
+        var unparsedFileIds = mainVideos
+            .Where(value => value.Episode is null)
+            .Select(value => value.File.FileId)
+            .ToArray();
+        if (unparsedFileIds.Length > 0)
+        {
+            return RequiresAi(
+                "u2_main_video_episode_not_parsed",
+                extras,
+                unparsedFileIds,
+                validatedCandidateFileIds);
+        }
+
+        if (mainVideos.Length <= 1)
+        {
+            return RequiresAi(
+                "u2_single_or_non_season_torrent",
+                extras,
+                mainVideos.Select(value => value.File.FileId),
+                validatedCandidateFileIds);
+        }
+
+        var torrentEpisodes = mainVideos.Select(value => value.Episode!.Value).ToArray();
 
         var exact = torrentEpisodes.Length == tmdbEpisodes.Length
             && torrentEpisodes.Distinct().Count() == torrentEpisodes.Length
             && torrentEpisodes.OrderBy(value => value).SequenceEqual(tmdbEpisodes);
         return exact
-            ? new U2WholeTorrentEpisodeDecision(true, false, null, extras, EmptyFileIds())
+            ? new U2WholeTorrentEpisodeDecision(
+                true,
+                false,
+                null,
+                extras,
+                EmptyFileIds(),
+                validatedCandidateFileIds)
             : RequiresAi(
                 "u2_torrent_not_complete_tmdb_season",
                 extras,
-                mainVideos.Select(value => value.File.FileId));
+                EmptyFileIds(),
+                validatedCandidateFileIds);
     }
 
     private static U2WholeTorrentEpisodeDecision RequiresAi(
         string reason,
         IReadOnlySet<string> extras,
-        IEnumerable<string> blockingFileIds) =>
+        IEnumerable<string> blockingFileIds,
+        IReadOnlySet<string> tmdbValidatedCandidateFileIds) =>
         new(
             true,
             true,
             reason,
             extras,
-            blockingFileIds.ToHashSet(StringComparer.Ordinal));
+            blockingFileIds.ToHashSet(StringComparer.Ordinal),
+            tmdbValidatedCandidateFileIds);
 
     private static HashSet<string> EmptyFileIds() =>
         new HashSet<string>(StringComparer.Ordinal);

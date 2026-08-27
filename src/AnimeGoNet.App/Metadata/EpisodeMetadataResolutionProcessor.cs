@@ -259,11 +259,15 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 var isExtra = u2Decision.ExplicitExtraFileIds.Contains(file.FileId);
                 var isBlockingFile = u2Decision.BlockingFileIds.Contains(file.FileId);
+                var isTmdbValidatedCandidate =
+                    u2Decision.TmdbValidatedCandidateFileIds.Contains(file.FileId);
                 var reason = isExtra
                     ? "u2_explicit_extra"
-                    : isBlockingFile
-                        ? u2Decision.Reason!
-                        : "u2_whole_torrent_gate_blocked_by_other_file";
+                    : isTmdbValidatedCandidate
+                        ? "u2_episode_candidate_tmdb_verified_ai_required"
+                        : isBlockingFile
+                            ? u2Decision.Reason!
+                            : "u2_whole_torrent_gate_blocked_by_other_file";
                 await RecordAsync(
                     claim,
                     "u2_whole_torrent_gate",
@@ -1084,10 +1088,17 @@ public sealed class EpisodeMetadataResolutionProcessor(
             var file = claim.Files.Single(candidate => candidate.FileId == result.FileId);
             if (SubtitleAssociationResolver.IsVideo(file.RelativePath))
             {
-                results[index] = result with { OtherReason = code };
+                if (!IsU2PreAiClassification(result.OtherReason))
+                {
+                    results[index] = result with { OtherReason = code };
+                }
             }
         }
     }
+
+    private static bool IsU2PreAiClassification(string? reason) =>
+        reason is "u2_explicit_extra"
+            or "u2_episode_candidate_tmdb_verified_ai_required";
 
     private static string NormalizeAiOtherReason(
         string? aiReason,

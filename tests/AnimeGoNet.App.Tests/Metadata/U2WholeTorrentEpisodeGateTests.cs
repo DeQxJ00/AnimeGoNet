@@ -48,6 +48,38 @@ public sealed class U2WholeTorrentEpisodeGateTests
         Assert.Equal("u2_main_video_episode_not_parsed", result.Reason);
         Assert.DoesNotContain("e1", result.BlockingFileIds);
         Assert.Contains("unknown", result.BlockingFileIds);
+        Assert.Contains("e1", result.TmdbValidatedCandidateFileIds);
+    }
+
+    [Fact]
+    public void ParsedCandidatesAreValidatedBeforeAnUnparsedFileTriggersWholeTaskAi()
+    {
+        var claim = Claim("u2", [
+            Video("e1", "Show 01.mkv", 1),
+            Video("e2", "Show 02.mkv", 2),
+            Video("unknown", "Show unknown.mkv", null)]);
+
+        var result = U2WholeTorrentEpisodeGate.Evaluate(claim, Season(1, 2, 3));
+
+        Assert.True(result.RequiresAi);
+        Assert.Equal("u2_main_video_episode_not_parsed", result.Reason);
+        Assert.Equal(["unknown"], result.BlockingFileIds);
+        Assert.Equal(["e1", "e2"], result.TmdbValidatedCandidateFileIds.Order().ToArray());
+    }
+
+    [Fact]
+    public void CandidateAbsentFromTmdbIsTheOnlyBlockingFile()
+    {
+        var claim = Claim("u2", [
+            Video("e1", "Show 01.mkv", 1),
+            Video("e4", "Show 04.mkv", 4)]);
+
+        var result = U2WholeTorrentEpisodeGate.Evaluate(claim, Season(1, 2, 3));
+
+        Assert.True(result.RequiresAi);
+        Assert.Equal("u2_episode_candidate_not_in_tmdb_season", result.Reason);
+        Assert.Equal(["e4"], result.BlockingFileIds);
+        Assert.Equal(["e1"], result.TmdbValidatedCandidateFileIds);
     }
 
     [Theory]
@@ -66,7 +98,7 @@ public sealed class U2WholeTorrentEpisodeGateTests
     {
         { [Video("e1", "Show 01.mkv", 1)], "u2_single_or_non_season_torrent" },
         { [Video("e1", "Show 01.mkv", 1), Video("e2", "Show 02.mkv", 2)], "u2_torrent_not_complete_tmdb_season" },
-        { [Video("e1", "Show 01.mkv", 1), Video("e2", "Show 02.mkv", 2), Video("e4", "Show 04.mkv", 4)], "u2_torrent_not_complete_tmdb_season" },
+        { [Video("e1", "Show 01.mkv", 1), Video("e2", "Show 02.mkv", 2), Video("e4", "Show 04.mkv", 4)], "u2_episode_candidate_not_in_tmdb_season" },
         { [Video("e1", "Show 01.mkv", 1), Video("e1v2", "Show 01v2.mkv", 1), Video("e2", "Show 02.mkv", 2)], "u2_duplicate_episode_candidate" },
         { [Video("s1e1", "S1/Show 01.mkv", 1, 1), Video("s2e1", "S2/Show 01.mkv", 1, 2)], "u2_duplicate_episode_candidate" },
         { [Video("e1", "Show 01.mkv", 1), Video("ncop", "Show NCOP 01.mkv", 1), Video("e2", "Show 02.mkv", 2)], "u2_duplicate_episode_candidate" },
