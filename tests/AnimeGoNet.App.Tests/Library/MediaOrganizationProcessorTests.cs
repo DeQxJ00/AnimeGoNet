@@ -478,7 +478,7 @@ public sealed class MediaOrganizationProcessorTests
         Assert.True(File.Exists(target));
         Assert.Empty(client.Paused);
         Assert.Empty(client.Deleted);
-        Assert.Equal(("downloaded", "cleanup", 1), await ReadStateAsync(app, taskId));
+        Assert.Equal(("organized", "cleanup", 1), await ReadStateAsync(app, taskId));
         Assert.Equal(MediaOrganizationResult.NoWork, await processor.RunOnceAsync());
 
         await SetDownloadStateAsync(app, taskId, "complete");
