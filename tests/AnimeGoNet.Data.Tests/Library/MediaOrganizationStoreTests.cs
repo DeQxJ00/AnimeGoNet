@@ -201,6 +201,7 @@ public sealed class MediaOrganizationStoreTests
             now));
         await fixture.Store.CompleteFileAsync(move, operation.OperationId, file.SizeBytes, now);
         await fixture.Store.CompleteMovesAsync(move, now);
+        Assert.Equal("organized", (await fixture.ReadStateAsync()).TaskStatus);
         var cleanup = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
             now.AddSeconds(1),
             TimeSpan.FromMinutes(1)));
@@ -212,6 +213,56 @@ public sealed class MediaOrganizationStoreTests
 
         Assert.Equal(MediaOrganizationStage.CleanupDownloader, recovered.Stage);
         Assert.Equal(cleanup.AttemptCount + 1, recovered.AttemptCount);
+    }
+
+    [Fact]
+    public async Task PermanentLinkSeedingIsOrganizedWithoutClaimingDownloaderCleanup()
+    {
+        await using var fixture = await OrganizationFixture.CreateAsync();
+        await fixture.SetFileStrategyAsync("link");
+        await fixture.SetPermanentSeedingAsync();
+        var now = DateTimeOffset.UtcNow;
+        var move = Assert.IsType<MediaOrganizationClaim>(await fixture.Store.TryClaimNextAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+        var file = Assert.Single(move.Files);
+        var operation = Assert.Single(await fixture.Store.EnsureOperationsAsync(
+            move,
+            [new MediaOperationPlan(
+                file.TaskFileId,
+                "/download/incomplete/bt/episode.mkv",
+                "/download/anime/Series/S01/E001.mkv")],
+            now));
+        await fixture.Store.CompleteFileAsync(move, operation.OperationId, file.SizeBytes, now);
+
+        await fixture.Store.CompleteMovesAsync(move, now);
+
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("organized", state.TaskStatus);
+        Assert.Equal("cleanup", state.OrganizationState);
+        Assert.Equal(MediaOrganizationPhases.CleanupDownloader, state.OrganizationPhase);
+        Assert.Null(await fixture.Store.TryClaimNextAsync(
+            now.AddDays(30),
+            TimeSpan.FromMinutes(1)));
+    }
+
+    [Fact]
+    public async Task LegacyDownloadedLinkCleanupStateIsPromotedWithoutStoppingPermanentSeeding()
+    {
+        await using var fixture = await OrganizationFixture.CreateAsync();
+        await fixture.SetFileStrategyAsync("link");
+        await fixture.SetPermanentSeedingAsync();
+        await fixture.SetLinkedCleanupStateAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.Null(await fixture.Store.TryClaimNextAsync(
+            now,
+            TimeSpan.FromMinutes(1)));
+
+        var state = await fixture.ReadStateAsync();
+        Assert.Equal("organized", state.TaskStatus);
+        Assert.Equal("cleanup", state.OrganizationState);
+        Assert.Equal(MediaOrganizationPhases.CleanupDownloader, state.OrganizationPhase);
     }
 
     private sealed class OrganizationFixture : IAsyncDisposable
@@ -313,6 +364,37 @@ public sealed class MediaOrganizationStoreTests
             command.Parameters.AddWithValue("$strategy", strategy);
             command.Parameters.AddWithValue("$task_id", TaskId);
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task SetPermanentSeedingAsync()
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE download_jobs
+                SET state = 'seeding', seeding_target_minutes = -1,
+                    seeding_state = 'seeding', seeding_elapsed_seconds = 180
+                WHERE task_id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task SetLinkedCleanupStateAsync()
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE ingest_tasks SET status = 'downloaded' WHERE id = $task_id;
+                UPDATE download_jobs
+                SET organization_state = 'cleanup',
+                    organization_phase = 'cleanup_downloader',
+                    organization_completed_units = 0,
+                    organization_total_units = 1
+                WHERE task_id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            Assert.Equal(2, await command.ExecuteNonQueryAsync());
         }
 
         public async Task AddEpisodeFileAsync(

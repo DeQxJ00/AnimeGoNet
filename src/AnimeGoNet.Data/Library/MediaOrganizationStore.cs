@@ -38,6 +38,27 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             await recover.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        await using (var promoteLinked = connection.CreateCommand())
+        {
+            promoteLinked.Transaction = transaction;
+            promoteLinked.CommandText = """
+                UPDATE ingest_tasks
+                SET status = 'organized', failure_kind = NULL,
+                    failure_reason = NULL, updated_at_utc = $now
+                WHERE status = 'downloaded'
+                  AND json_extract(route_snapshot_json, '$.file_strategy')
+                      IN ('link', 'link_delete')
+                  AND EXISTS (
+                    SELECT 1
+                    FROM download_jobs AS job
+                    WHERE job.task_id = ingest_tasks.id
+                      AND job.organization_state = 'cleanup'
+                      AND job.organization_phase = 'cleanup_downloader');
+                """;
+            promoteLinked.Parameters.AddWithValue("$now", now);
+            await promoteLinked.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         string? jobId = null;
         string? taskId = null;
         string? priorState = null;
@@ -68,7 +89,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                          OR
                          (json_extract(task.route_snapshot_json, '$.file_strategy')
                               IN ('link', 'link_delete')
-                          AND task.status = 'downloaded'
+                          AND task.status IN ('downloaded', 'organized')
                           AND job.seeding_state IN ('not_required', 'completed'))
                      ))
                 )
@@ -618,7 +639,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             UPDATE ingest_tasks
             SET status = CASE
                     WHEN $strategy IN ('move', 'wait_move') THEN 'organizing_cleanup'
-                    ELSE 'downloaded'
+                    ELSE 'organized'
                 END,
                 updated_at_utc = $now
             WHERE id = $task_id AND status = 'downloaded';
@@ -653,7 +674,10 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         var taskStatus = claim.Stage == MediaOrganizationStage.CleanupDownloader
             && claim.FileStrategy is "move" or "wait_move"
                 ? "organizing_cleanup"
-                : "downloaded";
+                : claim.Stage == MediaOrganizationStage.CleanupDownloader
+                    && claim.FileStrategy is "link" or "link_delete"
+                        ? "organized"
+                        : "downloaded";
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -712,7 +736,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
               AND (
                   ($strategy IN ('move', 'wait_move') AND status = 'organizing_cleanup')
                   OR
-                  ($strategy IN ('link', 'link_delete') AND status = 'downloaded')
+                  ($strategy IN ('link', 'link_delete') AND status IN ('downloaded', 'organized'))
               );
             """;
         AddIdentity(command, claim);
