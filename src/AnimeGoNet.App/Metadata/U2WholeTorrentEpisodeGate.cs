@@ -10,7 +10,8 @@ internal sealed record U2WholeTorrentEpisodeDecision(
     bool IsApplicable,
     bool RequiresAi,
     string? Reason,
-    IReadOnlySet<string> ExplicitExtraFileIds);
+    IReadOnlySet<string> ExplicitExtraFileIds,
+    IReadOnlySet<string> BlockingFileIds);
 
 internal static class U2WholeTorrentEpisodeGate
 {
@@ -21,7 +22,12 @@ internal static class U2WholeTorrentEpisodeGate
         if (!string.Equals(claim.Resolution.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
             || !string.Equals(claim.Resolution.MediaType, MediaTypes.Tv, StringComparison.OrdinalIgnoreCase))
         {
-            return new U2WholeTorrentEpisodeDecision(false, false, null, EmptyExtras());
+            return new U2WholeTorrentEpisodeDecision(
+                false,
+                false,
+                null,
+                EmptyFileIds(),
+                EmptyFileIds());
         }
 
         var videos = claim.Files
@@ -38,7 +44,7 @@ internal static class U2WholeTorrentEpisodeGate
             || season.SeriesId != claim.TmdbSeriesId
             || season.SeasonNumber != claim.TmdbSeasonNumber)
         {
-            return RequiresAi("u2_regular_season_not_verified", extras);
+            return RequiresAi("u2_regular_season_not_verified", extras, videos.Select(file => file.FileId));
         }
 
         var candidates = videos
@@ -57,7 +63,12 @@ internal static class U2WholeTorrentEpisodeGate
             .GroupBy(value => value.Episode!.Value)
             .Any(group => group.Count() > 1))
         {
-            return RequiresAi("u2_duplicate_episode_candidate", extras);
+            var duplicateFileIds = candidates
+                .Where(value => value.Episode is > 0)
+                .GroupBy(value => value.Episode!.Value)
+                .Where(group => group.Count() > 1)
+                .SelectMany(group => group.Select(value => value.File.FileId));
+            return RequiresAi("u2_duplicate_episode_candidate", extras, duplicateFileIds);
         }
 
         var mainVideos = candidates
@@ -65,12 +76,20 @@ internal static class U2WholeTorrentEpisodeGate
             .ToArray();
         if (mainVideos.Length <= 1)
         {
-            return RequiresAi("u2_single_or_non_season_torrent", extras);
+            return RequiresAi(
+                "u2_single_or_non_season_torrent",
+                extras,
+                mainVideos.Select(value => value.File.FileId));
         }
 
         if (mainVideos.Any(value => value.Episode is null))
         {
-            return RequiresAi("u2_main_video_episode_not_parsed", extras);
+            return RequiresAi(
+                "u2_main_video_episode_not_parsed",
+                extras,
+                mainVideos
+                    .Where(value => value.Episode is null)
+                    .Select(value => value.File.FileId));
         }
 
         var torrentEpisodes = mainVideos.Select(value => value.Episode!.Value).ToArray();
@@ -84,22 +103,34 @@ internal static class U2WholeTorrentEpisodeGate
             .ToArray();
         if (tmdbEpisodes.Length == 0)
         {
-            return RequiresAi("u2_tmdb_season_episode_snapshot_empty", extras);
+            return RequiresAi(
+                "u2_tmdb_season_episode_snapshot_empty",
+                extras,
+                mainVideos.Select(value => value.File.FileId));
         }
 
         var exact = torrentEpisodes.Length == tmdbEpisodes.Length
             && torrentEpisodes.Distinct().Count() == torrentEpisodes.Length
             && torrentEpisodes.OrderBy(value => value).SequenceEqual(tmdbEpisodes);
         return exact
-            ? new U2WholeTorrentEpisodeDecision(true, false, null, extras)
-            : RequiresAi("u2_torrent_not_complete_tmdb_season", extras);
+            ? new U2WholeTorrentEpisodeDecision(true, false, null, extras, EmptyFileIds())
+            : RequiresAi(
+                "u2_torrent_not_complete_tmdb_season",
+                extras,
+                mainVideos.Select(value => value.File.FileId));
     }
 
     private static U2WholeTorrentEpisodeDecision RequiresAi(
         string reason,
-        IReadOnlySet<string> extras) =>
-        new(true, true, reason, extras);
+        IReadOnlySet<string> extras,
+        IEnumerable<string> blockingFileIds) =>
+        new(
+            true,
+            true,
+            reason,
+            extras,
+            blockingFileIds.ToHashSet(StringComparer.Ordinal));
 
-    private static HashSet<string> EmptyExtras() =>
+    private static HashSet<string> EmptyFileIds() =>
         new HashSet<string>(StringComparer.Ordinal);
 }

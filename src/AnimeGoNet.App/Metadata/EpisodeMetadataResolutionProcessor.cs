@@ -258,7 +258,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
             if (u2Decision.RequiresAi)
             {
                 var isExtra = u2Decision.ExplicitExtraFileIds.Contains(file.FileId);
-                var reason = isExtra ? "u2_explicit_extra" : u2Decision.Reason!;
+                var isBlockingFile = u2Decision.BlockingFileIds.Contains(file.FileId);
+                var reason = isExtra
+                    ? "u2_explicit_extra"
+                    : isBlockingFile
+                        ? u2Decision.Reason!
+                        : "u2_whole_torrent_gate_blocked_by_other_file";
                 await RecordAsync(
                     claim,
                     "u2_whole_torrent_gate",

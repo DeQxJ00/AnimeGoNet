@@ -20,6 +20,36 @@ public sealed class U2WholeTorrentEpisodeGateTests
         Assert.Contains("ncop", result.ExplicitExtraFileIds);
     }
 
+    [Fact]
+    public void CompleteSeasonSetPassesWithRomanizedJapaneseTrailerAsExtra()
+    {
+        var claim = Claim("u2", [
+            Video("e1", "Show 01.mkv", 1),
+            Video("e2", "Show 02.mkv", 2),
+            Video("e3", "Show 03.mkv", 3),
+            Video("trailer", "Show (Gekiba hen youkoku) [BDrip].mkv", null)]);
+
+        var result = U2WholeTorrentEpisodeGate.Evaluate(claim, Season(1, 2, 3));
+
+        Assert.False(result.RequiresAi);
+        Assert.Contains("trailer", result.ExplicitExtraFileIds);
+    }
+
+    [Fact]
+    public void EpisodeNotParsedReasonOnlyPointsAtTheActualBlockingFile()
+    {
+        var claim = Claim("u2", [
+            Video("e1", "Show 01.mkv", 1),
+            Video("unknown", "Show unknown.mkv", null)]);
+
+        var result = U2WholeTorrentEpisodeGate.Evaluate(claim, Season(1, 2, 3));
+
+        Assert.True(result.RequiresAi);
+        Assert.Equal("u2_main_video_episode_not_parsed", result.Reason);
+        Assert.DoesNotContain("e1", result.BlockingFileIds);
+        Assert.Contains("unknown", result.BlockingFileIds);
+    }
+
     [Theory]
     [MemberData(nameof(AiCases))]
     public void NonExactOrConflictingTorrentRequiresAi(

@@ -269,7 +269,7 @@ public static partial class U2FileEpisodeCandidateResolver
         value is >= MinimumWeakEpisodeNumber and <= MaximumWeakEpisodeNumber;
 
     [GeneratedRegex(
-        @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo|extra|drama|spot|endcard|creditless|映像特典|特典|ノンテロップ|ノンクレジット(?:op|ed)?|メニュー)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
+        @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo|extra|drama|spot|endcard|creditless|trailer|preview|youkoku|予告|映像特典|特典|ノンテロップ|ノンクレジット(?:op|ed)?|メニュー)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NonFeatureToken();
 
