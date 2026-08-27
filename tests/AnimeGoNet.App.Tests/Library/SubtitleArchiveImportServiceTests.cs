@@ -51,10 +51,55 @@ public sealed class SubtitleArchiveImportServiceTests
         }
     }
 
+    [Fact]
+    public async Task ImportAcceptsAnAsyncOnlyUploadStream()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-subtitle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = AnimeGoDefaults.CreateNative(root).Paths;
+            var service = new SubtitleArchiveImportService(DirectoryLayout.From(paths));
+            await using var archive = new MemoryStream();
+            using (var zip = new ZipArchive(archive, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                await AddAsync(zip, "Show - 02.ass", "ep2");
+            }
+
+            await using var upload = new AsyncOnlyReadStream(archive.ToArray());
+            var session = await service.ImportAsync(upload, "subtitles.zip", 123, 1, "Show");
+
+            Assert.Single(session.Candidates);
+            Assert.Equal(2, session.Candidates[0].ParsedEpisode);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static async Task AddAsync(ZipArchive archive, string name, string content)
     {
         await using var stream = archive.CreateEntry(name).Open();
         await using var writer = new StreamWriter(stream);
         await writer.WriteAsync(content);
+    }
+
+    private sealed class AsyncOnlyReadStream(byte[] bytes) : Stream
+    {
+        private readonly MemoryStream _inner = new(bytes, writable: false);
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+        public override void Flush() => throw new InvalidOperationException("Synchronous operations are disallowed.");
+        public override int Read(byte[] buffer, int offset, int count) => throw new InvalidOperationException("Synchronous operations are disallowed.");
+        public override long Seek(long offset, SeekOrigin origin) => throw new InvalidOperationException("Synchronous operations are disallowed.");
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(buffer, cancellationToken);
     }
 }

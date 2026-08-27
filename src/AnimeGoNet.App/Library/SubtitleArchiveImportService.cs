@@ -64,7 +64,48 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
         var candidates = new List<SubtitleArchiveCandidate>();
         try
         {
-            using var zip = new ZipArchive(archive, ZipArchiveMode.Read, leaveOpen: true);
+            // Kestrel request bodies disallow synchronous reads.  ZipArchive performs
+            // synchronous seeks/reads while opening entries, so first spool the upload
+            // asynchronously to a private staging file and only then hand a regular
+            // FileStream to ZipArchive.  This also avoids retaining a potentially large
+            // ZIP in memory during import.
+            var archivePath = Path.Combine(sessionRoot, "archive.zip");
+            await using (var staged = new FileStream(
+                archivePath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                var totalBytes = 0L;
+                var buffer = new byte[64 * 1024];
+                while (true)
+                {
+                    var read = await archive.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    totalBytes = checked(totalBytes + read);
+                    if (totalBytes > 512L * 1024 * 1024)
+                    {
+                        throw new InvalidDataException("字幕压缩包不能超过 512 MiB。");
+                    }
+
+                    await staged.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            await using var stagedArchive = new FileStream(
+                archivePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                64 * 1024,
+                FileOptions.SequentialScan);
+            using var zip = new ZipArchive(stagedArchive, ZipArchiveMode.Read, leaveOpen: false);
             long extractedBytes = 0;
             foreach (var entry in zip.Entries)
             {
