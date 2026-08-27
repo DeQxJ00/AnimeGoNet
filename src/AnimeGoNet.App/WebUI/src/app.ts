@@ -10533,12 +10533,24 @@ async function loadMetadataAttempts(
   button.disabled = true;
   button.textContent = "读取策略时间线…";
   try {
-    const response = await authenticatedFetch(
-      `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/attempts`,
-      { headers },
-    );
+    const attemptsUrl = `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/attempts`;
+    const detailUrl = `/api/v1/metadata/tasks/${encodeURIComponent(taskId)}`;
+    const [response, detailResponse] = await Promise.all([
+      authenticatedFetch(attemptsUrl, { headers }),
+      authenticatedFetch(detailUrl, { headers }).catch(() => null),
+    ]);
     if (!response.ok) throw new Error(await responseError(response));
     const body = await response.json() as { items: MetadataAttemptItem[] };
+    let taskFiles: MetadataTaskDetail["files"] = [];
+    if (detailResponse?.ok) {
+      try {
+        const detail = await detailResponse.json() as MetadataTaskDetail;
+        taskFiles = detail.files ?? [];
+      } catch {
+        // The attempts timeline remains useful when an older server cannot
+        // provide task details in the same response.
+      }
+    }
     if (body.items.length === 0) {
       const empty = document.createElement("p");
       empty.className = "muted metadata-attempt-empty";
@@ -10559,6 +10571,36 @@ async function loadMetadataAttempts(
         const execution = document.createElement("p");
         execution.textContent = `P${textOrDash(attempt.priority)} · Run #${attempt.run_attempt_number} (${attempt.run_status}) · 尝试 #${attempt.attempt_number} · ${attempt.duration_ms} ms · ${new Date(attempt.created_at_utc).toLocaleString()}`;
         row.append(heading, execution);
+
+        const linkedFileNames = taskFiles
+          .filter((file) => file.episode_attempt_id === attempt.attempt_id)
+          .map((file) => file.source_name)
+          .filter((name): name is string => Boolean(name));
+        const fileNames = linkedFileNames.length > 0
+          ? linkedFileNames
+          : taskFiles.map((file) => file.source_name).filter((name): name is string => Boolean(name));
+        if (fileNames.length > 0) {
+          const filesDetails = document.createElement("details");
+          filesDetails.className = "metadata-attempt-files";
+          const filesSummary = document.createElement("summary");
+          const filePreview = fileNames.length <= 2
+            ? fileNames.join("、")
+            : `${fileNames.slice(0, 2).join("、")} 等 ${fileNames.length} 个文件`;
+          filesSummary.textContent = linkedFileNames.length > 0
+            ? `关联文件（${fileNames.length}）：${filePreview}`
+            : `本次任务文件（${fileNames.length}，当前阶段尚未绑定单文件）：${filePreview}`;
+          filesDetails.append(filesSummary);
+          const filesList = document.createElement("ul");
+          filesList.className = "metadata-attempt-file-list";
+          for (const fileName of fileNames) {
+            const fileItem = document.createElement("li");
+            fileItem.className = "metadata-attempt-file";
+            fileItem.textContent = fileName;
+            filesList.append(fileItem);
+          }
+          filesDetails.append(filesList);
+          row.append(filesDetails);
+        }
         if (attempt.ai_model !== null) {
           const usage = document.createElement("p");
           usage.className = "metadata-ai-usage";

@@ -778,6 +778,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-attempt-heading strong { color: #dce7fb; font-size: .78rem; overflow-wrap: anywhere; }
 .metadata-attempt p { margin: 6px 0 0; color: #94a7c8; font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
 .metadata-attempt .metadata-attempt-reason { color: #ffb0b0; }
+.metadata-attempt-files { margin-top: 8px; border: 1px solid #2d4161; border-radius: 8px; background: rgba(10,16,29,.55); }
+.metadata-attempt-files summary { padding: 6px 8px; color: #b8cae8; font-size: .7rem; cursor: pointer; overflow-wrap: anywhere; }
+.metadata-attempt-file-list { display: grid; gap: 4px; max-height: 12rem; overflow: auto; margin: 0; padding: 0 8px 8px 26px; }
+.metadata-attempt-file { color: #d9e5f8; font-size: .68rem; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
 .metadata-attempt-empty { margin: 0; padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.45); }
 .metadata-detail { display: grid; gap: 10px; margin-top: 12px; }
 .metadata-detail:empty { display: none; }

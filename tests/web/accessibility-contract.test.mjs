@@ -277,6 +277,19 @@ test("downloads expose verified TMDB metadata and link to persistent matching lo
   assert.match(css, /\.matching-log-flow\s*\{[^}]*grid-template-columns:\s*repeat\(3/s);
 });
 
+test("matching attempt timeline exposes concrete task filenames", async () => {
+  const [app, css] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  assert.match(app, /taskFiles\s*=\s*detail\.files/);
+  assert.match(app, /file\.episode_attempt_id === attempt\.attempt_id/);
+  assert.match(app, /关联文件（\$\{fileNames\.length\}）：\$\{filePreview\}/);
+  assert.match(app, /本次任务文件（\$\{fileNames\.length\}，当前阶段尚未绑定单文件）：\$\{filePreview\}/);
+  assert.match(css, /\.metadata-attempt-file-list\s*\{/);
+  assert.match(css, /\.metadata-attempt-file\s*\{/);
+});
+
 test("anime library exposes auditable task and file deletion without merging projection deletion", async () => {
   const [document, app, css] = await Promise.all([
     page(),
