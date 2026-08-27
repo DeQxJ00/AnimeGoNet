@@ -13,6 +13,7 @@
   <Folder Name="/tools/">
     <Project Path="tools/AnimeGoNet.DataBuilder/AnimeGoNet.DataBuilder.csproj" />
     <Project Path="tools/AnimeGoNet.LegacyCacheImporter/AnimeGoNet.LegacyCacheImporter.csproj" />
+    <Project Path="tools/AnimeGoNet.U2TorrentAudit/AnimeGoNet.U2TorrentAudit.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AnimeGo.PluginTool.Tests/AnimeGo.PluginTool.Tests.csproj" />
