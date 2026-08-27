@@ -192,7 +192,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     reason,
                     retryable: false,
                     0,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    file: file).ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
                     file.FileId,
                     null,
@@ -211,7 +212,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     file.PreResolvedOtherReason,
                     retryable: false,
                     0,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    file: file).ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
                     file.FileId,
                     null,
@@ -250,7 +252,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     claim,
                     strategy,
                     priority,
-                    "other", reason, retryable: false, 0, cancellationToken).ConfigureAwait(false);
+                    "other", reason, retryable: false, 0, cancellationToken,
+                    file: file).ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
                     file.FileId,
                     null,
@@ -304,7 +307,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                         reason,
                         retryable: false,
                         0,
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken,
+                        file: file).ConfigureAwait(false);
                     results.Add(new MetadataEpisodeFileResolution(
                         file.FileId,
                         null,
@@ -390,7 +394,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
                 const string reason = "tmdb_episode_not_found";
                 await RecordAsync(claim, "tmdb_episode_number", null, "other", reason,
-                    false, ElapsedMilliseconds(started), cancellationToken).ConfigureAwait(false);
+                    false, ElapsedMilliseconds(started), cancellationToken,
+                    file: file).ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
                     file.FileId,
                     null,
@@ -424,7 +429,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 null,
                 false,
                 ElapsedMilliseconds(started),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                file: file).ConfigureAwait(false);
             results.Add(new MetadataEpisodeFileResolution(
                 file.FileId,
                 episode,
@@ -465,7 +471,9 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 var attemptId = await RecordAsync(
                     claim, "subtitle_association", null, "matched", null,
-                    false, 0, cancellationToken).ConfigureAwait(false);
+                    false, 0, cancellationToken,
+                    file: claim.Files.Single(file => file.FileId == association.SubtitleFileId))
+                    .ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
                     association.SubtitleFileId,
                     video.Episode,
@@ -482,7 +490,9 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 var reason = association.UnmatchedReason ?? "subtitle_video_unmatched";
                 await RecordAsync(
                     claim, "subtitle_association", null, "other", reason,
-                    false, 0, cancellationToken).ConfigureAwait(false);
+                    false, 0, cancellationToken,
+                    file: claim.Files.Single(file => file.FileId == association.SubtitleFileId))
+                    .ConfigureAwait(false);
                 results.Add(new MetadataEpisodeFileResolution(
                     association.SubtitleFileId,
                     null,
@@ -1007,7 +1017,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
         long durationMilliseconds,
         CancellationToken cancellationToken,
         AiMetadataProviderUsage? aiUsage = null,
-        string? aiTriggerReason = null) =>
+        string? aiTriggerReason = null,
+        MetadataTaskFileProjection? file = null) =>
         resolutions.RecordAttemptAsync(
             claim.Resolution,
             new MetadataAttempt(
@@ -1019,10 +1030,22 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 retryable,
                 claim.Resolution.AttemptNumber,
                 durationMilliseconds,
+                Reason: file is null || string.IsNullOrWhiteSpace(errorCode)
+                    ? errorCode
+                    : AttemptReasonWithFile(errorCode, file.RelativePath),
                 AiUsage: aiUsage,
                 AiTriggerReason: aiTriggerReason),
             _timeProvider.GetUtcNow(),
             cancellationToken);
+
+    private static string AttemptReasonWithFile(string reason, string relativePath)
+    {
+        const int maxReasonLength = 512;
+        var prefix = $"{reason} · 文件：";
+        var safePath = new string(relativePath.Where(character => !char.IsControl(character)).ToArray());
+        var available = Math.Max(0, maxReasonLength - prefix.Length);
+        return prefix + (safePath.Length > available ? safePath[..available] : safePath);
+    }
 
     private static string BuildAiEpisodeTriggerReason(
         MetadataEpisodeTaskClaim claim,

@@ -741,6 +741,12 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         Assert.Null(file.EpisodeNumber);
         Assert.Equal(expectedReason, file.OtherReason);
         Assert.Empty(tmdb.EpisodeRequests);
+
+        var attempts = await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>()
+            .ListAttemptsAsync(taskId);
+        var attempt = Assert.Single(attempts, value => value.ErrorCode == expectedReason);
+        Assert.Contains(path, attempt.Reason, StringComparison.Ordinal);
     }
 
     [Theory]
