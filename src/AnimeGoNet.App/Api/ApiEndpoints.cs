@@ -7051,7 +7051,7 @@ public static class ApiEndpoints
             && !string.Equals(mediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
         {
             return TypedResults.BadRequest(Error("subtitle_import_content_type_invalid",
-                "字幕压缩包必须以 ZIP 请求体上传。"));
+                "字幕压缩包必须以 ZIP、RAR、7z、TAR、GZ、BZ2 或 XZ 请求体上传。"));
         }
         if (context.Request.ContentLength is > 512L * 1024 * 1024)
         {
@@ -7068,8 +7068,8 @@ public static class ApiEndpoints
         {
             var result = await importer.ImportAsync(
                 context.Request.Body,
-                context.Request.Headers.ContentDisposition.ToString() is { Length: > 0 } name
-                    ? name : "subtitle.zip",
+                context.Request.Headers["X-AnimeGo-Archive-Name"].ToString() is { Length: > 0 } name
+                    ? name : "subtitle.archive",
                 tmdbSeriesId,
                 seasonNumber,
                 detail.Season.DisplayName,

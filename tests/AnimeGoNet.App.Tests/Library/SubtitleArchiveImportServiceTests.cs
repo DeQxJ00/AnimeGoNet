@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Formats.Tar;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
@@ -72,6 +73,38 @@ public sealed class SubtitleArchiveImportServiceTests
 
             Assert.Single(session.Candidates);
             Assert.Equal(2, session.Candidates[0].ParsedEpisode);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAcceptsTarSubtitleArchive()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-subtitle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = AnimeGoDefaults.CreateNative(root).Paths;
+            var service = new SubtitleArchiveImportService(DirectoryLayout.From(paths));
+            await using var tar = new MemoryStream();
+            using (var writer = new TarWriter(tar, TarEntryFormat.Pax, leaveOpen: true))
+            {
+                writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "Show - 04.zh.ass")
+                {
+                    DataStream = new MemoryStream("ep4"u8.ToArray()),
+                });
+            }
+
+            tar.Position = 0;
+            tar.Position = 0;
+            var session = await service.ImportAsync(tar, "subtitles.tar", 123, 1, "Show");
+
+            var candidate = Assert.Single(session.Candidates);
+            Assert.Equal("Show - 04.zh.ass", candidate.FileName);
+            Assert.Equal(4, candidate.ParsedEpisode);
         }
         finally
         {

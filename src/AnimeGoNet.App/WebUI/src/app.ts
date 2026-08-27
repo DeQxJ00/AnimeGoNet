@@ -6133,7 +6133,15 @@ async function importSubtitleArchive(): Promise<void> {
   try {
     const response = await authenticatedFetch(
       `/api/v1/library/subtitle-archives/import?tmdbSeriesId=${detail.tmdb_series_id}&seasonNumber=${detail.tmdb_season_number}`,
-      { method: "POST", headers: { ...headers, "Content-Type": "application/zip" }, body: file },
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": file.type || "application/octet-stream",
+          "X-AnimeGo-Archive-Name": file.name,
+        },
+        body: file,
+      },
     );
     if (!response.ok) throw new Error(await responseError(response));
     activeSubtitleImport = await response.json() as SubtitleArchiveImportResult;

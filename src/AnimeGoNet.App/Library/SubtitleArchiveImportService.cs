@@ -1,8 +1,13 @@
-using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
+using SharpCompress.Archives;
+using SharpCompress.Compressors;
+using SharpCompress.Compressors.BZip2;
+using SharpCompress.Compressors.Xz;
+using SharpCompress.Common;
+using SharpCompress.Readers;
 
 namespace AnimeGoNet.App.Library;
 
@@ -66,12 +71,11 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
         var candidates = new List<SubtitleArchiveCandidate>();
         try
         {
-            // Kestrel request bodies disallow synchronous reads.  ZipArchive performs
-            // synchronous seeks/reads while opening entries, so first spool the upload
-            // asynchronously to a private staging file and only then hand a regular
-            // FileStream to ZipArchive.  This also avoids retaining a potentially large
-            // ZIP in memory during import.
-            var archivePath = Path.Combine(sessionRoot, "archive.zip");
+            // Kestrel request bodies disallow synchronous reads.  Spool the upload
+            // asynchronously first, then hand a regular file to SharpCompress.  The
+            // managed reader supports ZIP, RAR, 7z, TAR and common gzip/bzip2/xz
+            // wrappers without requiring platform-specific executables.
+            var archivePath = Path.Combine(sessionRoot, "archive.bin");
             await using (var staged = new FileStream(
                 archivePath,
                 FileMode.CreateNew,
@@ -100,50 +104,66 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
                 }
             }
 
+            var readerPath = await PrepareArchiveForReaderAsync(archivePath, archiveName, sessionRoot, cancellationToken)
+                .ConfigureAwait(false);
             await using var stagedArchive = new FileStream(
-                archivePath,
+                readerPath,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read,
                 64 * 1024,
                 FileOptions.SequentialScan);
-            using var zip = new ZipArchive(stagedArchive, ZipArchiveMode.Read, leaveOpen: false);
+            IArchive compressed;
+            try
+            {
+                compressed = ArchiveFactory.OpenArchive(stagedArchive, new ReaderOptions());
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw new InvalidDataException(
+                    "无法识别字幕压缩包格式；支持 ZIP、RAR、7z、TAR、GZ、BZ2 和 XZ。",
+                    exception);
+            }
+
+            using (compressed)
+            {
             long extractedBytes = 0;
-            foreach (var entry in zip.Entries)
+            foreach (var entry in compressed.Entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (string.IsNullOrEmpty(entry.Name))
+                if (entry.IsDirectory || string.IsNullOrEmpty(entry.Key))
                 {
                     continue;
                 }
-                var extension = Path.GetExtension(entry.Name);
+                var extension = Path.GetExtension(entry.Key);
                 if (!SubtitleExtensions.Contains(extension))
                 {
                     continue;
                 }
-                if (candidates.Count >= 500 || entry.Length > 128L * 1024 * 1024
-                    || (extractedBytes = checked(extractedBytes + entry.Length)) > 512L * 1024 * 1024)
+                if (candidates.Count >= 500 || entry.Size > 128L * 1024 * 1024
+                    || (extractedBytes = checked(extractedBytes + entry.Size)) > 512L * 1024 * 1024)
                 {
                     throw new InvalidDataException("字幕压缩包文件数量或解压后大小超过限制。");
                 }
-                var relative = NormalizeEntry(entry.FullName);
+                var relative = NormalizeEntry(entry.Key);
                 var target = PathBoundary.Combine(filesRoot, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                await using (var input = entry.Open())
+                await using (var input = entry.OpenEntryStream())
                 await using (var output = File.Create(target))
                 {
                     await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
                 }
 
-                var parsed = ParseEpisode(entry.Name);
+                var parsed = ParseEpisode(Path.GetFileName(entry.Key));
                 candidates.Add(new SubtitleArchiveCandidate(
                     Guid.NewGuid().ToString("N"),
-                    entry.Name,
+                    Path.GetFileName(entry.Key),
                     relative,
-                    entry.Length,
+                    entry.Size,
                     parsed.Episode,
                     parsed.Range,
                     parsed.Episode));
+            }
             }
 
             var session = new SubtitleArchiveImportSession(
@@ -158,6 +178,13 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
                 System.Text.Json.JsonSerializer.Serialize(session, SubtitleArchiveImportJsonContext.Default.SubtitleArchiveImportSession),
                 cancellationToken).ConfigureAwait(false);
             return session;
+        }
+        catch (SharpCompressException exception)
+        {
+            TryDelete(sessionRoot);
+            throw new InvalidDataException(
+                "字幕压缩包无法读取或已损坏；支持 ZIP、RAR、7z、TAR、GZ、BZ2 和 XZ。",
+                exception);
         }
         catch
         {
@@ -239,6 +266,41 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
             @"\.(?<language>[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8})?)\.(?<extension>ass|ssa|srt|vtt|sub|idx|sup|smi|ttml|xml)$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         return match.Success ? match.Value : Path.GetExtension(name);
+    }
+
+    private static async Task<string> PrepareArchiveForReaderAsync(
+        string archivePath,
+        string archiveName,
+        string sessionRoot,
+        CancellationToken cancellationToken)
+    {
+        var name = archiveName.Trim().ToLowerInvariant();
+        var wrapper = name.EndsWith(".tar.gz", StringComparison.Ordinal)
+            || name.EndsWith(".tgz", StringComparison.Ordinal)
+            || name.EndsWith(".tar.bz2", StringComparison.Ordinal)
+            || name.EndsWith(".tbz2", StringComparison.Ordinal)
+            || name.EndsWith(".tar.xz", StringComparison.Ordinal)
+            || name.EndsWith(".txz", StringComparison.Ordinal);
+        if (!wrapper) return archivePath;
+
+        var innerPath = Path.Combine(sessionRoot, "archive.tar");
+        await using var source = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var target = new FileStream(innerPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+            64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        Stream decompressed = name.EndsWith(".gz", StringComparison.Ordinal)
+            || name.EndsWith(".tgz", StringComparison.Ordinal)
+            ? new System.IO.Compression.GZipStream(source, System.IO.Compression.CompressionMode.Decompress, leaveOpen: true)
+            : name.EndsWith(".bz2", StringComparison.Ordinal)
+                || name.EndsWith(".tbz2", StringComparison.Ordinal)
+                ? BZip2Stream.Create(source, CompressionMode.Decompress, decompressConcatenated: true,
+                    leaveOpen: true, tolerateTruncatedStream: false)
+                : new XZStream(source);
+        await using (decompressed.ConfigureAwait(false))
+        {
+            await decompressed.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+        }
+        return innerPath;
     }
 
     private static string NormalizeEntry(string value)
