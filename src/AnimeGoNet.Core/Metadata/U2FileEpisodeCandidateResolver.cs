@@ -89,6 +89,47 @@ public static partial class U2FileEpisodeCandidateResolver
                 parsed);
         }
 
+        // U2 commonly uses a hash-prefixed episode marker (for example
+        // "Astro Ganger #25").  This is intentionally U2-only; Mikan's
+        // compatibility resolver keeps its original marker set unchanged.
+        var hashEpisodeMatches = HashEpisodeMarker().Matches(basename);
+        if (hashEpisodeMatches.Count > 0)
+        {
+            var hashEpisodes = hashEpisodeMatches
+                .Select(match => int.Parse(
+                    match.Groups["episode"].Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture))
+                .ToHashSet();
+            var otherMarkers = UpstreamIntegerMarker()
+                .Matches(basename)
+                .SelectMany(marker => marker.Groups.Cast<Group>().Skip(1))
+                .Where(group => group.Success)
+                .Select(group => int.TryParse(
+                    group.Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var value)
+                        ? value
+                        : 0)
+                .Where(IsPlausibleWeakEpisodeNumber)
+                .ToHashSet();
+            if (hashEpisodes.Count == 1
+                && !NonFeatureToken().IsMatch(basename)
+                && !otherMarkers.Any(value => !hashEpisodes.Contains(value)))
+            {
+                return new U2FileEpisodeCandidateResolution(
+                    hashEpisodes.Single(),
+                    "accepted_hash_episode_marker",
+                    parsed);
+            }
+
+            return new U2FileEpisodeCandidateResolution(
+                null,
+                "ambiguous_episode_markers",
+                parsed);
+        }
+
         if (parsed.Episode <= 0)
         {
             return new U2FileEpisodeCandidateResolution(null, "upstream_episode_not_parsed", parsed);
@@ -161,6 +202,11 @@ public static partial class U2FileEpisodeCandidateResolver
         @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NonFeatureToken();
+
+    [GeneratedRegex(
+        @"(?<![A-Za-z0-9])#(?<episode>\d{1,4})(?!\d)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex HashEpisodeMarker();
 
     [GeneratedRegex(
         @" -? (\d+)|\[(\d+)\]|\[(\d+).?[vV]\d{1}\]|[第](\d+)[话話集]|\[(\d+).?END\]",
