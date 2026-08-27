@@ -41,6 +41,7 @@ public sealed class U2FileEpisodeCandidateResolverTests
     [InlineData("Baka to Test to Shokanjyu NCED3 1080p Bluray FLAC 2.0 x264-DECAY.mkv")]
     [InlineData("[U2-Rip] 戦う司書 the book of bantorra 映像特典 DRAMA 10 (BD 1920x1080 x264 FLAC).mkv")]
     [InlineData("[U2-Rip] 戦う司書 the book of bantorra 映像特典 ノンテロップOP1 (BD 1920x1080 x264 FLAC).mkv")]
+    [InlineData("[Yousei-raws] Katanagatari (Creditless ED ep 12) [BDrip 1920x1080 x264 FLAC].mkv")]
     public void KeepsTheCopiedSafetyChecksForU2(string path)
     {
         var result = U2FileEpisodeCandidateResolver.Resolve(path);

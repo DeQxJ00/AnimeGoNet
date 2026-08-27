@@ -133,7 +133,10 @@ public static partial class U2FileEpisodeCandidateResolver
         // U2 also uses an explicit EP marker in release names (for example
         // "Baka to Test ... EP03").  This is deliberately separate from
         // Mikan's compatibility parser.
-        if (parsed.Episode <= 0 && NonFeatureToken().IsMatch(basename))
+        // Check U2's feature/creditless markers before the explicit EP rule;
+        // otherwise names such as "Creditless ED ep 12" would be mistaken
+        // for a regular episode merely because they contain "ep 12".
+        if (NonFeatureToken().IsMatch(basename))
         {
             return new U2FileEpisodeCandidateResolution(null, "non_feature_episode", parsed);
         }
@@ -266,7 +269,7 @@ public static partial class U2FileEpisodeCandidateResolver
         value is >= MinimumWeakEpisodeNumber and <= MaximumWeakEpisodeNumber;
 
     [GeneratedRegex(
-        @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo|extra|drama|spot|endcard|映像特典|特典|ノンテロップ|メニュー)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
+        @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo|extra|drama|spot|endcard|creditless|映像特典|特典|ノンテロップ|メニュー)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NonFeatureToken();
 
