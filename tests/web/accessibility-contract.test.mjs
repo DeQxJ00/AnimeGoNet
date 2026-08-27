@@ -547,6 +547,22 @@ test("AI test page exposes verified Responses compatibility controls and usage",
   assert.match(css, /\.badge\.ai-test-source-state\.disabled\s*\{[^}]*color:\s*#aebbd3/s);
 });
 
+test("AI matching workspace exposes metadata and subtitle matching entries", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  assert.match(document.querySelector('[data-workspace-target="tools"]')?.textContent ?? "", /AI 匹配测试/);
+  assert.equal(
+    document.querySelector('[data-workspace="tools"][data-subview="ai-subtitle"]')
+      ?.getAttribute("data-nav-label"),
+    "AI 字幕匹配",
+  );
+  assert.ok(document.querySelector("#ai-subtitle-open-library"));
+  assert.match(app, /id: "ai-subtitle", label: "AI 字幕匹配"/);
+  assert.match(app, /selectWorkspace\("library", "seasons"\)/);
+});
+
 test("AI test request omits Mikan pubDate when Bangumi date priority is disabled", async () => {
   const app = await readFile(appPath, "utf8");
 

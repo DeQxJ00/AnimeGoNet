@@ -23,7 +23,7 @@
         <button type="button" data-workspace-target="download-tools"><span aria-hidden="true">⇩</span>下载工具配置</button>
         <button type="button" data-workspace-target="plugins"><span aria-hidden="true">⊞</span>插件</button>
         <button type="button" data-workspace-target="connections"><span aria-hidden="true">⚙</span>设置与备份</button>
-        <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试工具</button>
+        <button type="button" data-workspace-target="tools"><span aria-hidden="true">⌁</span>AI 匹配测试</button>
         <button type="button" data-workspace-target="notifications"><span aria-hidden="true">♢</span>通知</button>
         <button type="button" data-workspace-target="logs"><span aria-hidden="true">≡</span>日志</button>
         <button type="button" data-workspace-target="system"><span aria-hidden="true">◉</span>缓存</button>
@@ -1843,6 +1843,22 @@
       </form>
     </section>
 
+    <section id="ai-subtitle-test" data-workspace="tools" data-subview="ai-subtitle" data-nav-label="AI 字幕匹配">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Subtitle matching</p>
+          <h2>AI 字幕匹配</h2>
+          <p class="muted">使用独立字幕 Prompt 为动画库中的字幕压缩包匹配 Episode；不会修改正式 Prompt 或自动创建下载任务。</p>
+        </div>
+        <span class="badge pending">独立 Prompt</span>
+      </div>
+      <article class="configuration-card">
+        <h3>开始字幕匹配</h3>
+        <p class="muted">请先在动画库打开目标作品的季度详情，再选择“导入字幕压缩包”。读取候选后，可在匹配列表中手工调整，或单独点击“AI 匹配字幕”。</p>
+        <button id="ai-subtitle-open-library" type="button" class="primary-button">打开动画库</button>
+      </article>
+    </section>
+
     <section id="management-shortcuts" class="grid panels" aria-label="管理入口" data-workspace="overview" data-subview="shortcuts" data-nav-label="管理入口">
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>已保存值直接回填</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
@@ -2049,7 +2065,7 @@
             </label>
             <label class="wide">正式 AI Prompt
               <textarea id="configuration-ai-prompt-template" class="ai-test-prompt" rows="20" maxlength="131072" required spellcheck="false" aria-describedby="configuration-ai-prompt-status"></textarea>
-              <small id="configuration-ai-prompt-status">后台 Worker 与 AI 匹配测试工具共用此模板；保存后重启生效。</small>
+              <small id="configuration-ai-prompt-status">后台 Worker 与 AI 匹配测试共用此模板；保存后重启生效。</small>
             </label>
             <button id="configuration-ai-prompt-reset" type="button" class="secondary-button">恢复程序默认 Prompt</button>
             <label class="wide">字幕导入 AI Prompt

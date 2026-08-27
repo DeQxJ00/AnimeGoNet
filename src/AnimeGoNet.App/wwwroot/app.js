@@ -287,11 +287,12 @@ const workspaceDefinitions = {
         ],
     },
     tools: {
-        title: "AI 匹配测试工具",
+        title: "AI 匹配测试",
         description: "以只读方式验证生产 Prompt、AI 工具调用与 TMDB 最终校验。",
         defaultSubview: "ai-metadata",
         tabs: [
             { id: "ai-metadata", label: "AI 元数据测试" },
+            { id: "ai-subtitle", label: "AI 字幕匹配" },
         ],
     },
     notifications: {
@@ -5345,8 +5346,6 @@ async function resetConfigurationAiPrompt() {
 async function loadSubtitleAiPrompt() {
     const editor = element("#configuration-subtitle-ai-prompt-template");
     const status = element("#configuration-subtitle-ai-prompt-status");
-    if (!editor || !status)
-        return;
     try {
         const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", { headers });
         if (!response.ok)
@@ -5368,7 +5367,7 @@ async function saveSubtitleAiPrompt() {
     try {
         const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", {
             method: "PUT",
-            headers: { ...headers, "Content-Type": "application/json" },
+            headers: jsonRequestHeaders(),
             body: JSON.stringify({ template: editor.value }),
         });
         if (!response.ok)
@@ -11151,6 +11150,7 @@ element("#download-next").addEventListener("click", () => {
     void loadDownloads();
 });
 element("#library-reload").addEventListener("click", () => void loadLibrary());
+element("#ai-subtitle-open-library").addEventListener("click", () => selectWorkspace("library", "seasons"));
 element("#movie-library-reload").addEventListener("click", () => void loadMovieLibrary());
 element("#movie-library-search-form").addEventListener("submit", (event) => {
     event.preventDefault();
