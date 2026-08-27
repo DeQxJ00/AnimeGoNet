@@ -2584,6 +2584,35 @@ function metadataReasonLabel(value) {
     const label = labels[value];
     return label ? `${label} (${value})` : value;
 }
+
+function metadataAttemptFileReason(attempt) {
+    const rawReason = typeof attempt.reason === "string" ? attempt.reason : "";
+    const fileMarker = " · 文件：";
+    const markerIndex = rawReason.indexOf(fileMarker);
+    const fileName = markerIndex >= 0
+        ? rawReason.slice(markerIndex + fileMarker.length).trim()
+        : null;
+    const reasonWithoutFile = markerIndex >= 0
+        ? rawReason.slice(0, markerIndex).trim()
+        : rawReason;
+    const presentations = {
+        u2_main_video_episode_not_parsed: {
+            role: "引起阻塞的文件",
+            explanation: "该视频没有提取到普通正片 EP，触发 U2 整批进入 AI。",
+        },
+        u2_whole_torrent_gate_blocked_by_other_file: {
+            role: "受同批阻塞影响的文件",
+            explanation: "该文件自身已完成 EP 提取；因同一 Torrent 的其他文件阻塞而随整批进入 AI。",
+        },
+    };
+    const presentation = presentations[attempt.error_code] ?? null;
+    return {
+        fileName,
+        reasonWithoutFile,
+        role: presentation?.role ?? null,
+        explanation: presentation?.explanation ?? null,
+    };
+}
 function renderExternalMediaImportResult(target, result) {
     const container = element(target);
     container.hidden = false;
@@ -7739,6 +7768,7 @@ async function loadMetadataAttempts(taskId, target, button) {
         }
         else {
             target.replaceChildren(...body.items.map((attempt) => {
+                const fileReason = metadataAttemptFileReason(attempt);
                 const row = document.createElement("article");
                 row.className = `metadata-attempt ${attempt.result === "failed" ? "failed" : ""}`;
                 const heading = document.createElement("div");
@@ -7781,6 +7811,24 @@ async function loadMetadataAttempts(taskId, target, button) {
                     filesDetails.append(filesList);
                     row.append(filesDetails);
                 }
+                if (fileReason.role) {
+                    const roleDetails = document.createElement("dl");
+                    roleDetails.className = `metadata-attempt-file-reason ${attempt.error_code === "u2_main_video_episode_not_parsed" ? "blocking" : "affected"}`;
+                    const roleLabel = document.createElement("dt");
+                    roleLabel.textContent = "文件角色";
+                    const roleValue = document.createElement("dd");
+                    roleValue.textContent = fileReason.role;
+                    const fileLabel = document.createElement("dt");
+                    fileLabel.textContent = "具体文件";
+                    const fileValue = document.createElement("dd");
+                    fileValue.textContent = fileReason.fileName ?? "旧记录未保存具体文件";
+                    const causeLabel = document.createElement("dt");
+                    causeLabel.textContent = "原因";
+                    const causeValue = document.createElement("dd");
+                    causeValue.textContent = fileReason.explanation;
+                    roleDetails.append(roleLabel, roleValue, fileLabel, fileValue, causeLabel, causeValue);
+                    row.append(roleDetails);
+                }
                 if (attempt.ai_model !== null) {
                     const usage = document.createElement("p");
                     usage.className = "metadata-ai-usage";
@@ -7796,11 +7844,11 @@ async function loadMetadataAttempts(taskId, target, button) {
                     const reason = document.createElement("p");
                     reason.className = "metadata-attempt-reason";
                     const detailReason = attempt.error_code
-                        && attempt.reason
-                        && (attempt.reason === attempt.error_code
-                            || attempt.reason.startsWith(`${attempt.error_code} · `))
-                        ? attempt.reason.slice(attempt.error_code.length).replace(/^ · /, "")
-                        : attempt.reason;
+                        && fileReason.reasonWithoutFile
+                        && (fileReason.reasonWithoutFile === attempt.error_code
+                            || fileReason.reasonWithoutFile.startsWith(`${attempt.error_code} · `))
+                        ? fileReason.reasonWithoutFile.slice(attempt.error_code.length).replace(/^ · /, "")
+                        : fileReason.reasonWithoutFile;
                     reason.textContent = `${textOrDash(attempt.error_code)} · ${textOrDash(detailReason)} · ${attempt.retryable ? "可自动重试" : "不可自动重试"}`;
                     row.append(reason);
                 }

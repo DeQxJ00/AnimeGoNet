@@ -41,6 +41,9 @@ public sealed class DetailedLogWindowTests
         Assert.Contains("validated_episodes", script, StringComparison.Ordinal);
         Assert.Contains("TMDB 最终验证 EP", script, StringComparison.Ordinal);
         Assert.Contains("AI 触发原因", script, StringComparison.Ordinal);
+        Assert.Contains("metadataAttemptFileReason", script, StringComparison.Ordinal);
+        Assert.Contains("引起阻塞的文件", script, StringComparison.Ordinal);
+        Assert.Contains("受同批阻塞影响的文件", script, StringComparison.Ordinal);
         Assert.Contains("ai_trigger_reason", script, StringComparison.Ordinal);
         Assert.Contains("error_category", script, StringComparison.Ordinal);
         Assert.Contains("id=\"ai-debug-dialog\"", html, StringComparison.Ordinal);

@@ -782,6 +782,11 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-attempt-files summary { padding: 6px 8px; color: #b8cae8; font-size: .7rem; cursor: pointer; overflow-wrap: anywhere; }
 .metadata-attempt-file-list { display: grid; gap: 4px; max-height: 12rem; overflow: auto; margin: 0; padding: 0 8px 8px 26px; }
 .metadata-attempt-file { color: #d9e5f8; font-size: .68rem; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
+.metadata-attempt-file-reason { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 10px; margin: 8px 0 0; padding: 8px 10px; border: 1px solid #425779; border-radius: 9px; background: rgba(12,20,35,.72); }
+.metadata-attempt-file-reason.blocking { border-color: #8b4753; background: rgba(64,19,29,.38); }
+.metadata-attempt-file-reason.affected { border-color: #74602d; background: rgba(57,44,13,.3); }
+.metadata-attempt-file-reason dt { color: #8fa7cd; font-size: .68rem; font-weight: 700; }
+.metadata-attempt-file-reason dd { min-width: 0; margin: 0; color: #e3edff; font-size: .7rem; line-height: 1.4; overflow-wrap: anywhere; word-break: break-word; }
 .metadata-attempt-empty { margin: 0; padding: 10px 12px; border-radius: 11px; background: rgba(5,8,16,.45); }
 .metadata-detail { display: grid; gap: 10px; margin-top: 12px; }
 .metadata-detail:empty { display: none; }
