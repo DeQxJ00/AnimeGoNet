@@ -67,9 +67,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 ? episode
                 : null)).ToArray());
         var subtitleIds = associations.Select(association => association.SubtitleFileId).ToHashSet(StringComparer.Ordinal);
+        var u2DuplicateEpisodeFileIds = FindU2DuplicateEpisodeFileIds(claim);
+        var hasU2DuplicateEpisodeAmbiguity = u2DuplicateEpisodeFileIds.Count > 0;
         EpisodeDateContext? episodeDateContext = null;
         if (manualOffset is null
             && !claim.HasMultipleSeasons
+            && !hasU2DuplicateEpisodeAmbiguity
             && !claim.EpisodeResolvedByTrustedOffset
             && string.Equals(
                 claim.Resolution.SourceAdapter,
@@ -219,6 +222,27 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     null,
                     UnmatchedVideoDisposition(file),
                     file.PreResolvedOtherReason));
+                continue;
+            }
+
+            if (u2DuplicateEpisodeFileIds.Contains(file.FileId))
+            {
+                const string reason = "u2_duplicate_episode_candidate_across_seasons";
+                await RecordAsync(
+                    claim,
+                    "u2_duplicate_episode_candidate",
+                    null,
+                    "other",
+                    reason,
+                    retryable: false,
+                    0,
+                    cancellationToken,
+                    file: file).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    "other",
+                    reason));
                 continue;
             }
 
@@ -444,7 +468,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         if (manualOffset is null
             && options.Metadata.Ai.UseMetadataMatch
             && !claim.AiMetadataAttempted
-            && !claim.HasMultipleSeasons
+            && (!claim.HasMultipleSeasons || hasU2DuplicateEpisodeAmbiguity)
             && !claim.EpisodeResolvedByTrustedOffset
             && results.Any(result => result.Episode is null
                 && claim.Files.Any(file => file.FileId == result.FileId
@@ -455,6 +479,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 claim,
                 results,
                 aiTriggerReason,
+                hasU2DuplicateEpisodeAmbiguity,
                 cancellationToken).ConfigureAwait(false);
             if (shouldStop)
             {
@@ -506,8 +531,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
         ClassifyNonVideoExtras(claim, results);
 
         var validatedSeasons = new List<TmdbSeason>();
+        var resultByFileId = results.ToDictionary(result => result.FileId, StringComparer.Ordinal);
         foreach (var seasonNumber in claim.Files
-                     .Select(file => file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber)
+                     .Select(file => resultByFileId.TryGetValue(file.FileId, out var result)
+                         && result.Episode is not null
+                            ? result.Episode.SeasonNumber
+                            : file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber)
                      .Distinct()
                      .OrderBy(value => value))
         {
@@ -765,6 +794,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         MetadataEpisodeTaskClaim claim,
         List<MetadataEpisodeFileResolution> results,
         string aiTriggerReason,
+        bool allowPerFileSeasons,
         CancellationToken cancellationToken)
     {
         var started = _timeProvider.GetTimestamp();
@@ -772,7 +802,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             claim.Resolution,
             claim.Files,
             claim.TmdbSeriesId,
-            claim.TmdbSeasonNumber,
+            allowPerFileSeasons ? null : claim.TmdbSeasonNumber,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         if (resolved.Publication?.ShouldAudit == true)
         {
@@ -820,7 +850,8 @@ public sealed class EpisodeMetadataResolutionProcessor(
             var path = claim.Files.Single(file => file.FileId == existing.FileId).RelativePath;
             var aiFile = validatedByPath[path];
             if (aiFile.Episode is null
-                || aiFile.Episode.EpisodeNumber != existing.Episode!.EpisodeNumber)
+                || aiFile.Episode.EpisodeNumber != existing.Episode!.EpisodeNumber
+                || aiFile.Episode.SeasonNumber != existing.Episode.SeasonNumber)
             {
                 var failure = new MetadataFailure(
                     MetadataFailureKind.Protocol,
@@ -1087,6 +1118,43 @@ public sealed class EpisodeMetadataResolutionProcessor(
         }
 
         return result.OtherReason ?? "episode_unresolved";
+    }
+
+    internal static HashSet<string> FindU2DuplicateEpisodeFileIds(
+        MetadataEpisodeTaskClaim claim)
+    {
+        if (!string.Equals(
+                claim.Resolution.SourceAdapter,
+                "u2",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var groups = claim.Files
+            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+            .Select(file =>
+            {
+                var candidate = int.TryParse(
+                    file.FileEpisodeCandidate,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var value) && value > 0
+                        ? value
+                        : (int?)null;
+                return (file.FileId, Candidate: candidate, Season: file.TmdbSeasonNumber);
+            })
+            .Where(value => value.Candidate is not null)
+            .GroupBy(value => value.Candidate!.Value)
+            .Where(group => group
+                .Select(value => value.Season)
+                .Where(value => value is > 0)
+                .Distinct()
+                .Count() > 1);
+
+        return groups
+            .SelectMany(group => group.Select(value => value.FileId))
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static string OtherReason(MetadataTaskFileProjection file)

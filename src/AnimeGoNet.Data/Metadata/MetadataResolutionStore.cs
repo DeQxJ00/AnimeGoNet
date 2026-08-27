@@ -1474,8 +1474,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             throw new ArgumentException("Every claimed task file must have exactly one Episode resolution.", nameof(fileResolutions));
         }
 
-        var requiredSeasonNumbers = claim.Files
-            .Select(file => file.TmdbSeasonNumber ?? claim.TmdbSeasonNumber)
+        var claimedFiles = claim.Files.ToDictionary(file => file.FileId, StringComparer.Ordinal);
+        var requiredSeasonNumbers = fileResolutions
+            .Select(resolution =>
+                resolution.Episode?.SeasonNumber
+                ?? claimedFiles[resolution.FileId].TmdbSeasonNumber
+                ?? claim.TmdbSeasonNumber)
             .Distinct()
             .OrderBy(value => value)
             .ToArray();
@@ -1495,11 +1499,12 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 nameof(validatedSeasons));
         }
 
-        var claimedFiles = claim.Files.ToDictionary(file => file.FileId, StringComparer.Ordinal);
         foreach (var resolution in fileResolutions)
         {
             var claimedFile = claimedFiles[resolution.FileId];
-            var expectedSeasonNumber = claimedFile.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
+            var expectedSeasonNumber = resolution.Episode?.SeasonNumber
+                ?? claimedFile.TmdbSeasonNumber
+                ?? claim.TmdbSeasonNumber;
             var resolvedEpisodeNumber = resolution.ResolvedEpisodeNumber;
             if (expectedSeasonNumber <= 0)
             {
@@ -1601,7 +1606,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
 
             var identity = new TmdbEpisodeIdentity(
                 claim.TmdbSeriesId,
-                claimedFiles[resolution.FileId].TmdbSeasonNumber ?? claim.TmdbSeasonNumber,
+                resolution.Episode?.SeasonNumber
+                    ?? claimedFiles[resolution.FileId].TmdbSeasonNumber
+                    ?? claim.TmdbSeasonNumber,
                 resolution.ResolvedEpisodeNumber.Value);
             if (!episodeClaims.ContainsKey(identity))
             {
@@ -1635,7 +1642,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         foreach (var resolution in fileResolutions)
         {
             var claimedFile = claimedFiles[resolution.FileId];
-            var expectedSeasonNumber = claimedFile.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
+            var claimedSeasonNumber = claimedFile.TmdbSeasonNumber ?? claim.TmdbSeasonNumber;
+            var expectedSeasonNumber = resolution.Episode?.SeasonNumber ?? claimedSeasonNumber;
             if (resolution.Episode is not null)
             {
                 await using var upsertEpisode = connection.CreateCommand();
@@ -1690,6 +1698,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 UPDATE task_files
                 SET tmdb_episode_number = $tmdb_episode_number,
                     tmdb_episode_id = $tmdb_episode_id,
+                    tmdb_season_number = $resolved_tmdb_season_number,
                     disposition = $disposition,
                     other_reason = $other_reason,
                     associated_task_file_id = $associated_file_id,
@@ -1706,7 +1715,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 WHERE id = $file_id AND task_id = $task_id
                   AND disposition = 'pending'
                   AND tmdb_series_id = $tmdb_series_id
-                  AND tmdb_season_number = $tmdb_season_number;
+                  AND tmdb_season_number = $claimed_tmdb_season_number;
                 """;
             updateFile.Parameters.AddWithValue("$file_id", resolution.FileId);
             updateFile.Parameters.AddWithValue("$task_id", claim.Resolution.TaskId);
@@ -1714,7 +1723,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 "$run_id",
                 claim.Resolution.RunId);
             updateFile.Parameters.AddWithValue("$tmdb_series_id", claim.TmdbSeriesId);
-            updateFile.Parameters.AddWithValue("$tmdb_season_number", expectedSeasonNumber);
+            updateFile.Parameters.AddWithValue("$claimed_tmdb_season_number", claimedSeasonNumber);
+            updateFile.Parameters.AddWithValue("$resolved_tmdb_season_number", expectedSeasonNumber);
             updateFile.Parameters.AddWithValue(
                 "$tmdb_episode_number",
                 (object?)resolution.ResolvedEpisodeNumber ?? DBNull.Value);
