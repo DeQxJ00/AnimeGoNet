@@ -422,6 +422,35 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task AiNaturalLanguageOtherReasonDoesNotBlockEpisodeCompletion()
+    {
+        var tmdb = new FakeTmdbClient();
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                [new(input.Files[0].Name, false, 2, null, "该文件是特典，不是正片 Episode。")],
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(app, ("Show bonus.mkv", null, null));
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("extras", file.Disposition);
+        Assert.Equal("episode_not_parsed", file.OtherReason);
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+    }
+
+    [Fact]
     public async Task MikanSingleFileNearestDateBeyondSevenDaysUsesAi()
     {
         var tmdb = new FakeTmdbClient

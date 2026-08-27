@@ -850,7 +850,9 @@ public sealed class EpisodeMetadataResolutionProcessor(
             results[index] = aiFile.Episode is null
                 ? existing with
                 {
-                    OtherReason = aiFile.OtherReason ?? existing.OtherReason,
+                    OtherReason = NormalizeAiOtherReason(
+                        aiFile.OtherReason,
+                        existing.OtherReason),
                 }
                 : new MetadataEpisodeFileResolution(
                     existing.FileId,
@@ -944,6 +946,28 @@ public sealed class EpisodeMetadataResolutionProcessor(
             }
         }
     }
+
+    private static string NormalizeAiOtherReason(
+        string? aiReason,
+        string? existingReason)
+    {
+        if (IsStableIdentifier(aiReason))
+        {
+            return aiReason!;
+        }
+
+        if (IsStableIdentifier(existingReason))
+        {
+            return existingReason!;
+        }
+
+        return "ai_episode_not_matched";
+    }
+
+    private static bool IsStableIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.All(character =>
+            char.IsAsciiLetterOrDigit(character) || character is '_' or '-');
 
     private async Task RecordFailureAndStopAsync(
         MetadataEpisodeTaskClaim claim,
