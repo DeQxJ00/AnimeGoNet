@@ -17,6 +17,7 @@ public sealed class U2FileEpisodeCandidateResolverTests
     [InlineData("[Class de 2 Banme ni Kawaii Onnanoko to Tomodachi ni Natta][08][BDRIP][1080P][H264_FLAC].mkv", 8)]
     [InlineData("[Group] Show - 11 [WebRip 1080p].mkv", 11)]
     [InlineData("[AI-Raws] アストロガンガー #25 (BD HEVC 1568x1080 FLAC)[FE30BEBA].mkv", 25)]
+    [InlineData("[AI-Raws] Fate／Strange Fake #01 (BD HEVC 1920x1080 FLAC)[51F217FD].mkv", 1)]
     [InlineData("Baka to Test to Shokanjyu  EP03 1080p Bluray FLAC 2.0 x264-DECAY.mkv", 3)]
     [InlineData("[Group] Show S02E04 [1080p].mkv", 4)]
     [InlineData("[U2-RIP]GUNSLINGER GIRL 01 [兄妹- fratello -] (BD 1280X720 X264 FLAC).mkv", 1)]
@@ -42,6 +43,8 @@ public sealed class U2FileEpisodeCandidateResolverTests
     [InlineData("[U2-Rip] 戦う司書 the book of bantorra 映像特典 DRAMA 10 (BD 1920x1080 x264 FLAC).mkv")]
     [InlineData("[U2-Rip] 戦う司書 the book of bantorra 映像特典 ノンテロップOP1 (BD 1920x1080 x264 FLAC).mkv")]
     [InlineData("[Yousei-raws] Katanagatari (Creditless ED ep 12) [BDrip 1920x1080 x264 FLAC].mkv")]
+    [InlineData("[AI-Raws] Fate／Strange Fake WEB予告#02 (BD HEVC 1920x1080 FLAC)[A5D6BB01].mkv")]
+    [InlineData("[AI-Raws] Fate／Strange Fake #02(BD HEVC 1920x1080 FLAC)[3826BB93].mkv")]
     public void KeepsTheCopiedSafetyChecksForU2(string path)
     {
         var result = U2FileEpisodeCandidateResolver.Resolve(path);
