@@ -162,6 +162,41 @@ public static partial class U2FileEpisodeCandidateResolver
                 parsed);
         }
 
+        // U2 releases also commonly put a bare episode number between the
+        // title and the bracketed/parenthesized release metadata, e.g.
+        // "GUNSLINGER GIRL 01 [兄妹 ...]" or "戦う司書 27 「世界の力」".
+        // The narrow trailing-delimiter check keeps numbers in titles,
+        // resolutions and years from becoming episode candidates.
+        var standaloneEpisodeMatches = StandaloneEpisodeMarker().Matches(basename);
+        if (standaloneEpisodeMatches.Count > 0)
+        {
+            var standaloneEpisodes = standaloneEpisodeMatches
+                .Select(match => int.Parse(
+                    match.Groups["episode"].Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture))
+                .ToHashSet();
+            if (standaloneEpisodes.Count == 1
+                && !NonFeatureToken().IsMatch(basename))
+            {
+                var episode = standaloneEpisodes.Single();
+                if (IsPlausibleWeakEpisodeNumber(episode)
+                    && episode is not (>= 1900 and <= 2100)
+                    && episode is not (720 or 1080 or 2160 or 4320))
+                {
+                    return new U2FileEpisodeCandidateResolution(
+                        episode,
+                        "accepted_standalone_episode_marker",
+                        parsed);
+                }
+            }
+
+            return new U2FileEpisodeCandidateResolution(
+                null,
+                "ambiguous_episode_markers",
+                parsed);
+        }
+
         if (parsed.Episode <= 0)
         {
             return new U2FileEpisodeCandidateResolution(null, "upstream_episode_not_parsed", parsed);
@@ -231,7 +266,7 @@ public static partial class U2FileEpisodeCandidateResolver
         value is >= MinimumWeakEpisodeNumber and <= MaximumWeakEpisodeNumber;
 
     [GeneratedRegex(
-        @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo|extra)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
+        @"(?:^|[\s._\-\[\(])(?:sp|special|ova|oad|pv|nced|ncop|menu|logo|extra|drama|spot|endcard|映像特典|特典|ノンテロップ|メニュー)(?:\d{0,3})?(?=$|[\s._\-\]\)])|S00E\d+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NonFeatureToken();
 
@@ -244,6 +279,11 @@ public static partial class U2FileEpisodeCandidateResolver
         @"(?<![A-Za-z0-9])(?:ep|episode)\s*(?<episode>\d{1,4})(?!\d)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ExplicitEpisodeMarker();
+
+    [GeneratedRegex(
+        @"(?<![A-Za-z0-9])(?<episode>\d{1,4})(?=\s*(?:\[|\(|「|【|$))",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex StandaloneEpisodeMarker();
 
     [GeneratedRegex(
         @" -? (\d+)|\[(\d+)\]|\[(\d+).?[vV]\d{1}\]|[第](\d+)[话話集]|\[(\d+).?END\]",
