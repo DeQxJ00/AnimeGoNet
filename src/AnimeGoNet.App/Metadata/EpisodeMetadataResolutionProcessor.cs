@@ -2,6 +2,7 @@ using System.Globalization;
 using AnimeGoNet.App.Ingest;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Library;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Mikan;
@@ -72,6 +73,50 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 ? episode
                 : null)).ToArray());
         var subtitleIds = associations.Select(association => association.SubtitleFileId).ToHashSet(StringComparer.Ordinal);
+        U2WholeTorrentEpisodeDecision u2Decision;
+        if (string.Equals(claim.Resolution.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(claim.Resolution.MediaType, MediaTypes.Tv, StringComparison.OrdinalIgnoreCase))
+        {
+            var started = _timeProvider.GetTimestamp();
+            TmdbSeason? u2Season;
+            try
+            {
+                u2Season = await tmdb.GetSeasonAsync(
+                    claim.TmdbSeriesId,
+                    claim.TmdbSeasonNumber,
+                    cancellationToken).ConfigureAwait(false);
+                if ((u2Season?.Episodes is null
+                        || u2Season.Episodes.Count != u2Season.EpisodeCount)
+                    && tmdb is ITmdbRefreshClient refreshClient)
+                {
+                    u2Season = await refreshClient.RefreshSeasonAsync(
+                        claim.TmdbSeriesId,
+                        claim.TmdbSeasonNumber,
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (TmdbClientException exception)
+            {
+                await RecordFailureAndStopAsync(
+                    claim,
+                    "u2_tmdb_season_gate",
+                    null,
+                    new MetadataFailure(
+                        exception.Kind,
+                        exception.SafeCode,
+                        exception.TmdbAccessConfirmed),
+                    ElapsedMilliseconds(started),
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            u2Decision = U2WholeTorrentEpisodeGate.Evaluate(claim, u2Season);
+        }
+        else
+        {
+            u2Decision = U2WholeTorrentEpisodeGate.Evaluate(claim, null);
+        }
+
         var u2DuplicateEpisodeFileIds = FindU2DuplicateEpisodeFileIds(claim);
         var hasU2DuplicateEpisodeAmbiguity = u2DuplicateEpisodeFileIds.Count > 0;
         EpisodeDateContext? episodeDateContext = null;
@@ -206,6 +251,28 @@ public sealed class EpisodeMetadataResolutionProcessor(
                     file.FileId,
                     null,
                     "other",
+                    reason));
+                continue;
+            }
+
+            if (u2Decision.RequiresAi)
+            {
+                var isExtra = u2Decision.ExplicitExtraFileIds.Contains(file.FileId);
+                var reason = isExtra ? "u2_explicit_extra" : u2Decision.Reason!;
+                await RecordAsync(
+                    claim,
+                    "u2_whole_torrent_gate",
+                    null,
+                    isExtra ? "extras" : "other",
+                    reason,
+                    retryable: false,
+                    0,
+                    cancellationToken,
+                    file: file).ConfigureAwait(false);
+                results.Add(new MetadataEpisodeFileResolution(
+                    file.FileId,
+                    null,
+                    isExtra ? "extras" : "other",
                     reason));
                 continue;
             }
@@ -473,18 +540,22 @@ public sealed class EpisodeMetadataResolutionProcessor(
         if (manualOffset is null
             && options.Metadata.Ai.UseMetadataMatch
             && !claim.AiMetadataAttempted
-            && (!claim.HasMultipleSeasons || hasU2DuplicateEpisodeAmbiguity)
+            && (!claim.HasMultipleSeasons
+                || hasU2DuplicateEpisodeAmbiguity
+                || u2Decision.RequiresAi)
             && !trustedOffsetResolved
             && results.Any(result => result.Episode is null
                 && claim.Files.Any(file => file.FileId == result.FileId
-                    && SubtitleAssociationResolver.IsVideo(file.RelativePath))))
+                    && SubtitleAssociationResolver.IsVideo(file.RelativePath)
+                    && (!u2Decision.IsApplicable
+                        || !u2Decision.ExplicitExtraFileIds.Contains(file.FileId)))))
         {
             var aiTriggerReason = BuildAiEpisodeTriggerReason(claim, results);
             var shouldStop = await TryApplyAiAsync(
                 claim,
                 results,
                 aiTriggerReason,
-                hasU2DuplicateEpisodeAmbiguity,
+                hasU2DuplicateEpisodeAmbiguity || u2Decision.RequiresAi,
                 cancellationToken).ConfigureAwait(false);
             if (shouldStop)
             {
@@ -847,7 +918,27 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var validatedByPath = resolved.Value!.Files.ToDictionary(
+        var u2FilePolicyFailure = U2AiFilePolicy.Validate(
+            claim.Resolution,
+            resolved.Value!.Files);
+        if (u2FilePolicyFailure is not null)
+        {
+            await RecordAsync(
+                claim,
+                "ai_metadata",
+                null,
+                "error",
+                u2FilePolicyFailure.Code,
+                false,
+                ElapsedMilliseconds(started),
+                cancellationToken,
+                resolved.Usage,
+                aiTriggerReason).ConfigureAwait(false);
+            AnnotateUnresolvedAiFailure(claim, results, u2FilePolicyFailure.Code);
+            return false;
+        }
+
+        var validatedByPath = resolved.Value.Files.ToDictionary(
             file => file.Input.Name,
             StringComparer.Ordinal);
         foreach (var existing in results.Where(result => result.Episode is not null))
@@ -1151,11 +1242,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             })
             .Where(value => value.Candidate is not null)
             .GroupBy(value => value.Candidate!.Value)
-            .Where(group => group
-                .Select(value => value.Season)
-                .Where(value => value is > 0)
-                .Distinct()
-                .Count() > 1);
+            .Where(group => group.Count() > 1);
 
         return groups
             .SelectMany(group => group.Select(value => value.FileId))

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
+using static AnitomySharp.AnitomySharp;
 
 namespace AnimeGoNet.App.Metadata;
 
@@ -14,6 +15,8 @@ public sealed record U2AniDbResolution(
 {
     public bool IsSuccess => Details is not null && Season is not null && FailureCode is null;
 }
+
+internal sealed record U2AniDbMapping(int? TmdbSeriesId, int? TmdbSeasonNumber);
 
 public sealed class U2AniDbMetadataResolver(
     HttpClient httpClient,
@@ -34,35 +37,89 @@ public sealed class U2AniDbMetadataResolver(
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(aid, 0);
         ArgumentException.ThrowIfNullOrWhiteSpace(taskTitle);
 
+        // tmdbseason is independent of the direct-tmdbid option. Read the
+        // configured mapping once even when direct tmdbid mapping is disabled.
+        var mapping = await TryReadMappingAsync(aid, mappingUrlTemplate, cancellationToken)
+            .ConfigureAwait(false);
         if (useTmdbMapping)
         {
-            var mappedId = await TryReadMappingAsync(aid, mappingUrlTemplate, cancellationToken).ConfigureAwait(false);
-            if (mappedId is > 0)
+            if (mapping?.TmdbSeriesId is not > 0)
             {
-                var direct = await ResolveSeriesIdAsync(
-                    mappedId.Value, taskTitle, "u2_anidb_mapping", cancellationToken).ConfigureAwait(false);
-                if (direct.IsSuccess)
-                {
-                    return direct;
-                }
+                return new U2AniDbResolution(
+                    null, null, "u2_anidb_mapping", [], "anidb_tmdb_mapping_missing");
             }
+
+            return await ResolveSeriesIdAsync(
+                mapping.TmdbSeriesId.Value,
+                mapping.TmdbSeasonNumber,
+                "u2_anidb_mapping",
+                cancellationToken).ConfigureAwait(false);
         }
 
+        // GetPreferredTitlesAsync orders official titles first. Do not append
+        // the U2 release title in AniDB-cache mode.
         var titles = await titleCache.GetPreferredTitlesAsync(aid, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        return await ResolveTitlesAsync(
+            titles,
+            mapping?.TmdbSeasonNumber,
+            "u2_anidb_title_cache",
+            "anidb_title_cache_empty",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<U2AniDbResolution> ResolveTaskTitleAsync(
+        string taskTitle,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskTitle);
+        var animeTitle = ExtractAnimeTitle(taskTitle);
+        return await ResolveTitlesAsync(
+            string.IsNullOrWhiteSpace(animeTitle) ? [] : [animeTitle],
+            mappedSeasonNumber: null,
+            "u2_anitomy_title",
+            "u2_anitomy_title_missing",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static string? ExtractAnimeTitle(string taskTitle)
+    {
+        try
+        {
+            return Parse(taskTitle)
+                .FirstOrDefault(element => string.Equals(
+                    element.Category.ToString(),
+                    "ElementAnimeTitle",
+                    StringComparison.Ordinal))
+                ?.Value
+                ?.Trim();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<U2AniDbResolution> ResolveTitlesAsync(
+        IEnumerable<string> titles,
+        int? mappedSeasonNumber,
+        string strategy,
+        string emptyFailureCode,
+        CancellationToken cancellationToken)
+    {
         var candidates = titles
-            .Append(taskTitle.Trim())
             .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (candidates.Length == 0)
         {
-            return new U2AniDbResolution(null, null, "u2_anidb_title_cache", [], "anidb_title_cache_empty");
+            return new U2AniDbResolution(null, null, strategy, [], emptyFailureCode);
         }
 
         var attempted = new List<string>();
-        TmdbSeriesDetails? details = null;
-        TmdbSeason? season = null;
+        TmdbSeriesDetails? lastDetails = null;
+        TmdbSeason? resolvedSeason = null;
         foreach (var title in candidates)
         {
             var result = await seriesResolver.ResolveAsync(
@@ -70,57 +127,69 @@ public sealed class U2AniDbMetadataResolver(
                 async (series, token) =>
                 {
                     attempted.Add(title);
-                    details = await GetSeriesDetailsAsync(series.Id, token).ConfigureAwait(false);
-                    season = details is null ? null : SelectSeason(details, taskTitle);
-                    if (details is null || season is null)
+                    var details = await GetSeriesDetailsAsync(series.Id, token).ConfigureAwait(false);
+                    lastDetails = details;
+                    var selected = details is null
+                        ? null
+                        : SelectSeason(details, mappedSeasonNumber);
+                    if (selected is null)
                     {
                         return false;
                     }
 
-                    season = await GetSeasonAsync(
-                        details.Series.Id, season.SeasonNumber, token).ConfigureAwait(false);
-                    return season is not null;
+                    resolvedSeason = await GetSeasonAsync(
+                        details!.Series.Id,
+                        selected.SeasonNumber,
+                        token).ConfigureAwait(false);
+                    return resolvedSeason is not null;
                 },
                 cancellationToken).ConfigureAwait(false);
-            if (result.IsSuccess && details is not null && season is not null)
+            if (result.IsSuccess && lastDetails is not null && resolvedSeason is not null)
             {
                 return new U2AniDbResolution(
-                    details,
-                    season,
-                    "u2_anidb_title_cache",
+                    lastDetails,
+                    resolvedSeason,
+                    strategy,
                     attempted.Concat(result.AttemptedTitles).Distinct(StringComparer.Ordinal).ToArray(),
                     null);
             }
         }
 
         return new U2AniDbResolution(
+            lastDetails,
             null,
-            null,
-            "u2_anidb_title_cache",
+            strategy,
             attempted.Distinct(StringComparer.Ordinal).ToArray(),
-            "anidb_title_tmdb_search_not_matched");
+            lastDetails is null
+                ? "anidb_title_tmdb_search_not_matched"
+                : "u2_tmdb_season_requires_ai");
     }
 
     private async Task<U2AniDbResolution> ResolveSeriesIdAsync(
         int seriesId,
-        string taskTitle,
+        int? mappedSeasonNumber,
         string strategy,
         CancellationToken cancellationToken)
     {
         var details = await GetSeriesDetailsAsync(seriesId, cancellationToken).ConfigureAwait(false);
-        var season = details is null ? null : SelectSeason(details, taskTitle);
-        if (details is not null && season is not null)
-        {
-            season = await GetSeasonAsync(seriesId, season.SeasonNumber, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        var selected = details is null ? null : SelectSeason(details, mappedSeasonNumber);
+        var season = selected is null
+            ? null
+            : await GetSeasonAsync(seriesId, selected.SeasonNumber, cancellationToken).ConfigureAwait(false);
 
         return details is not null && season is not null
             ? new U2AniDbResolution(details, season, strategy, [], null)
-            : new U2AniDbResolution(null, null, strategy, [], "anidb_tmdb_mapping_validation_failed");
+            : new U2AniDbResolution(
+                details,
+                null,
+                strategy,
+                [],
+                details is null
+                    ? "anidb_tmdb_mapping_validation_failed"
+                    : "u2_tmdb_season_requires_ai");
     }
 
-    private async Task<int?> TryReadMappingAsync(
+    private async Task<U2AniDbMapping?> TryReadMappingAsync(
         int aid,
         string? mappingUrlTemplate,
         CancellationToken cancellationToken)
@@ -145,21 +214,9 @@ public sealed class U2AniDbMetadataResolver(
                 stream,
                 new JsonDocumentOptions { MaxDepth = 8 },
                 cancellationToken).ConfigureAwait(false);
-            if (!document.RootElement.TryGetProperty("tmdbtv", out var value))
-            {
-                return null;
-            }
-
-            var text = value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : value.GetRawText();
-            return int.TryParse(
-                text,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var id) && id > 0
-                    ? id
-                    : null;
+            return new U2AniDbMapping(
+                ReadPositiveInt(document.RootElement, "tmdbtv"),
+                ReadPositiveInt(document.RootElement, "tmdbseason"));
         }
         catch (HttpRequestException)
         {
@@ -169,6 +226,22 @@ public sealed class U2AniDbMetadataResolver(
         {
             return null;
         }
+    }
+
+    private static int? ReadPositiveInt(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        var text = value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : value.GetRawText();
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var result)
+            && result > 0
+                ? result
+                : null;
     }
 
     private async Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(
@@ -189,31 +262,35 @@ public sealed class U2AniDbMetadataResolver(
         CancellationToken cancellationToken)
     {
         var season = await tmdb.GetSeasonAsync(seriesId, seasonNumber, cancellationToken).ConfigureAwait(false);
-        if ((!IsValidSeason(season, seriesId, seasonNumber)) && tmdb is ITmdbRefreshClient refresh)
+        if (!IsValidSeason(season, seriesId, seasonNumber) && tmdb is ITmdbRefreshClient refresh)
         {
             season = await refresh.RefreshSeasonAsync(seriesId, seasonNumber, cancellationToken).ConfigureAwait(false);
         }
         return IsValidSeason(season, seriesId, seasonNumber) ? season : null;
     }
 
-    private static TmdbSeason? SelectSeason(TmdbSeriesDetails details, string title)
+    internal static TmdbSeason? SelectSeason(
+        TmdbSeriesDetails details,
+        int? mappedSeasonNumber)
     {
-        var explicitSeason = TmdbSeasonFallbackSelector.SelectTitleSeason(title, details.Seasons);
-        if (explicitSeason is not null && explicitSeason.SeasonNumber > 0)
-        {
-            return explicitSeason;
-        }
-
         var regular = details.Seasons
             .Where(value => value.SeasonNumber > 0
                 && !string.Equals(value.Name, "Specials", StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        return regular.Length == 1 ? regular[0] : null;
+        if (regular.Length == 1)
+        {
+            return regular[0];
+        }
+
+        return mappedSeasonNumber is > 0
+            ? regular.SingleOrDefault(value => value.SeasonNumber == mappedSeasonNumber.Value)
+            : null;
     }
 
     private static bool IsValidSeason(TmdbSeason? season, int seriesId, int seasonNumber) =>
         season is not null
         && season.Id > 0
         && season.SeriesId == seriesId
-        && season.SeasonNumber == seasonNumber;
+        && season.SeasonNumber == seasonNumber
+        && season.SeasonNumber > 0;
 }

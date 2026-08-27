@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
 
@@ -92,7 +94,35 @@ public sealed class U2PluginApiTests
         Assert.Contains("u2_media_type_invalid", errors);
     }
 
-    private static object ValidPayload() => new
+    [Theory]
+    [InlineData("tv")]
+    [InlineData("movie")]
+    public async Task PluginMediaTypeIsPersistedExactlyWithoutInference(string mediaType)
+    {
+        await using var app = await RunningApp.StartAsync(
+            webUiAccessKey: string.Empty,
+            u2AccessKey: "u2-secret",
+            configure: AddU2Source);
+        using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+        {
+            Content = JsonContent.Create(ValidPayload(mediaType)),
+        };
+        request.Headers.Add("X-AnimeGo-Access-Key", "u2-secret");
+
+        using var response = await app.Client.SendAsync(request);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var taskId = body.RootElement.GetProperty("items")[0].GetProperty("ingest_id").GetString();
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT media_type FROM ingest_tasks WHERE id = $task_id;";
+        command.Parameters.AddWithValue("$task_id", taskId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(mediaType, await command.ExecuteScalarAsync());
+    }
+
+    private static object ValidPayload(string mediaType = "tv") => new
     {
         schema_version = 1,
         source_profile_id = "u2",
@@ -106,7 +136,7 @@ public sealed class U2PluginApiTests
                 torrent_url = "https://u2.dmhy.org/download.php?id=65893&passkey=u2-test-passkey&https=1",
                 anidbid = 9125,
                 category = new { id = 12, name = "BDRip" },
-                media_type = "tv",
+                media_type = mediaType,
             },
         },
     };

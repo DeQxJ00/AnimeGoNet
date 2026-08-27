@@ -463,6 +463,30 @@ public sealed class AutomaticMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task U2WithoutAniDbUsesAnitomyTitleAndDoesNotEnterMikanFallbacks()
+    {
+        var tmdb = new FakeTmdbClient(Series, [SeasonOne]);
+        await using var app = await RunningApp.StartAsync(
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient((BangumiSubject?)null));
+        var taskId = await AddDownloadedTaskAsync(
+            app,
+            "[Group] Made in Abyss - 01 [1080p].mkv");
+        await ConvertTaskToU2WithoutAniDbAsync(app, taskId);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>().RunOnceAsync());
+
+        var run = Assert.IsType<MetadataRunProjection>(await app.App.Services
+            .GetRequiredService<MetadataResolutionStore>().GetLatestAsync(taskId));
+        Assert.Equal(Series.Id, run.TmdbSeriesId);
+        Assert.Equal(1, run.TmdbSeasonNumber);
+        Assert.Equal("Made in Abyss", tmdb.SearchTitles[0]);
+        Assert.Contains("u2_anitomy_title", await ReadStrategiesAsync(app, taskId));
+        Assert.DoesNotContain("backtrace", await ReadStrategiesAsync(app, taskId));
+    }
+
+    [Fact]
     public async Task BacktraceCanRecoverDifferentSeriesWhenCurrentTitlesFindNoSeries()
     {
         var predecessorSeries = new TmdbSeries(900, "Previous", "Previous JP", null);
@@ -472,7 +496,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             1,
             "Season 1",
             new DateOnly(2018, 1, 1),
-            12);
+        12);
         var tmdb = new FakeTmdbClient(
             Series,
             [SeasonOne, SeasonTwo],
@@ -1418,6 +1442,27 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             "SELECT torrent_url_fingerprint FROM ingest_tasks WHERE id = $task_id;";
         command.Parameters.AddWithValue("$task_id", taskId);
         return Assert.IsType<string>(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task ConvertTaskToU2WithoutAniDbAsync(
+        RunningApp app,
+        string taskId)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE ingest_tasks
+            SET anidb_id = NULL, bangumi_subject_id = NULL, mikanid = NULL, groupid = NULL
+            WHERE id = $task_id;
+
+            UPDATE source_profiles
+            SET adapter = 'u2'
+            WHERE id = (SELECT source_profile_id FROM ingest_tasks WHERE id = $task_id);
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(2, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task SetTrustedPublicationEvidenceAsync(

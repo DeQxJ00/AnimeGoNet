@@ -7,17 +7,18 @@ namespace AnimeGoNet.App.Tests.Metadata;
 public sealed class U2EpisodeAmbiguityTests
 {
     [Fact]
-    public void DuplicateFilenameEpisodesAreAmbiguousOnlyForU2()
+    public void DuplicateFilenameEpisodesAnywhereInTorrentAreAmbiguousOnlyForU2()
     {
         var u2 = Claim("u2", [
             new MetadataTaskFileProjection("s1", "Season 1/Show 01.mkv", 1, "01", "1", TmdbSeasonNumber: 1),
             new MetadataTaskFileProjection("s2", "Season 2/Show 01.mkv", 1, "01", "1", TmdbSeasonNumber: 2),
+            new MetadataTaskFileProjection("s3a", "Season 2/Show 02 v1.mkv", 1, "02", "2", TmdbSeasonNumber: 2),
             new MetadataTaskFileProjection("s3", "Season 2/Show 02.mkv", 1, "02", "2", TmdbSeasonNumber: 2),
         ]);
         var mikan = Claim("mikan", u2.Files);
 
         Assert.Equal(
-            ["s1", "s2"],
+            ["s1", "s2", "s3", "s3a"],
             EpisodeMetadataResolutionProcessor.FindU2DuplicateEpisodeFileIds(u2)
                 .OrderBy(value => value, StringComparer.Ordinal)
                 .ToArray());

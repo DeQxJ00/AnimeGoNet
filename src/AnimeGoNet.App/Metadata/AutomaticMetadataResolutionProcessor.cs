@@ -64,24 +64,33 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         if (string.Equals(claim.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
-            && claim.AniDbAnimeId is > 0
             && u2AniDbResolver is not null)
         {
             var started = _timeProvider.GetTimestamp();
             U2AniDbResolution? preferred = null;
             try
             {
-                preferred = await u2AniDbResolver.ResolveAsync(
-                    claim.AniDbAnimeId.Value,
-                    claim.Title,
-                    claim.AniDbTmdbMappingUrlTemplate,
-                    claim.PreferAniDbTmdbMapping,
-                    cancellationToken).ConfigureAwait(false);
+                preferred = claim.AniDbAnimeId is > 0
+                    ? await u2AniDbResolver.ResolveAsync(
+                        claim.AniDbAnimeId.Value,
+                        claim.Title,
+                        claim.AniDbTmdbMappingUrlTemplate,
+                        claim.PreferAniDbTmdbMapping,
+                        cancellationToken).ConfigureAwait(false)
+                    : await u2AniDbResolver.ResolveTaskTitleAsync(
+                        claim.Title,
+                        cancellationToken).ConfigureAwait(false);
             }
             catch (TmdbClientException exception)
             {
                 await RecordAsync(claim, "series", "u2_anidb_preference", null, "error",
                     exception.SafeCode, IsRetryable(exception.Kind), started, cancellationToken).ConfigureAwait(false);
+                await FailAsync(
+                    claim,
+                    new MetadataFailure(exception.Kind, exception.SafeCode, exception.TmdbAccessConfirmed),
+                    "u2_tmdb_resolution_failed",
+                    cancellationToken).ConfigureAwait(false);
+                return true;
             }
 
             if (preferred is { IsSuccess: true })
@@ -106,6 +115,27 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 await RecordAsync(claim, "series", preferred.Strategy, null, "not_matched",
                     preferred.FailureCode, false, started, cancellationToken).ConfigureAwait(false);
             }
+
+            var failureCode = preferred?.FailureCode ?? "u2_series_season_not_resolved";
+            if (options.Metadata.Ai.UseMetadataMatch
+                && await TryCompleteAiMetadataAsync(
+                    claim,
+                    preferred?.AttemptedTitles ?? [],
+                    $"u2_unresolved:{failureCode}",
+                    cancellationToken).ConfigureAwait(false))
+            {
+                return true;
+            }
+
+            await FailAsync(
+                claim,
+                new MetadataFailure(
+                    MetadataFailureKind.SemanticNoMatch,
+                    failureCode,
+                    TmdbAccessConfirmed: preferred?.Details is not null),
+                preferred?.Details is null ? "tmdb_series_not_resolved" : "tmdb_series_resolved",
+                cancellationToken).ConfigureAwait(false);
+            return true;
         }
 
         BangumiSubject? subject = null;
@@ -836,6 +866,24 @@ public sealed class AutomaticMetadataResolutionProcessor(
         }
 
         var validatedFiles = resolved.Value!.Files;
+        var u2FilePolicyFailure = U2AiFilePolicy.Validate(claim, validatedFiles);
+        if (u2FilePolicyFailure is not null)
+        {
+            await RecordAsync(
+                claim,
+                "season",
+                "ai_metadata",
+                null,
+                "error",
+                u2FilePolicyFailure.Code,
+                false,
+                started,
+                cancellationToken,
+                resolved.Usage,
+                aiTriggerReason).ConfigureAwait(false);
+            return false;
+        }
+
         var seasons = validatedFiles
             .GroupBy(file => file.Season.SeasonNumber)
             .Select(group => group.First().Season)

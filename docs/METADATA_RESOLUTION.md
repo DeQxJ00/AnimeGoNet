@@ -60,6 +60,16 @@
 
 重复集/多版本采用“第一个成功记录生效”，不实现自动多版本管理。规范去重键固定为 `(TmdbSeriesId, TmdbSeasonNumber, TmdbEpisodeNumber)`，作用域是整个媒体库，不区分 Mikan、U2、字幕组、Torrent 或下载器实例。同一 TMDB 剧集不整体阻断：只跳过已经完成的具体 Episode，其他 Episode 正常处理。
 
+## U2 专属确定性门禁
+
+U2 只接受插件逐次人工确认后传入的 `media_type`，后端不根据标题或 Torrent 文件改写 TV/Movie。Movie 继续走既有 TMDB Movie 解析器；以下规则仅适用于 `source_adapter=u2` 且 `media_type=tv`，不会改变 Mikan/RSS，也不会读取或学习可信 EP Offset。
+
+TV 作品入口按证据分三路：无 AniDB ID 时用 AnitomySharp 从 U2 任务标题提取作品名后搜索 TMDB TV；有 AniDB ID 且开启“优先使用 AniDB 映射 TMDB”时，只用配置的 Anime-Lists-Json `tmdbtv` 直接验证；关闭时只从本地 AniDB 标题缓存取标题搜索 TMDB，并优先 official title。`tmdbseason` 与这个开关独立：Series 只有一个普通季度时直接选择，多个普通季度时只有有效 `tmdbseason` 才可确定性选择；Season 0 永远不参与普通季度门禁。
+
+Season 确认后，以整个 Torrent 的全部视频为一次判断单位。只有正片文件与 TMDB Season 普通 Episode 在数量、正整数编号集合和一一对应关系上完全相同，才允许不调用 AI 直接通过。单集、非整季、缺集、超集、任意重复编号、跨目录/季度重复、同集多版本、未解析正片以及正片与带数字特典冲突，全部只触发一次现有统一任务级 AI。明确识别为 NCOP/NCED/特典且未产生数字冲突的文件归入 Extras；当正片全集完全一致时，这些 Extras 不触发 AI。
+
+统一 AI 仍使用正式 Prompt、同一个 `AiMetadataTaskResolver`、模型/MCP 与 TMDB 最终验证。成功落库要求 TMDB Series/Season/Episode 身份存在且一致、每个普通正片都有唯一 Episode、不得出现重复 `(Season,Episode)` 目标；仅明确 Extras 可保持 unmatched，普通视频被 AI 随意标为 unmatched 时以 `ai_u2_main_video_unmatched` 拒绝。
+
 只有下载、文件策略、重命名和必要的 NFO/目录数据库写入全部成功后，才为每个 Episode 原子写入 `Downloaded=true` 的完成记录。失败、取消、只完成下载但整理失败的任务不能占用“第一个”资格。
 
 为支持 RSS 早停，每次成功解析还保存 `(source_id, source_work_key, 来源Episode类型, 来源Episode)` 到规范 TMDB Episode 的 alias。再次遇到已知 alias 时可在 RSS 解析阶段直接停止该文件；alias 未命中时先完成 TMDB 映射，再在提交下载器前检查全局规范键。`mikanid`、bgmid/anidbid/imdbid、Torrent hash 和来源集号保留用于审计，但都不能替代最终全局去重键。

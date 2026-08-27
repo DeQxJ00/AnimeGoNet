@@ -986,6 +986,115 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task U2CompleteSeasonSetPassesLocallyAndUnnumberedExtraDoesNotTriggerAi()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        var ai = new FakeAiMetadataMatcher();
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Show 01.mkv", "1", "1"),
+            ("Show 02.mkv", "2", "2"),
+            ("Show 03.mkv", "3", "3"),
+            ("Show NCOP.mkv", null, null));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Empty(ai.Requests);
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Equal([1, 2, 3], files.Where(file => file.Disposition == "episode")
+            .Select(file => file.EpisodeNumber).ToArray());
+        var extra = files.Single(file => file.Path.EndsWith("NCOP.mkv", StringComparison.Ordinal));
+        Assert.Equal("extras", extra.Disposition);
+    }
+
+    [Fact]
+    public async Task U2IncompleteTorrentInvokesUnifiedAiExactlyOnce()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    file.Name, true, 2, index + 1, null)).ToArray(),
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Show 01.mkv", "1", "1"),
+            ("Show 02.mkv", "2", "2"));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        Assert.All(await ReadFilesAsync(app, taskId), file => Assert.Equal("episode", file.Disposition));
+    }
+
+    [Fact]
+    public async Task U2AiCannotHideOrdinaryVideoAsUnmatchedExtra()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name, false, 2, null, "not an episode")).ToArray(),
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(app, ("Show unknown.mkv", null, null));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("other", file.Disposition);
+        Assert.Equal("ai_u2_main_video_unmatched", file.OtherReason);
+    }
+
+    [Fact]
     public async Task EpisodeAiCannotChangeDeterministicallyConfirmedEpisode()
     {
         var tmdb = new FakeTmdbClient
@@ -1290,6 +1399,41 @@ public sealed class EpisodeMetadataResolutionProcessorTests
         command.Parameters.AddWithValue("$task_id", taskId);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
+
+    private static async Task SetSourceAdapterAsync(
+        RunningApp app,
+        string taskId,
+        string adapter)
+    {
+        var database = app.App.Services
+            .GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE source_profiles
+            SET adapter = $adapter
+            WHERE id = (SELECT source_profile_id FROM ingest_tasks WHERE id = $task_id);
+            """;
+        command.Parameters.AddWithValue("$adapter", adapter);
+        command.Parameters.AddWithValue("$task_id", taskId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static TmdbSeason U2Season(params int[] episodes) =>
+        new(
+            204984,
+            72517,
+            2,
+            "Season 2",
+            null,
+            episodes.Length,
+            Episodes: episodes.Select(number => new TmdbEpisode(
+                9000 + number,
+                72517,
+                2,
+                number,
+                $"Episode {number}",
+                null)).ToArray());
 
     private static async Task SetTrustedPublicationEvidenceAsync(
         RunningApp app,
