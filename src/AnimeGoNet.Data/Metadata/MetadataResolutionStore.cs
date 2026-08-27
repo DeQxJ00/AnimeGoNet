@@ -165,7 +165,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                 tmdbSeasonNumber = reader.GetInt32(12);
                 seasonResolvedByAi = reader.GetInt64(13) == 1;
                 hasMultipleSeasons = reader.GetInt64(14) == 1;
-                episodeResolvedByTrustedOffset = reader.GetInt64(15) == 1;
+                // Trusted episode offsets are a Mikan-only correction keyed by
+                // mikanid + groupid. Never expose a stale/legacy trusted-offset
+                // attempt as applicable to U2 (or any other source adapter).
+                episodeResolvedByTrustedOffset = reader.GetInt64(15) == 1
+                    && string.Equals(sourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase);
                 aiMetadataAttempted = reader.GetInt64(16) == 1;
                 isOtherReadaptation = reader.GetInt64(17) == 1;
                 if (isOtherReadaptation)

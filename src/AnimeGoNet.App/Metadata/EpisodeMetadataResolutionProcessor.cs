@@ -55,7 +55,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
             };
         }
 
-        var manualOffset = !claim.HasMultipleSeasons
+        var isMikanSource = string.Equals(
+            claim.Resolution.SourceAdapter,
+            "mikan",
+            StringComparison.OrdinalIgnoreCase);
+        var trustedOffsetResolved = isMikanSource && claim.EpisodeResolvedByTrustedOffset;
+        var manualOffset = isMikanSource && !claim.HasMultipleSeasons
             && rule?.TmdbSeriesId == claim.TmdbSeriesId
             && rule.TmdbSeasonNumber == claim.TmdbSeasonNumber
             ? rule.EpisodeOffset
@@ -73,7 +78,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
         if (manualOffset is null
             && !claim.HasMultipleSeasons
             && !hasU2DuplicateEpisodeAmbiguity
-            && !claim.EpisodeResolvedByTrustedOffset
+            && !trustedOffsetResolved
             && string.Equals(
                 claim.Resolution.SourceAdapter,
                 "mikan",
@@ -209,7 +214,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             {
                 await RecordAsync(
                     claim,
-                    claim.EpisodeResolvedByTrustedOffset ? "trusted_mikan_offset" : "ai_metadata",
+                    trustedOffsetResolved ? "trusted_mikan_offset" : "ai_metadata",
                     null,
                     "other",
                     file.PreResolvedOtherReason,
@@ -248,7 +253,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             string strategy = manualOffset is not null
                 ? "manual_mikan_offset"
-                : claim.EpisodeResolvedByTrustedOffset
+                : trustedOffsetResolved
                     ? "trusted_mikan_offset"
                 : file.PreResolvedEpisodeNumber is > 0
                     ? "ai_metadata"
@@ -344,7 +349,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 targetEpisode = dateMatch.Episode!.EpisodeNumber;
             }
 
-            if (claim.EpisodeResolvedByTrustedOffset)
+            if (trustedOffsetResolved)
             {
                 var attemptId = await RecordAsync(
                     claim,
@@ -469,7 +474,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             && options.Metadata.Ai.UseMetadataMatch
             && !claim.AiMetadataAttempted
             && (!claim.HasMultipleSeasons || hasU2DuplicateEpisodeAmbiguity)
-            && !claim.EpisodeResolvedByTrustedOffset
+            && !trustedOffsetResolved
             && results.Any(result => result.Episode is null
                 && claim.Files.Any(file => file.FileId == result.FileId
                     && SubtitleAssociationResolver.IsVideo(file.RelativePath))))
