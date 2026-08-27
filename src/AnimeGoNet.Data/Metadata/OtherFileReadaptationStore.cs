@@ -607,9 +607,11 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
         foreach (var file in preview.Files)
         {
             var sourceEpisode = TorrentEpisodeCandidateParser.Parse(file.SourceName);
-            var fileCandidate = FileEpisodeCandidateResolver.Resolve(
-                preview.SourceAdapter,
-                file.SourceName);
+            var fileCandidate = string.Equals(preview.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
+                ? U2FileEpisodeCandidateResolver.Resolve(file.SourceName).Episode
+                : FileEpisodeCandidateResolver.Resolve(
+                    preview.SourceAdapter,
+                    file.SourceName).Episode;
             await using var resetFile = connection.CreateCommand();
             resetFile.Transaction = transaction;
             resetFile.CommandText = """
@@ -630,11 +632,11 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
             resetFile.Parameters.AddWithValue(
                 "$source_episode",
                 (object?)sourceEpisode.SourceEpisode
-                ?? (object?)fileCandidate?.Episode?.ToString(CultureInfo.InvariantCulture)
+                ?? (object?)fileCandidate?.ToString(CultureInfo.InvariantCulture)
                 ?? DBNull.Value);
             resetFile.Parameters.AddWithValue(
                 "$file_episode_candidate",
-                fileCandidate?.Episode is int candidate
+                fileCandidate is int candidate
                     ? candidate.ToString(CultureInfo.InvariantCulture)
                     : DBNull.Value);
             if (await resetFile.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)

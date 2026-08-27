@@ -165,7 +165,7 @@ public sealed class IngestTaskStoreTests
     }
 
     [Fact]
-    public async Task FileEpisodeCandidateUsesUpstreamParserSafetyPolicyOnlyForMikanAdapter()
+    public async Task FileEpisodeCandidateUsesIndependentMikanAndU2Policies()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
         var profileStore = new SourceProfileStore(fixture.Database);
@@ -266,7 +266,7 @@ public sealed class IngestTaskStoreTests
             row.TaskId == u2Task.Id
             && row.Path == "Show [04].mkv"
             && row.SourceEpisode == "4"
-            && row.Candidate is null);
+            && row.Candidate == "4");
     }
 
     [Fact]

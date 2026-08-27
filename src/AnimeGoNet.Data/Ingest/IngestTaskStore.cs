@@ -158,7 +158,9 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
                 : TorrentEpisodeCandidateParser.Parse(file.RelativePath);
             var fileCandidate = file.IsPadding
                 ? null
-                : FileEpisodeCandidateResolver.Resolve(profile.Adapter, file.RelativePath);
+                : string.Equals(profile.Adapter, "u2", StringComparison.OrdinalIgnoreCase)
+                    ? U2FileEpisodeCandidateResolver.Resolve(file.RelativePath).Episode
+                    : FileEpisodeCandidateResolver.Resolve(profile.Adapter, file.RelativePath).Episode;
             await using var fileCommand = connection.CreateCommand();
             fileCommand.Transaction = transaction;
             fileCommand.CommandText = """
@@ -177,11 +179,11 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             fileCommand.Parameters.AddWithValue(
                 "$source_episode",
                 (object?)sourceEpisode?.SourceEpisode
-                ?? (object?)fileCandidate?.Episode?.ToString(CultureInfo.InvariantCulture)
+                ?? (object?)fileCandidate?.ToString(CultureInfo.InvariantCulture)
                 ?? DBNull.Value);
             fileCommand.Parameters.AddWithValue(
                 "$file_episode_candidate",
-                fileCandidate?.Episode is int candidate
+                fileCandidate is int candidate
                     ? candidate.ToString(CultureInfo.InvariantCulture)
                     : DBNull.Value);
             fileCommand.Parameters.AddWithValue("$disposition", file.IsPadding ? "ignored" : "pending");
