@@ -298,9 +298,29 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
                 : new XZStream(source);
         await using (decompressed.ConfigureAwait(false))
         {
-            await decompressed.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+            await CopyWithLimitAsync(decompressed, target, 512L * 1024 * 1024, cancellationToken)
+                .ConfigureAwait(false);
         }
         return innerPath;
+    }
+
+    private static async Task CopyWithLimitAsync(
+        Stream source,
+        Stream target,
+        long maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[64 * 1024];
+        var total = 0L;
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+            if (read == 0) break;
+            total = checked(total + read);
+            if (total > maximumBytes)
+                throw new InvalidDataException("字幕压缩包解压后大小超过限制。");
+            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static string NormalizeEntry(string value)
