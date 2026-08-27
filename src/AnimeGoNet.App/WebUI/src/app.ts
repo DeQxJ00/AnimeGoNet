@@ -410,6 +410,8 @@ interface RuntimeConfiguration {
       use_bangumi_pubdate_first: boolean;
       tmdb_mcp_url: string;
       bangumi_mcp_url: string;
+      api_mode: "responses" | "chat-completions";
+      web_search_enabled: boolean;
     };
     tmdb_failure_use_bangumi: boolean;
     write_bangumi_id_when_tmdb_matched: boolean;
@@ -462,12 +464,15 @@ interface RuntimeConfiguration {
     season_failure_use_first_season: boolean;
     ai_base_url: string | null;
     ai_model: string | null;
+    ai_api_mode: "responses" | "chat-completions";
+    ai_web_search_enabled: boolean;
     ai_reasoning_effort: "none" | "low" | "medium" | "high";
     ai_prompt_template: string;
     ai_api_key_state: "inherit" | "configured" | "cleared";
     ai_api_key: string | null;
     ai_tmdb_mcp_url: string;
     ai_bangumi_mcp_url: string;
+    ai_use_bangumi_pubdate_first: boolean;
     ai_use_metadata_match: boolean;
     ai_use_season_match: boolean;
     ai_use_episode_match: boolean;
@@ -544,12 +549,15 @@ interface ConfigurationUpdatePayload {
   season_failure_use_first_season: boolean;
   ai_base_url: string | null;
   ai_model: string | null;
+  ai_api_mode: "responses" | "chat-completions";
+  ai_web_search_enabled: boolean;
   ai_reasoning_effort: "none" | "low" | "medium" | "high";
   ai_prompt_template: string;
   ai_api_key: string | null;
   clear_ai_api_key: boolean;
   ai_tmdb_mcp_url: string;
   ai_bangumi_mcp_url: string;
+  ai_use_bangumi_pubdate_first: boolean;
   ai_use_metadata_match: boolean;
   ai_debug_mode: boolean;
   ai_http_timeout_seconds: number;
@@ -4924,6 +4932,46 @@ function metadataReasonLabel(value: string | null): string {
   return label ? `${label} (${value})` : value;
 }
 
+interface MetadataAttemptFileReason {
+  fileName: string | null;
+  reasonWithoutFile: string;
+  role: string | null;
+  explanation: string | null;
+}
+
+function metadataAttemptFileReason(
+  attempt: MetadataAttemptItem,
+): MetadataAttemptFileReason {
+  const rawReason = typeof attempt.reason === "string" ? attempt.reason : "";
+  const fileMarker = " · 文件：";
+  const markerIndex = rawReason.indexOf(fileMarker);
+  const fileName = markerIndex >= 0
+    ? rawReason.slice(markerIndex + fileMarker.length).trim()
+    : null;
+  const reasonWithoutFile = markerIndex >= 0
+    ? rawReason.slice(0, markerIndex).trim()
+    : rawReason;
+  const presentations: Record<string, { role?: string; explanation?: string }> = {
+    u2_main_video_episode_not_parsed: {
+      role: "引起阻塞的文件",
+      explanation: "该视频没有提取到普通正片 EP，触发 U2 整批进入 AI。",
+    },
+    u2_whole_torrent_gate_blocked_by_other_file: {
+      role: "受同批阻塞影响的文件",
+      explanation: "该文件自身已完成 EP 提取；因同一 Torrent 的其他文件阻塞而随整批进入 AI。",
+    },
+  };
+  const presentation = attempt.error_code === null
+    ? null
+    : presentations[attempt.error_code] ?? null;
+  return {
+    fileName,
+    reasonWithoutFile,
+    role: presentation?.role ?? null,
+    explanation: presentation?.explanation ?? null,
+  };
+}
+
 function renderExternalMediaImportResult(
   target: string,
   result: ExternalMediaImportResult,
@@ -7332,11 +7380,14 @@ const configurationLockSelectors: Record<string, string[]> = {
   bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
   ai_base_url: ["#configuration-ai-base-url"],
   ai_model: ["#configuration-ai-model"],
+  ai_api_mode: ["#configuration-ai-api-mode"],
+  ai_web_search_enabled: ["#configuration-ai-web-search"],
   ai_reasoning_effort: ["#configuration-ai-reasoning-effort"],
   ai_prompt_template: ["#configuration-ai-prompt-template", "#configuration-ai-prompt-reset"],
   ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
   ai_tmdb_mcp_url: ["#configuration-ai-tmdb-mcp-url"],
   ai_bangumi_mcp_url: ["#configuration-ai-bangumi-mcp-url"],
+  ai_use_bangumi_pubdate_first: ["#configuration-ai-use-bangumi-pubdate-first"],
   ai_use_metadata_match: ["#configuration-ai-metadata"],
   ai_debug_mode: ["#configuration-ai-debug"],
   ai_http_timeout_seconds: ["#configuration-ai-timeout"],
@@ -7525,6 +7576,11 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
   setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
   setConfigurationValue("#configuration-ai-base-url", editable.ai_base_url ?? "");
   setConfigurationValue("#configuration-ai-model", editable.ai_model ?? "");
+  setConfigurationValue("#configuration-ai-api-mode", editable.ai_api_mode);
+  setConfigurationChecked(
+    "#configuration-ai-web-search",
+    editable.ai_web_search_enabled,
+  );
   setConfigurationValue(
     "#configuration-ai-reasoning-effort",
     editable.ai_reasoning_effort,
@@ -7539,6 +7595,10 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
     configurationSecretLabel(editable.ai_api_key_state);
   setConfigurationValue("#configuration-ai-tmdb-mcp-url", editable.ai_tmdb_mcp_url);
   setConfigurationValue("#configuration-ai-bangumi-mcp-url", editable.ai_bangumi_mcp_url);
+  setConfigurationChecked(
+    "#configuration-ai-use-bangumi-pubdate-first",
+    editable.ai_use_bangumi_pubdate_first,
+  );
   setConfigurationChecked(
     "#configuration-ai-metadata",
     editable.ai_use_metadata_match,
@@ -7623,11 +7683,14 @@ const configurationFieldLabels: Record<string, string> = {
   season_failure_use_first_season: "TMDBFailUseFirstSeason",
   ai_base_url: "OpenAI-compatible API 地址",
   ai_model: "AI 模型",
+  ai_api_mode: "AI API 模式",
+  ai_web_search_enabled: "Web Search 兜底",
   ai_reasoning_effort: "AI 推理程度",
   ai_prompt_template: "正式 AI Prompt",
   ai_api_key: "AI API Key",
-  ai_tmdb_mcp_url: "TMDB MCP 地址",
-  ai_bangumi_mcp_url: "Bangumi MCP 地址",
+  ai_tmdb_mcp_url: "TMDB MCP 地址（必须开启）",
+  ai_bangumi_mcp_url: "Bangumi MCP 地址（必须开启）",
+  ai_use_bangumi_pubdate_first: "优先使用 BGM pubDate 候选",
   ai_use_metadata_match: "AI 元数据匹配",
   ai_debug_mode: "AI Debug 完整链路",
   ai_http_timeout_seconds: "AI 超时（秒）",
@@ -7716,6 +7779,11 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-ai-base-url").value || null,
     ai_model:
       element<HTMLInputElement>("#configuration-ai-model").value || null,
+    ai_api_mode:
+      element<HTMLSelectElement>("#configuration-ai-api-mode").value as
+        ConfigurationUpdatePayload["ai_api_mode"],
+    ai_web_search_enabled:
+      element<HTMLInputElement>("#configuration-ai-web-search").checked,
     ai_reasoning_effort:
       element<HTMLSelectElement>("#configuration-ai-reasoning-effort").value as
         ConfigurationUpdatePayload["ai_reasoning_effort"],
@@ -7731,6 +7799,8 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-ai-tmdb-mcp-url").value,
     ai_bangumi_mcp_url:
       element<HTMLInputElement>("#configuration-ai-bangumi-mcp-url").value,
+    ai_use_bangumi_pubdate_first:
+      element<HTMLInputElement>("#configuration-ai-use-bangumi-pubdate-first").checked,
     ai_use_metadata_match:
       element<HTMLInputElement>("#configuration-ai-metadata").checked,
     ai_debug_mode:
@@ -10562,6 +10632,7 @@ async function loadMetadataAttempts(
       target.replaceChildren(empty);
     } else {
       target.replaceChildren(...body.items.map((attempt) => {
+        const fileReason = metadataAttemptFileReason(attempt);
         const row = document.createElement("article");
         row.className = `metadata-attempt ${attempt.result === "failed" ? "failed" : ""}`;
         const heading = document.createElement("div");
@@ -10605,6 +10676,31 @@ async function loadMetadataAttempts(
           filesDetails.append(filesList);
           row.append(filesDetails);
         }
+        if (fileReason.role) {
+          const roleDetails = document.createElement("dl");
+          roleDetails.className = `metadata-attempt-file-reason ${attempt.error_code === "u2_main_video_episode_not_parsed" ? "blocking" : "affected"}`;
+          const roleLabel = document.createElement("dt");
+          roleLabel.textContent = "文件角色";
+          const roleValue = document.createElement("dd");
+          roleValue.textContent = fileReason.role;
+          const fileLabel = document.createElement("dt");
+          fileLabel.textContent = "具体文件";
+          const fileValue = document.createElement("dd");
+          fileValue.textContent = fileReason.fileName ?? "旧记录未保存具体文件";
+          const causeLabel = document.createElement("dt");
+          causeLabel.textContent = "原因";
+          const causeValue = document.createElement("dd");
+          causeValue.textContent = fileReason.explanation ?? "";
+          roleDetails.append(
+            roleLabel,
+            roleValue,
+            fileLabel,
+            fileValue,
+            causeLabel,
+            causeValue,
+          );
+          row.append(roleDetails);
+        }
         if (attempt.ai_model !== null) {
           const usage = document.createElement("p");
           usage.className = "metadata-ai-usage";
@@ -10620,11 +10716,11 @@ async function loadMetadataAttempts(
           const reason = document.createElement("p");
           reason.className = "metadata-attempt-reason";
           const detailReason = attempt.error_code
-            && attempt.reason
-            && (attempt.reason === attempt.error_code
-              || attempt.reason.startsWith(`${attempt.error_code} · `))
-            ? attempt.reason.slice(attempt.error_code.length).replace(/^ · /, "")
-            : attempt.reason;
+            && fileReason.reasonWithoutFile
+            && (fileReason.reasonWithoutFile === attempt.error_code
+              || fileReason.reasonWithoutFile.startsWith(`${attempt.error_code} · `))
+            ? fileReason.reasonWithoutFile.slice(attempt.error_code.length).replace(/^ · /, "")
+            : fileReason.reasonWithoutFile;
           reason.textContent = `${textOrDash(attempt.error_code)} · ${textOrDash(detailReason)} · ${attempt.retryable ? "可自动重试" : "不可自动重试"}`;
           row.append(reason);
         }

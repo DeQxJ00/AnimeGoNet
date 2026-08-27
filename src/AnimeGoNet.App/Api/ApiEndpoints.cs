@@ -2259,7 +2259,9 @@ public static class ApiEndpoints
                     ai.UseBangumiPubDateFirst,
                     ai.TmdbMcpUrl.AbsoluteUri,
                     ai.BangumiMcpUrl.AbsoluteUri,
-                    ai.ReasoningEffort ?? "none"),
+                    ai.ReasoningEffort ?? "none",
+                    FormatAiApiMode(ai.ApiMode),
+                    ai.WebSearchEnabled),
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.WriteBangumiIdWhenTmdbMatched,
                 options.Metadata.MikanTrustedOffsetCacheEnabled,
@@ -2357,7 +2359,10 @@ public static class ApiEndpoints
             AiReasoningEffort: ai.ReasoningEffort ?? "none",
             MikanTrustedOffsetRequiredEpisodes:
                 desired.Metadata.MikanTrustedOffsetRequiredEpisodes,
-            MovieSavePath: desired.Paths.EffectiveMovieSavePath);
+            MovieSavePath: desired.Paths.EffectiveMovieSavePath,
+            AiApiMode: FormatAiApiMode(ai.ApiMode),
+            AiWebSearchEnabled: ai.WebSearchEnabled,
+            AiUseBangumiPubDateFirst: ai.UseBangumiPubDateFirst);
     }
 
     private static string SecretState(bool overridden, string? value) =>
@@ -2570,6 +2575,14 @@ public static class ApiEndpoints
         Add("ai_base_url", beforeAi.BaseUrl?.AbsoluteUri, afterAi.BaseUrl?.AbsoluteUri);
         Add("ai_model", beforeAi.Model, afterAi.Model);
         Add(
+            "ai_api_mode",
+            FormatAiApiMode(beforeAi.ApiMode),
+            FormatAiApiMode(afterAi.ApiMode));
+        AddBool(
+            "ai_web_search_enabled",
+            beforeAi.WebSearchEnabled,
+            afterAi.WebSearchEnabled);
+        Add(
             "ai_reasoning_effort",
             beforeAi.ReasoningEffort ?? "none",
             afterAi.ReasoningEffort ?? "none");
@@ -2594,6 +2607,10 @@ public static class ApiEndpoints
             "ai_bangumi_mcp_url",
             beforeAi.BangumiMcpUrl.AbsoluteUri,
             afterAi.BangumiMcpUrl.AbsoluteUri);
+        AddBool(
+            "ai_use_bangumi_pubdate_first",
+            beforeAi.UseBangumiPubDateFirst,
+            afterAi.UseBangumiPubDateFirst);
         AddBool(
             "ai_use_metadata_match",
             beforeAi.UseMetadataMatch,
@@ -2808,7 +2825,10 @@ public static class ApiEndpoints
                 current.Metadata.MikanTrustedOffsetRequiredEpisodes,
             DownloadPath: current.Paths.DownloadPath,
             SavePath: current.Paths.SavePath,
-            MovieSavePath: current.Paths.EffectiveMovieSavePath);
+            MovieSavePath: current.Paths.EffectiveMovieSavePath,
+            AiApiMode: FormatAiApiMode(ai.ApiMode),
+            AiWebSearchEnabled: ai.WebSearchEnabled,
+            AiUseBangumiPubDateFirst: ai.UseBangumiPubDateFirst);
 
         return section.Trim().ToLowerInvariant() switch
         {
@@ -2860,10 +2880,13 @@ public static class ApiEndpoints
                 SeasonFailureUseFirstSeason = request.SeasonFailureUseFirstSeason,
                 AiBaseUrl = request.AiBaseUrl,
                 AiModel = request.AiModel,
+                AiApiMode = request.AiApiMode,
+                AiWebSearchEnabled = request.AiWebSearchEnabled,
                 AiApiKey = request.AiApiKey,
                 ClearAiApiKey = request.ClearAiApiKey,
                 AiTmdbMcpUrl = request.AiTmdbMcpUrl,
                 AiBangumiMcpUrl = request.AiBangumiMcpUrl,
+                AiUseBangumiPubDateFirst = request.AiUseBangumiPubDateFirst,
                 AiPromptTemplate = request.AiPromptTemplate,
                 AiReasoningEffort = request.AiReasoningEffort,
                 AiUseMetadataMatch = request.AiUseMetadataMatch,
@@ -2976,6 +2999,25 @@ public static class ApiEndpoints
         {
             throw new ArgumentException("ai_model must contain at most 256 characters.");
         }
+        var aiApiMode = ParseAiApiMode(request.AiApiMode)
+            ?? current?.AiApiMode
+            ?? AiApiMode.Responses;
+        if (HasValue(request.AiApiMode) && ParseAiApiMode(request.AiApiMode) is null)
+        {
+            throw new ArgumentException(
+                "ai_api_mode must be responses or chat-completions.");
+        }
+        var aiWebSearchEnabled = request.AiWebSearchEnabled
+            ?? current?.AiWebSearchEnabled
+            ?? true;
+        if (aiWebSearchEnabled && aiApiMode != AiApiMode.Responses)
+        {
+            throw new ArgumentException(
+                "ai_web_search_enabled requires ai_api_mode=responses.");
+        }
+        var aiUseBangumiPubDateFirst = request.AiUseBangumiPubDateFirst
+            ?? current?.AiUseBangumiPubDateFirst
+            ?? true;
         if (!IsOptionalReasoningEffort(request.AiReasoningEffort))
         {
             throw new ArgumentException(
@@ -3174,7 +3216,10 @@ public static class ApiEndpoints
             MikanTrustedOffsetRequiredEpisodes: mikanTrustedOffsetRequiredEpisodes,
             DownloadPath: downloadPath,
             SavePath: savePath,
-            MovieSavePath: movieSavePath);
+            MovieSavePath: movieSavePath,
+            AiApiMode: aiApiMode,
+            AiWebSearchEnabled: aiWebSearchEnabled,
+            AiUseBangumiPubDateFirst: aiUseBangumiPubDateFirst);
     }
 
     private static string PromptSummary(string template) =>
@@ -8607,6 +8652,10 @@ public static class ApiEndpoints
                         MikanId = resolved.MikanId,
                         GroupId = resolved.GroupId,
                         BangumiId = resolved.BangumiSubjectId,
+                        PublishedAtRaw = resolved.PublishedAt?.ToString(
+                            "O",
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        PublishedAt = resolved.PublishedAt,
                     };
                 }
                 catch (MikanAiTestImportException exception)
@@ -8784,7 +8833,12 @@ public static class ApiEndpoints
                 request.Info.AniDbId,
                 request.Info.ImdbId,
                 request.Info.GroupId,
-                request.Info.MediaType));
+                request.Info.MediaType),
+            request.Info.PublishedAtRaw is null && request.Info.PublishedAt is null
+                ? null
+                : new IngestSourceEvidence(
+                    request.Info.PublishedAtRaw,
+                    request.Info.PublishedAt));
 
     private static IngestItemResponse Rejected(int index, IReadOnlyList<string> errors) =>
         new(index, "rejected", null, null, null, null, null, null, null, errors);

@@ -2584,7 +2584,6 @@ function metadataReasonLabel(value) {
     const label = labels[value];
     return label ? `${label} (${value})` : value;
 }
-
 function metadataAttemptFileReason(attempt) {
     const rawReason = typeof attempt.reason === "string" ? attempt.reason : "";
     const fileMarker = " · 文件：";
@@ -2604,14 +2603,10 @@ function metadataAttemptFileReason(attempt) {
             role: "受同批阻塞影响的文件",
             explanation: "该文件自身已完成 EP 提取；因同一 Torrent 的其他文件阻塞而随整批进入 AI。",
         },
-        u2_episode_candidate_tmdb_verified_ai_required: {
-          badge: "TMDB 候选已验证",
-          title: "本地 EP 候选已通过 TMDB 验证",
-          detail: "整批 Torrent 未满足确定性通过条件，仍由 AI 重新判断全部文件；此本地 EP 不会锁定或覆盖 AI 结果。",
-          tone: "info",
-        },
     };
-    const presentation = presentations[attempt.error_code] ?? null;
+    const presentation = attempt.error_code === null
+        ? null
+        : presentations[attempt.error_code] ?? null;
     return {
         fileName,
         reasonWithoutFile,
@@ -4891,11 +4886,14 @@ const configurationLockSelectors = {
     bangumi_retry_delay_seconds: ["#configuration-bangumi-retry-delay"],
     ai_base_url: ["#configuration-ai-base-url"],
     ai_model: ["#configuration-ai-model"],
+    ai_api_mode: ["#configuration-ai-api-mode"],
+    ai_web_search_enabled: ["#configuration-ai-web-search"],
     ai_reasoning_effort: ["#configuration-ai-reasoning-effort"],
     ai_prompt_template: ["#configuration-ai-prompt-template", "#configuration-ai-prompt-reset"],
     ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
     ai_tmdb_mcp_url: ["#configuration-ai-tmdb-mcp-url"],
     ai_bangumi_mcp_url: ["#configuration-ai-bangumi-mcp-url"],
+    ai_use_bangumi_pubdate_first: ["#configuration-ai-use-bangumi-pubdate-first"],
     ai_use_metadata_match: ["#configuration-ai-metadata"],
     ai_debug_mode: ["#configuration-ai-debug"],
     ai_http_timeout_seconds: ["#configuration-ai-timeout"],
@@ -5053,6 +5051,8 @@ function openConfigurationEditor(section) {
     setConfigurationChecked("#configuration-fail-first", editable.season_failure_use_first_season);
     setConfigurationValue("#configuration-ai-base-url", editable.ai_base_url ?? "");
     setConfigurationValue("#configuration-ai-model", editable.ai_model ?? "");
+    setConfigurationValue("#configuration-ai-api-mode", editable.ai_api_mode);
+    setConfigurationChecked("#configuration-ai-web-search", editable.ai_web_search_enabled);
     setConfigurationValue("#configuration-ai-reasoning-effort", editable.ai_reasoning_effort);
     element("#configuration-ai-prompt-template").value =
         editable.ai_prompt_template;
@@ -5064,6 +5064,7 @@ function openConfigurationEditor(section) {
         configurationSecretLabel(editable.ai_api_key_state);
     setConfigurationValue("#configuration-ai-tmdb-mcp-url", editable.ai_tmdb_mcp_url);
     setConfigurationValue("#configuration-ai-bangumi-mcp-url", editable.ai_bangumi_mcp_url);
+    setConfigurationChecked("#configuration-ai-use-bangumi-pubdate-first", editable.ai_use_bangumi_pubdate_first);
     setConfigurationChecked("#configuration-ai-metadata", editable.ai_use_metadata_match);
     setConfigurationChecked("#configuration-ai-debug", editable.ai_debug_mode);
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
@@ -5118,11 +5119,14 @@ const configurationFieldLabels = {
     season_failure_use_first_season: "TMDBFailUseFirstSeason",
     ai_base_url: "OpenAI-compatible API 地址",
     ai_model: "AI 模型",
+    ai_api_mode: "AI API 模式",
+    ai_web_search_enabled: "Web Search 兜底",
     ai_reasoning_effort: "AI 推理程度",
     ai_prompt_template: "正式 AI Prompt",
     ai_api_key: "AI API Key",
-    ai_tmdb_mcp_url: "TMDB MCP 地址",
-    ai_bangumi_mcp_url: "Bangumi MCP 地址",
+    ai_tmdb_mcp_url: "TMDB MCP 地址（必须开启）",
+    ai_bangumi_mcp_url: "Bangumi MCP 地址（必须开启）",
+    ai_use_bangumi_pubdate_first: "优先使用 BGM pubDate 候选",
     ai_use_metadata_match: "AI 元数据匹配",
     ai_debug_mode: "AI Debug 完整链路",
     ai_http_timeout_seconds: "AI 超时（秒）",
@@ -5179,12 +5183,15 @@ function configurationRequest() {
         season_failure_use_first_season: element("#configuration-fail-first").checked,
         ai_base_url: element("#configuration-ai-base-url").value || null,
         ai_model: element("#configuration-ai-model").value || null,
+        ai_api_mode: element("#configuration-ai-api-mode").value,
+        ai_web_search_enabled: element("#configuration-ai-web-search").checked,
         ai_reasoning_effort: element("#configuration-ai-reasoning-effort").value,
         ai_prompt_template: element("#configuration-ai-prompt-template").value,
         ai_api_key: configurationSecretUpdateValue("#configuration-ai-key", currentConfiguration.editable.ai_api_key),
         clear_ai_api_key: element("#configuration-ai-key-clear").checked,
         ai_tmdb_mcp_url: element("#configuration-ai-tmdb-mcp-url").value,
         ai_bangumi_mcp_url: element("#configuration-ai-bangumi-mcp-url").value,
+        ai_use_bangumi_pubdate_first: element("#configuration-ai-use-bangumi-pubdate-first").checked,
         ai_use_metadata_match: element("#configuration-ai-metadata").checked,
         ai_debug_mode: element("#configuration-ai-debug").checked,
         ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
@@ -7831,7 +7838,7 @@ async function loadMetadataAttempts(taskId, target, button) {
                     const causeLabel = document.createElement("dt");
                     causeLabel.textContent = "原因";
                     const causeValue = document.createElement("dd");
-                    causeValue.textContent = fileReason.explanation;
+                    causeValue.textContent = fileReason.explanation ?? "";
                     roleDetails.append(roleLabel, roleValue, fileLabel, fileValue, causeLabel, causeValue);
                     row.append(roleDetails);
                 }

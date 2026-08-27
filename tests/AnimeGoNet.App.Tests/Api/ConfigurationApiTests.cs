@@ -148,6 +148,8 @@ public sealed class ConfigurationApiTests
         Assert.Equal("test-model", metadata.GetProperty("ai").GetProperty("model").GetString());
         Assert.True(metadata.GetProperty("ai").GetProperty("api_key_configured").GetBoolean());
         Assert.Equal(2, metadata.GetProperty("ai").GetProperty("retry_count").GetInt32());
+        Assert.Equal("responses", metadata.GetProperty("ai").GetProperty("api_mode").GetString());
+        Assert.True(metadata.GetProperty("ai").GetProperty("web_search_enabled").GetBoolean());
         Assert.True(metadata.GetProperty("ai")
             .GetProperty("use_bangumi_pubdate_first").GetBoolean());
         Assert.Equal(
@@ -180,6 +182,50 @@ public sealed class ConfigurationApiTests
             "tmdb-bearer-secret",
             editable.GetProperty("tmdb_read_access_token").GetString());
         Assert.Equal("ai-api-secret", editable.GetProperty("ai_api_key").GetString());
+        Assert.Equal("responses", editable.GetProperty("ai_api_mode").GetString());
+        Assert.True(editable.GetProperty("ai_web_search_enabled").GetBoolean());
+        Assert.True(editable.GetProperty("ai_use_bangumi_pubdate_first").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AiProviderModeWebSearchAndMikanPubDateAreEditableAndValidated()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var invalid = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                aiApiMode: "chat-completions",
+                aiWebSearchEnabled: true));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Contains(
+            "ai_web_search_enabled",
+            await invalid.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                aiApiMode: "chat-completions",
+                aiWebSearchEnabled: false,
+                aiUseBangumiPubDateFirst: false));
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+
+        using var response = await app.Client.GetAsync("/api/v1/config");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var editable = json.RootElement.GetProperty("editable");
+        Assert.Equal("chat-completions", editable.GetProperty("ai_api_mode").GetString());
+        Assert.False(editable.GetProperty("ai_web_search_enabled").GetBoolean());
+        Assert.False(editable.GetProperty("ai_use_bangumi_pubdate_first").GetBoolean());
+
+        var stored = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.Equal(AiApiMode.ChatCompletions, stored.Settings?.AiApiMode);
+        Assert.False(stored.Settings?.AiWebSearchEnabled);
+        Assert.False(stored.Settings?.AiUseBangumiPubDateFirst);
     }
 
     [Fact]
@@ -375,12 +421,20 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-ai-metadata\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-base-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-model\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-api-mode\"", html, StringComparison.Ordinal);
+        Assert.Contains("Responses（默认）", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-web-search\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-reasoning-effort\"", html, StringComparison.Ordinal);
         Assert.Contains("none（不发送 reasoning）", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-key\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-key-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-tmdb-mcp-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-bangumi-mcp-url\"", html, StringComparison.Ordinal);
+        Assert.Contains("TMDB MCP 地址（必须开启）", html, StringComparison.Ordinal);
+        Assert.Contains("Bangumi MCP 地址（必须开启）", html, StringComparison.Ordinal);
+        Assert.Contains("Mikan 源专用", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"configuration-ai-use-bangumi-pubdate-first\"", html, StringComparison.Ordinal);
+        Assert.Contains("单文件任务同时具备 bgmid、bgm_episode_candidate、pubDate", html, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"configuration-ai-season\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"configuration-ai-episode\"", html, StringComparison.Ordinal);
         Assert.Contains("一个任务只使用一个提示词", html, StringComparison.Ordinal);
@@ -415,6 +469,9 @@ public sealed class ConfigurationApiTests
         Assert.Contains("Bangumi 完全兜底（一般不启用这个）", script, StringComparison.Ordinal);
         Assert.Contains("内部仍按现有逻辑写 0", script, StringComparison.Ordinal);
         Assert.Contains("ai_use_metadata_match", script, StringComparison.Ordinal);
+        Assert.Contains("ai_api_mode", script, StringComparison.Ordinal);
+        Assert.Contains("ai_web_search_enabled", script, StringComparison.Ordinal);
+        Assert.Contains("ai_use_bangumi_pubdate_first", script, StringComparison.Ordinal);
         Assert.DoesNotContain("configuration-ai-season", script, StringComparison.Ordinal);
         Assert.DoesNotContain("configuration-ai-episode", script, StringComparison.Ordinal);
         Assert.Contains("previewConfiguration", script, StringComparison.Ordinal);
@@ -1385,7 +1442,10 @@ public sealed class ConfigurationApiTests
         int? mikanTrustedOffsetRequiredEpisodes = null,
         string? downloadPath = null,
         string? savePath = null,
-        string? movieSavePath = null)
+        string? movieSavePath = null,
+        string? aiApiMode = null,
+        bool? aiWebSearchEnabled = null,
+        bool? aiUseBangumiPubDateFirst = null)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -1412,12 +1472,15 @@ public sealed class ConfigurationApiTests
             bangumi_retry_delay_seconds = bangumiRetryDelaySeconds,
             ai_base_url = aiBaseUrl,
             ai_model = aiModel,
+            ai_api_mode = aiApiMode,
+            ai_web_search_enabled = aiWebSearchEnabled,
             ai_reasoning_effort = aiReasoningEffort,
             ai_prompt_template = aiPromptTemplate,
             ai_api_key = aiApiKey,
             clear_ai_api_key = clearAiApiKey,
             ai_tmdb_mcp_url = aiTmdbMcpUrl,
             ai_bangumi_mcp_url = aiBangumiMcpUrl,
+            ai_use_bangumi_pubdate_first = aiUseBangumiPubDateFirst,
             season_failure_skip = false,
             season_failure_backtrace = true,
             season_failure_use_title_season = true,

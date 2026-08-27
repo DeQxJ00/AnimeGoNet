@@ -190,11 +190,11 @@ public sealed record AiMatchingOptions
 
     public string? PromptTemplate { get; init; }
 
-    public AiApiMode ApiMode { get; init; } = AiApiMode.ChatCompletions;
+    public AiApiMode ApiMode { get; init; } = AiApiMode.Responses;
 
     public string? ReasoningEffort { get; init; }
 
-    public bool WebSearchEnabled { get; init; }
+    public bool WebSearchEnabled { get; init; } = true;
 
     public bool UseMetadataMatch { get; init; }
 

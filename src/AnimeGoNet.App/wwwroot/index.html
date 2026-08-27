@@ -2042,10 +2042,17 @@
         </fieldset>
         <fieldset class="wide configuration-data-update-editor">
           <legend>AI 与 MCP</legend>
-          <p class="configuration-data-update-caption">OpenAI-compatible 请求使用 Base URL 下的 <code>v1/chat/completions</code>；API Key 保存到私有配置并在编辑器中回填。两个 MCP 由 AnimeGoNet 本地连接，模型不会直接访问 MCP 地址。</p>
+          <p class="configuration-data-update-caption">正式流程与 AI 匹配测试使用同一套 OpenAI-compatible 模式、Web Search 兜底、模型和 Prompt。API Key 保存到私有配置并在编辑器中回填；MCP 由 AnimeGoNet 本地连接，模型不会直接访问 MCP 地址。</p>
           <div class="configuration-data-update-grid">
             <label class="wide">OpenAI-compatible Base URL（可选）<input id="configuration-ai-base-url" type="url" maxlength="2048" placeholder="http://openai.local/"></label>
             <label>模型<input id="configuration-ai-model" maxlength="256" placeholder="gpt-5.4-mini"></label>
+            <label>API 模式
+              <select id="configuration-ai-api-mode">
+                <option value="responses">Responses（默认）</option>
+                <option value="chat-completions">Chat Completions</option>
+              </select>
+              <small>Web Search 兜底只支持 Responses；切换到 Chat Completions 时必须关闭 Web Search。</small>
+            </label>
             <label>推理程度
               <select id="configuration-ai-reasoning-effort">
                 <option value="none">none（不发送 reasoning）</option>
@@ -2057,8 +2064,11 @@
             <label>AI API Key<input id="configuration-ai-key" autocomplete="off" spellcheck="false"></label>
             <label class="configuration-clear"><input id="configuration-ai-key-clear" type="checkbox">明确清除 AI API Key</label>
             <p id="configuration-ai-key-state" class="configuration-secret-state wide"></p>
-            <label class="wide">TMDB MCP 地址<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
-            <label class="wide">Bangumi MCP 地址<input id="configuration-ai-bangumi-mcp-url" type="url" maxlength="2048" required placeholder="http://bgm.mcp.local/mcp"></label>
+            <label class="configuration-guided-option wide">
+              <input id="configuration-ai-web-search" type="checkbox">
+              <span><strong>Web Search 兜底</strong><small>默认启用。仅当适用的 MCP 工具无结果、出错或信息不足时才允许使用；必须选择 Responses API 模式。</small></span>
+            </label>
+            <label class="wide">TMDB MCP 地址（必须开启）<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
             <label class="configuration-guided-option wide">
               <input id="configuration-ai-debug" type="checkbox">
               <span><strong>AI Debug 完整链路</strong><small>默认关闭。开启后按调用保存 AI 前置确定性尝试、任务输入、Prompt 模板与最终渲染 Prompt、每轮 AI/MCP 请求和响应、解析结果、TMDB 本地验证及用量。文件位于 data_path/ai-debug；不保存 API Key、Cookie、passkey 或 Authorization Header。</small></span>
@@ -2078,8 +2088,19 @@
             </div>
           </div>
         </fieldset>
+        <section class="wide configuration-mikan-ai-region" aria-labelledby="configuration-mikan-ai-title">
+          <div class="configuration-mikan-ai-heading">
+            <p class="eyebrow">Mikan source only</p>
+            <h3 id="configuration-mikan-ai-title">Mikan 源专用</h3>
+            <p class="muted">以下选项只影响 Mikan 输入，不改变 U2 或其他输入源的匹配行为。</p>
+          </div>
         <fieldset class="wide">
-          <legend>匹配与兜底</legend>
+          <legend>Mikan AI 与 Bangumi</legend>
+          <label class="wide">Bangumi MCP 地址（必须开启）<input id="configuration-ai-bangumi-mcp-url" type="url" maxlength="2048" required placeholder="http://bgm.mcp.local/mcp"></label>
+          <label class="configuration-guided-option">
+            <input id="configuration-ai-use-bangumi-pubdate-first" type="checkbox">
+            <span><strong>优先使用 BGM pubDate 候选</strong><small>默认启用；仅在 Mikan 单文件任务同时具备 bgmid、bgm_episode_candidate、pubDate，且 BGM MCP 已启用时进入日期候选优先分支。任一条件不满足就继续通用匹配。</small></span>
+          </label>
           <label class="configuration-guided-option">
             <input id="configuration-bangumi-fallback" type="checkbox">
             <span><strong>Bangumi 完全兜底（一般不启用这个）</strong><small>TMDB 完全失败时用 Bangumi 最终兜底；季度固定 S01；需要 bgmid；不输出有效 tmdbid（内部仍按现有逻辑写 0）</small></span>
@@ -2090,7 +2111,7 @@
           </label>
         </fieldset>
         <fieldset class="wide configuration-data-update-editor">
-          <legend>可信 EP Offset</legend>
+          <legend>Mikan 可信 EP Offset</legend>
           <p class="configuration-data-update-caption">独立于 TMDB 匹配与兜底策略。这里的来源 EP 专指从 Torrent 视频文件名解析出的 EP；程序按“目标 TMDB EP = 文件名 EP + Offset”计算。相同 mikanid + groupid 下，只有不同文件名 EP 产生相同且已通过 TMDB 验证的 tmdbid、Season 和 Offset，达到设定次数后才会成为可信缓存。</p>
           <div class="configuration-data-update-grid">
             <label class="configuration-guided-option wide">
@@ -2103,6 +2124,7 @@
             </label>
           </div>
         </fieldset>
+        </section>
         <label>AI 超时（秒）<input id="configuration-ai-timeout" type="number" min="1" max="86400" required></label>
         <fieldset class="wide configuration-data-update-editor">
           <legend>Torrent 获取</legend>

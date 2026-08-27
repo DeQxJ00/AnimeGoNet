@@ -407,7 +407,11 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("ai_reasoning_effort")] string AiReasoningEffort = "none",
     [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
     int MikanTrustedOffsetRequiredEpisodes = 3,
-    [property: JsonPropertyName("movie_save_path")] string MovieSavePath = "");
+    [property: JsonPropertyName("movie_save_path")] string MovieSavePath = "",
+    [property: JsonPropertyName("ai_api_mode")] string AiApiMode = "responses",
+    [property: JsonPropertyName("ai_web_search_enabled")] bool AiWebSearchEnabled = true,
+    [property: JsonPropertyName("ai_use_bangumi_pubdate_first")]
+    bool AiUseBangumiPubDateFirst = true);
 
 public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -474,7 +478,11 @@ public sealed record ConfigurationUpdateRequest(
     int? MikanTrustedOffsetRequiredEpisodes = null,
     [property: JsonPropertyName("download_path")] string? DownloadPath = null,
     [property: JsonPropertyName("save_path")] string? SavePath = null,
-    [property: JsonPropertyName("movie_save_path")] string? MovieSavePath = null);
+    [property: JsonPropertyName("movie_save_path")] string? MovieSavePath = null,
+    [property: JsonPropertyName("ai_api_mode")] string? AiApiMode = null,
+    [property: JsonPropertyName("ai_web_search_enabled")] bool? AiWebSearchEnabled = null,
+    [property: JsonPropertyName("ai_use_bangumi_pubdate_first")]
+    bool? AiUseBangumiPubDateFirst = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -577,7 +585,9 @@ public sealed record AiConfigurationResponse(
     [property: JsonPropertyName("use_bangumi_pubdate_first")] bool UseBangumiPubDateFirst,
     [property: JsonPropertyName("tmdb_mcp_url")] string TmdbMcpUrl,
     [property: JsonPropertyName("bangumi_mcp_url")] string BangumiMcpUrl,
-    [property: JsonPropertyName("reasoning_effort")] string ReasoningEffort = "none");
+    [property: JsonPropertyName("reasoning_effort")] string ReasoningEffort = "none",
+    [property: JsonPropertyName("api_mode")] string ApiMode = "responses",
+    [property: JsonPropertyName("web_search_enabled")] bool WebSearchEnabled = true);
 
 public sealed record TorrentFetchConfigurationResponse(
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,
@@ -656,7 +666,9 @@ public sealed record IngestItemInfoRequest(
     [property: JsonPropertyName("anidbid")] int? AniDbId,
     [property: JsonPropertyName("imdbid")] string? ImdbId,
     [property: JsonPropertyName("groupid")] int? GroupId = null,
-    [property: JsonPropertyName("media_type")] string? MediaType = null);
+    [property: JsonPropertyName("media_type")] string? MediaType = null,
+    [property: JsonPropertyName("published_at_raw")] string? PublishedAtRaw = null,
+    [property: JsonPropertyName("published_at")] DateTimeOffset? PublishedAt = null);
 
 public sealed record IngestBatchResponse(
     [property: JsonPropertyName("source")] string Source,

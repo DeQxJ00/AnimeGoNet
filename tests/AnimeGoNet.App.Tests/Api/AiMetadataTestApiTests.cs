@@ -140,7 +140,8 @@ public sealed class AiMetadataTestApiTests
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT source_item_id, source_work_id, mikanid, groupid,
-                   bangumi_subject_id, title, source_page_url
+                   bangumi_subject_id, title, source_page_url,
+                   source_published_at_raw, source_published_at
             FROM ingest_tasks
             LIMIT 1;
             """;
@@ -153,6 +154,8 @@ public sealed class AiMetadataTestApiTests
         Assert.Equal(590786, reader.GetInt32(4));
         Assert.Equal(title, reader.GetString(5));
         Assert.Equal($"https://mikanani.me/Home/Episode/{EpisodeId}", reader.GetString(6));
+        Assert.StartsWith("2026-08-09T08:55:16.532", reader.GetString(7), StringComparison.Ordinal);
+        Assert.StartsWith("2026-08-09T08:55:16.532", reader.GetString(8), StringComparison.Ordinal);
     }
 
     [Fact]

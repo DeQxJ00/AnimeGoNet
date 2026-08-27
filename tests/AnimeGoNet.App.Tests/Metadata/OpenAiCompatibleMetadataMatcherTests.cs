@@ -534,6 +534,8 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             BaseUrl = new Uri("https://ai.test.invalid/compatible/"),
             ApiKey = "local-secret",
             Model = "test-model",
+            ApiMode = AiApiMode.ChatCompletions,
+            WebSearchEnabled = false,
             RetryCount = 0,
             HttpTimeout = TimeSpan.FromSeconds(10),
             TmdbMcpUrl = new Uri("http://tmdb.test.invalid/mcp"),

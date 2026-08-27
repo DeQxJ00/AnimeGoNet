@@ -927,6 +927,12 @@ public static class AnimeGoApplication
                         configuration,
                         "ai_model",
                         "metadata:ai:model")),
+                    ApiMode = ParseOptionalAiApiMode(
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_api_mode",
+                            "metadata:ai:api_mode"),
+                        defaults.Metadata.Ai.ApiMode),
                     ReasoningEffort = ParseOptionalReasoningEffort(
                         FirstConfigurationValue(
                             configuration,
@@ -936,6 +942,13 @@ public static class AnimeGoApplication
                         configuration,
                         "ai_prompt_template",
                         "metadata:ai:prompt_template")),
+                    WebSearchEnabled = ParseOptionalBool(
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_web_search_enabled",
+                            "metadata:ai:web_search_enabled"),
+                        defaults.Metadata.Ai.WebSearchEnabled,
+                        "ai_web_search_enabled"),
                     UseMetadataMatch = ParseAiMetadataMatch(
                         configuration,
                         ParseOptionalBool(
@@ -1536,6 +1549,21 @@ public static class AnimeGoApplication
             "low" or "medium" or "high" => normalized,
             _ => throw new InvalidOperationException(
                 "ai_reasoning_effort must be none, low, medium or high."),
+        };
+    }
+
+    private static AiApiMode ParseOptionalAiApiMode(
+        string? value,
+        AiApiMode defaultValue)
+    {
+        var normalized = NormalizeOptional(value)?.ToLowerInvariant();
+        return normalized switch
+        {
+            null => defaultValue,
+            "responses" => AiApiMode.Responses,
+            "chat-completions" or "chat_completions" => AiApiMode.ChatCompletions,
+            _ => throw new InvalidOperationException(
+                "ai_api_mode must be responses or chat-completions."),
         };
     }
 

@@ -66,7 +66,10 @@ public sealed record ApplicationOverrideEntry(
     int? MikanTrustedOffsetRequiredEpisodes = null,
     string? DownloadPath = null,
     string? SavePath = null,
-    string? MovieSavePath = null);
+    string? MovieSavePath = null,
+    AiApiMode? AiApiMode = null,
+    bool? AiWebSearchEnabled = null,
+    bool? AiUseBangumiPubDateFirst = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -388,6 +391,9 @@ public sealed class ApplicationOverrideStore : IDisposable
                         && settings.AiModelOverridden == true
                         ? settings.AiModel
                         : options.Metadata.Ai.Model,
+                    ApiMode = inheritedFields.Contains("ai_api_mode")
+                        ? options.Metadata.Ai.ApiMode
+                        : settings.AiApiMode ?? options.Metadata.Ai.ApiMode,
                     ReasoningEffort = !inheritedFields.Contains("ai_reasoning_effort")
                         && settings.AiReasoningEffortOverridden == true
                         ? settings.AiReasoningEffort
@@ -404,6 +410,14 @@ public sealed class ApplicationOverrideStore : IDisposable
                         && settings.AiBangumiMcpUrl is not null
                         ? ParseRequiredUri(settings.AiBangumiMcpUrl, "AI Bangumi MCP URL")
                         : options.Metadata.Ai.BangumiMcpUrl,
+                    WebSearchEnabled = inheritedFields.Contains("ai_web_search_enabled")
+                        ? options.Metadata.Ai.WebSearchEnabled
+                        : settings.AiWebSearchEnabled ?? options.Metadata.Ai.WebSearchEnabled,
+                    UseBangumiPubDateFirst = inheritedFields.Contains(
+                        "ai_use_bangumi_pubdate_first")
+                        ? options.Metadata.Ai.UseBangumiPubDateFirst
+                        : settings.AiUseBangumiPubDateFirst
+                        ?? options.Metadata.Ai.UseBangumiPubDateFirst,
                     UseMetadataMatch = inheritedFields.Contains("ai_use_metadata_match")
                         ? options.Metadata.Ai.UseMetadataMatch
                         : settings.AiUseMetadataMatch

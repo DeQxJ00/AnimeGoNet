@@ -58,10 +58,13 @@ public sealed class DeploymentConfigurationLocks
         new("ai_base_url", ["ai_base_url", "metadata:ai:base_url"]),
         new("ai_api_key", ["ai_api_key", "metadata:ai:api_key"]),
         new("ai_model", ["ai_model", "metadata:ai:model"]),
+        new("ai_api_mode", ["ai_api_mode", "metadata:ai:api_mode"]),
+        new("ai_web_search_enabled", ["ai_web_search_enabled", "metadata:ai:web_search_enabled"]),
         new("ai_reasoning_effort", ["ai_reasoning_effort", "metadata:ai:reasoning_effort"]),
         new("ai_prompt_template", ["ai_prompt_template", "metadata:ai:prompt_template"]),
         new("ai_tmdb_mcp_url", ["ai_tmdb_mcp_url", "metadata:ai:tmdb_mcp_url"]),
         new("ai_bangumi_mcp_url", ["ai_bangumi_mcp_url", "metadata:ai:bangumi_mcp_url"]),
+        new("ai_use_bangumi_pubdate_first", ["ai_use_bangumi_pubdate_first", "metadata:ai:use_bangumi_pubdate_first"]),
         new("ai_http_timeout_seconds", ["ai_timeout_second", "metadata:ai:timeout_seconds"]),
         new("tmdb_failure_use_bangumi", ["tmdb_fail_use_bangumi", "metadata:tmdb_failure_use_bangumi"]),
         new(
@@ -350,6 +353,14 @@ public sealed class DeploymentConfigurationLocks
                     current.AiModelOverridden,
                     candidate.AiModelOverridden),
                 AiModel = Preserve("ai_model", current.AiModel, candidate.AiModel),
+                AiApiMode = Preserve(
+                    "ai_api_mode",
+                    current.AiApiMode,
+                    candidate.AiApiMode),
+                AiWebSearchEnabled = Preserve(
+                    "ai_web_search_enabled",
+                    current.AiWebSearchEnabled,
+                    candidate.AiWebSearchEnabled),
                 AiReasoningEffortOverridden = Preserve(
                     "ai_reasoning_effort",
                     current.AiReasoningEffortOverridden,
@@ -370,6 +381,10 @@ public sealed class DeploymentConfigurationLocks
                     "ai_bangumi_mcp_url",
                     current.AiBangumiMcpUrl,
                     candidate.AiBangumiMcpUrl),
+                AiUseBangumiPubDateFirst = Preserve(
+                    "ai_use_bangumi_pubdate_first",
+                    current.AiUseBangumiPubDateFirst,
+                    candidate.AiUseBangumiPubDateFirst),
                 AiHttpTimeoutSeconds = Preserve(
                     "ai_http_timeout_seconds",
                     current.AiHttpTimeoutSeconds,
@@ -623,6 +638,14 @@ public sealed class DeploymentConfigurationLocks
         {
             ai = ai with { ReasoningEffort = deployment.Metadata.Ai.ReasoningEffort };
         }
+        if (IsLocked("ai_api_mode"))
+        {
+            ai = ai with { ApiMode = deployment.Metadata.Ai.ApiMode };
+        }
+        if (IsLocked("ai_web_search_enabled"))
+        {
+            ai = ai with { WebSearchEnabled = deployment.Metadata.Ai.WebSearchEnabled };
+        }
         if (IsLocked("ai_prompt_template"))
         {
             ai = ai with { PromptTemplate = deployment.Metadata.Ai.PromptTemplate };
@@ -634,6 +657,13 @@ public sealed class DeploymentConfigurationLocks
         if (IsLocked("ai_bangumi_mcp_url"))
         {
             ai = ai with { BangumiMcpUrl = deployment.Metadata.Ai.BangumiMcpUrl };
+        }
+        if (IsLocked("ai_use_bangumi_pubdate_first"))
+        {
+            ai = ai with
+            {
+                UseBangumiPubDateFirst = deployment.Metadata.Ai.UseBangumiPubDateFirst,
+            };
         }
         if (IsLocked("ai_use_metadata_match"))
         {
@@ -863,6 +893,14 @@ public sealed class DeploymentConfigurationLocks
             deployment.Metadata.Ai.Model,
             candidate.Metadata.Ai.Model);
         AddIfChanged(
+            "ai_api_mode",
+            deployment.Metadata.Ai.ApiMode,
+            candidate.Metadata.Ai.ApiMode);
+        AddIfChanged(
+            "ai_web_search_enabled",
+            deployment.Metadata.Ai.WebSearchEnabled,
+            candidate.Metadata.Ai.WebSearchEnabled);
+        AddIfChanged(
             "ai_reasoning_effort",
             deployment.Metadata.Ai.ReasoningEffort,
             candidate.Metadata.Ai.ReasoningEffort);
@@ -878,6 +916,10 @@ public sealed class DeploymentConfigurationLocks
             "ai_bangumi_mcp_url",
             deployment.Metadata.Ai.BangumiMcpUrl,
             candidate.Metadata.Ai.BangumiMcpUrl);
+        AddIfChanged(
+            "ai_use_bangumi_pubdate_first",
+            deployment.Metadata.Ai.UseBangumiPubDateFirst,
+            candidate.Metadata.Ai.UseBangumiPubDateFirst);
         AddIfChanged(
             "ai_use_metadata_match",
             deployment.Metadata.Ai.UseMetadataMatch,
