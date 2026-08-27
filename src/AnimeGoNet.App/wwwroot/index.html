@@ -2052,6 +2052,14 @@
               <small id="configuration-ai-prompt-status">后台 Worker 与 AI 匹配测试工具共用此模板；保存后重启生效。</small>
             </label>
             <button id="configuration-ai-prompt-reset" type="button" class="secondary-button">恢复程序默认 Prompt</button>
+            <label class="wide">字幕导入 AI Prompt
+              <textarea id="configuration-subtitle-ai-prompt-template" class="ai-test-prompt" rows="14" maxlength="131072" required spellcheck="false" aria-describedby="configuration-subtitle-ai-prompt-status"></textarea>
+              <small id="configuration-subtitle-ai-prompt-status">字幕压缩包的“AI 匹配字幕”按钮使用此独立模板；保存后立即生效。</small>
+            </label>
+            <div class="configuration-archive-actions">
+              <button id="configuration-subtitle-ai-prompt-save" type="button" class="primary-button">保存字幕 Prompt</button>
+              <button id="configuration-subtitle-ai-prompt-reset" type="button" class="secondary-button">恢复字幕默认 Prompt</button>
+            </div>
           </div>
         </fieldset>
         <fieldset class="wide">

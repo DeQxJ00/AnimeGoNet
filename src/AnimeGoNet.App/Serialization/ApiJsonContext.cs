@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using AnimeGoNet.App.Api;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Feeds;
+using AnimeGoNet.App.Library;
 using AnimeGoNet.App.Metadata;
 
 namespace AnimeGoNet.App.Serialization;
@@ -125,6 +126,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(SubtitleArchiveConfirmRequest))]
 [JsonSerializable(typeof(SubtitleArchiveConfirmResponse))]
 [JsonSerializable(typeof(SubtitleArchiveAiMatchResponse))]
+[JsonSerializable(typeof(SubtitleAiPromptSettings))]
+[JsonSerializable(typeof(SubtitleAiPromptUpdate))]
 [JsonSerializable(typeof(DirectoryDatabaseStatusResponse))]
 [JsonSerializable(typeof(DataUpdateStatusResponse))]
 [JsonSerializable(typeof(BangumiArchiveUsageResponse))]

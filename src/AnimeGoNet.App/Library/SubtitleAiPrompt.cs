@@ -1,3 +1,7 @@
+using System.Text;
+using AnimeGoNet.App.Metadata;
+using AnimeGoNet.Core.Configuration;
+
 namespace AnimeGoNet.App.Library;
 
 internal static class SubtitleAiPrompt
@@ -22,4 +26,107 @@ internal static class SubtitleAiPrompt
         Bangumi EP 候选：{{OPTIONAL_BGM_EPISODE_CANDIDATE_JSON}}，日期优先={{USE_BANGUMI_PUBDATE_FIRST_JSON}}
         输出示例：{"matched":true,"tmdb_id":12345,"files":[{"name":"01.zh.ass","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}
         """;
+}
+
+public sealed record SubtitleAiPromptSettings(
+    string PromptVersion,
+    string Template,
+    string DefaultTemplate,
+    int MaximumLength,
+    bool Customized);
+
+public sealed record SubtitleAiPromptUpdate(string Template);
+
+public sealed class SubtitleAiPromptStore : IDisposable
+{
+    private const string FileName = "subtitle-ai-prompt.txt";
+    private readonly string _path;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public SubtitleAiPromptStore(DirectoryLayout layout)
+    {
+        Directory.CreateDirectory(layout.ConfigurationPath);
+        _path = Path.Combine(layout.ConfigurationPath, FileName);
+    }
+
+    public void Dispose() => _gate.Dispose();
+
+    public async Task<string> GetTemplateAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!File.Exists(_path))
+            {
+                return SubtitleAiPrompt.Template;
+            }
+
+            var value = await File.ReadAllTextAsync(_path, Encoding.UTF8, cancellationToken)
+                .ConfigureAwait(false);
+            return string.IsNullOrWhiteSpace(value) ? SubtitleAiPrompt.Template : value;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<SubtitleAiPromptSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var template = await GetTemplateAsync(cancellationToken).ConfigureAwait(false);
+        return new(
+            SubtitleAiPrompt.Version,
+            template,
+            SubtitleAiPrompt.Template,
+            AiMetadataPromptRenderer.MaximumTemplateLength,
+            !string.Equals(template, SubtitleAiPrompt.Template, StringComparison.Ordinal));
+    }
+
+    public async Task<SubtitleAiPromptSettings> SaveAsync(
+        string template,
+        CancellationToken cancellationToken = default)
+    {
+        template = template.Replace("\r\n", "\n", StringComparison.Ordinal);
+        AiMetadataPromptRenderer.ValidateTemplate(template);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await File.WriteAllTextAsync(_path, template, new UTF8Encoding(false), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        return new(
+            SubtitleAiPrompt.Version,
+            template,
+            SubtitleAiPrompt.Template,
+            AiMetadataPromptRenderer.MaximumTemplateLength,
+            !string.Equals(template, SubtitleAiPrompt.Template, StringComparison.Ordinal));
+    }
+
+    public async Task<SubtitleAiPromptSettings> ResetAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (File.Exists(_path))
+            {
+                File.Delete(_path);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        return new(
+            SubtitleAiPrompt.Version,
+            SubtitleAiPrompt.Template,
+            SubtitleAiPrompt.Template,
+            AiMetadataPromptRenderer.MaximumTemplateLength,
+            false);
+    }
 }

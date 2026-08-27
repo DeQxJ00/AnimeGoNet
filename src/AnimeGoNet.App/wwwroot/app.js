@@ -5342,6 +5342,68 @@ async function resetConfigurationAiPrompt() {
         button.disabled = activeConfigurationLockedFields.has("ai_prompt_template");
     }
 }
+async function loadSubtitleAiPrompt() {
+    const editor = element("#configuration-subtitle-ai-prompt-template");
+    const status = element("#configuration-subtitle-ai-prompt-status");
+    if (!editor || !status)
+        return;
+    try {
+        const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const settings = await response.json();
+        editor.value = settings.template;
+        status.textContent = `${settings.prompt_version} · ${settings.customized ? "自定义模板" : "程序默认模板"}；保存后立即生效。`;
+    }
+    catch (error) {
+        status.textContent = `字幕 AI Prompt 读取失败：${errorMessage(error, "未知错误")}`;
+    }
+}
+async function saveSubtitleAiPrompt() {
+    const editor = element("#configuration-subtitle-ai-prompt-template");
+    const status = element("#configuration-subtitle-ai-prompt-status");
+    const button = element("#configuration-subtitle-ai-prompt-save");
+    button.disabled = true;
+    status.textContent = "正在校验并保存字幕 AI Prompt…";
+    try {
+        const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", {
+            method: "PUT",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ template: editor.value }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const settings = await response.json();
+        editor.value = settings.template;
+        status.textContent = `${settings.prompt_version} · 已保存并立即生效。`;
+    }
+    catch (error) {
+        status.textContent = `字幕 AI Prompt 保存失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
+    }
+}
+async function resetSubtitleAiPrompt() {
+    const editor = element("#configuration-subtitle-ai-prompt-template");
+    const status = element("#configuration-subtitle-ai-prompt-status");
+    const button = element("#configuration-subtitle-ai-prompt-reset");
+    button.disabled = true;
+    try {
+        const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", { method: "DELETE", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const settings = await response.json();
+        editor.value = settings.template;
+        status.textContent = `${settings.prompt_version} · 已恢复程序默认并立即生效。`;
+    }
+    catch (error) {
+        status.textContent = `字幕 AI Prompt 恢复失败：${errorMessage(error, "未知错误")}`;
+    }
+    finally {
+        button.disabled = false;
+    }
+}
 function formatBytes(value) {
     if (value < 1024)
         return `${value} B`;
@@ -11246,6 +11308,8 @@ element("#configuration-close").addEventListener("click", () => configurationDia
 element("#configuration-form").addEventListener("submit", (event) => void previewConfiguration(event));
 element("#configuration-confirm").addEventListener("click", () => void confirmConfiguration());
 element("#configuration-ai-prompt-reset").addEventListener("click", () => void resetConfigurationAiPrompt());
+element("#configuration-subtitle-ai-prompt-save").addEventListener("click", () => void saveSubtitleAiPrompt());
+element("#configuration-subtitle-ai-prompt-reset").addEventListener("click", () => void resetSubtitleAiPrompt());
 element("#configuration-form").addEventListener("input", () => {
     const preview = element("#configuration-preview");
     if (pendingConfigurationRequest || !preview.hidden) {
@@ -11629,6 +11693,7 @@ connectLiveLogs();
 void loadLibrary();
 void loadMovieLibrary();
 void loadConfiguration().then(() => loadDeploymentDataPath());
+void loadSubtitleAiPrompt();
 void loadWebUiAuthentication();
 void loadWebApiCompatibility();
 void loadU2WebApiCompatibility();

@@ -57,6 +57,9 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/status", Status);
         app.MapPost("/api/v1/runtime/restart", RestartRuntime);
         app.MapGet("/api/v1/ai-test/prompt", GetAiMetadataTestPrompt);
+        app.MapGet("/api/v1/configuration/subtitle-ai-prompt", GetSubtitleAiPrompt);
+        app.MapPut("/api/v1/configuration/subtitle-ai-prompt", PutSubtitleAiPrompt);
+        app.MapDelete("/api/v1/configuration/subtitle-ai-prompt", ResetSubtitleAiPrompt);
         AiTesterApiEndpoints.Map(app);
         app.MapGet("/api/v1/plugins", ExternalPluginConfigurations);
         app.MapPut(
@@ -492,6 +495,36 @@ public static class ApiEndpoints
             referenceHttpClient: CreateClient(),
             ownsReferenceHttpClient: true);
     }
+
+    private static async Task<Ok<SubtitleAiPromptSettings>> GetSubtitleAiPrompt(
+        SubtitleAiPromptStore prompts,
+        CancellationToken cancellationToken) =>
+        TypedResults.Ok(await prompts.GetSettingsAsync(cancellationToken).ConfigureAwait(false));
+
+    private static async Task<IResult> PutSubtitleAiPrompt(
+        SubtitleAiPromptUpdate request,
+        SubtitleAiPromptStore prompts,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Template))
+        {
+            return TypedResults.BadRequest(Error("subtitle_ai_prompt_invalid", "字幕 AI Prompt 不能为空。"));
+        }
+
+        try
+        {
+            return TypedResults.Ok(await prompts.SaveAsync(request.Template, cancellationToken).ConfigureAwait(false));
+        }
+        catch (AiMetadataMatcherException exception)
+        {
+            return TypedResults.BadRequest(Error(exception.SafeCode, "字幕 AI Prompt 校验失败。"));
+        }
+    }
+
+    private static async Task<Ok<SubtitleAiPromptSettings>> ResetSubtitleAiPrompt(
+        SubtitleAiPromptStore prompts,
+        CancellationToken cancellationToken) =>
+        TypedResults.Ok(await prompts.ResetAsync(cancellationToken).ConfigureAwait(false));
 
     private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value);
 
@@ -7076,6 +7109,7 @@ public static class ApiEndpoints
     private static async Task<IResult> AiMatchSubtitleArchive(
         string sessionId,
         SubtitleArchiveImportService importer,
+        SubtitleAiPromptStore prompts,
         IAiMetadataMatcher matcher,
         CancellationToken cancellationToken)
     {
@@ -7089,7 +7123,7 @@ public static class ApiEndpoints
             session.Candidates.Select(value => new AiMetadataFileInput(value.FileName, value.SizeBytes)).ToArray(),
             null, null, null, session.Candidates.Count, null, null, false)
         {
-            PromptTemplateOverride = SubtitleAiPrompt.Template,
+            PromptTemplateOverride = await prompts.GetTemplateAsync(cancellationToken).ConfigureAwait(false),
         };
         try
         {
