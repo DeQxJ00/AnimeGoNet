@@ -112,7 +112,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                          FROM metadata_resolution_attempts AS attempt
                          JOIN metadata_resolution_runs AS prior_run ON prior_run.id = attempt.run_id
                          WHERE prior_run.task_id = task.id
-                           AND attempt.strategy IN ('ai_metadata', 'ai_season', 'ai_episode'))
+                           AND attempt.strategy IN ('ai_metadata', 'ai_season', 'ai_episode')
+                           AND (
+                             attempt.stage <> 'episode'
+                             OR attempt.result <> 'matched'
+                             OR prior_run.status = 'resolved'))
                        , EXISTS (
                            SELECT 1 FROM other_file_readaptation_jobs AS readaptation
                            WHERE readaptation.task_id = task.id
@@ -635,6 +639,32 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
         }
 
         return attemptId;
+    }
+
+    public async Task<bool> RenewMetadataLeaseAsync(
+        MetadataTaskClaim claim,
+        DateTimeOffset utcNow,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE metadata_resolution_runs
+            SET lease_expires_at_utc = $lease_expires_at_utc
+            WHERE id = $run_id
+              AND task_id = $task_id
+              AND status = 'running'
+              AND lease_token = $lease_token;
+            """;
+        command.Parameters.AddWithValue("$lease_expires_at_utc", Format(utcNow.Add(leaseDuration)));
+        command.Parameters.AddWithValue("$run_id", claim.RunId);
+        command.Parameters.AddWithValue("$task_id", claim.TaskId);
+        command.Parameters.AddWithValue("$lease_token", claim.LeaseToken);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
 
     public async Task CompleteMovieAsync(

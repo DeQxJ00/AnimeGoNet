@@ -408,6 +408,93 @@ public sealed class MetadataResolutionStoreTests
     }
 
     [Fact]
+    public async Task InterruptedMatchedAiEpisodeDoesNotSuppressRetry()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.CompleteSeasonAsync(
+            claim,
+            new TmdbSeries(72517, "来自深渊", "メイドインアビス", null),
+            new TmdbSeason(204984, 72517, 2, "Season 2", null, 12),
+            now);
+
+        var episodeClaim = Assert.IsType<MetadataEpisodeTaskClaim>(
+            await fixture.Store.TryClaimNextSeasonResolvedAsync(
+                now.AddSeconds(1),
+                TimeSpan.FromMinutes(1)));
+        await fixture.Store.RecordAttemptAsync(
+            episodeClaim.Resolution,
+            new MetadataAttempt(
+                "episode",
+                "ai_metadata",
+                null,
+                "matched",
+                null,
+                false,
+                episodeClaim.Resolution.AttemptNumber,
+                10),
+            now.AddSeconds(2));
+
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE metadata_resolution_runs
+                SET status = 'interrupted', lease_token = NULL,
+                    lease_expires_at_utc = NULL, completed_at_utc = $completed_at
+                WHERE id = $run_id;
+
+                UPDATE ingest_tasks
+                SET status = 'metadata_season_resolved'
+                WHERE id = $task_id;
+                """;
+            command.Parameters.AddWithValue("$completed_at", now.AddSeconds(3).ToString("O"));
+            command.Parameters.AddWithValue("$run_id", episodeClaim.Resolution.RunId);
+            command.Parameters.AddWithValue("$task_id", fixture.TaskId);
+            Assert.Equal(2, await command.ExecuteNonQueryAsync());
+        }
+
+        var retryClaim = Assert.IsType<MetadataEpisodeTaskClaim>(
+            await fixture.Store.TryClaimNextSeasonResolvedAsync(
+                now.AddSeconds(4),
+                TimeSpan.FromMinutes(1)));
+
+        Assert.False(retryClaim.AiMetadataAttempted);
+    }
+
+    [Fact]
+    public async Task RenewMetadataLeaseExtendsActiveRun()
+    {
+        await using var fixture = await MetadataFixture.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var claim = Assert.IsType<MetadataTaskClaim>(
+            await fixture.Store.TryClaimNextDownloadedAsync(
+                now,
+                TimeSpan.FromMinutes(1)));
+
+        Assert.True(await fixture.Store.RenewMetadataLeaseAsync(
+            claim,
+            now.AddMinutes(2),
+            TimeSpan.FromMinutes(5)));
+
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT lease_expires_at_utc
+            FROM metadata_resolution_runs
+            WHERE id = $run_id;
+            """;
+        command.Parameters.AddWithValue("$run_id", claim.RunId);
+        Assert.Equal(
+            now.AddMinutes(7).ToString("O"),
+            (string?)await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task FailedUnifiedAiAttemptIsRememberedAfterDeterministicSeasonFallback()
     {
         await using var fixture = await MetadataFixture.CreateAsync();

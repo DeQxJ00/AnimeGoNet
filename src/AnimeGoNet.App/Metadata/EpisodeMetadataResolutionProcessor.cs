@@ -35,6 +35,10 @@ public sealed class EpisodeMetadataResolutionProcessor(
         {
             return false;
         }
+        await using var leaseHeartbeat = new MetadataLeaseHeartbeat(
+            resolutions,
+            claim.Resolution,
+            _timeProvider);
         using var refresh = refreshScope?.Begin(claim.IsOtherReadaptation);
 
         var rule = claim.Resolution.MikanId is null
@@ -582,6 +586,60 @@ public sealed class EpisodeMetadataResolutionProcessor(
         season?.Episodes is null
         || sourceCandidates.Any(candidate =>
             !season.Episodes.Any(episode => episode.EpisodeNumber == candidate));
+
+    private sealed class MetadataLeaseHeartbeat : IAsyncDisposable
+    {
+        private static readonly TimeSpan RenewalInterval = TimeSpan.FromMinutes(1);
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Task _loop;
+
+        public MetadataLeaseHeartbeat(
+            MetadataResolutionStore resolutions,
+            MetadataTaskClaim claim,
+            TimeProvider timeProvider)
+        {
+            _loop = RunAsync(resolutions, claim, timeProvider, _stop.Token);
+        }
+
+        private static async Task RunAsync(
+            MetadataResolutionStore resolutions,
+            MetadataTaskClaim claim,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(RenewalInterval, cancellationToken).ConfigureAwait(false);
+                    if (!await resolutions.RenewMetadataLeaseAsync(
+                            claim,
+                            timeProvider.GetUtcNow(),
+                            LeaseDuration,
+                            cancellationToken).ConfigureAwait(false))
+                    {
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _stop.Cancel();
+            try
+            {
+                await _loop.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+            {
+            }
+            _stop.Dispose();
+        }
+    }
 
     private sealed record EpisodeDateContext(
         IReadOnlyList<BangumiEpisode> BangumiEpisodes,
