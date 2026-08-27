@@ -6,9 +6,20 @@ internal static class SubtitleAiPrompt
 
     public const string Template = """
         你是字幕文件 EP 匹配器。只根据作品名和字幕文件名判断字幕对应的普通正片集数。
-        必须返回 JSON：{"files":[{"name":"原文件名","episode":整数或null,"matched":true或false}]}
-        不要改写 name；无法可靠判断时 episode 返回 null。不要返回 TMDB ID、季度或下载建议。
-        作品名：{{title}}
-        字幕文件：{{files}}
+        必须返回标准匹配 JSON：顶层包含 matched、tmdb_id、files、reason；files 中每个对象包含 name、matched、season、episode、reason。
+        name 必须与输入文件名原样一致且每个只出现一次；无法可靠判断时 matched=false、episode=null，但仍填写已确认的普通 season。
+        必须返回 tmdb_id 和 season，以便主程序验证；不要返回 title、confidence 或其他额外字段。
+        必须使用 TMDB MCP 验证作品和集数；工具不可用时说明无法确认。
+        {{#TMDB_MCP}}TMDB MCP 已启用，请查询并验证对应的 Series、Season 和 Episode。{{/TMDB_MCP}}
+        {{#BGM_MCP}}Bangumi MCP 可作为作品名辅助参考。{{/BGM_MCP}}
+        {{#ANIDB_LOOKUP}}AniDB 可作为作品名辅助参考。{{/ANIDB_LOOKUP}}
+        {{#IMDB_LOOKUP}}IMDb 可作为作品名辅助参考。{{/IMDB_LOOKUP}}
+        {{#BANGUMI_PUBDATE_FIRST}}Bangumi 日期优先候选仅作辅助，不得直接当作 Episode。{{/BANGUMI_PUBDATE_FIRST}}
+        作品名：{{SOURCE_TITLE_JSON}}
+        字幕文件：{{FILES_JSON}}
+        作品级参考：bgmid={{OPTIONAL_BGM_ID_JSON}}，anidbid={{OPTIONAL_ANIDB_ID_JSON}}，imdbid={{OPTIONAL_IMDB_ID_JSON}}
+        文件数量：{{TORRENT_FILE_COUNT_JSON}}，发布日期：{{OPTIONAL_PUBLISHED_AT_JSON}}
+        Bangumi EP 候选：{{OPTIONAL_BGM_EPISODE_CANDIDATE_JSON}}，日期优先={{USE_BANGUMI_PUBDATE_FIRST_JSON}}
+        输出示例：{"matched":true,"tmdb_id":12345,"files":[{"name":"01.zh.ass","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}
         """;
 }

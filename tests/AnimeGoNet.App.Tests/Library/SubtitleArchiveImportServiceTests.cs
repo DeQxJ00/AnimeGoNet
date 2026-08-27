@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using AnimeGoNet.App.Library;
+using AnimeGoNet.App.Metadata;
 using AnimeGoNet.Core.Configuration;
 
 namespace AnimeGoNet.App.Tests.Library;
@@ -76,6 +77,12 @@ public sealed class SubtitleArchiveImportServiceTests
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void SubtitlePromptSatisfiesMetadataPromptContract()
+    {
+        AiMetadataPromptRenderer.ValidateTemplate(SubtitleAiPrompt.Template);
     }
 
     private static async Task AddAsync(ZipArchive archive, string name, string content)
