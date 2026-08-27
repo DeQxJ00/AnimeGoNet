@@ -1,5 +1,7 @@
 using AnimeGoNet.App.Library;
 using AnimeGoNet.Core.Configuration;
+using System.Globalization;
+using Xunit.Abstractions;
 using Xunit.Sdk;
 
 namespace AnimeGoNet.LocalIntegration.Tests;
@@ -9,7 +11,7 @@ namespace AnimeGoNet.LocalIntegration.Tests;
 /// The fixture directory is intentionally ignored so private media/subtitle data
 /// cannot be staged accidentally.
 /// </summary>
-public sealed class SubtitleArchiveFixtureTests
+public sealed class SubtitleArchiveFixtureTests(ITestOutputHelper output)
 {
     private static readonly string[] SupportedExtensions =
     [
@@ -60,6 +62,50 @@ public sealed class SubtitleArchiveFixtureTests
                     seriesName: "Subtitle Fixture Show");
 
                 Assert.NotEmpty(session.Candidates);
+                output.WriteLine(
+                    "{0}: {1} subtitle candidates",
+                    Path.GetFileName(archivePath),
+                    session.Candidates.Count);
+                foreach (var candidate in session.Candidates)
+                {
+                    output.WriteLine(
+                        "  {0} | {1} bytes | EP={2} | range={3}",
+                        candidate.RelativePath,
+                        candidate.SizeBytes,
+                        candidate.ParsedEpisode?.ToString(CultureInfo.InvariantCulture) ?? "unresolved",
+                        candidate.ParsedRange ?? "-");
+                }
+
+                var restored = await service.GetAsync(session.SessionId);
+                Assert.NotNull(restored);
+                Assert.Equal(session.Candidates.Count, restored.Candidates.Count);
+
+                var assignments = session.Candidates
+                    .Select(candidate => new SubtitleArchiveAssignment(
+                        candidate.Id,
+                        candidate.ParsedEpisode))
+                    .ToArray();
+                var confirmation = await service.ConfirmAsync(
+                    session.SessionId,
+                    assignments,
+                    paths.SavePath);
+                Assert.NotNull(confirmation);
+                Assert.Equal(
+                    session.Candidates.Count,
+                    confirmation.ImportedCount + confirmation.ExtrasCount);
+                Assert.Null(await service.GetAsync(session.SessionId));
+
+                var copied = Directory.EnumerateFiles(
+                        paths.SavePath,
+                        "*",
+                        SearchOption.AllDirectories)
+                    .ToArray();
+                Assert.Equal(session.Candidates.Count, copied.Length);
+                output.WriteLine(
+                    "  confirmed: {0} episode subtitles, {1} Extras, {2} files copied",
+                    confirmation.ImportedCount,
+                    confirmation.ExtrasCount,
+                    copied.Length);
                 results.Add($"{Path.GetFileName(archivePath)}: {session.Candidates.Count} subtitle candidates");
             }
             catch (Exception exception) when (exception is not XunitException)

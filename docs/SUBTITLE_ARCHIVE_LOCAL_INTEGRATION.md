@@ -16,6 +16,8 @@ Remove-Item Env:ANIMEGONET_SUBTITLE_ARCHIVE_INTEGRATION
 
 测试会逐个打开 `subtitles-test` 目录及其子目录下的已支持压缩包，用真实的
 `SubtitleArchiveImportService` 解压、路径安全检查和集数解析，并要求每个压缩包至少得到一个字幕候选。
+随后会重新读取暂存会话、确认导入全部候选，并验证 EP/Extras 计数、目标文件实际落盘数量和会话清理。
+使用详细控制台日志时会逐条输出候选相对路径、大小、解析 EP 和集数范围，便于定位真实文件名兼容问题。
 每个夹具都使用独立临时 `data_path`，测试结束后清理临时目录，不会写入正式动画库，也不会连接 TMDB、AI、qBittorrent 或外部网络。
 
 未设置 `ANIMEGONET_SUBTITLE_ARCHIVE_INTEGRATION=1` 时，测试会直接拒绝运行并提示显式开关；目录不存在或目录中没有支持格式也会给出明确断言。因此默认 CI 和普通测试不会依赖本机私有夹具（该 LocalIntegration 项目不在默认解决方案门禁中）。

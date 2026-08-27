@@ -45,7 +45,7 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
         ".ass", ".ssa", ".srt", ".vtt", ".sub", ".idx", ".sup", ".smi", ".ttml", ".xml"
     };
     private static readonly Regex EpisodeMarker = new(
-        @"(?:\bS\d{1,2}[ ._-]*)?E(?<ep>\d{1,4})(?:\b|[-_.])|(?:^|[ ._\-\[\(])(?<ep2>\d{1,3})(?:[-~](?<ep3>\d{1,3}))?(?:[ ._\-\]\)]|$)",
+        @"(?:\bS\d{1,2}[ ._-]*)?E(?<ep>\d{1,4})(?:\b|[-_.])|第(?<epc>\d{1,4})[话話集]|(?:^|[ ._\-\[\(])(?<ep2>\d{1,3})(?!\.\d)(?:[-~](?<range_end>\d{1,3}))?(?:[ ._\-\]\)]|$)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private string Root => Path.Combine(layout.StagingPath, "subtitle-imports");
@@ -253,9 +253,13 @@ public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
     {
         var match = EpisodeMarker.Match(Path.GetFileNameWithoutExtension(name));
         if (!match.Success) return (null, null);
-        var value = match.Groups["ep"].Success ? match.Groups["ep"].Value : match.Groups["ep2"].Value;
+        var value = match.Groups["ep"].Success
+            ? match.Groups["ep"].Value
+            : match.Groups["epc"].Success
+                ? match.Groups["epc"].Value
+                : match.Groups["ep2"].Value;
         if (!int.TryParse(value, out var episode) || episode <= 0) return (null, null);
-        var end = match.Groups["ep3"];
+        var end = match.Groups["range_end"];
         return (episode, end.Success ? $"{episode}-{end.Value}" : null);
     }
 

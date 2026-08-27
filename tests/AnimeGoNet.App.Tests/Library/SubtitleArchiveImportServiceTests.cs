@@ -113,6 +113,51 @@ public sealed class SubtitleArchiveImportServiceTests
     }
 
     [Fact]
+    public async Task ImportParsesJapaneseEpisodeMarkersWithoutTreatingAudioChannelsAsEpisodes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-subtitle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = AnimeGoDefaults.CreateNative(root).Paths;
+            var service = new SubtitleArchiveImportService(DirectoryLayout.From(paths));
+            await using var archive = new MemoryStream();
+            using (var zip = new ZipArchive(archive, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                await AddAsync(
+                    zip,
+                    "[アニメ DVD] 機動戦艦ナデシコ 第01話 (WMV9 640x480 AC3 5.1ch).ass",
+                    "ep1");
+                await AddAsync(
+                    zip,
+                    "[アニメ DVD] 機動戦艦ナデシコ 第26話 (WMV9 640x480 AC3 5.1ch).ass",
+                    "ep26");
+                await AddAsync(zip, "音声 AC3 5.1ch.ass", "unmatched");
+            }
+            archive.Position = 0;
+
+            var session = await service.ImportAsync(archive, "subtitles.zip", 123, 1, "Show");
+
+            Assert.Equal(3, session.Candidates.Count);
+            Assert.Equal(
+                1,
+                Assert.Single(session.Candidates, value => value.FileName.Contains("第01話", StringComparison.Ordinal))
+                    .ParsedEpisode);
+            Assert.Equal(
+                26,
+                Assert.Single(session.Candidates, value => value.FileName.Contains("第26話", StringComparison.Ordinal))
+                    .ParsedEpisode);
+            Assert.Null(
+                Assert.Single(session.Candidates, value => value.FileName.StartsWith("音声", StringComparison.Ordinal))
+                    .ParsedEpisode);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void SubtitlePromptSatisfiesMetadataPromptContract()
     {
         AiMetadataPromptRenderer.ValidateTemplate(SubtitleAiPrompt.Template);
