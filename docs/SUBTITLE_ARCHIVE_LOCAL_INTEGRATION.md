@@ -24,6 +24,14 @@ Remove-Item Env:ANIMEGONET_SUBTITLE_ARCHIVE_INTEGRATION
 
 可用格式与应用上传限制仍以 WebUI/API 文档为准：单个上传不超过 512 MiB，单个字幕不超过 128 MiB，解压字幕总量不超过 512 MiB，最多 500 个字幕候选。
 
+## 字幕 AI 匹配边界
+
+字幕 AI 使用独立的 `subtitle-v2` 提示词。输入文件标识为压缩包内相对路径，模型必须保持原顺序和原文；已确认的 TMDB Series ID 与 Season 不允许被模型修改。简体、繁体、双语和不同格式字幕可以共同映射到同一个 Episode。
+
+模型结果返回后，主程序还会验证 Series、Season 和每个不同的 Episode。任何相对路径变更、Series/Season 变更、汇总状态不一致或 TMDB Episode 不存在都会拒绝整次建议，不会自动写入导入表单。AI 仅回填候选，用户仍需在 WebUI 中复核并确认导入。
+
+字幕 AI 单元测试使用 fake 模型和 fake TMDB，不调用真实外部服务；真实压缩包夹具测试也不会消耗 AI Token。
+
 ## 清理与 Git 检查
 
 测试不会删除 `subtitles-test` 中的源文件。确认目录被忽略：

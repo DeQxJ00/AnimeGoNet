@@ -553,6 +553,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<TmdbMovieResolver>();
         builder.Services.AddSingleton<SubtitleArchiveImportService>();
         builder.Services.AddSingleton<SubtitleAiPromptStore>();
+        builder.Services.AddSingleton<SubtitleArchiveAiMatchService>();
         builder.Services.AddSingleton<U2AniDbMetadataResolver>(services =>
             new U2AniDbMetadataResolver(
                 MetadataHttpClientFactory.Create(

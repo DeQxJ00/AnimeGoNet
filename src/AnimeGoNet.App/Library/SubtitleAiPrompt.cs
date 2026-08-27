@@ -6,15 +6,20 @@ namespace AnimeGoNet.App.Library;
 
 internal static class SubtitleAiPrompt
 {
-    public const string Version = "subtitle-v1";
+    public const string Version = "subtitle-v2";
 
     public const string Template = """
-        你是字幕文件 EP 匹配器。只根据作品名和字幕文件名判断字幕对应的普通正片集数。
-        必须返回标准匹配 JSON：顶层包含 matched、tmdb_id、files、reason；files 中每个对象包含 name、matched、season、episode、reason。
-        name 必须与输入文件名原样一致且每个只出现一次；无法可靠判断时 matched=false、episode=null，但仍填写已确认的普通 season。
-        必须返回 tmdb_id 和 season，以便主程序验证；不要返回 title、confidence 或其他额外字段。
-        必须使用 TMDB MCP 验证作品和集数；工具不可用时说明无法确认。
-        {{#TMDB_MCP}}TMDB MCP 已启用，请查询并验证对应的 Series、Season 和 Episode。{{/TMDB_MCP}}
+        你是 AnimeGoNet 的字幕文件 Episode 匹配器。主程序已确认 TMDB Series ID 和普通 Season，它们会写在作品上下文中，属于不可修改的固定值。
+        你的任务只是判断压缩包内每个字幕文件是否属于该 Season 的某个普通正片 Episode。
+        必须返回标准匹配 JSON：顶层只包含 matched、tmdb_id、files、reason；files 中每个对象只包含 name、matched、season、episode、reason。
+        tmdb_id 必须原样返回已确认的 TMDB Series ID；每个 season 必须原样返回已确认的 Season。不得搜索后改成其他作品或季度。
+        name 是字幕在压缩包内的相对路径，不只是文件名。每个输入 name 必须按原顺序、原样出现一次，不能增删、改写、排序或只保留 basename。
+        同一 Episode 可以有简体、繁体、双语或不同格式的多个字幕文件，因此多个文件映射到同一 Episode 是合法的。
+        只从路径、文件名、作品上下文和 TMDB 的普通正片 Episode 证据判断；不得把分辨率、年份、CRC、音轨数字（如 5.1）当成集数。
+        NCOP、NCED、OP、ED、PV、CM、Menu、Fonts、Scans、SP、特典以及无法可靠确认的文件必须 matched=false、episode=null，并写明 reason；season 仍返回固定 Season。
+        顶层 matched 仅表示至少一个文件成功匹配；没有任何文件匹配时必须 matched=false 并填写顶层 reason。
+        不要返回 title、confidence、候选列表、解释段落或任何额外字段。
+        {{#TMDB_MCP}}TMDB MCP 已启用。必须验证固定 Series、固定 Season，以及每个成功结果对应的普通 Episode；工具失败或查无该 Episode 时不得猜测。{{/TMDB_MCP}}
         {{#BGM_MCP}}Bangumi MCP 可作为作品名辅助参考。{{/BGM_MCP}}
         {{#ANIDB_LOOKUP}}AniDB 可作为作品名辅助参考。{{/ANIDB_LOOKUP}}
         {{#IMDB_LOOKUP}}IMDb 可作为作品名辅助参考。{{/IMDB_LOOKUP}}
@@ -24,7 +29,7 @@ internal static class SubtitleAiPrompt
         作品级参考：bgmid={{OPTIONAL_BGM_ID_JSON}}，anidbid={{OPTIONAL_ANIDB_ID_JSON}}，imdbid={{OPTIONAL_IMDB_ID_JSON}}
         文件数量：{{TORRENT_FILE_COUNT_JSON}}，发布日期：{{OPTIONAL_PUBLISHED_AT_JSON}}
         Bangumi EP 候选：{{OPTIONAL_BGM_EPISODE_CANDIDATE_JSON}}，日期优先={{USE_BANGUMI_PUBDATE_FIRST_JSON}}
-        输出示例：{"matched":true,"tmdb_id":12345,"files":[{"name":"01.zh.ass","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}
+        输出示例：{"matched":true,"tmdb_id":12345,"files":[{"name":"Subs/01.zh-Hans.ass","matched":true,"season":1,"episode":1,"reason":null},{"name":"Subs/01.zh-Hant.ass","matched":true,"season":1,"episode":1,"reason":null},{"name":"Extras/NCOP.ass","matched":false,"season":1,"episode":null,"reason":"non_episode_extra"}],"reason":null}
         """;
 }
 

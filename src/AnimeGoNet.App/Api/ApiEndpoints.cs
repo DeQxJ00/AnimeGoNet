@@ -7109,8 +7109,7 @@ public static class ApiEndpoints
     private static async Task<IResult> AiMatchSubtitleArchive(
         string sessionId,
         SubtitleArchiveImportService importer,
-        SubtitleAiPromptStore prompts,
-        IAiMetadataMatcher matcher,
+        SubtitleArchiveAiMatchService aiMatcher,
         CancellationToken cancellationToken)
     {
         var session = await importer.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -7118,27 +7117,11 @@ public static class ApiEndpoints
         {
             return TypedResults.NotFound(Error("subtitle_import_session_not_found", "字幕导入会话已过期或不存在。"));
         }
-        var input = new AiMetadataMatchInput(
-            session.SeriesName,
-            session.Candidates.Select(value => new AiMetadataFileInput(value.FileName, value.SizeBytes)).ToArray(),
-            null, null, null, session.Candidates.Count, null, null, false)
-        {
-            PromptTemplateOverride = await prompts.GetTemplateAsync(cancellationToken).ConfigureAwait(false),
-        };
         try
         {
-            var response = await matcher.MatchAsync(input, cancellationToken).ConfigureAwait(false);
-            var byName = session.Candidates.ToDictionary(value => value.FileName, StringComparer.OrdinalIgnoreCase);
-            var assignments = response.Files is null
-                ? Array.Empty<SubtitleArchiveAssignment>()
-                : response.Files
-                    .Where(value => value.Matched == true && value.Episode is > 0 && value.Name is not null)
-                    .Where(value => byName.ContainsKey(value.Name!))
-                    .Select(value => new SubtitleArchiveAssignment(
-                        byName[value.Name!].Id, value.Episode))
-                    .ToArray();
+            var response = await aiMatcher.MatchAsync(session, cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new SubtitleArchiveAiMatchResponse(
-                SubtitleAiPrompt.Version, assignments, response.Reason, response.Usage));
+                SubtitleAiPrompt.Version, response.Assignments, response.Reason, response.Usage));
         }
         catch (AiMetadataMatcherException exception)
         {
