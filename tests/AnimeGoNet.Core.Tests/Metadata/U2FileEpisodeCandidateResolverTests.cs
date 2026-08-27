@@ -21,6 +21,8 @@ public sealed class U2FileEpisodeCandidateResolverTests
     [InlineData("[Group] Show S02E04 [1080p].mkv", 4)]
     [InlineData("[U2-RIP]GUNSLINGER GIRL 01 [兄妹- fratello -] (BD 1280X720 X264 FLAC).mkv", 1)]
     [InlineData("[U2-Rip] 戦う司書 the book of bantorra 27 「世界の力」 (BD 1920x1080 x264 FLACx2).mkv", 27)]
+    [InlineData("[アニメ BD] シグルイ SHIGURUI 01.第一景「駿府城御前試合」 (1920x1080 x264).mkv", 1)]
+    [InlineData("[アニメ BD] シグルイ SHIGURUI 12.第十二景「無明逆流れ」 (1920x1080 x264).mkv", 12)]
     public void UsesTheCopiedFilenameRulesForU2(string path, int expectedEpisode)
     {
         var result = U2FileEpisodeCandidateResolver.Resolve(path);

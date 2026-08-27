@@ -281,7 +281,7 @@ public static partial class U2FileEpisodeCandidateResolver
     private static partial Regex ExplicitEpisodeMarker();
 
     [GeneratedRegex(
-        @"(?<![A-Za-z0-9])(?<episode>\d{1,4})(?=\s*(?:\[|\(|「|【|$))",
+        @"(?<![A-Za-z0-9])(?<episode>\d{1,4})(?=\s*(?:\[|\(|「|【|$)|\.(?:\s*(?:第|[^\x00-\x7F])))",
         RegexOptions.CultureInvariant)]
     private static partial Regex StandaloneEpisodeMarker();
 
