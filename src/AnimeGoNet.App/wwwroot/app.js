@@ -7791,7 +7791,13 @@ async function loadMetadataAttempts(taskId, target, button) {
                 if (attempt.error_code || attempt.reason) {
                     const reason = document.createElement("p");
                     reason.className = "metadata-attempt-reason";
-                    reason.textContent = `${textOrDash(attempt.error_code)} · ${textOrDash(attempt.reason)} · ${attempt.retryable ? "可自动重试" : "不可自动重试"}`;
+                    const detailReason = attempt.error_code
+                        && attempt.reason
+                        && (attempt.reason === attempt.error_code
+                            || attempt.reason.startsWith(`${attempt.error_code} · `))
+                        ? attempt.reason.slice(attempt.error_code.length).replace(/^ · /, "")
+                        : attempt.reason;
+                    reason.textContent = `${textOrDash(attempt.error_code)} · ${textOrDash(detailReason)} · ${attempt.retryable ? "可自动重试" : "不可自动重试"}`;
                     row.append(reason);
                 }
                 return row;
