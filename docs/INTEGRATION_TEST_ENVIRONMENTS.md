@@ -27,3 +27,6 @@ Playwright 测试。源码只读挂载，`node_modules`、测试产物和 `/tmp`
 
 2026-08-11 的 Ubuntu x86_64 实跑结果见
 `docs/verification/2026-08-11-ubuntu-ct-docker-validation.md`。
+
+本机字幕压缩包夹具不属于 Docker 测试，放在被 Git 忽略的 `subtitles-test/` 下；运行方式和限制见
+`docs/SUBTITLE_ARCHIVE_LOCAL_INTEGRATION.md`。

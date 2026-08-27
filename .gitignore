@@ -41,6 +41,7 @@ publish/
 
 # Local qBittorrent integration sandbox and secrets
 TestSpace/
+/subtitles-test/
 /测试数据.csv
 *.local-integration.json
 .env
