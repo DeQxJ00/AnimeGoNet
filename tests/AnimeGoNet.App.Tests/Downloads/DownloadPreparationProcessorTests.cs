@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
 using AnimeGoNet.Data.Ingest;
 using Microsoft.Extensions.DependencyInjection;
@@ -88,6 +89,48 @@ public sealed class DownloadPreparationProcessorTests
             },
             duplicate => Assert.Equal((0, 0, false), (duplicate.Index, duplicate.Priority, duplicate.Wanted)),
             wanted => Assert.Equal((1, 1, true), (wanted.Index, wanted.Priority, wanted.Wanted)));
+    }
+
+    [Fact]
+    public async Task U2TorrentDownloadsEveryActualFileEvenWhenEpisodesAreDuplicates()
+    {
+        var client = new FakeDownloadClient
+        {
+            Files =
+            [
+                new DownloadFileSnapshot(0, "Show/EP01.mkv", 100, 0, 1),
+                new DownloadFileSnapshot(1, "Show/EP02.mkv", 200, 0, 1),
+                new DownloadFileSnapshot(2, "Show/NCOP.mkv", 50, 0, 1),
+                new DownloadFileSnapshot(3, "Show/.pad/123", 123, 0, 1),
+            ],
+        };
+        await using var app = await RunningApp.StartAsync(
+            downloadClientRegistry: new FakeRegistry(client),
+            configure: AddU2Source);
+        var taskId = await PrepareTaskAsync(
+            app,
+            [
+                ("Show/.pad/123", 123L, "extras"),
+                ("Show/EP01.mkv", 100L, "duplicate"),
+                ("Show/EP02.mkv", 200L, "episode"),
+                ("Show/NCOP.mkv", 50L, "ignored"),
+            ],
+            sourceAdapter: "u2");
+
+        var result = await app.App.Services.GetRequiredService<DownloadPreparationProcessor>().RunOnceAsync();
+
+        Assert.Equal(DownloadPreparationResult.Completed, result);
+        var priority = Assert.Single(client.PriorityCalls);
+        Assert.Equal([0, 1, 2, 3], priority.Indexes);
+        Assert.Equal(1, priority.Priority);
+        Assert.Single(client.Resumed);
+        Assert.Empty(client.Deleted);
+        var state = await ReadStateAsync(app, taskId);
+        Assert.Equal("download_queued", state.TaskStatus);
+        Assert.Equal("completed", state.PreparationPhase);
+        Assert.All(
+            state.Files.Where(file => !file.RelativePath.Contains("/.pad/", StringComparison.Ordinal)),
+            file => Assert.Equal((1, true), (file.Priority, file.Wanted)));
     }
 
     [Fact]
@@ -308,9 +351,10 @@ public sealed class DownloadPreparationProcessorTests
 
     private static async Task<string> PrepareTaskAsync(
         RunningApp app,
-        params (string Path, long Size, string Disposition)[] files)
+        (string Path, long Size, string Disposition)[] files,
+        string sourceAdapter = "mikan")
     {
-        const string payload = """
+        const string mikanPayload = """
             {
               "source": "mikan",
               "data": [{
@@ -319,6 +363,18 @@ public sealed class DownloadPreparationProcessorTests
               }]
             }
             """;
+        const string u2Payload = """
+            {
+              "source": "u2",
+              "data": [{
+                "torrent": "https://u2.invalid/passkey/download-preparation.torrent",
+                "info": { "title": "Download preparation", "source_work_id": "u2-preparation" }
+              }]
+            }
+            """;
+        var payload = string.Equals(sourceAdapter, "u2", StringComparison.OrdinalIgnoreCase)
+            ? u2Payload
+            : mikanPayload;
         using var response = await app.Client.PostAsync(
             "/api/v1/ingest",
             new StringContent(payload, Encoding.UTF8, "application/json"));
@@ -424,6 +480,24 @@ public sealed class DownloadPreparationProcessorTests
         Assert.Equal(2, await task.ExecuteNonQueryAsync());
     }
 
+    private static AnimeGoOptions AddU2Source(AnimeGoOptions options) => options with
+    {
+        InitialSourceProfiles =
+        [
+            .. options.InitialSourceProfiles,
+            new SourceProfileSeed
+            {
+                Id = "u2",
+                DisplayName = "U2",
+                Adapter = "u2",
+                MediaType = "tv",
+                DownloaderId = "pt",
+                FileStrategy = FileStrategy.Link,
+                AllowedTorrentHosts = ["u2.invalid"],
+            },
+        ],
+    };
+
     private static async Task SetOtherReasonAsync(
         RunningApp app,
         string taskId,
@@ -521,10 +595,10 @@ public sealed class DownloadPreparationProcessorTests
 
     private sealed class FakeRegistry(IDownloadClient client) : IDownloadClientRegistry
     {
-        public IReadOnlyCollection<string> InstanceIds => ["bt"];
+        public IReadOnlyCollection<string> InstanceIds => ["bt", "pt"];
 
         public IDownloadClient GetRequired(string instanceId) =>
-            instanceId == "bt" ? client : throw new KeyNotFoundException();
+            instanceId is "bt" or "pt" ? client : throw new KeyNotFoundException();
     }
 
     private sealed class FakeDownloadClient : IDownloadClient

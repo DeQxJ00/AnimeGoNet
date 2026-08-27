@@ -135,7 +135,14 @@ public sealed class DownloadPreparationProcessor(
             throw new PreparationFailureException("qbittorrent_metadata_pending");
         }
 
-        if (clientFiles.Count != claim.Files.Count
+        var allowsEpisodeSelectiveDownload = string.Equals(
+            claim.SourceAdapter,
+            "mikan",
+            StringComparison.OrdinalIgnoreCase);
+        var comparableClientFiles = allowsEpisodeSelectiveDownload
+            ? clientFiles.Where(file => !IsPaddingPath(file.RelativePath)).ToArray()
+            : [.. clientFiles];
+        if ((allowsEpisodeSelectiveDownload && comparableClientFiles.Length != claim.Files.Count)
             || clientFiles.Any(file => file.Index < 0 || file.SizeBytes < 0)
             || clientFiles.Select(file => file.Index).Distinct().Count() != clientFiles.Count)
         {
@@ -146,7 +153,7 @@ public sealed class DownloadPreparationProcessor(
         string[] expectedPaths;
         try
         {
-            byPath = clientFiles.ToDictionary(
+            byPath = comparableClientFiles.ToDictionary(
                 file => PortablePathNormalizer.NormalizeRelativePathForComparison(file.RelativePath),
                 StringComparer.Ordinal);
             expectedPaths = claim.Files
@@ -177,7 +184,8 @@ public sealed class DownloadPreparationProcessor(
                 throw new PreparationFailureException("download_file_manifest_mismatch");
             }
 
-            var wanted = file.Disposition is not ("duplicate" or "ignored");
+            var wanted = !allowsEpisodeSelectiveDownload
+                || file.Disposition is not ("duplicate" or "ignored");
             assignments.Add(new DownloadFileAssignment(
                 file.FileId,
                 clientFile.RelativePath,
@@ -188,25 +196,36 @@ public sealed class DownloadPreparationProcessor(
 
         var unwantedIndexes = assignments.Where(item => !item.Wanted).Select(item => item.DownloadFileIndex).ToArray();
         var wantedIndexes = assignments.Where(item => item.Wanted).Select(item => item.DownloadFileIndex).ToArray();
+        var downloadIndexes = allowsEpisodeSelectiveDownload
+            ? wantedIndexes
+            : clientFiles.Select(file => file.Index).ToArray();
+        var allSkipped = allowsEpisodeSelectiveDownload && downloadIndexes.Length == 0;
         var dynamicTags = await ApplyDynamicTagsAsync(
             client,
             claim,
-            wantedIndexes.Length == 0,
+            allSkipped,
             cancellationToken).ConfigureAwait(false);
 
-        if (unwantedIndexes.Length > 0)
+        if (allowsEpisodeSelectiveDownload && unwantedIndexes.Length > 0)
         {
             await client.SetFilePriorityAsync(claim.InfoHash, unwantedIndexes, 0, cancellationToken).ConfigureAwait(false);
         }
 
-        if (wantedIndexes.Length > 0)
+        if (downloadIndexes.Length > 0)
         {
-            await client.SetFilePriorityAsync(claim.InfoHash, wantedIndexes, 1, cancellationToken).ConfigureAwait(false);
+            await client.SetFilePriorityAsync(claim.InfoHash, downloadIndexes, 1, cancellationToken).ConfigureAwait(false);
             await client.ResumeAsync([claim.InfoHash], cancellationToken).ConfigureAwait(false);
         }
 
-        return new PreparedDownload(assignments, wantedIndexes.Length == 0, dynamicTags);
+        return new PreparedDownload(assignments, allSkipped, dynamicTags);
     }
+
+    private static bool IsPaddingPath(string path) =>
+        path.Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Any(component =>
+                string.Equals(component, ".pad", StringComparison.Ordinal)
+                || component.StartsWith("_____padding_file", StringComparison.Ordinal));
 
     private static async Task<DownloadDynamicTagAssignment> ApplyDynamicTagsAsync(
         IDownloadClient client,

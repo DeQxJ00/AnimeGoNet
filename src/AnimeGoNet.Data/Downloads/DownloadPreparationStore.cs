@@ -84,6 +84,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
 
         string downloaderId;
         string infoHash;
+        string sourceAdapter;
         string? dynamicTagTemplate;
         DateOnly? dynamicTagAirDate;
         int? dynamicTagEpisodeNumber;
@@ -91,7 +92,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
         {
             job.Transaction = transaction;
             job.CommandText = """
-                SELECT job.downloader_id, job.info_hash,
+                SELECT job.downloader_id, job.info_hash, profile.adapter,
                        json_extract(task.route_snapshot_json, '$.dynamic_tag_template'),
                        (
                            SELECT season.air_date
@@ -129,6 +130,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
                        )
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
+                JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 WHERE job.id = $job_id AND job.task_id = $task_id
                   AND job.preparation_state = 'preparing'
                   AND job.preparation_lease_token = $lease_token;
@@ -144,14 +146,15 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
 
             downloaderId = reader.GetString(0);
             infoHash = reader.GetString(1);
-            dynamicTagTemplate = reader.IsDBNull(2) ? null : reader.GetString(2);
-            dynamicTagAirDate = reader.IsDBNull(3)
+            sourceAdapter = reader.GetString(2);
+            dynamicTagTemplate = reader.IsDBNull(3) ? null : reader.GetString(3);
+            dynamicTagAirDate = reader.IsDBNull(4)
                 ? null
                 : DateOnly.ParseExact(
-                    reader.GetString(3),
+                    reader.GetString(4),
                     "yyyy-MM-dd",
                     CultureInfo.InvariantCulture);
-            dynamicTagEpisodeNumber = reader.IsDBNull(4) ? null : reader.GetInt32(4);
+            dynamicTagEpisodeNumber = reader.IsDBNull(5) ? null : reader.GetInt32(5);
         }
 
         var files = new List<DownloadPreparationFile>();
@@ -216,6 +219,7 @@ public sealed class DownloadPreparationStore(AnimeGoSqliteDatabase database)
             taskId,
             downloaderId,
             infoHash,
+            sourceAdapter,
             leaseToken,
             attemptCount,
             dynamicTagTemplate,

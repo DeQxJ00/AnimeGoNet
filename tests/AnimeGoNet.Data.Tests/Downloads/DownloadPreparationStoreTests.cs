@@ -22,6 +22,7 @@ public sealed class DownloadPreparationStoreTests
 
         var claimed = Assert.Single(claims, claim => claim is not null)!;
         Assert.Equal(fixture.TaskId, claimed.TaskId);
+        Assert.Equal("mikan", claimed.SourceAdapter);
         Assert.Equal(1, claimed.AttemptCount);
         Assert.Single(claimed.Files);
     }

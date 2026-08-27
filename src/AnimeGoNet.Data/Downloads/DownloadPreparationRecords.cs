@@ -12,6 +12,7 @@ public sealed record DownloadPreparationClaim(
     string TaskId,
     string DownloaderId,
     string InfoHash,
+    string SourceAdapter,
     string LeaseToken,
     int AttemptCount,
     string? DynamicTagTemplate,
