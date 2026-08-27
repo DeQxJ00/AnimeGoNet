@@ -7,13 +7,13 @@ using AnimeGoNet.Core.Library;
 namespace AnimeGoNet.App.Library;
 
 public sealed record SubtitleArchiveCandidate(
-    string Id,
-    string FileName,
-    string RelativePath,
-    long SizeBytes,
-    int? ParsedEpisode,
-    string? ParsedRange,
-    int? SelectedEpisode);
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("file_name")] string FileName,
+    [property: JsonPropertyName("relative_path")] string RelativePath,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("parsed_episode")] int? ParsedEpisode,
+    [property: JsonPropertyName("parsed_range")] string? ParsedRange,
+    [property: JsonPropertyName("selected_episode")] int? SelectedEpisode);
 
 public sealed record SubtitleArchiveImportSession(
     string SessionId,
@@ -23,7 +23,9 @@ public sealed record SubtitleArchiveImportSession(
     string SeriesName,
     IReadOnlyList<SubtitleArchiveCandidate> Candidates);
 
-public sealed record SubtitleArchiveAssignment(string CandidateId, int? EpisodeNumber);
+public sealed record SubtitleArchiveAssignment(
+    [property: JsonPropertyName("candidate_id")] string CandidateId,
+    [property: JsonPropertyName("episode_number")] int? EpisodeNumber);
 
 public sealed record SubtitleArchiveImportConfirmation(
     string SessionId,
