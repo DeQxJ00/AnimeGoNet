@@ -7047,8 +7047,7 @@ public static class ApiEndpoints
                 "TMDB Series ID and season number must be positive."));
         }
         var mediaType = context.Request.ContentType?.Split(';', 2)[0].Trim();
-        if (!string.Equals(mediaType, "application/zip", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(mediaType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+        if (!SubtitleArchiveContentTypes.IsSupported(mediaType))
         {
             return TypedResults.BadRequest(Error("subtitle_import_content_type_invalid",
                 "字幕压缩包必须以 ZIP、RAR、7z、TAR、GZ、BZ2 或 XZ 请求体上传。"));
@@ -7068,8 +7067,9 @@ public static class ApiEndpoints
         {
             var result = await importer.ImportAsync(
                 context.Request.Body,
-                context.Request.Headers["X-AnimeGo-Archive-Name"].ToString() is { Length: > 0 } name
-                    ? name : "subtitle.archive",
+                SubtitleArchiveNameCodec.Decode(
+                    context.Request.Headers["X-AnimeGo-Archive-Name-Encoded"].ToString(),
+                    context.Request.Headers["X-AnimeGo-Archive-Name"].ToString()),
                 tmdbSeriesId,
                 seasonNumber,
                 detail.Season.DisplayName,

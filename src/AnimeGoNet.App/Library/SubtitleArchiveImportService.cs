@@ -38,6 +38,56 @@ public sealed record SubtitleArchiveImportConfirmation(
     int ExtrasCount,
     IReadOnlyList<string> ImportedPaths);
 
+internal static class SubtitleArchiveNameCodec
+{
+    private const string FallbackName = "subtitle.archive";
+    private const int MaximumEncodedLength = 8192;
+
+    public static string Decode(string? encodedName, string? legacyName)
+    {
+        if (!string.IsNullOrWhiteSpace(encodedName) && encodedName.Length <= MaximumEncodedLength)
+        {
+            try
+            {
+                var decoded = Uri.UnescapeDataString(encodedName);
+                if (!string.IsNullOrWhiteSpace(decoded) && !decoded.Any(char.IsControl))
+                {
+                    return decoded;
+                }
+            }
+            catch (UriFormatException)
+            {
+                // Fall through to the legacy ASCII header for older clients.
+            }
+        }
+
+        return !string.IsNullOrWhiteSpace(legacyName) && !legacyName.Any(char.IsControl)
+            ? legacyName
+            : FallbackName;
+    }
+}
+
+internal static class SubtitleArchiveContentTypes
+{
+    private static readonly HashSet<string> Supported = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "application/octet-stream",
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/vnd.rar",
+        "application/x-rar-compressed",
+        "application/x-7z-compressed",
+        "application/x-tar",
+        "application/gzip",
+        "application/x-gzip",
+        "application/x-bzip2",
+        "application/x-xz",
+    };
+
+    public static bool IsSupported(string? mediaType) =>
+        mediaType is not null && Supported.Contains(mediaType);
+}
+
 public sealed class SubtitleArchiveImportService(DirectoryLayout layout)
 {
     private static readonly HashSet<string> SubtitleExtensions = new(StringComparer.OrdinalIgnoreCase)

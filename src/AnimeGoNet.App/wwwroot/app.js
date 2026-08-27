@@ -3667,7 +3667,11 @@ function renderSubtitleImportCandidates() {
         name.textContent = `${candidate.file_name} · ${formatBytes(candidate.size_bytes)}`;
         const parsed = document.createElement("span");
         parsed.className = "muted";
-        parsed.textContent = candidate.parsed_range ? `读取 EP ${candidate.parsed_range}` : "未读取 EP";
+        parsed.textContent = candidate.parsed_range
+            ? `读取 EP ${candidate.parsed_range}`
+            : candidate.parsed_episode !== null
+                ? `读取 EP ${candidate.parsed_episode}`
+                : "未读取 EP";
         const episode = document.createElement("input");
         episode.type = "number";
         episode.min = "1";
@@ -3695,8 +3699,8 @@ async function importSubtitleArchive() {
             method: "POST",
             headers: {
                 ...headers,
-                "Content-Type": file.type || "application/octet-stream",
-                "X-AnimeGo-Archive-Name": file.name,
+                "Content-Type": "application/octet-stream",
+                "X-AnimeGo-Archive-Name-Encoded": encodeURIComponent(file.name),
             },
             body: file,
         });

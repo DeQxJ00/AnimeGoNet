@@ -376,6 +376,15 @@ test("anime library links a confirmed season to its canonical TMDB page", async 
   assert.match(app, /tmdbLink\.setAttribute\(\s*"aria-label"/);
 });
 
+test("subtitle archive upload safely transports Unicode names and displays parsed episodes", async () => {
+  const app = await readFile(appPath, "utf8");
+  assert.match(app, /"Content-Type": "application\/octet-stream"/);
+  assert.match(app, /"X-AnimeGo-Archive-Name-Encoded": encodeURIComponent\(file\.name\)/);
+  assert.match(app, /candidate\.parsed_episode !== null/);
+  assert.match(app, /`读取 EP \$\{candidate\.parsed_episode\}`/);
+  assert.doesNotMatch(app, /"X-AnimeGo-Archive-Name": file\.name/);
+});
+
 test("movie library remains distinct from TV seasons and exposes TMDB Movie identity", async () => {
   const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
   assert.equal(

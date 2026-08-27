@@ -9,6 +9,31 @@ namespace AnimeGoNet.App.Tests.Library;
 public sealed class SubtitleArchiveImportServiceTests
 {
     [Fact]
+    public void ArchiveNameCodecDecodesUnicodeWebHeaderAndKeepsLegacyAsciiCompatibility()
+    {
+        const string name = "[アニメ DVD][机动战舰].rar";
+
+        Assert.Equal(name, SubtitleArchiveNameCodec.Decode(Uri.EscapeDataString(name), null));
+        Assert.Equal("subtitles.7z", SubtitleArchiveNameCodec.Decode(null, "subtitles.7z"));
+        Assert.Equal("subtitle.archive", SubtitleArchiveNameCodec.Decode("%0D%0Ainvalid", null));
+    }
+
+    [Theory]
+    [InlineData("application/octet-stream")]
+    [InlineData("application/zip")]
+    [InlineData("application/vnd.rar")]
+    [InlineData("application/x-rar-compressed")]
+    [InlineData("application/x-7z-compressed")]
+    [InlineData("application/x-tar")]
+    [InlineData("application/gzip")]
+    [InlineData("application/x-bzip2")]
+    [InlineData("application/x-xz")]
+    public void SubtitleArchiveContentTypeAcceptsSupportedBrowserMimeTypes(string mediaType)
+    {
+        Assert.True(SubtitleArchiveContentTypes.IsSupported(mediaType));
+    }
+
+    [Fact]
     public async Task ImportParsesEpisodesAndConfirmPlacesUnmatchedFilesInExtras()
     {
         var root = Path.Combine(Path.GetTempPath(), "animegonet-subtitle-" + Guid.NewGuid().ToString("N"));
