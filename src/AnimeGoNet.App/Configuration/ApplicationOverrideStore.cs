@@ -69,7 +69,8 @@ public sealed record ApplicationOverrideEntry(
     string? MovieSavePath = null,
     AiApiMode? AiApiMode = null,
     bool? AiWebSearchEnabled = null,
-    bool? AiUseBangumiPubDateFirst = null);
+    bool? AiUseBangumiPubDateFirst = null,
+    int? AiFileIdentityFuzzyMatchLimit = null);
 
 public sealed record ApplicationOverrideSnapshot(
     int FormatVersion,
@@ -413,6 +414,11 @@ public sealed class ApplicationOverrideStore : IDisposable
                     WebSearchEnabled = inheritedFields.Contains("ai_web_search_enabled")
                         ? options.Metadata.Ai.WebSearchEnabled
                         : settings.AiWebSearchEnabled ?? options.Metadata.Ai.WebSearchEnabled,
+                    FileIdentityFuzzyMatchLimit = inheritedFields.Contains(
+                        "ai_file_identity_fuzzy_match_limit")
+                        ? options.Metadata.Ai.FileIdentityFuzzyMatchLimit
+                        : settings.AiFileIdentityFuzzyMatchLimit
+                        ?? options.Metadata.Ai.FileIdentityFuzzyMatchLimit,
                     UseBangumiPubDateFirst = inheritedFields.Contains(
                         "ai_use_bangumi_pubdate_first")
                         ? options.Metadata.Ai.UseBangumiPubDateFirst

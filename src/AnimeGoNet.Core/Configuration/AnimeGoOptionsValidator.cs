@@ -274,6 +274,13 @@ public static partial class AnimeGoOptionsValidator
             errors.Add("AI web search requires Responses API mode.");
         }
 
+        if (ai.FileIdentityFuzzyMatchLimit is < 0
+            or > AiMatchingOptions.MaximumFileIdentityFuzzyMatchLimit)
+        {
+            errors.Add(
+                $"AI file identity fuzzy match limit must be between 0 and {AiMatchingOptions.MaximumFileIdentityFuzzyMatchLimit}.");
+        }
+
         if (!IsHttpEndpoint(ai.TmdbMcpUrl))
         {
             errors.Add("TMDB MCP URL must be an absolute HTTP(S) URL without credentials.");

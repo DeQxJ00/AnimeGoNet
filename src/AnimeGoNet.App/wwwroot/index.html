@@ -2071,6 +2071,10 @@
               <input id="configuration-ai-web-search" type="checkbox">
               <span><strong>Web Search 兜底</strong><small>默认启用。仅当适用的 MCP 工具无结果、出错或信息不足时才允许使用；必须选择 Responses API 模式。</small></span>
             </label>
+            <label>近似文件名容错数量
+              <input id="configuration-ai-file-identity-fuzzy-match-limit" type="number" min="0" max="2" step="1" value="1" required>
+              <small>默认 1。多文件 AI 结果最多允许这么多个文件名发生轻微变化；0 为严格逐字匹配。扩展名、数字/EP、顺序和 90% 相似度仍会校验。</small>
+            </label>
             <label class="wide">TMDB MCP 地址（必须开启）<input id="configuration-ai-tmdb-mcp-url" type="url" maxlength="2048" required placeholder="http://tmdb.mcp.local/mcp"></label>
             <label class="configuration-guided-option wide">
               <input id="configuration-ai-debug" type="checkbox">

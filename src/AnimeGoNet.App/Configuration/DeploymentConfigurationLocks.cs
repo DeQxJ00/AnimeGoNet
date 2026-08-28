@@ -60,6 +60,7 @@ public sealed class DeploymentConfigurationLocks
         new("ai_model", ["ai_model", "metadata:ai:model"]),
         new("ai_api_mode", ["ai_api_mode", "metadata:ai:api_mode"]),
         new("ai_web_search_enabled", ["ai_web_search_enabled", "metadata:ai:web_search_enabled"]),
+        new("ai_file_identity_fuzzy_match_limit", ["ai_file_identity_fuzzy_match_limit", "metadata:ai:file_identity_fuzzy_match_limit"]),
         new("ai_reasoning_effort", ["ai_reasoning_effort", "metadata:ai:reasoning_effort"]),
         new("ai_prompt_template", ["ai_prompt_template", "metadata:ai:prompt_template"]),
         new("ai_tmdb_mcp_url", ["ai_tmdb_mcp_url", "metadata:ai:tmdb_mcp_url"]),
@@ -361,6 +362,10 @@ public sealed class DeploymentConfigurationLocks
                     "ai_web_search_enabled",
                     current.AiWebSearchEnabled,
                     candidate.AiWebSearchEnabled),
+                AiFileIdentityFuzzyMatchLimit = Preserve(
+                    "ai_file_identity_fuzzy_match_limit",
+                    current.AiFileIdentityFuzzyMatchLimit,
+                    candidate.AiFileIdentityFuzzyMatchLimit),
                 AiReasoningEffortOverridden = Preserve(
                     "ai_reasoning_effort",
                     current.AiReasoningEffortOverridden,
@@ -646,6 +651,14 @@ public sealed class DeploymentConfigurationLocks
         {
             ai = ai with { WebSearchEnabled = deployment.Metadata.Ai.WebSearchEnabled };
         }
+        if (IsLocked("ai_file_identity_fuzzy_match_limit"))
+        {
+            ai = ai with
+            {
+                FileIdentityFuzzyMatchLimit =
+                    deployment.Metadata.Ai.FileIdentityFuzzyMatchLimit,
+            };
+        }
         if (IsLocked("ai_prompt_template"))
         {
             ai = ai with { PromptTemplate = deployment.Metadata.Ai.PromptTemplate };
@@ -900,6 +913,10 @@ public sealed class DeploymentConfigurationLocks
             "ai_web_search_enabled",
             deployment.Metadata.Ai.WebSearchEnabled,
             candidate.Metadata.Ai.WebSearchEnabled);
+        AddIfChanged(
+            "ai_file_identity_fuzzy_match_limit",
+            deployment.Metadata.Ai.FileIdentityFuzzyMatchLimit,
+            candidate.Metadata.Ai.FileIdentityFuzzyMatchLimit);
         AddIfChanged(
             "ai_reasoning_effort",
             deployment.Metadata.Ai.ReasoningEffort,

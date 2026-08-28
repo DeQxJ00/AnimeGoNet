@@ -48,6 +48,7 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(TimeSpan.FromSeconds(600), options.Metadata.Ai.HttpTimeout);
         Assert.Equal(2, options.Metadata.Ai.RetryCount);
         Assert.True(options.Metadata.Ai.UseBangumiPubDateFirst);
+        Assert.Equal(1, options.Metadata.Ai.FileIdentityFuzzyMatchLimit);
         Assert.Equal(AiApiMode.Responses, options.Metadata.Ai.ApiMode);
         Assert.True(options.Metadata.Ai.WebSearchEnabled);
         Assert.Equal(new Uri("http://tmdb.mcp.local/mcp"), options.Metadata.Ai.TmdbMcpUrl);

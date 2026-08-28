@@ -185,6 +185,9 @@ public sealed class ConfigurationApiTests
         Assert.Equal("responses", editable.GetProperty("ai_api_mode").GetString());
         Assert.True(editable.GetProperty("ai_web_search_enabled").GetBoolean());
         Assert.True(editable.GetProperty("ai_use_bangumi_pubdate_first").GetBoolean());
+        Assert.Equal(
+            1,
+            editable.GetProperty("ai_file_identity_fuzzy_match_limit").GetInt32());
     }
 
     [Fact]
@@ -226,6 +229,43 @@ public sealed class ConfigurationApiTests
         Assert.Equal(AiApiMode.ChatCompletions, stored.Settings?.AiApiMode);
         Assert.False(stored.Settings?.AiWebSearchEnabled);
         Assert.False(stored.Settings?.AiUseBangumiPubDateFirst);
+    }
+
+    [Fact]
+    public async Task AiFileIdentityFuzzyMatchLimitIsEditableAndValidated()
+    {
+        await using var app = await RunningApp.StartAsync();
+
+        using var invalid = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                aiFileIdentityFuzzyMatchLimit: 3));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Contains(
+            "ai_file_identity_fuzzy_match_limit",
+            await invalid.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+
+        using var write = await app.Client.PutAsync(
+            "/api/v1/config",
+            Payload(
+                expectedRevision: 0,
+                aiFileIdentityFuzzyMatchLimit: 2));
+        Assert.Equal(HttpStatusCode.OK, write.StatusCode);
+
+        using var response = await app.Client.GetAsync("/api/v1/config");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(
+            2,
+            json.RootElement.GetProperty("editable")
+                .GetProperty("ai_file_identity_fuzzy_match_limit")
+                .GetInt32());
+
+        var stored = await app.App.Services
+            .GetRequiredService<ApplicationOverrideStore>()
+            .LoadAsync();
+        Assert.Equal(2, stored.Settings?.AiFileIdentityFuzzyMatchLimit);
     }
 
     [Fact]
@@ -424,6 +464,10 @@ public sealed class ConfigurationApiTests
         Assert.Contains("id=\"configuration-ai-api-mode\"", html, StringComparison.Ordinal);
         Assert.Contains("Responses（默认）", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-web-search\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "id=\"configuration-ai-file-identity-fuzzy-match-limit\"",
+            html,
+            StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-reasoning-effort\"", html, StringComparison.Ordinal);
         Assert.Contains("none（不发送 reasoning）", html, StringComparison.Ordinal);
         Assert.Contains("id=\"configuration-ai-key\"", html, StringComparison.Ordinal);
@@ -1445,7 +1489,8 @@ public sealed class ConfigurationApiTests
         string? movieSavePath = null,
         string? aiApiMode = null,
         bool? aiWebSearchEnabled = null,
-        bool? aiUseBangumiPubDateFirst = null)
+        bool? aiUseBangumiPubDateFirst = null,
+        int? aiFileIdentityFuzzyMatchLimit = null)
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -1474,6 +1519,7 @@ public sealed class ConfigurationApiTests
             ai_model = aiModel,
             ai_api_mode = aiApiMode,
             ai_web_search_enabled = aiWebSearchEnabled,
+            ai_file_identity_fuzzy_match_limit = aiFileIdentityFuzzyMatchLimit,
             ai_reasoning_effort = aiReasoningEffort,
             ai_prompt_template = aiPromptTemplate,
             ai_api_key = aiApiKey,

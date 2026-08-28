@@ -124,7 +124,10 @@ public sealed class AiMetadataResultValidatorTests
             "[AI-Raws] Nadesico 02 「Part B」 [1080p].mkv",
             "[AI-Raws] Nadesico 03 [1080p].mkv");
 
-        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+        var failure = AiMetadataResultValidator.ValidateStructure(
+            input,
+            candidate,
+            fileIdentityFuzzyMatchLimit: 2);
 
         Assert.Null(failure);
     }
@@ -144,6 +147,41 @@ public sealed class AiMetadataResultValidatorTests
             "Show 04 [1080p].mkv");
 
         var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+    }
+
+    [Fact]
+    public void DefaultToleranceRejectsTwoCloseFileNameMutations()
+    {
+        var input = Input(
+            new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 02 『B』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 03 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "Show 01 「A」 [1080p].mkv",
+            "Show 02 「B」 [1080p].mkv",
+            "Show 03 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+    }
+
+    [Fact]
+    public void ZeroToleranceRestoresExactMultiFileIdentityValidation()
+    {
+        var input = Input(
+            new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 02 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "Show 01 「A」 [1080p].mkv",
+            "Show 02 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(
+            input,
+            candidate,
+            fileIdentityFuzzyMatchLimit: 0);
 
         Assert.Equal("ai_file_identity_mismatch", failure!.Code);
     }

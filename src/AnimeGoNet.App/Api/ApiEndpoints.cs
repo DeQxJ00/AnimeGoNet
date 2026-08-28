@@ -2261,7 +2261,8 @@ public static class ApiEndpoints
                     ai.BangumiMcpUrl.AbsoluteUri,
                     ai.ReasoningEffort ?? "none",
                     FormatAiApiMode(ai.ApiMode),
-                    ai.WebSearchEnabled),
+                    ai.WebSearchEnabled,
+                    ai.FileIdentityFuzzyMatchLimit),
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.WriteBangumiIdWhenTmdbMatched,
                 options.Metadata.MikanTrustedOffsetCacheEnabled,
@@ -2362,7 +2363,8 @@ public static class ApiEndpoints
             MovieSavePath: desired.Paths.EffectiveMovieSavePath,
             AiApiMode: FormatAiApiMode(ai.ApiMode),
             AiWebSearchEnabled: ai.WebSearchEnabled,
-            AiUseBangumiPubDateFirst: ai.UseBangumiPubDateFirst);
+            AiUseBangumiPubDateFirst: ai.UseBangumiPubDateFirst,
+            AiFileIdentityFuzzyMatchLimit: ai.FileIdentityFuzzyMatchLimit);
     }
 
     private static string SecretState(bool overridden, string? value) =>
@@ -2403,6 +2405,7 @@ public static class ApiEndpoints
             deployment.Paths.DownloadPath,
             deployment.Paths.SavePath,
             deployment.Paths.EffectiveMovieSavePath,
+            deployment.Metadata.Ai.FileIdentityFuzzyMatchLimit,
             DateTimeOffset.UtcNow);
         var requestedCandidate = ApplicationOverrideStore.Apply(
             deployment,
@@ -2582,6 +2585,10 @@ public static class ApiEndpoints
             "ai_web_search_enabled",
             beforeAi.WebSearchEnabled,
             afterAi.WebSearchEnabled);
+        Add(
+            "ai_file_identity_fuzzy_match_limit",
+            beforeAi.FileIdentityFuzzyMatchLimit.ToString(invariant),
+            afterAi.FileIdentityFuzzyMatchLimit.ToString(invariant));
         Add(
             "ai_reasoning_effort",
             beforeAi.ReasoningEffort ?? "none",
@@ -2828,7 +2835,8 @@ public static class ApiEndpoints
             MovieSavePath: current.Paths.EffectiveMovieSavePath,
             AiApiMode: FormatAiApiMode(ai.ApiMode),
             AiWebSearchEnabled: ai.WebSearchEnabled,
-            AiUseBangumiPubDateFirst: ai.UseBangumiPubDateFirst);
+            AiUseBangumiPubDateFirst: ai.UseBangumiPubDateFirst,
+            AiFileIdentityFuzzyMatchLimit: ai.FileIdentityFuzzyMatchLimit);
 
         return section.Trim().ToLowerInvariant() switch
         {
@@ -2882,6 +2890,8 @@ public static class ApiEndpoints
                 AiModel = request.AiModel,
                 AiApiMode = request.AiApiMode,
                 AiWebSearchEnabled = request.AiWebSearchEnabled,
+                AiFileIdentityFuzzyMatchLimit =
+                    request.AiFileIdentityFuzzyMatchLimit,
                 AiApiKey = request.AiApiKey,
                 ClearAiApiKey = request.ClearAiApiKey,
                 AiTmdbMcpUrl = request.AiTmdbMcpUrl,
@@ -2919,6 +2929,7 @@ public static class ApiEndpoints
         string deploymentDownloadPath,
         string deploymentSavePath,
         string deploymentMovieSavePath,
+        int deploymentAiFileIdentityFuzzyMatchLimit,
         DateTimeOffset utcNow)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(request.ExpectedConfigurationRevision);
@@ -3018,6 +3029,15 @@ public static class ApiEndpoints
         var aiUseBangumiPubDateFirst = request.AiUseBangumiPubDateFirst
             ?? current?.AiUseBangumiPubDateFirst
             ?? true;
+        var aiFileIdentityFuzzyMatchLimit = request.AiFileIdentityFuzzyMatchLimit
+            ?? current?.AiFileIdentityFuzzyMatchLimit
+            ?? deploymentAiFileIdentityFuzzyMatchLimit;
+        if (aiFileIdentityFuzzyMatchLimit is < 0
+            or > AiMatchingOptions.MaximumFileIdentityFuzzyMatchLimit)
+        {
+            throw new ArgumentException(
+                $"ai_file_identity_fuzzy_match_limit must be between 0 and {AiMatchingOptions.MaximumFileIdentityFuzzyMatchLimit}.");
+        }
         if (!IsOptionalReasoningEffort(request.AiReasoningEffort))
         {
             throw new ArgumentException(
@@ -3219,7 +3239,8 @@ public static class ApiEndpoints
             MovieSavePath: movieSavePath,
             AiApiMode: aiApiMode,
             AiWebSearchEnabled: aiWebSearchEnabled,
-            AiUseBangumiPubDateFirst: aiUseBangumiPubDateFirst);
+            AiUseBangumiPubDateFirst: aiUseBangumiPubDateFirst,
+            AiFileIdentityFuzzyMatchLimit: aiFileIdentityFuzzyMatchLimit);
     }
 
     private static string PromptSummary(string template) =>

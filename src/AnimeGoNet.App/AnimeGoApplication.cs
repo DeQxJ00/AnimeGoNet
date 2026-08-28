@@ -949,6 +949,13 @@ public static class AnimeGoApplication
                             "metadata:ai:web_search_enabled"),
                         defaults.Metadata.Ai.WebSearchEnabled,
                         "ai_web_search_enabled"),
+                    FileIdentityFuzzyMatchLimit = ParseOptionalInt(
+                        FirstConfigurationValue(
+                            configuration,
+                            "ai_file_identity_fuzzy_match_limit",
+                            "metadata:ai:file_identity_fuzzy_match_limit"),
+                        defaults.Metadata.Ai.FileIdentityFuzzyMatchLimit,
+                        "ai_file_identity_fuzzy_match_limit"),
                     UseMetadataMatch = ParseAiMetadataMatch(
                         configuration,
                         ParseOptionalBool(

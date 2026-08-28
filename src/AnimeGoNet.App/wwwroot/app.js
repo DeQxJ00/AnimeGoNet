@@ -4939,6 +4939,7 @@ const configurationLockSelectors = {
     ai_model: ["#configuration-ai-model"],
     ai_api_mode: ["#configuration-ai-api-mode"],
     ai_web_search_enabled: ["#configuration-ai-web-search"],
+    ai_file_identity_fuzzy_match_limit: ["#configuration-ai-file-identity-fuzzy-match-limit"],
     ai_reasoning_effort: ["#configuration-ai-reasoning-effort"],
     ai_prompt_template: ["#configuration-ai-prompt-template", "#configuration-ai-prompt-reset"],
     ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
@@ -5104,6 +5105,7 @@ function openConfigurationEditor(section) {
     setConfigurationValue("#configuration-ai-model", editable.ai_model ?? "");
     setConfigurationValue("#configuration-ai-api-mode", editable.ai_api_mode);
     setConfigurationChecked("#configuration-ai-web-search", editable.ai_web_search_enabled);
+    setConfigurationValue("#configuration-ai-file-identity-fuzzy-match-limit", editable.ai_file_identity_fuzzy_match_limit);
     setConfigurationValue("#configuration-ai-reasoning-effort", editable.ai_reasoning_effort);
     element("#configuration-ai-prompt-template").value =
         editable.ai_prompt_template;
@@ -5172,6 +5174,7 @@ const configurationFieldLabels = {
     ai_model: "AI 模型",
     ai_api_mode: "AI API 模式",
     ai_web_search_enabled: "Web Search 兜底",
+    ai_file_identity_fuzzy_match_limit: "近似文件名容错数量",
     ai_reasoning_effort: "AI 推理程度",
     ai_prompt_template: "正式 AI Prompt",
     ai_api_key: "AI API Key",
@@ -5236,6 +5239,7 @@ function configurationRequest() {
         ai_model: element("#configuration-ai-model").value || null,
         ai_api_mode: element("#configuration-ai-api-mode").value,
         ai_web_search_enabled: element("#configuration-ai-web-search").checked,
+        ai_file_identity_fuzzy_match_limit: element("#configuration-ai-file-identity-fuzzy-match-limit").valueAsNumber,
         ai_reasoning_effort: element("#configuration-ai-reasoning-effort").value,
         ai_prompt_template: element("#configuration-ai-prompt-template").value,
         ai_api_key: configurationSecretUpdateValue("#configuration-ai-key", currentConfiguration.editable.ai_api_key),

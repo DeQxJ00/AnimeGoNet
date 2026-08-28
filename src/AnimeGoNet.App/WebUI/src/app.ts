@@ -412,6 +412,7 @@ interface RuntimeConfiguration {
       bangumi_mcp_url: string;
       api_mode: "responses" | "chat-completions";
       web_search_enabled: boolean;
+      file_identity_fuzzy_match_limit: number;
     };
     tmdb_failure_use_bangumi: boolean;
     write_bangumi_id_when_tmdb_matched: boolean;
@@ -466,6 +467,7 @@ interface RuntimeConfiguration {
     ai_model: string | null;
     ai_api_mode: "responses" | "chat-completions";
     ai_web_search_enabled: boolean;
+    ai_file_identity_fuzzy_match_limit: number;
     ai_reasoning_effort: "none" | "low" | "medium" | "high";
     ai_prompt_template: string;
     ai_api_key_state: "inherit" | "configured" | "cleared";
@@ -551,6 +553,7 @@ interface ConfigurationUpdatePayload {
   ai_model: string | null;
   ai_api_mode: "responses" | "chat-completions";
   ai_web_search_enabled: boolean;
+  ai_file_identity_fuzzy_match_limit: number;
   ai_reasoning_effort: "none" | "low" | "medium" | "high";
   ai_prompt_template: string;
   ai_api_key: string | null;
@@ -7449,6 +7452,7 @@ const configurationLockSelectors: Record<string, string[]> = {
   ai_model: ["#configuration-ai-model"],
   ai_api_mode: ["#configuration-ai-api-mode"],
   ai_web_search_enabled: ["#configuration-ai-web-search"],
+  ai_file_identity_fuzzy_match_limit: ["#configuration-ai-file-identity-fuzzy-match-limit"],
   ai_reasoning_effort: ["#configuration-ai-reasoning-effort"],
   ai_prompt_template: ["#configuration-ai-prompt-template", "#configuration-ai-prompt-reset"],
   ai_api_key: ["#configuration-ai-key", "#configuration-ai-key-clear"],
@@ -7649,6 +7653,10 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
     editable.ai_web_search_enabled,
   );
   setConfigurationValue(
+    "#configuration-ai-file-identity-fuzzy-match-limit",
+    editable.ai_file_identity_fuzzy_match_limit,
+  );
+  setConfigurationValue(
     "#configuration-ai-reasoning-effort",
     editable.ai_reasoning_effort,
   );
@@ -7752,6 +7760,7 @@ const configurationFieldLabels: Record<string, string> = {
   ai_model: "AI 模型",
   ai_api_mode: "AI API 模式",
   ai_web_search_enabled: "Web Search 兜底",
+  ai_file_identity_fuzzy_match_limit: "近似文件名容错数量",
   ai_reasoning_effort: "AI 推理程度",
   ai_prompt_template: "正式 AI Prompt",
   ai_api_key: "AI API Key",
@@ -7851,6 +7860,8 @@ function configurationRequest(): ConfigurationUpdatePayload {
         ConfigurationUpdatePayload["ai_api_mode"],
     ai_web_search_enabled:
       element<HTMLInputElement>("#configuration-ai-web-search").checked,
+    ai_file_identity_fuzzy_match_limit:
+      element<HTMLInputElement>("#configuration-ai-file-identity-fuzzy-match-limit").valueAsNumber,
     ai_reasoning_effort:
       element<HTMLSelectElement>("#configuration-ai-reasoning-effort").value as
         ConfigurationUpdatePayload["ai_reasoning_effort"],

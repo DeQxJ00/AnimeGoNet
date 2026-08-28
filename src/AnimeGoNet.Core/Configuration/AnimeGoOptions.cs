@@ -177,6 +177,8 @@ public sealed record AiMatchingOptions
 {
     public const int MaximumPromptTemplateLength = 128 * 1024;
 
+    public const int MaximumFileIdentityFuzzyMatchLimit = 2;
+
     public const string FixedAniDbMappingUrlTemplate =
         "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
 
@@ -195,6 +197,8 @@ public sealed record AiMatchingOptions
     public string? ReasoningEffort { get; init; }
 
     public bool WebSearchEnabled { get; init; } = true;
+
+    public int FileIdentityFuzzyMatchLimit { get; init; } = 1;
 
     public bool UseMetadataMatch { get; init; }
 

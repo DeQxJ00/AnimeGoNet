@@ -411,7 +411,9 @@ public sealed record EditableConfigurationResponse(
     [property: JsonPropertyName("ai_api_mode")] string AiApiMode = "responses",
     [property: JsonPropertyName("ai_web_search_enabled")] bool AiWebSearchEnabled = true,
     [property: JsonPropertyName("ai_use_bangumi_pubdate_first")]
-    bool AiUseBangumiPubDateFirst = true);
+    bool AiUseBangumiPubDateFirst = true,
+    [property: JsonPropertyName("ai_file_identity_fuzzy_match_limit")]
+    int AiFileIdentityFuzzyMatchLimit = 1);
 
 public sealed record ConfigurationFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -482,7 +484,9 @@ public sealed record ConfigurationUpdateRequest(
     [property: JsonPropertyName("ai_api_mode")] string? AiApiMode = null,
     [property: JsonPropertyName("ai_web_search_enabled")] bool? AiWebSearchEnabled = null,
     [property: JsonPropertyName("ai_use_bangumi_pubdate_first")]
-    bool? AiUseBangumiPubDateFirst = null);
+    bool? AiUseBangumiPubDateFirst = null,
+    [property: JsonPropertyName("ai_file_identity_fuzzy_match_limit")]
+    int? AiFileIdentityFuzzyMatchLimit = null);
 
 public sealed record ConfigurationWriteResponse(
     [property: JsonPropertyName("configuration_revision")] long ConfigurationRevision,
@@ -587,7 +591,9 @@ public sealed record AiConfigurationResponse(
     [property: JsonPropertyName("bangumi_mcp_url")] string BangumiMcpUrl,
     [property: JsonPropertyName("reasoning_effort")] string ReasoningEffort = "none",
     [property: JsonPropertyName("api_mode")] string ApiMode = "responses",
-    [property: JsonPropertyName("web_search_enabled")] bool WebSearchEnabled = true);
+    [property: JsonPropertyName("web_search_enabled")] bool WebSearchEnabled = true,
+    [property: JsonPropertyName("file_identity_fuzzy_match_limit")]
+    int FileIdentityFuzzyMatchLimit = 1);
 
 public sealed record TorrentFetchConfigurationResponse(
     [property: JsonPropertyName("http_timeout_seconds")] double HttpTimeoutSeconds,

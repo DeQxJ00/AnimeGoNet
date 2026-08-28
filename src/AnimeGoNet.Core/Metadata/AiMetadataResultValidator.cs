@@ -1,8 +1,11 @@
 using System.Text.RegularExpressions;
+using AnimeGoNet.Core.Configuration;
 
 namespace AnimeGoNet.Core.Metadata;
 
-public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
+public sealed partial class AiMetadataResultValidator(
+    ITmdbClient tmdb,
+    AnimeGoOptions? options = null)
 {
     public async Task<AiMetadataValidationResult> ValidateAsync(
         AiMetadataMatchInput input,
@@ -11,7 +14,10 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
         int? expectedSeasonNumber = null,
         CancellationToken cancellationToken = default)
     {
-        var structuralFailure = ValidateStructure(input, candidate);
+        var structuralFailure = ValidateStructure(
+            input,
+            candidate,
+            options?.Metadata.Ai.FileIdentityFuzzyMatchLimit ?? 1);
         if (structuralFailure is not null)
         {
             return Failed(structuralFailure);
@@ -167,7 +173,8 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
 
     public static MetadataFailure? ValidateStructure(
         AiMetadataMatchInput input,
-        AiMetadataMatchCandidate candidate)
+        AiMetadataMatchCandidate candidate,
+        int fileIdentityFuzzyMatchLimit = 1)
     {
         if (string.IsNullOrWhiteSpace(input.Title)
             || input.Files.Count == 0
@@ -209,7 +216,13 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
         }
 
         if (input.Files.Count > 1
-            && !HasCompatibleOrderedFileIdentities(input.Files, candidate.Files))
+            && !HasCompatibleOrderedFileIdentities(
+                input.Files,
+                candidate.Files,
+                Math.Clamp(
+                    fileIdentityFuzzyMatchLimit,
+                    0,
+                    AiMatchingOptions.MaximumFileIdentityFuzzyMatchLimit)))
         {
             return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_identity_mismatch", false);
         }
@@ -244,7 +257,8 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
 
     private static bool HasCompatibleOrderedFileIdentities(
         IReadOnlyList<AiMetadataFileInput> inputFiles,
-        IReadOnlyList<AiMetadataFileCandidate> candidateFiles)
+        IReadOnlyList<AiMetadataFileCandidate> candidateFiles,
+        int fuzzyMatchLimit)
     {
         var mismatchedIndexes = new List<int>(capacity: 2);
         for (var index = 0; index < inputFiles.Count; index++)
@@ -255,7 +269,7 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
             }
 
             mismatchedIndexes.Add(index);
-            if (mismatchedIndexes.Count > 2)
+            if (mismatchedIndexes.Count > fuzzyMatchLimit)
             {
                 return false;
             }

@@ -681,6 +681,7 @@ internal static class DeploymentYamlConfiguration
                 api_mode: responses
                 reasoning_effort: none
                 web_search_enabled: true
+                file_identity_fuzzy_match_limit: 1
                 # 留空使用程序内置 Prompt；多行自定义值建议通过 WebUI 私有配置保存。
                 prompt_template: ''
                 use_metadata_match: false
@@ -912,6 +913,7 @@ internal static class DeploymentYamlConfiguration
                 api_mode: responses
                 reasoning_effort: none
                 web_search_enabled: true
+                file_identity_fuzzy_match_limit: 1
                 # 留空使用程序内置 Prompt；多行自定义值建议通过 WebUI 私有配置保存。
                 prompt_template: ''
                 use_metadata_match: false
