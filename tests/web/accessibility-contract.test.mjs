@@ -585,6 +585,24 @@ test("AI matching workspace exposes metadata and subtitle matching entries", asy
   assert.match(app, /selectWorkspace\("library", "seasons"\)/);
 });
 
+test("subtitle matching previews the complete candidate file name", async () => {
+  const [document, app, css] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+
+  assert.ok(document.querySelector("#library-subtitle-file-preview"));
+  assert.match(
+    document.querySelector("#library-subtitle-file-preview-name")?.textContent ?? "",
+    /完整字幕文件名/,
+  );
+  assert.match(app, /preview\.textContent = candidate\.relative_path/);
+  assert.match(app, /row\.addEventListener\("click", \(\) => previewCandidate\(candidate, row\)\)/);
+  assert.match(app, /row\.addEventListener\("focusin", \(\) => previewCandidate\(candidate, row\)\)/);
+  assert.match(css, /\.library-subtitle-file-preview strong\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+});
+
 test("AI test request omits Mikan pubDate when Bangumi date priority is disabled", async () => {
   const app = await readFile(appPath, "utf8");
 

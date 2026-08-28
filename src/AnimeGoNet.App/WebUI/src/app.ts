@@ -6129,14 +6129,32 @@ async function importExternalMedia(scope: "all" | "season"): Promise<void> {
 function renderSubtitleImportCandidates(): void {
   const panel = element<HTMLElement>("#library-subtitle-import-panel");
   const list = element<HTMLElement>("#library-subtitle-import-list");
+  const preview = element<HTMLElement>("#library-subtitle-file-preview-name");
   const session = activeSubtitleImport;
   panel.hidden = !session;
-  if (!session) { list.replaceChildren(); return; }
+  if (!session) {
+    list.replaceChildren();
+    preview.textContent = "导入压缩包后可在这里查看完整字幕文件名";
+    preview.removeAttribute("title");
+    return;
+  }
+  const previewCandidate = (candidate: SubtitleArchiveCandidate, row: HTMLElement): void => {
+    list.querySelectorAll<HTMLElement>(".library-subtitle-import-row.previewing")
+      .forEach(candidateRow => candidateRow.classList.remove("previewing"));
+    row.classList.add("previewing");
+    preview.textContent = candidate.relative_path;
+    preview.title = candidate.relative_path;
+  };
   list.replaceChildren(...session.candidates.map((candidate) => {
     const row = document.createElement("div");
     row.className = "library-subtitle-import-row";
     row.draggable = true;
+    row.tabIndex = 0;
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", `字幕文件 ${candidate.relative_path}`);
     row.dataset.candidateId = candidate.id;
+    row.addEventListener("click", () => previewCandidate(candidate, row));
+    row.addEventListener("focusin", () => previewCandidate(candidate, row));
     row.addEventListener("dragstart", () => row.classList.add("dragging"));
     row.addEventListener("dragend", () => row.classList.remove("dragging"));
     row.addEventListener("dragover", (event) => event.preventDefault());
@@ -6168,6 +6186,14 @@ function renderSubtitleImportCandidates(): void {
     row.append(enabled, name, parsed, episode);
     return row;
   }));
+  const firstCandidate = session.candidates[0];
+  const firstRow = list.querySelector<HTMLElement>(".library-subtitle-import-row");
+  if (firstCandidate && firstRow) {
+    previewCandidate(firstCandidate, firstRow);
+  } else {
+    preview.textContent = "压缩包内没有可导入的字幕文件";
+    preview.removeAttribute("title");
+  }
   element<HTMLElement>("#library-subtitle-import-status").textContent =
     `${session.candidates.length} 个字幕文件 · 已默认勾选可识别 EP 的文件`;
 }
