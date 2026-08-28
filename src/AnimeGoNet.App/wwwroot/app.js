@@ -2907,7 +2907,7 @@ async function openMovieFileList(item) {
             table.className = "compact-table movie-file-table";
             const head = document.createElement("thead");
             const headRow = document.createElement("tr");
-            ["归类", "文件名", "大小 / 状态", "实际路径"].forEach(label => {
+            ["归类", "文件名", "文件大小", "链接 / 状态", "实际路径"].forEach(label => {
                 const cell = document.createElement("th");
                 cell.textContent = label;
                 headRow.append(cell);
@@ -2925,16 +2925,23 @@ async function openMovieFileList(item) {
                 const name = document.createElement("td");
                 name.textContent = file.file_name;
                 name.title = file.file_name;
+                const size = document.createElement("td");
+                size.textContent = file.exists
+                    ? (file.size_bytes === null ? "大小未知" : formatBytes(file.size_bytes))
+                    : "—";
+                if (file.link_type === "symbolic")
+                    size.title = "符号链接目标文件的实际大小";
                 const state = document.createElement("td");
-                state.textContent = file.exists
-                    ? `${file.size_bytes === null ? "大小未知" : formatBytes(file.size_bytes)}`
-                        + (file.link_type ? ` · ${file.link_type}` : "")
-                    : "文件不存在";
+                state.textContent = !file.exists
+                    ? "文件不存在"
+                    : file.link_type === "symbolic"
+                        ? "符号链接（大小为目标文件）"
+                        : "普通文件";
                 const path = document.createElement("td");
                 const code = document.createElement("code");
                 code.textContent = file.full_path;
                 path.append(code);
-                row.append(role, name, state, path);
+                row.append(role, name, size, state, path);
                 body.append(row);
             });
             table.append(head, body);

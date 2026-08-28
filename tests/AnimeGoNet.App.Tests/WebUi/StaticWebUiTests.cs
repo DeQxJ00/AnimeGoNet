@@ -6,7 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
-    [InlineData("/", "text/html", "/styles.css?v=20260827-u2-blocking-file-reasons")]
+    [InlineData("/", "text/html", "/styles.css?v=20260828-movie-library-admin")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]
@@ -155,7 +155,8 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "delete web.access_key")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260828-merged-task-logs")]
+    [InlineData("/", "text/html", "/app.js?v=20260828-movie-symbolic-size")]
+    [InlineData("/app.js", "text/javascript", "符号链接（大小为目标文件）")]
     [InlineData("/", "text/html", "other-readaptation-review-reject")]
     [InlineData("/", "text/html", "拒绝并保留 Other")]
     [InlineData("/app.js", "text/javascript", "/ai-series-change-review/accept")]
