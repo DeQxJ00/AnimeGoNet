@@ -142,6 +142,8 @@ public sealed class U2WholeTorrentEpisodeGateTests
                 new TmdbEpisode(1, 100, 1, 1, "E1", null), null),
             new ValidatedAiMetadataFile(
                 new AiMetadataFileInput("Show NCOP.mkv", 1), season, null, "creditless opening"),
+            new ValidatedAiMetadataFile(
+                new AiMetadataFileInput("Movie/劇場版.mkv", 1), season, null, "movie for postprocessing"),
         };
 
         Assert.Null(U2AiFilePolicy.Validate(claim, files));

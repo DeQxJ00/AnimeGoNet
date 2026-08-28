@@ -30,6 +30,18 @@ internal static class AiMetadataInputBoundary
             publication.BangumiEpisodeCandidate,
             publication.UseBangumiPubDateFirst)
         {
+            PromptFeaturesOverride = new AiMetadataPromptFeatures(
+                TmdbMcp: true,
+                BangumiMcp: claim.BangumiSubjectId is not null,
+                AniDbLookup: claim.AniDbAnimeId is not null,
+                BangumiPubDateFirst: publication.UseBangumiPubDateFirst)
+            {
+                ImdbLookup = claim.ImdbTitleId is not null,
+                U2TvSource = string.Equals(
+                    claim.SourceAdapter,
+                    "u2",
+                    StringComparison.OrdinalIgnoreCase),
+            },
             DebugIdentity = debugPreAiContext is null
                 ? null
                 : new AiMetadataDebugIdentity(claim.RunId, claim.TaskId),

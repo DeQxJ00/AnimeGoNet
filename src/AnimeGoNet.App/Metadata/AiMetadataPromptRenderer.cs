@@ -8,7 +8,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v16";
+    public const string PromptVersion = "tmdb-ai-match-v17";
     public const int MaximumTemplateLength = AiMatchingOptions.MaximumPromptTemplateLength;
 
     private static readonly string[] RequiredPlaceholders =
@@ -188,6 +188,7 @@ public static class AiMetadataPromptRenderer
         rendered = ApplyConditionalSection(rendered, "BGM_MCP", features.BangumiMcp);
         rendered = ApplyConditionalSection(rendered, "ANIDB_LOOKUP", features.AniDbLookup);
         rendered = ApplyConditionalSection(rendered, "IMDB_LOOKUP", features.ImdbLookup);
+        rendered = ApplyConditionalSection(rendered, "U2_TV_SOURCE", features.U2TvSource);
         return ApplyConditionalSection(
             rendered,
             "BANGUMI_PUBDATE_FIRST",

@@ -13944,7 +13944,7 @@ function renderAiTestResult(result: AiTesterRunResult): void {
   );
   summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
   const badge = element<HTMLElement>("#ai-test-prompt-version");
-  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v16";
+  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v17";
   badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
   element<HTMLElement>("#ai-test-raw-output").textContent =
     result.raw_response || "模型未返回响应。";

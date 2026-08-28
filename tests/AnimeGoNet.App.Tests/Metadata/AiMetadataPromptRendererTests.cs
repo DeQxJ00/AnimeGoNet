@@ -40,7 +40,31 @@ public sealed class AiMetadataPromptRendererTests
             StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("最近日期差不超过 7 天且 TMDB EP 与文件名 EP 一致", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v16", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v17", AiMetadataPromptRenderer.PromptVersion);
+    }
+
+    [Fact]
+    public void U2TvSourceRendersMixedTvMovieCompletionRuleOnlyForU2()
+    {
+        var baseInput = new AiMetadataMatchInput(
+            "TV+Movie",
+            [new AiMetadataFileInput("TV/01.mkv", 1), new AiMetadataFileInput("Movie/劇場版.mkv", 1)],
+            null, 123, null, 2, null, null, false);
+
+        var u2 = AiMetadataPromptRenderer.LoadAndRender(baseInput with
+        {
+            PromptFeaturesOverride = new(true, false, true, false) { U2TvSource = true },
+        });
+        var mikan = AiMetadataPromptRenderer.LoadAndRender(baseInput with
+        {
+            PromptFeaturesOverride = new(true, false, true, false),
+        });
+
+        Assert.Contains("本请求来自 U2 并按 TV 处理", u2, StringComparison.Ordinal);
+        Assert.Contains("顶层必须返回 matched=true", u2, StringComparison.Ordinal);
+        Assert.DoesNotContain("本请求来自 U2 并按 TV 处理", mikan, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{#U2_TV_SOURCE}}", u2, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{#U2_TV_SOURCE}}", mikan, StringComparison.Ordinal);
     }
 
     [Fact]

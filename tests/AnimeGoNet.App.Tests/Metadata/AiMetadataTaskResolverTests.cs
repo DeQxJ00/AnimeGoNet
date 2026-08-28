@@ -30,7 +30,7 @@ public sealed class AiMetadataTaskResolverTests
             "route-secret-lease",
             AniDbAnimeId: 999,
             ImdbTitleId: "tt1234567",
-            SourceAdapter: "route-secret-adapter",
+            SourceAdapter: "u2",
             SourcePublishedAtRaw: "route-secret-raw-date",
             TorrentFileCount: 2);
         MetadataTaskFileProjection[] files =
@@ -48,6 +48,7 @@ public sealed class AiMetadataTaskResolverTests
         var file = Assert.Single(input.Files);
         Assert.Equal("episode-04.mkv", file.Name);
         Assert.Equal(1234, file.SizeBytes);
+        Assert.True(input.PromptFeaturesOverride!.U2TvSource);
         var serializedInput = JsonSerializer.Serialize(input);
         Assert.DoesNotContain("route-secret", serializedInput, StringComparison.Ordinal);
         Assert.Equal(72517, result.Value!.Series.Id);
@@ -81,7 +82,7 @@ public sealed class AiMetadataTaskResolverTests
             ["Name", "SizeBytes"],
             typeof(AiMetadataFileInput).GetProperties().Select(property => property.Name));
         Assert.Equal(
-            ["TmdbMcp", "BangumiMcp", "AniDbLookup", "BangumiPubDateFirst", "ImdbLookup"],
+            ["TmdbMcp", "BangumiMcp", "AniDbLookup", "BangumiPubDateFirst", "ImdbLookup", "U2TvSource"],
             typeof(AiMetadataPromptFeatures).GetProperties().Select(property => property.Name));
     }
 

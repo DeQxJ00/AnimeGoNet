@@ -108,6 +108,8 @@ public sealed record AiMetadataPromptFeatures(
 {
     public bool ImdbLookup { get; init; }
 
+    public bool U2TvSource { get; init; }
+
     public static AiMetadataPromptFeatures Resolve(AiMetadataMatchInput input)
     {
         var requested = input.PromptFeaturesOverride
@@ -132,6 +134,7 @@ public sealed record AiMetadataPromptFeatures(
             ImdbLookup = requested.ImdbLookup
                 && input.ImdbTitleId is not null
                 && tmdb,
+            U2TvSource = requested.U2TvSource,
         };
     }
 }
