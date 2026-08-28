@@ -109,16 +109,6 @@ public sealed partial class AiMetadataResultValidator(
                 seasons.Add(seasonNumber, season);
             }
 
-            if (file.Matched != true)
-            {
-                validated.Add(new ValidatedAiMetadataFile(
-                    input.Files[index],
-                    season,
-                    null,
-                    file.Reason));
-                continue;
-            }
-
             if (file.IsExtras)
             {
                 validated.Add(new ValidatedAiMetadataFile(
@@ -127,6 +117,16 @@ public sealed partial class AiMetadataResultValidator(
                     null,
                     file.Reason,
                     IsExtra: true));
+                continue;
+            }
+
+            if (file.Matched != true)
+            {
+                validated.Add(new ValidatedAiMetadataFile(
+                    input.Files[index],
+                    season,
+                    null,
+                    file.Reason));
                 continue;
             }
 
@@ -248,12 +248,13 @@ public sealed partial class AiMetadataResultValidator(
 
             if (file.Matched == true)
             {
-                if (file.Episode is null or < AiMetadataFileCandidate.ExtrasEpisodeSentinel)
+                if (file.Episode is null || (file.Episode <= 0 && !file.IsExtras))
                 {
                     return new MetadataFailure(MetadataFailureKind.Protocol, "ai_episode_match_invalid", false);
                 }
             }
-            else if (file.Episode is not null || string.IsNullOrWhiteSpace(file.Reason))
+            else if ((file.Episode is not null && !file.IsExtras)
+                || string.IsNullOrWhiteSpace(file.Reason))
             {
                 return new MetadataFailure(MetadataFailureKind.Protocol, "ai_other_resolution_invalid", false);
             }

@@ -464,6 +464,32 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     }
 
     [Fact]
+    public void ParsesNumericStringEpisodeValue()
+    {
+        var candidate = OpenAiCompatibleMetadataMatcher.ParseCandidate(
+            """
+            {
+              "matched": true,
+              "tmdb_id": 42,
+              "files": [
+                {
+                  "name": "Show/01.mkv",
+                  "matched": true,
+                  "season": 1,
+                  "episode": "1",
+                  "reason": null
+                }
+              ],
+              "reason": null
+            }
+            """);
+
+        var file = Assert.Single(candidate.Files!);
+        Assert.False(file.IsExtras);
+        Assert.Equal(1, file.Episode);
+    }
+
+    [Fact]
     public void RejectsUnknownStringEpisodeValue()
     {
         var exception = Assert.Throws<AiMetadataMatcherException>(() =>

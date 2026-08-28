@@ -8,7 +8,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v21";
+    public const string PromptVersion = "tmdb-ai-match-v22";
     public const int MaximumTemplateLength = AiMatchingOptions.MaximumPromptTemplateLength;
 
     private static readonly string[] RequiredPlaceholders =

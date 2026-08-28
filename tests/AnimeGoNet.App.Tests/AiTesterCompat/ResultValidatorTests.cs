@@ -336,6 +336,32 @@ public sealed class ResultValidatorTests
         Assert.True(Assert.Single(result!.Files!).IsExtras);
     }
 
+    [Fact]
+    public void AcceptsUnmatchedExtrasAndNumericStringEpisodeValues()
+    {
+        const string json = """
+            {
+              "matched": true,
+              "tmdb_id": 12345,
+              "files": [
+                { "name": "01.mkv", "matched": true, "season": 1, "episode": "1", "reason": null },
+                { "name": "Summary.mkv", "matched": false, "season": 1, "episode": "Extras", "reason": "Summary" }
+              ],
+              "reason": null
+            }
+            """;
+        var input = new MatchRequestInput(
+            "任务",
+            [new MatchFileInput("01.mkv", 1), new MatchFileInput("Summary.mkv", 2)],
+            IsMikanRssSource: false);
+
+        (bool valid, string? error, TmdbAiMatchResult? result) = ResultValidator.Validate(json, input);
+
+        Assert.True(valid, error);
+        Assert.Equal(1, result!.Files![0].Episode);
+        Assert.True(result.Files[1].IsExtras);
+    }
+
     [Theory]
     [InlineData(0, 4)]
     [InlineData(-2, 2)]

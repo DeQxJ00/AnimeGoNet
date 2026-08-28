@@ -200,7 +200,7 @@ public sealed record AiMetadataFileCandidate(
     [property: JsonConverter(typeof(AiMetadataEpisodeJsonConverter))] int? Episode,
     string? Reason)
 {
-    public const int ExtrasEpisodeSentinel = 0;
+    public const int ExtrasEpisodeSentinel = int.MinValue;
     public const string ExtrasEpisodeValue = "Extras";
 
     public bool IsExtras => Episode == ExtrasEpisodeSentinel;

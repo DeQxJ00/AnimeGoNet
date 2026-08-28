@@ -1,6 +1,6 @@
 # TMDB AI 固定 Prompt
 
-Prompt version：`tmdb-ai-match-v21`
+Prompt version：`tmdb-ai-match-v22`
 
 所有 AI 元数据匹配只使用这一份任务级提示词，不存在独立的季度或 EP 提示词。调用方提供下载任务总标题、视频文件列表，可空的 `bgmid`、`anidbid`、`imdbid`，以及由程序在模型外计算的 Mikan 单文件发布日期候选和最终门禁；并按实际启用状态渲染 `TMDB_MCP`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST`、`TV_SOURCE`、`MOVIE_SOURCE`、`U2_TV_SOURCE` 条件区块。`name` 可以是下载任务内部的相对文件名，但不能是宿主机绝对路径，容量统一使用整数 `size_bytes`。文件名 EP 候选和 `episode_offset` 都不属于 AI 请求或响应，由主程序在逐文件 TMDB Episode 验证后本地处理。非空元数据 ID 已由调用方绑定到这一个下载任务的标题和 Torrent 文件组，但只表示作品级上下文关联，不表示跨站标题、季度或 Episode 编号相同。不发送来源/下载器配置、Bangumi详情、已确认的 TMDB 信息或任何密钥。
 
@@ -30,7 +30,7 @@ Prompt version：`tmdb-ai-match-v21`
 4. 作品级参考 ID 只能加强“这些资料描述当前下载任务所属作品”的上下文，不能单独证明某个 TMDB Series、Season 或 Episode。来源集号以及外部 Episode 编号可能与 TMDB Episode Number 不同，不能直接复制或只按同号匹配。
 {{#BANGUMI_PUBDATE_FIRST}}5. `published_at` 是 Torrent 发布时刻，不是动画播出时刻。`bgm_episode_candidate` 是主程序按该时刻在普通 Bangumi Episode 中选出的最近候选；它只是辅助证据，即使日期很近也不能直接复制成 TMDB Episode Number，必须结合文件名并用 TMDB MCP验证。
 {{/BANGUMI_PUBDATE_FIRST}}
-6. 不匹配 TMDB Season 0 或 Specials。Menu、特别篇、OVA、Summary、PV、CM、NCOP、NCED、Logo  等非正片(季度0以外都算正片)文件返回 matched=true、episode=Extras；如果能可靠确认它随下载任务所属的普通季度，必须返回大于0的 season，供主程序放入该季度的 Extras 文件夹。
+6. 不匹配 TMDB Season 0 或 Specials。Menu、特别篇、OVA、Summary、PV、CM、NCOP、NCED、Logo  等非正片(季度0以外都算正片)文件返回 matched=false、episode="Extras"；如果能可靠确认它随下载任务所属的普通季度，必须返回大于0的 season，供主程序放入该季度的 Extras 文件夹。
 7. 综合使用总标题、全部文件名、连续集关系、单集标题、首播日期和文件容量判断。
 8. size_bytes{{#BANGUMI_PUBDATE_FIRST}} 和发布日期候选{{/BANGUMI_PUBDATE_FIRST}}只能作为辅助线索，不能单独证明匹配结果。
 9. 优先使用季度首播日期判断季度对应关系，Bangumi 与 TMDB 的季度首播日期允许正负 1 天的时区误差。单集 Episode 的首播日期不使用该误差范围。
@@ -74,14 +74,14 @@ Prompt version：`tmdb-ai-match-v21`
       "name": "01.mkv",
       "matched": true,
       "season": 1,
-      "episode": 1,
+      "episode": "1",
       "reason": null
     },
     {
       "name": "SP01 Summary.mkv",
       "matched": false,
       "season": 1,
-      "episode": null,
+      "episode": "Extras",
       "reason": "该文件是随Season 1发布的Summary，不是TMDB正片Episode，应保留原名放入Season 1的Extras文件夹。"
     }
   ],

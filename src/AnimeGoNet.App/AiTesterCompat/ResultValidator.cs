@@ -93,15 +93,16 @@ public static class ResultValidator
             if (file.Matched == true)
             {
                 if (file.Season is null or <= 0) return $"files[{i}].season must be greater than 0 when matched=true.";
-                if (file.Episode is null or < AiMetadataFileCandidate.ExtrasEpisodeSentinel)
+                if (file.Episode is null || (file.Episode <= 0 && !file.IsExtras))
                 {
                     return $"files[{i}].episode must be greater than 0 or Extras when matched=true.";
                 }
                 if (file.Reason is not null) return $"files[{i}].reason must be null when matched=true.";
             }
-            else if (string.IsNullOrWhiteSpace(file.Reason))
+            else if ((file.Episode is not null && !file.IsExtras)
+                || string.IsNullOrWhiteSpace(file.Reason))
             {
-                return $"files[{i}].reason is required when matched=false.";
+                return $"files[{i}] requires episode=null/Extras and a reason when matched=false.";
             }
         }
 

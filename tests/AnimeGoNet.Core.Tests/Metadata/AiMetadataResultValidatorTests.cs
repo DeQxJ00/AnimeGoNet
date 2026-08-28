@@ -61,6 +61,31 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
+    public async Task ValidatesUnmatchedExtrasWithoutRequestingTmdbEpisode()
+    {
+        var tmdb = new FakeTmdbClient();
+        var input = Input(new AiMetadataFileInput("Show/Summary.mkv", 10));
+        var candidate = new AiMetadataMatchCandidate(
+            true,
+            42,
+            [new(
+                "Show/Summary.mkv",
+                false,
+                2,
+                AiMetadataFileCandidate.ExtrasEpisodeSentinel,
+                "Summary belongs in Extras.")],
+            null);
+
+        var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
+
+        Assert.True(result.IsSuccess);
+        var file = Assert.Single(result.Value!.Files);
+        Assert.True(file.IsExtra);
+        Assert.Equal("Summary belongs in Extras.", file.OtherReason);
+        Assert.Equal(0, tmdb.EpisodeCalls);
+    }
+
+    [Fact]
     public async Task ReZeroCopiedTitleFileNameIsIgnoredAndOriginalInputIdentityIsPreserved()
     {
         var tmdb = new FakeTmdbClient();

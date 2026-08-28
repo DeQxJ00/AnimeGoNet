@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -22,16 +23,24 @@ public sealed class AiMetadataEpisodeJsonConverter : JsonConverter<int?>
             return episode;
         }
 
-        if (reader.TokenType == JsonTokenType.String
-            && string.Equals(
-                reader.GetString()?.Trim(),
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var value = reader.GetString()?.Trim();
+            if (string.Equals(
+                value,
                 AiMetadataFileCandidate.ExtrasEpisodeValue,
                 StringComparison.OrdinalIgnoreCase))
-        {
-            return AiMetadataFileCandidate.ExtrasEpisodeSentinel;
+            {
+                return AiMetadataFileCandidate.ExtrasEpisodeSentinel;
+            }
+
+            if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out episode))
+            {
+                return episode;
+            }
         }
 
-        throw new JsonException("episode must be a number, null, or Extras.");
+        throw new JsonException("episode must be a number, numeric string, null, or Extras.");
     }
 
     public override void Write(
@@ -49,7 +58,7 @@ public sealed class AiMetadataEpisodeJsonConverter : JsonConverter<int?>
         }
         else
         {
-            writer.WriteNumberValue(value.Value);
+            writer.WriteStringValue(value.Value.ToString(CultureInfo.InvariantCulture));
         }
     }
 }

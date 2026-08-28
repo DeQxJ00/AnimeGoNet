@@ -1206,10 +1206,10 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 72517,
                 input.Files.Select(file => new AiMetadataFileCandidate(
                     file.Name,
-                    true,
+                    false,
                     2,
                     AiMetadataFileCandidate.ExtrasEpisodeSentinel,
-                    null)).ToArray(),
+                    "AI classified this file as Extras.")).ToArray(),
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
