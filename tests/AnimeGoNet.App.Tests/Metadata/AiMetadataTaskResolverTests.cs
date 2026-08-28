@@ -49,6 +49,8 @@ public sealed class AiMetadataTaskResolverTests
         Assert.Equal("episode-04.mkv", file.Name);
         Assert.Equal(1234, file.SizeBytes);
         Assert.True(input.PromptFeaturesOverride!.U2TvSource);
+        Assert.True(input.PromptFeaturesOverride.TvSource);
+        Assert.False(input.PromptFeaturesOverride.MovieSource);
         var serializedInput = JsonSerializer.Serialize(input);
         Assert.DoesNotContain("route-secret", serializedInput, StringComparison.Ordinal);
         Assert.Equal(72517, result.Value!.Series.Id);
@@ -82,8 +84,42 @@ public sealed class AiMetadataTaskResolverTests
             ["Name", "SizeBytes"],
             typeof(AiMetadataFileInput).GetProperties().Select(property => property.Name));
         Assert.Equal(
-            ["TmdbMcp", "BangumiMcp", "AniDbLookup", "BangumiPubDateFirst", "ImdbLookup", "U2TvSource"],
+            ["TmdbMcp", "BangumiMcp", "AniDbLookup", "BangumiPubDateFirst", "ImdbLookup", "U2TvSource", "TvSource", "MovieSource"],
             typeof(AiMetadataPromptFeatures).GetProperties().Select(property => property.Name));
+    }
+
+    [Fact]
+    public async Task SourceSelectedMovieTypeActivatesOnlyMoviePromptSection()
+    {
+        var matcher = new FakeMatcher();
+        var resolver = new AiMetadataTaskResolver(
+            matcher,
+            new AiMetadataResultValidator(new FakeTmdbClient()),
+            new AiPublicationEvidenceResolver(
+                null,
+                new AiMatchingOptions { UseBangumiPubDateFirst = false }));
+        var claim = new MetadataTaskClaim(
+            "run",
+            "task",
+            "Movie title",
+            null,
+            null,
+            null,
+            1,
+            "lease",
+            SourceAdapter: "mikan",
+            TorrentFileCount: 1,
+            MediaType: "movie");
+
+        var result = await resolver.ResolveAsync(
+            claim,
+            [new MetadataTaskFileProjection("video", "Movie.mkv", 1234, null, null)]);
+
+        Assert.True(result.IsSuccess);
+        var features = Assert.Single(matcher.Requests).PromptFeaturesOverride!;
+        Assert.False(features.TvSource);
+        Assert.True(features.MovieSource);
+        Assert.False(features.U2TvSource);
     }
 
     [Fact]

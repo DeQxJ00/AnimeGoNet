@@ -8,7 +8,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v20";
+    public const string PromptVersion = "tmdb-ai-match-v21";
     public const int MaximumTemplateLength = AiMatchingOptions.MaximumPromptTemplateLength;
 
     private static readonly string[] RequiredPlaceholders =
@@ -31,6 +31,8 @@ public static class AiMetadataPromptRenderer
         "ANIDB_LOOKUP",
         "IMDB_LOOKUP",
         "BANGUMI_PUBDATE_FIRST",
+        "TV_SOURCE",
+        "MOVIE_SOURCE",
         "U2_TV_SOURCE",
     ];
 
@@ -187,16 +189,20 @@ public static class AiMetadataPromptRenderer
     public static string UpgradeTemplateContract(string template)
     {
         ArgumentNullException.ThrowIfNull(template);
-        const string section = "U2_TV_SOURCE";
-        var opening = "{{#" + section + "}}";
-        if (template.Contains(opening, StringComparison.Ordinal))
+        foreach (var section in new[] { "U2_TV_SOURCE", "TV_SOURCE", "MOVIE_SOURCE" })
         {
-            return template;
+            var opening = "{{#" + section + "}}";
+            if (template.Contains(opening, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var authoritativeTemplate = LoadTemplate();
+            var conditional = ExtractConditionalSection(authoritativeTemplate, section);
+            template = template.TrimEnd() + Environment.NewLine + conditional;
         }
 
-        var authoritativeTemplate = LoadTemplate();
-        var conditional = ExtractConditionalSection(authoritativeTemplate, section);
-        return template.TrimEnd() + Environment.NewLine + conditional;
+        return template;
     }
 
     private static string ExtractConditionalSection(string template, string name)
@@ -225,6 +231,8 @@ public static class AiMetadataPromptRenderer
         rendered = ApplyConditionalSection(rendered, "BGM_MCP", features.BangumiMcp);
         rendered = ApplyConditionalSection(rendered, "ANIDB_LOOKUP", features.AniDbLookup);
         rendered = ApplyConditionalSection(rendered, "IMDB_LOOKUP", features.ImdbLookup);
+        rendered = ApplyConditionalSection(rendered, "TV_SOURCE", features.TvSource);
+        rendered = ApplyConditionalSection(rendered, "MOVIE_SOURCE", features.MovieSource);
         rendered = ApplyConditionalSection(rendered, "U2_TV_SOURCE", features.U2TvSource);
         return ApplyConditionalSection(
             rendered,

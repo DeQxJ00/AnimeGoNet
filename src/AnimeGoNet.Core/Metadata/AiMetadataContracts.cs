@@ -111,6 +111,10 @@ public sealed record AiMetadataPromptFeatures(
 
     public bool U2TvSource { get; init; }
 
+    public bool TvSource { get; init; } = true;
+
+    public bool MovieSource { get; init; }
+
     public static AiMetadataPromptFeatures Resolve(AiMetadataMatchInput input)
     {
         var requested = input.PromptFeaturesOverride
@@ -136,6 +140,8 @@ public sealed record AiMetadataPromptFeatures(
                 && input.ImdbTitleId is not null
                 && tmdb,
             U2TvSource = requested.U2TvSource,
+            TvSource = requested.TvSource && !requested.MovieSource,
+            MovieSource = requested.MovieSource,
         };
     }
 }

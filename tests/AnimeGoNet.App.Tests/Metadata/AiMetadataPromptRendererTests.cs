@@ -40,7 +40,31 @@ public sealed class AiMetadataPromptRendererTests
             StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("最近日期差不超过 7 天且 TMDB EP 与文件名 EP 一致", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v20", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Contains("tmdb_id 必须是 TMDB TV Series ID", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("tmdb_id 必须是 TMDB Movie ID", rendered, StringComparison.Ordinal);
+        Assert.Equal("tmdb-ai-match-v21", AiMetadataPromptRenderer.PromptVersion);
+    }
+
+    [Fact]
+    public void MovieSourceRendersMovieIdentityRuleInsteadOfTvIdentityRule()
+    {
+        var input = new AiMetadataMatchInput(
+            "Movie",
+            [new AiMetadataFileInput("Movie.mkv", 1)],
+            null, null, null, 1, null, null, false)
+        {
+            PromptFeaturesOverride = new(false, false, false, false)
+            {
+                MovieSource = true,
+            },
+        };
+
+        var rendered = AiMetadataPromptRenderer.LoadAndRender(input);
+
+        Assert.Contains("tmdb_id 必须是 TMDB Movie ID", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("tmdb_id 必须是 TMDB TV Series ID", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{#TV_SOURCE}}", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{#MOVIE_SOURCE}}", rendered, StringComparison.Ordinal);
     }
 
     [Fact]

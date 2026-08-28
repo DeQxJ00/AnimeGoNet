@@ -1,8 +1,8 @@
 # TMDB AI 固定 Prompt
 
-Prompt version：`tmdb-ai-match-v20`
+Prompt version：`tmdb-ai-match-v21`
 
-所有 AI 元数据匹配只使用这一份任务级提示词，不存在独立的季度或 EP 提示词。调用方提供下载任务总标题、视频文件列表，可空的 `bgmid`、`anidbid`、`imdbid`，以及由程序在模型外计算的 Mikan 单文件发布日期候选和最终门禁；并按实际启用状态渲染 `TMDB_MCP`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST`、`U2_TV_SOURCE` 条件区块。`name` 可以是下载任务内部的相对文件名，但不能是宿主机绝对路径，容量统一使用整数 `size_bytes`。文件名 EP 候选和 `episode_offset` 都不属于 AI 请求或响应，由主程序在逐文件 TMDB Episode 验证后本地处理。非空元数据 ID 已由调用方绑定到这一个下载任务的标题和 Torrent 文件组，但只表示作品级上下文关联，不表示跨站标题、季度或 Episode 编号相同。不发送来源/下载器配置、Bangumi详情、已确认的 TMDB 信息或任何密钥。
+所有 AI 元数据匹配只使用这一份任务级提示词，不存在独立的季度或 EP 提示词。调用方提供下载任务总标题、视频文件列表，可空的 `bgmid`、`anidbid`、`imdbid`，以及由程序在模型外计算的 Mikan 单文件发布日期候选和最终门禁；并按实际启用状态渲染 `TMDB_MCP`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST`、`TV_SOURCE`、`MOVIE_SOURCE`、`U2_TV_SOURCE` 条件区块。`name` 可以是下载任务内部的相对文件名，但不能是宿主机绝对路径，容量统一使用整数 `size_bytes`。文件名 EP 候选和 `episode_offset` 都不属于 AI 请求或响应，由主程序在逐文件 TMDB Episode 验证后本地处理。非空元数据 ID 已由调用方绑定到这一个下载任务的标题和 Torrent 文件组，但只表示作品级上下文关联，不表示跨站标题、季度或 Episode 编号相同。不发送来源/下载器配置、Bangumi详情、已确认的 TMDB 信息或任何密钥。
 
 ```text
 你是一个动画 TMDB 元数据匹配器。
@@ -22,7 +22,9 @@ Prompt version：`tmdb-ai-match-v20`
 
 要求：
 
-1. tmdb_id 必须是 TMDB TV Series ID，不能是 Movie、Season 或 Episode ID。
+{{#TV_SOURCE}}1. tmdb_id 必须是 TMDB TV Series ID，不能是 Movie、Season 或 Episode ID。
+{{/TV_SOURCE}}{{#MOVIE_SOURCE}}1. tmdb_id 必须是 TMDB Movie ID，不能是 TV Series、Season 或 Episode ID。
+{{/MOVIE_SOURCE}}
 2. 最终动画名、季度和集号必须以 TMDB 为准，来源标题和文件名只用于查找。
 3. 不得要求下载标题、Bangumi/AniDB/IMDb 标题与 TMDB 标题字面相同。允许本地化名称、别名、译名、罗马字、续作命名和数据库拆分方式不同；应结合别名、日期、正片数量和发布结构判断。
 4. 作品级参考 ID 只能加强“这些资料描述当前下载任务所属作品”的上下文，不能单独证明某个 TMDB Series、Season 或 Episode。来源集号以及外部 Episode 编号可能与 TMDB Episode Number 不同，不能直接复制或只按同号匹配。

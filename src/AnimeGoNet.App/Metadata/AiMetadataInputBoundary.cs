@@ -1,4 +1,5 @@
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Media;
 using AnimeGoNet.Data.Metadata;
 
 namespace AnimeGoNet.App.Metadata;
@@ -14,6 +15,11 @@ internal static class AiMetadataInputBoundary
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(videos);
         ArgumentNullException.ThrowIfNull(publication);
+        var isMovie = string.Equals(
+            claim.MediaType,
+            MediaTypes.Movie,
+            StringComparison.OrdinalIgnoreCase);
+        var isTv = !isMovie;
 
         // Deliberate data diode: this projection has no Torrent URL/fingerprint,
         // announce data, staged bytes, route snapshot, Cookie or downloader secret.
@@ -37,7 +43,9 @@ internal static class AiMetadataInputBoundary
                 BangumiPubDateFirst: publication.UseBangumiPubDateFirst)
             {
                 ImdbLookup = claim.ImdbTitleId is not null,
-                U2TvSource = string.Equals(
+                TvSource = isTv,
+                MovieSource = isMovie,
+                U2TvSource = isTv && string.Equals(
                     claim.SourceAdapter,
                     "u2",
                     StringComparison.OrdinalIgnoreCase),
