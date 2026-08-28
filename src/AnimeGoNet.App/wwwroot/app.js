@@ -3668,12 +3668,27 @@ function renderSubtitleImportCandidates() {
         preview.removeAttribute("title");
         return;
     }
-    const previewCandidate = (candidate, row) => {
+    const subtitleRenameSuffix = (fileName) => {
+        const languageSuffix = fileName.match(/\.[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8})?\.(?:ass|ssa|srt|vtt|sub|idx|sup|smi|ttml|xml)$/i);
+        if (languageSuffix)
+            return languageSuffix[0];
+        const extension = fileName.match(/\.[^.]+$/);
+        return extension?.[0] ?? "";
+    };
+    const targetName = (candidate, enabled, episode) => {
+        if (!enabled.checked)
+            return "不导入";
+        const value = Number(episode.value);
+        return Number.isInteger(value) && value > 0
+            ? `E${String(value).padStart(3, "0")}${subtitleRenameSuffix(candidate.file_name)}`
+            : `Extras/${candidate.file_name}`;
+    };
+    const previewCandidate = (candidate, row, target) => {
         list.querySelectorAll(".library-subtitle-import-row.previewing")
             .forEach(candidateRow => candidateRow.classList.remove("previewing"));
         row.classList.add("previewing");
-        preview.textContent = candidate.relative_path;
-        preview.title = candidate.relative_path;
+        preview.textContent = `${candidate.relative_path}  →  ${target}`;
+        preview.title = `${candidate.relative_path} → ${target}`;
     };
     list.replaceChildren(...session.candidates.map((candidate) => {
         const row = document.createElement("div");
@@ -3683,8 +3698,6 @@ function renderSubtitleImportCandidates() {
         row.setAttribute("role", "group");
         row.setAttribute("aria-label", `字幕文件 ${candidate.relative_path}`);
         row.dataset.candidateId = candidate.id;
-        row.addEventListener("click", () => previewCandidate(candidate, row));
-        row.addEventListener("focusin", () => previewCandidate(candidate, row));
         row.addEventListener("dragstart", () => row.classList.add("dragging"));
         row.addEventListener("dragend", () => row.classList.remove("dragging"));
         row.addEventListener("dragover", (event) => event.preventDefault());
@@ -3719,13 +3732,32 @@ function renderSubtitleImportCandidates() {
         episode.value = candidate.selected_episode?.toString() ?? "";
         episode.placeholder = "EP";
         episode.dataset.subtitleEpisode = candidate.id;
-        row.append(enabled, name, parsed, episode);
+        const renamePreview = document.createElement("span");
+        renamePreview.className = "library-subtitle-rename-preview";
+        const updateRenamePreview = () => {
+            const target = targetName(candidate, enabled, episode);
+            renamePreview.textContent = `重命名：${target}`;
+            renamePreview.title = target;
+            if (row.classList.contains("previewing"))
+                previewCandidate(candidate, row, target);
+        };
+        row.addEventListener("click", () => previewCandidate(candidate, row, targetName(candidate, enabled, episode)));
+        row.addEventListener("focusin", () => previewCandidate(candidate, row, targetName(candidate, enabled, episode)));
+        enabled.addEventListener("change", updateRenamePreview);
+        episode.addEventListener("input", updateRenamePreview);
+        updateRenamePreview();
+        const file = document.createElement("span");
+        file.className = "library-subtitle-import-file";
+        file.append(name, renamePreview);
+        row.append(enabled, file, parsed, episode);
         return row;
     }));
     const firstCandidate = session.candidates[0];
     const firstRow = list.querySelector(".library-subtitle-import-row");
     if (firstCandidate && firstRow) {
-        previewCandidate(firstCandidate, firstRow);
+        const enabled = firstRow.querySelector("[data-subtitle-enabled]");
+        const episode = firstRow.querySelector("[data-subtitle-episode]");
+        previewCandidate(firstCandidate, firstRow, targetName(firstCandidate, enabled, episode));
     }
     else {
         preview.textContent = "压缩包内没有可导入的字幕文件";
@@ -3813,6 +3845,7 @@ async function aiSubtitleArchiveMatch() {
                 input.value = String(assignment.episode_number);
             if (enabled)
                 enabled.checked = Boolean(assignment.episode_number);
+            input?.dispatchEvent(new Event("input"));
         }
         status.textContent = `AI 已返回 ${result.assignments.length} 个候选（${result.prompt_version}），请人工复核后确认导入。`;
     }

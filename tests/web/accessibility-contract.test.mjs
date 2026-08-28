@@ -585,7 +585,7 @@ test("AI matching workspace exposes metadata and subtitle matching entries", asy
   assert.match(app, /selectWorkspace\("library", "seasons"\)/);
 });
 
-test("subtitle matching previews the complete candidate file name", async () => {
+test("subtitle matching previews every original and renamed file name", async () => {
   const [document, app, css] = await Promise.all([
     page(),
     readFile(appPath, "utf8"),
@@ -595,12 +595,16 @@ test("subtitle matching previews the complete candidate file name", async () => 
   assert.ok(document.querySelector("#library-subtitle-file-preview"));
   assert.match(
     document.querySelector("#library-subtitle-file-preview-name")?.textContent ?? "",
-    /完整字幕文件名/,
+    /原文件名和重命名文件名/,
   );
-  assert.match(app, /preview\.textContent = candidate\.relative_path/);
-  assert.match(app, /row\.addEventListener\("click", \(\) => previewCandidate\(candidate, row\)\)/);
-  assert.match(app, /row\.addEventListener\("focusin", \(\) => previewCandidate\(candidate, row\)\)/);
+  assert.match(app, /`E\$\{String\(value\)\.padStart\(3, "0"\)\}\$\{subtitleRenameSuffix\(candidate\.file_name\)\}`/);
+  assert.match(app, /`Extras\/\$\{candidate\.file_name\}`/);
+  assert.match(app, /renamePreview\.textContent = `重命名：\$\{target\}`/);
+  assert.match(app, /enabled\.addEventListener\("change", updateRenamePreview\)/);
+  assert.match(app, /episode\.addEventListener\("input", updateRenamePreview\)/);
+  assert.match(app, /input\?\.dispatchEvent\(new Event\("input"\)\)/);
   assert.match(css, /\.library-subtitle-file-preview strong\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.library-subtitle-rename-preview\s*\{/);
 });
 
 test("AI test request omits Mikan pubDate when Bangumi date priority is disabled", async () => {

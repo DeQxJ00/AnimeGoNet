@@ -216,6 +216,8 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .library-subtitle-file-preview { display: grid; gap: 5px; margin-top: 10px; padding: 10px 12px; border: 1px solid #40577e; border-radius: 10px; background: rgba(13,24,44,.72); }
 .library-subtitle-file-preview span { color: #8da2c9; font-size: .7rem; }
 .library-subtitle-file-preview strong { color: #e8efff; font-size: .78rem; font-weight: 600; overflow-wrap: anywhere; user-select: text; }
+.library-subtitle-import-file { display: grid; min-width: 0; gap: 3px; }
+.library-subtitle-rename-preview { color: #72dfb4; font-size: .72rem; font-weight: 650; overflow-wrap: anywhere; user-select: text; }
 .library-subtitle-import-list { display: grid; gap: 8px; margin: 10px 0; }
 .library-subtitle-import-row { display: grid; grid-template-columns: auto minmax(0,1fr) 7rem 7rem; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid #334565; border-radius: 10px; background: rgba(5,8,16,.62); }
 .library-subtitle-import-row.previewing { border-color: #6b91cc; box-shadow: 0 0 0 1px rgba(107,145,204,.22); }
