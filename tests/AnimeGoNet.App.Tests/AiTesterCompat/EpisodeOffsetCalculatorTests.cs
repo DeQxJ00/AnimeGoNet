@@ -1,4 +1,5 @@
 using AnimeGoNet.App.AiTesterCompat;
+using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Tests.AiTesterCompat;
 
@@ -9,8 +10,8 @@ public sealed class EpisodeOffsetCalculatorTests
     {
         MatchRequestInput input = MikanInput("[Group] Show [01].mkv", "[Group] Show [02].mkv");
         TmdbAiMatchResult result = Result(
-            new("[Group] Show [01].mkv", true, 2, 13, null),
-            new("[Group] Show [02].mkv", true, 2, 14, null));
+            new("f0001", true, 2, 13, null),
+            new("f0002", true, 2, 14, null));
 
         LocalEpisodeOffsetResult offset = EpisodeOffsetCalculator.Calculate(input, result);
 
@@ -26,8 +27,8 @@ public sealed class EpisodeOffsetCalculatorTests
     {
         MatchRequestInput input = MikanInput("[Group] Show [01].mkv", "[Group] Show [02].mkv");
         TmdbAiMatchResult result = Result(
-            new("[Group] Show [01].mkv", true, 2, 13, null),
-            new("[Group] Show [02].mkv", true, 2, 15, null));
+            new("f0001", true, 2, 13, null),
+            new("f0002", true, 2, 15, null));
 
         LocalEpisodeOffsetResult offset = EpisodeOffsetCalculator.Calculate(input, result);
 
@@ -43,7 +44,7 @@ public sealed class EpisodeOffsetCalculatorTests
 
         LocalEpisodeOffsetResult offset = EpisodeOffsetCalculator.Calculate(
             input,
-            Result(new TmdbAiFileResult("[01].mkv", true, 1, 1, null)));
+            Result(new TmdbAiFileResult("f0001", true, 1, 1, null)));
 
         Assert.False(offset.Applicable);
         Assert.False(offset.Calculated);
@@ -54,8 +55,8 @@ public sealed class EpisodeOffsetCalculatorTests
     {
         MatchRequestInput input = MikanInput("[Group] Show [01].mkv", "[Group] Show [02].mkv");
         TmdbAiMatchResult result = Result(
-            new("[Group] Show [01].mkv", true, 1, 13, null),
-            new("[Group] Show [02].mkv", true, 2, 14, null));
+            new("f0001", true, 1, 13, null),
+            new("f0002", true, 2, 14, null));
 
         LocalEpisodeOffsetResult offset = EpisodeOffsetCalculator.Calculate(input, result);
 
@@ -71,7 +72,8 @@ public sealed class EpisodeOffsetCalculatorTests
             .ToArray();
         MatchRequestInput input = MikanInput(names);
         TmdbAiMatchResult result = Result(input.Files
-            .Select((file, index) => new TmdbAiFileResult(file.Name, true, 1, 51 + index, null))
+            .Select((_, index) => new TmdbAiFileResult(
+                AiMetadataFileIdentity.FromIndex(index), true, 1, 51 + index, null))
             .ToArray());
 
         LocalEpisodeOffsetResult offset = EpisodeOffsetCalculator.Calculate(input, result);

@@ -1894,6 +1894,35 @@ function aiDebugDisclosure(title, value, open = false) {
     details.append(summary, aiDebugCodeBlock(value));
     return details;
 }
+function aiDebugCandidateWithSourceNames(candidate, input) {
+    if (!candidate || typeof candidate !== "object" || !input)
+        return candidate;
+    const candidateRecord = candidate;
+    const candidateFiles = candidateRecord.files;
+    const inputFiles = input.files;
+    if (!Array.isArray(candidateFiles) || !Array.isArray(inputFiles))
+        return candidate;
+    const names = new Map();
+    inputFiles.forEach((value, index) => {
+        if (!value || typeof value !== "object")
+            return;
+        const name = value.name;
+        if (typeof name === "string")
+            names.set(`f${String(index + 1).padStart(4, "0")}`, name);
+    });
+    return {
+        ...candidateRecord,
+        files: candidateFiles.map((value) => {
+            if (!value || typeof value !== "object")
+                return value;
+            const file = value;
+            const fileId = file.file_id;
+            return typeof fileId === "string" && names.has(fileId)
+                ? { ...file, source_name: names.get(fileId) }
+                : file;
+        }),
+    };
+}
 function renderAiDebugDocument(documentValue) {
     const chain = documentValue.chain;
     const content = element("#ai-debug-content");
@@ -1978,7 +2007,7 @@ function renderAiDebugDocument(documentValue) {
     resultSection.className = "ai-debug-section";
     const resultTitle = document.createElement("h3");
     resultTitle.textContent = "4. 模型结果与本地验证";
-    resultSection.append(resultTitle, aiDebugDisclosure("模型原始输出", chain.raw_output ?? "—", true), aiDebugDisclosure("解析候选", chain.candidate), aiDebugDisclosure("TMDB 本地验证", documentValue.validation, true), aiDebugDisclosure("用量", chain.usage));
+    resultSection.append(resultTitle, aiDebugDisclosure("模型原始输出", chain.raw_output ?? "—", true), aiDebugDisclosure("解析候选（file_id 已映射原文件名）", aiDebugCandidateWithSourceNames(chain.candidate, preAi?.input ?? null)), aiDebugDisclosure("TMDB 本地验证", documentValue.validation, true), aiDebugDisclosure("用量", chain.usage));
     sections.push(resultSection, aiDebugDisclosure("完整原始 Debug JSON", documentValue));
     content.replaceChildren(...sections);
 }
@@ -9549,6 +9578,12 @@ function updateSourceCredentialInputs() {
     document.querySelectorAll('[data-source-adapter-scope="u2"]')
         .forEach(field => { field.hidden = !isU2; });
     element("#source-u2-guidance").hidden = !isU2;
+    const preferAniDbTmdb = element("#source-prefer-anidb-tmdb");
+    const aniDbTmdbMappingUrl = element("#source-anidb-tmdb-mapping-url");
+    if (!isU2)
+        preferAniDbTmdb.checked = false;
+    preferAniDbTmdb.disabled = !isU2;
+    aniDbTmdbMappingUrl.disabled = !isU2;
     const cookieLock = current?.locked_fields.find((lock) => lock.field === "mikan_identity_cookie");
     input.disabled = !isMikan || clear.checked || cookieLock !== undefined;
     clear.disabled = !isMikan || current === null || cookieLock !== undefined;
@@ -10398,6 +10433,7 @@ async function saveSource(event) {
     const current = activeSource();
     const save = element("#source-save");
     const status = element("#source-status");
+    const isU2 = element("#source-adapter").value === "u2";
     const common = {
         display_name: element("#source-name").value.trim(),
         downloader_id: element("#source-downloader").value.trim(),
@@ -11259,7 +11295,7 @@ function renderAiTestResult(result) {
     summary.replaceChildren(aiTestSummaryItem("HTTP", result.status_code ? String(result.status_code) : "unavailable"), aiTestSummaryItem("Tester 请求", result.success ? "成功" : "失败"), aiTestSummaryItem("Result JSON", result.result_json_valid ? "有效" : "无效"), aiTestSummaryItem("主程序 TMDB 验证", production?.success ? "通过" : production?.failure_code ?? "未执行/未通过"), aiTestSummaryItem("耗时", `${result.elapsed_milliseconds} ms`), aiTestSummaryItem("请求 / 工具", `${result.ai_api_requests?.length ?? 0} / ${calls.length}`), aiTestSummaryItem("Input Tokens", String(usage.input_tokens ?? "—")), aiTestSummaryItem("Output Tokens", String(usage.output_tokens ?? "—")), aiTestSummaryItem("Reasoning Tokens", String(usage.reasoning_tokens ?? "—")), aiTestSummaryItem("Total Tokens", String(usage.total_tokens ?? "—")), aiTestSummaryItem("Request Identity", result.request_identity ?? "—"), aiTestSummaryItem("错误", result.error_message ?? result.result_json_error ?? "—"));
     summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
     const badge = element("#ai-test-prompt-version");
-    badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v22";
+    badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v24";
     badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
     element("#ai-test-raw-output").textContent =
         result.raw_response || "模型未返回响应。";

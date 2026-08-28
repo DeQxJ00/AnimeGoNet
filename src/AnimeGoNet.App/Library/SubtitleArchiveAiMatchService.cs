@@ -44,7 +44,8 @@ public sealed class SubtitleArchiveAiMatchService(
         await ValidateTmdbAsync(session, response, cancellationToken).ConfigureAwait(false);
 
         var assignments = response.Files!
-            .Select((value, index) => value.Matched == true
+            .Select(value => value.Matched == true
+                && TryParseFileIndex(value.FileId, session.Candidates.Count, out var index)
                 ? new SubtitleArchiveAssignment(session.Candidates[index].Id, value.Episode)
                 : null)
             .OfType<SubtitleArchiveAssignment>()
@@ -57,20 +58,6 @@ public sealed class SubtitleArchiveAiMatchService(
         AiMetadataMatchInput input,
         AiMetadataMatchResponse response)
     {
-        if (response.Files is { Count: var count } && count == input.Files.Count)
-        {
-            for (var index = 0; index < count; index++)
-            {
-                if (!string.Equals(response.Files[index].Name, input.Files[index].Name, StringComparison.Ordinal))
-                {
-                    throw Failure(
-                        MetadataFailureKind.Protocol,
-                        "subtitle_ai_file_identity_mismatch",
-                        response.Usage);
-                }
-            }
-        }
-
         var genericFailure = AiMetadataResultValidator.ValidateStructure(input, response.Candidate);
         if (genericFailure is not null)
         {
@@ -185,4 +172,21 @@ public sealed class SubtitleArchiveAiMatchService(
         string code,
         AiMetadataProviderUsage? usage) =>
         new(kind, code, usage: usage);
+
+    private static bool TryParseFileIndex(string? fileId, int count, out int index)
+    {
+        for (index = 0; index < count; index++)
+        {
+            if (string.Equals(
+                    fileId,
+                    AiMetadataFileIdentity.FromIndex(index),
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        index = -1;
+        return false;
+    }
 }

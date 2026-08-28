@@ -1,3 +1,5 @@
+using AnimeGoNet.Core.Metadata;
+
 namespace AnimeGoNet.App.AiTesterCompat;
 
 public static class EpisodeOffsetCalculator
@@ -16,9 +18,16 @@ public static class EpisodeOffsetCalculator
         }
 
         var mappings = new List<(int Candidate, int Episode, int Season)>();
-        for (int i = 0; i < result.Files.Count; i++)
+        var filesById = result.Files
+            .Where(file => file.FileId is not null)
+            .ToDictionary(file => file.FileId!, StringComparer.Ordinal);
+        for (int i = 0; i < normalized.Files.Count; i++)
         {
-            TmdbAiFileResult file = result.Files[i];
+            if (!filesById.TryGetValue(AiMetadataFileIdentity.FromIndex(i), out var file))
+            {
+                continue;
+            }
+
             if (file.Matched == true &&
                 file.Episode is > 0 &&
                 file.Season is > 0 &&

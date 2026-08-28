@@ -42,7 +42,7 @@ public sealed class AiMetadataPromptRendererTests
         Assert.DoesNotContain("最近日期差不超过 7 天且 TMDB EP 与文件名 EP 一致", rendered, StringComparison.Ordinal);
         Assert.Contains("tmdb_id 必须是 TMDB TV Series ID", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("tmdb_id 必须是 TMDB Movie ID", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v22", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v24", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]

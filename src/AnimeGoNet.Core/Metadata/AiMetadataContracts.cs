@@ -150,6 +150,15 @@ public sealed record AiMetadataFileInput(
     string Name,
     long SizeBytes);
 
+public static class AiMetadataFileIdentity
+{
+    public static string FromIndex(int index)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        return $"f{index + 1:D4}";
+    }
+}
+
 public sealed record AiMetadataMatchCandidate(
     bool? Matched,
     int? TmdbId,
@@ -194,7 +203,7 @@ public sealed record AiMetadataTraceEvent(
     long? DurationMilliseconds = null);
 
 public sealed record AiMetadataFileCandidate(
-    string? Name,
+    string? FileId,
     bool? Matched,
     int? Season,
     [property: JsonConverter(typeof(AiMetadataEpisodeJsonConverter))] int? Episode,

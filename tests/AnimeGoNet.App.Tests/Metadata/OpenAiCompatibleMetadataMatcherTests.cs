@@ -366,7 +366,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
         var handler = new FakeAiAndMcpHandler
         {
             FinalModelResult =
-                """{"matched":true,"tmdb_id":999999,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""",
+                """{"matched":true,"tmdb_id":999999,"files":[{"file_id":"f0001","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""",
         };
         using var client = new HttpClient(handler);
         using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
@@ -382,12 +382,12 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     }
 
     [Fact]
-    public async Task FakeProviderEchoedFileNameIsIgnoredBeforeAuthoritativeTmdbValidation()
+    public async Task FakeProviderFileIdMapsBackToAuthoritativeInputBeforeTmdbValidation()
     {
         var handler = new FakeAiAndMcpHandler
         {
             FinalModelResult =
-                """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/02.mkv","matched":true,"season":1,"episode":2,"reason":null}],"reason":null}""",
+                """{"matched":true,"tmdb_id":42,"files":[{"file_id":"f0001","matched":true,"season":1,"episode":2,"reason":null}],"reason":null}""",
         };
         using var client = new HttpClient(handler);
         using var matcher = new OpenAiCompatibleMetadataMatcher(client, Options());
@@ -447,7 +447,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
               "tmdb_id": 42,
               "files": [
                 {
-                  "name": "Show/NCOP.mkv",
+                  "file_id": "f0001",
                   "matched": true,
                   "season": 1,
                   "episode": "Extras",
@@ -473,7 +473,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
               "tmdb_id": 42,
               "files": [
                 {
-                  "name": "Show/01.mkv",
+                  "file_id": "f0001",
                   "matched": true,
                   "season": 1,
                   "episode": "1",
@@ -500,7 +500,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
                   "tmdb_id": 42,
                   "files": [
                     {
-                      "name": "Show/unknown.mkv",
+                      "file_id": "f0001",
                       "matched": true,
                       "season": 1,
                       "episode": "Special",
@@ -745,7 +745,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             }
 
             var modelResult = FinalModelResult
-                ?? """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
+                ?? """{"matched":true,"tmdb_id":42,"files":[{"file_id":"f0001","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
             return Json(
                 HttpStatusCode.OK,
                 "{\"model\":\"resolved-test-model\",\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":8,\"total_tokens\":28},\"choices\":[{\"message\":{\"content\":"
@@ -796,7 +796,7 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
             }
 
             var modelResult = FinalModelResult
-                ?? """{"matched":true,"tmdb_id":42,"files":[{"name":"Season 1/01.mkv","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
+                ?? """{"matched":true,"tmdb_id":42,"files":[{"file_id":"f0001","matched":true,"season":1,"episode":1,"reason":null}],"reason":null}""";
             return Json(HttpStatusCode.OK,
                 "{\"id\":\"resp-2\",\"model\":\"resolved-test-model\",\"usage\":{\"input_tokens\":20,\"output_tokens\":8,\"output_tokens_details\":{\"reasoning_tokens\":2},\"total_tokens\":28},\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":"
                 + JsonSerializer.Serialize(modelResult)

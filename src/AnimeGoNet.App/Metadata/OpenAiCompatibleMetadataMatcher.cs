@@ -78,8 +78,8 @@ public sealed class OpenAiCompatibleMetadataMatcher(
             new AiMetadataMatchCandidate(
                 false,
                 null,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((_, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     false,
                     null,
                     null,

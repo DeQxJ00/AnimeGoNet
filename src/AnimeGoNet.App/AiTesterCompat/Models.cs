@@ -157,7 +157,7 @@ public sealed record LocalEpisodeOffsetResult(
     string Reason);
 
 public sealed record TmdbAiFileResult(
-    string? Name,
+    [property: JsonPropertyName("file_id")] string? FileId,
     bool? Matched,
     int? Season,
     [property: JsonConverter(typeof(AiMetadataEpisodeJsonConverter))] int? Episode,

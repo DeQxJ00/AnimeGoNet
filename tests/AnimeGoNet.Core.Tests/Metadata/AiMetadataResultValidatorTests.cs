@@ -15,8 +15,8 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [
-                new("Show/01.mkv", true, 2, 3, null),
-                new("Show/NCOP.mkv", false, 2, null, "NCOP belongs in Other."),
+                new("f0001", true, 2, 3, null),
+                new("f0002", false, 2, null, "NCOP belongs in Other."),
             ],
             null);
 
@@ -42,7 +42,7 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [new(
-                "Show/NCOP.mkv",
+                "f0001",
                 true,
                 2,
                 AiMetadataFileCandidate.ExtrasEpisodeSentinel,
@@ -69,7 +69,7 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [new(
-                "Show/Summary.mkv",
+                "f0001",
                 false,
                 2,
                 AiMetadataFileCandidate.ExtrasEpisodeSentinel,
@@ -90,9 +90,8 @@ public sealed class AiMetadataResultValidatorTests
     {
         var tmdb = new FakeTmdbClient();
         const string originalName = "[ANi] Re：從零開始的異世界生活 第四季 - 12 [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4";
-        const string echoedName = "[ANi] Re：從零開始的異世界生活 第四季 - 12 [1080P][Baha][WEB-DL][AAC AVC][CHT][MP4]";
         var input = Input(new AiMetadataFileInput(originalName, 289_517_816));
-        var candidate = Success(echoedName, 1, 78);
+        var candidate = Success(1, 78);
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
 
@@ -111,7 +110,7 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [new(
-                "Show/78.mkv",
+                "f0001",
                 true,
                 1,
                 78,
@@ -126,7 +125,7 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
-    public async Task RejectsMultiFileOrderMismatchBeforeTmdbAccess()
+    public async Task AcceptsReorderedFileIdsAndRestoresOriginalInputOrder()
     {
         var tmdb = new FakeTmdbClient();
         var input = Input(
@@ -136,136 +135,119 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [
-                new("02.mkv", true, 1, 2, null),
-                new("01.mkv", true, 1, 1, null),
+                new("f0002", true, 1, 2, null),
+                new("f0001", true, 1, 1, null),
             ],
             null);
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
 
-        Assert.Equal("ai_file_identity_mismatch", result.Failure!.Code);
-        Assert.Equal(0, tmdb.TotalCalls);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("01.mkv", result.Value!.Files[0].Input.Name);
+        Assert.Equal(1, result.Value.Files[0].Episode!.EpisodeNumber);
+        Assert.Equal("02.mkv", result.Value.Files[1].Input.Name);
+        Assert.Equal(2, result.Value.Files[1].Episode!.EpisodeNumber);
     }
 
     [Fact]
-    public void AcceptsOneCloseFileNameMutationWhenTheRemainingOrderIsAnchored()
+    public void RejectsUnknownFileId()
     {
         var input = Input(
             new AiMetadataFileInput("[AI-Raws] Nadesico 01 [1080p].mkv", 100),
             new AiMetadataFileInput("[AI-Raws] 劇場版 機動戦艦ナデシコ 特別先行編『それから』 [1080p].mkv", 100),
             new AiMetadataFileInput("[AI-Raws] Nadesico 03 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "[AI-Raws] Nadesico 01 [1080p].mkv",
-            "[AI-Raws] 機動戦艦ナデシコ 特別先行編『それから』 [1080p].mkv",
-            "[AI-Raws] Nadesico 03 [1080p].mkv");
+        var candidate = Candidate("f0001", "unknown", "f0003");
 
         var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
 
-        Assert.Null(failure);
+        Assert.Equal("ai_file_id_unknown", failure!.Code);
     }
 
     [Fact]
-    public void AcceptsAtMostTwoCloseFileNameMutations()
+    public void AcceptsEveryFileIdExactlyOnceRegardlessOfOutputOrder()
     {
         var input = Input(
             new AiMetadataFileInput("[AI-Raws] Nadesico 01 『Part A』 [1080p].mkv", 100),
             new AiMetadataFileInput("[AI-Raws] Nadesico 02 『Part B』 [1080p].mkv", 100),
             new AiMetadataFileInput("[AI-Raws] Nadesico 03 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "[AI-Raws] Nadesico 01 「Part A」 [1080p].mkv",
-            "[AI-Raws] Nadesico 02 「Part B」 [1080p].mkv",
-            "[AI-Raws] Nadesico 03 [1080p].mkv");
+        var candidate = Candidate("f0003", "f0001", "f0002");
 
         var failure = AiMetadataResultValidator.ValidateStructure(
             input,
-            candidate,
-            fileIdentityFuzzyMatchLimit: 2);
+            candidate);
 
         Assert.Null(failure);
     }
 
     [Fact]
-    public void RejectsThreeCloseFileNameMutations()
+    public void RejectsDuplicateFileId()
     {
         var input = Input(
             new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 02 『B』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 03 『C』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 04 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "Show 01 「A」 [1080p].mkv",
-            "Show 02 「B」 [1080p].mkv",
-            "Show 03 「C」 [1080p].mkv",
-            "Show 04 [1080p].mkv");
+        var candidate = Candidate("f0001", "f0002", "f0002", "f0004");
 
         var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
 
-        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+        Assert.Equal("ai_file_id_duplicate", failure!.Code);
     }
 
     [Fact]
-    public void DefaultToleranceRejectsTwoCloseFileNameMutations()
+    public void RejectsMissingFileId()
     {
         var input = Input(
             new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 02 『B』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 03 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "Show 01 「A」 [1080p].mkv",
-            "Show 02 「B」 [1080p].mkv",
-            "Show 03 [1080p].mkv");
+        var candidate = Candidate("f0001", "", "f0003");
 
         var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
 
-        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+        Assert.Equal("ai_file_id_missing", failure!.Code);
     }
 
     [Fact]
-    public void ZeroToleranceRestoresExactMultiFileIdentityValidation()
+    public void LegacyFuzzyToleranceDoesNotPermitUnknownFileId()
     {
         var input = Input(
             new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 02 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "Show 01 「A」 [1080p].mkv",
-            "Show 02 [1080p].mkv");
+        var candidate = Candidate("filename.mkv", "f0002");
 
         var failure = AiMetadataResultValidator.ValidateStructure(
             input,
             candidate,
             fileIdentityFuzzyMatchLimit: 0);
 
-        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+        Assert.Equal("ai_file_id_unknown", failure!.Code);
     }
 
     [Fact]
-    public void RejectsCloseFileNameMutationThatChangesEpisodeNumber()
+    public void RejectsFileCountMismatch()
     {
         var input = Input(
             new AiMetadataFileInput("Show Episode 01 [1080p].mkv", 100),
             new AiMetadataFileInput("Show Episode 02 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "Show Episode 03 [1080p].mkv",
-            "Show Episode 02 [1080p].mkv");
+        var candidate = Candidate("f0001");
 
         var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
 
-        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+        Assert.Equal("ai_file_count_mismatch", failure!.Code);
     }
 
     [Fact]
-    public void RejectsTwoMutationsWithoutAnUnchangedOrderAnchor()
+    public void RejectsGeneratedFileIdOutsideInputSet()
     {
         var input = Input(
             new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
             new AiMetadataFileInput("Show 02 『B』 [1080p].mkv", 100));
-        var candidate = Candidate(
-            "Show 01 「A」 [1080p].mkv",
-            "Show 02 「B」 [1080p].mkv");
+        var candidate = Candidate("f0001", "f0003");
 
         var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
 
-        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+        Assert.Equal("ai_file_id_unknown", failure!.Code);
     }
 
     [Fact]
@@ -276,7 +258,7 @@ public sealed class AiMetadataResultValidatorTests
         var candidate = new AiMetadataMatchCandidate(
             true,
             42,
-            [new("OVA.mkv", false, 0, null, "Special")],
+            [new("f0001", false, 0, null, "Special")],
             null);
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
@@ -293,7 +275,7 @@ public sealed class AiMetadataResultValidatorTests
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(
             input,
-            Success(@"E:\private\01.mkv", 1, 1));
+            Success(1, 1));
 
         Assert.Equal("ai_metadata_input_invalid", result.Failure!.Code);
         Assert.Equal(0, tmdb.TotalCalls);
@@ -310,7 +292,7 @@ public sealed class AiMetadataResultValidatorTests
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(
             input,
-            Success("01.mkv", 1, 1));
+            Success(1, 1));
 
         Assert.Equal("ai_metadata_input_invalid", result.Failure!.Code);
         Assert.Equal(0, tmdb.TotalCalls);
@@ -327,8 +309,8 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [
-                new("01a.mkv", true, 1, 1, null),
-                new("01b.mkv", true, 1, 1, null),
+                new("f0001", true, 1, 1, null),
+                new("f0002", true, 1, 1, null),
             ],
             null);
 
@@ -346,12 +328,12 @@ public sealed class AiMetadataResultValidatorTests
 
         var changedSeries = await validator.ValidateAsync(
             input,
-            Success("01.mkv", 2, 1),
+            Success(2, 1),
             expectedSeriesId: 99,
             expectedSeasonNumber: 2);
         var changedSeason = await validator.ValidateAsync(
             input,
-            Success("01.mkv", 2, 1),
+            Success(2, 1),
             expectedSeriesId: 42,
             expectedSeasonNumber: 1);
 
@@ -368,7 +350,7 @@ public sealed class AiMetadataResultValidatorTests
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(
             input,
-            Success("01.mkv", 1, 1));
+            Success(1, 1));
 
         Assert.Equal(MetadataFailureKind.Protocol, result.Failure!.Kind);
         Assert.Equal("ai_tmdb_episode_identity_mismatch", result.Failure.Code);
@@ -388,7 +370,7 @@ public sealed class AiMetadataResultValidatorTests
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(
             input,
-            Success("01.mkv", 1, 1));
+            Success(1, 1));
 
         Assert.Equal(MetadataFailureKind.Network, result.Failure!.Kind);
         Assert.Equal("tmdb_network_error", result.Failure.Code);
@@ -411,7 +393,7 @@ public sealed class AiMetadataResultValidatorTests
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(
             input,
-            Success("01.mkv", 1, 1));
+            Success(1, 1));
 
         Assert.Equal("ai_metadata_input_invalid", result.Failure!.Code);
         Assert.Equal(0, tmdb.TotalCalls);
@@ -425,7 +407,7 @@ public sealed class AiMetadataResultValidatorTests
         var candidate = new AiMetadataMatchCandidate(
             false,
             null,
-            [new("unknown.mkv", false, 1, null, "Episode is ambiguous.")],
+            [new("f0001", false, 1, null, "Episode is ambiguous.")],
             "Task is ambiguous.");
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
@@ -443,7 +425,7 @@ public sealed class AiMetadataResultValidatorTests
         var candidate = new AiMetadataMatchCandidate(
             false,
             42,
-            [new("unknown.mkv", false, null, null, "Season is unknown.")],
+            [new("f0001", false, null, null, "Season is unknown.")],
             "Task cannot be completely arranged.");
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
@@ -460,7 +442,7 @@ public sealed class AiMetadataResultValidatorTests
         var candidate = new AiMetadataMatchCandidate(
             true,
             42,
-            [new("unknown.mkv", false, null, null, "Season is unknown.")],
+            [new("f0001", false, null, null, "Season is unknown.")],
             null);
 
         var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
@@ -481,19 +463,19 @@ public sealed class AiMetadataResultValidatorTests
             BangumiEpisodeCandidate: null,
             UseBangumiPubDateFirst: false);
 
-    private static AiMetadataMatchCandidate Success(string name, int season, int episode) =>
+    private static AiMetadataMatchCandidate Success(int season, int episode) =>
         new(
             true,
             42,
-            [new(name, true, season, episode, null)],
+            [new("f0001", true, season, episode, null)],
             null);
 
-    private static AiMetadataMatchCandidate Candidate(params string[] names) =>
+    private static AiMetadataMatchCandidate Candidate(params string[] fileIds) =>
         new(
             true,
             42,
-            names.Select((name, index) =>
-                new AiMetadataFileCandidate(name, true, 1, index + 1, null)).ToArray(),
+            fileIds.Select((fileId, index) =>
+                new AiMetadataFileCandidate(fileId, true, 1, index + 1, null)).ToArray(),
             null);
 
     private sealed class FakeTmdbClient : ITmdbClient

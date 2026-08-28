@@ -35,7 +35,7 @@ public sealed class AiMetadataTestApiTests
         var prompt = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/prompt");
         var bootstrap = await app.Client.GetFromJsonAsync<JsonElement>("/api/v1/ai-test/bootstrap");
 
-        Assert.Equal("tmdb-ai-match-v22", prompt.GetProperty("prompt_version").GetString());
+        Assert.Equal("tmdb-ai-match-v24", prompt.GetProperty("prompt_version").GetString());
         Assert.Contains("{{SOURCE_TITLE_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
         Assert.Contains("{{OPTIONAL_BGM_ID_JSON}}", prompt.GetProperty("template").GetString(), StringComparison.Ordinal);
         Assert.Equal(
@@ -251,7 +251,7 @@ public sealed class AiMetadataTestApiTests
     [Fact]
     public async Task StreamsExactTesterProgressAndAddsProductionTmdbValidation()
     {
-        const string modelJson = "{\"matched\":true,\"tmdb_id\":42,\"files\":[{\"name\":\"Example - 06.mkv\",\"matched\":true,\"season\":1,\"episode\":6,\"reason\":null}],\"reason\":null}";
+        const string modelJson = "{\"matched\":true,\"tmdb_id\":42,\"files\":[{\"file_id\":\"f0001\",\"matched\":true,\"season\":1,\"episode\":6,\"reason\":null}],\"reason\":null}";
         var providerJson = JsonSerializer.Serialize(new
         {
             choices = new[] { new { message = new { content = modelJson } } },

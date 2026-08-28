@@ -665,8 +665,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     2,
                     7,
@@ -764,8 +764,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     2,
                     7,
@@ -837,8 +837,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 Series.Id,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     file.Name.StartsWith("season-2/", StringComparison.Ordinal) ? 2 : 1,
                     1,
@@ -915,8 +915,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 Series.Id,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     file.Name.StartsWith("season-2/", StringComparison.Ordinal) ? 2 : 1,
                     1,
@@ -1117,8 +1117,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 Series.Id,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     2,
                     17,
@@ -1182,8 +1182,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 Series.Id,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     2,
                     4,
@@ -1290,7 +1290,7 @@ public sealed class AutomaticMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                [new(input.Files[0].Name, false, 2, null, "NCOP is not an Episode.")],
+                [new(AiMetadataFileIdentity.FromIndex(0), false, 2, null, "NCOP is not an Episode.")],
                 null),
         };
         await using var app = await RunningApp.StartAsync(

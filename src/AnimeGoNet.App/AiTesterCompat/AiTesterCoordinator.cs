@@ -290,7 +290,7 @@ public sealed class AiTesterCoordinator(
             parsed.Matched,
             parsed.TmdbId,
             parsed.Files?.Select(file => new AiMetadataFileCandidate(
-                file.Name,
+                file.FileId,
                 file.Matched,
                 file.Season,
                 file.Episode,

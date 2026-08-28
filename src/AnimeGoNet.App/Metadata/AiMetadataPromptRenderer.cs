@@ -8,7 +8,7 @@ namespace AnimeGoNet.App.Metadata;
 
 public static class AiMetadataPromptRenderer
 {
-    public const string PromptVersion = "tmdb-ai-match-v22";
+    public const string PromptVersion = "tmdb-ai-match-v24";
     public const int MaximumTemplateLength = AiMatchingOptions.MaximumPromptTemplateLength;
 
     private static readonly string[] RequiredPlaceholders =
@@ -280,9 +280,11 @@ public static class AiMetadataPromptRenderer
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartArray();
-            foreach (var file in files)
+            for (var index = 0; index < files.Count; index++)
             {
+                var file = files[index];
                 writer.WriteStartObject();
+                writer.WriteString("file_id", AiMetadataFileIdentity.FromIndex(index));
                 writer.WriteString("name", file.Name);
                 writer.WriteNumber("size_bytes", file.SizeBytes);
                 writer.WriteEndObject();

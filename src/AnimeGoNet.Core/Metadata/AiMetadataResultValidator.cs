@@ -23,6 +23,8 @@ public sealed partial class AiMetadataResultValidator(
             return Failed(structuralFailure);
         }
 
+        _ = TryOrderCandidateFiles(input, candidate, out var candidateFiles, out _);
+
         if (candidate.Matched != true)
         {
             return Failed(MetadataFailureKind.SemanticNoMatch, "ai_metadata_not_matched", false);
@@ -68,7 +70,7 @@ public sealed partial class AiMetadataResultValidator(
         var validated = new List<ValidatedAiMetadataFile>(input.Files.Count);
         for (var index = 0; index < input.Files.Count; index++)
         {
-            var file = candidate.Files![index];
+            var file = candidateFiles[index];
             var seasonNumber = file.Season!.Value;
             if (expectedSeasonNumber is not null && seasonNumber != expectedSeasonNumber.Value)
             {
@@ -187,6 +189,9 @@ public sealed partial class AiMetadataResultValidator(
         AiMetadataMatchCandidate candidate,
         int fileIdentityFuzzyMatchLimit = 1)
     {
+        // Retained in the public signature for configuration/API compatibility. v23
+        // identifies files exclusively by the request-scoped file_id contract.
+        _ = fileIdentityFuzzyMatchLimit;
         if (string.IsNullOrWhiteSpace(input.Title)
             || input.Files.Count == 0
             || input.TorrentFileCount <= 0
@@ -226,21 +231,14 @@ public sealed partial class AiMetadataResultValidator(
             return new MetadataFailure(MetadataFailureKind.Protocol, "ai_metadata_no_match_reason_missing", false);
         }
 
-        if (input.Files.Count > 1
-            && !HasCompatibleOrderedFileIdentities(
-                input.Files,
-                candidate.Files,
-                Math.Clamp(
-                    fileIdentityFuzzyMatchLimit,
-                    0,
-                    AiMatchingOptions.MaximumFileIdentityFuzzyMatchLimit)))
+        if (!TryOrderCandidateFiles(input, candidate, out var candidateFiles, out var identityFailure))
         {
-            return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_identity_mismatch", false);
+            return identityFailure;
         }
 
         for (var index = 0; index < input.Files.Count; index++)
         {
-            var file = candidate.Files[index];
+            var file = candidateFiles[index];
             if (file.Matched is null || file.Season is <= 0)
             {
                 return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_resolution_incomplete", false);
@@ -267,131 +265,67 @@ public sealed partial class AiMetadataResultValidator(
         return null;
     }
 
-    private static bool HasCompatibleOrderedFileIdentities(
-        IReadOnlyList<AiMetadataFileInput> inputFiles,
-        IReadOnlyList<AiMetadataFileCandidate> candidateFiles,
-        int fuzzyMatchLimit)
+    private static bool TryOrderCandidateFiles(
+        AiMetadataMatchInput input,
+        AiMetadataMatchCandidate candidate,
+        out IReadOnlyList<AiMetadataFileCandidate> orderedFiles,
+        out MetadataFailure? failure)
     {
-        var mismatchedIndexes = new List<int>(capacity: 2);
-        for (var index = 0; index < inputFiles.Count; index++)
+        var expected = Enumerable.Range(0, input.Files.Count)
+            .ToDictionary(
+                AiMetadataFileIdentity.FromIndex,
+                index => index,
+                StringComparer.Ordinal);
+        var ordered = new AiMetadataFileCandidate[input.Files.Count];
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in candidate.Files!)
         {
-            if (string.Equals(inputFiles[index].Name, candidateFiles[index].Name, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(file.FileId))
             {
-                continue;
-            }
-
-            mismatchedIndexes.Add(index);
-            if (mismatchedIndexes.Count > fuzzyMatchLimit)
-            {
+                orderedFiles = [];
+                failure = new MetadataFailure(
+                    MetadataFailureKind.Protocol,
+                    "ai_file_id_missing",
+                    false);
                 return false;
             }
+
+            if (!expected.TryGetValue(file.FileId, out var inputIndex))
+            {
+                orderedFiles = [];
+                failure = new MetadataFailure(
+                    MetadataFailureKind.Protocol,
+                    "ai_file_id_unknown",
+                    false);
+                return false;
+            }
+
+            if (!seen.Add(file.FileId))
+            {
+                orderedFiles = [];
+                failure = new MetadataFailure(
+                    MetadataFailureKind.Protocol,
+                    "ai_file_id_duplicate",
+                    false);
+                return false;
+            }
+
+            ordered[inputIndex] = file;
         }
 
-        if (mismatchedIndexes.Count == 0)
+        if (seen.Count != expected.Count)
         {
-            return true;
-        }
-
-        // Fuzzy matching is only a narrow fallback. At least one unchanged item must
-        // remain at the same index to anchor the list order.
-        if (mismatchedIndexes.Count == inputFiles.Count)
-        {
+            orderedFiles = [];
+            failure = new MetadataFailure(
+                MetadataFailureKind.Protocol,
+                "ai_file_id_set_mismatch",
+                false);
             return false;
         }
 
-        foreach (var index in mismatchedIndexes)
-        {
-            var expected = inputFiles[index].Name;
-            var actual = candidateFiles[index].Name;
-            if (actual is null)
-            {
-                return false;
-            }
-
-            // An exact name from another position means the model reordered the list.
-            if (inputFiles.Where((_, inputIndex) => inputIndex != index)
-                .Any(file => string.Equals(file.Name, actual, StringComparison.Ordinal)))
-            {
-                return false;
-            }
-
-            if (!HasCompatibleFileIdentity(expected, actual))
-            {
-                return false;
-            }
-        }
-
+        orderedFiles = ordered;
+        failure = null;
         return true;
-    }
-
-    private static bool HasCompatibleFileIdentity(string expected, string actual)
-    {
-        if (!string.Equals(
-                Path.GetExtension(expected),
-                Path.GetExtension(actual),
-                StringComparison.OrdinalIgnoreCase)
-            || !HaveSameIdentityTokens(NumberTokenPattern(), expected, actual)
-            || !HaveSameIdentityTokens(LongHexTokenPattern(), expected, actual))
-        {
-            return false;
-        }
-
-        return CalculateSimilarity(expected, actual) >= 0.90;
-    }
-
-    private static bool HaveSameIdentityTokens(Regex pattern, string expected, string actual)
-    {
-        var expectedMatches = pattern.Matches(expected);
-        var actualMatches = pattern.Matches(actual);
-        if (expectedMatches.Count != actualMatches.Count)
-        {
-            return false;
-        }
-
-        for (var index = 0; index < expectedMatches.Count; index++)
-        {
-            if (!string.Equals(
-                    expectedMatches[index].Value,
-                    actualMatches[index].Value,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static double CalculateSimilarity(string expected, string actual)
-    {
-        if (expected.Length == 0 || actual.Length == 0)
-        {
-            return expected.Length == actual.Length ? 1 : 0;
-        }
-
-        var previous = new int[actual.Length + 1];
-        var current = new int[actual.Length + 1];
-        for (var column = 0; column <= actual.Length; column++)
-        {
-            previous[column] = column;
-        }
-
-        for (var row = 1; row <= expected.Length; row++)
-        {
-            current[0] = row;
-            for (var column = 1; column <= actual.Length; column++)
-            {
-                var substitutionCost = expected[row - 1] == actual[column - 1] ? 0 : 1;
-                current[column] = Math.Min(
-                    Math.Min(current[column - 1] + 1, previous[column] + 1),
-                    previous[column - 1] + substitutionCost);
-            }
-
-            (previous, current) = (current, previous);
-        }
-
-        var distance = previous[actual.Length];
-        return 1 - ((double)distance / Math.Max(expected.Length, actual.Length));
     }
 
     private static bool IsSafeRelativeName(string name)
@@ -426,9 +360,4 @@ public sealed partial class AiMetadataResultValidator(
     [GeneratedRegex("^[A-Za-z]:[\\\\/]", RegexOptions.CultureInvariant)]
     private static partial Regex WindowsRootedPathPattern();
 
-    [GeneratedRegex("[0-9]+", RegexOptions.CultureInvariant)]
-    private static partial Regex NumberTokenPattern();
-
-    [GeneratedRegex("[A-Fa-f0-9]{8,}", RegexOptions.CultureInvariant)]
-    private static partial Regex LongHexTokenPattern();
 }

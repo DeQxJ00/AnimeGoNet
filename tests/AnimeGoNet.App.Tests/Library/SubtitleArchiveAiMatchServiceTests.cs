@@ -14,9 +14,9 @@ public sealed class SubtitleArchiveAiMatchServiceTests
             matcher.Response = Response(
                 72517,
                 [
-                    new("Subs/01.zh-Hans.ass", true, 2, 1, null),
-                    new("Subs/01.zh-Hant.ass", true, 2, 1, null),
-                    new("Extras/NCOP.ass", false, 2, null, "non_episode_extra"),
+                    new("f0001", true, 2, 1, null),
+                    new("f0002", true, 2, 1, null),
+                    new("f0003", false, 2, null, "non_episode_extra"),
                 ]);
             var session = Session();
 
@@ -52,9 +52,9 @@ public sealed class SubtitleArchiveAiMatchServiceTests
             matcher.Response = Response(
                 tmdbId,
                 [
-                    new("Subs/01.zh-Hans.ass", true, seasonNumber, 1, null),
-                    new("Subs/01.zh-Hant.ass", true, seasonNumber, 1, null),
-                    new("Extras/NCOP.ass", false, seasonNumber, null, "non_episode_extra"),
+                    new("f0001", true, seasonNumber, 1, null),
+                    new("f0002", true, seasonNumber, 1, null),
+                    new("f0003", false, seasonNumber, null, "non_episode_extra"),
                 ]);
 
             var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
@@ -65,22 +65,22 @@ public sealed class SubtitleArchiveAiMatchServiceTests
     }
 
     [Fact]
-    public async Task MatchRejectsAChangedOrReorderedRelativePath()
+    public async Task MatchRejectsAnUnknownFileId()
     {
         await WithServiceAsync(async (service, matcher, _) =>
         {
             matcher.Response = Response(
                 72517,
                 [
-                    new("01.zh-Hans.ass", true, 2, 1, null),
-                    new("Subs/01.zh-Hant.ass", true, 2, 1, null),
-                    new("Extras/NCOP.ass", false, 2, null, "non_episode_extra"),
+                    new("unknown", true, 2, 1, null),
+                    new("f0002", true, 2, 1, null),
+                    new("f0003", false, 2, null, "non_episode_extra"),
                 ]);
 
             var exception = await Assert.ThrowsAsync<AiMetadataMatcherException>(
                 () => service.MatchAsync(Session()));
 
-            Assert.Equal("subtitle_ai_file_identity_mismatch", exception.SafeCode);
+            Assert.Equal("ai_file_id_unknown", exception.SafeCode);
         });
     }
 

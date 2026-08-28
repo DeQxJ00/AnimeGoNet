@@ -389,8 +389,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     2,
                     file.Name.Contains("05", StringComparison.Ordinal) ? 5 : 6,
@@ -430,7 +430,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                [new(input.Files[0].Name, false, 2, null, "该文件是特典，不是正片 Episode。")],
+                [new(AiMetadataFileIdentity.FromIndex(0), false, 2, null, "该文件是特典，不是正片 Episode。")],
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
@@ -477,7 +477,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                [new(input.Files[0].Name, true, 2, 6, null)],
+                [new(AiMetadataFileIdentity.FromIndex(0), true, 2, 6, null)],
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
@@ -521,7 +521,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                [new(input.Files[0].Name, true, 2, 7, null)],
+                [new(AiMetadataFileIdentity.FromIndex(0), true, 2, 7, null)],
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
@@ -940,8 +940,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     true,
                     2,
                     7,
@@ -1035,8 +1035,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 true,
                 72517,
                 [
-                    new(input.Files[0].Name, true, 2, 2, null),
-                    new(input.Files[1].Name, true, 2, 1, null),
+                    new(AiMetadataFileIdentity.FromIndex(0), true, 2, 2, null),
+                    new(AiMetadataFileIdentity.FromIndex(1), true, 2, 1, null),
                 ],
                 null),
         };
@@ -1078,14 +1078,15 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => file.Name.Contains("Movie", StringComparison.Ordinal)
+                input.Files.Select((file, index) => file.Name.Contains("Movie", StringComparison.Ordinal)
                     ? new AiMetadataFileCandidate(
-                        file.Name,
+                        AiMetadataFileIdentity.FromIndex(index),
                         false,
                         2,
                         null,
                         "movie for postprocessing")
-                    : new AiMetadataFileCandidate(file.Name, true, 2, 1, null)).ToArray(),
+                    : new AiMetadataFileCandidate(
+                        AiMetadataFileIdentity.FromIndex(index), true, 2, 1, null)).ToArray(),
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
@@ -1170,8 +1171,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name, false, 2, null, "not an episode")).ToArray(),
+                input.Files.Select((_, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index), false, 2, null, "not an episode")).ToArray(),
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(
@@ -1204,8 +1205,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                input.Files.Select(file => new AiMetadataFileCandidate(
-                    file.Name,
+                input.Files.Select((_, index) => new AiMetadataFileCandidate(
+                    AiMetadataFileIdentity.FromIndex(index),
                     false,
                     2,
                     AiMetadataFileCandidate.ExtrasEpisodeSentinel,
@@ -1250,8 +1251,8 @@ public sealed class EpisodeMetadataResolutionProcessorTests
                 true,
                 72517,
                 [
-                    new(input.Files[0].Name, true, 2, 9, null),
-                    new(input.Files[1].Name, true, 2, 5, null),
+                    new(AiMetadataFileIdentity.FromIndex(0), true, 2, 9, null),
+                    new(AiMetadataFileIdentity.FromIndex(1), true, 2, 5, null),
                 ],
                 null),
         };
@@ -1374,7 +1375,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             ResultFactory = input => new AiMetadataMatchCandidate(
                 true,
                 72517,
-                [new(input.Files[0].Name, true, 2, 7, null)],
+                [new(AiMetadataFileIdentity.FromIndex(0), true, 2, 7, null)],
                 null),
         };
         await using var app = await StartSeasonResolvedTaskAsync(

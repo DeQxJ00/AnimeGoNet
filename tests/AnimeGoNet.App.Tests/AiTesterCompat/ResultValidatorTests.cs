@@ -1,4 +1,5 @@
 using AnimeGoNet.App.AiTesterCompat;
+using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.Tests.AiTesterCompat;
 
@@ -12,7 +13,7 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "01.mkv", "matched": true, "season": 1, "episode": 1, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 1, "reason": null }
               ],
               "reason": null
             }
@@ -34,14 +35,14 @@ public sealed class ResultValidatorTests
         {
             string name = $"{episode:00}.mkv";
             inputFiles.Add(new MatchFileInput(name, episode));
-            responseFiles.Add($$"""    { "name": "{{name}}", "matched": true, "season": 1, "episode": {{episode}}, "reason": null }""");
+            responseFiles.Add($$"""    { "file_id": "{{AiMetadataFileIdentity.FromIndex(inputFiles.Count - 1)}}", "matched": true, "season": 1, "episode": {{episode}}, "reason": null }""");
         }
 
         string[] otherNames = ["Menu.mkv", "SP.mkv", "PV.mkv", "NCOP.mkv", "NCED.mkv", "Logo.mkv"];
         foreach (string name in otherNames)
         {
             inputFiles.Add(new MatchFileInput(name, 100));
-            responseFiles.Add($$"""    { "name": "{{name}}", "matched": false, "season": 1, "episode": null, "reason": "{{name}} 是非正片文件，可放入 Season 1 Other。" }""");
+            responseFiles.Add($$"""    { "file_id": "{{AiMetadataFileIdentity.FromIndex(inputFiles.Count - 1)}}", "matched": false, "season": 1, "episode": null, "reason": "{{name}} 是非正片文件，可放入 Season 1 Other。" }""");
         }
 
         string json = string.Join('\n', [
@@ -69,7 +70,7 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "第01话.mkv", "matched": true, "season": 2, "episode": 67, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 2, "episode": 67, "reason": null }
               ],
               "reason": null
             }
@@ -89,8 +90,8 @@ public sealed class ResultValidatorTests
               "matched": false,
               "tmdb_id": 12345,
               "files": [
-                { "name": "01.mkv", "matched": true, "season": 1, "episode": 1, "reason": null },
-                { "name": "SP.mkv", "matched": false, "season": null, "episode": null, "reason": "无法对应正篇Episode。" }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 1, "reason": null },
+                { "file_id": "f0002", "matched": false, "season": null, "episode": null, "reason": "无法对应正篇Episode。" }
               ],
               "reason": "部分文件无法可靠确认。"
             }
@@ -103,14 +104,14 @@ public sealed class ResultValidatorTests
     }
 
     [Fact]
-    public void IgnoresEchoedFileNameBecauseOriginalInputIdentityIsAuthoritative()
+    public void AcceptsFileIdWithoutEchoedFileName()
     {
         string json = """
             {
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "02.mkv", "matched": true, "season": 1, "episode": 2, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 2, "reason": null }
               ],
               "reason": null
             }
@@ -123,15 +124,15 @@ public sealed class ResultValidatorTests
     }
 
     [Fact]
-    public void RejectsMismatchedEchoedNamesForMultiFileMapping()
+    public void AcceptsReorderedFileIdsForMultiFileMapping()
     {
         string json = """
             {
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "02.mkv", "matched": true, "season": 1, "episode": 2, "reason": null },
-                { "name": "01.mkv", "matched": true, "season": 1, "episode": 1, "reason": null }
+                { "file_id": "f0002", "matched": true, "season": 1, "episode": 2, "reason": null },
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 1, "reason": null }
               ],
               "reason": null
             }
@@ -142,8 +143,7 @@ public sealed class ResultValidatorTests
 
         (bool valid, string? error, _) = ResultValidator.Validate(json, input);
 
-        Assert.False(valid);
-        Assert.Contains("multi-file mapping", error);
+        Assert.True(valid, error);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "01.mkv", "matched": true, "season": null, "episode": 1, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": null, "episode": 1, "reason": null }
               ],
               "reason": null
             }
@@ -174,7 +174,7 @@ public sealed class ResultValidatorTests
               "matched": false,
               "tmdb_id": 12345,
               "files": [
-                { "name": "OVA.mkv", "matched": false, "season": 0, "episode": null, "reason": "特别篇不匹配正篇Episode。" }
+                { "file_id": "f0001", "matched": false, "season": 0, "episode": null, "reason": "特别篇不匹配正篇Episode。" }
               ],
               "reason": "部分文件无法可靠确认。"
             }
@@ -194,7 +194,7 @@ public sealed class ResultValidatorTests
               "matched": false,
               "tmdb_id": 12345,
               "files": [
-                { "name": "NCOP.mkv", "matched": false, "season": 1, "episode": null, "reason": "NCOP无法可靠匹配到正篇Episode，保留到普通季度其他文件。" }
+                { "file_id": "f0001", "matched": false, "season": 1, "episode": null, "reason": "NCOP无法可靠匹配到正篇Episode，保留到普通季度其他文件。" }
               ],
               "reason": "部分文件无法可靠确认。"
             }
@@ -214,7 +214,7 @@ public sealed class ResultValidatorTests
               "matched": false,
               "tmdb_id": 12345,
               "files": [
-                { "name": "OVA.mkv", "matched": false, "season": null, "episode": null, "reason": "OVA无法可靠匹配到普通季度和Episode。" }
+                { "file_id": "f0001", "matched": false, "season": null, "episode": null, "reason": "OVA无法可靠匹配到普通季度和Episode。" }
               ],
               "reason": "部分文件无法可靠确认。"
             }
@@ -234,7 +234,7 @@ public sealed class ResultValidatorTests
               "tmdb_id": 12345,
               "title": "TMDB名称",
               "files": [
-                { "name": "01.mkv", "matched": true, "season": 1, "episode": 1, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 1, "reason": null }
               ],
               "reason": null
             }
@@ -254,7 +254,7 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "[Group] Show [04].mkv", "matched": true, "season": 1, "episode": 8, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 8, "reason": null }
               ],
               "reason": null
             }
@@ -275,7 +275,7 @@ public sealed class ResultValidatorTests
               "tmdb_id": 12345,
               "episode_offset": 1,
               "files": [
-                { "name": "[Group] Show [04].mkv", "matched": true, "season": 1, "episode": 8, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": 8, "reason": null }
               ],
               "reason": null
             }
@@ -296,8 +296,8 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "[Group] Show [01].mkv", "matched": true, "season": 2, "episode": 13, "reason": null },
-                { "name": "[Group] Show [02].mkv", "matched": true, "season": 2, "episode": 14, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 2, "episode": 13, "reason": null },
+                { "file_id": "f0002", "matched": true, "season": 2, "episode": 14, "reason": null }
               ],
               "reason": null
             }
@@ -320,7 +320,7 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "NCOP.mkv", "matched": true, "season": 1, "episode": "Extras", "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": "Extras", "reason": null }
               ],
               "reason": null
             }
@@ -344,8 +344,8 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "01.mkv", "matched": true, "season": 1, "episode": "1", "reason": null },
-                { "name": "Summary.mkv", "matched": false, "season": 1, "episode": "Extras", "reason": "Summary" }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": "1", "reason": null },
+                { "file_id": "f0002", "matched": false, "season": 1, "episode": "Extras", "reason": "Summary" }
               ],
               "reason": null
             }
@@ -372,7 +372,7 @@ public sealed class ResultValidatorTests
               "matched": true,
               "tmdb_id": 12345,
               "files": [
-                { "name": "[Group] Show [04].mkv", "matched": true, "season": 1, "episode": {{tmdbEpisode}}, "reason": null }
+                { "file_id": "f0001", "matched": true, "season": 1, "episode": {{tmdbEpisode}}, "reason": null }
               ],
               "reason": null
             }

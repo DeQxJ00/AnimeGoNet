@@ -989,6 +989,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .source-switches label { display: flex; align-items: center; gap: 7px; }
 .source-switches input { accent-color: #59d3a5; }
 .source-switches .source-u2-mapping-option { flex: 1 1 100%; display: grid; grid-template-columns: auto minmax(0, max-content) minmax(0, 1fr); align-items: center; column-gap: 9px; row-gap: 7px; }
+.source-switches .source-u2-mapping-option[hidden] { display: none; }
 .configuration-mikan-ai-region { display: grid; gap: 14px; padding: 16px; border: 1px solid #51477d; border-radius: 15px; background: rgba(43,34,75,.32); }
 .configuration-mikan-ai-region > fieldset { margin: 0; }
 .configuration-mikan-ai-heading h3 { margin: 2px 0 5px; }

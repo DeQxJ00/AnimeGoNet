@@ -4243,6 +4243,36 @@ function aiDebugDisclosure(title: string, value: unknown, open = false): HTMLEle
   return details;
 }
 
+function aiDebugCandidateWithSourceNames(
+  candidate: unknown,
+  input: Record<string, unknown> | null,
+): unknown {
+  if (!candidate || typeof candidate !== "object" || !input) return candidate;
+  const candidateRecord = candidate as Record<string, unknown>;
+  const candidateFiles = candidateRecord.files;
+  const inputFiles = input.files;
+  if (!Array.isArray(candidateFiles) || !Array.isArray(inputFiles)) return candidate;
+
+  const names = new Map<string, string>();
+  inputFiles.forEach((value, index) => {
+    if (!value || typeof value !== "object") return;
+    const name = (value as Record<string, unknown>).name;
+    if (typeof name === "string") names.set(`f${String(index + 1).padStart(4, "0")}`, name);
+  });
+
+  return {
+    ...candidateRecord,
+    files: candidateFiles.map((value) => {
+      if (!value || typeof value !== "object") return value;
+      const file = value as Record<string, unknown>;
+      const fileId = file.file_id;
+      return typeof fileId === "string" && names.has(fileId)
+        ? { ...file, source_name: names.get(fileId) }
+        : file;
+    }),
+  };
+}
+
 function renderAiDebugDocument(documentValue: AiDebugDocument): void {
   const chain = documentValue.chain;
   const content = element<HTMLElement>("#ai-debug-content");
@@ -4348,7 +4378,10 @@ function renderAiDebugDocument(documentValue: AiDebugDocument): void {
   resultSection.append(
     resultTitle,
     aiDebugDisclosure("模型原始输出", chain.raw_output ?? "—", true),
-    aiDebugDisclosure("解析候选", chain.candidate),
+    aiDebugDisclosure(
+      "解析候选（file_id 已映射原文件名）",
+      aiDebugCandidateWithSourceNames(chain.candidate, preAi?.input ?? null),
+    ),
     aiDebugDisclosure("TMDB 本地验证", documentValue.validation, true),
     aiDebugDisclosure("用量", chain.usage),
   );
@@ -12609,6 +12642,11 @@ function updateSourceCredentialInputs(): void {
   document.querySelectorAll<HTMLElement>('[data-source-adapter-scope="u2"]')
     .forEach(field => { field.hidden = !isU2; });
   element<HTMLElement>("#source-u2-guidance").hidden = !isU2;
+  const preferAniDbTmdb = element<HTMLInputElement>("#source-prefer-anidb-tmdb");
+  const aniDbTmdbMappingUrl = element<HTMLInputElement>("#source-anidb-tmdb-mapping-url");
+  if (!isU2) preferAniDbTmdb.checked = false;
+  preferAniDbTmdb.disabled = !isU2;
+  aniDbTmdbMappingUrl.disabled = !isU2;
   const cookieLock = current?.locked_fields.find(
     (lock) => lock.field === "mikan_identity_cookie",
   );
@@ -13536,6 +13574,7 @@ async function saveSource(event: SubmitEvent): Promise<void> {
   const current = activeSource();
   const save = element<HTMLButtonElement>("#source-save");
   const status = element<HTMLElement>("#source-status");
+  const isU2 = element<HTMLSelectElement>("#source-adapter").value === "u2";
   const common = {
     display_name: element<HTMLInputElement>("#source-name").value.trim(),
     downloader_id: element<HTMLInputElement>("#source-downloader").value.trim(),
@@ -14445,7 +14484,7 @@ function renderAiTestResult(result: AiTesterRunResult): void {
   );
   summary.dataset.uiState = result.success && result.result_json_valid ? "ready" : "error";
   const badge = element<HTMLElement>("#ai-test-prompt-version");
-  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v22";
+  badge.textContent = aiTestDefaultPrompt?.prompt_version ?? "tmdb-ai-match-v24";
   badge.className = `badge ${result.success && result.result_json_valid ? "ok" : "error"}`;
   element<HTMLElement>("#ai-test-raw-output").textContent =
     result.raw_response || "模型未返回响应。";

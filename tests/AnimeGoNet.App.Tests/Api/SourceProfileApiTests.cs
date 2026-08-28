@@ -619,6 +619,7 @@ public sealed class SourceProfileApiTests
         await using var app = await RunningApp.StartAsync();
         var html = await app.Client.GetStringAsync("/");
         var script = await app.Client.GetStringAsync("/app.js");
+        var styles = await app.Client.GetStringAsync("/styles.css");
 
         Assert.Contains("id=\"source-list\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-form\"", html, StringComparison.Ordinal);
@@ -644,6 +645,20 @@ public sealed class SourceProfileApiTests
         Assert.Contains("管理来源与 Cookie", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-anidb-tmdb-mapping-url\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "data-source-adapter-scope=\"u2\" class=\"source-u2-mapping-option\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ".source-switches .source-u2-mapping-option[hidden] { display: none; }",
+            styles,
+            StringComparison.Ordinal);
+        Assert.Contains("if (!isU2)", script, StringComparison.Ordinal);
+        Assert.Contains("preferAniDbTmdb.checked = false", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "prefer_anidb_tmdb_mapping: isU2 &&",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("id=\"source-media-type\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-url-clear\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-rss-cron\"", html, StringComparison.Ordinal);

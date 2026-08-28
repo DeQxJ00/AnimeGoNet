@@ -64,6 +64,21 @@ public static class ResultValidator
             if (result.Reason is not null) return "matched=true requires reason to be null.";
         }
 
+        var actualFileIds = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < result.Files.Count; i++)
+        {
+            var fileId = result.Files[i].FileId;
+            if (string.IsNullOrWhiteSpace(fileId))
+            {
+                return $"files[{i}].file_id is required.";
+            }
+
+            if (!actualFileIds.Add(fileId))
+            {
+                return $"files[{i}].file_id '{fileId}' is duplicated.";
+            }
+        }
+
         MatchRequestInput? normalizedInput = null;
         if (input is not null)
         {
@@ -73,15 +88,21 @@ public static class ResultValidator
                 return $"files length must equal input files length ({normalizedInput.Files.Count}).";
             }
 
-            if (normalizedInput.Files.Count > 1)
+            var expectedFileIds = Enumerable.Range(0, normalizedInput.Files.Count)
+                .Select(AiMetadataFileIdentity.FromIndex)
+                .ToHashSet(StringComparer.Ordinal);
+            for (int i = 0; i < result.Files.Count; i++)
             {
-                for (int i = 0; i < normalizedInput.Files.Count; i++)
+                var fileId = result.Files[i].FileId!;
+                if (!expectedFileIds.Contains(fileId))
                 {
-                    if (!string.Equals(result.Files[i].Name, normalizedInput.Files[i].Name, StringComparison.Ordinal))
-                    {
-                        return $"files[{i}].name must echo input name '{normalizedInput.Files[i].Name}' for multi-file mapping.";
-                    }
+                    return $"files[{i}].file_id '{fileId}' is not present in the input.";
                 }
+            }
+
+            if (!actualFileIds.SetEquals(expectedFileIds))
+            {
+                return "files[].file_id must contain every input file_id exactly once.";
             }
         }
 

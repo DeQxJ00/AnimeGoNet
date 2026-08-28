@@ -195,8 +195,8 @@ public sealed class AiMetadataTaskResolverTests
                 new AiMetadataMatchCandidate(
                     true,
                     TmdbId,
-                    input.Files.Select(file => new AiMetadataFileCandidate(
-                        file.Name,
+                    input.Files.Select((file, index) => new AiMetadataFileCandidate(
+                        AiMetadataFileIdentity.FromIndex(index),
                         true,
                         2,
                         4,
