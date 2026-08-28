@@ -5748,24 +5748,32 @@ public static class ApiEndpoints
                 "metadata_task_not_found", "Metadata task was not found."));
         }
 
-        var eligible = preview.TaskStatus == "organized"
-            && preview.MediaType == "tv"
-            && !preview.HasActivePostprocess
+        var eligible = preview.MediaType == "tv"
+            && preview.PostprocessMode is "create" or "edit_pending"
             && preview.Files.Count > 0;
         var reason = eligible
             ? null
-            : preview.TaskStatus != "organized"
-                ? "任务尚未整理完成。"
-                : preview.MediaType != "tv"
+            : preview.MediaType != "tv"
                     ? "只有按 TV 处理的任务需要 TV+Movie 后处理。"
-                    : preview.HasActivePostprocess
-                        ? "任务已有正在执行的后处理。"
+                    : preview.PostprocessMode == "readonly"
+                        ? preview.HasActivePostprocess
+                            ? "后处理已经开始整理，当前方案已锁定。"
+                            : "任务尚未整理完成。"
                         : "没有可迁移的已整理视频文件。";
         return TypedResults.Ok(new MixedMediaPostprocessPreviewResponse(
             preview.TaskId,
             preview.Title,
             eligible,
             reason,
+            preview.PostprocessMode,
+            preview.CurrentMovie is null
+                ? null
+                : new MixedMediaCurrentMovieResponse(
+                    preview.CurrentMovie.Id,
+                    preview.CurrentMovie.Title,
+                    preview.CurrentMovie.OriginalTitle,
+                    preview.CurrentMovie.ReleaseDate,
+                    preview.CurrentMovie.PosterPath),
             preview.Files.Select(file => new MixedMediaPostprocessFileResponse(
                 file.TaskFileId,
                 file.SourceName,
@@ -5775,6 +5783,8 @@ public static class ApiEndpoints
                 file.TmdbSeriesId,
                 file.TmdbSeasonNumber,
                 file.TmdbEpisodeNumber,
+                file.TmdbMovieId,
+                file.MovieRole,
                 file.MovieHint,
                 File.Exists(file.SourceMediaPath)
                     && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes)).ToArray()));
@@ -5822,12 +5832,15 @@ public static class ApiEndpoints
         ITmdbMovieClient tmdb,
         CancellationToken cancellationToken)
     {
-        var taskFileIds = request.SelectedTaskFileIds;
-        if (taskFileIds.Count == 0 || request.TmdbMovieId <= 0)
+        var movieTaskFileId = request.SelectedMovieTaskFileId;
+        var movieExtraTaskFileIds = request.SelectedMovieExtraTaskFileIds;
+        if (string.IsNullOrWhiteSpace(movieTaskFileId)
+            || movieExtraTaskFileIds.Contains(movieTaskFileId, StringComparer.Ordinal)
+            || request.TmdbMovieId <= 0)
         {
             return TypedResults.BadRequest(Error(
                 "mixed_media_request_invalid",
-                "task_file_ids and a positive tmdb_movie_id are required."));
+                "Exactly one movie_task_file_id, distinct Movie Extras, and a positive tmdb_movie_id are required."));
         }
 
         TmdbMovie? movie;
@@ -5852,7 +5865,8 @@ public static class ApiEndpoints
 
         var result = await postprocess.StartAsync(
             taskId,
-            taskFileIds,
+            movieTaskFileId,
+            movieExtraTaskFileIds,
             movie,
             DateTimeOffset.UtcNow,
             cancellationToken).ConfigureAwait(false);
@@ -5860,7 +5874,10 @@ public static class ApiEndpoints
         {
             MixedMediaPostprocessResult.Started => TypedResults.Ok(
                 new MixedMediaPostprocessStartResponse(
-                    taskId, taskFileIds, request.TmdbMovieId, "downloaded")),
+                    taskId,
+                    new[] { movieTaskFileId }.Concat(movieExtraTaskFileIds).ToArray(),
+                    request.TmdbMovieId,
+                    "downloaded")),
             MixedMediaPostprocessResult.NotFound => TypedResults.NotFound(Error(
                 "metadata_task_not_found", "Metadata task was not found.")),
             MixedMediaPostprocessResult.FileNotEligible => TypedResults.Conflict(Error(

@@ -130,13 +130,45 @@ public sealed class MovieMetadataResolutionProcessorTests
         Assert.Equal(129, searchJson.RootElement.GetProperty("items")[0]
             .GetProperty("tmdb_movie_id").GetInt32());
 
+        using var invalidRoles = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess",
+            new StringContent(
+                $$"""{"movie_task_file_id":"{{taskFileId}}","movie_extra_task_file_ids":["{{taskFileId}}"],"tmdb_movie_id":129}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidRoles.StatusCode);
+
         using var start = await app.Client.PostAsync(
             $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess",
             new StringContent(
-                $$"""{"task_file_ids":["{{taskFileId}}","{{extraTaskFileId}}"],"tmdb_movie_id":129}""",
+                $$"""{"movie_task_file_id":"{{taskFileId}}","movie_extra_task_file_ids":["{{extraTaskFileId}}"],"tmdb_movie_id":129}""",
                 Encoding.UTF8,
                 "application/json"));
         Assert.Equal(HttpStatusCode.OK, start.StatusCode);
+
+        using var pendingPreview = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess/preview");
+        Assert.Equal(HttpStatusCode.OK, pendingPreview.StatusCode);
+        using var pendingJson = JsonDocument.Parse(await pendingPreview.Content.ReadAsStreamAsync());
+        Assert.True(pendingJson.RootElement.GetProperty("eligible").GetBoolean());
+        Assert.Equal("edit_pending", pendingJson.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(129, pendingJson.RootElement.GetProperty("current_movie")
+            .GetProperty("tmdb_movie_id").GetInt32());
+        var pendingFiles = pendingJson.RootElement.GetProperty("files");
+        Assert.Equal("movie", pendingFiles.EnumerateArray()
+            .Single(item => item.GetProperty("task_file_id").GetString() == taskFileId)
+            .GetProperty("movie_role").GetString());
+        Assert.Equal("extras", pendingFiles.EnumerateArray()
+            .Single(item => item.GetProperty("task_file_id").GetString() == extraTaskFileId)
+            .GetProperty("movie_role").GetString());
+
+        using var revise = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess",
+            new StringContent(
+                $$"""{"movie_task_file_id":"{{extraTaskFileId}}","movie_extra_task_file_ids":["{{taskFileId}}"],"tmdb_movie_id":129}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.OK, revise.StatusCode);
         Assert.Equal(
             MediaOrganizationResult.FilesCompleted,
             await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
@@ -144,8 +176,12 @@ public sealed class MovieMetadataResolutionProcessorTests
         var targetDirectory = Path.Combine(paths.EffectiveMovieSavePath, "千与千寻 (2001)");
         Assert.False(File.Exists(source));
         Assert.False(File.Exists(extraSource));
-        Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
-        Assert.True(File.Exists(Path.Combine(targetDirectory, extraFileName)));
+        Assert.Equal(
+            [6, 7, 8, 9],
+            await File.ReadAllBytesAsync(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
+        Assert.Equal(
+            [1, 2, 3, 4, 5],
+            await File.ReadAllBytesAsync(Path.Combine(targetDirectory, fileName)));
         Assert.True(File.Exists(Path.Combine(targetDirectory, "movie.nfo")));
         await using var verify = await database.OpenConnectionAsync();
         await using var query = verify.CreateCommand();

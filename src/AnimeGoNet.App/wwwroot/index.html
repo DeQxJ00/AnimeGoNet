@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260827-u2-blocking-file-reasons">
+  <link rel="stylesheet" href="/styles.css?v=20260828-mixed-media-roles">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -2244,23 +2244,34 @@
         <button id="mixed-media-postprocess-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
       <p id="mixed-media-postprocess-summary" class="muted"></p>
-      <fieldset class="mixed-media-file-picker">
-        <legend>1. 选择需要迁移为 Movie 的文件（可多选）</legend>
-        <p class="muted">含 劇場版 / 剧场版 / Movie 的正片或特典文件会预选；漏判时可手工补选。选中的文件会一起归入同一个 TMDB Movie。</p>
-        <div id="mixed-media-postprocess-files" class="mixed-media-file-list"></div>
-      </fieldset>
-      <section class="mixed-media-movie-search" aria-labelledby="mixed-media-movie-search-title">
-        <h3 id="mixed-media-movie-search-title">2. 搜索并确认 TMDB Movie</h3>
-        <div class="mixed-media-search-row">
-          <label>Movie 名称<input id="mixed-media-movie-query" maxlength="256" autocomplete="off"></label>
-          <button id="mixed-media-movie-search" type="button" class="secondary-button">搜索 TMDB Movie</button>
-        </div>
-        <div id="mixed-media-movie-results" class="mixed-media-movie-results" aria-live="polite"></div>
+      <section id="mixed-media-postprocess-editor">
+        <fieldset class="mixed-media-file-picker">
+          <legend>1. 逐个指定文件归类</legend>
+          <p class="muted">每个文件可设为“保留 TV”“Movie 正片”或“Movie Extras”。必须且只能指定一个 Movie 正片；关键词只负责预选，最终以你的选择为准。</p>
+          <div id="mixed-media-postprocess-files" class="mixed-media-file-list"></div>
+        </fieldset>
+        <section class="mixed-media-movie-search" aria-labelledby="mixed-media-movie-search-title">
+          <h3 id="mixed-media-movie-search-title">2. 搜索并确认 TMDB Movie</h3>
+          <div class="mixed-media-search-row">
+            <label>Movie 名称<input id="mixed-media-movie-query" maxlength="256" autocomplete="off"></label>
+            <button id="mixed-media-movie-search" type="button" class="secondary-button">搜索 TMDB Movie</button>
+          </div>
+          <div id="mixed-media-movie-results" class="mixed-media-movie-results" aria-live="polite"></div>
+        </section>
+      </section>
+      <section id="mixed-media-postprocess-review" class="mixed-media-postprocess-review" hidden>
+        <h3>3. 执行前复核</h3>
+        <p id="mixed-media-postprocess-review-movie" class="mixed-media-review-movie"></p>
+        <div id="mixed-media-postprocess-review-files" class="mixed-media-review-files"></div>
+        <p class="muted">Movie 正片会使用规范化电影文件名；Movie Extras 保留原文件名。返回编辑不会提交任何改动。</p>
       </section>
       <p id="mixed-media-postprocess-message" class="delete-message" aria-live="polite"></p>
       <div class="delete-actions">
         <button id="mixed-media-postprocess-cancel" type="button" class="secondary-button">取消</button>
-        <button id="mixed-media-postprocess-confirm" type="button" class="primary-button" disabled>确认迁移到 Movie</button>
+        <div>
+          <button id="mixed-media-postprocess-edit" type="button" class="secondary-button" hidden>返回编辑</button>
+          <button id="mixed-media-postprocess-confirm" type="button" class="primary-button" disabled>检查迁移方案</button>
+        </div>
       </div>
     </article>
   </dialog>
@@ -2315,6 +2326,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260828-merged-task-logs"></script>
+    <script type="module" src="/app.js?v=20260828-mixed-media-roles"></script>
 </body>
 </html>
