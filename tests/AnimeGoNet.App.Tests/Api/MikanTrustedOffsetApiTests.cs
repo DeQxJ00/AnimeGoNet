@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AnimeGoNet.Data.Mikan;
+using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AnimeGoNet.App.Tests.Api;
@@ -28,6 +29,68 @@ public sealed class MikanTrustedOffsetApiTests
         var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
         Assert.Equal("trusted", item.GetProperty("state").GetString());
         Assert.Equal(2, item.GetProperty("required_episode_count").GetInt32());
+    }
+
+    [Fact]
+    public async Task ListsReadableMikanGroupAndTmdbNames()
+    {
+        await using var app = await RunningApp.StartAsync();
+        var services = app.App.Services;
+        var database = services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var groups = services.GetRequiredService<MikanPublishGroupStore>();
+        var offsets = services.GetRequiredService<MikanTrustedOffsetStore>();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'offset-name-source', 'Offset name source', 'mikan', 'bt', 'move',
+                    0, 0, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    mikanid, groupid, title, torrent_url_fingerprint,
+                    downloader_id, route_snapshot_json, status,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'offset-name-task', 'offset-name-source', 1, 'mikan',
+                    3951, 7, 'Mikan 作品标题 第 01 集', 'offset-name-fingerprint',
+                    'bt', '{}', 'metadata_resolved', $now, $now);
+
+                INSERT INTO anime_series (
+                    id, tmdb_series_id, canonical_name, original_name,
+                    needs_tmdb_completion, created_at_utc, updated_at_utc)
+                VALUES (
+                    'offset-name-series', 72517, 'TMDB 作品名', 'TMDB Original',
+                    0, $now, $now);
+
+                INSERT INTO anime_seasons (
+                    id, series_id, season_number, canonical_name, poster_path,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'offset-name-season', 'offset-name-series', 2, 'TMDB 第二季', NULL,
+                    $now, $now);
+                """;
+            command.Parameters.AddWithValue("$now", now.ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+        await groups.SaveAutomaticAsync(7, "字幕组名称", "offset-name-source", now);
+        await offsets.ObserveAsync(Observation(1), now, 1);
+
+        using var response = await app.Client.GetAsync("/api/v1/mikan/trusted-offsets");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var item = Assert.Single(json.RootElement.GetProperty("items").EnumerateArray());
+
+        Assert.Equal("Mikan 作品标题 第 01 集", item.GetProperty("mikan_title").GetString());
+        Assert.Equal("字幕组名称", item.GetProperty("group_name").GetString());
+        Assert.Equal("TMDB 作品名", item.GetProperty("tmdb_series_name").GetString());
+        Assert.Equal("TMDB 第二季", item.GetProperty("tmdb_season_name").GetString());
     }
 
     [Fact]
@@ -168,6 +231,10 @@ public sealed class MikanTrustedOffsetApiTests
         Assert.Contains("/api/v1/mikan/trusted-offset-blacklist", script, StringComparison.Ordinal);
         Assert.Contains("mikan_trusted_offset_required_episodes", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/trusted-offsets", script, StringComparison.Ordinal);
+        Assert.Contains("item.mikan_title", script, StringComparison.Ordinal);
+        Assert.Contains("item.group_name", script, StringComparison.Ordinal);
+        Assert.Contains("item.tmdb_series_name", script, StringComparison.Ordinal);
+        Assert.Contains("item.tmdb_season_name", script, StringComparison.Ordinal);
         Assert.Contains("人工规则、完成记录和媒体文件不会删除", script, StringComparison.Ordinal);
         Assert.Contains("id=\"mikan-manual-series-mappings\"", html, StringComparison.Ordinal);
         Assert.Contains("/api/v1/mikan/manual-series-mappings", script, StringComparison.Ordinal);

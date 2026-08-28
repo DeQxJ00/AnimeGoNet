@@ -1476,8 +1476,12 @@ interface PendingTmdbRecoveryResult {
 interface MikanTrustedOffsetItem {
   mikanid: number;
   groupid: number;
+  mikan_title: string | null;
+  group_name: string | null;
   tmdb_series_id: number;
+  tmdb_series_name: string | null;
   tmdb_season_number: number;
+  tmdb_season_name: string | null;
   episode_offset: number;
   distinct_episode_count: number;
   required_episode_count: number;
@@ -8716,19 +8720,25 @@ async function loadTrustedOffsets(): Promise<void> {
       const heading = document.createElement("div");
       heading.className = "download-heading";
       const title = document.createElement("strong");
-      title.textContent = `Mikan ${item.mikanid} · Group ${item.groupid}`;
+      title.textContent = item.mikan_title || `Mikan ${item.mikanid}`;
+      title.title = item.mikan_title || `Mikan ${item.mikanid}`;
       const state = document.createElement("span");
       state.className = `badge ${item.state}`;
       state.textContent = item.state === "trusted"
         ? "Trusted"
         : item.state === "conflict_reset" ? "Conflict reset" : "Learning";
       heading.append(title, state);
+      const sourceIdentity = document.createElement("p");
+      sourceIdentity.className = "muted";
+      sourceIdentity.textContent = `mikanid ${item.mikanid} · groupid ${item.groupid} · 字幕组 ${item.group_name || "名称未记录"}`;
       const details = document.createElement("p");
       details.className = "muted";
       const signedOffset = item.episode_offset >= 0
         ? `+${item.episode_offset}` : `${item.episode_offset}`;
-      details.textContent = `TMDB ${item.tmdb_series_id} · S${String(item.tmdb_season_number).padStart(2, "0")} · offset ${signedOffset} · ${item.distinct_episode_count}/${item.required_episode_count}`;
-      summary.append(heading, details);
+      const tmdbName = item.tmdb_series_name || "名称未缓存";
+      const seasonName = item.tmdb_season_name ? ` · ${item.tmdb_season_name}` : "";
+      details.textContent = `TMDB ${item.tmdb_series_id} · ${tmdbName} · S${String(item.tmdb_season_number).padStart(2, "0")}${seasonName} · offset ${signedOffset} · ${item.distinct_episode_count}/${item.required_episode_count}`;
+      summary.append(heading, sourceIdentity, details);
       const clear = document.createElement("button");
       clear.type = "button";
       clear.className = "delete-button";

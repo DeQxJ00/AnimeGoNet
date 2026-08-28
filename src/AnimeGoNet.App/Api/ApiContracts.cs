@@ -977,8 +977,12 @@ public sealed record MikanPublishGroupRefreshRequest(
 public sealed record MikanTrustedOffsetItemResponse(
     [property: JsonPropertyName("mikanid")] int MikanId,
     [property: JsonPropertyName("groupid")] int GroupId,
+    [property: JsonPropertyName("mikan_title")] string? MikanTitle,
+    [property: JsonPropertyName("group_name")] string? GroupName,
     [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_series_name")] string? TmdbSeriesName,
     [property: JsonPropertyName("tmdb_season_number")] int TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_season_name")] string? TmdbSeasonName,
     [property: JsonPropertyName("episode_offset")] int EpisodeOffset,
     [property: JsonPropertyName("distinct_episode_count")] int DistinctEpisodeCount,
     [property: JsonPropertyName("required_episode_count")] int RequiredEpisodeCount,

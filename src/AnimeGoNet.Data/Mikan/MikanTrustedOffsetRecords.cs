@@ -35,7 +35,11 @@ public sealed record MikanOffsetCandidateState(
     int EpisodeOffset,
     int DistinctEpisodeCount,
     string State,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string? MikanTitle,
+    string? GroupName,
+    string? TmdbSeriesName,
+    string? TmdbSeasonName);
 
 public static class MikanTrustedOffsetBlacklistScope
 {

@@ -5124,8 +5124,12 @@ public static class ApiEndpoints
                 values.Select(value => new MikanTrustedOffsetItemResponse(
                     value.MikanId,
                     value.GroupId,
+                    value.MikanTitle,
+                    value.GroupName,
                     value.TmdbSeriesId,
+                    value.TmdbSeriesName,
                     value.TmdbSeasonNumber,
+                    value.TmdbSeasonName,
                     value.EpisodeOffset,
                     value.DistinctEpisodeCount,
                     requiredEpisodes,

@@ -390,7 +390,26 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                      WHEN trusted.state = 'revoked' THEN 'conflict_reset'
                      ELSE 'learning'
                    END,
-                   MAX(evidence.observed_at_utc)
+                   MAX(evidence.observed_at_utc),
+                   (SELECT task.title
+                    FROM ingest_tasks AS task
+                    WHERE task.mikanid = evidence.mikanid
+                      AND task.groupid = evidence.groupid
+                    ORDER BY task.updated_at_utc DESC, task.id DESC
+                    LIMIT 1),
+                   (SELECT publish_group.group_name
+                    FROM mikan_publish_groups AS publish_group
+                    WHERE publish_group.groupid = evidence.groupid),
+                   (SELECT COALESCE(series.canonical_name, series.original_name)
+                    FROM anime_series AS series
+                    WHERE series.tmdb_series_id = evidence.tmdb_series_id
+                    LIMIT 1),
+                   (SELECT season.canonical_name
+                    FROM anime_seasons AS season
+                    JOIN anime_series AS series ON series.id = season.series_id
+                    WHERE series.tmdb_series_id = evidence.tmdb_series_id
+                      AND season.season_number = evidence.tmdb_season_number
+                    LIMIT 1)
             FROM mikan_offset_evidence AS evidence
             LEFT JOIN mikan_trusted_offsets AS trusted
               ON trusted.mikanid = evidence.mikanid
@@ -425,7 +444,11 @@ public sealed class MikanTrustedOffsetStore(AnimeGoSqliteDatabase database)
                 DateTimeOffset.Parse(
                     reader.GetString(7),
                     CultureInfo.InvariantCulture,
-                    DateTimeStyles.RoundtripKind)));
+                    DateTimeStyles.RoundtripKind),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11)));
         }
 
         return result;
