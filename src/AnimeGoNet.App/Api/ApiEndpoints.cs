@@ -7295,6 +7295,18 @@ public static class ApiEndpoints
                                 ? "movie"
                                 : IsVideoFile(path) ? "extras" : "sidecar"));
                     }
+
+                    var extrasDirectory = Path.Combine(directory, "Extras");
+                    if (Directory.Exists(extrasDirectory))
+                    {
+                        foreach (var path in Directory.EnumerateFiles(
+                                     extrasDirectory,
+                                     "*",
+                                     SearchOption.TopDirectoryOnly))
+                        {
+                            files.Add(MovieFileItem(movieRoot, path, "extras"));
+                        }
+                    }
                 }
             }
 

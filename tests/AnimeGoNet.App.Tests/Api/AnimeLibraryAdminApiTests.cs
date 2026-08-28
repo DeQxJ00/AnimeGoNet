@@ -104,9 +104,9 @@ public sealed class AnimeLibraryAdminApiTests
         var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
         var movieDirectory = Path.Combine(options.Paths.EffectiveMovieSavePath, "Old Movie (2024)");
         var mainPath = Path.Combine(movieDirectory, "Old Movie (2024).mkv");
-        var extraPath = Path.Combine(movieDirectory, "Old Movie - NCOP.mkv");
+        var extraPath = Path.Combine(movieDirectory, "Extras", "Old Movie - NCOP.mkv");
         var nfoPath = Path.Combine(movieDirectory, "movie.nfo");
-        Directory.CreateDirectory(movieDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(extraPath)!);
         await File.WriteAllBytesAsync(mainPath, new byte[] { 1, 2, 3 });
         await File.WriteAllBytesAsync(extraPath, new byte[] { 4, 5 });
         await File.WriteAllTextAsync(nfoPath, "nfo");
@@ -130,7 +130,9 @@ public sealed class AnimeLibraryAdminApiTests
         Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "movie"
             && item.GetProperty("file_name").GetString() == Path.GetFileName(mainPath));
         Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "extras"
-            && item.GetProperty("file_name").GetString() == Path.GetFileName(extraPath));
+            && item.GetProperty("file_name").GetString() == Path.GetFileName(extraPath)
+            && item.GetProperty("relative_path").GetString() == Path.Combine(
+                "Old Movie (2024)", "Extras", Path.GetFileName(extraPath)));
         Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "sidecar"
             && item.GetProperty("file_name").GetString() == Path.GetFileName(nfoPath));
 
