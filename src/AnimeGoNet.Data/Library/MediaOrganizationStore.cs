@@ -43,6 +43,34 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         {
             promoteLinked.Transaction = transaction;
             promoteLinked.CommandText = """
+                UPDATE download_jobs
+                SET organization_state = 'pending',
+                    organization_lease_token = NULL,
+                    organization_lease_expires_at_utc = NULL,
+                    organization_next_attempt_at_utc = NULL,
+                    organization_failure_code = NULL,
+                    organization_phase = 'not_started',
+                    organization_total_units = 0,
+                    organization_completed_units = 0,
+                    updated_at_utc = $now,
+                    revision = revision + 1
+                WHERE organization_state = 'cleanup'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM other_file_readaptation_jobs AS readaptation
+                    WHERE readaptation.task_id = download_jobs.task_id
+                      AND readaptation.state = 'pending');
+
+                UPDATE ingest_tasks
+                SET status = 'downloaded', failure_kind = NULL,
+                    failure_reason = NULL, updated_at_utc = $now
+                WHERE status = 'organized'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM other_file_readaptation_jobs AS readaptation
+                    WHERE readaptation.task_id = ingest_tasks.id
+                      AND readaptation.state = 'pending');
+
                 UPDATE ingest_tasks
                 SET status = 'organized', failure_kind = NULL,
                     failure_reason = NULL, updated_at_utc = $now
@@ -54,7 +82,12 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                     FROM download_jobs AS job
                     WHERE job.task_id = ingest_tasks.id
                       AND job.organization_state = 'cleanup'
-                      AND job.organization_phase = 'cleanup_downloader');
+                      AND job.organization_phase = 'cleanup_downloader')
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM other_file_readaptation_jobs AS readaptation
+                    WHERE readaptation.task_id = ingest_tasks.id
+                      AND readaptation.state = 'pending');
                 """;
             promoteLinked.Parameters.AddWithValue("$now", now);
             await promoteLinked.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

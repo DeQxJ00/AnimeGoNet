@@ -529,7 +529,7 @@ public sealed class MediaOrganizationProcessorTests
         await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
         var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
         var taskId = await PrepareDownloadedTaskAsync(
-            app, paths, "link", "complete", linkType: "symbolic");
+            app, paths, "link", "seeding", linkType: "symbolic");
         var source = Path.Combine(paths.DownloadPath, "bt", "episode.mkv");
         if (!CanCreateSymbolicLink(paths.SavePath, source))
         {
@@ -539,7 +539,7 @@ public sealed class MediaOrganizationProcessorTests
 
         var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
         Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
-        Assert.Equal(MediaOrganizationResult.CleanupCompleted, await processor.RunOnceAsync());
+        Assert.Equal(("organized", "cleanup", 1), await ReadStateAsync(app, taskId));
 
         var oldTarget = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
         Assert.True(FilePathInspector.HasExpectedFileLength(oldTarget, 5));
@@ -553,9 +553,24 @@ public sealed class MediaOrganizationProcessorTests
                 file.TaskFileId,
                 new TmdbMovie(200, "Movie", "Movie", new DateOnly(2026, 1, 2), null),
                 DateTimeOffset.UtcNow));
+        Assert.Equal(("downloaded", "pending", 0), await ReadStateAsync(app, taskId));
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var stuckConnection = await database.OpenConnectionAsync())
+        await using (var stuck = stuckConnection.CreateCommand())
+        {
+            stuck.CommandText = """
+                UPDATE download_jobs
+                SET organization_state = 'cleanup', organization_phase = 'cleanup_downloader'
+                WHERE task_id = $task_id;
+                UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
+                """;
+            stuck.Parameters.AddWithValue("$task_id", taskId);
+            Assert.Equal(2, await stuck.ExecuteNonQueryAsync());
+        }
+        Assert.Equal(("organized", "cleanup", 0), await ReadStateAsync(app, taskId));
 
         Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
-        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
         await using var connection = await database.OpenConnectionAsync();
         await using var query = connection.CreateCommand();
         query.CommandText = "SELECT target_path FROM file_operations WHERE task_file_id = $file_id AND state = 'completed';";

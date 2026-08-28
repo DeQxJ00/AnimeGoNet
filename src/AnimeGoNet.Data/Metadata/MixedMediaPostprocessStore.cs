@@ -408,7 +408,8 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                     organization_completed_units = 0,
                     updated_at_utc = $now,
                     revision = revision + 1
-                WHERE task_id = $task_id AND organization_state = 'completed';
+                WHERE task_id = $task_id
+                  AND organization_state IN ('completed', 'cleanup');
                 UPDATE ingest_tasks
                 SET status = 'downloaded', failure_kind = NULL, failure_reason = NULL,
                     updated_at_utc = $now
