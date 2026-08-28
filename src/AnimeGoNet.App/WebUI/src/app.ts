@@ -9901,9 +9901,10 @@ function showMixedMediaEditor(): void {
 
 function updateMixedMediaConfirmState(): void {
   const assignments = mixedMediaAssignments();
+  const canInspectReadonlyPlan = activeMixedMediaPreview?.mode === "readonly";
   mixedMediaPostprocessConfirm.disabled =
-    activeMixedMediaPreview?.eligible !== true
-    || assignments.movieTaskFileId === null
+    assignments.movieTaskFileId === null
+    || (activeMixedMediaPreview?.eligible !== true && !canInspectReadonlyPlan)
     || selectedMixedMediaMovie === null;
 }
 
@@ -10053,9 +10054,12 @@ function renderMixedMediaReview(): boolean {
   element<HTMLElement>("#mixed-media-postprocess-editor").hidden = true;
   element<HTMLElement>("#mixed-media-postprocess-review").hidden = false;
   element<HTMLButtonElement>("#mixed-media-postprocess-edit").hidden = false;
-  mixedMediaPostprocessConfirm.textContent = preview.mode === "edit_pending"
-    ? "确认更新待整理方案"
-    : "确认执行后处理";
+  mixedMediaPostprocessConfirm.textContent = preview.mode === "readonly"
+    ? "方案已锁定（仅查看）"
+    : preview.mode === "edit_pending"
+      ? "确认更新待整理方案"
+      : "确认执行后处理";
+  mixedMediaPostprocessConfirm.disabled = preview.mode === "readonly";
   mixedMediaReviewReady = true;
   return true;
 }
@@ -10129,10 +10133,13 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
       label.append(select, body);
       files.append(label);
     }
-    if (preview.mode === "edit_pending" && preview.current_movie) {
+    if ((preview.mode === "edit_pending" || preview.mode === "readonly")
+        && preview.current_movie) {
       selectedMixedMediaMovie = preview.current_movie;
       element<HTMLInputElement>("#mixed-media-movie-query").value = preview.current_movie.title;
-      message.textContent = `当前使用 ${preview.current_movie.title} · TMDB ${preview.current_movie.tmdb_movie_id}；可重新搜索后替换。`;
+      message.textContent = preview.mode === "readonly"
+        ? `当前方案使用 ${preview.current_movie.title} · TMDB ${preview.current_movie.tmdb_movie_id}；整理已开始，只允许检查方案。`
+        : `当前使用 ${preview.current_movie.title} · TMDB ${preview.current_movie.tmdb_movie_id}；可重新搜索后替换。`;
     } else {
       element<HTMLInputElement>("#mixed-media-movie-query").value = preview.title;
       await parseMixedMediaMovieTitle();
@@ -10209,6 +10216,7 @@ async function confirmMixedMediaPostprocess(): Promise<void> {
     renderMixedMediaReview();
     return;
   }
+  if (preview.mode === "readonly") return;
   const message = element<HTMLElement>("#mixed-media-postprocess-message");
   mixedMediaPostprocessConfirm.disabled = true;
   message.textContent = "正在验证 TMDB Movie 并创建迁移任务…";

@@ -517,6 +517,10 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(app, /movie_extra_task_file_ids: assignments\.movieExtraTaskFileIds/);
   assert.doesNotMatch(app, /mixed-media-file-role"] option:checked/);
   assert.match(app, /已选择 \$\{movie\.title\} · TMDB \$\{movie\.tmdb_movie_id\}/);
+  assert.match(app, /canInspectReadonlyPlan = activeMixedMediaPreview\?\.mode === "readonly"/);
+  assert.match(app, /方案已锁定（仅查看）/);
+  assert.match(app, /整理已开始，只允许检查方案/);
+  assert.match(app, /if \(preview\.mode === "readonly"\)\s+return/);
   assert.match(css, /#mixed-media-postprocess-review\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
   assert.match(css, /#mixed-media-postprocess-edit\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
   assert.match(app, /"edit_pending"/);
