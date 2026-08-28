@@ -515,6 +515,10 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(mixedDialog.textContent, /自动填入搜索框时会移除/);
   assert.match(app, /movie_task_file_id: assignments\.movieTaskFileId/);
   assert.match(app, /movie_extra_task_file_ids: assignments\.movieExtraTaskFileIds/);
+  assert.doesNotMatch(app, /mixed-media-file-role"] option:checked/);
+  assert.match(app, /已选择 \$\{movie\.title\} · TMDB \$\{movie\.tmdb_movie_id\}/);
+  assert.match(css, /#mixed-media-postprocess-review\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
+  assert.match(css, /#mixed-media-postprocess-edit\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
   assert.match(app, /"edit_pending"/);
   assert.match(app, /readaptation-review-table/);
   assert.match(app, /\["信息项", "适配前", "适配后"\]/);

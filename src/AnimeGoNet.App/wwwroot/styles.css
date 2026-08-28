@@ -606,6 +606,9 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 #mixed-media-postprocess-dialog::backdrop { background: rgba(3,5,10,.78); backdrop-filter: blur(5px); }
 .mixed-media-postprocess-panel { display: grid; gap: 16px; max-height: calc(100vh - 36px); padding: 24px; overflow: auto; }
 #mixed-media-postprocess-editor { display: grid; gap: 16px; }
+#mixed-media-postprocess-editor[hidden],
+#mixed-media-postprocess-review[hidden],
+#mixed-media-postprocess-edit[hidden] { display: none !important; }
 .mixed-media-file-picker, .mixed-media-movie-search { display: grid; gap: 12px; min-width: 0; margin: 0; border: 1px solid #344260; border-radius: 16px; padding: 15px; background: rgba(5,8,16,.36); }
 .mixed-media-file-picker legend { padding: 0 8px; color: #e8efff; font-weight: 700; }
 .mixed-media-file-picker .muted { margin: 0; }

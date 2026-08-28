@@ -9901,14 +9901,9 @@ function showMixedMediaEditor(): void {
 
 function updateMixedMediaConfirmState(): void {
   const assignments = mixedMediaAssignments();
-  const mainCount = document.querySelectorAll<HTMLSelectElement>(
-    'select[name="mixed-media-file-role"] option:checked',
-  );
-  const exactMainCount = Array.from(mainCount).filter(option => option.value === "movie").length;
   mixedMediaPostprocessConfirm.disabled =
     activeMixedMediaPreview?.eligible !== true
     || assignments.movieTaskFileId === null
-    || exactMainCount !== 1
     || selectedMixedMediaMovie === null;
 }
 
@@ -10195,6 +10190,7 @@ async function searchMixedMediaMovies(): Promise<void> {
         button.classList.add("selected");
         marker.textContent = "●";
         selectedMixedMediaMovie = movie;
+        message.textContent = `已选择 ${movie.title} · TMDB ${movie.tmdb_movie_id}；点击“检查迁移方案”复核。`;
         showMixedMediaEditor();
       });
       results.append(button);
