@@ -1,4 +1,5 @@
 using AnimeGoNet.App.Downloads;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Deletion;
 
 namespace AnimeGoNet.App.Deletion;
@@ -14,6 +15,7 @@ public sealed class DeleteExecutionProcessor(
     DeleteExecutionStore store,
     DownloadClientOperationCoordinator clients,
     SafeFileDeleter fileDeleter,
+    AnimeGoOptions options,
     TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
@@ -108,6 +110,8 @@ public sealed class DeleteExecutionProcessor(
                 break;
             case DeleteItemKinds.SourceFile:
             case DeleteItemKinds.MediaFile:
+                item = await CorrectLegacyMediaRootAsync(claim, item, cancellationToken)
+                    .ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(item.RootPath))
                 {
                     throw new SafeFileDeleteException("delete_root_missing", "Delete target has no captured root.");
@@ -129,6 +133,35 @@ public sealed class DeleteExecutionProcessor(
             default:
                 throw new InvalidOperationException("Delete item kind is unsupported.");
         }
+    }
+
+    private async Task<DeleteExecutionItem> CorrectLegacyMediaRootAsync(
+        DeleteExecutionClaim claim,
+        DeleteExecutionItem item,
+        CancellationToken cancellationToken)
+    {
+        if (item.ItemKind != DeleteItemKinds.MediaFile
+            || (!string.IsNullOrWhiteSpace(item.RootPath)
+                && PathBoundary.IsWithin(item.RootPath, item.TargetKey)))
+        {
+            return item;
+        }
+
+        var correctedRoot = new[]
+            {
+                options.Paths.EffectiveMovieSavePath,
+                options.Paths.SavePath,
+            }
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal)
+            .OrderByDescending(root => Path.GetFullPath(root).Length)
+            .FirstOrDefault(root => PathBoundary.IsWithin(root, item.TargetKey));
+        return correctedRoot is null
+            ? item
+            : await store.CorrectFileRootAsync(
+                claim, item, correctedRoot, cancellationToken).ConfigureAwait(false);
     }
 
     private static string Classify(Exception exception) => exception switch

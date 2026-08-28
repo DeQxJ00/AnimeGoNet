@@ -111,6 +111,46 @@ public sealed class DeleteExecutionProcessorTests
         Assert.True(await RssCandidateIsReadyAsync(app));
     }
 
+    [Fact]
+    public async Task LegacyMixedMovieItemRepairsRootBeforeDeletion()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var prepared = await PreparePlanAsync(
+            app, new DeleteSelection(false, false, false, true));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var moviePath = Path.Combine(
+            paths.EffectiveMovieSavePath, "Movie (2026)", "Movie (2026).mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(moviePath)!);
+        await File.WriteAllBytesAsync(moviePath, [1, 2, 3, 4, 5]);
+        File.Delete(prepared.MediaPath);
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var stale = connection.CreateCommand())
+        {
+            stale.CommandText = """
+                UPDATE delete_execution_items
+                SET target_key = $movie_path, display_value = $movie_path,
+                    root_path = $tv_root
+                WHERE execution_id = $execution_id AND item_kind = 'media_file';
+                """;
+            stale.Parameters.AddWithValue("$movie_path", moviePath);
+            stale.Parameters.AddWithValue("$tv_root", paths.SavePath);
+            stale.Parameters.AddWithValue("$execution_id", prepared.ExecutionId);
+            Assert.Equal(1, await stale.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(
+            DeleteExecutionResult.Completed,
+            await app.App.Services.GetRequiredService<DeleteExecutionProcessor>()
+                .RunExecutionOnceAsync(prepared.ExecutionId));
+        Assert.False(File.Exists(moviePath));
+        Assert.Equal(
+            Path.GetFullPath(paths.EffectiveMovieSavePath),
+            await ReadMediaItemRootAsync(app, prepared.ExecutionId));
+    }
+
     private static async Task<PreparedPlan> PreparePlanAsync(
         RunningApp app,
         DeleteSelection selection,
@@ -215,6 +255,19 @@ public sealed class DeleteExecutionProcessorTests
         return Convert.ToInt64(
             await command.ExecuteScalarAsync(),
             System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
+    private static async Task<string?> ReadMediaItemRootAsync(RunningApp app, string executionId)
+    {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT root_path FROM delete_execution_items
+            WHERE execution_id = $execution_id AND item_kind = 'media_file';
+            """;
+        command.Parameters.AddWithValue("$execution_id", executionId);
+        return await command.ExecuteScalarAsync() as string;
     }
 
     private static async Task SeedRssReferenceAsync(RunningApp app, string taskId)

@@ -133,6 +133,19 @@ public sealed class DeletePlanStoreTests
         Assert.Equal((0, 0), await fixture.ReadMovieBusinessCountsAsync());
     }
 
+    [Fact]
+    public async Task MixedTvTaskMovieFileUsesConfiguredMovieRoot()
+    {
+        await using var fixture = await DeleteFixture.CreateAsync();
+        await fixture.ConvertToMixedMovieAsync();
+
+        var preview = Assert.IsType<DeletePlanPreview>(
+            await fixture.Store.GetPreviewAsync(fixture.TaskId));
+        var media = Assert.Single(preview.MediaFiles);
+        Assert.Equal("/download/movies/萤火之森 (2011)/萤火之森 (2011).mkv", media.TargetKey);
+        Assert.Equal("/download/movies", media.RootPath);
+    }
+
     private sealed class DeleteFixture : IAsyncDisposable
     {
         private readonly SqliteDatabaseFixture _database;
@@ -193,7 +206,12 @@ public sealed class DeletePlanStoreTests
             setup.Parameters.AddWithValue("$task_id", task.Id);
             setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             Assert.Equal(3, await setup.ExecuteNonQueryAsync());
-            return new DeleteFixture(database, new DeletePlanStore(database.Database), task.Id);
+            var options = AnimeGoDefaults.CreateDocker();
+            options = options with
+            {
+                Paths = options.Paths with { MovieSavePath = "/download/movies" },
+            };
+            return new DeleteFixture(database, new DeletePlanStore(database.Database, options), task.Id);
         }
 
         public async Task<PersistedState> ReadPersistedAsync(string executionId)
@@ -278,6 +296,32 @@ public sealed class DeletePlanStoreTests
             command.Parameters.AddWithValue("$task_id", TaskId);
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             Assert.Equal(8, await command.ExecuteNonQueryAsync());
+        }
+
+        public async Task ConvertToMixedMovieAsync()
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO anime_movies (
+                    id, tmdb_movie_id, canonical_title, original_title,
+                    release_date, poster_path, created_at_utc, updated_at_utc)
+                VALUES (
+                    'mixed-movie', 10681, '萤火之森', '蛍火の杜へ',
+                    '2011-09-17', NULL, $now, $now);
+                UPDATE task_files
+                SET disposition = 'movie', other_reason = NULL,
+                    tmdb_series_id = NULL, tmdb_season_number = NULL,
+                    tmdb_episode_number = NULL, tmdb_episode_id = NULL,
+                    tmdb_movie_id = 10681
+                WHERE task_id = $task_id;
+                UPDATE file_operations
+                SET target_path = '/download/movies/萤火之森 (2011)/萤火之森 (2011).mkv'
+                WHERE task_file_id IN (SELECT id FROM task_files WHERE task_id = $task_id);
+                """;
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(3, await command.ExecuteNonQueryAsync());
         }
 
         public async Task<(int Completions, int Claims)> ReadMovieBusinessCountsAsync()

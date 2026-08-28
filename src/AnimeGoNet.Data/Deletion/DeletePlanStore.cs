@@ -1,12 +1,15 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 
 namespace AnimeGoNet.Data.Deletion;
 
-public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
+public sealed class DeletePlanStore(
+    AnimeGoSqliteDatabase database,
+    AnimeGoOptions? options = null)
 {
     public async Task<DeletePlanPreview?> GetPreviewAsync(
         string taskId,
@@ -14,7 +17,9 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        return await ReadPreviewAsync(connection, null, taskId, cancellationToken).ConfigureAwait(false);
+        return await ReadPreviewAsync(
+            connection, null, taskId, options?.Paths.EffectiveMovieSavePath, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<DeleteExecutionPlan> CreateAsync(
@@ -34,7 +39,9 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var preview = await ReadPreviewAsync(connection, transaction, taskId, cancellationToken).ConfigureAwait(false)
+        var preview = await ReadPreviewAsync(
+                connection, transaction, taskId, options?.Paths.EffectiveMovieSavePath, cancellationToken)
+            .ConfigureAwait(false)
             ?? throw new KeyNotFoundException($"Ingest task '{taskId}' was not found.");
         if (!CryptographicOperations.FixedTimeEquals(
                 Encoding.ASCII.GetBytes(preview.Fingerprint),
@@ -115,6 +122,7 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
         SqliteConnection connection,
         SqliteTransaction? transaction,
         string taskId,
+        string? movieRootPath,
         CancellationToken cancellationToken)
     {
         string taskTitle;
@@ -173,14 +181,19 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
             ORDER BY operation.source_path;
             """, taskId, cancellationToken).ConfigureAwait(false);
         var media = await ReadTargetsAsync(connection, transaction, """
-            SELECT DISTINCT 'media_file', operation.target_path, job.save_root_path, NULL,
+            SELECT DISTINCT 'media_file', operation.target_path,
+                   CASE WHEN file.disposition = 'movie'
+                        THEN COALESCE($movie_root, job.save_root_path)
+                        ELSE job.save_root_path END,
+                   NULL,
                    operation.target_path
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
             JOIN download_jobs AS job ON job.task_id = file.task_id
             WHERE file.task_id = $task_id
             ORDER BY operation.target_path;
-            """, taskId, cancellationToken).ConfigureAwait(false);
+            """, taskId, cancellationToken, movieRootPath)
+            .ConfigureAwait(false);
         var taskRecords = new[]
         {
             new DeletePlanTarget(DeleteItemKinds.TaskRecord, taskId, null, null, $"任务记录：{taskTitle}"),
@@ -201,12 +214,19 @@ public sealed class DeletePlanStore(AnimeGoSqliteDatabase database)
         SqliteTransaction? transaction,
         string sql,
         string taskId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? movieRootPath = null)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = sql;
         command.Parameters.AddWithValue("$task_id", taskId);
+        if (sql.Contains("$movie_root", StringComparison.Ordinal))
+        {
+            command.Parameters.AddWithValue(
+                "$movie_root",
+                string.IsNullOrWhiteSpace(movieRootPath) ? DBNull.Value : movieRootPath);
+        }
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         var targets = new List<DeletePlanTarget>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))

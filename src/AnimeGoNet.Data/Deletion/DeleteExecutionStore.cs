@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -212,6 +213,47 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default) =>
         SetItemCompletedAsync(claim, item, targetExisted ? "completed" : "skipped", utcNow, cancellationToken);
+
+    public async Task<DeleteExecutionItem> CorrectFileRootAsync(
+        DeleteExecutionClaim claim,
+        DeleteExecutionItem item,
+        string rootPath,
+        CancellationToken cancellationToken = default)
+    {
+        if (item.ItemKind is not (DeleteItemKinds.SourceFile or DeleteItemKinds.MediaFile))
+        {
+            throw new ArgumentException("Only file delete items have a captured root.", nameof(item));
+        }
+        if (!PathBoundary.IsAbsolute(rootPath)
+            || !PathBoundary.IsWithin(rootPath, item.TargetKey))
+        {
+            throw new ArgumentException("Corrected delete root must contain the frozen target.", nameof(rootPath));
+        }
+
+        var normalizedRoot = Path.GetFullPath(rootPath);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE delete_execution_items
+            SET root_path = $root, failure_code = NULL
+            WHERE id = $item_id AND execution_id = $execution_id
+              AND state IN ('pending', 'failed');
+            """;
+        update.Parameters.AddWithValue("$root", normalizedRoot);
+        update.Parameters.AddWithValue("$item_id", item.ItemId);
+        update.Parameters.AddWithValue("$execution_id", claim.ExecutionId);
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException("Delete execution item changed concurrently.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return item with { RootPath = normalizedRoot };
+    }
 
     public async Task CompleteBusinessRecordAsync(
         DeleteExecutionClaim claim,
