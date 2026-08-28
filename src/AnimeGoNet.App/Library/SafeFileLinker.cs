@@ -223,10 +223,23 @@ public sealed class SafeFileLinker
 
     private static void EnsureExpectedSize(string path, long expectedBytes, string code)
     {
-        if (new FileInfo(path).Length != expectedBytes)
+        if (GetResolvedFileLength(path) != expectedBytes)
         {
             throw new SafeFileMoveException(code, "File size does not match the Torrent manifest.");
         }
+    }
+
+    internal static long GetResolvedFileLength(string path)
+    {
+        var file = new FileInfo(path);
+        if (file.LinkTarget is null)
+        {
+            return file.Length;
+        }
+
+        return file.ResolveLinkTarget(returnFinalTarget: true) is FileInfo resolved
+            ? resolved.Length
+            : file.Length;
     }
 
     private static void Validate(SafeFileLinkRequest request)

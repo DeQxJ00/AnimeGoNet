@@ -72,6 +72,7 @@ public sealed class SafeFileLinkerTests
         Assert.True(recovered.RecoveredExistingTarget);
         Assert.NotNull(new FileInfo(target).LinkTarget);
         Assert.Equal(Path.GetFullPath(source), new FileInfo(target).ResolveLinkTarget(true)!.FullName);
+        Assert.Equal(bytes.Length, SafeFileLinker.GetResolvedFileLength(target));
         Assert.True(File.Exists(source));
         Assert.Equal(bytes, await File.ReadAllBytesAsync(target));
     }

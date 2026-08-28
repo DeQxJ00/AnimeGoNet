@@ -659,6 +659,7 @@ public sealed class SourceProfileApiTests
         Assert.Contains("不填写 Cookie 名、分号或整段 Cookie Header", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
         Assert.Contains("id=\"source-link-type\"", html, StringComparison.Ordinal);
+        Assert.Contains("Windows 下创建软链接需要管理员权限", html, StringComparison.Ordinal);
         Assert.Contains("四种文件策略详细说明", html, StringComparison.Ordinal);
         Assert.Contains("link_type", script, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);

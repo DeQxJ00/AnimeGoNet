@@ -12424,7 +12424,7 @@ function updateSourceWarning(): void {
   if (strategy !== "link") linkType.value = "hard";
   linkTypeState.textContent = strategy === "link"
     ? linkType.value === "symbolic"
-      ? "软链接可跨文件系统；Jellyfin 必须能按相同路径访问源文件，Windows 需要符号链接权限。"
+      ? "软链接可跨文件系统；Jellyfin 必须能按相同路径访问源文件。Windows 下创建软链接需要管理员权限；开启开发人员模式后可使用普通权限。"
       : "硬链接最稳，不依赖源路径，但下载目录与媒体库必须位于同一文件系统。"
     : strategy === "link_delete"
     ? "link_delete 固定使用硬链接；删除做种源后软链接会失效，因此不允许选择软链接。"
@@ -12432,7 +12432,7 @@ function updateSourceWarning(): void {
   const warnings: Record<string, string> = {
     move: "move：下载完成后暂停 qB 并立即移动；做种固定为 0。跨盘会复制、校验大小与 SHA-256 后删除源文件。",
     link: linkType.value === "symbolic"
-      ? "link + 软链接：完成后立即建立符号链接并保留做种源，可跨盘；Jellyfin/容器必须能访问链接指向的源路径。"
+      ? "link + 软链接：完成后立即建立符号链接并保留做种源，可跨盘；Jellyfin/容器必须能访问链接指向的源路径；Windows 需管理员权限或开启开发人员模式。"
       : "link + 硬链接：完成后立即建立硬链接并保留做种源，可靠且源路径删除后媒体仍有效，但必须处于同一文件系统。",
     link_delete: "link_delete：立即建立硬链接继续做种；到期复核后删除下载源并移除 qB 任务，媒体库硬链接继续有效。",
     wait_move: "wait_move：先在下载目录做种，到期后暂停 qB 再移动；-1 表示无限做种，因此不会自动移动。",

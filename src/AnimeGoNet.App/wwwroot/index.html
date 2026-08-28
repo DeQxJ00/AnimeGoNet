@@ -1264,9 +1264,9 @@
             <label>链接类型
               <select id="source-link-type">
                 <option value="hard">硬链接（推荐）</option>
-                <option value="symbolic">软链接 / 符号链接</option>
+                <option value="symbolic">软链接 / 符号链接（Windows 需管理员权限）</option>
               </select>
-              <small id="source-link-type-state">仅 link 策略可选；其他策略固定使用硬链接语义。</small>
+              <small id="source-link-type-state">仅 link 策略可选。Windows 下创建软链接需要管理员权限；开启开发人员模式后可使用普通权限。其他策略固定使用硬链接语义。</small>
             </label>
             <label>qB 分类<input id="source-category" required maxlength="64" autocomplete="off"></label>
             <label>附加 Tags<input id="source-tags" maxlength="512" placeholder="web, 追番" autocomplete="off"></label>
@@ -1331,7 +1331,7 @@
             <summary>四种文件策略详细说明</summary>
             <div class="settings-guidance-list">
               <p><strong>move</strong>：下载完成后暂停 qB 并立即移动。做种时间固定为 0；同盘优先原子移动，跨盘会复制、校验大小和 SHA-256 后再删除源文件。</p>
-              <p><strong>link</strong>：下载完成后立即在媒体库创建链接，不暂停 qB。硬链接最稳但要求同一文件系统；软链接可跨盘，但 Jellyfin 必须能访问链接指向的源路径，Windows 还需要创建符号链接权限。源文件始终保留；正数做种到期后只移除 qB 任务，-1 无限保留。</p>
+              <p><strong>link</strong>：下载完成后立即在媒体库创建链接，不暂停 qB。硬链接最稳但要求同一文件系统；软链接可跨盘，但 Jellyfin 必须能访问链接指向的源路径。Windows 下创建软链接需要管理员权限；开启开发人员模式后可使用普通权限。源文件始终保留；正数做种到期后只移除 qB 任务，-1 无限保留。</p>
               <p><strong>link_delete</strong>：立即创建硬链接并继续做种；做种时间到期后再次校验媒体目标与源内容一致，再删除下载目录中的源路径并移除 qB 任务。媒体库硬链接仍有效。禁止软链接，避免删除源文件后产生断链。</p>
               <p><strong>wait_move</strong>：下载完成后保持原路径做种，到期后暂停 qB 再移动；支持跨盘复制校验。设置 -1 时永远不会自动移动。</p>
             </div>
