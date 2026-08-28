@@ -393,10 +393,15 @@ test("movie library remains distinct from TV seasons and exposes TMDB Movie iden
     "动画电影",
   );
   assert.ok(document.querySelector("#movie-library-list"));
+  assert.ok(document.querySelector("#movie-library-action-status"));
   assert.match(app, /\/api\/v1\/library\/movies/);
   assert.match(app, /themoviedb\.org\/movie\/\$\{item\.tmdb_movie_id\}/);
   assert.match(app, /TMDB Movie \$\{item\.tmdb_movie_id\}/);
   assert.match(app, /元数据已确认 · 等待整理完成/);
+  assert.match(app, /编辑 \/ 从 TMDB 刷新/);
+  assert.match(app, /删除关联任务\/文件/);
+  assert.match(app, /仅删除无引用投影/);
+  assert.match(app, /openDeletePreview\(item\.related_task_id\)/);
 });
 
 test("manual ingest uses the WebUI-authenticated route instead of the plugin boundary", async () => {

@@ -2769,12 +2769,8 @@ function renderMovieLibraryPage(page) {
         return;
     }
     renderRegionContent(list, ...page.items.map((item) => {
-        const card = document.createElement("a");
+        const card = document.createElement("article");
         card.className = "library-card movie-library-card";
-        card.href = `https://www.themoviedb.org/movie/${item.tmdb_movie_id}`;
-        card.target = "_blank";
-        card.rel = "noopener noreferrer";
-        card.setAttribute("aria-label", `在 TMDB 打开电影 ${item.title}`);
         const image = libraryPoster(item.poster_url, item.title, "library-poster");
         const content = document.createElement("span");
         content.className = "library-card-content";
@@ -2799,10 +2795,82 @@ function renderMovieLibraryPage(page) {
             ? `✓ 已整理${item.completed_at_utc ? ` · ${libraryDate(item.completed_at_utc, true)}` : ""}`
                 + (item.media_path_known ? "" : " · 媒体路径未记录")
             : "○ 元数据已确认 · 等待整理完成";
-        content.append(heading, identity, completion);
+        const actions = document.createElement("span");
+        actions.className = "movie-library-actions";
+        const tmdbLink = document.createElement("a");
+        tmdbLink.className = "secondary-button library-tmdb-link";
+        tmdbLink.href = `https://www.themoviedb.org/movie/${item.tmdb_movie_id}`;
+        tmdbLink.target = "_blank";
+        tmdbLink.rel = "noopener noreferrer";
+        tmdbLink.textContent = "打开 TMDB";
+        const refresh = document.createElement("button");
+        refresh.type = "button";
+        refresh.className = "secondary-button";
+        refresh.textContent = "编辑 / 从 TMDB 刷新";
+        refresh.title = "电影名称、原名、上映日期和封面以 TMDB 为准";
+        refresh.addEventListener("click", () => void refreshMovieLibraryItem(item, refresh));
+        const deleteContent = document.createElement("button");
+        deleteContent.type = "button";
+        deleteContent.className = "danger-button";
+        deleteContent.textContent = item.related_task_total > 0
+            ? `删除关联任务/文件…（${item.related_task_total}）`
+            : "删除关联任务/文件…";
+        deleteContent.disabled = item.related_task_id === null;
+        deleteContent.addEventListener("click", () => {
+            if (item.related_task_id)
+                void openDeletePreview(item.related_task_id);
+        });
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "delete-button";
+        remove.textContent = "仅删除无引用投影";
+        remove.addEventListener("click", () => void deleteMovieLibraryItem(item, remove));
+        actions.append(tmdbLink, refresh, deleteContent, remove);
+        content.append(heading, identity, completion, actions);
         card.append(image, content);
         return card;
     }));
+}
+async function refreshMovieLibraryItem(item, button) {
+    const status = element("#movie-library-action-status");
+    button.disabled = true;
+    status.textContent = `正在从 TMDB 刷新 ${item.title}…`;
+    try {
+        const response = await authenticatedFetch(`/api/v1/library/movies/${item.tmdb_movie_id}`, {
+            method: "PUT",
+            headers: jsonRequestHeaders(),
+            body: JSON.stringify({ expected_revision: item.resource_revision }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        status.textContent = `已按 TMDB Movie ${item.tmdb_movie_id} 更新名称、封面和上映日期。`;
+        await loadMovieLibrary();
+    }
+    catch (error) {
+        status.textContent = `电影编辑失败：${errorMessage(error, "未知错误")}`;
+        button.disabled = false;
+    }
+}
+async function deleteMovieLibraryItem(item, button) {
+    if (!window.confirm(`仅删除 ${item.title}（TMDB Movie ${item.tmdb_movie_id}）的本地投影？`
+        + " 服务端会拒绝仍有关联任务、完成记录或有效 claim 的电影。"
+        + " 此操作不会删除下载器任务、下载源文件或媒体文件。"))
+        return;
+    const status = element("#movie-library-action-status");
+    button.disabled = true;
+    status.textContent = `正在检查 ${item.title} 的引用并删除投影…`;
+    try {
+        const query = new URLSearchParams({ expected_revision: item.resource_revision });
+        const response = await authenticatedFetch(`/api/v1/library/movies/${item.tmdb_movie_id}?${query}`, { method: "DELETE", headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        status.textContent = `已删除 TMDB Movie ${item.tmdb_movie_id} 的无引用投影。`;
+        await loadMovieLibrary();
+    }
+    catch (error) {
+        status.textContent = `删除失败：${errorMessage(error, "未知错误")}；有业务引用时请先使用“删除关联任务/文件…”。`;
+        button.disabled = false;
+    }
 }
 async function loadMovieLibrary(background = false) {
     const sequence = ++movieLibraryRequestSequence;

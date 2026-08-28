@@ -193,6 +193,8 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/notifications/deliveries", ListNotificationDeliveries);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapGet("/api/v1/library/movies", LibraryMovies);
+        app.MapPut("/api/v1/library/movies/{tmdbMovieId:int}", RefreshLibraryMovie);
+        app.MapDelete("/api/v1/library/movies/{tmdbMovieId:int}", DeleteLibraryMovie);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
         app.MapPost("/api/v1/library/subtitle-archives/import", ImportSubtitleArchive);
@@ -7015,7 +7017,115 @@ public static class ApiEndpoints
                 item.Completed,
                 item.DownloadSourceId,
                 item.CompletedAtUtc,
-                item.MediaPathKnown)).ToArray()));
+                item.MediaPathKnown,
+                item.ResourceRevision,
+                item.RelatedTaskTotal,
+                item.RelatedTaskId)).ToArray()));
+    }
+
+    private static async Task<IResult> RefreshLibraryMovie(
+        int tmdbMovieId,
+        AnimeMovieRefreshRequest request,
+        ITmdbMovieClient tmdb,
+        AnimeLibraryAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbMovieId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_movie_id_invalid",
+                "TMDB Movie ID must be a positive integer."));
+        }
+
+        if (!IsLibraryRevision(request.ExpectedRevision))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_revision_invalid",
+                "A 64-character resource revision is required."));
+        }
+
+        try
+        {
+            var movie = await tmdb.GetMovieAsync(tmdbMovieId, cancellationToken).ConfigureAwait(false);
+            if (movie?.Id != tmdbMovieId)
+            {
+                return TypedResults.NotFound(Error(
+                    "library_tmdb_movie_not_found",
+                    "TMDB Movie could not be verified."));
+            }
+
+            var result = await admin.RefreshMovieAsync(
+                movie,
+                request.ExpectedRevision!,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return result.Status switch
+            {
+                AnimeLibraryMutationStatus.Updated => TypedResults.Ok(
+                    new AnimeMovieMutationResponse(
+                        "refreshed",
+                        result.TmdbMovieId,
+                        result.ResourceRevision)),
+                AnimeLibraryMutationStatus.NotFound => TypedResults.NotFound(Error(
+                    "library_movie_not_found",
+                    "The requested TMDB Movie was not found in the local library.")),
+                AnimeLibraryMutationStatus.RevisionConflict => TypedResults.Conflict(Error(
+                    "library_revision_conflict",
+                    "The library Movie changed; reload it before refreshing.")),
+                _ => throw new InvalidOperationException("Unexpected Movie library refresh result."),
+            };
+        }
+        catch (TmdbClientException exception)
+        {
+            return LibraryTmdbFailure(exception, "TMDB Movie library refresh failed.");
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_tmdb_payload_invalid",
+                "TMDB returned an invalid Movie snapshot."));
+        }
+    }
+
+    private static async Task<IResult> DeleteLibraryMovie(
+        int tmdbMovieId,
+        [FromQuery(Name = "expected_revision")] string? expectedRevision,
+        AnimeLibraryAdminStore admin,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbMovieId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_movie_id_invalid",
+                "TMDB Movie ID must be a positive integer."));
+        }
+
+        if (!IsLibraryRevision(expectedRevision))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_revision_invalid",
+                "A 64-character resource revision is required."));
+        }
+
+        var result = await admin.DeleteMovieAsync(
+            tmdbMovieId,
+            expectedRevision!,
+            cancellationToken).ConfigureAwait(false);
+        return result.Status switch
+        {
+            AnimeLibraryMutationStatus.Deleted => TypedResults.Ok(
+                new AnimeMovieMutationResponse("deleted", result.TmdbMovieId, null)),
+            AnimeLibraryMutationStatus.NotFound => TypedResults.NotFound(Error(
+                "library_movie_not_found",
+                "The requested TMDB Movie was not found in the local library.")),
+            AnimeLibraryMutationStatus.RevisionConflict => TypedResults.Conflict(Error(
+                "library_revision_conflict",
+                "The library Movie changed; reload it before deleting.")),
+            AnimeLibraryMutationStatus.InUse => TypedResults.Conflict(Error(
+                "library_movie_in_use",
+                LibraryMovieReferenceMessage(result.References!))),
+            _ => throw new InvalidOperationException("Unexpected Movie library delete result."),
+        };
     }
 
     private static async Task<IResult> CreateLibrarySeason(
@@ -7747,6 +7857,14 @@ public static class ApiEndpoints
         + $"pending NFO rewrites: {references.PendingNfoRewriteJobs}). "
         + "Use the four-part deletion workflow for business data, downloader tasks, "
         + "source files or media files.";
+
+    private static string LibraryMovieReferenceMessage(
+        AnimeMovieReferenceSummary references) =>
+        "Movie library projection is still referenced "
+        + $"(task files: {references.TaskFiles}, "
+        + $"completion records: {references.CompletionRecords}, "
+        + $"active claims: {references.ActiveClaims}). "
+        + "Use the four-part deletion workflow for related tasks and files first.";
 
     private static async Task<IResult> LibraryCover(
         int tmdbSeriesId,

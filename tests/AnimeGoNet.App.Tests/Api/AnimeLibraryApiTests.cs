@@ -82,6 +82,9 @@ public sealed class AnimeLibraryApiTests
         Assert.True(item.GetProperty("completed").GetBoolean());
         Assert.True(item.GetProperty("media_path_known").GetBoolean());
         Assert.Equal("mikan", item.GetProperty("download_source_id").GetString());
+        Assert.Equal(64, item.GetProperty("resource_revision").GetString()!.Length);
+        Assert.Equal(0, item.GetProperty("related_task_total").GetInt32());
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("related_task_id").ValueKind);
     }
 
     [Fact]

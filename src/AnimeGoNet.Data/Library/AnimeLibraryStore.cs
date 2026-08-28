@@ -46,10 +46,18 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
         };
         await using var command = connection.CreateCommand();
         command.CommandText = $$"""
-            SELECT movie.tmdb_movie_id, movie.canonical_title, movie.original_title,
+            SELECT movie.id, movie.tmdb_movie_id, movie.canonical_title, movie.original_title,
                    movie.poster_path, movie.release_date, movie.created_at_utc,
                    movie.updated_at_utc, completion.id, completion.source_id,
-                   completion.completed_at_utc, completion.media_path
+                   completion.completed_at_utc, completion.media_path,
+                   (SELECT COUNT(DISTINCT file.task_id)
+                      FROM task_files AS file
+                     WHERE file.tmdb_movie_id = movie.tmdb_movie_id),
+                   (SELECT file.task_id
+                      FROM task_files AS file
+                     WHERE file.tmdb_movie_id = movie.tmdb_movie_id
+                     ORDER BY file.id
+                     LIMIT 1)
             FROM anime_movies AS movie
             LEFT JOIN movie_completion_records AS completion
               ON completion.tmdb_movie_id = movie.tmdb_movie_id
@@ -64,19 +72,24 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            var completed = !reader.IsDBNull(7);
+            var completed = !reader.IsDBNull(8);
+            var tmdbMovieId = reader.GetInt32(1);
+            var updatedAtUtc = reader.GetString(7);
             items.Add(new AnimeMovieListProjection(
-                reader.GetInt32(0),
-                reader.GetString(1),
+                tmdbMovieId,
                 reader.GetString(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3),
-                ParseDate(reader, 4),
-                ParseTimestamp(reader.GetString(5)),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                ParseDate(reader, 5),
                 ParseTimestamp(reader.GetString(6)),
+                ParseTimestamp(updatedAtUtc),
                 completed,
-                completed ? reader.GetString(8) : null,
-                completed ? ParseTimestamp(reader.GetString(9)) : null,
-                completed && !reader.IsDBNull(10)));
+                completed ? reader.GetString(9) : null,
+                completed ? ParseTimestamp(reader.GetString(10)) : null,
+                completed && !reader.IsDBNull(11),
+                AnimeLibraryResourceRevision.CreateMovie(reader.GetString(0), tmdbMovieId, updatedAtUtc),
+                reader.GetInt32(12),
+                reader.IsDBNull(13) ? null : reader.GetString(13)));
         }
 
         return new AnimeMovieListPage(query.Page, query.PageSize, totalItems, items);

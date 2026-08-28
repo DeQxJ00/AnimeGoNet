@@ -123,6 +123,133 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             references);
     }
 
+    public async Task<AnimeMovieMutationResult> RefreshMovieAsync(
+        TmdbMovie movie,
+        string expectedRevision,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateMovie(movie);
+        var revision = NormalizeRevision(expectedRevision);
+        var now = utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var current = await FindMovieAsync(connection, transaction, movie.Id, cancellationToken)
+            .ConfigureAwait(false);
+        if (current is null)
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.NotFound,
+                movie.Id,
+                null);
+        }
+
+        var currentRevision = MovieRevision(current);
+        if (!string.Equals(currentRevision, revision, StringComparison.Ordinal))
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.RevisionConflict,
+                movie.Id,
+                currentRevision);
+        }
+
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE anime_movies
+            SET canonical_title = $title,
+                original_title = $original_title,
+                release_date = $release_date,
+                poster_path = $poster_path,
+                updated_at_utc = $updated_at
+            WHERE tmdb_movie_id = $tmdb_movie_id;
+            """;
+        update.Parameters.AddWithValue("$tmdb_movie_id", movie.Id);
+        update.Parameters.AddWithValue("$title", CanonicalMovieTitle(movie));
+        update.Parameters.AddWithValue(
+            "$original_title",
+            string.IsNullOrWhiteSpace(movie.OriginalTitle)
+                ? CanonicalMovieTitle(movie)
+                : movie.OriginalTitle.Trim());
+        update.Parameters.AddWithValue(
+            "$release_date",
+            movie.ReleaseDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? (object)DBNull.Value);
+        update.Parameters.AddWithValue("$poster_path", movie.PosterPath ?? (object)DBNull.Value);
+        update.Parameters.AddWithValue("$updated_at", now);
+        await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new AnimeMovieMutationResult(
+            AnimeLibraryMutationStatus.Updated,
+            movie.Id,
+            AnimeLibraryResourceRevision.CreateMovie(current.MovieRowId, movie.Id, now));
+    }
+
+    public async Task<AnimeMovieMutationResult> DeleteMovieAsync(
+        int tmdbMovieId,
+        string expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbMovieId, 1);
+        var revision = NormalizeRevision(expectedRevision);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var current = await FindMovieAsync(connection, transaction, tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (current is null)
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.NotFound,
+                tmdbMovieId,
+                null);
+        }
+
+        var currentRevision = MovieRevision(current);
+        if (!string.Equals(currentRevision, revision, StringComparison.Ordinal))
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.RevisionConflict,
+                tmdbMovieId,
+                currentRevision);
+        }
+
+        var references = await ReadMovieReferencesAsync(
+            connection,
+            transaction,
+            tmdbMovieId,
+            cancellationToken).ConfigureAwait(false);
+        if (references.Total > 0)
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.InUse,
+                tmdbMovieId,
+                currentRevision,
+                references);
+        }
+
+        await using (var releasedClaims = connection.CreateCommand())
+        {
+            releasedClaims.Transaction = transaction;
+            releasedClaims.CommandText = "DELETE FROM movie_claims WHERE tmdb_movie_id = $tmdb_movie_id;";
+            releasedClaims.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            await releasedClaims.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.Transaction = transaction;
+            delete.CommandText = "DELETE FROM anime_movies WHERE tmdb_movie_id = $tmdb_movie_id;";
+            delete.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new AnimeMovieMutationResult(
+            AnimeLibraryMutationStatus.Deleted,
+            tmdbMovieId,
+            null,
+            references);
+    }
+
     private async Task<AnimeLibraryMutationResult> WriteAsync(
         TmdbSeries series,
         TmdbSeason season,
@@ -575,12 +702,67 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(5));
     }
 
+    private static async Task<CurrentMovie?> FindMovieAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        int tmdbMovieId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, updated_at_utc
+            FROM anime_movies
+            WHERE tmdb_movie_id = $tmdb_movie_id
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new CurrentMovie(reader.GetString(0), tmdbMovieId, reader.GetString(1))
+            : null;
+    }
+
+    private static async Task<AnimeMovieReferenceSummary> ReadMovieReferencesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        int tmdbMovieId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM task_files WHERE tmdb_movie_id = $tmdb_movie_id),
+                (SELECT COUNT(*) FROM movie_completion_records WHERE tmdb_movie_id = $tmdb_movie_id),
+                (SELECT COUNT(*) FROM movie_claims
+                  WHERE tmdb_movie_id = $tmdb_movie_id AND state <> 'released');
+            """;
+        command.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("Movie library reference summary was not returned.");
+        }
+
+        return new AnimeMovieReferenceSummary(
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2));
+    }
+
     private static string Revision(CurrentSeason value) =>
         AnimeLibraryResourceRevision.Create(
             value.SeriesRowId,
             value.SeriesUpdatedAtUtc,
             value.SeasonRowId,
             value.SeasonUpdatedAtUtc);
+
+    private static string MovieRevision(CurrentMovie value) =>
+        AnimeLibraryResourceRevision.CreateMovie(
+            value.MovieRowId,
+            value.TmdbMovieId,
+            value.UpdatedAtUtc);
 
     private static string NormalizeRevision(string value)
     {
@@ -616,6 +798,25 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
         ArgumentOutOfRangeException.ThrowIfLessThan(seasonNumber, 1);
     }
 
+    private static void ValidateMovie(TmdbMovie movie)
+    {
+        ArgumentNullException.ThrowIfNull(movie);
+        ArgumentOutOfRangeException.ThrowIfLessThan(movie.Id, 1);
+        if (movie.Title.Length > 512
+            || movie.OriginalTitle.Length > 512
+            || movie.PosterPath is { Length: > 1024 })
+        {
+            throw new ArgumentException("TMDB Movie identity is invalid.", nameof(movie));
+        }
+    }
+
+    private static string CanonicalMovieTitle(TmdbMovie movie) =>
+        !string.IsNullOrWhiteSpace(movie.Title)
+            ? movie.Title.Trim()
+            : !string.IsNullOrWhiteSpace(movie.OriginalTitle)
+                ? movie.OriginalTitle.Trim()
+                : $"TMDB Movie {movie.Id}";
+
     private static string CanonicalSeriesName(TmdbSeries series) =>
         !string.IsNullOrWhiteSpace(series.Name)
             ? series.Name.Trim()
@@ -634,4 +835,9 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
         string SeasonRowId,
         string SeasonUpdatedAtUtc,
         int SeasonCount);
+
+    private sealed record CurrentMovie(
+        string MovieRowId,
+        int TmdbMovieId,
+        string UpdatedAtUtc);
 }

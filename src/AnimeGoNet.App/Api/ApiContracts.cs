@@ -1533,7 +1533,18 @@ public sealed record AnimeMovieListItemResponse(
     [property: JsonPropertyName("completed")] bool Completed,
     [property: JsonPropertyName("download_source_id")] string? DownloadSourceId,
     [property: JsonPropertyName("completed_at_utc")] DateTimeOffset? CompletedAtUtc,
-    [property: JsonPropertyName("media_path_known")] bool MediaPathKnown);
+    [property: JsonPropertyName("media_path_known")] bool MediaPathKnown,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision,
+    [property: JsonPropertyName("related_task_total")] int RelatedTaskTotal,
+    [property: JsonPropertyName("related_task_id")] string? RelatedTaskId);
+
+public sealed record AnimeMovieRefreshRequest(
+    [property: JsonPropertyName("expected_revision")] string? ExpectedRevision);
+
+public sealed record AnimeMovieMutationResponse(
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("resource_revision")] string? ResourceRevision);
 
 public sealed record AnimeSeasonDetailResponse(
     [property: JsonPropertyName("id")] string Id,

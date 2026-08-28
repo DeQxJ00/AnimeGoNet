@@ -10,6 +10,91 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class AnimeLibraryAdminApiTests
 {
     [Fact]
+    public async Task MovieRefreshUsesTmdbSnapshotAndOptimisticRevision()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await SeedMovieAsync(database, tmdb.Movie.Id);
+        using var listed = await app.Client.GetAsync("/api/v1/library/movies");
+        using var listedJson = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
+        var revision = Assert.Single(listedJson.RootElement.GetProperty("items").EnumerateArray())
+            .GetProperty("resource_revision")
+            .GetString()!;
+        tmdb.Movie = tmdb.Movie with
+        {
+            Title = "Changed Movie",
+            OriginalTitle = "Changed Original Movie",
+            ReleaseDate = new DateOnly(2025, 2, 3),
+            PosterPath = "/changed-movie.jpg",
+        };
+
+        using var refreshed = await app.Client.PutAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}",
+            Json($$"""{"expected_revision":"{{revision}}"}"""));
+        using var refreshedJson = JsonDocument.Parse(await refreshed.Content.ReadAsStreamAsync());
+        var newRevision = refreshedJson.RootElement.GetProperty("resource_revision").GetString();
+        using var stale = await app.Client.PutAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}",
+            Json($$"""{"expected_revision":"{{revision}}"}"""));
+        using var staleJson = JsonDocument.Parse(await stale.Content.ReadAsStreamAsync());
+        using var reloaded = await app.Client.GetAsync("/api/v1/library/movies");
+        using var reloadedJson = JsonDocument.Parse(await reloaded.Content.ReadAsStreamAsync());
+        var item = Assert.Single(reloadedJson.RootElement.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
+        Assert.Equal("refreshed", refreshedJson.RootElement.GetProperty("result").GetString());
+        Assert.NotEqual(revision, newRevision);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("library_revision_conflict", staleJson.RootElement.GetProperty("code").GetString());
+        Assert.Equal("Changed Movie", item.GetProperty("title").GetString());
+        Assert.Equal("Changed Original Movie", item.GetProperty("original_title").GetString());
+        Assert.Equal("2025-02-03", item.GetProperty("release_date").GetString());
+        Assert.Equal(2, tmdb.MovieDetailCallCount);
+    }
+
+    [Fact]
+    public async Task MovieDeleteRejectsReferencesThenRemovesUnreferencedProjection()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await SeedMovieAsync(database, tmdb.Movie.Id, includeCompletion: true);
+        using var listed = await app.Client.GetAsync("/api/v1/library/movies");
+        using var listedJson = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
+        var revision = Assert.Single(listedJson.RootElement.GetProperty("items").EnumerateArray())
+            .GetProperty("resource_revision")
+            .GetString()!;
+
+        using var inUse = await app.Client.DeleteAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}?expected_revision={revision}");
+        var inUseBody = await inUse.Content.ReadAsStringAsync();
+        using var inUseJson = JsonDocument.Parse(inUseBody);
+
+        Assert.Equal(HttpStatusCode.Conflict, inUse.StatusCode);
+        Assert.Equal("library_movie_in_use", inUseJson.RootElement.GetProperty("code").GetString());
+        Assert.Contains("completion records: 1", inUseBody, StringComparison.Ordinal);
+
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "DELETE FROM movie_completion_records WHERE tmdb_movie_id = $tmdb_movie_id;";
+            command.Parameters.AddWithValue("$tmdb_movie_id", tmdb.Movie.Id);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var deleted = await app.Client.DeleteAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}?expected_revision={revision}");
+        using var deletedJson = JsonDocument.Parse(await deleted.Content.ReadAsStreamAsync());
+        using var missing = await app.Client.GetAsync("/api/v1/library/movies");
+        using var missingJson = JsonDocument.Parse(await missing.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
+        Assert.Equal("deleted", deletedJson.RootElement.GetProperty("result").GetString());
+        Assert.Equal(0, missingJson.RootElement.GetProperty("total_items").GetInt32());
+    }
+
+    [Fact]
     public async Task CreateValidatesTmdbAndPublishesCanonicalSeasonSnapshot()
     {
         var tmdb = new MutableTmdbClient();
@@ -166,7 +251,37 @@ public sealed class AnimeLibraryAdminApiTests
     private static StringContent Json(string value) =>
         new(value, Encoding.UTF8, "application/json");
 
-    private sealed class MutableTmdbClient : ITmdbClient
+    private static async Task SeedMovieAsync(
+        AnimeGoSqliteDatabase database,
+        int tmdbMovieId,
+        bool includeCompletion = false)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO anime_movies (
+                id, tmdb_movie_id, canonical_title, original_title,
+                release_date, poster_path, created_at_utc, updated_at_utc)
+            VALUES (
+                'movie-admin', $tmdb_movie_id, 'Old Movie', 'Old Original Movie',
+                '2024-01-01', '/old-movie.jpg', $now, $now);
+            """ + (includeCompletion
+                ? """
+
+                  INSERT INTO movie_completion_records (
+                      id, tmdb_movie_id, source_id, source_item_id,
+                      media_path, completed_at_utc)
+                  VALUES (
+                      'movie-admin-completion', $tmdb_movie_id, 'test', 'movie-admin-source',
+                      '/movies/old.mkv', $now);
+                  """
+                : string.Empty);
+        command.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+        command.Parameters.AddWithValue("$now", "2026-08-28T00:00:00.0000000+00:00");
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private sealed class MutableTmdbClient : ITmdbClient, ITmdbMovieClient
     {
         public TmdbSeries Series { get; set; } = new(
             100,
@@ -188,9 +303,31 @@ public sealed class AnimeLibraryAdminApiTests
                 new TmdbEpisode(10002, 100, 1, 2, "Episode Two", new DateOnly(2024, 1, 8)),
             ]);
 
+        public TmdbMovie Movie { get; set; } = new(
+            129,
+            "Canonical Movie",
+            "Original Movie",
+            new DateOnly(2001, 7, 20),
+            "/movie.jpg");
+
         public TmdbClientException? Failure { get; init; }
 
         public int CallCount { get; private set; }
+
+        public int MovieDetailCallCount { get; private set; }
+
+        public Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+            string title,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TmdbMovie>>([Movie]);
+
+        public Task<TmdbMovie?> GetMovieAsync(
+            int movieId,
+            CancellationToken cancellationToken = default)
+        {
+            MovieDetailCallCount++;
+            return Task.FromResult<TmdbMovie?>(movieId == Movie.Id ? Movie : null);
+        }
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
             string title,

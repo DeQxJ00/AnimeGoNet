@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260828-mixed-media-readonly">
+  <link rel="stylesheet" href="/styles.css?v=20260828-movie-library-admin">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -1069,6 +1069,7 @@
         <button id="movie-library-reload" type="button" class="secondary-button">刷新电影库</button>
       </div>
       <p class="muted">这里只展示已通过 TMDB Movie 接口验证的电影；电影没有 Series、Season 或 Episode，也不会伪造成 S01E01。完成状态来自独立的电影完成记录。</p>
+      <p id="movie-library-action-status" class="muted" role="status" aria-live="polite">电影名称、原名、封面和上映日期以 TMDB 为准；修改入口会重新在线验证并刷新。</p>
       <div class="library-toolbar" aria-label="电影库搜索、排序和分页设置">
         <form id="movie-library-search-form" class="library-search-form" role="search">
           <label>搜索电影
@@ -2331,6 +2332,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260828-mixed-media-readonly"></script>
+    <script type="module" src="/app.js?v=20260828-movie-library-admin"></script>
 </body>
 </html>

@@ -65,7 +65,10 @@ public sealed record AnimeMovieListProjection(
     bool Completed,
     string? DownloadSourceId,
     DateTimeOffset? CompletedAtUtc,
-    bool MediaPathKnown);
+    bool MediaPathKnown,
+    string ResourceRevision,
+    int RelatedTaskTotal,
+    string? RelatedTaskId);
 
 public sealed record AnimeMovieListPage(
     int Page,

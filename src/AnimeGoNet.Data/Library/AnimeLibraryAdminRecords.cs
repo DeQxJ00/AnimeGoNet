@@ -35,3 +35,17 @@ public sealed record AnimeLibraryMutationResult(
     string? ResourceRevision,
     bool SeriesRemoved = false,
     AnimeLibraryReferenceSummary? References = null);
+
+public sealed record AnimeMovieReferenceSummary(
+    int TaskFiles,
+    int CompletionRecords,
+    int ActiveClaims)
+{
+    public int Total => TaskFiles + CompletionRecords + ActiveClaims;
+}
+
+public sealed record AnimeMovieMutationResult(
+    AnimeLibraryMutationStatus Status,
+    int TmdbMovieId,
+    string? ResourceRevision,
+    AnimeMovieReferenceSummary? References = null);
