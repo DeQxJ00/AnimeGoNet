@@ -31,11 +31,13 @@ public static class AiMetadataPromptRenderer
         "ANIDB_LOOKUP",
         "IMDB_LOOKUP",
         "BANGUMI_PUBDATE_FIRST",
+        "U2_TV_SOURCE",
     ];
 
     public static string LoadAndRender(AiMetadataMatchInput input)
     {
-        var template = input.PromptTemplateOverride ?? LoadTemplate();
+        var template = UpgradeTemplateContract(
+            input.PromptTemplateOverride ?? LoadTemplate());
         if (template.Length > MaximumTemplateLength)
         {
             throw new AiMetadataMatcherException(
@@ -50,6 +52,7 @@ public static class AiMetadataPromptRenderer
 
     public static void ValidateTemplate(string template)
     {
+        template = UpgradeTemplateContract(template);
         if (string.IsNullOrWhiteSpace(template)
             || template.Length > MaximumTemplateLength
             || template.Contains('\0'))
@@ -151,6 +154,7 @@ public static class AiMetadataPromptRenderer
 
     public static string Render(string template, AiMetadataMatchInput input)
     {
+        template = UpgradeTemplateContract(template);
         var features = AiMetadataPromptFeatures.Resolve(input);
         var rendered = ApplyConditionalSections(template, features)
             .Replace("{{SOURCE_TITLE_JSON}}", JsonString(input.Title), StringComparison.Ordinal)
@@ -178,6 +182,39 @@ public static class AiMetadataPromptRenderer
         }
 
         return rendered;
+    }
+
+    public static string UpgradeTemplateContract(string template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        const string section = "U2_TV_SOURCE";
+        var opening = "{{#" + section + "}}";
+        if (template.Contains(opening, StringComparison.Ordinal))
+        {
+            return template;
+        }
+
+        var authoritativeTemplate = LoadTemplate();
+        var conditional = ExtractConditionalSection(authoritativeTemplate, section);
+        return template.TrimEnd() + Environment.NewLine + conditional;
+    }
+
+    private static string ExtractConditionalSection(string template, string name)
+    {
+        var opening = "{{#" + name + "}}";
+        var closing = "{{/" + name + "}}";
+        var start = template.IndexOf(opening, StringComparison.Ordinal);
+        var end = start < 0
+            ? -1
+            : template.IndexOf(closing, start + opening.Length, StringComparison.Ordinal);
+        if (start < 0 || end < 0)
+        {
+            throw new AiMetadataMatcherException(
+                MetadataFailureKind.Configuration,
+                "ai_prompt_required_conditional_missing");
+        }
+
+        return template[start..(end + closing.Length)];
     }
 
     private static string ApplyConditionalSections(

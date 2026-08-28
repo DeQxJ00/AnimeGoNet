@@ -11,6 +11,34 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class ConfigurationApiTests
 {
     [Fact]
+    public async Task LegacyPromptOverrideIsShownWithCurrentU2PolicySection()
+    {
+        var current = AiMetadataPromptRenderer.LoadTemplate();
+        const string opening = "{{#U2_TV_SOURCE}}";
+        const string closing = "{{/U2_TV_SOURCE}}";
+        var start = current.IndexOf(opening, StringComparison.Ordinal);
+        var end = current.IndexOf(closing, start, StringComparison.Ordinal) + closing.Length;
+        var legacy = current.Remove(start, end - start);
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    Ai = options.Metadata.Ai with { PromptTemplate = legacy },
+                },
+            });
+
+        using var response = await app.Client.GetAsync("/api/v1/config");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var prompt = json.RootElement.GetProperty("editable")
+            .GetProperty("ai_prompt_template").GetString();
+        Assert.Contains(opening, prompt, StringComparison.Ordinal);
+        Assert.Contains("本请求来自 U2 并按 TV 处理", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EffectiveConfigurationIsTypedAndNeverReturnsCredentials()
     {
         await using var app = await RunningApp.StartAsync(

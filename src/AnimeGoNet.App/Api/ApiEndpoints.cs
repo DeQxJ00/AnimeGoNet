@@ -2327,7 +2327,8 @@ public static class ApiEndpoints
             season.UseFirstSeason,
             ai.BaseUrl?.AbsoluteUri,
             ai.Model,
-            ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate(),
+            AiMetadataPromptRenderer.UpgradeTemplateContract(
+                ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate()),
             SecretState(settings?.AiApiKeyOverridden == true, settings?.AiApiKey),
             string.IsNullOrWhiteSpace(ai.ApiKey) ? null : ai.ApiKey,
             ai.TmdbMcpUrl.AbsoluteUri,
@@ -2824,7 +2825,8 @@ public static class ApiEndpoints
             ClearAiApiKey: false,
             AiTmdbMcpUrl: ai.TmdbMcpUrl.AbsoluteUri,
             AiBangumiMcpUrl: ai.BangumiMcpUrl.AbsoluteUri,
-            AiPromptTemplate: ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate(),
+            AiPromptTemplate: AiMetadataPromptRenderer.UpgradeTemplateContract(
+                ai.PromptTemplate ?? AiMetadataPromptRenderer.LoadTemplate()),
             MikanEpisodeIdentityCacheHours: mikan.EpisodeIdentityCacheTtl.TotalHours,
             MikanBangumiIdentityCacheHours: mikan.BangumiIdentityCacheTtl.TotalHours,
             AiReasoningEffort: ai.ReasoningEffort ?? "none",

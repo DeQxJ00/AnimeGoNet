@@ -98,8 +98,9 @@ public sealed class OpenAiCompatibleMetadataMatcher(
         timeout.CancelAfter(options.HttpTimeout);
         try
         {
-            var promptTemplate = input.PromptTemplateOverride
-                ?? AiMetadataPromptRenderer.LoadTemplate();
+            var promptTemplate = AiMetadataPromptRenderer.UpgradeTemplateContract(
+                input.PromptTemplateOverride
+                ?? AiMetadataPromptRenderer.LoadTemplate());
             var prompt = AiMetadataPromptRenderer.LoadAndRender(input);
             debugCapture?.SetPrompt(promptTemplate, prompt);
             trace.Add(new(++sequence, "prompt_rendered", AiMetadataPromptRenderer.PromptVersion));

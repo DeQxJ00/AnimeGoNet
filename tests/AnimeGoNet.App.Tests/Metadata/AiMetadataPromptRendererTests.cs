@@ -68,6 +68,38 @@ public sealed class AiMetadataPromptRendererTests
     }
 
     [Fact]
+    public void LegacyCustomPromptWithoutU2SectionReceivesCurrentU2Policy()
+    {
+        var current = AiMetadataPromptRenderer.LoadTemplate();
+        const string opening = "{{#U2_TV_SOURCE}}";
+        const string closing = "{{/U2_TV_SOURCE}}";
+        var start = current.IndexOf(opening, StringComparison.Ordinal);
+        var end = current.IndexOf(closing, start, StringComparison.Ordinal) + closing.Length;
+        var legacy = current.Remove(start, end - start);
+        var baseInput = new AiMetadataMatchInput(
+            "TV+Movie",
+            [new AiMetadataFileInput("TV/01.mkv", 1), new AiMetadataFileInput("Movie/劇場版.mkv", 1)],
+            null, 180, null, 2, null, null, false)
+        {
+            PromptTemplateOverride = legacy,
+        };
+
+        var u2 = AiMetadataPromptRenderer.LoadAndRender(baseInput with
+        {
+            PromptFeaturesOverride = new(true, false, true, false) { U2TvSource = true },
+        });
+        var mikan = AiMetadataPromptRenderer.LoadAndRender(baseInput with
+        {
+            PromptFeaturesOverride = new(true, false, true, false),
+        });
+
+        Assert.Contains("本请求来自 U2 并按 TV 处理", u2, StringComparison.Ordinal);
+        Assert.Contains("顶层必须返回 matched=true", u2, StringComparison.Ordinal);
+        Assert.DoesNotContain("本请求来自 U2 并按 TV 处理", mikan, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{#U2_TV_SOURCE}}", u2, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RejectsMoreThanOnePromptTextBlock()
     {
         var exception = Assert.Throws<AiMetadataMatcherException>(() =>
