@@ -1064,6 +1064,58 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task U2OverallAiMatchPlacesIndividuallyUnmatchedFilesInExtras()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+            EpisodeFactory = number => number == 1
+                ? new TmdbEpisode(9001, 72517, 2, 1, "Episode 1", null)
+                : null,
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select(file => file.Name.Contains("Movie", StringComparison.Ordinal)
+                    ? new AiMetadataFileCandidate(
+                        file.Name,
+                        false,
+                        2,
+                        null,
+                        "movie for postprocessing")
+                    : new AiMetadataFileCandidate(file.Name, true, 2, 1, null)).ToArray(),
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("TV/Show 01.mkv", "1", "1"),
+            ("Movie/Show Movie.mkv", null, null));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        var files = await ReadFilesAsync(app, taskId);
+        var episode = files.Single(file => file.Path == "TV/Show 01.mkv");
+        Assert.Equal("episode", episode.Disposition);
+        Assert.Equal(1, episode.EpisodeNumber);
+        var extra = files.Single(file => file.Path == "Movie/Show Movie.mkv");
+        Assert.Equal("extras", extra.Disposition);
+        Assert.Null(extra.EpisodeNumber);
+        Assert.Equal("u2_explicit_extra", extra.OtherReason);
+    }
+
+    [Fact]
     public async Task U2AiFailureDoesNotRelabelTmdbValidatedLocalCandidatesAsParseFailures()
     {
         var tmdb = new FakeTmdbClient

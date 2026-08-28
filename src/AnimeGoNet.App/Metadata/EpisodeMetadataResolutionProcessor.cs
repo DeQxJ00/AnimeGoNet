@@ -288,11 +288,12 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
             if (manualOffset is null && file.PreResolvedOtherReason is not null)
             {
+                var disposition = PreResolvedOtherDisposition(claim, file);
                 await RecordAsync(
                     claim,
                     trustedOffsetResolved ? "trusted_mikan_offset" : "ai_metadata",
                     null,
-                    "other",
+                    disposition,
                     file.PreResolvedOtherReason,
                     retryable: false,
                     0,
@@ -301,7 +302,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
                 results.Add(new MetadataEpisodeFileResolution(
                     file.FileId,
                     null,
-                    UnmatchedVideoDisposition(file),
+                    disposition,
                     file.PreResolvedOtherReason));
                 continue;
             }
@@ -996,6 +997,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
             results[index] = aiFile.Episode is null
                 ? existing with
                 {
+                    Disposition = AiUnmatchedDisposition(claim, existing),
                     OtherReason = NormalizeAiOtherReason(
                         aiFile.OtherReason,
                         existing.OtherReason),
@@ -1284,6 +1286,28 @@ public sealed class EpisodeMetadataResolutionProcessor(
 
         return ContainsMovieHint(file.RelativePath) ? "other" : "extras";
     }
+
+    private static string PreResolvedOtherDisposition(
+        MetadataEpisodeTaskClaim claim,
+        MetadataTaskFileProjection file) =>
+        IsU2Source(claim)
+        && string.Equals(
+            file.PreResolvedOtherReason,
+            "ai_episode_unmatched",
+            StringComparison.Ordinal)
+            ? "extras"
+            : UnmatchedVideoDisposition(file);
+
+    private static string AiUnmatchedDisposition(
+        MetadataEpisodeTaskClaim claim,
+        MetadataEpisodeFileResolution existing) =>
+        IsU2Source(claim) ? "extras" : existing.Disposition;
+
+    private static bool IsU2Source(MetadataEpisodeTaskClaim claim) =>
+        string.Equals(
+            claim.Resolution.SourceAdapter,
+            "u2",
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool ContainsMovieHint(string relativePath) =>
         relativePath.Contains("劇場版", StringComparison.OrdinalIgnoreCase)
