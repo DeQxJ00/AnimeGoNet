@@ -508,6 +508,11 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(app, /file\.size_bytes > current\.size_bytes/);
   assert.match(app, /\/api\/v1\/metadata\/anitomy\/parse-title/);
   assert.match(app, /document\.createElement\("mark"\)/);
+  assert.match(app, /className = "mixed-media-keyword-highlight"/);
+  assert.match(app, /sourceName\.matchAll\(pattern\)/);
+  assert.match(app, /replace\(\/劇場版\|剧场版\/gu, " "\)/);
+  assert.match(app, /movie\(\?=\$\|\[\^a-z0-9\]\)\/giu/);
+  assert.match(mixedDialog.textContent, /自动填入搜索框时会移除/);
   assert.match(app, /movie_task_file_id: assignments\.movieTaskFileId/);
   assert.match(app, /movie_extra_task_file_ids: assignments\.movieExtraTaskFileIds/);
   assert.match(app, /"edit_pending"/);

@@ -614,6 +614,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .mixed-media-file-option select { min-width: 170px; margin: 0; border-color: #52698f; background: #111a2c; font-weight: 700; }
 .mixed-media-file-option select:disabled { opacity: .58; }
 .mixed-media-file-option strong, .mixed-media-movie-result strong { overflow-wrap: anywhere; }
+.mixed-media-keyword-highlight { margin: 0 2px; border: 1px solid #c3783d; border-radius: 5px; padding: 1px 4px; color: #ffe0ae; background: #65351c; }
 .mixed-media-file-option small, .mixed-media-movie-result small { color: #94a7c8; line-height: 1.45; }
 .mixed-media-movie-result { width: 100%; text-align: left; cursor: pointer; }
 .mixed-media-movie-result.selected { border-color: #59d3a5; box-shadow: 0 0 0 2px rgba(89,211,165,.22); }

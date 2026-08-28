@@ -9916,6 +9916,23 @@ function mixedMediaRoleLabel(role: MixedMediaFileRole): string {
   return role === "movie" ? "Movie 正片" : role === "extras" ? "Movie Extras" : "保留 TV";
 }
 
+function appendMovieKeywordHighlight(target: HTMLElement, sourceName: string): void {
+  const pattern = /劇場版|剧场版|movie/giu;
+  let cursor = 0;
+  for (const match of sourceName.matchAll(pattern)) {
+    const index = match.index;
+    if (index > cursor) target.append(document.createTextNode(sourceName.slice(cursor, index)));
+    const mark = document.createElement("mark");
+    mark.className = "mixed-media-keyword-highlight";
+    mark.textContent = match[0];
+    target.append(mark);
+    cursor = index + match[0].length;
+  }
+  if (cursor < sourceName.length) {
+    target.append(document.createTextNode(sourceName.slice(cursor)));
+  }
+}
+
 function recommendedMixedMediaMainId(
   files: MixedMediaPostprocessPreview["files"],
 ): string | null {
@@ -9960,6 +9977,15 @@ function renderAnitomyMovieTitle(result: AnitomyTitleParseResult | null, message
   preview.append(label, source);
 }
 
+function normalizeMixedMediaMovieSearchTitle(title: string): string {
+  return title
+    .replace(/劇場版|剧场版/gu, " ")
+    .replace(/(^|[^a-z0-9])movie(?=$|[^a-z0-9])/giu, "$1 ")
+    .replace(/\s+/gu, " ")
+    .replace(/^[\s/|·:：,，;；\-–—_]+|[\s/|·:：,，;；\-–—_]+$/gu, "")
+    .trim();
+}
+
 async function parseMixedMediaMovieTitle(): Promise<void> {
   const preview = activeMixedMediaPreview;
   if (!preview) return;
@@ -9984,7 +10010,8 @@ async function parseMixedMediaMovieTitle(): Promise<void> {
     const result = await response.json() as AnitomyTitleParseResult;
     renderAnitomyMovieTitle(result);
     if (result.success && result.anime_title) {
-      element<HTMLInputElement>("#mixed-media-movie-query").value = result.anime_title;
+      const normalizedTitle = normalizeMixedMediaMovieSearchTitle(result.anime_title);
+      element<HTMLInputElement>("#mixed-media-movie-query").value = normalizedTitle || result.anime_title;
       selectedMixedMediaMovie = null;
       element<HTMLElement>("#mixed-media-movie-results").replaceChildren();
       showMixedMediaEditor();
@@ -10093,7 +10120,8 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
       select.addEventListener("change", showMixedMediaEditor);
       const body = document.createElement("span");
       const title = document.createElement("strong");
-      title.textContent = `${file.movie_hint ? "Movie 关键词 · " : ""}${file.source_name}`;
+      if (file.movie_hint) title.append(document.createTextNode("Movie 关键词 · "));
+      appendMovieKeywordHighlight(title, file.source_name);
       const detail = document.createElement("small");
       detail.textContent = `${readaptationDisposition(file.disposition)} · ${formatBytes(file.size_bytes)} · `
         + `${file.tmdb_series_id === null ? "无 TV TMDB" : `TV TMDB ${file.tmdb_series_id}`}`
