@@ -150,6 +150,28 @@ public sealed class DownloadJobStoreTests
                 && value.ToState == "completed");
     }
 
+    [Theory]
+    [InlineData(30)]
+    [InlineData(-1)]
+    public async Task PausedCompleteTorrentDoesNotSatisfySeedingTarget(int targetMinutes)
+    {
+        await using var fixture = await DownloadJobFixture.CreateAsync();
+        await fixture.ConfigureSeedingAsync(targetMinutes, "seeding");
+
+        await fixture.Jobs.ApplyInstanceSnapshotAsync(
+            "bt",
+            [new DownloadTaskSnapshot(
+                fixture.InfoHash, "Episode", DownloadTaskState.Complete,
+                1, 100, 100, 0, null, 8, 2, 60)],
+            DateTimeOffset.UtcNow);
+
+        var item = Assert.Single(await fixture.Jobs.ListAsync());
+        Assert.Equal("complete", item.State);
+        Assert.Equal("waiting", item.SeedingState);
+        Assert.Equal(60, item.SeedingElapsedSeconds);
+        Assert.Null(item.SeedingCompletedAtUtc);
+    }
+
     [Fact]
     public async Task ListPageFiltersAndDetailExposeFilesAndAuditTimeline()
     {

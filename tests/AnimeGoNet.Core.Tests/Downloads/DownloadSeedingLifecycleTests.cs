@@ -59,13 +59,13 @@ public sealed class DownloadSeedingLifecycleTests
     }
 
     [Fact]
-    public void InfiniteTargetOnlyCompletesWhenDownloaderReportsCompletion()
+    public void DownloaderPauseDoesNotCompleteInfiniteSeedingTarget()
     {
         var stillSeeding = DownloadSeedingLifecycle.Project(
             -1,
             DownloadTaskState.Seeding,
             50_000);
-        var completed = DownloadSeedingLifecycle.Project(
+        var paused = DownloadSeedingLifecycle.Project(
             -1,
             DownloadTaskState.Complete,
             50_001,
@@ -73,6 +73,27 @@ public sealed class DownloadSeedingLifecycleTests
             stillSeeding.ElapsedSeconds);
 
         Assert.Equal(DownloadSeedingState.Seeding, stillSeeding.State);
+        Assert.Equal(DownloadSeedingState.Waiting, paused.State);
+        Assert.Equal(50_001, paused.ElapsedSeconds);
+    }
+
+    [Fact]
+    public void DownloaderPauseDoesNotCompleteFiniteTargetBeforeElapsedBoundary()
+    {
+        var paused = DownloadSeedingLifecycle.Project(
+            30,
+            DownloadTaskState.Complete,
+            1_799,
+            DownloadSeedingState.Seeding,
+            1_798);
+        var completed = DownloadSeedingLifecycle.Project(
+            30,
+            DownloadTaskState.Complete,
+            1_800,
+            paused.State,
+            paused.ElapsedSeconds);
+
+        Assert.Equal(DownloadSeedingState.Waiting, paused.State);
         Assert.Equal(DownloadSeedingState.Completed, completed.State);
     }
 
