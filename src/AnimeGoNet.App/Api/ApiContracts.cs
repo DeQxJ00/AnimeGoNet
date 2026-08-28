@@ -1186,6 +1186,16 @@ public sealed record TmdbMovieSearchResponse(
     [property: JsonPropertyName("query")] string Query,
     [property: JsonPropertyName("items")] IReadOnlyList<TmdbMovieSearchItemResponse> Items);
 
+public sealed record AnitomyTitleParseRequest(
+    [property: JsonPropertyName("source_text")] string? SourceText);
+
+public sealed record AnitomyTitleParseResponse(
+    [property: JsonPropertyName("source_text")] string SourceText,
+    [property: JsonPropertyName("anime_title")] string? AnimeTitle,
+    [property: JsonPropertyName("match_start")] int MatchStart,
+    [property: JsonPropertyName("match_length")] int MatchLength,
+    [property: JsonPropertyName("success")] bool Success);
+
 public sealed record MixedMediaPostprocessRequest(
     [property: JsonPropertyName("task_file_ids")] IReadOnlyList<string>? TaskFileIds,
     [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,

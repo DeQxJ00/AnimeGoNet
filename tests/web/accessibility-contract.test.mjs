@@ -499,9 +499,15 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.ok(mixedDialog.querySelector("#mixed-media-postprocess-confirm"));
   assert.ok(mixedDialog.querySelector("#mixed-media-postprocess-edit"));
   assert.ok(mixedDialog.querySelector("#mixed-media-postprocess-review"));
+  assert.ok(mixedDialog.querySelector("#mixed-media-anitomy-parse"));
+  assert.ok(mixedDialog.querySelector("#mixed-media-anitomy-preview[aria-live='polite']"));
   assert.match(mixedDialog.textContent, /必须且只能指定一个 Movie 正片/);
+  assert.match(mixedDialog.textContent, /最大文件会预选为正片/);
   assert.match(mixedDialog.textContent, /Movie Extras/);
   assert.match(app, /select\.name = "mixed-media-file-role"/);
+  assert.match(app, /file\.size_bytes > current\.size_bytes/);
+  assert.match(app, /\/api\/v1\/metadata\/anitomy\/parse-title/);
+  assert.match(app, /document\.createElement\("mark"\)/);
   assert.match(app, /movie_task_file_id: assignments\.movieTaskFileId/);
   assert.match(app, /movie_extra_task_file_ids: assignments\.movieExtraTaskFileIds/);
   assert.match(app, /"edit_pending"/);

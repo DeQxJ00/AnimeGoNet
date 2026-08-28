@@ -123,6 +123,20 @@ public sealed class MovieMetadataResolutionProcessorTests
         Assert.True(extra.GetProperty("movie_hint").GetBoolean());
         var extraTaskFileId = extra.GetProperty("task_file_id").GetString()!;
 
+        using var anitomy = await app.Client.PostAsync(
+            "/api/v1/metadata/anitomy/parse-title",
+            new StringContent(
+                """{"source_text":"[Group] Kidou Senkan Nadesico The Movie [1080p].mkv"}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.OK, anitomy.StatusCode);
+        using var anitomyJson = JsonDocument.Parse(await anitomy.Content.ReadAsStreamAsync());
+        Assert.True(anitomyJson.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(
+            "Kidou Senkan Nadesico The Movie",
+            anitomyJson.RootElement.GetProperty("anime_title").GetString());
+        Assert.True(anitomyJson.RootElement.GetProperty("match_start").GetInt32() >= 0);
+
         using var search = await app.Client.GetAsync(
             "/api/v1/tmdb/movies/search?query=Spirited%20Away");
         Assert.Equal(HttpStatusCode.OK, search.StatusCode);

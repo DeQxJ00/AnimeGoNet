@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260828-mixed-media-roles">
+  <link rel="stylesheet" href="/styles.css?v=20260828-mixed-media-anitomy">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -2247,15 +2247,19 @@
       <section id="mixed-media-postprocess-editor">
         <fieldset class="mixed-media-file-picker">
           <legend>1. 逐个指定文件归类</legend>
-          <p class="muted">每个文件可设为“保留 TV”“Movie 正片”或“Movie Extras”。必须且只能指定一个 Movie 正片；关键词只负责预选，最终以你的选择为准。</p>
+          <p class="muted">每个文件可设为“保留 TV”“Movie 正片”或“Movie Extras”。必须且只能指定一个 Movie 正片；命中 Movie 关键词的最大文件会预选为正片，其余命中文件预选为 Extras，最终以你的选择为准。</p>
           <div id="mixed-media-postprocess-files" class="mixed-media-file-list"></div>
         </fieldset>
         <section class="mixed-media-movie-search" aria-labelledby="mixed-media-movie-search-title">
           <h3 id="mixed-media-movie-search-title">2. 搜索并确认 TMDB Movie</h3>
           <div class="mixed-media-search-row">
             <label>Movie 名称<input id="mixed-media-movie-query" maxlength="256" autocomplete="off"></label>
-            <button id="mixed-media-movie-search" type="button" class="secondary-button">搜索 TMDB Movie</button>
+            <div class="mixed-media-title-actions">
+              <button id="mixed-media-anitomy-parse" type="button" class="secondary-button">AnitomySharp 一键解析</button>
+              <button id="mixed-media-movie-search" type="button" class="secondary-button">搜索 TMDB Movie</button>
+            </div>
           </div>
+          <p id="mixed-media-anitomy-preview" class="mixed-media-anitomy-preview" aria-live="polite"></p>
           <div id="mixed-media-movie-results" class="mixed-media-movie-results" aria-live="polite"></div>
         </section>
       </section>
@@ -2326,6 +2330,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260828-mixed-media-roles"></script>
+    <script type="module" src="/app.js?v=20260828-mixed-media-anitomy"></script>
 </body>
 </html>

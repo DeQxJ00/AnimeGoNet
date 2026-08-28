@@ -619,6 +619,10 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .mixed-media-movie-result.selected { border-color: #59d3a5; box-shadow: 0 0 0 2px rgba(89,211,165,.22); }
 .mixed-media-search-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: end; }
 .mixed-media-search-row label { display: grid; gap: 7px; }
+.mixed-media-title-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mixed-media-anitomy-preview { min-height: 24px; margin: 0; color: #9db2d5; line-height: 1.55; overflow-wrap: anywhere; }
+.mixed-media-anitomy-preview strong { color: #c7d7f3; }
+.mixed-media-anitomy-preview mark { margin: 0 2px; border: 1px solid #b38836; border-radius: 5px; padding: 1px 4px; color: #fff0b8; background: #624715; }
 .mixed-media-postprocess-review { display: grid; gap: 12px; border: 1px solid #5f4a8e; border-radius: 16px; padding: 16px; background: rgba(58,36,91,.24); }
 .mixed-media-postprocess-review h3, .mixed-media-review-movie { margin: 0; }
 .mixed-media-review-movie { color: #cfb6ff; font-weight: 700; }
@@ -631,6 +635,7 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .mixed-media-role-badge.extras { color: #d9c5ff; border: 1px solid #6e55a0; background: #2a2142; }
 @media (max-width: 720px) {
   .mixed-media-search-row { grid-template-columns: 1fr; }
+  .mixed-media-title-actions > button { flex: 1 1 210px; }
   .mixed-media-file-option, .mixed-media-review-row { grid-template-columns: 1fr; }
   .mixed-media-file-option select { width: 100%; }
 }

@@ -850,6 +850,14 @@ interface MixedMediaPostprocessPreview {
   }>;
 }
 
+interface AnitomyTitleParseResult {
+  source_text: string;
+  anime_title: string | null;
+  match_start: number;
+  match_length: number;
+  success: boolean;
+}
+
 interface TmdbMovieSearchItem {
   tmdb_movie_id: number;
   title: string;
@@ -9908,6 +9916,86 @@ function mixedMediaRoleLabel(role: MixedMediaFileRole): string {
   return role === "movie" ? "Movie 正片" : role === "extras" ? "Movie Extras" : "保留 TV";
 }
 
+function recommendedMixedMediaMainId(
+  files: MixedMediaPostprocessPreview["files"],
+): string | null {
+  const hinted = files.filter(file =>
+    file.movie_hint && file.source_available && file.movie_role === null);
+  const largest = hinted.reduce<(typeof hinted)[number] | null>(
+    (current, file) => current === null || file.size_bytes > current.size_bytes ? file : current,
+    null,
+  );
+  return largest?.task_file_id ?? null;
+}
+
+function renderAnitomyMovieTitle(result: AnitomyTitleParseResult | null, message = ""): void {
+  const preview = element<HTMLElement>("#mixed-media-anitomy-preview");
+  preview.replaceChildren();
+  if (result === null) {
+    preview.textContent = message;
+    preview.dataset.uiState = message ? "loading" : "empty";
+    return;
+  }
+
+  preview.dataset.uiState = result.success ? "ready" : "empty";
+  const label = document.createElement("strong");
+  label.textContent = result.success ? "AnitomySharp 标题：" : "AnitomySharp 未识别标题：";
+  const source = document.createElement("span");
+  const validRange = result.match_start >= 0
+    && result.match_length > 0
+    && result.match_start + result.match_length <= result.source_text.length;
+  if (validRange) {
+    source.append(document.createTextNode(result.source_text.slice(0, result.match_start)));
+    const mark = document.createElement("mark");
+    mark.textContent = result.source_text.slice(
+      result.match_start,
+      result.match_start + result.match_length,
+    );
+    source.append(mark, document.createTextNode(
+      result.source_text.slice(result.match_start + result.match_length),
+    ));
+  } else {
+    source.textContent = result.source_text || "—";
+  }
+  preview.append(label, source);
+}
+
+async function parseMixedMediaMovieTitle(): Promise<void> {
+  const preview = activeMixedMediaPreview;
+  if (!preview) return;
+  const mainId = mixedMediaAssignments().movieTaskFileId;
+  const sourceText = preview.files.find(file => file.task_file_id === mainId)?.source_name
+    ?? preview.title;
+  const button = element<HTMLButtonElement>("#mixed-media-anitomy-parse");
+  button.disabled = true;
+  renderAnitomyMovieTitle(null, "AnitomySharp 正在解析 Movie 正片文件名…");
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Content-Type", "application/json");
+    const response = await authenticatedFetch(
+      "/api/v1/metadata/anitomy/parse-title",
+      {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify({ source_text: sourceText }),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const result = await response.json() as AnitomyTitleParseResult;
+    renderAnitomyMovieTitle(result);
+    if (result.success && result.anime_title) {
+      element<HTMLInputElement>("#mixed-media-movie-query").value = result.anime_title;
+      selectedMixedMediaMovie = null;
+      element<HTMLElement>("#mixed-media-movie-results").replaceChildren();
+      showMixedMediaEditor();
+    }
+  } catch (error) {
+    renderAnitomyMovieTitle(null, errorMessage(error, "AnitomySharp 解析失败"));
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function renderMixedMediaReview(): boolean {
   const preview = activeMixedMediaPreview;
   const movie = selectedMixedMediaMovie;
@@ -9977,9 +10065,7 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
         ? `${preview.title} · 后处理尚未开始整理，可再次指定哪一个是 Movie 正片、哪些属于 Movie Extras。`
         : `${preview.title} · 请逐个指定保留 TV、Movie 正片或 Movie Extras，再确认独立的 TMDB Movie。`
       : `${preview.title} · ${preview.reason ?? "当前不可执行后处理"}`;
-    const hinted = preview.files.filter(file =>
-      file.movie_hint && file.source_available && file.movie_role === null);
-    const recommendedMainId = hinted[0]?.task_file_id ?? null;
+    const recommendedMainId = recommendedMixedMediaMainId(preview.files);
     for (const file of preview.files) {
       const label = document.createElement("div");
       label.className = "mixed-media-file-option";
@@ -10026,6 +10112,7 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
       message.textContent = `当前使用 ${preview.current_movie.title} · TMDB ${preview.current_movie.tmdb_movie_id}；可重新搜索后替换。`;
     } else {
       element<HTMLInputElement>("#mixed-media-movie-query").value = preview.title;
+      await parseMixedMediaMovieTitle();
     }
     updateMixedMediaConfirmState();
   } catch (error) {
@@ -15305,6 +15392,10 @@ element<HTMLButtonElement>("#mixed-media-postprocess-cancel").addEventListener(
 element<HTMLButtonElement>("#mixed-media-movie-search").addEventListener(
   "click",
   () => void searchMixedMediaMovies(),
+);
+element<HTMLButtonElement>("#mixed-media-anitomy-parse").addEventListener(
+  "click",
+  () => void parseMixedMediaMovieTitle(),
 );
 element<HTMLButtonElement>("#mixed-media-postprocess-edit").addEventListener(
   "click",

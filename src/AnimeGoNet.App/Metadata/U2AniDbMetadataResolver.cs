@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text.Json;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Metadata;
-using static AnitomySharp.AnitomySharp;
 
 namespace AnimeGoNet.App.Metadata;
 
@@ -83,22 +82,7 @@ public sealed class U2AniDbMetadataResolver(
     }
 
     internal static string? ExtractAnimeTitle(string taskTitle)
-    {
-        try
-        {
-            return Parse(taskTitle)
-                .FirstOrDefault(element => string.Equals(
-                    element.Category.ToString(),
-                    "ElementAnimeTitle",
-                    StringComparison.Ordinal))
-                ?.Value
-                ?.Trim();
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            return null;
-        }
-    }
+        => AnitomyTitleParser.ParseTitle(taskTitle).AnimeTitle;
 
     private async Task<U2AniDbResolution> ResolveTitlesAsync(
         IEnumerable<string> titles,

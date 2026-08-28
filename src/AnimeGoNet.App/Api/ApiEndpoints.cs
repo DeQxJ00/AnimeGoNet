@@ -160,6 +160,7 @@ public static class ApiEndpoints
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess",
             StartMixedMediaPostprocess);
+        app.MapPost("/api/v1/metadata/anitomy/parse-title", ParseAnitomyTitle);
         app.MapGet("/api/v1/tmdb/movies/search", SearchTmdbMovies);
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
@@ -5823,6 +5824,24 @@ public static class ApiEndpoints
                 title: "TMDB Movie search failed",
                 detail: exception.SafeCode);
         }
+    }
+
+    private static IResult ParseAnitomyTitle(AnitomyTitleParseRequest request)
+    {
+        var sourceText = request.SourceText ?? string.Empty;
+        if (sourceText.Length > 4096)
+        {
+            return TypedResults.BadRequest(Error(
+                "anitomy_source_too_long", "Anitomy source text cannot exceed 4096 characters."));
+        }
+
+        var parsed = AnitomyTitleParser.ParseTitle(sourceText);
+        return TypedResults.Ok(new AnitomyTitleParseResponse(
+            parsed.SourceText,
+            parsed.AnimeTitle,
+            parsed.MatchStart,
+            parsed.MatchLength,
+            parsed.Success));
     }
 
     private static async Task<IResult> StartMixedMediaPostprocess(

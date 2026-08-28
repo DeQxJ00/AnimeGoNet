@@ -87,6 +87,8 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(MixedMediaPostprocessRequest))]
 [JsonSerializable(typeof(MixedMediaPostprocessStartResponse))]
 [JsonSerializable(typeof(AnimeGoNet.App.Api.TmdbMovieSearchResponse))]
+[JsonSerializable(typeof(AnitomyTitleParseRequest))]
+[JsonSerializable(typeof(AnitomyTitleParseResponse))]
 [JsonSerializable(typeof(OtherFileReadaptationReviewResponse))]
 [JsonSerializable(typeof(OtherFileReadaptationManualOverrideRequest))]
 [JsonSerializable(typeof(OtherFileReadaptationManualOverrideResponse))]
