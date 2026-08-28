@@ -96,6 +96,89 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
+    public void AcceptsOneCloseFileNameMutationWhenTheRemainingOrderIsAnchored()
+    {
+        var input = Input(
+            new AiMetadataFileInput("[AI-Raws] Nadesico 01 [1080p].mkv", 100),
+            new AiMetadataFileInput("[AI-Raws] 劇場版 機動戦艦ナデシコ 特別先行編『それから』 [1080p].mkv", 100),
+            new AiMetadataFileInput("[AI-Raws] Nadesico 03 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "[AI-Raws] Nadesico 01 [1080p].mkv",
+            "[AI-Raws] 機動戦艦ナデシコ 特別先行編『それから』 [1080p].mkv",
+            "[AI-Raws] Nadesico 03 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Null(failure);
+    }
+
+    [Fact]
+    public void AcceptsAtMostTwoCloseFileNameMutations()
+    {
+        var input = Input(
+            new AiMetadataFileInput("[AI-Raws] Nadesico 01 『Part A』 [1080p].mkv", 100),
+            new AiMetadataFileInput("[AI-Raws] Nadesico 02 『Part B』 [1080p].mkv", 100),
+            new AiMetadataFileInput("[AI-Raws] Nadesico 03 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "[AI-Raws] Nadesico 01 「Part A」 [1080p].mkv",
+            "[AI-Raws] Nadesico 02 「Part B」 [1080p].mkv",
+            "[AI-Raws] Nadesico 03 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Null(failure);
+    }
+
+    [Fact]
+    public void RejectsThreeCloseFileNameMutations()
+    {
+        var input = Input(
+            new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 02 『B』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 03 『C』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 04 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "Show 01 「A」 [1080p].mkv",
+            "Show 02 「B」 [1080p].mkv",
+            "Show 03 「C」 [1080p].mkv",
+            "Show 04 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+    }
+
+    [Fact]
+    public void RejectsCloseFileNameMutationThatChangesEpisodeNumber()
+    {
+        var input = Input(
+            new AiMetadataFileInput("Show Episode 01 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show Episode 02 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "Show Episode 03 [1080p].mkv",
+            "Show Episode 02 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+    }
+
+    [Fact]
+    public void RejectsTwoMutationsWithoutAnUnchangedOrderAnchor()
+    {
+        var input = Input(
+            new AiMetadataFileInput("Show 01 『A』 [1080p].mkv", 100),
+            new AiMetadataFileInput("Show 02 『B』 [1080p].mkv", 100));
+        var candidate = Candidate(
+            "Show 01 「A」 [1080p].mkv",
+            "Show 02 「B」 [1080p].mkv");
+
+        var failure = AiMetadataResultValidator.ValidateStructure(input, candidate);
+
+        Assert.Equal("ai_file_identity_mismatch", failure!.Code);
+    }
+
+    [Fact]
     public async Task RejectsSeasonZeroBeforeTmdbAccess()
     {
         var tmdb = new FakeTmdbClient();
@@ -313,6 +396,14 @@ public sealed class AiMetadataResultValidatorTests
             true,
             42,
             [new(name, true, season, episode, null)],
+            null);
+
+    private static AiMetadataMatchCandidate Candidate(params string[] names) =>
+        new(
+            true,
+            42,
+            names.Select((name, index) =>
+                new AiMetadataFileCandidate(name, true, 1, index + 1, null)).ToArray(),
             null);
 
     private sealed class FakeTmdbClient : ITmdbClient

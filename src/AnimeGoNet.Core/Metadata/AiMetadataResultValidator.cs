@@ -208,15 +208,15 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
             return new MetadataFailure(MetadataFailureKind.Protocol, "ai_metadata_no_match_reason_missing", false);
         }
 
+        if (input.Files.Count > 1
+            && !HasCompatibleOrderedFileIdentities(input.Files, candidate.Files))
+        {
+            return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_identity_mismatch", false);
+        }
+
         for (var index = 0; index < input.Files.Count; index++)
         {
             var file = candidate.Files[index];
-            if (input.Files.Count > 1
-                && !string.Equals(file.Name, input.Files[index].Name, StringComparison.Ordinal))
-            {
-                return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_identity_mismatch", false);
-            }
-
             if (file.Matched is null || file.Season is <= 0)
             {
                 return new MetadataFailure(MetadataFailureKind.Protocol, "ai_file_resolution_incomplete", false);
@@ -240,6 +240,132 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
         }
 
         return null;
+    }
+
+    private static bool HasCompatibleOrderedFileIdentities(
+        IReadOnlyList<AiMetadataFileInput> inputFiles,
+        IReadOnlyList<AiMetadataFileCandidate> candidateFiles)
+    {
+        var mismatchedIndexes = new List<int>(capacity: 2);
+        for (var index = 0; index < inputFiles.Count; index++)
+        {
+            if (string.Equals(inputFiles[index].Name, candidateFiles[index].Name, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            mismatchedIndexes.Add(index);
+            if (mismatchedIndexes.Count > 2)
+            {
+                return false;
+            }
+        }
+
+        if (mismatchedIndexes.Count == 0)
+        {
+            return true;
+        }
+
+        // Fuzzy matching is only a narrow fallback. At least one unchanged item must
+        // remain at the same index to anchor the list order.
+        if (mismatchedIndexes.Count == inputFiles.Count)
+        {
+            return false;
+        }
+
+        foreach (var index in mismatchedIndexes)
+        {
+            var expected = inputFiles[index].Name;
+            var actual = candidateFiles[index].Name;
+            if (actual is null)
+            {
+                return false;
+            }
+
+            // An exact name from another position means the model reordered the list.
+            if (inputFiles.Where((_, inputIndex) => inputIndex != index)
+                .Any(file => string.Equals(file.Name, actual, StringComparison.Ordinal)))
+            {
+                return false;
+            }
+
+            if (!HasCompatibleFileIdentity(expected, actual))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasCompatibleFileIdentity(string expected, string actual)
+    {
+        if (!string.Equals(
+                Path.GetExtension(expected),
+                Path.GetExtension(actual),
+                StringComparison.OrdinalIgnoreCase)
+            || !HaveSameIdentityTokens(NumberTokenPattern(), expected, actual)
+            || !HaveSameIdentityTokens(LongHexTokenPattern(), expected, actual))
+        {
+            return false;
+        }
+
+        return CalculateSimilarity(expected, actual) >= 0.90;
+    }
+
+    private static bool HaveSameIdentityTokens(Regex pattern, string expected, string actual)
+    {
+        var expectedMatches = pattern.Matches(expected);
+        var actualMatches = pattern.Matches(actual);
+        if (expectedMatches.Count != actualMatches.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < expectedMatches.Count; index++)
+        {
+            if (!string.Equals(
+                    expectedMatches[index].Value,
+                    actualMatches[index].Value,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static double CalculateSimilarity(string expected, string actual)
+    {
+        if (expected.Length == 0 || actual.Length == 0)
+        {
+            return expected.Length == actual.Length ? 1 : 0;
+        }
+
+        var previous = new int[actual.Length + 1];
+        var current = new int[actual.Length + 1];
+        for (var column = 0; column <= actual.Length; column++)
+        {
+            previous[column] = column;
+        }
+
+        for (var row = 1; row <= expected.Length; row++)
+        {
+            current[0] = row;
+            for (var column = 1; column <= actual.Length; column++)
+            {
+                var substitutionCost = expected[row - 1] == actual[column - 1] ? 0 : 1;
+                current[column] = Math.Min(
+                    Math.Min(current[column - 1] + 1, previous[column] + 1),
+                    previous[column - 1] + substitutionCost);
+            }
+
+            (previous, current) = (current, previous);
+        }
+
+        var distance = previous[actual.Length];
+        return 1 - ((double)distance / Math.Max(expected.Length, actual.Length));
     }
 
     private static bool IsSafeRelativeName(string name)
@@ -273,4 +399,10 @@ public sealed partial class AiMetadataResultValidator(ITmdbClient tmdb)
 
     [GeneratedRegex("^[A-Za-z]:[\\\\/]", RegexOptions.CultureInvariant)]
     private static partial Regex WindowsRootedPathPattern();
+
+    [GeneratedRegex("[0-9]+", RegexOptions.CultureInvariant)]
+    private static partial Regex NumberTokenPattern();
+
+    [GeneratedRegex("[A-Fa-f0-9]{8,}", RegexOptions.CultureInvariant)]
+    private static partial Regex LongHexTokenPattern();
 }
