@@ -55,6 +55,8 @@ public sealed class U2FileEpisodeCandidateResolverTests
     [InlineData("[Yousei-raws] Katanagatari (Creditless ED ep 12) [BDrip 1920x1080 x264 FLAC].mkv")]
     [InlineData("[AI-Raws] Fate／Strange Fake WEB予告#02 (BD HEVC 1920x1080 FLAC)[A5D6BB01].mkv")]
     [InlineData("[AI-Raws] Fate／Strange Fake #02(BD HEVC 1920x1080 FLAC)[3826BB93].mkv")]
+    [InlineData("[AI-Raws] 機動戦艦ナデシコ ゲキ・ガンガー3 (BD HEVC 1408x1072 FLAC)[078532D0].mkv")]
+    [InlineData("日本語作品名12 (BD 1920x1080).mkv")]
     public void KeepsTheCopiedSafetyChecksForU2(string path)
     {
         var result = U2FileEpisodeCandidateResolver.Resolve(path);
