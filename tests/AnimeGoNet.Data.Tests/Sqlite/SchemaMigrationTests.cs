@@ -226,6 +226,46 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task SourceProfileLinkTypeMigrationDefaultsToHardAndConstrainsSymbolicToLink()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var profiles = new SourceProfileStore(fixture.Database);
+        await profiles.EnsureSeedsAsync(AnimeGoDefaults.CreateDocker().InitialSourceProfiles);
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT dflt_value, "notnull"
+                FROM pragma_table_info('source_profiles')
+                WHERE name = 'link_type' AND type = 'TEXT';
+                """;
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("'hard'", reader.GetString(0));
+            Assert.Equal(1, reader.GetInt32(1));
+        }
+
+        await using (var valid = connection.CreateCommand())
+        {
+            valid.CommandText = """
+                UPDATE source_profiles
+                SET file_strategy = 'link', link_type = 'symbolic'
+                WHERE id = 'mikan';
+                """;
+            Assert.Equal(1, await valid.ExecuteNonQueryAsync());
+        }
+
+        await using var invalid = connection.CreateCommand();
+        invalid.CommandText = """
+            UPDATE source_profiles
+            SET file_strategy = 'link_delete'
+            WHERE id = 'mikan';
+            """;
+        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(
+            () => invalid.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
     public async Task MovieDispositionMigrationConvertsLegacyMovieRowsAndPreservesReferences()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");

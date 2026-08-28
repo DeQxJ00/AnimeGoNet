@@ -27,6 +27,41 @@ public sealed class SafeFileDeleterTests : IDisposable
     }
 
     [Fact]
+    public async Task DeletesSymbolicMediaLinkWithoutDeletingItsSource()
+    {
+        var sourceRoot = Path.Combine(Path.GetTempPath(), "animegonet-delete-link-source", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(sourceRoot, "episode.mkv");
+        var target = Path.Combine(_root, "Series", "S01", "E001.mkv");
+        Directory.CreateDirectory(sourceRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        await File.WriteAllBytesAsync(source, [1, 2, 3]);
+        try
+        {
+            try
+            {
+                File.CreateSymbolicLink(target, source);
+            }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                Assert.True(File.Exists(source));
+                return;
+            }
+
+            Assert.True(await new SafeFileDeleter().DeleteAsync(_root, target));
+            Assert.False(new FileInfo(target).Exists);
+            Assert.Null(new FileInfo(target).LinkTarget);
+            Assert.True(File.Exists(source));
+        }
+        finally
+        {
+            if (Directory.Exists(sourceRoot))
+            {
+                Directory.Delete(sourceRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task RejectsOutsidePathRootAndDirectoryTargets()
     {
         Directory.CreateDirectory(_root);

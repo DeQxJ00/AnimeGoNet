@@ -34,6 +34,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 seed.DynamicTagTemplate);
             var seedingTimeMinutes = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
                 fileStrategy, seed.SeedingTimeMinutes);
+            var linkType = SourceDownloadPolicy.NormalizeLinkType(fileStrategy, seed.LinkType);
             var mikanIdentityCookie = NormalizeMikanIdentityCookie(
                 seed.Adapter,
                 seed.MikanIdentityCookie);
@@ -68,7 +69,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     created_at_utc, updated_at_utc, mikan_identity_cookie,
                     dynamic_tag_template, dynamic_tag_template_initialized,
                     rss_feed_url, rss_schedule_enabled, rss_schedule_cron, media_type,
-                    prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template)
+                    prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template, link_type)
                 VALUES (
                     $id, $display_name, $adapter, $downloader_id, $file_strategy,
                     $allowed_torrent_hosts_json, $category, $tags_json, $seeding_time_minutes,
@@ -76,7 +77,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                     $created_at_utc, $updated_at_utc, $mikan_identity_cookie,
                     $dynamic_tag_template, 1,
                     $rss_feed_url, $rss_schedule_enabled, $rss_schedule_cron, $media_type,
-                    $prefer_anidb_tmdb_mapping, $anidb_tmdb_mapping_url_template)
+                    $prefer_anidb_tmdb_mapping, $anidb_tmdb_mapping_url_template, $link_type)
                 ON CONFLICT(id) DO UPDATE SET
                     allowed_torrent_hosts_json = CASE
                         WHEN source_profiles.allowed_torrent_hosts_json = '[]'
@@ -163,6 +164,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             command.Parameters.AddWithValue(
                 "$anidb_tmdb_mapping_url_template",
                 NormalizeAniDbTmdbMappingUrlTemplate(seed.AniDbTmdbMappingUrlTemplate));
+            command.Parameters.AddWithValue("$link_type", linkType);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -249,7 +251,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                    rss_filter_enabled, rss_priority_enabled, duplicate_notification_enabled, revision,
                    mikan_identity_cookie, dynamic_tag_template,
                    rss_feed_url, rss_schedule_enabled, rss_schedule_cron, media_type,
-                   prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template
+                   prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template, link_type
             FROM source_profiles
             WHERE id = $id AND enabled = 1;
             """;
@@ -280,7 +282,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             reader.GetInt64(10) != 0,
             reader.GetString(17),
             reader.GetInt64(18) != 0,
-            reader.GetString(19));
+            reader.GetString(19),
+            reader.GetString(20));
     }
 
     public async Task<IReadOnlyList<SourceProfileAdminRecord>> ListAsync(
@@ -327,13 +330,13 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 mikan_identity_cookie, dynamic_tag_template,
                 dynamic_tag_template_initialized, rss_feed_url,
                 rss_schedule_enabled, rss_schedule_cron, media_type,
-                prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template)
+                prefer_anidb_tmdb_mapping, anidb_tmdb_mapping_url_template, link_type)
             VALUES ($id, $name, $adapter, $downloader, $strategy, $hosts,
                     $category, $tags, $seeding_time, $filter, $priority, $duplicate_notification,
                     1, $enabled, $now, $now, $mikan_identity_cookie,
                     $dynamic_tag_template, 1, $rss_feed_url,
                     $rss_schedule_enabled, $rss_schedule_cron, $media_type,
-                    $prefer_anidb_tmdb_mapping, $anidb_tmdb_mapping_url_template);
+                    $prefer_anidb_tmdb_mapping, $anidb_tmdb_mapping_url_template, $link_type);
             """;
         BindDefinition(command, normalized, definition, utcNow);
         try
@@ -375,6 +378,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                 media_type = $media_type,
                 prefer_anidb_tmdb_mapping = $prefer_anidb_tmdb_mapping,
                 anidb_tmdb_mapping_url_template = $anidb_tmdb_mapping_url_template,
+                link_type = $link_type,
                 rss_last_run_state = 'never',
                 rss_last_started_at_utc = NULL,
                 rss_last_completed_at_utc = NULL,
@@ -609,7 +613,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
                p.rss_schedule_cron, p.rss_last_run_state,
                p.rss_last_started_at_utc, p.rss_last_completed_at_utc,
                p.rss_last_failure_code, p.rss_last_batch_id, p.media_type,
-               p.prefer_anidb_tmdb_mapping, p.anidb_tmdb_mapping_url_template
+               p.prefer_anidb_tmdb_mapping, p.anidb_tmdb_mapping_url_template,
+               p.link_type
         FROM source_profiles p
         """;
 
@@ -648,7 +653,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         reader.GetBoolean(11),
         reader.GetString(28),
         reader.GetInt64(29) != 0,
-        reader.GetString(30));
+        reader.GetString(30),
+        reader.GetString(31));
 
     private static void BindDefinition(
         SqliteCommand command,
@@ -662,6 +668,8 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             definition.DynamicTagTemplate);
         var seedingTimeMinutes = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
             definition.FileStrategy, definition.SeedingTimeMinutes);
+        var linkType = SourceDownloadPolicy.NormalizeLinkType(
+            definition.FileStrategy, definition.LinkType);
         var mikanIdentityCookie = NormalizeMikanIdentityCookie(
             definition.Adapter,
             definition.MikanIdentityCookie);
@@ -713,6 +721,7 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue(
             "$anidb_tmdb_mapping_url_template",
             NormalizeAniDbTmdbMappingUrlTemplate(definition.AniDbTmdbMappingUrlTemplate));
+        command.Parameters.AddWithValue("$link_type", linkType);
         command.Parameters.AddWithValue("$now", utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
     }
 

@@ -209,16 +209,18 @@ public static partial class AnimeGoOptionsValidator
                 _ = SourceDownloadPolicy.NormalizeCategory(profile.Category);
                 _ = SourceDownloadPolicy.NormalizeTags(profile.Tags);
                 _ = DownloadDynamicTagTemplate.Normalize(profile.DynamicTagTemplate);
-                _ = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
-                    profile.FileStrategy switch
+                var strategy = profile.FileStrategy switch
                     {
                         FileStrategy.Link => "link",
                         FileStrategy.LinkDelete => "link_delete",
                         FileStrategy.Move => "move",
                         FileStrategy.WaitMove => "wait_move",
                         _ => string.Empty,
-                    },
+                    };
+                _ = SourceDownloadPolicy.ValidateSeedingTimeMinutes(
+                    strategy,
                     profile.SeedingTimeMinutes);
+                _ = SourceDownloadPolicy.NormalizeLinkType(strategy, profile.LinkType);
             }
             catch (ArgumentException exception)
             {

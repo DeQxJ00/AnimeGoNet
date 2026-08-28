@@ -4,6 +4,8 @@ public static class SourceDownloadPolicy
 {
     public const int MaximumTagCount = 16;
     public const int MaximumSeedingTimeMinutes = 5_256_000;
+    public const string HardLinkType = "hard";
+    public const string SymbolicLinkType = "symbolic";
 
     public static string NormalizeCategory(string? value)
     {
@@ -50,5 +52,26 @@ public static class SourceDownloadPolicy
         }
 
         return value;
+    }
+
+    public static string NormalizeLinkType(string fileStrategy, string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? HardLinkType
+            : value.Trim().ToLowerInvariant();
+        if (normalized is not (HardLinkType or SymbolicLinkType))
+        {
+            throw new ArgumentException("link_type must be hard or symbolic.");
+        }
+
+        if (normalized == SymbolicLinkType
+            && !string.Equals(fileStrategy, "link", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "symbolic link_type is only valid with file_strategy=link; "
+                + "link_delete must use hard links so deleting the source cannot break the media target.");
+        }
+
+        return normalized;
     }
 }

@@ -641,6 +641,7 @@ public sealed class IngestTaskStore(AnimeGoSqliteDatabase database)
             writer.WriteNumber("revision", profile.Revision);
             writer.WriteString("downloader_id", profile.DownloaderId);
             writer.WriteString("file_strategy", profile.FileStrategy);
+            writer.WriteString("link_type", profile.LinkType);
             writer.WriteString("category", profile.Category);
             writer.WriteStartArray("tags");
             foreach (var tag in profile.Tags)

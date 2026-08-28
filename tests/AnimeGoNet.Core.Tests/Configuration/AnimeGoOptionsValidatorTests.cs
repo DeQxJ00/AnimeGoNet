@@ -425,6 +425,41 @@ public sealed class AnimeGoOptionsValidatorTests
     }
 
     [Fact]
+    public void SymbolicLinkTypeIsAcceptedOnlyForLinkStrategy()
+    {
+        var defaults = AnimeGoDefaults.CreateDocker();
+        var accepted = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    FileStrategy = FileStrategy.Link,
+                    LinkType = SourceDownloadPolicy.SymbolicLinkType,
+                    SeedingTimeMinutes = -1,
+                },
+            ],
+        };
+        var rejected = defaults with
+        {
+            InitialSourceProfiles =
+            [
+                defaults.InitialSourceProfiles[0] with
+                {
+                    FileStrategy = FileStrategy.LinkDelete,
+                    LinkType = SourceDownloadPolicy.SymbolicLinkType,
+                    SeedingTimeMinutes = 10,
+                },
+            ],
+        };
+
+        Assert.Empty(AnimeGoOptionsValidator.Validate(accepted));
+        Assert.Contains(
+            AnimeGoOptionsValidator.Validate(rejected),
+            error => error.Contains("symbolic", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void RejectsInvalidOrNonMikanIdentityCookieWithoutEchoingValue()
     {
         const string secret = "do-not-echo;Injected=true";

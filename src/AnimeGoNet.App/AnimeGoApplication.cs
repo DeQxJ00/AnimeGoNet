@@ -1327,6 +1327,9 @@ public static class AnimeGoApplication
                     _ => throw new InvalidOperationException(
                         $"sources:{id}:file_strategy is unsupported."),
                 },
+                LinkType = SourceDownloadPolicy.NormalizeLinkType(
+                    strategyText.ToLowerInvariant(),
+                    FirstConfigurationValue(child, "link_type")),
                 AllowedTorrentHosts = ReadScalarList(
                     child.GetSection("allowed_torrent_hosts")),
                 Category = NormalizeOptional(id == "mikan"

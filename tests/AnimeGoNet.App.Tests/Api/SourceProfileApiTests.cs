@@ -11,6 +11,89 @@ namespace AnimeGoNet.App.Tests.Api;
 public sealed class SourceProfileApiTests
 {
     [Fact]
+    public async Task LinkTypePersistsInProfilePreviewAndTaskSnapshot()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-symbolic",
+            display_name = "U2 symbolic",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = "link",
+            link_type = "symbolic",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            seeding_time_minutes = -1,
+            enabled = true,
+        }));
+        using var created = JsonDocument.Parse(await create.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.Equal("symbolic", created.RootElement.GetProperty("link_type").GetString());
+
+        using var preview = await app.Client.PostAsync(
+            "/api/v1/sources/u2-symbolic/route-preview",
+            Json(new { title = "Symbolic link preview" }));
+        using var route = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.Equal("symbolic", route.RootElement.GetProperty("link_type").GetString());
+
+        using var ingest = await app.Client.PostAsync("/api/v1/ingest", Json(new
+        {
+            source = "u2-symbolic",
+            data = new[]
+            {
+                new
+                {
+                    torrent = "https://u2.invalid/passkey/symbolic.torrent",
+                    info = new
+                    {
+                        title = "Symbolic link task",
+                        source_item_id = "symbolic-item",
+                        source_work_id = "symbolic-work",
+                    },
+                },
+            },
+        }));
+        using var ingested = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        Assert.Equal(HttpStatusCode.OK, ingest.StatusCode);
+        var taskId = ingested.RootElement.GetProperty("items")[0]
+            .GetProperty("ingest_id").GetString()!;
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT route_snapshot_json FROM ingest_tasks WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", taskId);
+        using var snapshot = JsonDocument.Parse((string)(await command.ExecuteScalarAsync())!);
+        Assert.Equal("symbolic", snapshot.RootElement.GetProperty("link_type").GetString());
+    }
+
+    [Fact]
+    public async Task SymbolicLinkTypeIsRejectedForLinkDelete()
+    {
+        await using var app = await RunningApp.StartAsync();
+        using var response = await app.Client.PostAsync("/api/v1/sources", Json(new
+        {
+            id = "u2-invalid-symbolic",
+            display_name = "U2 invalid symbolic",
+            adapter = "u2",
+            downloader_id = "pt",
+            file_strategy = "link_delete",
+            link_type = "symbolic",
+            allowed_torrent_hosts = new List<string> { "u2.invalid" },
+            seeding_time_minutes = 10,
+            enabled = true,
+        }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        Assert.Equal("source_profile_invalid", body.RootElement.GetProperty("code").GetString());
+        Assert.Contains(
+            "symbolic",
+            body.RootElement.GetProperty("message").GetString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task MikanMovieSourcePersistsTypeAndPreviewsMovieLibraryRoute()
     {
         await using var app = await RunningApp.StartAsync();
@@ -575,6 +658,9 @@ public sealed class SourceProfileApiTests
         Assert.Contains("已配置并已回填", script, StringComparison.Ordinal);
         Assert.Contains("不填写 Cookie 名、分号或整段 Cookie Header", script, StringComparison.Ordinal);
         Assert.Contains("move · 移动且不做种", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"source-link-type\"", html, StringComparison.Ordinal);
+        Assert.Contains("四种文件策略详细说明", html, StringComparison.Ordinal);
+        Assert.Contains("link_type", script, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-run\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"route-preview-result\"", html, StringComparison.Ordinal);
         Assert.Contains("loadSources", script, StringComparison.Ordinal);

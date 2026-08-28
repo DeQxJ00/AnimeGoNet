@@ -4302,7 +4302,8 @@ public static class ApiEndpoints
                 plugins,
                 request.MediaType,
                 request.PreferAniDbTmdbMapping,
-                request.AniDbTmdbMappingUrlTemplate);
+                request.AniDbTmdbMappingUrlTemplate,
+                request.LinkType);
             var now = DateTimeOffset.UtcNow;
             var created = await profiles.CreateAsync(id, definition, now, cancellationToken).ConfigureAwait(false);
             await rules.EnsureDefaultAsync(
@@ -4393,7 +4394,8 @@ public static class ApiEndpoints
                 plugins,
                 request.MediaType,
                 request.PreferAniDbTmdbMapping,
-                request.AniDbTmdbMappingUrlTemplate);
+                request.AniDbTmdbMappingUrlTemplate,
+                request.LinkType);
             var changedLockedFields = new List<string>();
             AddLockedChange("category", current.Category, definition.Category);
             AddLockedChange(
@@ -4553,7 +4555,8 @@ public static class ApiEndpoints
             profile.RssPriorityEnabled,
             profile.DuplicateNotificationEnabled,
             ruleRevision,
-            profile.MediaType));
+            profile.MediaType,
+            profile.LinkType));
     }
 
     private static async Task<IResult> GetRssRules(
@@ -9263,7 +9266,8 @@ public static class ApiEndpoints
             profile.RssLastBatchId,
             profile.MediaType,
             profile.PreferAniDbTmdbMapping,
-            profile.AniDbTmdbMappingUrlTemplate);
+            profile.AniDbTmdbMappingUrlTemplate,
+            profile.LinkType);
     }
 
     private static DownloaderInstanceResponse ToResponse(
@@ -9369,7 +9373,8 @@ public static class ApiEndpoints
         AnimeGo.Plugin.Abstractions.PluginCatalog plugins,
         string? mediaType,
         bool? preferAniDbTmdbMapping,
-        string? aniDbTmdbMappingUrlTemplate)
+        string? aniDbTmdbMappingUrlTemplate,
+        string? linkType)
     {
         var name = displayName?.Trim() ?? string.Empty;
         if (name.Length is < 1 or > 128)
@@ -9423,6 +9428,12 @@ public static class ApiEndpoints
                 ?? (current is not null && current.FileStrategy == normalizedStrategy
                     ? current.SeedingTimeMinutes
                     : 0));
+        var normalizedLinkType = SourceDownloadPolicy.NormalizeLinkType(
+            normalizedStrategy,
+            linkType
+                ?? (current is not null && current.FileStrategy == normalizedStrategy
+                    ? current.LinkType
+                    : SourceDownloadPolicy.HardLinkType));
         var normalizedMikanIdentityCookie = clearMikanIdentityCookie
             ? null
             : !string.IsNullOrWhiteSpace(mikanIdentityCookie)
@@ -9489,7 +9500,8 @@ public static class ApiEndpoints
                 ?? true,
             normalizedMediaType,
             preferMapping,
-            normalizedAniDbMappingUrlTemplate);
+            normalizedAniDbMappingUrlTemplate,
+            normalizedLinkType);
     }
 
     private static string NormalizeAniDbTmdbMappingUrlTemplate(string? value)

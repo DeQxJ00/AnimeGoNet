@@ -243,6 +243,8 @@ public sealed record SourceProfileSeed
 
     public required FileStrategy FileStrategy { get; init; }
 
+    public string LinkType { get; init; } = SourceDownloadPolicy.HardLinkType;
+
     public required IReadOnlyList<string> AllowedTorrentHosts { get; init; }
 
     public string Category { get; init; } = "animegonet";

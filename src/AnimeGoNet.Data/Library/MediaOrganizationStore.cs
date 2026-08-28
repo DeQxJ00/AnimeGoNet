@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -159,6 +160,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         int? bangumiId;
         var isOtherReadaptation = false;
         var mediaType = "tv";
+        var linkType = "hard";
         await using (var details = connection.CreateCommand())
         {
             details.Transaction = transaction;
@@ -171,7 +173,8 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                            SELECT 1 FROM other_file_readaptation_jobs AS readaptation
                            WHERE readaptation.task_id = task.id
                              AND readaptation.state = 'pending'),
-                       task.media_type
+                       task.media_type,
+                       COALESCE(json_extract(task.route_snapshot_json, '$.link_type'), 'hard')
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
                 WHERE job.id = $job_id AND job.task_id = $task_id
@@ -199,10 +202,12 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             fileStrategy = reader.GetString(9);
             isOtherReadaptation = reader.GetInt64(10) == 1;
             mediaType = reader.GetString(11);
+            linkType = reader.GetString(12);
             if (fileStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
             {
                 throw new InvalidOperationException("Captured file strategy is unsupported.");
             }
+            _ = SourceDownloadPolicy.NormalizeLinkType(fileStrategy, linkType);
         }
 
         if (string.IsNullOrWhiteSpace(downloadRoot) || string.IsNullOrWhiteSpace(saveRoot))
@@ -292,7 +297,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         return new MediaOrganizationClaim(
             jobId, taskId, downloaderId, infoHash, fileStrategy, downloadRoot, saveRoot,
             sourceId, sourceItemId, bangumiId, token, attempt, stage, files,
-            sourceWorkId, mikanId, isOtherReadaptation, mediaType);
+            sourceWorkId, mikanId, isOtherReadaptation, mediaType, linkType);
     }
 
     public async Task<IReadOnlyList<MediaOperationRecord>> EnsureOperationsAsync(

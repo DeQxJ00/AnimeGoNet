@@ -20,7 +20,8 @@ public sealed record SourceProfileRecord(
     bool DuplicateNotificationEnabled = true,
     string MediaType = AnimeGoNet.Core.Media.MediaTypes.Tv,
     bool PreferAniDbTmdbMapping = false,
-    string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json")
+    string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json",
+    string LinkType = AnimeGoNet.Core.Configuration.SourceDownloadPolicy.HardLinkType)
 {
     public override string ToString() =>
         $"SourceProfileRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -59,7 +60,8 @@ public sealed record SourceProfileAdminRecord(
     bool DuplicateNotificationEnabled = true,
     string MediaType = AnimeGoNet.Core.Media.MediaTypes.Tv,
     bool PreferAniDbTmdbMapping = false,
-    string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json")
+    string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json",
+    string LinkType = AnimeGoNet.Core.Configuration.SourceDownloadPolicy.HardLinkType)
 {
     public override string ToString() =>
         $"SourceProfileAdminRecord {{ Id = {Id}, Adapter = {Adapter}, "
@@ -87,7 +89,8 @@ public sealed record SourceProfileDefinition(
     bool DuplicateNotificationEnabled = true,
     string MediaType = AnimeGoNet.Core.Media.MediaTypes.Tv,
     bool PreferAniDbTmdbMapping = false,
-    string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json")
+    string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json",
+    string LinkType = AnimeGoNet.Core.Configuration.SourceDownloadPolicy.HardLinkType)
 {
     public override string ToString() =>
         $"SourceProfileDefinition {{ Adapter = {Adapter}, "

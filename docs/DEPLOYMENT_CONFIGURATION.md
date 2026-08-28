@@ -208,6 +208,7 @@ sources:
     adapter: mikan
     downloader_id: bt
     file_strategy: move
+    link_type: hard
     allowed_torrent_hosts:
       - mikanani.me
     category: animegonet
@@ -304,9 +305,12 @@ allowlist、DNS 地址、redirect 和 HTTPS downgrade；forward proxy 自行解�
 `downloaders` 和 `sources` 是按 ID 命名的 mapping。不同来源通过
 `downloader_id` 绑定不同 qBittorrent 实例。每个下载器 `download_path` 是独立的绝对路径；
 BT 可以沿用全局 `paths.download_path`，PT 建议配置为长期做种目录并可位于另一挂载点。
-AnimeGoNet 与 qBittorrent 必须看到同一目录；使用 `link`/`link_delete` 时，PT 下载目录还须
-与目标媒体库位于同一文件系统以建立硬链接。Mikan 默认整理语义固定为 `move`，因此做种分钟
-必须为 0。
+AnimeGoNet 与 qBittorrent 必须看到同一目录。`link_type=hard` 是默认值，要求 PT 下载目录
+与目标媒体库位于同一文件系统；它适用于 `link` 和固定为硬链接的 `link_delete`。
+`file_strategy=link` 可改为 `link_type=symbolic` 以跨文件系统建立符号链接，但 Jellyfin
+容器也必须挂载并能按相同目录布局访问符号链接指向的下载源；源路径不能在做种期间改名、
+移动或删除。Windows 原生部署还要求 AnimeGoNet 进程具备创建符号链接权限。Mikan 默认
+整理语义固定为 `move`，因此做种分钟必须为 0。
 
 `sources.<id>.duplicate_notification_enabled` 默认 `true`，只控制发现重复时是否向
 脱敏应用日志/WebSocket 写事件；不会改变全局 TMDB Episode 去重、RSS 早停或

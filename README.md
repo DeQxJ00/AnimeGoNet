@@ -176,6 +176,13 @@ Compose 示例直接支持以下启动参数：
 [部署配置文档](docs/DEPLOYMENT_CONFIGURATION.md)。密码、Cookie、API Key 和
 passkey URL 建议放入未提交的 `.env` 或 Docker secrets，不要直接写进 Compose。
 
+来源配置中的四种文件策略可在 WebUI 修改：`move` 下载后立即移动且不做种；`link`
+立即发布并保留做种源，可选择同文件系统的硬链接（默认）或可跨文件系统的软链接；
+`link_delete` 固定使用硬链接，做种到期并复核后删除下载源；`wait_move` 做种到期后才移动。
+Docker 使用软链接时，AnimeGoNet 与 Jellyfin 必须以兼容的容器路径同时挂载下载源和媒体库，
+否则 Jellyfin 虽能看到链接文件却无法解析其目标。完整语义见
+[输入源与下载路由](docs/SOURCE_ROUTING.md)。
+
 容器内部固定路径为：
 
 - `data_path=/data`

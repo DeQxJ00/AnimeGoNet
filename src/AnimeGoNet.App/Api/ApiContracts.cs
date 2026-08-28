@@ -1964,7 +1964,8 @@ public sealed record SourceProfileCreateRequest(
     [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null,
     [property: JsonPropertyName("media_type")] string? MediaType = null,
     [property: JsonPropertyName("prefer_anidb_tmdb_mapping")] bool? PreferAniDbTmdbMapping = null,
-    [property: JsonPropertyName("anidb_tmdb_mapping_url_template")] string? AniDbTmdbMappingUrlTemplate = null);
+    [property: JsonPropertyName("anidb_tmdb_mapping_url_template")] string? AniDbTmdbMappingUrlTemplate = null,
+    [property: JsonPropertyName("link_type")] string? LinkType = null);
 
 public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("display_name")] string? DisplayName,
@@ -1989,7 +1990,8 @@ public sealed record SourceProfileUpdateRequest(
     [property: JsonPropertyName("rss_schedule_cron")] string? RssScheduleCron = null,
     [property: JsonPropertyName("media_type")] string? MediaType = null,
     [property: JsonPropertyName("prefer_anidb_tmdb_mapping")] bool? PreferAniDbTmdbMapping = null,
-    [property: JsonPropertyName("anidb_tmdb_mapping_url_template")] string? AniDbTmdbMappingUrlTemplate = null);
+    [property: JsonPropertyName("anidb_tmdb_mapping_url_template")] string? AniDbTmdbMappingUrlTemplate = null,
+    [property: JsonPropertyName("link_type")] string? LinkType = null);
 
 public sealed record SourceProfileResponse(
     [property: JsonPropertyName("id")] string Id,
@@ -2033,7 +2035,8 @@ public sealed record SourceProfileResponse(
     [property: JsonPropertyName("rss_last_batch_id")] string? RssLastBatchId = null,
     [property: JsonPropertyName("media_type")] string MediaType = MediaTypes.Tv,
     [property: JsonPropertyName("prefer_anidb_tmdb_mapping")] bool PreferAniDbTmdbMapping = false,
-    [property: JsonPropertyName("anidb_tmdb_mapping_url_template")] string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json");
+    [property: JsonPropertyName("anidb_tmdb_mapping_url_template")] string AniDbTmdbMappingUrlTemplate = "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json",
+    [property: JsonPropertyName("link_type")] string LinkType = "hard");
 
 public sealed record SourceProfileFieldLockResponse(
     [property: JsonPropertyName("field")] string Field,
@@ -2152,7 +2155,8 @@ public sealed record SourceRoutePreviewResponse(
     [property: JsonPropertyName("duplicate_notification_enabled")]
     bool DuplicateNotificationEnabled,
     [property: JsonPropertyName("rss_rule_revision")] long? RssRuleRevision,
-    [property: JsonPropertyName("media_type")] string MediaType);
+    [property: JsonPropertyName("media_type")] string MediaType,
+    [property: JsonPropertyName("link_type")] string LinkType = "hard");
 
 public sealed record LegacyMikanFilterRuleResponse(
     [property: JsonPropertyName("tier")] int Tier,

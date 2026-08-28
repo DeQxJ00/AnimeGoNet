@@ -62,7 +62,8 @@ public sealed record ConfigurationArchiveSource(
     bool DuplicateNotificationEnabled,
     string MediaType = MediaTypes.Tv,
     bool PreferAniDbTmdbMapping = false,
-    string AniDbTmdbMappingUrlTemplate = AiMatchingOptions.FixedAniDbMappingUrlTemplate);
+    string AniDbTmdbMappingUrlTemplate = AiMatchingOptions.FixedAniDbMappingUrlTemplate,
+    string LinkType = SourceDownloadPolicy.HardLinkType);
 
 public sealed record ConfigurationArchiveRssRules(
     string SourceProfileId,
@@ -652,7 +653,8 @@ public sealed partial class ConfigurationArchiveService(
             item.MikanIdentityCookie, item.DynamicTagTemplate, item.RssFeedUrl,
             item.RssScheduleEnabled, item.RssScheduleCron,
             item.DuplicateNotificationEnabled, item.MediaType,
-            item.PreferAniDbTmdbMapping, item.AniDbTmdbMappingUrlTemplate);
+            item.PreferAniDbTmdbMapping, item.AniDbTmdbMappingUrlTemplate,
+            item.LinkType);
 
     private static SourceProfileDefinition ToDefinition(ConfigurationArchiveSource item) =>
         new(
@@ -662,7 +664,8 @@ public sealed partial class ConfigurationArchiveService(
             item.MikanIdentityCookie, item.DynamicTagTemplate, item.RssFeedUrl,
             item.RssScheduleEnabled, item.RssScheduleCron,
             item.DuplicateNotificationEnabled, item.MediaType,
-            item.PreferAniDbTmdbMapping, item.AniDbTmdbMappingUrlTemplate);
+            item.PreferAniDbTmdbMapping, item.AniDbTmdbMappingUrlTemplate,
+            item.LinkType);
 
     private string BackupPath(string backupId)
     {

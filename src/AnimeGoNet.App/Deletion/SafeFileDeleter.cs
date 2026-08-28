@@ -30,13 +30,14 @@ public sealed class SafeFileDeleter
             throw new SafeFileDeleteException("delete_root_not_allowed", "Captured root cannot be deleted.");
         }
 
-        RejectSymbolicTraversal(fullRoot, fullTarget);
+        RejectSymbolicTraversal(fullRoot, Path.GetDirectoryName(fullTarget)!);
         if (Directory.Exists(fullTarget))
         {
             throw new SafeFileDeleteException("delete_target_not_file", "Delete target is a directory.");
         }
 
-        if (!File.Exists(fullTarget))
+        var targetInfo = new FileInfo(fullTarget);
+        if (!targetInfo.Exists && targetInfo.LinkTarget is null)
         {
             return Task.FromResult(false);
         }

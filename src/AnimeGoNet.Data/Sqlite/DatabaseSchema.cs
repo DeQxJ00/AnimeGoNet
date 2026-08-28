@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 71;
+    public const int CurrentVersion = 72;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -172,7 +172,18 @@ public static class DatabaseSchema
             71,
             "u2_anidb_tmdb_mapping_url",
             U2AniDbTmdbMappingUrl),
+        new SchemaMigration(
+            72,
+            "source_profile_link_type",
+            SourceProfileLinkType),
     ];
+
+    private const string SourceProfileLinkType = """
+        ALTER TABLE source_profiles
+            ADD COLUMN link_type TEXT NOT NULL DEFAULT 'hard'
+                CHECK (link_type IN ('hard', 'symbolic')
+                       AND (link_type = 'hard' OR file_strategy = 'link'));
+        """;
 
     private const string ConfigurableAnidbTitleCacheInterval = """
         ALTER TABLE anidb_title_cache_state

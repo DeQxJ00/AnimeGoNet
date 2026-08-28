@@ -17,14 +17,26 @@ public sealed class SafeFileLinker
 {
     public async Task<SafeFileLinkResult> LinkAsync(
         SafeFileLinkRequest request,
+        string linkType = SourceDownloadPolicy.HardLinkType,
         CancellationToken cancellationToken = default)
     {
         Validate(request);
+        var normalizedLinkType = SourceDownloadPolicy.NormalizeLinkType("link", linkType);
         cancellationToken.ThrowIfCancellationRequested();
         RejectSymbolicTraversal(request.SourceRoot, request.SourcePath);
         RejectSymbolicTraversal(request.TargetRoot, Path.GetDirectoryName(request.TargetPath)!);
 
+        if (normalizedLinkType == SourceDownloadPolicy.SymbolicLinkType)
+        {
+            return await CreateSymbolicLinkAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         var sourceExists = File.Exists(request.SourcePath);
+        if (new FileInfo(request.TargetPath).LinkTarget is not null)
+        {
+            throw new SafeFileMoveException(
+                "target_conflict", "A symbolic link already exists at the hard-link target path.");
+        }
         if (File.Exists(request.TargetPath))
         {
             EnsureExpectedSize(request.TargetPath, request.ExpectedBytes, "target_conflict");
@@ -66,6 +78,89 @@ public sealed class SafeFileLinker
                 File.Exists(request.TargetPath) ? "target_conflict" : "hard_link_unavailable",
                 "Hard link creation failed.", exception);
         }
+    }
+
+    private static Task<SafeFileLinkResult> CreateSymbolicLinkAsync(
+        SafeFileLinkRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(request.SourcePath))
+        {
+            throw new SafeFileMoveException("source_file_missing", "Source file does not exist.");
+        }
+
+        EnsureExpectedSize(request.SourcePath, request.ExpectedBytes, "source_size_mismatch");
+        var targetInfo = new FileInfo(request.TargetPath);
+        if (targetInfo.Exists || targetInfo.LinkTarget is not null)
+        {
+            ValidateSymbolicTarget(request, targetInfo);
+            return Task.FromResult(new SafeFileLinkResult(request.ExpectedBytes, true));
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(request.TargetPath)!);
+        RejectSymbolicTraversal(request.TargetRoot, Path.GetDirectoryName(request.TargetPath)!);
+        var targetDirectory = Path.GetDirectoryName(request.TargetPath)!;
+        var relativeSource = Path.GetRelativePath(targetDirectory, request.SourcePath);
+        var storedTarget = Path.IsPathRooted(relativeSource)
+            ? request.SourcePath
+            : relativeSource;
+        try
+        {
+            File.CreateSymbolicLink(request.TargetPath, storedTarget);
+            ValidateSymbolicTarget(request, new FileInfo(request.TargetPath));
+            return Task.FromResult(new SafeFileLinkResult(request.ExpectedBytes, false));
+        }
+        catch (SafeFileMoveException)
+        {
+            throw;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            throw new SafeFileMoveException(
+                "file_access_denied", "Symbolic link creation was denied.", exception);
+        }
+        catch (IOException exception)
+        {
+            throw new SafeFileMoveException(
+                "symbolic_link_unavailable", "Symbolic link creation failed.", exception);
+        }
+    }
+
+    private static void ValidateSymbolicTarget(
+        SafeFileLinkRequest request,
+        FileInfo targetInfo)
+    {
+        if (targetInfo.LinkTarget is null)
+        {
+            throw new SafeFileMoveException(
+                "target_conflict", "The existing target is not a symbolic link.");
+        }
+
+        FileSystemInfo? resolved;
+        try
+        {
+            resolved = targetInfo.ResolveLinkTarget(returnFinalTarget: true);
+        }
+        catch (IOException exception)
+        {
+            throw new SafeFileMoveException(
+                "target_conflict", "The symbolic link target cannot be resolved.", exception);
+        }
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (resolved is null
+            || !string.Equals(
+                Path.GetFullPath(resolved.FullName),
+                Path.GetFullPath(request.SourcePath),
+                comparison))
+        {
+            throw new SafeFileMoveException(
+                "target_conflict", "The symbolic link points to a different source file.");
+        }
+
+        EnsureExpectedSize(request.TargetPath, request.ExpectedBytes, "target_size_mismatch");
     }
 
     public async Task DeleteSourceAsync(

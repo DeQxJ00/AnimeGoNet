@@ -74,8 +74,13 @@ SQLite 保存可由 Web 修改的业务路由。`SourceProfile` 至少包含：
 - qB category、静态附加 tags；AnimeGoNet 总会额外加入 `animegonet`、来源 ID 和文件策略三个可识别系统 tag。
 - 可空 `dynamic_tag_template`；默认 Mikan 为 `{year}年{quarter}月新番`，支持 `{year}`、`{quarter}`（季度首月 1/4/7/10）、`{quarter_index}`、`{quarter_name}`、`{ep}`、`{week}` 和 `{week_name}`，逗号分隔最多 16 个 tag。
 - `file_strategy`：`link`、`link_delete`、`move`、`wait_move`。
+- `link_type`：`hard`（默认）或 `symbolic`；只在 `file_strategy=link` 时允许选择。旧任务和旧数据库自动视为 `hard`。`link_delete` 固定使用硬链接，因为做种结束后会删除源路径，软链接会立即变成断链。
 - `seeding_time_minutes` 沿用上游 qB 语义：`0` 不做种、`-1` 无限做种、正数为分钟上限；`move` 必须为 `0`，因为下载完成后移动源文件。
-- 四种策略严格使用任务创建时的 route snapshot。schema v33 把做种分钟复制为 job 的不可变目标，并由 qB `seeding_time` 投影为单调累计秒数及 `not_required/waiting/seeding/completed`；重启、离线旧快照和后续 SourceProfile 修改都不能改变目标或倒退完成状态。`0` 直接为 `not_required`，正数仅在累计做种秒数达到分钟上限后为 `completed`，`-1` 永不自动完成。qB 的 `pausedUP/stoppedUP` 只表示文件已完整但当前未上传，不能替代做种时长门禁。`link` 与 `link_delete` 在 qB 首次进入已下载/做种状态后建立媒体库硬链接且不暂停做种；`link_delete` 仅在持久化做种状态完成后校验目标与源内容一致再删除源文件。`move` 在下载完成后暂停并立即安全移动；`wait_move` 等同一持久化门禁完成后才暂停并移动。文件/NFO/完成记录成功后才进入独立 qB 清理阶段，清理固定使用 `deleteFiles=false`。
+- `move`：下载完成后立即暂停 qB 并移动到媒体库，做种时间固定为 `0`。同一文件系统优先原子移动；跨文件系统使用复制、大小和 SHA-256 校验，再删除源文件。适合 Mikan 追番等不要求长期做种的来源。
+- `link`：下载完成后立即在媒体库建立链接，不暂停 qB，下载源始终保留。选择 `hard` 时媒体库文件与源文件共享 inode/文件记录，可靠且删除任一目录项不会破坏另一项，但下载目录与媒体库必须处于同一文件系统。选择 `symbolic` 时可跨盘/跨文件系统，媒体库只保存指向源路径的符号链接；Jellyfin 以及其容器必须能按链接解析后的路径访问源文件，源文件被移动或删除即断链，Windows 还需要进程具备创建符号链接权限。正数到期后只移除 qB 任务而不删文件，`-1` 无限保留。
+- `link_delete`：下载完成后立即建立硬链接并继续做种；到达持久化做种目标后重新校验目标与源文件一致，删除下载目录中的源路径，再以 `deleteFiles=false` 移除 qB 任务。媒体库硬链接仍有效。该策略禁止软链接。
+- `wait_move`：下载完成后继续在下载目录做种，不提前发布媒体文件；到达持久化做种目标后暂停 qB，再按与 `move` 相同的安全流程移动。`-1` 表示无限做种，因此永远不会自动移动。
+- 四种策略、链接类型和做种分钟严格使用任务创建时的 route snapshot。schema v33 把做种分钟复制为 job 的不可变目标，并由 qB `seeding_time` 投影为单调累计秒数及 `not_required/waiting/seeding/completed`；重启、离线旧快照和后续 SourceProfile 修改都不能改变目标或倒退完成状态。`0` 直接为 `not_required`，正数仅在累计做种秒数达到分钟上限后为 `completed`，`-1` 永不自动完成。qB 的 `pausedUP/stoppedUP` 只表示文件已完整但当前未上传，不能替代做种时长门禁。文件/NFO/完成记录成功后才进入独立 qB 清理阶段。
 - 动态 tag 模板与 profile revision 一起写入不可变 `route_snapshot_json`，绝不在暂停 dispatch 阶段把未展开模板发送给 qB。任务达到 `metadata_resolved` 后，下载准备 worker 取按 Season/EP/路径稳定排序的首个普通规范 Episode，用其已确认 TMDB Season 的开播日期和 EP 渲染模板，并在设置文件 priority、恢复任务前调用 qB `addTags`。缺少所需日期/EP、全文件重复或渲染结果无效时，下载继续但 job 记录稳定 `skipped` 原因；qB 写入失败则保持暂停并按准备租约重试。API/WebUI 显示 `pending/applied/skipped/not_configured`、实际 tag 和失败码。
 - 去重范围固定为全局媒体库，不允许 source profile 改成来源内去重；规范键为 TMDB Series/Season/Episode。profile 只可配置发现重复后的日志/通知，不可绕过完成记录。
 - `duplicate_notification_enabled` 默认 `true`。开启时，RSS 来源完成 alias、同一批 winner 已被领取，以及 TMDB 验证后的全局 Series/Season/Episode 重复会写事件 `4301` 到脱敏应用日志并实时推送 WebSocket；消息只含 profile/source ID、稳定去重 scope 和原因码，不含 title、Torrent URL、passkey 或文件绝对路径。关闭仅抑制该通知，RSS 批次审计、逐文件 `duplicate` disposition、完成记录和下载门禁照常执行。
@@ -199,7 +204,7 @@ Torrent URL 和下载后的 `.torrent` announce 信息都可能包含个人 pass
 - “路由预览”：输入模拟 title/IDs 后显示会命中哪个下载器、哪些规则以及路径。
 - 修改只影响新任务；进行中任务保持原快照，可由用户显式重新路由。
 
-当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、category、静态 tags、动态 tag 模板、做种分钟、规则开关和重复通知状态。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
+当前 `POST /api/v1/sources/{id}/route-preview` 使用持久化 SourceProfile 的编译期 adapter 执行与统一导入相同的字段规范化，返回 profile/rule revision、下载器、download/save path、文件策略、链接类型、category、静态 tags、动态 tag 模板、做种分钟、规则开关和重复通知状态。预览构造内存中的安全占位 Torrent URL，不执行网络请求、不写 ingest task、不连接 qB。SourceProfile ID 与 adapter 已分离，因此 `u2-anime` 等自定义 ID 会保存为来源身份，同时使用 `u2` adapter 校验；实际 `/api/v1/ingest` 采用完全相同的分离逻辑。
 
 ### 任务/作品详情
 

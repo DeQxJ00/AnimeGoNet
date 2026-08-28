@@ -1,4 +1,5 @@
 using AnimeGoNet.App.Library;
+using AnimeGoNet.Core.Configuration;
 
 namespace AnimeGoNet.App.Tests.Library;
 
@@ -35,6 +36,74 @@ public sealed class SafeFileLinkerTests
 
         Assert.True(result.RecoveredExistingTarget);
         Assert.True(File.Exists(source));
+    }
+
+    [Fact]
+    public async Task CreatesSymbolicLinkAndPreservesSource()
+    {
+        await using var fixture = new LinkFixture();
+        var bytes = new byte[] { 4, 3, 2, 1 };
+        var source = fixture.CreateSource("torrent/episode.mkv", bytes);
+        var target = fixture.Target("Series/S01/E001.mkv");
+        var linker = new SafeFileLinker();
+
+        SafeFileLinkResult created;
+        try
+        {
+            created = await linker.LinkAsync(
+                new SafeFileLinkRequest(
+                    fixture.SourceRoot, fixture.TargetRoot, source, target, bytes.Length),
+                SourceDownloadPolicy.SymbolicLinkType);
+        }
+        catch (SafeFileMoveException exception) when (
+            OperatingSystem.IsWindows()
+            && exception.Code == "symbolic_link_unavailable")
+        {
+            Assert.True(File.Exists(source));
+            Assert.False(File.Exists(target));
+            return;
+        }
+        var recovered = await linker.LinkAsync(
+            new SafeFileLinkRequest(
+                fixture.SourceRoot, fixture.TargetRoot, source, target, bytes.Length),
+            SourceDownloadPolicy.SymbolicLinkType);
+
+        Assert.False(created.RecoveredExistingTarget);
+        Assert.True(recovered.RecoveredExistingTarget);
+        Assert.NotNull(new FileInfo(target).LinkTarget);
+        Assert.Equal(Path.GetFullPath(source), new FileInfo(target).ResolveLinkTarget(true)!.FullName);
+        Assert.True(File.Exists(source));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(target));
+    }
+
+    [Fact]
+    public async Task SymbolicModeRejectsLinkPointingToDifferentSource()
+    {
+        await using var fixture = new LinkFixture();
+        var source = fixture.CreateSource("episode.mkv", [1, 2, 3]);
+        var other = fixture.CreateSource("other.mkv", [1, 2, 3]);
+        var target = fixture.Target("Series/S01/E001.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        try
+        {
+            File.CreateSymbolicLink(target, other);
+        }
+        catch (IOException) when (OperatingSystem.IsWindows())
+        {
+            Assert.True(File.Exists(source));
+            Assert.True(File.Exists(other));
+            return;
+        }
+
+        var error = await Assert.ThrowsAsync<SafeFileMoveException>(() =>
+            new SafeFileLinker().LinkAsync(
+                new SafeFileLinkRequest(
+                    fixture.SourceRoot, fixture.TargetRoot, source, target, 3),
+                SourceDownloadPolicy.SymbolicLinkType));
+
+        Assert.Equal("target_conflict", error.Code);
+        Assert.True(File.Exists(source));
+        Assert.True(File.Exists(other));
     }
 
     [Fact]

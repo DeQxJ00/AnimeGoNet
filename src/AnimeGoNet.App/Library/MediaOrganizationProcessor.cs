@@ -344,7 +344,7 @@ public sealed class MediaOrganizationProcessor(
                         targetRoot,
                         sourcePath,
                         operation.TargetPath,
-                        file.SizeBytes), cancellationToken).ConfigureAwait(false)).BytesVerified
+                        file.SizeBytes), claim.LinkType, cancellationToken).ConfigureAwait(false)).BytesVerified
                     : (await mover.MoveAsync(new SafeFileMoveRequest(
                         operation.OperationId,
                         sourceRoot,

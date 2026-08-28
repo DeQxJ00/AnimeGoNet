@@ -9391,12 +9391,31 @@ function refreshSourceDownloaderOptions() {
 function updateSourceWarning() {
     const strategy = element("#source-strategy").value;
     const seeding = element("#source-seeding-time");
+    const linkType = element("#source-link-type");
+    const linkTypeState = element("#source-link-type-state");
     if (strategy === "move")
         seeding.value = "0";
     seeding.disabled = strategy === "move";
-    element("#source-warning").textContent = strategy === "move"
-        ? "move 会在下载完成后移动源文件，做种分钟固定为 0；修改只影响之后创建的任务。"
-        : "做种分钟：-1 无限、0 不做种、正数为上限；历史任务继续使用原 revision 路由快照。";
+    linkType.disabled = strategy !== "link";
+    if (strategy !== "link")
+        linkType.value = "hard";
+    linkTypeState.textContent = strategy === "link"
+        ? linkType.value === "symbolic"
+            ? "软链接可跨文件系统；Jellyfin 必须能按相同路径访问源文件，Windows 需要符号链接权限。"
+            : "硬链接最稳，不依赖源路径，但下载目录与媒体库必须位于同一文件系统。"
+        : strategy === "link_delete"
+            ? "link_delete 固定使用硬链接；删除做种源后软链接会失效，因此不允许选择软链接。"
+            : "当前策略不创建链接，链接类型不适用。";
+    const warnings = {
+        move: "move：下载完成后暂停 qB 并立即移动；做种固定为 0。跨盘会复制、校验大小与 SHA-256 后删除源文件。",
+        link: linkType.value === "symbolic"
+            ? "link + 软链接：完成后立即建立符号链接并保留做种源，可跨盘；Jellyfin/容器必须能访问链接指向的源路径。"
+            : "link + 硬链接：完成后立即建立硬链接并保留做种源，可靠且源路径删除后媒体仍有效，但必须处于同一文件系统。",
+        link_delete: "link_delete：立即建立硬链接继续做种；到期复核后删除下载源并移除 qB 任务，媒体库硬链接继续有效。",
+        wait_move: "wait_move：先在下载目录做种，到期后暂停 qB 再移动；-1 表示无限做种，因此不会自动移动。",
+    };
+    element("#source-warning").textContent =
+        `${warnings[strategy] ?? "未知文件策略。"} 修改只影响之后创建的任务。`;
 }
 function updateSourceCredentialInputs() {
     const adapter = element("#source-adapter").value;
@@ -9492,6 +9511,7 @@ function populateSourceForm(profile, templateAdapter = "mikan") {
         profile?.downloader_id ?? (isU2Template ? "pt" : "bt");
     element("#source-strategy").value =
         profile?.file_strategy ?? (isU2Template ? "link" : "move");
+    element("#source-link-type").value = profile?.link_type ?? "hard";
     const category = element("#source-category");
     const dynamicTag = element("#source-dynamic-tag");
     const categoryLock = profile?.locked_fields.find((lock) => lock.field === "category");
@@ -9568,7 +9588,12 @@ function renderSourceList() {
             : profile.adapter === "u2"
                 ? `U2 手动插件 · Host ${profile.allowed_torrent_hosts.join(", ") || "未配置"}`
                 : `外部适配器 ${profile.adapter}`;
-        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.media_type === "movie" ? "动画电影" : "TV 动画"} · ${profile.file_strategy} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · ${adapterState}${lockState} · 任务 ${profile.ingest_task_count}`;
+        const strategyState = profile.file_strategy === "link"
+            ? `${profile.file_strategy}(${profile.link_type === "symbolic" ? "软链接" : "硬链接"})`
+            : profile.file_strategy === "link_delete"
+                ? "link_delete(硬链接)"
+                : profile.file_strategy;
+        route.textContent = `${profile.adapter} → ${profile.downloader_id} · ${profile.media_type === "movie" ? "动画电影" : "TV 动画"} · ${strategyState} · ${profile.category} · 重复通知 ${profile.duplicate_notification_enabled ? "开启" : "关闭"} · 动态 Tag ${profile.dynamic_tag_template ?? "关闭"} · 做种 ${profile.seeding_time_minutes} 分钟 · ${adapterState}${lockState} · 任务 ${profile.ingest_task_count}`;
         card.append(heading, route);
         card.addEventListener("click", () => populateSourceForm(profile));
         return card;
@@ -9609,7 +9634,7 @@ async function previewSourceRoute() {
                 `有效 · ${route.source_profile_id} rev ${route.source_profile_revision} (${route.adapter} · ${route.media_type === "movie" ? "动画电影" : "TV 动画"})`,
                 `下载器 ${route.downloader_id} · ${route.download_path ?? "路径不可用"}`,
                 `媒体库 ${route.save_path}`,
-                `策略 ${route.file_strategy} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
+                `策略 ${route.file_strategy}${route.file_strategy === "link" || route.file_strategy === "link_delete" ? ` · ${route.link_type === "symbolic" ? "软链接" : "硬链接"}` : ""} · 分类 ${route.category} · Tags ${route.tags.join(", ") || "—"}`,
                 `动态 Tag 模板 ${route.dynamic_tag_template ?? "关闭"}`,
                 `做种 ${route.seeding_time_minutes} 分钟 · RSS规则 rev ${route.rss_rule_revision ?? "—"}`,
                 `重复命中通知 ${route.duplicate_notification_enabled ? "开启" : "关闭"}（不改变全局去重）`,
@@ -10257,6 +10282,7 @@ async function saveSource(event) {
         display_name: element("#source-name").value.trim(),
         downloader_id: element("#source-downloader").value.trim(),
         file_strategy: element("#source-strategy").value,
+        link_type: element("#source-link-type").value,
         category: element("#source-category").value.trim(),
         tags: sourceTags(),
         dynamic_tag_template: element("#source-dynamic-tag").value,
@@ -11830,6 +11856,7 @@ element("#source-enabled").addEventListener("change", updateSourceCredentialInpu
 element("#source-rss-schedule-enabled").addEventListener("change", updateSourceCredentialInputs);
 element("#source-delete").addEventListener("click", () => void deleteSource());
 element("#source-strategy").addEventListener("change", updateSourceWarning);
+element("#source-link-type").addEventListener("change", updateSourceWarning);
 element("#route-preview-run").addEventListener("click", () => void previewSourceRoute());
 element("#manual-download-source").addEventListener("change", updateManualDownloadHint);
 element("#manual-download-mikan-url").addEventListener("input", updateManualDownloadHint);

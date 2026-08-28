@@ -359,6 +359,7 @@ internal static class DeploymentYamlConfiguration
             "advanced:download:rename",
             "sources:mikan:file_strategy");
         Add(values, "sources:mikan:file_strategy", "move");
+        Add(values, "sources:mikan:link_type", "hard");
         Add(values, "sources:mikan:allowed_torrent_hosts:0", "mikanani.me");
         Alias(values, "setting:category", "sources:mikan:category");
         Add(values, "sources:mikan:category", "animegonet");
@@ -628,6 +629,7 @@ internal static class DeploymentYamlConfiguration
                 media_type: {{Scalar(Configured(values, "sources:mikan:media_type", "tv"))}}
                 downloader_id: bt
                 file_strategy: {{LegacyFileStrategy(values)}}
+                link_type: {{LegacyLinkType(values)}}
                 allowed_torrent_hosts:
                   - mikanani.me
             {{LegacyMikanAdditionalAllowedHost(values)}}
@@ -802,6 +804,21 @@ internal static class DeploymentYamlConfiguration
         };
     }
 
+    private static string LegacyLinkType(
+        IReadOnlyDictionary<string, string?> values)
+    {
+        var linkType = Configured(
+            values,
+            "sources:mikan:link_type",
+            "hard").ToLowerInvariant();
+        return linkType switch
+        {
+            "hard" or "symbolic" => linkType,
+            _ => throw new DeploymentYamlException(
+                "Legacy deployment YAML Mikan link type is unsupported."),
+        };
+    }
+
     internal static string RenderDefault(AnimeGoOptions options)
     {
         var bt = options.Downloaders["bt"];
@@ -861,6 +878,7 @@ internal static class DeploymentYamlConfiguration
                 media_type: tv
                 downloader_id: bt
                 file_strategy: move
+                link_type: hard
                 allowed_torrent_hosts:
                   - mikanani.me
                 category: animegonet

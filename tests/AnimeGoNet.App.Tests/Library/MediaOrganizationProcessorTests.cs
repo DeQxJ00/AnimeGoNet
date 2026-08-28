@@ -491,6 +491,57 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     [Fact]
+    public async Task LinkStrategyUsesConfiguredSymbolicLinkAndPreservesSeedingSource()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        _ = await PrepareDownloadedTaskAsync(
+            app, paths, "link", "seeding", linkType: "symbolic");
+        var source = Path.Combine(paths.DownloadPath, "bt", "episode.mkv");
+        var target = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
+        if (!CanCreateSymbolicLink(paths.SavePath, source))
+        {
+            Assert.True(OperatingSystem.IsWindows());
+            Assert.True(File.Exists(source));
+            return;
+        }
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var targetInfo = new FileInfo(target);
+        Assert.NotNull(targetInfo.LinkTarget);
+        Assert.Equal(Path.GetFullPath(source), targetInfo.ResolveLinkTarget(true)!.FullName);
+        Assert.True(File.Exists(source));
+        Assert.True(File.Exists(target));
+        Assert.Empty(client.Paused);
+    }
+
+    private static bool CanCreateSymbolicLink(string directory, string source)
+    {
+        var probe = Path.Combine(directory, $".animegonet-symlink-test-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.CreateSymbolicLink(probe, source);
+            return new FileInfo(probe).LinkTarget is not null;
+        }
+        catch (IOException) when (OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+        finally
+        {
+            if (new FileInfo(probe).LinkTarget is not null || File.Exists(probe))
+            {
+                File.Delete(probe);
+            }
+        }
+    }
+
+    [Fact]
     public async Task WaitMoveDoesNotTouchFilesUntilSeedingEnds()
     {
         var client = new FakeDownloadClient();
@@ -606,7 +657,8 @@ public sealed class MediaOrganizationProcessorTests
         RunningApp app,
         PathOptions paths,
         string strategy = "move",
-        string downloadState = "complete")
+        string downloadState = "complete",
+        string linkType = "hard")
     {
         if (strategy != "move")
         {
@@ -618,6 +670,7 @@ public sealed class MediaOrganizationProcessorTests
                         "display_name": "Mikan",
                         "downloader_id": "bt",
                         "file_strategy": "{{strategy}}",
+                        "link_type": "{{linkType}}",
                         "allowed_torrent_hosts": ["mikanani.me"],
                         "category": "animegonet",
                         "tags": [],
