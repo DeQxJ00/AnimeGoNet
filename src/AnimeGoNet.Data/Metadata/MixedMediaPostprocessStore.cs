@@ -1,4 +1,5 @@
 using System.Globalization;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -245,8 +246,8 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
             .Select(fileId => filesById[fileId])
             .ToArray();
         if (selected.Length != normalizedFileIds.Length
-            || selected.Any(file => !File.Exists(file.SourceMediaPath)
-                || new FileInfo(file.SourceMediaPath).Length != file.SizeBytes))
+            || selected.Any(file => !FilePathInspector.HasExpectedFileLength(
+                file.SourceMediaPath, file.SizeBytes)))
         {
             return MixedMediaPostprocessResult.FileNotEligible;
         }
@@ -454,8 +455,8 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
             .ToArray();
         if (pendingMovieFiles.Length == 0
             || !selectedIds.SetEquals(pendingMovieFiles.Select(file => file.TaskFileId))
-            || pendingMovieFiles.Any(file => !File.Exists(file.SourceMediaPath)
-                || new FileInfo(file.SourceMediaPath).Length != file.SizeBytes))
+            || pendingMovieFiles.Any(file => !FilePathInspector.HasExpectedFileLength(
+                file.SourceMediaPath, file.SizeBytes)))
         {
             return MixedMediaPostprocessResult.FileNotEligible;
         }

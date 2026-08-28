@@ -5,8 +5,11 @@ using AnimeGoNet.App.Downloads;
 using AnimeGoNet.App.Library;
 using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Library;
+using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Library;
+using AnimeGoNet.Data.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -517,6 +520,54 @@ public sealed class MediaOrganizationProcessorTests
         Assert.True(File.Exists(source));
         Assert.True(File.Exists(target));
         Assert.Empty(client.Paused);
+    }
+
+    [Fact]
+    public async Task MixedMediaPostprocessRelinksSymbolicMediaToOriginalDownload()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(
+            app, paths, "link", "complete", linkType: "symbolic");
+        var source = Path.Combine(paths.DownloadPath, "bt", "episode.mkv");
+        if (!CanCreateSymbolicLink(paths.SavePath, source))
+        {
+            Assert.True(OperatingSystem.IsWindows());
+            return;
+        }
+
+        var processor = app.App.Services.GetRequiredService<MediaOrganizationProcessor>();
+        Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
+        Assert.Equal(MediaOrganizationResult.CleanupCompleted, await processor.RunOnceAsync());
+
+        var oldTarget = Path.Combine(paths.SavePath, "Series", "S01", "E001.mkv");
+        Assert.True(FilePathInspector.HasExpectedFileLength(oldTarget, 5));
+        var postprocess = app.App.Services.GetRequiredService<MixedMediaPostprocessStore>();
+        var preview = Assert.IsType<MixedMediaPostprocessPreview>(await postprocess.PreviewAsync(taskId));
+        var file = Assert.Single(preview.Files);
+        Assert.Equal(
+            MixedMediaPostprocessResult.Started,
+            await postprocess.StartAsync(
+                taskId,
+                file.TaskFileId,
+                new TmdbMovie(200, "Movie", "Movie", new DateOnly(2026, 1, 2), null),
+                DateTimeOffset.UtcNow));
+
+        Assert.Equal(MediaOrganizationResult.FilesCompleted, await processor.RunOnceAsync());
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var query = connection.CreateCommand();
+        query.CommandText = "SELECT target_path FROM file_operations WHERE task_file_id = $file_id AND state = 'completed';";
+        query.Parameters.AddWithValue("$file_id", file.TaskFileId);
+        var movieTarget = Assert.IsType<string>(await query.ExecuteScalarAsync());
+
+        Assert.False(File.Exists(oldTarget));
+        Assert.True(File.Exists(source));
+        Assert.True(FilePathInspector.HasExpectedFileLength(movieTarget, 5));
+        Assert.Equal(
+            Path.GetFullPath(source),
+            new FileInfo(movieTarget).ResolveLinkTarget(returnFinalTarget: true)!.FullName);
     }
 
     private static bool CanCreateSymbolicLink(string directory, string source)

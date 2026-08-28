@@ -337,15 +337,41 @@ public sealed class MediaOrganizationProcessor(
             }
             else
             {
-                bytesVerified = file.SourceOverridePath is null
-                    && claim.FileStrategy is ("link" or "link_delete")
-                    ? (await linker.LinkAsync(new SafeFileLinkRequest(
+                if (file.SourceOverridePath is not null
+                    && claim.FileStrategy == "link"
+                    && FilePathInspector.TryResolveSymbolicFileTarget(sourcePath, out var originalSource))
+                {
+                    if (!PathBoundary.IsWithin(claim.DownloadRootPath, originalSource))
+                    {
+                        throw new SafeFileMoveException(
+                            "readaptation_source_invalid",
+                            "The media symbolic link points outside the captured download root.");
+                    }
+
+                    bytesVerified = (await linker.LinkAsync(new SafeFileLinkRequest(
+                        claim.DownloadRootPath,
+                        targetRoot,
+                        originalSource,
+                        operation.TargetPath,
+                        file.SizeBytes), claim.LinkType, cancellationToken).ConfigureAwait(false)).BytesVerified;
+                    if (!file.PreserveSource)
+                    {
+                        File.Delete(sourcePath);
+                    }
+                }
+                else if (file.SourceOverridePath is null
+                    && claim.FileStrategy is ("link" or "link_delete"))
+                {
+                    bytesVerified = (await linker.LinkAsync(new SafeFileLinkRequest(
                         sourceRoot,
                         targetRoot,
                         sourcePath,
                         operation.TargetPath,
-                        file.SizeBytes), claim.LinkType, cancellationToken).ConfigureAwait(false)).BytesVerified
-                    : (await mover.MoveAsync(new SafeFileMoveRequest(
+                        file.SizeBytes), claim.LinkType, cancellationToken).ConfigureAwait(false)).BytesVerified;
+                }
+                else
+                {
+                    bytesVerified = (await mover.MoveAsync(new SafeFileMoveRequest(
                         operation.OperationId,
                         sourceRoot,
                         targetRoot,
@@ -354,6 +380,7 @@ public sealed class MediaOrganizationProcessor(
                         file.SizeBytes,
                         ForceCopyAndVerify: file.PreserveSource,
                         PreserveSource: file.PreserveSource), cancellationToken).ConfigureAwait(false)).BytesVerified;
+                }
             }
             await store.CompleteFileAsync(
                 claim,

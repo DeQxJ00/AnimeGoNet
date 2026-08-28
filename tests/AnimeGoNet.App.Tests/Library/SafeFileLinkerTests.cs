@@ -1,5 +1,6 @@
 using AnimeGoNet.App.Library;
 using AnimeGoNet.Core.Configuration;
+using AnimeGoNet.Core.Library;
 
 namespace AnimeGoNet.App.Tests.Library;
 
@@ -72,7 +73,8 @@ public sealed class SafeFileLinkerTests
         Assert.True(recovered.RecoveredExistingTarget);
         Assert.NotNull(new FileInfo(target).LinkTarget);
         Assert.Equal(Path.GetFullPath(source), new FileInfo(target).ResolveLinkTarget(true)!.FullName);
-        Assert.Equal(bytes.Length, SafeFileLinker.GetResolvedFileLength(target));
+        Assert.Equal(bytes.Length, FilePathInspector.GetResolvedFileLength(target));
+        Assert.True(FilePathInspector.HasExpectedFileLength(target, bytes.Length));
         Assert.True(File.Exists(source));
         Assert.Equal(bytes, await File.ReadAllBytesAsync(target));
     }

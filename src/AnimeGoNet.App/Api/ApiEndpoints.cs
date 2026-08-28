@@ -11,6 +11,7 @@ using AnimeGoNet.App.DataUpdate;
 using AnimeGoNet.App.Deletion;
 using AnimeGoNet.App.Downloads;
 using AnimeGoNet.Core.Ingest;
+using AnimeGoNet.Core.Library;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Core.Media;
 using AnimeGoNet.Core.Sources;
@@ -5605,8 +5606,8 @@ public static class ApiEndpoints
             file.OtherReason,
             file.TmdbSeriesId,
             file.TmdbSeasonNumber,
-            File.Exists(file.SourceMediaPath)
-                && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes,
+            FilePathInspector.HasExpectedFileLength(
+                file.SourceMediaPath, file.SizeBytes),
             file.SharedPathReferenceCount)).ToArray();
         var reason = ReadaptationDenialReason(preview, files);
         return TypedResults.Ok(new OtherFileReadaptationPreviewResponse(
@@ -5639,8 +5640,8 @@ public static class ApiEndpoints
             file.OtherReason,
             file.TmdbSeriesId,
             file.TmdbSeasonNumber,
-            File.Exists(file.SourceMediaPath)
-                && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes,
+            FilePathInspector.HasExpectedFileLength(
+                file.SourceMediaPath, file.SizeBytes),
             file.SharedPathReferenceCount)).ToArray();
         var denial = ReadaptationDenialReason(preview, files);
         if (denial is not null)
@@ -5792,8 +5793,8 @@ public static class ApiEndpoints
                 file.TmdbMovieId,
                 file.MovieRole,
                 file.MovieHint,
-                File.Exists(file.SourceMediaPath)
-                    && new FileInfo(file.SourceMediaPath).Length == file.SizeBytes)).ToArray()));
+                FilePathInspector.HasExpectedFileLength(
+                    file.SourceMediaPath, file.SizeBytes))).ToArray()));
     }
 
     private static async Task<IResult> SearchTmdbMovies(
