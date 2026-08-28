@@ -791,11 +791,13 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             var isBoundSubtitle = association?.VideoFileId == mainFile.FileId;
             var disposition = duplicateReason is not null
                 ? (isMain || isBoundSubtitle ? "duplicate" : "ignored")
-                : isMain || isBoundSubtitle ? "movie" : "ignored";
+                : isMain ? "movie" : "extras";
             var reason = duplicateReason
-                ?? (isMain || isBoundSubtitle
+                ?? (isMain
                     ? null
-                    : association?.UnmatchedReason ?? "movie_auxiliary_ignored");
+                    : isBoundSubtitle
+                        ? "movie_subtitle_extra"
+                        : association?.UnmatchedReason ?? "movie_auxiliary_extra");
 
             await using var updateFile = connection.CreateCommand();
             updateFile.Transaction = transaction;
@@ -813,7 +815,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             updateFile.Parameters.AddWithValue("$reason", (object?)reason ?? DBNull.Value);
             updateFile.Parameters.AddWithValue(
                 "$associated_file_id",
-                isBoundSubtitle ? mainFile.FileId : DBNull.Value);
+                isMain ? DBNull.Value : mainFile.FileId);
             updateFile.Parameters.AddWithValue(
                 "$rename_suffix",
                 isBoundSubtitle ? association!.RenameSuffix : DBNull.Value);

@@ -195,7 +195,7 @@ public sealed class MovieMetadataResolutionProcessorTests
             await File.ReadAllBytesAsync(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
         Assert.Equal(
             [1, 2, 3, 4, 5],
-            await File.ReadAllBytesAsync(Path.Combine(targetDirectory, fileName)));
+            await File.ReadAllBytesAsync(Path.Combine(targetDirectory, "Extras", fileName)));
         Assert.True(File.Exists(Path.Combine(targetDirectory, "movie.nfo")));
         await using var verify = await database.OpenConnectionAsync();
         await using var query = verify.CreateCommand();
@@ -246,10 +246,10 @@ public sealed class MovieMetadataResolutionProcessorTests
                     WHERE task_id = $task_id AND disposition = 'movie'
                       AND associated_task_file_id IS NULL
                       AND other_reason IS NULL),
-                   (SELECT COUNT(*) FROM task_files
-                    WHERE task_id = $task_id AND disposition = 'movie'
-                      AND associated_task_file_id IS NOT NULL
-                      AND other_reason IS NULL),
+                    (SELECT COUNT(*) FROM task_files
+                     WHERE task_id = $task_id AND disposition = 'extras'
+                       AND associated_task_file_id IS NOT NULL
+                       AND other_reason = 'movie_subtitle_extra'),
                    (SELECT COUNT(*) FROM task_files
                     WHERE task_id = $task_id AND disposition = 'other')
             FROM ingest_tasks AS task
@@ -352,7 +352,7 @@ public sealed class MovieMetadataResolutionProcessorTests
 
         var targetDirectory = Path.Combine(paths.EffectiveMovieSavePath, "千与千寻 (2001)");
         Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).mkv")));
-        Assert.True(File.Exists(Path.Combine(targetDirectory, "千与千寻 (2001).zh-CN.ass")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "Extras", "movie.zh-CN.ass")));
         Assert.True(File.Exists(Path.Combine(targetDirectory, "movie.nfo")));
         await using var verify = await database.OpenConnectionAsync();
         await using var query = verify.CreateCommand();

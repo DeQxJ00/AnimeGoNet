@@ -435,7 +435,7 @@ public sealed class MediaOrganizationProcessor(
 
             var movieSource = file.SourceOverridePath
                 ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
-            if (file.AssociatedFileId is not null && file.RenameSuffix is null)
+            if (file.Disposition != "movie" || file.AssociatedFileId is not null)
             {
                 var movieDirectory = MoviePathPlanner.DirectoryName(
                     file.CanonicalSeriesName,
@@ -447,7 +447,7 @@ public sealed class MediaOrganizationProcessor(
                     movieSource,
                     PathBoundary.Combine(
                         options.Paths.EffectiveMovieSavePath,
-                        Path.Combine(movieDirectory, extraName)));
+                        Path.Combine(movieDirectory, "Extras", extraName)));
             }
             var relativeTarget = MoviePathPlanner.PlanRelativePath(new MoviePathInput(
                 file.CanonicalSeriesName,
