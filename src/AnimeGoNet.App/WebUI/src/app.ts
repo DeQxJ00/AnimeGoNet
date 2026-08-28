@@ -13063,7 +13063,7 @@ async function saveSource(event: SubmitEvent): Promise<void> {
     rss_schedule_cron: element<HTMLInputElement>("#source-rss-cron").value.trim(),
     media_type: element<HTMLSelectElement>("#source-media-type").value,
     prefer_anidb_tmdb_mapping:
-      element<HTMLInputElement>("#source-prefer-anidb-tmdb").checked,
+      isU2 && element<HTMLInputElement>("#source-prefer-anidb-tmdb").checked,
     anidb_tmdb_mapping_url_template:
       element<HTMLInputElement>("#source-anidb-tmdb-mapping-url").value.trim(),
   };

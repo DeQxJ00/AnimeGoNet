@@ -18,6 +18,7 @@ internal static class U2AiFilePolicy
         foreach (var file in files)
         {
             if (file.Episode is null
+                && !file.IsExtra
                 && SubtitleAssociationResolver.IsVideo(file.Input.Name)
                 && !IsExplicitExtra(file.Input.Name))
             {

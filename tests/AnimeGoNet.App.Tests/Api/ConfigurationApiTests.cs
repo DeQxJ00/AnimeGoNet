@@ -35,7 +35,7 @@ public sealed class ConfigurationApiTests
         var prompt = json.RootElement.GetProperty("editable")
             .GetProperty("ai_prompt_template").GetString();
         Assert.Contains(opening, prompt, StringComparison.Ordinal);
-        Assert.Contains("本请求来自 U2 并按 TV 处理", prompt, StringComparison.Ordinal);
+        Assert.Contains("如果输入的是tv的剧集/tv+movie混合剧集", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1179,7 +1179,7 @@ public sealed class ConfigurationApiTests
         var change = Assert.Single(
             json.RootElement.GetProperty("changes").EnumerateArray(),
             item => item.GetProperty("field").GetString() == "ai_prompt_template");
-        Assert.Contains("tmdb-ai-match-v17", change.GetProperty("after").GetString(), StringComparison.Ordinal);
+        Assert.Contains("tmdb-ai-match-v19", change.GetProperty("after").GetString(), StringComparison.Ordinal);
         Assert.Contains("sha256:", change.GetProperty("after").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("PROMPT-CONTENT-MUST-NOT-ECHO", body, StringComparison.Ordinal);
     }

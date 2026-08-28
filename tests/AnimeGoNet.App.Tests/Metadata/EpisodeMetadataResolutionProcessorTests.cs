@@ -1193,7 +1193,46 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
-    public async Task EpisodeAiCannotChangeDeterministicallyConfirmedEpisode()
+    public async Task U2AiCanExplicitlyClassifyOrdinaryVideoAsExtras()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+        };
+        var ai = new FakeAiMetadataMatcher
+        {
+            ResultFactory = input => new AiMetadataMatchCandidate(
+                true,
+                72517,
+                input.Files.Select(file => new AiMetadataFileCandidate(
+                    file.Name,
+                    true,
+                    2,
+                    AiMetadataFileCandidate.ExtrasEpisodeSentinel,
+                    null)).ToArray(),
+                null),
+        };
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(app, ("Show unknown.mkv", null, null));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Single(ai.Requests);
+        var file = Assert.Single(await ReadFilesAsync(app, taskId));
+        Assert.Equal("extras", file.Disposition);
+        Assert.Equal("ai_episode_extra", file.OtherReason);
+        Assert.Null(file.EpisodeNumber);
+    }
+
+    [Fact]
+    public async Task EpisodeAiResultOverridesLocalEpisodeCandidates()
     {
         var tmdb = new FakeTmdbClient
         {
@@ -1231,12 +1270,10 @@ public sealed class EpisodeMetadataResolutionProcessorTests
             .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
 
         var files = await ReadFilesAsync(app, taskId);
-        Assert.Equal(4, files[0].EpisodeNumber);
-        Assert.Equal("extras", files[1].Disposition);
+        Assert.Equal(9, files[0].EpisodeNumber);
+        Assert.Equal(5, files[1].EpisodeNumber);
         Assert.Equal([4, 9, 5], tmdb.EpisodeRequests);
-        Assert.Equal(
-            "ai_confirmed_episode_changed",
-            await ReadLatestAttemptErrorAsync(app, taskId, "ai_metadata"));
+        Assert.Null(await ReadLatestAttemptErrorAsync(app, taskId, "ai_metadata"));
     }
 
     [Fact]

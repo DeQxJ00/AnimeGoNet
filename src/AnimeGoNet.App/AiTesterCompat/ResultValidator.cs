@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.AiTesterCompat;
 
@@ -92,7 +93,10 @@ public static class ResultValidator
             if (file.Matched == true)
             {
                 if (file.Season is null or <= 0) return $"files[{i}].season must be greater than 0 when matched=true.";
-                if (file.Episode is null or <= 0) return $"files[{i}].episode must be greater than 0 when matched=true.";
+                if (file.Episode is null or < AiMetadataFileCandidate.ExtrasEpisodeSentinel)
+                {
+                    return $"files[{i}].episode must be greater than 0 or Extras when matched=true.";
+                }
                 if (file.Reason is not null) return $"files[{i}].reason must be null when matched=true.";
             }
             else if (string.IsNullOrWhiteSpace(file.Reason))

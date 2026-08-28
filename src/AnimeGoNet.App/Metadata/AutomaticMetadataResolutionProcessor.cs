@@ -896,7 +896,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
                 .Select(file => new MetadataSeasonFileSeed(
                     file.Input.Name,
                     file.Episode?.EpisodeNumber,
-                    file.Episode is null ? "ai_episode_unmatched" : null,
+                    AiOtherReason(file),
                     file.Season.SeasonNumber))
                 .ToArray();
         }
@@ -915,7 +915,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
                     new MetadataSeasonFileSeed(
                         file.RelativePath,
                         aiFile.Episode?.EpisodeNumber,
-                        aiFile.Episode is null ? "ai_episode_unmatched" : null,
+                        AiOtherReason(aiFile),
                         aiFile.Season.SeasonNumber));
             }
 
@@ -1077,6 +1077,13 @@ public sealed class AutomaticMetadataResolutionProcessor(
 
     private static MetadataFailure ToFailure(TmdbClientException exception) =>
         new(exception.Kind, exception.SafeCode, exception.TmdbAccessConfirmed);
+
+    private static string? AiOtherReason(ValidatedAiMetadataFile file) =>
+        file.IsExtra
+            ? "ai_episode_extra"
+            : file.Episode is null
+                ? "ai_episode_unmatched"
+                : null;
 
     private static bool IsRetryable(MetadataFailureKind kind) =>
         kind is MetadataFailureKind.Network or MetadataFailureKind.RemoteService;

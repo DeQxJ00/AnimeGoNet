@@ -119,6 +119,17 @@ public sealed partial class AiMetadataResultValidator(
                 continue;
             }
 
+            if (file.IsExtras)
+            {
+                validated.Add(new ValidatedAiMetadataFile(
+                    input.Files[index],
+                    season,
+                    null,
+                    file.Reason,
+                    IsExtra: true));
+                continue;
+            }
+
             var episodeNumber = file.Episode!.Value;
             if (!targets.Add((seasonNumber, episodeNumber)))
             {
@@ -237,7 +248,7 @@ public sealed partial class AiMetadataResultValidator(
 
             if (file.Matched == true)
             {
-                if (file.Season is null || file.Episode is null or <= 0)
+                if (file.Episode is null or < AiMetadataFileCandidate.ExtrasEpisodeSentinel)
                 {
                     return new MetadataFailure(MetadataFailureKind.Protocol, "ai_episode_match_invalid", false);
                 }

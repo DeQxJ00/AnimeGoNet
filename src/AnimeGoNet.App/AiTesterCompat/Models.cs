@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AnimeGoNet.Core.Metadata;
 
 namespace AnimeGoNet.App.AiTesterCompat;
 
@@ -159,8 +160,11 @@ public sealed record TmdbAiFileResult(
     string? Name,
     bool? Matched,
     int? Season,
-    int? Episode,
-    string? Reason);
+    [property: JsonConverter(typeof(AiMetadataEpisodeJsonConverter))] int? Episode,
+    string? Reason)
+{
+    public bool IsExtras => Episode == AiMetadataFileCandidate.ExtrasEpisodeSentinel;
+}
 
 public sealed record UiRunRequest(
     string? BaseUrl,

@@ -312,6 +312,30 @@ public sealed class ResultValidatorTests
         Assert.True(valid, error);
     }
 
+    [Fact]
+    public void AcceptsExtrasEpisodeValue()
+    {
+        const string json = """
+            {
+              "matched": true,
+              "tmdb_id": 12345,
+              "files": [
+                { "name": "NCOP.mkv", "matched": true, "season": 1, "episode": "Extras", "reason": null }
+              ],
+              "reason": null
+            }
+            """;
+        var input = new MatchRequestInput(
+            "任务",
+            [new MatchFileInput("NCOP.mkv", 1)],
+            IsMikanRssSource: false);
+
+        (bool valid, string? error, TmdbAiMatchResult? result) = ResultValidator.Validate(json, input);
+
+        Assert.True(valid, error);
+        Assert.True(Assert.Single(result!.Files!).IsExtras);
+    }
+
     [Theory]
     [InlineData(0, 4)]
     [InlineData(-2, 2)]

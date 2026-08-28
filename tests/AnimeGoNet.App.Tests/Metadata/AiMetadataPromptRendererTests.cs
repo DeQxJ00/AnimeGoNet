@@ -40,7 +40,7 @@ public sealed class AiMetadataPromptRendererTests
             StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("最近日期差不超过 7 天且 TMDB EP 与文件名 EP 一致", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v17", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v19", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]
@@ -60,9 +60,9 @@ public sealed class AiMetadataPromptRendererTests
             PromptFeaturesOverride = new(true, false, true, false),
         });
 
-        Assert.Contains("本请求来自 U2 并按 TV 处理", u2, StringComparison.Ordinal);
-        Assert.Contains("顶层必须返回 matched=true", u2, StringComparison.Ordinal);
-        Assert.DoesNotContain("本请求来自 U2 并按 TV 处理", mikan, StringComparison.Ordinal);
+        Assert.Contains("如果输入的是tv的剧集/tv+movie混合剧集", u2, StringComparison.Ordinal);
+        Assert.Contains("整体归为matched=true", u2, StringComparison.Ordinal);
+        Assert.DoesNotContain("如果输入的是tv的剧集/tv+movie混合剧集", mikan, StringComparison.Ordinal);
         Assert.DoesNotContain("{{#U2_TV_SOURCE}}", u2, StringComparison.Ordinal);
         Assert.DoesNotContain("{{#U2_TV_SOURCE}}", mikan, StringComparison.Ordinal);
     }
@@ -93,9 +93,9 @@ public sealed class AiMetadataPromptRendererTests
             PromptFeaturesOverride = new(true, false, true, false),
         });
 
-        Assert.Contains("本请求来自 U2 并按 TV 处理", u2, StringComparison.Ordinal);
-        Assert.Contains("顶层必须返回 matched=true", u2, StringComparison.Ordinal);
-        Assert.DoesNotContain("本请求来自 U2 并按 TV 处理", mikan, StringComparison.Ordinal);
+        Assert.Contains("如果输入的是tv的剧集/tv+movie混合剧集", u2, StringComparison.Ordinal);
+        Assert.Contains("整体归为matched=true", u2, StringComparison.Ordinal);
+        Assert.DoesNotContain("如果输入的是tv的剧集/tv+movie混合剧集", mikan, StringComparison.Ordinal);
         Assert.DoesNotContain("{{#U2_TV_SOURCE}}", u2, StringComparison.Ordinal);
     }
 

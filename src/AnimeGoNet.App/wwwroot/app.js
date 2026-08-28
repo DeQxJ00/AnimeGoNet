@@ -9999,7 +9999,7 @@ async function saveSource(event) {
         rss_schedule_enabled: element("#source-rss-schedule-enabled").checked,
         rss_schedule_cron: element("#source-rss-cron").value.trim(),
         media_type: element("#source-media-type").value,
-        prefer_anidb_tmdb_mapping: element("#source-prefer-anidb-tmdb").checked,
+        prefer_anidb_tmdb_mapping: isU2 && element("#source-prefer-anidb-tmdb").checked,
         anidb_tmdb_mapping_url_template: element("#source-anidb-tmdb-mapping-url").value.trim(),
     };
     const payload = current

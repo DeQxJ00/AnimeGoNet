@@ -438,6 +438,57 @@ public sealed class OpenAiCompatibleMetadataMatcherTests
     }
 
     [Fact]
+    public void ParsesExtrasEpisodeValue()
+    {
+        var candidate = OpenAiCompatibleMetadataMatcher.ParseCandidate(
+            """
+            {
+              "matched": true,
+              "tmdb_id": 42,
+              "files": [
+                {
+                  "name": "Show/NCOP.mkv",
+                  "matched": true,
+                  "season": 1,
+                  "episode": "Extras",
+                  "reason": null
+                }
+              ],
+              "reason": null
+            }
+            """);
+
+        var file = Assert.Single(candidate.Files!);
+        Assert.True(file.IsExtras);
+        Assert.Equal(AiMetadataFileCandidate.ExtrasEpisodeSentinel, file.Episode);
+    }
+
+    [Fact]
+    public void RejectsUnknownStringEpisodeValue()
+    {
+        var exception = Assert.Throws<AiMetadataMatcherException>(() =>
+            OpenAiCompatibleMetadataMatcher.ParseCandidate(
+                """
+                {
+                  "matched": true,
+                  "tmdb_id": 42,
+                  "files": [
+                    {
+                      "name": "Show/unknown.mkv",
+                      "matched": true,
+                      "season": 1,
+                      "episode": "Special",
+                      "reason": null
+                    }
+                  ],
+                  "reason": null
+                }
+                """));
+
+        Assert.Equal("ai_result_json_invalid", exception.SafeCode);
+    }
+
+    [Fact]
     public async Task DebugModeCapturesPromptTemplateRenderedPromptAndCompleteExchangeBodies()
     {
         var handler = new FakeAiAndMcpHandler();

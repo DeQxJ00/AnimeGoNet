@@ -34,6 +34,33 @@ public sealed class AiMetadataResultValidatorTests
     }
 
     [Fact]
+    public async Task ValidatesMatchedExtrasWithoutRequestingTmdbEpisode()
+    {
+        var tmdb = new FakeTmdbClient();
+        var input = Input(new AiMetadataFileInput("Show/NCOP.mkv", 10));
+        var candidate = new AiMetadataMatchCandidate(
+            true,
+            42,
+            [new(
+                "Show/NCOP.mkv",
+                true,
+                2,
+                AiMetadataFileCandidate.ExtrasEpisodeSentinel,
+                null)],
+            null);
+
+        var result = await new AiMetadataResultValidator(tmdb).ValidateAsync(input, candidate);
+
+        Assert.True(result.IsSuccess);
+        var file = Assert.Single(result.Value!.Files);
+        Assert.True(file.IsExtra);
+        Assert.False(file.IsEpisode);
+        Assert.Equal(1, tmdb.SeriesCalls);
+        Assert.Equal(1, tmdb.SeasonCalls);
+        Assert.Equal(0, tmdb.EpisodeCalls);
+    }
+
+    [Fact]
     public async Task ReZeroCopiedTitleFileNameIsIgnoredAndOriginalInputIdentityIsPreserved()
     {
         var tmdb = new FakeTmdbClient();

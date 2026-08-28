@@ -951,42 +951,9 @@ public sealed class EpisodeMetadataResolutionProcessor(
         var validatedByPath = resolved.Value.Files.ToDictionary(
             file => file.Input.Name,
             StringComparer.Ordinal);
-        foreach (var existing in results.Where(result => result.Episode is not null))
-        {
-            var path = claim.Files.Single(file => file.FileId == existing.FileId).RelativePath;
-            var aiFile = validatedByPath[path];
-            if (aiFile.Episode is null
-                || aiFile.Episode.EpisodeNumber != existing.Episode!.EpisodeNumber
-                || aiFile.Episode.SeasonNumber != existing.Episode.SeasonNumber)
-            {
-                var failure = new MetadataFailure(
-                    MetadataFailureKind.Protocol,
-                    "ai_confirmed_episode_changed",
-                    TmdbAccessConfirmed: true);
-                await RecordAsync(
-                    claim,
-                    "ai_metadata",
-                    null,
-                    "error",
-                    failure.Code,
-                    false,
-                    ElapsedMilliseconds(started),
-                    cancellationToken,
-                    resolved.Usage,
-                    aiTriggerReason).ConfigureAwait(false);
-                AnnotateUnresolvedAiFailure(claim, results, failure.Code);
-                return false;
-            }
-        }
-
         for (var index = 0; index < results.Count; index++)
         {
             var existing = results[index];
-            if (existing.Episode is not null)
-            {
-                continue;
-            }
-
             var file = claim.Files.Single(candidateFile => candidateFile.FileId == existing.FileId);
             if (!SubtitleAssociationResolver.IsVideo(file.RelativePath))
             {
@@ -994,7 +961,13 @@ public sealed class EpisodeMetadataResolutionProcessor(
             }
 
             var aiFile = validatedByPath[file.RelativePath];
-            results[index] = aiFile.Episode is null
+            results[index] = aiFile.IsExtra
+                ? new MetadataEpisodeFileResolution(
+                    existing.FileId,
+                    null,
+                    "extras",
+                    "ai_episode_extra")
+                : aiFile.Episode is null
                 ? existing with
                 {
                     Disposition = AiUnmatchedDisposition(claim, existing),
@@ -1290,11 +1263,15 @@ public sealed class EpisodeMetadataResolutionProcessor(
     private static string PreResolvedOtherDisposition(
         MetadataEpisodeTaskClaim claim,
         MetadataTaskFileProjection file) =>
-        IsU2Source(claim)
+        string.Equals(
+            file.PreResolvedOtherReason,
+            "ai_episode_extra",
+            StringComparison.Ordinal)
+        || (IsU2Source(claim)
         && string.Equals(
             file.PreResolvedOtherReason,
             "ai_episode_unmatched",
-            StringComparison.Ordinal)
+            StringComparison.Ordinal))
             ? "extras"
             : UnmatchedVideoDisposition(file);
 

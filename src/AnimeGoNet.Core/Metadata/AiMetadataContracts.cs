@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AnimeGoNet.Core.Diagnostics;
 
 namespace AnimeGoNet.Core.Metadata;
@@ -190,8 +191,14 @@ public sealed record AiMetadataFileCandidate(
     string? Name,
     bool? Matched,
     int? Season,
-    int? Episode,
-    string? Reason);
+    [property: JsonConverter(typeof(AiMetadataEpisodeJsonConverter))] int? Episode,
+    string? Reason)
+{
+    public const int ExtrasEpisodeSentinel = 0;
+    public const string ExtrasEpisodeValue = "Extras";
+
+    public bool IsExtras => Episode == ExtrasEpisodeSentinel;
+}
 
 public sealed record ValidatedAiMetadataMatch(
     TmdbSeries Series,
@@ -201,7 +208,8 @@ public sealed record ValidatedAiMetadataFile(
     AiMetadataFileInput Input,
     TmdbSeason Season,
     TmdbEpisode? Episode,
-    string? OtherReason)
+    string? OtherReason,
+    bool IsExtra = false)
 {
     public bool IsEpisode => Episode is not null;
 }
