@@ -1,6 +1,6 @@
 # TMDB AI 固定 Prompt
 
-Prompt version：`tmdb-ai-match-v19`
+Prompt version：`tmdb-ai-match-v20`
 
 所有 AI 元数据匹配只使用这一份任务级提示词，不存在独立的季度或 EP 提示词。调用方提供下载任务总标题、视频文件列表，可空的 `bgmid`、`anidbid`、`imdbid`，以及由程序在模型外计算的 Mikan 单文件发布日期候选和最终门禁；并按实际启用状态渲染 `TMDB_MCP`、`BGM_MCP`、`ANIDB_LOOKUP`、`IMDB_LOOKUP`、`BANGUMI_PUBDATE_FIRST`、`U2_TV_SOURCE` 条件区块。`name` 可以是下载任务内部的相对文件名，但不能是宿主机绝对路径，容量统一使用整数 `size_bytes`。文件名 EP 候选和 `episode_offset` 都不属于 AI 请求或响应，由主程序在逐文件 TMDB Episode 验证后本地处理。非空元数据 ID 已由调用方绑定到这一个下载任务的标题和 Torrent 文件组，但只表示作品级上下文关联，不表示跨站标题、季度或 Episode 编号相同。不发送来源/下载器配置、Bangumi详情、已确认的 TMDB 信息或任何密钥。
 
@@ -80,7 +80,7 @@ Prompt version：`tmdb-ai-match-v19`
       "matched": false,
       "season": 1,
       "episode": null,
-      "reason": "该文件是随Season 1发布的Summary，不是TMDB正片Episode，应保留原名放入Season 1的Other文件夹。"
+      "reason": "该文件是随Season 1发布的Summary，不是TMDB正片Episode，应保留原名放入Season 1的Extras文件夹。"
     }
   ],
   "reason": null

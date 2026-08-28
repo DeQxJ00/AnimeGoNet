@@ -40,7 +40,7 @@ public sealed class AiMetadataPromptRendererTests
             StringComparison.Ordinal);
         Assert.Contains("published_at", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("最近日期差不超过 7 天且 TMDB EP 与文件名 EP 一致", rendered, StringComparison.Ordinal);
-        Assert.Equal("tmdb-ai-match-v19", AiMetadataPromptRenderer.PromptVersion);
+        Assert.Equal("tmdb-ai-match-v20", AiMetadataPromptRenderer.PromptVersion);
     }
 
     [Fact]
