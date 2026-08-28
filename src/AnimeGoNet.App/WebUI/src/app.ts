@@ -1221,6 +1221,25 @@ interface AnimeMovieListPage {
   items: AnimeMovieListItem[];
 }
 
+interface AnimeMovieFileItem {
+  role: "movie" | "extras" | "sidecar";
+  file_name: string;
+  full_path: string;
+  relative_path: string | null;
+  size_bytes: number | null;
+  exists: boolean;
+  within_movie_root: boolean;
+  link_type: string | null;
+}
+
+interface AnimeMovieFileList {
+  tmdb_movie_id: number;
+  resource_revision: string;
+  movie_root: string;
+  can_force_delete: boolean;
+  files: AnimeMovieFileItem[];
+}
+
 interface AnimeEpisodeItem {
   id: string;
   tmdb_episode_id: number;
@@ -2137,6 +2156,7 @@ async function validateEnteredWebUiAccessKey(): Promise<void> {
 }
 const deleteDialog = element<HTMLDialogElement>("#delete-dialog");
 const deleteConfirm = element<HTMLButtonElement>("#delete-confirm");
+const movieFileDialog = element<HTMLDialogElement>("#movie-file-dialog");
 const downloaderConfigDialog = element<HTMLDialogElement>("#downloader-config-dialog");
 const configurationDialog = element<HTMLDialogElement>("#configuration-dialog");
 const cacheEntryDialog = element<HTMLDialogElement>("#cache-entry-dialog");
@@ -5227,6 +5247,12 @@ function renderMovieLibraryPage(page: AnimeMovieListPage): void {
     refresh.textContent = "编辑 / 从 TMDB 刷新";
     refresh.title = "电影名称、原名、上映日期和封面以 TMDB 为准";
     refresh.addEventListener("click", () => void refreshMovieLibraryItem(item, refresh));
+    const files = document.createElement("button");
+    files.type = "button";
+    files.className = "secondary-button";
+    files.textContent = "查看文件";
+    files.title = "查看 Movie 主文件、Movie Extras 和附属文件；孤立记录可在列表中强制删除";
+    files.addEventListener("click", () => void openMovieFileList(item));
     const deleteContent = document.createElement("button");
     deleteContent.type = "button";
     deleteContent.className = "danger-button";
@@ -5242,11 +5268,141 @@ function renderMovieLibraryPage(page: AnimeMovieListPage): void {
     remove.className = "delete-button";
     remove.textContent = "仅删除无引用投影";
     remove.addEventListener("click", () => void deleteMovieLibraryItem(item, remove));
-    actions.append(tmdbLink, refresh, deleteContent, remove);
+    actions.append(tmdbLink, refresh, files, deleteContent, remove);
     content.append(heading, identity, completion, actions);
     card.append(image, content);
     return card;
   }));
+}
+
+function movieFileRoleLabel(role: AnimeMovieFileItem["role"]): string {
+  if (role === "movie") return "Movie 主文件";
+  if (role === "extras") return "Movie Extras";
+  return "附属文件";
+}
+
+async function openMovieFileList(item: AnimeMovieListItem): Promise<void> {
+  element<HTMLElement>("#movie-file-dialog-title").textContent = `${item.title} · 文件清单`;
+  const summary = element<HTMLElement>("#movie-file-dialog-summary");
+  const container = element<HTMLElement>("#movie-file-dialog-list");
+  const message = element<HTMLElement>("#movie-file-dialog-message");
+  const forceDelete = element<HTMLButtonElement>("#movie-file-force-delete");
+  summary.textContent = `正在读取 TMDB Movie ${item.tmdb_movie_id} 的实际文件…`;
+  message.textContent = "";
+  forceDelete.hidden = true;
+  forceDelete.onclick = null;
+  setRegionState(container, "loading");
+  movieFileDialog.showModal();
+  try {
+    const response = await authenticatedFetch(
+      `/api/v1/library/movies/${item.tmdb_movie_id}/files`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const detail = await response.json() as AnimeMovieFileList;
+    const mainCount = detail.files.filter(file => file.role === "movie").length;
+    const extrasCount = detail.files.filter(file => file.role === "extras").length;
+    const sidecarCount = detail.files.filter(file => file.role === "sidecar").length;
+    const missingCount = detail.files.filter(file => !file.exists).length;
+    summary.textContent =
+      `Movie 主文件 ${mainCount} · Extras ${extrasCount} · 附属文件 ${sidecarCount}`
+      + (missingCount > 0 ? ` · 缺失 ${missingCount}` : "")
+      + ` · 根目录 ${detail.movie_root}`;
+    if (detail.files.length === 0) {
+      renderRegionMessage(container, "empty", "没有完成记录中的媒体路径，也未发现可列出的 Movie 文件。");
+    } else {
+      const table = document.createElement("table");
+      table.className = "compact-table movie-file-table";
+      const head = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      ["归类", "文件名", "大小 / 状态", "实际路径"].forEach(label => {
+        const cell = document.createElement("th");
+        cell.textContent = label;
+        headRow.append(cell);
+      });
+      head.append(headRow);
+      const body = document.createElement("tbody");
+      detail.files.forEach(file => {
+        const row = document.createElement("tr");
+        row.className = file.exists ? "" : "missing";
+        const role = document.createElement("td");
+        const roleBadge = document.createElement("span");
+        roleBadge.className = `movie-file-role ${file.role}`;
+        roleBadge.textContent = movieFileRoleLabel(file.role);
+        role.append(roleBadge);
+        const name = document.createElement("td");
+        name.textContent = file.file_name;
+        name.title = file.file_name;
+        const state = document.createElement("td");
+        state.textContent = file.exists
+          ? `${file.size_bytes === null ? "大小未知" : formatBytes(file.size_bytes)}`
+            + (file.link_type ? ` · ${file.link_type}` : "")
+          : "文件不存在";
+        const path = document.createElement("td");
+        const code = document.createElement("code");
+        code.textContent = file.full_path;
+        path.append(code);
+        row.append(role, name, state, path);
+        body.append(row);
+      });
+      table.append(head, body);
+      renderRegionContent(container, table);
+    }
+
+    forceDelete.hidden = !detail.can_force_delete;
+    forceDelete.disabled = false;
+    forceDelete.onclick = () => void forceDeleteOrphanMovie(item, detail, forceDelete);
+  } catch (error) {
+    renderRegionMessage(
+      container,
+      "error",
+      `电影文件读取失败：${errorMessage(error, "未知错误")}`,
+    );
+  }
+}
+
+async function forceDeleteOrphanMovie(
+  item: AnimeMovieListItem,
+  detail: AnimeMovieFileList,
+  button: HTMLButtonElement,
+): Promise<void> {
+  const confirmation = window.prompt(
+    `强制删除会移除 ${item.title} 的孤立完成记录、本地 Movie 投影，`
+    + `以及上方列出的 ${detail.files.length} 个 Movie 库文件。不会删除 Movie 根目录之外的文件。\n\n`
+    + `请输入 TMDB Movie ID ${item.tmdb_movie_id} 确认：`,
+  );
+  if (confirmation?.trim() !== String(item.tmdb_movie_id)) return;
+
+  const message = element<HTMLElement>("#movie-file-dialog-message");
+  button.disabled = true;
+  message.textContent = "正在校验孤立状态并强制删除 Movie 文件与记录…";
+  try {
+    const response = await authenticatedFetch(
+      `/api/v1/library/movies/${item.tmdb_movie_id}/force-delete`,
+      {
+        method: "POST",
+        headers: jsonRequestHeaders(),
+        body: JSON.stringify({
+          expected_revision: detail.resource_revision,
+          confirm_tmdb_movie_id: item.tmdb_movie_id,
+        }),
+      },
+    );
+    if (!response.ok) throw new Error(await responseError(response));
+    const result = await response.json() as {
+      deleted_file_count: number;
+      missing_file_count: number;
+      completion_record_count: number;
+    };
+    movieFileDialog.close();
+    element<HTMLElement>("#movie-library-action-status").textContent =
+      `已强制删除 TMDB Movie ${item.tmdb_movie_id}：文件 ${result.deleted_file_count} 个，`
+      + `原本已缺失 ${result.missing_file_count} 个，完成记录 ${result.completion_record_count} 条。`;
+    await loadMovieLibrary();
+  } catch (error) {
+    message.textContent = `强制删除失败：${errorMessage(error, "未知错误")}`;
+    button.disabled = false;
+  }
 }
 
 async function refreshMovieLibraryItem(
@@ -15188,6 +15344,14 @@ element<HTMLFormElement>("#configuration-backup-automation-form").addEventListen
   event => void saveConfigurationBackupAutomation(event),
 );
 element<HTMLButtonElement>("#configuration-close").addEventListener("click", () => configurationDialog.close());
+element<HTMLButtonElement>("#movie-file-dialog-close").addEventListener(
+  "click",
+  () => movieFileDialog.close(),
+);
+element<HTMLButtonElement>("#movie-file-dialog-cancel").addEventListener(
+  "click",
+  () => movieFileDialog.close(),
+);
 element<HTMLFormElement>("#configuration-form").addEventListener(
   "submit",
   (event) => void previewConfiguration(event),

@@ -194,8 +194,12 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/notifications/deliveries", ListNotificationDeliveries);
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapGet("/api/v1/library/movies", LibraryMovies);
+        app.MapGet("/api/v1/library/movies/{tmdbMovieId:int}/files", LibraryMovieFiles);
         app.MapPut("/api/v1/library/movies/{tmdbMovieId:int}", RefreshLibraryMovie);
         app.MapDelete("/api/v1/library/movies/{tmdbMovieId:int}", DeleteLibraryMovie);
+        app.MapPost(
+            "/api/v1/library/movies/{tmdbMovieId:int}/force-delete",
+            ForceDeleteLibraryMovie);
         app.MapPost("/api/v1/library/seasons", CreateLibrarySeason);
         app.MapPost("/api/v1/library/external-media/import", ImportExternalMedia);
         app.MapPost("/api/v1/library/subtitle-archives/import", ImportSubtitleArchive);
@@ -7130,6 +7134,268 @@ public static class ApiEndpoints
                 LibraryMovieReferenceMessage(result.References!))),
             _ => throw new InvalidOperationException("Unexpected Movie library delete result."),
         };
+    }
+
+    private static async Task<IResult> LibraryMovieFiles(
+        int tmdbMovieId,
+        AnimeLibraryAdminStore admin,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbMovieId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_movie_id_invalid",
+                "TMDB Movie ID must be a positive integer."));
+        }
+
+        var context = await admin.GetMovieFileContextAsync(tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (context is null)
+        {
+            return TypedResults.NotFound(Error(
+                "library_movie_not_found",
+                "The requested TMDB Movie was not found in the local library."));
+        }
+
+        return TypedResults.Ok(BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath));
+    }
+
+    private static async Task<IResult> ForceDeleteLibraryMovie(
+        int tmdbMovieId,
+        AnimeMovieForceDeleteRequest request,
+        AnimeLibraryAdminStore admin,
+        SafeFileDeleter fileDeleter,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbMovieId <= 0 || request.ConfirmTmdbMovieId != tmdbMovieId)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_movie_force_confirmation_invalid",
+                "The confirmed TMDB Movie ID must match the route ID."));
+        }
+
+        if (!IsLibraryRevision(request.ExpectedRevision))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_revision_invalid",
+                "A 64-character resource revision is required."));
+        }
+
+        var context = await admin.GetMovieFileContextAsync(tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (context is null)
+        {
+            return TypedResults.NotFound(Error(
+                "library_movie_not_found",
+                "The requested TMDB Movie was not found in the local library."));
+        }
+
+        if (!string.Equals(
+                context.ResourceRevision,
+                request.ExpectedRevision,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.Conflict(Error(
+                "library_revision_conflict",
+                "The library Movie changed; reload it before force deleting."));
+        }
+
+        if (context.References.TaskFiles > 0 || context.References.ActiveClaims > 0)
+        {
+            return TypedResults.Conflict(Error(
+                "library_movie_force_delete_has_active_task",
+                "Force delete is limited to orphan Movies without task files or active claims; use the related-task deletion workflow."));
+        }
+
+        var inventory = BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath);
+        if (inventory.Files.Any(file => !file.WithinMovieRoot))
+        {
+            return TypedResults.Conflict(Error(
+                "library_movie_media_outside_root",
+                "The recorded Movie media path is outside the configured Movie library root and cannot be force deleted."));
+        }
+
+        var deletedFiles = 0;
+        var missingFiles = 0;
+        try
+        {
+            foreach (var file in inventory.Files
+                         .DistinctBy(item => Path.GetFullPath(item.FullPath), MoviePathComparer()))
+            {
+                if (await fileDeleter.DeleteAsync(
+                        options.Paths.EffectiveMovieSavePath,
+                        file.FullPath,
+                        cancellationToken).ConfigureAwait(false))
+                {
+                    deletedFiles++;
+                }
+                else
+                {
+                    missingFiles++;
+                }
+            }
+        }
+        catch (SafeFileDeleteException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+
+        var result = await admin.ForceDeleteOrphanMovieAsync(
+            tmdbMovieId,
+            request.ExpectedRevision!,
+            cancellationToken).ConfigureAwait(false);
+        if (result.Status != AnimeLibraryMutationStatus.Deleted)
+        {
+            return result.Status switch
+            {
+                AnimeLibraryMutationStatus.NotFound => TypedResults.NotFound(Error(
+                    "library_movie_not_found",
+                    "The requested TMDB Movie was not found in the local library.")),
+                AnimeLibraryMutationStatus.RevisionConflict => TypedResults.Conflict(Error(
+                    "library_revision_conflict",
+                    "The library Movie changed while it was being force deleted; reload before retrying.")),
+                AnimeLibraryMutationStatus.InUse => TypedResults.Conflict(Error(
+                    "library_movie_force_delete_has_active_task",
+                    "A task or active claim appeared while the Movie was being deleted; use the related-task deletion workflow.")),
+                _ => throw new InvalidOperationException("Unexpected Movie force-delete result."),
+            };
+        }
+
+        TryDeleteEmptyMovieDirectory(context.MainMediaPath, options.Paths.EffectiveMovieSavePath);
+        return TypedResults.Ok(new AnimeMovieForceDeleteResponse(
+            "force_deleted",
+            tmdbMovieId,
+            deletedFiles,
+            missingFiles,
+            result.References?.CompletionRecords ?? 0));
+    }
+
+    private static AnimeMovieFileListResponse BuildMovieFileList(
+        AnimeMovieFileContext context,
+        string movieRoot)
+    {
+        var files = new List<AnimeMovieFileItemResponse>();
+        if (!string.IsNullOrWhiteSpace(context.MainMediaPath))
+        {
+            var mainPath = Path.GetFullPath(context.MainMediaPath);
+            var withinRoot = PathBoundary.IsWithin(movieRoot, mainPath);
+            if (withinRoot)
+            {
+                var directory = Path.GetDirectoryName(mainPath);
+                if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+                {
+                    foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        files.Add(MovieFileItem(
+                            movieRoot,
+                            path,
+                            SameMoviePath(path, mainPath)
+                                ? "movie"
+                                : IsVideoFile(path) ? "extras" : "sidecar"));
+                    }
+                }
+            }
+
+            if (!files.Any(file => SameMoviePath(file.FullPath, mainPath)))
+            {
+                files.Add(MovieFileItem(movieRoot, mainPath, "movie"));
+            }
+        }
+
+        var ordered = files
+            .OrderBy(file => file.Role switch
+            {
+                "movie" => 0,
+                "extras" => 1,
+                _ => 2,
+            })
+            .ThenBy(file => file.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new AnimeMovieFileListResponse(
+            context.TmdbMovieId,
+            context.ResourceRevision,
+            Path.GetFullPath(movieRoot),
+            context.References.TaskFiles == 0
+                && context.References.ActiveClaims == 0
+                && ordered.All(file => file.WithinMovieRoot),
+            ordered);
+    }
+
+    private static AnimeMovieFileItemResponse MovieFileItem(
+        string movieRoot,
+        string path,
+        string role)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var withinRoot = PathBoundary.IsWithin(movieRoot, fullPath);
+        var info = new FileInfo(fullPath);
+        var exists = info.Exists || info.LinkTarget is not null;
+        long? size = null;
+        if (info.Exists)
+        {
+            try
+            {
+                size = info.Length;
+            }
+            catch (IOException)
+            {
+                size = null;
+            }
+        }
+
+        return new AnimeMovieFileItemResponse(
+            role,
+            Path.GetFileName(fullPath),
+            fullPath,
+            withinRoot ? Path.GetRelativePath(Path.GetFullPath(movieRoot), fullPath) : null,
+            size,
+            exists,
+            withinRoot,
+            info.LinkTarget is null ? null : "symbolic");
+    }
+
+    private static bool IsVideoFile(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is
+            ".mkv" or ".mp4" or ".avi" or ".mov" or ".m2ts" or ".ts" or ".webm";
+
+    private static bool SameMoviePath(string left, string right) =>
+        string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static StringComparer MoviePathComparer() =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static void TryDeleteEmptyMovieDirectory(string? mainMediaPath, string movieRoot)
+    {
+        if (string.IsNullOrWhiteSpace(mainMediaPath))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(mainMediaPath));
+        if (string.IsNullOrWhiteSpace(directory)
+            || !PathBoundary.IsWithin(movieRoot, directory)
+            || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(directory, recursive: false);
+        }
+        catch (IOException)
+        {
+            // Leave non-empty folders in place; only the enumerated Movie files are force deleted.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The database deletion succeeded; a harmless empty directory may remain.
+        }
     }
 
     private static async Task<IResult> CreateLibrarySeason(

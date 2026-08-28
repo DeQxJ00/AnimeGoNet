@@ -2214,6 +2214,28 @@
     </form>
   </dialog>
 
+  <dialog id="movie-file-dialog" aria-labelledby="movie-file-dialog-title">
+    <article class="movie-file-dialog-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Movie files and orphan cleanup</p>
+          <h2 id="movie-file-dialog-title">电影文件清单</h2>
+        </div>
+        <button id="movie-file-dialog-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <p id="movie-file-dialog-summary" class="muted"></p>
+      <div id="movie-file-dialog-list" class="movie-file-dialog-list"></div>
+      <p id="movie-file-dialog-message" class="delete-message" aria-live="polite"></p>
+      <div class="delete-actions">
+        <span class="muted">强制删除仅允许无关联任务的孤立 Movie，并严格限制在 Movie 库根目录。</span>
+        <button id="movie-file-dialog-cancel" type="button" class="secondary-button">关闭</button>
+        <button id="movie-file-force-delete" type="button" class="danger-button" hidden>
+          强制删除孤立记录和文件…
+        </button>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="other-readaptation-review-dialog" aria-labelledby="other-readaptation-review-title">
     <article id="other-readaptation-review-panel" class="readaptation-review-panel">
       <div class="delete-heading">

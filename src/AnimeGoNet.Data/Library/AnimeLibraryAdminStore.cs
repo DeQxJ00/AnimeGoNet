@@ -250,6 +250,124 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             references);
     }
 
+    public async Task<AnimeMovieFileContext?> GetMovieFileContextAsync(
+        int tmdbMovieId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbMovieId, 1);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: true);
+        var current = await FindMovieAsync(connection, transaction, tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (current is null)
+        {
+            return null;
+        }
+
+        string? mainMediaPath;
+        await using (var media = connection.CreateCommand())
+        {
+            media.Transaction = transaction;
+            media.CommandText = """
+                SELECT media_path
+                FROM movie_completion_records
+                WHERE tmdb_movie_id = $tmdb_movie_id
+                LIMIT 1;
+                """;
+            media.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            var value = await media.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            mainMediaPath = value is string path && !string.IsNullOrWhiteSpace(path)
+                ? path
+                : null;
+        }
+
+        var references = await ReadMovieReferencesAsync(
+            connection,
+            transaction,
+            tmdbMovieId,
+            cancellationToken).ConfigureAwait(false);
+        return new AnimeMovieFileContext(
+            tmdbMovieId,
+            MovieRevision(current),
+            mainMediaPath,
+            references);
+    }
+
+    public async Task<AnimeMovieMutationResult> ForceDeleteOrphanMovieAsync(
+        int tmdbMovieId,
+        string expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbMovieId, 1);
+        var revision = NormalizeRevision(expectedRevision);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var current = await FindMovieAsync(connection, transaction, tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (current is null)
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.NotFound,
+                tmdbMovieId,
+                null);
+        }
+
+        var currentRevision = MovieRevision(current);
+        if (!string.Equals(currentRevision, revision, StringComparison.Ordinal))
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.RevisionConflict,
+                tmdbMovieId,
+                currentRevision);
+        }
+
+        var references = await ReadMovieReferencesAsync(
+            connection,
+            transaction,
+            tmdbMovieId,
+            cancellationToken).ConfigureAwait(false);
+        if (references.TaskFiles > 0 || references.ActiveClaims > 0)
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.InUse,
+                tmdbMovieId,
+                currentRevision,
+                references);
+        }
+
+        await using (var deleteCompletion = connection.CreateCommand())
+        {
+            deleteCompletion.Transaction = transaction;
+            deleteCompletion.CommandText =
+                "DELETE FROM movie_completion_records WHERE tmdb_movie_id = $tmdb_movie_id;";
+            deleteCompletion.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            await deleteCompletion.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var deleteClaims = connection.CreateCommand())
+        {
+            deleteClaims.Transaction = transaction;
+            deleteClaims.CommandText = "DELETE FROM movie_claims WHERE tmdb_movie_id = $tmdb_movie_id;";
+            deleteClaims.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            await deleteClaims.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var deleteMovie = connection.CreateCommand())
+        {
+            deleteMovie.Transaction = transaction;
+            deleteMovie.CommandText = "DELETE FROM anime_movies WHERE tmdb_movie_id = $tmdb_movie_id;";
+            deleteMovie.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            await deleteMovie.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new AnimeMovieMutationResult(
+            AnimeLibraryMutationStatus.Deleted,
+            tmdbMovieId,
+            null,
+            references);
+    }
+
     private async Task<AnimeLibraryMutationResult> WriteAsync(
         TmdbSeries series,
         TmdbSeason season,

@@ -49,3 +49,9 @@ public sealed record AnimeMovieMutationResult(
     int TmdbMovieId,
     string? ResourceRevision,
     AnimeMovieReferenceSummary? References = null);
+
+public sealed record AnimeMovieFileContext(
+    int TmdbMovieId,
+    string ResourceRevision,
+    string? MainMediaPath,
+    AnimeMovieReferenceSummary References);

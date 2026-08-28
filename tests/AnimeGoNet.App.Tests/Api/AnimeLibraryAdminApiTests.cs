@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -92,6 +93,95 @@ public sealed class AnimeLibraryAdminApiTests
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal("deleted", deletedJson.RootElement.GetProperty("result").GetString());
         Assert.Equal(0, missingJson.RootElement.GetProperty("total_items").GetInt32());
+    }
+
+    [Fact]
+    public async Task MovieFilesClassifyMainExtrasAndForceDeleteOrphanMovie()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
+        var movieDirectory = Path.Combine(options.Paths.EffectiveMovieSavePath, "Old Movie (2024)");
+        var mainPath = Path.Combine(movieDirectory, "Old Movie (2024).mkv");
+        var extraPath = Path.Combine(movieDirectory, "Old Movie - NCOP.mkv");
+        var nfoPath = Path.Combine(movieDirectory, "movie.nfo");
+        Directory.CreateDirectory(movieDirectory);
+        await File.WriteAllBytesAsync(mainPath, new byte[] { 1, 2, 3 });
+        await File.WriteAllBytesAsync(extraPath, new byte[] { 4, 5 });
+        await File.WriteAllTextAsync(nfoPath, "nfo");
+        await SeedMovieAsync(
+            database,
+            tmdb.Movie.Id,
+            includeCompletion: true,
+            mediaPath: mainPath);
+
+        using var listed = await app.Client.GetAsync("/api/v1/library/movies");
+        using var listedJson = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
+        var revision = Assert.Single(listedJson.RootElement.GetProperty("items").EnumerateArray())
+            .GetProperty("resource_revision")
+            .GetString()!;
+        using var files = await app.Client.GetAsync($"/api/v1/library/movies/{tmdb.Movie.Id}/files");
+        using var filesJson = JsonDocument.Parse(await files.Content.ReadAsStreamAsync());
+        var fileItems = filesJson.RootElement.GetProperty("files").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, files.StatusCode);
+        Assert.True(filesJson.RootElement.GetProperty("can_force_delete").GetBoolean());
+        Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "movie"
+            && item.GetProperty("file_name").GetString() == Path.GetFileName(mainPath));
+        Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "extras"
+            && item.GetProperty("file_name").GetString() == Path.GetFileName(extraPath));
+        Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "sidecar"
+            && item.GetProperty("file_name").GetString() == Path.GetFileName(nfoPath));
+
+        using var deleted = await app.Client.PostAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}/force-delete",
+            Json($$"""{"expected_revision":"{{revision}}","confirm_tmdb_movie_id":{{tmdb.Movie.Id}}}"""));
+        using var deletedJson = JsonDocument.Parse(await deleted.Content.ReadAsStreamAsync());
+        using var missing = await app.Client.GetAsync("/api/v1/library/movies");
+        using var missingJson = JsonDocument.Parse(await missing.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
+        Assert.Equal("force_deleted", deletedJson.RootElement.GetProperty("result").GetString());
+        Assert.Equal(3, deletedJson.RootElement.GetProperty("deleted_file_count").GetInt32());
+        Assert.False(File.Exists(mainPath));
+        Assert.False(File.Exists(extraPath));
+        Assert.False(File.Exists(nfoPath));
+        Assert.Equal(0, missingJson.RootElement.GetProperty("total_items").GetInt32());
+    }
+
+    [Fact]
+    public async Task MovieForceDeleteRejectsRecordedPathOutsideMovieRoot()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var outsidePath = Path.Combine(app.RootPath, "outside-movie.mkv");
+        await File.WriteAllBytesAsync(outsidePath, new byte[] { 1, 2, 3 });
+        await SeedMovieAsync(
+            database,
+            tmdb.Movie.Id,
+            includeCompletion: true,
+            mediaPath: outsidePath);
+        using var listed = await app.Client.GetAsync("/api/v1/library/movies");
+        using var listedJson = JsonDocument.Parse(await listed.Content.ReadAsStreamAsync());
+        var revision = Assert.Single(listedJson.RootElement.GetProperty("items").EnumerateArray())
+            .GetProperty("resource_revision")
+            .GetString()!;
+
+        using var deleted = await app.Client.PostAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}/force-delete",
+            Json($$"""{"expected_revision":"{{revision}}","confirm_tmdb_movie_id":{{tmdb.Movie.Id}}}"""));
+        using var deletedJson = JsonDocument.Parse(await deleted.Content.ReadAsStreamAsync());
+        using var stillListed = await app.Client.GetAsync("/api/v1/library/movies");
+        using var stillListedJson = JsonDocument.Parse(await stillListed.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.Conflict, deleted.StatusCode);
+        Assert.Equal(
+            "library_movie_media_outside_root",
+            deletedJson.RootElement.GetProperty("code").GetString());
+        Assert.True(File.Exists(outsidePath));
+        Assert.Equal(1, stillListedJson.RootElement.GetProperty("total_items").GetInt32());
     }
 
     [Fact]
@@ -254,7 +344,8 @@ public sealed class AnimeLibraryAdminApiTests
     private static async Task SeedMovieAsync(
         AnimeGoSqliteDatabase database,
         int tmdbMovieId,
-        bool includeCompletion = false)
+        bool includeCompletion = false,
+        string? mediaPath = null)
     {
         await using var connection = await database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
@@ -273,11 +364,15 @@ public sealed class AnimeLibraryAdminApiTests
                       media_path, completed_at_utc)
                   VALUES (
                       'movie-admin-completion', $tmdb_movie_id, 'test', 'movie-admin-source',
-                      '/movies/old.mkv', $now);
+                      $media_path, $now);
                   """
                 : string.Empty);
         command.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
         command.Parameters.AddWithValue("$now", "2026-08-28T00:00:00.0000000+00:00");
+        if (includeCompletion)
+        {
+            command.Parameters.AddWithValue("$media_path", mediaPath ?? "/movies/old.mkv");
+        }
         await command.ExecuteNonQueryAsync();
     }
 

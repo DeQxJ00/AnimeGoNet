@@ -1546,6 +1546,34 @@ public sealed record AnimeMovieMutationResponse(
     [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
     [property: JsonPropertyName("resource_revision")] string? ResourceRevision);
 
+public sealed record AnimeMovieFileListResponse(
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision,
+    [property: JsonPropertyName("movie_root")] string MovieRoot,
+    [property: JsonPropertyName("can_force_delete")] bool CanForceDelete,
+    [property: JsonPropertyName("files")] IReadOnlyList<AnimeMovieFileItemResponse> Files);
+
+public sealed record AnimeMovieFileItemResponse(
+    [property: JsonPropertyName("role")] string Role,
+    [property: JsonPropertyName("file_name")] string FileName,
+    [property: JsonPropertyName("full_path")] string FullPath,
+    [property: JsonPropertyName("relative_path")] string? RelativePath,
+    [property: JsonPropertyName("size_bytes")] long? SizeBytes,
+    [property: JsonPropertyName("exists")] bool Exists,
+    [property: JsonPropertyName("within_movie_root")] bool WithinMovieRoot,
+    [property: JsonPropertyName("link_type")] string? LinkType);
+
+public sealed record AnimeMovieForceDeleteRequest(
+    [property: JsonPropertyName("expected_revision")] string? ExpectedRevision,
+    [property: JsonPropertyName("confirm_tmdb_movie_id")] int ConfirmTmdbMovieId);
+
+public sealed record AnimeMovieForceDeleteResponse(
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("deleted_file_count")] int DeletedFileCount,
+    [property: JsonPropertyName("missing_file_count")] int MissingFileCount,
+    [property: JsonPropertyName("completion_record_count")] int CompletionRecordCount);
+
 public sealed record AnimeSeasonDetailResponse(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,

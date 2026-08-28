@@ -402,6 +402,12 @@ test("movie library remains distinct from TV seasons and exposes TMDB Movie iden
   assert.match(app, /删除关联任务\/文件/);
   assert.match(app, /仅删除无引用投影/);
   assert.match(app, /openDeletePreview\(item\.related_task_id\)/);
+  assert.ok(document.querySelector("#movie-file-dialog"));
+  assert.ok(document.querySelector("#movie-file-force-delete"));
+  assert.match(app, /查看 Movie 主文件、Movie Extras 和附属文件/);
+  assert.match(app, /library\/movies\/\$\{item\.tmdb_movie_id\}\/files/);
+  assert.match(app, /library\/movies\/\$\{item\.tmdb_movie_id\}\/force-delete/);
+  assert.match(app, /请输入 TMDB Movie ID/);
 });
 
 test("manual ingest uses the WebUI-authenticated route instead of the plugin boundary", async () => {
