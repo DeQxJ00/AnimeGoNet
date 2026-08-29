@@ -16,7 +16,8 @@ internal sealed record TmdbMovieDto(
     [property: JsonPropertyName("title")] string? Title,
     [property: JsonPropertyName("original_title")] string? OriginalTitle,
     [property: JsonPropertyName("release_date")] string? ReleaseDate,
-    [property: JsonPropertyName("poster_path")] string? PosterPath);
+    [property: JsonPropertyName("poster_path")] string? PosterPath,
+    [property: JsonPropertyName("genre_ids")] int[]? GenreIds);
 
 internal sealed record TmdbSeriesDto(
     [property: JsonPropertyName("id")] int Id,

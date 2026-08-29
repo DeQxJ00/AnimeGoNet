@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260829-manual-metadata-assignment">
+  <link rel="stylesheet" href="/styles.css?v=20260829-mixed-media-callout">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -2286,6 +2286,7 @@
         </div>
         <button id="mixed-media-postprocess-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
+      <p class="mixed-media-purpose">此功能用于处理 TV+Movie 合集：把合集中的 Movie 正片及其 Extras 从 TV 内容中分离，并迁移为独立的 Movie 类型。</p>
       <p id="mixed-media-postprocess-summary" class="muted"></p>
       <section id="mixed-media-postprocess-editor">
         <fieldset class="mixed-media-file-picker">
@@ -2341,6 +2342,19 @@
         <label>TMDB ID<input id="manual-metadata-tmdb-id" type="number" min="1" step="1" inputmode="numeric"></label>
         <label id="manual-metadata-season-field">Season<input id="manual-metadata-season" type="number" min="1" step="1" inputmode="numeric"></label>
       </div>
+      <section class="manual-metadata-search" aria-labelledby="manual-metadata-search-title">
+        <h3 id="manual-metadata-search-title">标题解析与 TMDB 搜索</h3>
+        <div class="mixed-media-search-row">
+          <label><span id="manual-metadata-query-label">TV 名称</span><input id="manual-metadata-title-query" maxlength="256" autocomplete="off"></label>
+          <div class="mixed-media-title-actions">
+            <button id="manual-metadata-anitomy-parse" type="button" class="secondary-button">AnitomySharp 一键解析</button>
+            <button id="manual-metadata-search" type="button" class="secondary-button">搜索 TMDB TV</button>
+          </div>
+        </div>
+        <p id="manual-metadata-anitomy-preview" class="mixed-media-anitomy-preview" aria-live="polite"></p>
+        <p class="muted">识别出多个作品名称时会使用不同颜色高亮；点击任意高亮名称即可填入搜索框。候选类型会跟随上方的 TV / Movie 选择。</p>
+        <div id="manual-metadata-search-results" class="manual-metadata-search-results" aria-live="polite"></div>
+      </section>
       <p class="muted">提交时会在线验证 TMDB 身份。TV 的每个视频可指定 EP 或 Extras；Movie 必须且只能选择一个主文件，其余文件归入 Movie Extras。</p>
       <div id="manual-metadata-assignment-files" class="manual-metadata-file-list"></div>
       <p id="manual-metadata-assignment-message" class="delete-message" aria-live="polite"></p>
@@ -2401,6 +2415,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260829-manual-metadata-assignment"></script>
+    <script type="module" src="/app.js?v=20260829-mixed-media-callout"></script>
 </body>
 </html>

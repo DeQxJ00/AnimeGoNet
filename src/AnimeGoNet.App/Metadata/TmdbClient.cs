@@ -63,12 +63,11 @@ public sealed class TmdbClient : ITmdbClient, ITmdbMovieClient, IDisposable
 
         var query = string.Join(
             '&',
-            "sort_by=primary_release_date.desc",
             $"language={Uri.EscapeDataString(_options.Language)}",
-            "with_genres=16",
-            $"with_text_query={Uri.EscapeDataString(title.Trim())}");
+            "include_adult=false",
+            $"query={Uri.EscapeDataString(title.Trim())}");
         var response = await GetAsync(
-            $"3/discover/movie?{query}",
+            $"3/search/movie?{query}",
             TmdbJsonContext.Default.TmdbMovieSearchResponse,
             allowNotFound: false,
             cancellationToken).ConfigureAwait(false);
@@ -77,7 +76,10 @@ public sealed class TmdbClient : ITmdbClient, ITmdbMovieClient, IDisposable
             throw Failure(MetadataFailureKind.Protocol, "tmdb_invalid_movie_search_response");
         }
 
-        return response.Results.Select(MapMovie).ToArray();
+        return response.Results
+            .Where(movie => movie.GenreIds?.Contains(16) == true)
+            .Select(MapMovie)
+            .ToArray();
     }
 
     public async Task<TmdbMovie?> GetMovieAsync(

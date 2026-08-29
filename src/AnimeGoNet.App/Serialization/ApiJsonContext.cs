@@ -90,6 +90,7 @@ namespace AnimeGoNet.App.Serialization;
 [JsonSerializable(typeof(ManualMetadataAssignmentRequest))]
 [JsonSerializable(typeof(ManualMetadataAssignmentResponse))]
 [JsonSerializable(typeof(AnimeGoNet.App.Api.TmdbMovieSearchResponse))]
+[JsonSerializable(typeof(AnimeGoNet.App.Api.TmdbSeriesSearchResponse))]
 [JsonSerializable(typeof(AnitomyTitleParseRequest))]
 [JsonSerializable(typeof(AnitomyTitleParseResponse))]
 [JsonSerializable(typeof(OtherFileReadaptationReviewResponse))]

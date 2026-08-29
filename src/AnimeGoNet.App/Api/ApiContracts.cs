@@ -1186,6 +1186,17 @@ public sealed record TmdbMovieSearchResponse(
     [property: JsonPropertyName("query")] string Query,
     [property: JsonPropertyName("items")] IReadOnlyList<TmdbMovieSearchItemResponse> Items);
 
+public sealed record TmdbSeriesSearchItemResponse(
+    [property: JsonPropertyName("tmdb_series_id")] int TmdbSeriesId,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("original_name")] string OriginalName,
+    [property: JsonPropertyName("first_air_date")] DateOnly? FirstAirDate,
+    [property: JsonPropertyName("poster_path")] string? PosterPath);
+
+public sealed record TmdbSeriesSearchResponse(
+    [property: JsonPropertyName("query")] string Query,
+    [property: JsonPropertyName("items")] IReadOnlyList<TmdbSeriesSearchItemResponse> Items);
+
 public sealed record AnitomyTitleParseRequest(
     [property: JsonPropertyName("source_text")] string? SourceText);
 

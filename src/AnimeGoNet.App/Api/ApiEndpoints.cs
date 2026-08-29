@@ -164,6 +164,7 @@ public static class ApiEndpoints
             "/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess",
             StartMixedMediaPostprocess);
         app.MapPost("/api/v1/metadata/anitomy/parse-title", ParseAnitomyTitle);
+        app.MapGet("/api/v1/tmdb/tv/search", SearchTmdbSeries);
         app.MapGet("/api/v1/tmdb/movies/search", SearchTmdbMovies);
         app.MapPost(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/review",
@@ -5961,6 +5962,41 @@ public static class ApiEndpoints
                 file.MovieHint,
                 FilePathInspector.HasExpectedFileLength(
                     file.SourceMediaPath, file.SizeBytes))).ToArray()));
+    }
+
+    private static async Task<IResult> SearchTmdbSeries(
+        [FromQuery] string? query,
+        ITmdbClient tmdb,
+        CancellationToken cancellationToken)
+    {
+        var normalized = query?.Trim() ?? string.Empty;
+        if (normalized.Length is < 1 or > 256)
+        {
+            return TypedResults.BadRequest(Error(
+                "tmdb_tv_query_invalid", "TV search query must contain 1 to 256 characters."));
+        }
+
+        try
+        {
+            var matches = await tmdb.SearchSeriesAsync(normalized, cancellationToken)
+                .ConfigureAwait(false);
+            return TypedResults.Ok(new TmdbSeriesSearchResponse(
+                normalized,
+                matches.Take(20).Select(series => new TmdbSeriesSearchItemResponse(
+                    series.Id,
+                    series.Name,
+                    series.OriginalName,
+                    series.FirstAirDate,
+                    series.PosterPath)).ToArray()));
+        }
+        catch (TmdbClientException exception)
+        {
+            return TypedResults.Problem(
+                statusCode: exception.Kind is MetadataFailureKind.Network
+                    or MetadataFailureKind.RemoteService ? 503 : 422,
+                title: "TMDB TV search failed",
+                detail: exception.SafeCode);
+        }
     }
 
     private static async Task<IResult> SearchTmdbMovies(

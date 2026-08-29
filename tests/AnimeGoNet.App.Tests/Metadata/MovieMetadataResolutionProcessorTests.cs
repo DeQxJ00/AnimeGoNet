@@ -22,7 +22,18 @@ public sealed class MovieMetadataResolutionProcessorTests
     [Fact]
     public async Task OrganizedTvCollectionCanMoveUnhintedVideoThroughValidatedPostprocess()
     {
-        var tmdb = new FakeTmdbClient();
+        var tmdb = new FakeTmdbClient
+        {
+            TvSearchResults =
+            [
+                new TmdbSeries(
+                    35544,
+                    "机动战舰抚子号",
+                    "機動戦艦ナデシコ",
+                    new DateOnly(1996, 10, 1),
+                    "/nadesico.jpg"),
+            ],
+        };
         await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
         var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
         var profile = Assert.IsType<SourceProfileRecord>(await app.App.Services
@@ -143,6 +154,13 @@ public sealed class MovieMetadataResolutionProcessorTests
         using var searchJson = JsonDocument.Parse(await search.Content.ReadAsStreamAsync());
         Assert.Equal(129, searchJson.RootElement.GetProperty("items")[0]
             .GetProperty("tmdb_movie_id").GetInt32());
+
+        using var tvSearch = await app.Client.GetAsync(
+            "/api/v1/tmdb/tv/search?query=Nadesico");
+        Assert.Equal(HttpStatusCode.OK, tvSearch.StatusCode);
+        using var tvSearchJson = JsonDocument.Parse(await tvSearch.Content.ReadAsStreamAsync());
+        Assert.Equal(35544, tvSearchJson.RootElement.GetProperty("items")[0]
+            .GetProperty("tmdb_series_id").GetInt32());
 
         using var invalidRoles = await app.Client.PostAsync(
             $"/api/v1/metadata/tasks/{task.Id}/mixed-media-postprocess",
@@ -542,6 +560,8 @@ public sealed class MovieMetadataResolutionProcessorTests
 
     private sealed class FakeTmdbClient : ITmdbClient, ITmdbMovieClient
     {
+        public IReadOnlyList<TmdbSeries> TvSearchResults { get; init; } = [];
+
         public List<string> TvSearches { get; } = [];
 
         public List<string> MovieSearches { get; } = [];
@@ -569,7 +589,7 @@ public sealed class MovieMetadataResolutionProcessorTests
             CancellationToken cancellationToken = default)
         {
             TvSearches.Add(title);
-            return Task.FromResult<IReadOnlyList<TmdbSeries>>([]);
+            return Task.FromResult(TvSearchResults);
         }
 
         public Task<TmdbSeries?> GetSeriesAsync(int seriesId, CancellationToken cancellationToken = default) =>

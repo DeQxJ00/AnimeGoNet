@@ -398,9 +398,12 @@ test("movie library remains distinct from TV seasons and exposes TMDB Movie iden
   assert.match(app, /themoviedb\.org\/movie\/\$\{item\.tmdb_movie_id\}/);
   assert.match(app, /TMDB Movie \$\{item\.tmdb_movie_id\}/);
   assert.match(app, /元数据已确认 · 等待整理完成/);
-  assert.match(app, /编辑 \/ 从 TMDB 刷新/);
   assert.match(app, /删除关联任务\/文件/);
   assert.match(app, /仅删除无引用投影/);
+  assert.match(app, /deleteMenuLabel\.textContent = "删除"/);
+  assert.match(app, /movie-library-delete-options/);
+  assert.match(app, /deleteOptions\.setAttribute\("popover", "auto"\)/);
+  assert.match(app, /deleteMenuLabel\.setAttribute\("aria-haspopup", "menu"\)/);
   assert.match(app, /openDeletePreview\(item\.related_task_id\)/);
   assert.ok(document.querySelector("#movie-file-dialog"));
   assert.ok(document.querySelector("#movie-file-force-delete"));
@@ -408,6 +411,35 @@ test("movie library remains distinct from TV seasons and exposes TMDB Movie iden
   assert.match(app, /library\/movies\/\$\{item\.tmdb_movie_id\}\/files/);
   assert.match(app, /library\/movies\/\$\{item\.tmdb_movie_id\}\/force-delete/);
   assert.match(app, /请输入 TMDB Movie ID/);
+  assert.match(app, /themoviedb\.org\/movie\/\$\{movie\.tmdb_movie_id\}/);
+  assert.match(app, /tmdbLink\.target = "_blank"/);
+  assert.match(app, /tmdbLink\.rel = "noopener noreferrer"/);
+  assert.match(app, /mixedMediaMovieSearchQueries\(query\)/);
+  assert.match(app, /没有结果，已通过任务内标题/);
+});
+
+test("TV plus Movie postprocess explains that it separates Movie content from TV collections", async () => {
+  const document = await page();
+  const dialog = document.querySelector("#mixed-media-postprocess-dialog");
+  assert.ok(dialog);
+  assert.match(
+    dialog.textContent,
+    /把合集中的 Movie 正片及其 Extras 从 TV 内容中分离，并迁移为独立的 Movie 类型/,
+  );
+});
+
+test("manual assignment provides media-aware TMDB search and clickable multilingual title candidates", async () => {
+  const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
+  assert.ok(document.querySelector("#manual-metadata-title-query"));
+  assert.ok(document.querySelector("#manual-metadata-anitomy-parse"));
+  assert.ok(document.querySelector("#manual-metadata-search"));
+  assert.ok(document.querySelector("#manual-metadata-search-results"));
+  assert.match(app, /\/api\/v1\/tmdb\/\$\{endpoint\}\/search/);
+  assert.match(app, /anitomy-title-candidate/);
+  assert.match(app, /candidate\.addEventListener\("click"/);
+  assert.match(app, /function manualMetadataTitleSource\(\)[\s\S]*?return preview\?\.title \?\? "";/);
+  assert.match(app, /updateManualMetadataSearchMode\(\);\s+await parseManualMetadataTitle\(\);/);
+  assert.doesNotMatch(app, /编辑 Movie \/ Extras/);
 });
 
 test("manual ingest uses the WebUI-authenticated route instead of the plugin boundary", async () => {
@@ -512,12 +544,14 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.ok(mixedDialog.querySelector("#mixed-media-postprocess-review"));
   assert.ok(mixedDialog.querySelector("#mixed-media-anitomy-parse"));
   assert.ok(mixedDialog.querySelector("#mixed-media-anitomy-preview[aria-live='polite']"));
+  assert.ok(mixedDialog.querySelector(".mixed-media-purpose"));
   assert.match(mixedDialog.textContent, /必须且只能指定一个 Movie 正片/);
   assert.match(mixedDialog.textContent, /最大文件会预选为正片/);
   assert.match(mixedDialog.textContent, /Movie Extras/);
   assert.match(app, /select\.name = "mixed-media-file-role"/);
   assert.match(app, /file\.size_bytes > current\.size_bytes/);
   assert.match(app, /\/api\/v1\/metadata\/anitomy\/parse-title/);
+  assert.match(app, /await parseMixedMediaMovieTitle\(\);\s+updateMixedMediaConfirmState\(\);/);
   assert.match(app, /document\.createElement\("mark"\)/);
   assert.match(app, /className = "mixed-media-keyword-highlight"/);
   assert.match(app, /sourceName\.matchAll\(pattern\)/);

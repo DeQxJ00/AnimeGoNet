@@ -94,7 +94,9 @@ internal sealed class TmdbCachingClient(
                 .ConfigureAwait(false);
         }
 
-        var key = Key("movie-search", title.Trim());
+        // v2 uses TMDB's canonical search/movie endpoint instead of discover/movie.
+        // Version the key so stale empty discover results cannot hide valid matches.
+        var key = Key("movie-search-v2", title.Trim());
         var cached = refreshScope?.BypassCaches == true ? null : await ReadAsync(
             key,
             TmdbJsonContext.Default.TmdbMovieArray,

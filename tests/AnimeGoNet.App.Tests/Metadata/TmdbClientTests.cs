@@ -10,10 +10,10 @@ namespace AnimeGoNet.App.Tests.Metadata;
 public sealed class TmdbClientTests
 {
     [Fact]
-    public async Task MovieSearchUsesAnimatedMovieDiscoverAndMapsCanonicalFields()
+    public async Task MovieSearchUsesCanonicalSearchAndFiltersAnimatedResults()
     {
         const string json = """
-            {"total_results":1,"results":[{"id":129,"title":"千与千寻","original_title":"千と千尋の神隠し","release_date":"2001-07-20","poster_path":"/movie.jpg"}]}
+            {"total_results":2,"results":[{"id":129,"title":"千与千寻","original_title":"千と千尋の神隠し","release_date":"2001-07-20","poster_path":"/movie.jpg","genre_ids":[16,14]},{"id":130,"title":"真人电影","original_title":"Live Action","release_date":"2001-07-20","poster_path":"/live.jpg","genre_ids":[12]}]}
             """;
         using var handler = new RecordingHandler(_ => Json(json));
         using var http = new HttpClient(handler);
@@ -27,10 +27,11 @@ public sealed class TmdbClientTests
         Assert.Equal(new DateOnly(2001, 7, 20), movie.ReleaseDate);
         Assert.Equal("/movie.jpg", movie.PosterPath);
         var request = Assert.Single(handler.Requests);
-        Assert.Equal("/3/discover/movie", request.Path);
-        Assert.Contains("sort_by=primary_release_date.desc", request.Query, StringComparison.Ordinal);
-        Assert.Contains("with_genres=16", request.Query, StringComparison.Ordinal);
-        Assert.Contains("with_text_query=", request.Query, StringComparison.Ordinal);
+        Assert.Equal("/3/search/movie", request.Path);
+        Assert.Contains("language=zh-CN", request.Query, StringComparison.Ordinal);
+        Assert.Contains("include_adult=false", request.Query, StringComparison.Ordinal);
+        Assert.Contains("query=", request.Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("with_text_query", request.Query, StringComparison.Ordinal);
     }
 
     [Fact]
