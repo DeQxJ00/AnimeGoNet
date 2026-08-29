@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260829-mixed-media-callout">
+  <link rel="stylesheet" href="/styles.css?v=20260829-uniform-metadata-cards">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -367,14 +367,13 @@
             <h4>字幕匹配列表</h4>
             <span id="library-subtitle-import-status" class="muted"></span>
           </div>
-          <p class="muted">默认使用文件名读取 EP；可修改 EP 或拖拽行调整顺序。未勾选文件不会导入。AI 匹配需要单独点击，使用独立字幕提示词。</p>
+          <p class="muted">默认使用文件名读取 EP；可修改 EP 或拖拽行调整顺序。未勾选文件不会导入。</p>
           <div id="library-subtitle-file-preview" class="library-subtitle-file-preview" aria-live="polite">
             <span>当前字幕与重命名结果</span>
             <strong id="library-subtitle-file-preview-name">导入压缩包后可在这里查看原文件名和重命名文件名</strong>
           </div>
           <div id="library-subtitle-import-list" class="library-subtitle-import-list"></div>
           <div class="library-subtitle-import-actions">
-            <button id="library-subtitle-import-ai" type="button" class="secondary-button">AI 匹配字幕</button>
             <button id="library-subtitle-import-confirm" type="button" class="primary-button">确认导入已勾选</button>
           </div>
         </section>
@@ -1864,22 +1863,6 @@
       </form>
     </section>
 
-    <section id="ai-subtitle-test" data-workspace="tools" data-subview="ai-subtitle" data-nav-label="AI 字幕匹配">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Subtitle matching</p>
-          <h2>AI 字幕匹配</h2>
-          <p class="muted">使用独立字幕 Prompt 为动画库中的字幕压缩包匹配 Episode；不会修改正式 Prompt 或自动创建下载任务。</p>
-        </div>
-        <span class="badge pending">独立 Prompt</span>
-      </div>
-      <article class="configuration-card">
-        <h3>开始字幕匹配</h3>
-        <p class="muted">请先在动画库打开目标作品的季度详情，再选择“导入字幕压缩包”。读取候选后，可在匹配列表中手工调整，或单独点击“AI 匹配字幕”。</p>
-        <button id="ai-subtitle-open-library" type="button" class="primary-button">打开动画库</button>
-      </article>
-    </section>
-
     <section id="management-shortcuts" class="grid panels" aria-label="管理入口" data-workspace="overview" data-subview="shortcuts" data-nav-label="管理入口">
       <article><h3>配置</h3><p>目录、TMDB、AI 与安全设置。</p><span>已保存值直接回填</span></article>
       <article><h3>来源与下载器</h3><p>来源 profile、qBittorrent 实例与路由。</p><span>来源管理已接入</span></article>
@@ -2103,14 +2086,6 @@
               <small id="configuration-ai-prompt-status">后台 Worker 与 AI 匹配测试共用此模板；保存后重启生效。</small>
             </label>
             <button id="configuration-ai-prompt-reset" type="button" class="secondary-button">恢复程序默认 Prompt</button>
-            <label class="wide">字幕导入 AI Prompt
-              <textarea id="configuration-subtitle-ai-prompt-template" class="ai-test-prompt" rows="14" maxlength="131072" required spellcheck="false" aria-describedby="configuration-subtitle-ai-prompt-status"></textarea>
-              <small id="configuration-subtitle-ai-prompt-status">字幕压缩包的“AI 匹配字幕”按钮使用此独立模板；保存后立即生效。</small>
-            </label>
-            <div class="configuration-archive-actions">
-              <button id="configuration-subtitle-ai-prompt-save" type="button" class="primary-button">保存字幕 Prompt</button>
-              <button id="configuration-subtitle-ai-prompt-reset" type="button" class="secondary-button">恢复字幕默认 Prompt</button>
-            </div>
           </div>
         </fieldset>
         <section class="wide configuration-mikan-ai-region" aria-labelledby="configuration-mikan-ai-title">
@@ -2415,6 +2390,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260829-mixed-media-callout"></script>
+    <script type="module" src="/app.js?v=20260829-uniform-metadata-cards"></script>
 </body>
 </html>

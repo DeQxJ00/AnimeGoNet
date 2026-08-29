@@ -99,7 +99,8 @@ public sealed class WorkspaceNavigationTests
         Assert.DoesNotContain(">连接与配置</button>", html, StringComparison.Ordinal);
         Assert.Contains(">AI 匹配测试</button>", html, StringComparison.Ordinal);
         Assert.Contains("title: \"AI 匹配测试\"", script, StringComparison.Ordinal);
-        Assert.Contains("id: \"ai-subtitle\", label: \"AI 字幕匹配\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("id: \"ai-subtitle\", label: \"AI 字幕匹配\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"ai-subtitle-test\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("data-workspace-target=\"logs\"", html, StringComparison.Ordinal);
         Assert.Contains(
             "data-workspace=\"tasks\" data-subview=\"runtime\"",

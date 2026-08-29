@@ -149,6 +149,23 @@ test("metadata detail visibly separates source evidence from TMDB authority", as
   assert.match(css, /\.metadata-source-evidence\s*\{/);
 });
 
+test("metadata cards reserve uniform title, status and stage rows", async () => {
+  const [app, css] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(cssPath, "utf8"),
+  ]);
+  assert.match(app, /function metadataCardStatusText\(value\)[\s\S]*?index \+= 3[\s\S]*?lines\.join\("\\n"\)/);
+  assert.match(app, /state\.textContent = metadataCardStatusText\(fullState\)/);
+  assert.match(app, /state\.className = `badge metadata-card-state/);
+  assert.match(app, /strategyValue\.className = "metadata-stage-value"/);
+  assert.match(app, /reference\.textContent = mixed[\s\S]*?resolutionReference\(runId, attemptId\)/);
+  assert.match(css, /\.metadata-card > \.metadata-heading > strong\s*\{[^}]*height:\s*4\.2em[^}]*-webkit-line-clamp:\s*3/s);
+  assert.match(css, /\.metadata-card-state\s*\{[^}]*height:\s*4\.6rem/s);
+  assert.match(css, /\.metadata-card-state\s*\{[^}]*white-space:\s*pre-line/s);
+  assert.match(css, /\.metadata-stage-value\s*\{[^}]*height:\s*2\.9em[^}]*-webkit-line-clamp:\s*2/s);
+  assert.match(css, /\.metadata-resolution-reference\s*\{[^}]*height:\s*1\.35em[^}]*white-space:\s*nowrap/s);
+});
+
 test("metadata attention counters are prominent buttons with direct filters", async () => {
   const [document, app, css] = await Promise.all([
     page(),
@@ -439,6 +456,8 @@ test("manual assignment provides media-aware TMDB search and clickable multiling
   assert.match(app, /candidate\.addEventListener\("click"/);
   assert.match(app, /function manualMetadataTitleSource\(\)[\s\S]*?return preview\?\.title \?\? "";/);
   assert.match(app, /updateManualMetadataSearchMode\(\);\s+await parseManualMetadataTitle\(\);/);
+  assert.match(app, /role\.classList\.add\("movie-file-role-select"\)/);
+  assert.match(app, /select\.dataset\.role = select\.value === "main" \? "movie" : "extras"/);
   assert.doesNotMatch(app, /编辑 Movie \/ Extras/);
 });
 
@@ -638,20 +657,19 @@ test("AI test page exposes verified Responses compatibility controls and usage",
   assert.match(css, /\.badge\.ai-test-source-state\.disabled\s*\{[^}]*color:\s*#aebbd3/s);
 });
 
-test("AI matching workspace exposes metadata and subtitle matching entries", async () => {
+test("AI matching workspace exposes metadata matching without subtitle AI controls", async () => {
   const [document, app] = await Promise.all([
     page(),
     readFile(appPath, "utf8"),
   ]);
   assert.match(document.querySelector('[data-workspace-target="tools"]')?.textContent ?? "", /AI 匹配测试/);
-  assert.equal(
-    document.querySelector('[data-workspace="tools"][data-subview="ai-subtitle"]')
-      ?.getAttribute("data-nav-label"),
-    "AI 字幕匹配",
-  );
-  assert.ok(document.querySelector("#ai-subtitle-open-library"));
-  assert.match(app, /id: "ai-subtitle", label: "AI 字幕匹配"/);
-  assert.match(app, /selectWorkspace\("library", "seasons"\)/);
+  assert.equal(document.querySelector('[data-workspace="tools"][data-subview="ai-subtitle"]'), null);
+  assert.equal(document.querySelector("#ai-subtitle-open-library"), null);
+  assert.equal(document.querySelector("#library-subtitle-import-ai"), null);
+  assert.equal(document.querySelector("#configuration-subtitle-ai-prompt-template"), null);
+  assert.equal(document.querySelector("#configuration-subtitle-ai-prompt-save"), null);
+  assert.doesNotMatch(app, /id: "ai-subtitle", label: "AI 字幕匹配"/);
+  assert.doesNotMatch(app, /aiSubtitleArchiveMatch|loadSubtitleAiPrompt|saveSubtitleAiPrompt|resetSubtitleAiPrompt/);
 });
 
 test("subtitle matching previews every original and renamed file name", async () => {
@@ -671,7 +689,6 @@ test("subtitle matching previews every original and renamed file name", async ()
   assert.match(app, /renamePreview\.textContent = `重命名：\$\{target\}`/);
   assert.match(app, /enabled\.addEventListener\("change", updateRenamePreview\)/);
   assert.match(app, /episode\.addEventListener\("input", updateRenamePreview\)/);
-  assert.match(app, /input\?\.dispatchEvent\(new Event\("input"\)\)/);
   assert.match(css, /\.library-subtitle-file-preview strong\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /\.library-subtitle-rename-preview\s*\{/);
 });

@@ -6,7 +6,7 @@ public sealed class StaticWebUiTests
 {
     [Theory]
     [InlineData("/", "text/html", "AnimeGoNet")]
-    [InlineData("/", "text/html", "/styles.css?v=20260829-mixed-media-callout")]
+    [InlineData("/", "text/html", "/styles.css?v=20260829-uniform-metadata-cards")]
     [InlineData("/styles.css", "text/css", ".hero")]
     [InlineData("/styles.css", "text/css", ".metadata-card")]
     [InlineData("/styles.css", "text/css", ".metadata-filters")]
@@ -161,7 +161,7 @@ public sealed class StaticWebUiTests
     [InlineData("/app.js", "text/javascript", "delete web.access_key")]
     [InlineData("/app.js", "text/javascript", "mikan_episode_identity_cache_hours")]
     [InlineData("/app.js", "text/javascript", "mikan_bangumi_identity_cache_hours")]
-    [InlineData("/", "text/html", "/app.js?v=20260829-mixed-media-callout")]
+    [InlineData("/", "text/html", "/app.js?v=20260829-uniform-metadata-cards")]
     [InlineData("/", "text/html", "movie-file-save")]
     [InlineData("/app.js", "text/javascript", "/files/main")]
     [InlineData("/app.js", "text/javascript", "保存后，新主文件会移到电影目录顶层")]

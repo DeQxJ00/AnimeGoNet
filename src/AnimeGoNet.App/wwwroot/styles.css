@@ -840,23 +840,27 @@ h2 { font-size: clamp(1.7rem, 4vw, 3rem); max-width: 760px; }
 .metadata-card.failed { border-color: #813f49; }
 .metadata-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .metadata-heading strong { overflow-wrap: anywhere; }
+.metadata-card > .metadata-heading { display: grid; grid-template-columns: minmax(0,1fr) 58px; align-items: start; }
+.metadata-card > .metadata-heading > strong { display: -webkit-box; height: 4.2em; overflow: hidden; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.metadata-card-state { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 58px; min-width: 58px; height: 4.6rem; min-height: 4.6rem; padding: 6px 7px; line-height: 1.35; text-align: center; white-space: pre-line; }
 .metadata-handling { display: inline-flex; margin: 12px 0 0; padding: 5px 8px; border: 1px solid #405f8d; border-radius: 999px; color: #dbeaff; background: rgba(24,41,67,.65); font-size: .7rem; }
 .metadata-handling.explicit_retry { border-color: #6c526f; color: #f2d9ff; }
 .metadata-handling.configuration, .metadata-handling.manual { border-color: #813f49; color: #ffb4b4; }
 .metadata-handling.fallback { border-color: #7c6835; color: #ffe09a; }
 .metadata-handling.resolved, .metadata-handling.skipped { border-color: #356757; color: #b8efd8; }
 .metadata-identity, .metadata-files, .metadata-failure { color: #aebbd3; font-size: .84rem; line-height: 1.55; overflow-wrap: anywhere; }
-.metadata-identity { margin: 15px 0; }
+.metadata-identity { height: 1.55em; margin: 15px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .metadata-files { margin: 15px 0 0; }
 .metadata-failure { color: #ffb0b0; margin: 12px 0 0; }
 .metadata-fallback-decision { margin: 10px 0 0; padding: 9px 11px; border: 1px solid #5b4b57; border-radius: 10px; color: #f0d7df; background: rgba(63,31,42,.38); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
 .metadata-fallback-decision.allowed { border-color: #7c6835; color: #ffe09a; background: rgba(65,53,21,.38); }
 .metadata-fallback-decision.denied { border-color: #813f49; color: #ffb4b4; }
 .metadata-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.metadata-stages div { min-width: 0; padding: 10px; border-radius: 12px; background: rgba(5,8,16,.55); }
+.metadata-stages div { display: grid; grid-template-rows: auto minmax(0,1fr); min-width: 0; height: 112px; padding: 10px; border-radius: 12px; background: rgba(5,8,16,.55); }
 .metadata-stages dt { color: #8da2c9; font-size: .72rem; }
-.metadata-stages dd { margin: 5px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
-.metadata-resolution-reference { color: #7f95bd; font-size: .65rem; }
+.metadata-stages dd { display: grid; grid-template-rows: 2.9em 1.35em; gap: 3px; min-width: 0; margin: 5px 0 0; font-size: .78rem; overflow: hidden; }
+.metadata-stage-value { display: -webkit-box; height: 2.9em; overflow: hidden; color: #edf2ff; line-height: 1.45; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.metadata-resolution-reference { display: block; min-width: 0; height: 1.35em; overflow: hidden; color: #7f95bd; font-size: .65rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .metadata-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
 .retry-button { border: 1px solid #6c526f; border-radius: 10px; padding: 9px 12px; color: #f2d9ff; background: #2a1d32; cursor: pointer; }
 .retry-button:disabled { cursor: wait; opacity: .7; }

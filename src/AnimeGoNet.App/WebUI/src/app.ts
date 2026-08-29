@@ -2399,14 +2399,6 @@ interface AiMetadataTestPrompt {
   customized: boolean;
 }
 
-interface SubtitleAiPromptSettings {
-  prompt_version: string;
-  template: string;
-  maximum_length: number;
-  default_template: string;
-  customized: boolean;
-}
-
 interface AiMetadataTestMikanImport {
   success: boolean;
   title: string | null;
@@ -2550,10 +2542,7 @@ const workspaceDefinitions: Record<WorkspaceId, WorkspaceDefinition> = {
     title: "AI 匹配测试",
     description: "以只读方式验证生产 Prompt、AI 工具调用与 TMDB 最终校验。",
     defaultSubview: "ai-metadata",
-    tabs: [
-      { id: "ai-metadata", label: "AI 元数据测试" },
-      { id: "ai-subtitle", label: "AI 字幕匹配" },
-    ],
+    tabs: [{ id: "ai-metadata", label: "AI 元数据测试" }],
   },
   notifications: {
     title: "通知",
@@ -2777,6 +2766,15 @@ const statusLabels: Record<string, string> = {
   metadata_failed: "元数据失败",
   already_completed: "同一来源集已完成，已跳过",
 };
+
+function metadataCardStatusText(value: string): string {
+  const characters = Array.from(value.replace(/\s+/gu, "")).slice(0, 9);
+  const lines: string[] = [];
+  for (let index = 0; index < characters.length; index += 3) {
+    lines.push(characters.slice(index, index + 3).join(""));
+  }
+  return lines.join("\n");
+}
 
 const rssStatusLabels: Record<string, string> = {
   staged: "已暂存",
@@ -6738,30 +6736,6 @@ async function confirmSubtitleArchiveImport(): Promise<void> {
   }
 }
 
-async function aiSubtitleArchiveMatch(): Promise<void> {
-  if (!activeSubtitleImport) return;
-  const status = element<HTMLElement>("#library-subtitle-import-status");
-  status.textContent = "正在使用独立字幕提示词请求 AI…";
-  try {
-    const response = await authenticatedFetch(
-      `/api/v1/library/subtitle-archives/${activeSubtitleImport.session_id}/ai-match`,
-      { method: "POST", headers },
-    );
-    if (!response.ok) throw new Error(await responseError(response));
-    const result = await response.json() as { assignments: Array<{ candidate_id: string; episode_number: number | null }>; prompt_version: string };
-    for (const assignment of result.assignments) {
-      const input = document.querySelector<HTMLInputElement>(`[data-subtitle-episode="${CSS.escape(assignment.candidate_id)}"]`);
-      const enabled = document.querySelector<HTMLInputElement>(`[data-subtitle-enabled="${CSS.escape(assignment.candidate_id)}"]`);
-      if (input && assignment.episode_number) input.value = String(assignment.episode_number);
-      if (enabled) enabled.checked = Boolean(assignment.episode_number);
-      input?.dispatchEvent(new Event("input"));
-    }
-    status.textContent = `AI 已返回 ${result.assignments.length} 个候选（${result.prompt_version}），请人工复核后确认导入。`;
-  } catch (error) {
-    status.textContent = `AI 匹配失败：${errorMessage(error, "未知错误")}`;
-  }
-}
-
 async function deleteLibrarySeason(): Promise<void> {
   if (!activeLibraryDetail) return;
   const detail = activeLibraryDetail;
@@ -8543,61 +8517,6 @@ async function resetConfigurationAiPrompt(): Promise<void> {
   }
 }
 
-async function loadSubtitleAiPrompt(): Promise<void> {
-  const editor = element<HTMLTextAreaElement>("#configuration-subtitle-ai-prompt-template");
-  const status = element<HTMLElement>("#configuration-subtitle-ai-prompt-status");
-  try {
-    const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", { headers });
-    if (!response.ok) throw new Error(await responseError(response));
-    const settings = await response.json() as SubtitleAiPromptSettings;
-    editor.value = settings.template;
-    status.textContent = `${settings.prompt_version} · ${settings.customized ? "自定义模板" : "程序默认模板"}；保存后立即生效。`;
-  } catch (error) {
-    status.textContent = `字幕 AI Prompt 读取失败：${errorMessage(error, "未知错误")}`;
-  }
-}
-
-async function saveSubtitleAiPrompt(): Promise<void> {
-  const editor = element<HTMLTextAreaElement>("#configuration-subtitle-ai-prompt-template");
-  const status = element<HTMLElement>("#configuration-subtitle-ai-prompt-status");
-  const button = element<HTMLButtonElement>("#configuration-subtitle-ai-prompt-save");
-  button.disabled = true;
-  status.textContent = "正在校验并保存字幕 AI Prompt…";
-  try {
-    const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", {
-      method: "PUT",
-      headers: jsonRequestHeaders(),
-      body: JSON.stringify({ template: editor.value }),
-    });
-    if (!response.ok) throw new Error(await responseError(response));
-    const settings = await response.json() as SubtitleAiPromptSettings;
-    editor.value = settings.template;
-    status.textContent = `${settings.prompt_version} · 已保存并立即生效。`;
-  } catch (error) {
-    status.textContent = `字幕 AI Prompt 保存失败：${errorMessage(error, "未知错误")}`;
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function resetSubtitleAiPrompt(): Promise<void> {
-  const editor = element<HTMLTextAreaElement>("#configuration-subtitle-ai-prompt-template");
-  const status = element<HTMLElement>("#configuration-subtitle-ai-prompt-status");
-  const button = element<HTMLButtonElement>("#configuration-subtitle-ai-prompt-reset");
-  button.disabled = true;
-  try {
-    const response = await authenticatedFetch("/api/v1/configuration/subtitle-ai-prompt", { method: "DELETE", headers });
-    if (!response.ok) throw new Error(await responseError(response));
-    const settings = await response.json() as SubtitleAiPromptSettings;
-    editor.value = settings.template;
-    status.textContent = `${settings.prompt_version} · 已恢复程序默认并立即生效。`;
-  } catch (error) {
-    status.textContent = `字幕 AI Prompt 恢复失败：${errorMessage(error, "未知错误")}`;
-  } finally {
-    button.disabled = false;
-  }
-}
-
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   const units = ["KiB", "MiB", "GiB", "TiB"];
@@ -10273,23 +10192,31 @@ function renderManualMetadataFiles(): void {
       syncEpisode();
       row.append(identity, role, episode);
     } else {
+      role.classList.add("movie-file-role-select");
       role.append(new Option("Movie 主文件", "main"), new Option("Movie Extras", "extras"));
       role.value = file.is_video
         && (file.disposition === "movie" || file.task_file_id === defaultMovieMain)
         ? "main"
         : "extras";
+      const syncMovieRoleHighlight = (select: HTMLSelectElement) => {
+        select.dataset.role = select.value === "main" ? "movie" : "extras";
+      };
       if (!file.is_video) {
         role.value = "extras";
         role.disabled = true;
         role.title = "非视频附件仅能归入 Movie Extras";
       }
       role.addEventListener("change", () => {
-        if (role.value !== "main") return;
-        container.querySelectorAll<HTMLSelectElement>(".manual-metadata-file-role")
-          .forEach(other => {
-            if (other !== role && other.value === "main") other.value = "extras";
-          });
+        if (role.value === "main") {
+          container.querySelectorAll<HTMLSelectElement>(".manual-metadata-file-role")
+            .forEach(other => {
+              if (other !== role && other.value === "main") other.value = "extras";
+              syncMovieRoleHighlight(other);
+            });
+        }
+        syncMovieRoleHighlight(role);
       });
+      syncMovieRoleHighlight(role);
       row.append(identity, role);
     }
     container.append(row);
@@ -12492,15 +12419,18 @@ async function loadMetadataTasks(background = false): Promise<void> {
       heading.className = "metadata-heading";
       const title = document.createElement("strong");
       title.textContent = item.title;
+      title.title = item.title;
       const state = document.createElement("span");
-      state.className = `badge ${item.status === "metadata_failed" ? "error" : "ready"}`;
-      state.textContent = item.review_kind === "ai_series_change"
+      state.className = `badge metadata-card-state ${item.status === "metadata_failed" ? "error" : "ready"}`;
+      const fullState = item.review_kind === "ai_series_change"
         ? "AI TMDB 变更待审核"
         : item.readaptation_review_state === "pending" && item.status === "organized"
         ? "重新适配待审核"
         : item.readaptation_review_state === "approved"
           ? "重新适配审核完成"
           : statusLabels[item.status] ?? item.status;
+      state.title = fullState;
+      state.textContent = metadataCardStatusText(fullState);
       heading.append(title, state);
       const handling = document.createElement("p");
       handling.className = `metadata-handling ${item.handling_category}`;
@@ -12536,7 +12466,9 @@ async function loadMetadataTasks(background = false): Promise<void> {
         const term = document.createElement("dt");
         term.textContent = String(label);
         const description = document.createElement("dd");
-        description.textContent = mixed
+        const strategyValue = document.createElement("span");
+        strategyValue.className = "metadata-stage-value";
+        strategyValue.textContent = mixed
           ? "多个文件使用不同来源或证据（见文件详情）"
           : libraryStrategy(value);
         if (!mixed && value) {
@@ -12544,11 +12476,13 @@ async function loadMetadataTasks(background = false): Promise<void> {
             `${resolutionReference(runId, attemptId)}\n`
             + `run_id=${runId ?? "未记录"}\n`
             + `attempt_id=${attemptId ?? "未记录"}`;
-          const reference = document.createElement("small");
-          reference.className = "metadata-resolution-reference";
-          reference.textContent = resolutionReference(runId, attemptId);
-          description.append(document.createElement("br"), reference);
         }
+        const reference = document.createElement("small");
+        reference.className = "metadata-resolution-reference";
+        reference.textContent = mixed
+          ? "Run / Attempt：见文件详情"
+          : resolutionReference(runId, attemptId);
+        description.append(strategyValue, reference);
         group.append(term, description);
         stages.append(group);
       }
@@ -15693,7 +15627,6 @@ element<HTMLButtonElement>("#download-next").addEventListener("click", () => {
   void loadDownloads();
 });
 element<HTMLButtonElement>("#library-reload").addEventListener("click", () => void loadLibrary());
-element<HTMLButtonElement>("#ai-subtitle-open-library").addEventListener("click", () => selectWorkspace("library", "seasons"));
 element<HTMLButtonElement>("#movie-library-reload").addEventListener(
   "click",
   () => void loadMovieLibrary(),
@@ -15806,10 +15739,6 @@ element<HTMLInputElement>("#library-subtitle-archive-file").addEventListener(
 element<HTMLButtonElement>("#library-subtitle-import-confirm").addEventListener(
   "click",
   () => void confirmSubtitleArchiveImport(),
-);
-element<HTMLButtonElement>("#library-subtitle-import-ai").addEventListener(
-  "click",
-  () => void aiSubtitleArchiveMatch(),
 );
 element<HTMLButtonElement>("#library-detail-delete").addEventListener(
   "click",
@@ -16057,14 +15986,6 @@ element<HTMLButtonElement>("#configuration-confirm").addEventListener(
 element<HTMLButtonElement>("#configuration-ai-prompt-reset").addEventListener(
   "click",
   () => void resetConfigurationAiPrompt(),
-);
-element<HTMLButtonElement>("#configuration-subtitle-ai-prompt-save").addEventListener(
-  "click",
-  () => void saveSubtitleAiPrompt(),
-);
-element<HTMLButtonElement>("#configuration-subtitle-ai-prompt-reset").addEventListener(
-  "click",
-  () => void resetSubtitleAiPrompt(),
 );
 element<HTMLFormElement>("#configuration-form").addEventListener("input", () => {
   const preview = element<HTMLElement>("#configuration-preview");
@@ -16714,7 +16635,6 @@ connectLiveLogs();
 void loadLibrary();
 void loadMovieLibrary();
 void loadConfiguration().then(() => loadDeploymentDataPath());
-void loadSubtitleAiPrompt();
 void loadWebUiAuthentication();
 void loadWebApiCompatibility();
 void loadU2WebApiCompatibility();
