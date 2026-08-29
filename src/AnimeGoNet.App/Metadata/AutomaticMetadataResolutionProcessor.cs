@@ -370,27 +370,98 @@ public sealed class AutomaticMetadataResolutionProcessor(
         MetadataTaskClaim claim,
         CancellationToken cancellationToken)
     {
-        var videos = (claim.Files ?? [])
-            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
-            .ToArray();
-        if (videos.Length != 1)
+        var isU2 = string.Equals(claim.SourceAdapter, "u2", StringComparison.OrdinalIgnoreCase);
+        MetadataTaskFileProjection? mainFile;
+        if (isU2)
         {
-            var failure = new MetadataFailure(
-                MetadataFailureKind.Ambiguous,
-                videos.Length == 0 ? "movie_video_missing" : "movie_multiple_videos_unsupported",
-                false);
+            var layout = U2MovieFileLayoutResolver.Resolve(claim.Files);
+            mainFile = layout.MainFile;
             await RecordAsync(
                 claim,
                 "series",
-                "tmdb_movie_title",
+                "u2_movie_file_layout",
                 null,
-                "not_applicable",
-                failure.Code,
+                layout.IsResolved ? "matched" : "not_matched",
+                layout.FailureCode,
                 false,
                 _timeProvider.GetTimestamp(),
                 cancellationToken).ConfigureAwait(false);
-            await FailAsync(claim, failure, "movie_file_layout_unresolved", cancellationToken)
-                .ConfigureAwait(false);
+            if (!layout.IsResolved)
+            {
+                await FailAsync(
+                    claim,
+                    new MetadataFailure(
+                        MetadataFailureKind.Ambiguous,
+                        layout.FailureCode!,
+                        false),
+                    "movie_file_layout_unresolved",
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+        }
+        else
+        {
+            var videos = (claim.Files ?? [])
+                .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
+                .ToArray();
+            mainFile = videos.Length == 1 ? videos[0] : null;
+            if (mainFile is null)
+            {
+                var failure = new MetadataFailure(
+                    MetadataFailureKind.Ambiguous,
+                    videos.Length == 0 ? "movie_video_missing" : "movie_multiple_videos_unsupported",
+                    false);
+                await RecordAsync(
+                    claim,
+                    "series",
+                    "tmdb_movie_title",
+                    null,
+                    "not_applicable",
+                    failure.Code,
+                    false,
+                    _timeProvider.GetTimestamp(),
+                    cancellationToken).ConfigureAwait(false);
+                await FailAsync(claim, failure, "movie_file_layout_unresolved", cancellationToken)
+                    .ConfigureAwait(false);
+                return true;
+            }
+        }
+
+        if (isU2 && u2AniDbResolver is not null)
+        {
+            var u2Started = _timeProvider.GetTimestamp();
+            var preferred = await u2AniDbResolver.ResolveMovieAsync(
+                claim.AniDbAnimeId,
+                claim.Title,
+                claim.AniDbTmdbMappingUrlTemplate,
+                claim.PreferAniDbTmdbMapping,
+                cancellationToken).ConfigureAwait(false);
+            await RecordAsync(
+                claim,
+                "series",
+                preferred.Strategy,
+                null,
+                preferred.IsSuccess ? "matched" : "not_matched",
+                preferred.Failure?.Code,
+                preferred.Failure is not null && IsRetryable(preferred.Failure.Kind),
+                u2Started,
+                cancellationToken).ConfigureAwait(false);
+            if (!preferred.IsSuccess)
+            {
+                await FailAsync(
+                    claim,
+                    preferred.Failure!,
+                    "tmdb_movie_not_resolved",
+                    cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            await resolutions.CompleteMovieAsync(
+                claim,
+                preferred.Movie!,
+                mainFile!.FileId,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
             return true;
         }
 
@@ -452,6 +523,7 @@ public sealed class AutomaticMetadataResolutionProcessor(
         await resolutions.CompleteMovieAsync(
             claim,
             resolution.Value!,
+            mainFile!.FileId,
             _timeProvider.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         return true;

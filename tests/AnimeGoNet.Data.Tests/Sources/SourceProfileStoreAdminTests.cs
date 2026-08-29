@@ -11,7 +11,7 @@ namespace AnimeGoNet.Data.Tests.Sources;
 public sealed class SourceProfileStoreAdminTests
 {
     [Fact]
-    public async Task MikanMovieMediaTypeIsPersistedAndNonMikanMovieIsRejected()
+    public async Task MikanAndU2MovieMediaTypesArePersisted()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();
         var store = new SourceProfileStore(fixture.Database);
@@ -27,13 +27,18 @@ public sealed class SourceProfileStoreAdminTests
         Assert.Equal(
             MediaTypes.Movie,
             (await store.GetEnabledAsync("mikan-movie"))?.MediaType);
-        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(
+        var u2Created = await store.CreateAsync(
             "u2-movie",
             Definition("U2 movie", "u2", "pt", "link", ["u2.invalid"]) with
             {
                 MediaType = MediaTypes.Movie,
             },
-            At(11)));
+            At(11));
+
+        Assert.Equal(MediaTypes.Movie, u2Created.MediaType);
+        Assert.Equal(
+            MediaTypes.Movie,
+            (await store.GetEnabledAsync("u2-movie"))?.MediaType);
     }
 
     [Fact]

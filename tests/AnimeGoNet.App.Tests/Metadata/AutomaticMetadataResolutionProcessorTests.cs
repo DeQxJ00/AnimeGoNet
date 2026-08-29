@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Downloads;
@@ -484,6 +485,32 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         Assert.Equal("Made in Abyss", tmdb.SearchTitles[0]);
         Assert.Contains("u2_anitomy_title", await ReadStrategiesAsync(app, taskId));
         Assert.DoesNotContain("backtrace", await ReadStrategiesAsync(app, taskId));
+
+        var database = app.App.Services.GetRequiredService<AnimeGoNet.Data.Sqlite.AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var evidence = connection.CreateCommand();
+        evidence.CommandText = """
+            SELECT series_resolution_source, season_resolution_source,
+                   series_resolution_attempt_id, season_resolution_attempt_id
+            FROM metadata_resolution_runs
+            WHERE task_id = $task_id;
+            """;
+        evidence.Parameters.AddWithValue("$task_id", taskId);
+        await using var reader = await evidence.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal("u2_anitomy_title", reader.GetString(0));
+        Assert.Equal("u2_anitomy_title", reader.GetString(1));
+        Assert.False(reader.IsDBNull(2));
+        Assert.False(reader.IsDBNull(3));
+
+        using var listResponse = await app.Client.GetAsync(
+            "/api/v1/metadata/tasks?page=1&page_size=25&handling=all&file_state=all"
+            + "&review_state=all&retryability=all&sort=updated&direction=desc");
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStreamAsync());
+        var item = Assert.Single(listJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.False(string.IsNullOrWhiteSpace(item.GetProperty("series_run_id").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(item.GetProperty("season_run_id").GetString()));
     }
 
     [Fact]

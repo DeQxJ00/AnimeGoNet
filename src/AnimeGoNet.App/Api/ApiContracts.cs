@@ -1239,6 +1239,45 @@ public sealed record MixedMediaPostprocessStartResponse(
     public string TaskFileId => TaskFileIds[0];
 }
 
+public sealed record ManualMetadataAssignmentFileResponse(
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("relative_path")] string RelativePath,
+    [property: JsonPropertyName("size_bytes")] long SizeBytes,
+    [property: JsonPropertyName("is_video")] bool IsVideo,
+    [property: JsonPropertyName("disposition")] string Disposition,
+    [property: JsonPropertyName("tmdb_series_id")] int? TmdbSeriesId,
+    [property: JsonPropertyName("tmdb_season_number")] int? TmdbSeasonNumber,
+    [property: JsonPropertyName("tmdb_episode_number")] int? TmdbEpisodeNumber,
+    [property: JsonPropertyName("tmdb_movie_id")] int? TmdbMovieId,
+    [property: JsonPropertyName("file_episode_candidate")] string? FileEpisodeCandidate);
+
+public sealed record ManualMetadataAssignmentPreviewResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("media_type")] string MediaType,
+    [property: JsonPropertyName("eligible")] bool Eligible,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("files")] IReadOnlyList<ManualMetadataAssignmentFileResponse> Files);
+
+public sealed record ManualMetadataAssignmentFileRequest(
+    [property: JsonPropertyName("task_file_id")] string TaskFileId,
+    [property: JsonPropertyName("role")] string Role,
+    [property: JsonPropertyName("episode_number")] int? EpisodeNumber);
+
+public sealed record ManualMetadataAssignmentRequest(
+    [property: JsonPropertyName("media_type")] string MediaType,
+    [property: JsonPropertyName("tmdb_id")] int TmdbId,
+    [property: JsonPropertyName("season_number")] int? SeasonNumber,
+    [property: JsonPropertyName("files")] IReadOnlyList<ManualMetadataAssignmentFileRequest>? Files);
+
+public sealed record ManualMetadataAssignmentResponse(
+    [property: JsonPropertyName("task_id")] string TaskId,
+    [property: JsonPropertyName("media_type")] string MediaType,
+    [property: JsonPropertyName("tmdb_id")] int TmdbId,
+    [property: JsonPropertyName("season_number")] int? SeasonNumber,
+    [property: JsonPropertyName("status")] string Status);
+
 public sealed record OtherFileReadaptationReviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("review_state")] string ReviewState);
@@ -1561,7 +1600,19 @@ public sealed record AnimeMovieFileItemResponse(
     [property: JsonPropertyName("size_bytes")] long? SizeBytes,
     [property: JsonPropertyName("exists")] bool Exists,
     [property: JsonPropertyName("within_movie_root")] bool WithinMovieRoot,
+    [property: JsonPropertyName("is_video")] bool IsVideo,
     [property: JsonPropertyName("link_type")] string? LinkType);
+
+public sealed record AnimeMovieMainFileUpdateRequest(
+    [property: JsonPropertyName("expected_revision")] string? ExpectedRevision,
+    [property: JsonPropertyName("main_relative_path")] string? MainRelativePath);
+
+public sealed record AnimeMovieMainFileUpdateResponse(
+    [property: JsonPropertyName("result")] string Result,
+    [property: JsonPropertyName("tmdb_movie_id")] int TmdbMovieId,
+    [property: JsonPropertyName("resource_revision")] string ResourceRevision,
+    [property: JsonPropertyName("main_relative_path")] string MainRelativePath,
+    [property: JsonPropertyName("former_main_relative_path")] string? FormerMainRelativePath);
 
 public sealed record AnimeMovieForceDeleteRequest(
     [property: JsonPropertyName("expected_revision")] string? ExpectedRevision,

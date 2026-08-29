@@ -490,6 +490,7 @@ public static class AnimeGoApplication
                 "Notification")));
         builder.Services.AddSingleton<NotificationProcessor>();
         builder.Services.AddSingleton<MetadataResolutionStore>();
+        builder.Services.AddSingleton<ManualMetadataAssignmentStore>();
         builder.Services.AddSingleton<OtherFileReadaptationStore>();
         builder.Services.AddSingleton<MixedMediaPostprocessStore>();
         builder.Services.AddSingleton<AiSeriesChangeReviewStore>();
@@ -525,6 +526,7 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton<DownloadPreparationProcessor>();
         builder.Services.AddSingleton<SafeFileMover>();
         builder.Services.AddSingleton<SafeFileLinker>();
+        builder.Services.AddSingleton<MovieFileRoleEditor>();
         builder.Services.AddSingleton<TvShowNfoWriter>();
         builder.Services.AddSingleton<MovieNfoWriter>();
         builder.Services.AddSingleton<PendingTmdbNfoRewriteProcessor>();
@@ -562,7 +564,9 @@ public static class AnimeGoApplication
                     "AniDB TMDB mapping"),
                 anidbTitleCache,
                 services.GetRequiredService<TmdbSeriesResolver>(),
-                services.GetRequiredService<ITmdbClient>()));
+                services.GetRequiredService<ITmdbClient>(),
+                services.GetRequiredService<ITmdbMovieClient>(),
+                services.GetRequiredService<TmdbMovieResolver>()));
         if (bangumiSubjectClient is null)
         {
             var upstream = new BangumiSubjectClient(

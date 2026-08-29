@@ -15,13 +15,28 @@ public sealed record U2AniDbResolution(
     public bool IsSuccess => Details is not null && Season is not null && FailureCode is null;
 }
 
-internal sealed record U2AniDbMapping(int? TmdbSeriesId, int? TmdbSeasonNumber);
+public sealed record U2AniDbMovieResolution(
+    TmdbMovie? Movie,
+    string Strategy,
+    IReadOnlyList<string> AttemptedTitles,
+    MetadataFailure? Failure)
+{
+    public bool IsSuccess => Movie is not null && Failure is null;
+}
+
+internal sealed record U2AniDbMapping(
+    int? TmdbSeriesId,
+    int? TmdbSeasonNumber,
+    int? TmdbMovieId,
+    string? Name);
 
 public sealed class U2AniDbMetadataResolver(
     HttpClient httpClient,
     AnidbTitleCacheStore titleCache,
     TmdbSeriesResolver seriesResolver,
-    ITmdbClient tmdb)
+    ITmdbClient tmdb,
+    ITmdbMovieClient tmdbMovies,
+    TmdbMovieResolver movieResolver)
 {
     public const string MappingUrlTemplate =
         "https://raw.githubusercontent.com/DeQxJ00/Anime-Lists-Json/refs/heads/main/api/anidb/{anidbid}.json";
@@ -78,6 +93,94 @@ public sealed class U2AniDbMetadataResolver(
             mappedSeasonNumber: null,
             "u2_anitomy_title",
             "u2_anitomy_title_missing",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<U2AniDbMovieResolution> ResolveMovieAsync(
+        int? aid,
+        string taskTitle,
+        string? mappingUrlTemplate = null,
+        bool useTmdbMapping = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskTitle);
+        var mapping = aid is > 0
+            ? await TryReadMappingAsync(aid.Value, mappingUrlTemplate, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        if (useTmdbMapping && mapping?.TmdbMovieId is > 0)
+        {
+            try
+            {
+                var movie = await tmdbMovies.GetMovieAsync(
+                    mapping.TmdbMovieId.Value,
+                    cancellationToken).ConfigureAwait(false);
+                if (movie is not null && movie.Id == mapping.TmdbMovieId.Value)
+                {
+                    return new U2AniDbMovieResolution(
+                        movie,
+                        "u2_anidb_movie_mapping",
+                        [],
+                        null);
+                }
+            }
+            catch (TmdbClientException exception)
+            {
+                return new U2AniDbMovieResolution(
+                    null,
+                    "u2_anidb_movie_mapping",
+                    [],
+                    new MetadataFailure(
+                        exception.Kind,
+                        exception.SafeCode,
+                        exception.TmdbAccessConfirmed));
+            }
+        }
+
+        if (useTmdbMapping && !string.IsNullOrWhiteSpace(mapping?.Name))
+        {
+            var mappedTitleResult = await ResolveMovieTitlesAsync(
+                [mapping.Name],
+                "u2_anidb_movie_mapping_title",
+                cancellationToken).ConfigureAwait(false);
+            if (mappedTitleResult.IsSuccess
+                || mappedTitleResult.Failure?.Kind is not MetadataFailureKind.SemanticNoMatch)
+            {
+                return mappedTitleResult;
+            }
+        }
+
+        if (!useTmdbMapping && aid is > 0)
+        {
+            var cachedTitles = await titleCache.GetPreferredTitlesAsync(
+                aid.Value,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (cachedTitles.Count > 0)
+            {
+                return await ResolveMovieTitlesAsync(
+                    cachedTitles,
+                    "u2_anidb_movie_title_cache",
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var animeTitle = ExtractAnimeTitle(taskTitle);
+        if (string.IsNullOrWhiteSpace(animeTitle))
+        {
+            return new U2AniDbMovieResolution(
+                null,
+                "u2_anitomy_movie_title",
+                [],
+                new MetadataFailure(
+                    MetadataFailureKind.InvalidInput,
+                    "u2_movie_title_missing",
+                    false));
+        }
+
+        return await ResolveMovieTitlesAsync(
+            [animeTitle],
+            "u2_anitomy_movie_title",
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -200,7 +303,9 @@ public sealed class U2AniDbMetadataResolver(
                 cancellationToken).ConfigureAwait(false);
             return new U2AniDbMapping(
                 ReadPositiveInt(document.RootElement, "tmdbtv"),
-                ReadPositiveInt(document.RootElement, "tmdbseason"));
+                ReadPositiveInt(document.RootElement, "tmdbseason"),
+                ReadPositiveInt(document.RootElement, "tmdbid"),
+                ReadNonEmptyString(document.RootElement, "name"));
         }
         catch (HttpRequestException)
         {
@@ -210,6 +315,20 @@ public sealed class U2AniDbMetadataResolver(
         {
             return null;
         }
+    }
+
+    private async Task<U2AniDbMovieResolution> ResolveMovieTitlesAsync(
+        IEnumerable<string> titles,
+        string strategy,
+        CancellationToken cancellationToken)
+    {
+        var resolved = await movieResolver.ResolveAsync(titles, cancellationToken)
+            .ConfigureAwait(false);
+        return new U2AniDbMovieResolution(
+            resolved.Value,
+            strategy,
+            resolved.AttemptedTitles,
+            resolved.Failure);
     }
 
     private static int? ReadPositiveInt(JsonElement root, string propertyName)
@@ -226,6 +345,18 @@ public sealed class U2AniDbMetadataResolver(
             && result > 0
                 ? result
                 : null;
+    }
+
+    private static string? ReadNonEmptyString(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value)
+            || value.ValueKind is not JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var result = value.GetString()?.Trim();
+        return string.IsNullOrWhiteSpace(result) ? null : result;
     }
 
     private async Task<TmdbSeriesDetails?> GetSeriesDetailsAsync(

@@ -300,6 +300,85 @@ public sealed class MovieMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task U2MovieWithClearlyLargestVideoCompletesMainAndExtras()
+    {
+        var tmdb = new FakeTmdbClient();
+        await using var app = await RunningApp.StartAsync(
+            configure: options => options with
+            {
+                InitialSourceProfiles =
+                [
+                    .. options.InitialSourceProfiles,
+                    new SourceProfileSeed
+                    {
+                        Id = "u2",
+                        DisplayName = "U2",
+                        Adapter = "u2",
+                        MediaType = MediaTypes.Movie,
+                        DownloaderId = "bt",
+                        FileStrategy = FileStrategy.Link,
+                        AllowedTorrentHosts = ["u2.dmhy.org"],
+                    },
+                ],
+            },
+            tmdbClient: tmdb,
+            bangumiSubjectClient: new FakeBangumiClient());
+        var taskId = await SeedU2MovieAsync(
+            app,
+            "[Group] Spirited Away [BDRip 1080p]",
+            [
+                new TorrentFile("Spirited Away.mkv", 8L * 1024 * 1024 * 1024, false),
+                new TorrentFile("Trailer.mkv", 200L * 1024 * 1024, false),
+                new TorrentFile("Booklet.pdf", 50L * 1024 * 1024, false),
+            ]);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<AutomaticMetadataResolutionProcessor>()
+            .RunOnceAsync());
+
+        await using var connection = await app.App.Services
+            .GetRequiredService<AnimeGoSqliteDatabase>()
+            .OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT task.status, file.relative_path, file.disposition,
+                   file.tmdb_movie_id, file.associated_task_file_id,
+                   main.relative_path
+            FROM ingest_tasks AS task
+            JOIN task_files AS file ON file.task_id = task.id
+            LEFT JOIN task_files AS main ON main.id = file.associated_task_file_id
+            WHERE task.id = $task_id
+            ORDER BY file.relative_path;
+            """;
+        command.Parameters.AddWithValue("$task_id", taskId);
+        var rows = new List<(string Status, string Path, string Disposition, int MovieId, string? MainPath)>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetInt32(3),
+                reader.IsDBNull(5) ? null : reader.GetString(5)));
+        }
+
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, row =>
+        {
+            Assert.Equal("metadata_resolved", row.Status);
+            Assert.Equal(129, row.MovieId);
+        });
+        var main = Assert.Single(rows, row => row.Disposition == "movie");
+        Assert.Equal("Spirited Away.mkv", main.Path);
+        Assert.Null(main.MainPath);
+        var extras = rows.Where(row => row.Disposition == "extras").ToArray();
+        Assert.Equal(2, extras.Length);
+        Assert.All(extras, extra => Assert.Equal("Spirited Away.mkv", extra.MainPath));
+        Assert.Equal(["Spirited Away"], tmdb.MovieSearches);
+    }
+
+    [Fact]
     public async Task VerifiedMovieMovesToMovieLibraryAndCreatesMovieCompletion()
     {
         var tmdb = new FakeTmdbClient();
@@ -418,6 +497,46 @@ public sealed class MovieMetadataResolutionProcessorTests
             new TorrentMetadata(title, new string('a', 40), files.Sum(file => file.Size), files),
             $"movie-{Guid.NewGuid():N}.torrent",
             DateTimeOffset.UtcNow.AddMinutes(10));
+        return task.Id;
+    }
+
+    private static async Task<string> SeedU2MovieAsync(
+        RunningApp app,
+        string title,
+        IReadOnlyList<TorrentFile> files)
+    {
+        var profiles = app.App.Services.GetRequiredService<SourceProfileStore>();
+        var profile = Assert.IsType<SourceProfileRecord>(await profiles.GetEnabledAsync("u2"));
+        var normalization = IngestCommandNormalizer.Normalize(
+            "u2",
+            new IngestItemCommand(
+                "https://u2.dmhy.org/download.php?id=65893&passkey=test&https=1",
+                new IngestItemInfo(
+                    title,
+                    null,
+                    "65893",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    MediaTypes.Movie)));
+        Assert.True(normalization.IsValid, string.Join(", ", normalization.Errors));
+        var task = await app.App.Services.GetRequiredService<IngestTaskStore>().AddStagedAsync(
+            normalization.Item!,
+            profile,
+            new TorrentMetadata(title, new string('c', 40), files.Sum(file => file.Size), files),
+            $"u2-movie-{Guid.NewGuid():N}.torrent",
+            DateTimeOffset.UtcNow.AddMinutes(10));
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using var connection = await database.OpenConnectionAsync();
+        await using var update = connection.CreateCommand();
+        update.CommandText = "UPDATE ingest_tasks SET status = 'download_preparing' WHERE id = $task_id;";
+        update.Parameters.AddWithValue("$task_id", task.Id);
+        Assert.Equal(1, await update.ExecuteNonQueryAsync());
         return task.Id;
     }
 

@@ -127,6 +127,9 @@ const otherReadaptationReviewCancel = element("#other-readaptation-review-cancel
 const otherReadaptationReviewReject = element("#other-readaptation-review-reject");
 const mixedMediaPostprocessDialog = element("#mixed-media-postprocess-dialog");
 const mixedMediaPostprocessConfirm = element("#mixed-media-postprocess-confirm");
+const manualMetadataDialog = element("#manual-metadata-assignment-dialog");
+const manualMetadataConfirm = element("#manual-metadata-assignment-confirm");
+let activeManualMetadataPreview = null;
 let activeMixedMediaPreview = null;
 let selectedMixedMediaMovie = null;
 let mixedMediaReviewReady = false;
@@ -2559,6 +2562,9 @@ function libraryStrategy(value) {
         tmdb_episode_bangumi_date: "Bangumi/TMDB EP ±1 日 + TMDB 验证",
         tmdb_episode_bangumi_nearest_date: "单文件 7 日最近日期 + 文件名 EP + TMDB 验证",
         subtitle_association: "字幕关联已确认 EP",
+        u2_anidb_mapping: "U2 AniDB 映射 + TMDB 验证",
+        u2_anidb_title_cache: "U2 AniDB 官方标题 + TMDB 搜索",
+        u2_anitomy_title: "U2 AnitomySharp 标题 + TMDB 搜索",
         manual_review_override: "人工审核 TMDB 修正 + TMDB 验证",
     };
     return value ? labels[value] ?? value : "未记录";
@@ -2879,9 +2885,13 @@ async function openMovieFileList(item) {
     const summary = element("#movie-file-dialog-summary");
     const container = element("#movie-file-dialog-list");
     const message = element("#movie-file-dialog-message");
+    const save = element("#movie-file-save");
     const forceDelete = element("#movie-file-force-delete");
     summary.textContent = `正在读取 TMDB Movie ${item.tmdb_movie_id} 的实际文件…`;
     message.textContent = "";
+    save.hidden = true;
+    save.disabled = true;
+    save.onclick = null;
     forceDelete.hidden = true;
     forceDelete.onclick = null;
     setRegionState(container, "loading");
@@ -2898,7 +2908,7 @@ async function openMovieFileList(item) {
         summary.textContent =
             `Movie 主文件 ${mainCount} · Extras ${extrasCount} · 附属文件 ${sidecarCount}`
                 + (missingCount > 0 ? ` · 缺失 ${missingCount}` : "")
-                + ` · 根目录 ${detail.movie_root}`;
+                + ` · 根目录 ${detail.movie_root}。可从现有视频中指定一个主文件，其余视频统一归入 Movie Extras。`;
         if (detail.files.length === 0) {
             renderRegionMessage(container, "empty", "没有完成记录中的媒体路径，也未发现可列出的 Movie 文件。");
         }
@@ -2914,14 +2924,57 @@ async function openMovieFileList(item) {
             });
             head.append(headRow);
             const body = document.createElement("tbody");
+            const editableVideos = detail.files.filter(file => file.is_video
+                && file.exists
+                && file.within_movie_root
+                && file.relative_path !== null);
+            const currentMain = detail.files.find(file => file.role === "movie")?.relative_path ?? null;
+            let selectedMain = currentMain;
+            const roleSelects = [];
             detail.files.forEach(file => {
                 const row = document.createElement("tr");
                 row.className = file.exists ? "" : "missing";
                 const role = document.createElement("td");
-                const roleBadge = document.createElement("span");
-                roleBadge.className = `movie-file-role ${file.role}`;
-                roleBadge.textContent = movieFileRoleLabel(file.role);
-                role.append(roleBadge);
+                const editable = editableVideos.includes(file);
+                if (editable) {
+                    const roleSelect = document.createElement("select");
+                    roleSelect.className = "movie-file-role-select";
+                    roleSelect.dataset.relativePath = file.relative_path;
+                    const mainOption = document.createElement("option");
+                    mainOption.value = "movie";
+                    mainOption.textContent = "Movie 主文件";
+                    const extrasOption = document.createElement("option");
+                    extrasOption.value = "extras";
+                    extrasOption.textContent = "Movie Extras";
+                    roleSelect.append(mainOption, extrasOption);
+                    roleSelect.value = file.role === "movie" ? "movie" : "extras";
+                    roleSelect.dataset.role = roleSelect.value;
+                    roleSelect.addEventListener("change", () => {
+                        if (roleSelect.value !== "movie") {
+                            roleSelect.value = "movie";
+                            roleSelect.dataset.role = "movie";
+                            message.textContent = "Movie 必须保留一个主文件；请选择另一个视频作为主文件即可自动交换。";
+                            return;
+                        }
+                        roleSelects.forEach(other => {
+                            other.value = other === roleSelect ? "movie" : "extras";
+                            other.dataset.role = other.value;
+                        });
+                        selectedMain = roleSelect.dataset.relativePath ?? null;
+                        save.disabled = selectedMain === null || selectedMain === currentMain;
+                        message.textContent = save.disabled
+                            ? "当前归类没有变化。"
+                            : "保存后，新主文件会移到电影目录顶层，原主文件会移入 Extras。";
+                    });
+                    roleSelects.push(roleSelect);
+                    role.append(roleSelect);
+                }
+                else {
+                    const roleBadge = document.createElement("span");
+                    roleBadge.className = `movie-file-role ${file.role}`;
+                    roleBadge.textContent = movieFileRoleLabel(file.role);
+                    role.append(roleBadge);
+                }
                 const name = document.createElement("td");
                 name.textContent = file.file_name;
                 name.title = file.file_name;
@@ -2946,6 +2999,41 @@ async function openMovieFileList(item) {
             });
             table.append(head, body);
             renderRegionContent(container, table);
+            save.hidden = editableVideos.length === 0;
+            save.disabled = true;
+            save.onclick = async () => {
+                if (!selectedMain || selectedMain === currentMain)
+                    return;
+                save.disabled = true;
+                forceDelete.disabled = true;
+                message.textContent = "正在安全交换 Movie 主文件与 Extras，并同步任务引用…";
+                try {
+                    const response = await authenticatedFetch(`/api/v1/library/movies/${item.tmdb_movie_id}/files/main`, {
+                        method: "PUT",
+                        headers: jsonRequestHeaders(),
+                        body: JSON.stringify({
+                            expected_revision: detail.resource_revision,
+                            main_relative_path: selectedMain,
+                        }),
+                    });
+                    if (!response.ok)
+                        throw new Error(await responseError(response));
+                    const result = await response.json();
+                    element("#movie-library-action-status").textContent =
+                        `TMDB Movie ${item.tmdb_movie_id} 的主文件已改为 ${result.main_relative_path}`
+                            + (result.former_main_relative_path
+                                ? `；原主文件已移至 ${result.former_main_relative_path}。`
+                                : "。");
+                    movieFileDialog.close();
+                    await loadMovieLibrary();
+                    await openMovieFileList(item);
+                }
+                catch (error) {
+                    message.textContent = `文件归类保存失败：${errorMessage(error, "未知错误")}`;
+                    save.disabled = false;
+                    forceDelete.disabled = false;
+                }
+            };
         }
         forceDelete.hidden = !detail.can_force_delete;
         forceDelete.disabled = false;
@@ -7263,6 +7351,181 @@ async function retryMetadataTask(taskId, button) {
         button.textContent = errorMessage(error, "重试失败");
     }
 }
+function manualEpisodeCandidate(value) {
+    if (!value)
+        return null;
+    const normalized = value.trim();
+    if (!/^\d{1,5}$/.test(normalized))
+        return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+function renderManualMetadataFiles() {
+    const preview = activeManualMetadataPreview;
+    if (!preview)
+        return;
+    const mediaType = element("#manual-metadata-media-type").value;
+    element("#manual-metadata-season-field").hidden = mediaType === "movie";
+    const container = element("#manual-metadata-assignment-files");
+    container.replaceChildren();
+    const defaultMovieMain = preview.files
+        .filter(file => file.is_video)
+        .sort((left, right) => right.size_bytes - left.size_bytes)[0]?.task_file_id ?? null;
+    for (const file of preview.files) {
+        const row = document.createElement("div");
+        row.className = `manual-metadata-file-row${mediaType === "movie" ? " movie" : ""}`;
+        row.dataset.fileId = file.task_file_id;
+        const identity = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = file.relative_path;
+        name.title = file.relative_path;
+        const detail = document.createElement("small");
+        detail.textContent = `${file.is_video ? "视频" : "附件"} · ${formatBytes(file.size_bytes)} · 当前 ${file.disposition}`;
+        identity.append(name, detail);
+        const role = document.createElement("select");
+        role.className = "manual-metadata-file-role";
+        if (mediaType === "tv") {
+            role.append(new Option("Episode", "episode"), new Option("Extras", "extras"));
+            const episodeNumber = file.tmdb_episode_number ?? manualEpisodeCandidate(file.file_episode_candidate);
+            role.value = file.is_video && (file.disposition === "episode" || episodeNumber !== null)
+                ? "episode"
+                : "extras";
+            if (!file.is_video) {
+                role.value = "extras";
+                role.disabled = true;
+                role.title = "非视频附件仅能归入 Extras";
+            }
+            const episode = document.createElement("input");
+            episode.className = "manual-metadata-file-episode";
+            episode.type = "number";
+            episode.min = "1";
+            episode.step = "1";
+            episode.placeholder = "EP";
+            episode.value = episodeNumber === null ? "" : String(episodeNumber);
+            const syncEpisode = () => {
+                episode.hidden = role.value !== "episode";
+                episode.required = role.value === "episode";
+            };
+            role.addEventListener("change", syncEpisode);
+            syncEpisode();
+            row.append(identity, role, episode);
+        }
+        else {
+            role.append(new Option("Movie 主文件", "main"), new Option("Movie Extras", "extras"));
+            role.value = file.is_video
+                && (file.disposition === "movie" || file.task_file_id === defaultMovieMain)
+                ? "main"
+                : "extras";
+            if (!file.is_video) {
+                role.value = "extras";
+                role.disabled = true;
+                role.title = "非视频附件仅能归入 Movie Extras";
+            }
+            role.addEventListener("change", () => {
+                if (role.value !== "main")
+                    return;
+                container.querySelectorAll(".manual-metadata-file-role")
+                    .forEach(other => {
+                    if (other !== role && other.value === "main")
+                        other.value = "extras";
+                });
+            });
+            row.append(identity, role);
+        }
+        container.append(row);
+    }
+}
+async function openManualMetadataAssignment(taskId) {
+    const message = element("#manual-metadata-assignment-message");
+    message.textContent = "正在读取任务文件…";
+    manualMetadataConfirm.disabled = true;
+    activeManualMetadataPreview = null;
+    manualMetadataDialog.showModal();
+    try {
+        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(taskId)}/manual-assignment`, { headers });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        const preview = await response.json();
+        activeManualMetadataPreview = preview;
+        element("#manual-metadata-assignment-summary").textContent =
+            `${preview.title} · ${statusLabels[preview.status] ?? preview.status} · ${preview.files.length} 个文件`;
+        const mediaType = element("#manual-metadata-media-type");
+        mediaType.value = preview.media_type;
+        const tvIdentity = preview.files.find(file => file.tmdb_series_id !== null);
+        const movieIdentity = preview.files.find(file => file.tmdb_movie_id !== null);
+        element("#manual-metadata-tmdb-id").value = String(preview.media_type === "movie"
+            ? movieIdentity?.tmdb_movie_id ?? ""
+            : tvIdentity?.tmdb_series_id ?? "");
+        element("#manual-metadata-season").value = String(tvIdentity?.tmdb_season_number ?? "");
+        renderManualMetadataFiles();
+        message.textContent = preview.eligible ? "" : preview.reason ?? "任务当前不可手动指定。";
+        manualMetadataConfirm.disabled = !preview.eligible;
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "手动指定预览读取失败");
+    }
+}
+async function submitManualMetadataAssignment() {
+    const preview = activeManualMetadataPreview;
+    if (!preview?.eligible)
+        return;
+    const message = element("#manual-metadata-assignment-message");
+    const mediaType = element("#manual-metadata-media-type").value;
+    const tmdbId = Number(element("#manual-metadata-tmdb-id").value);
+    const seasonNumber = mediaType === "tv"
+        ? Number(element("#manual-metadata-season").value)
+        : null;
+    const rows = Array.from(element("#manual-metadata-assignment-files")
+        .querySelectorAll(".manual-metadata-file-row"));
+    const files = rows.map(row => {
+        const role = row.querySelector(".manual-metadata-file-role").value;
+        const episodeInput = row.querySelector(".manual-metadata-file-episode");
+        return {
+            task_file_id: row.dataset.fileId,
+            role,
+            episode_number: mediaType === "tv" && role === "episode"
+                ? Number(episodeInput?.value ?? "")
+                : null,
+        };
+    });
+    if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0
+        || (mediaType === "tv" && (!Number.isSafeInteger(seasonNumber) || (seasonNumber ?? 0) <= 0))
+        || files.some(file => file.role === "episode"
+            && (!Number.isSafeInteger(file.episode_number) || (file.episode_number ?? 0) <= 0))
+        || (mediaType === "movie" && files.filter(file => file.role === "main").length !== 1)) {
+        message.textContent = mediaType === "tv"
+            ? "请填写正数 TMDB ID、Season，并为每个 Episode 填写正数 EP。"
+            : "请填写正数 TMDB ID，并且只选择一个 Movie 主文件。";
+        return;
+    }
+    const description = mediaType === "tv"
+        ? `TMDB TV ${tmdbId} · S${String(seasonNumber).padStart(2, "0")} · ${files.filter(file => file.role === "episode").length} 个 Episode`
+        : `TMDB Movie ${tmdbId} · 1 个主文件 · ${files.length - 1} 个 Extras`;
+    if (!window.confirm(`确认手动覆盖该任务的自动匹配结果？\n${description}\n提交后将重新进入下载/整理流程。`))
+        return;
+    manualMetadataConfirm.disabled = true;
+    message.textContent = "正在验证 TMDB 并原子写入文件归类…";
+    try {
+        const response = await authenticatedFetch(`/api/v1/metadata/tasks/${encodeURIComponent(preview.task_id)}/manual-assignment`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                media_type: mediaType,
+                tmdb_id: tmdbId,
+                season_number: seasonNumber,
+                files,
+            }),
+        });
+        if (!response.ok)
+            throw new Error(await responseError(response));
+        manualMetadataDialog.close();
+        await loadMetadataTasks();
+    }
+    catch (error) {
+        message.textContent = errorMessage(error, "手动指定失败");
+        manualMetadataConfirm.disabled = false;
+    }
+}
 async function readaptOtherFiles(taskId, button) {
     const defaultLabel = "重新适配 Other";
     button.disabled = true;
@@ -8949,6 +9212,12 @@ async function loadMetadataTasks(background = false) {
             attemptList.className = "metadata-attempt-list";
             attempts.onclick = () => void loadMetadataAttempts(item.task_id, attemptList, attempts);
             actions.append(detailButton, attempts);
+            const manual = document.createElement("button");
+            manual.type = "button";
+            manual.className = "secondary-button";
+            manual.textContent = "手动指定";
+            manual.addEventListener("click", () => void openManualMetadataAssignment(item.task_id));
+            actions.append(manual);
             if (item.status === "metadata_failed") {
                 const retry = document.createElement("button");
                 retry.type = "button";
@@ -12114,6 +12383,10 @@ element("#other-readaptation-review-close").addEventListener("click", () => {
         otherReadaptationReviewDialog.close();
 });
 element("#mixed-media-postprocess-close").addEventListener("click", () => mixedMediaPostprocessDialog.close());
+element("#manual-metadata-assignment-close").addEventListener("click", () => manualMetadataDialog.close());
+element("#manual-metadata-assignment-cancel").addEventListener("click", () => manualMetadataDialog.close());
+element("#manual-metadata-media-type").addEventListener("change", renderManualMetadataFiles);
+manualMetadataConfirm.addEventListener("click", () => void submitManualMetadataAssignment());
 element("#mixed-media-postprocess-cancel").addEventListener("click", () => mixedMediaPostprocessDialog.close());
 element("#mixed-media-movie-search").addEventListener("click", () => void searchMixedMediaMovies());
 element("#mixed-media-anitomy-parse").addEventListener("click", () => void parseMixedMediaMovieTitle());

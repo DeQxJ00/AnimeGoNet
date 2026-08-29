@@ -792,10 +792,11 @@ public sealed class SourceProfileStore(AnimeGoSqliteDatabase database)
             throw new ArgumentException("Source profile media type must be tv or movie.");
         }
         if (normalized == MediaTypes.Movie
-            && !string.Equals(adapter, "mikan", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(adapter, "mikan", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(adapter, "u2", StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException(
-                "Movie media type can only be configured for a Mikan source profile.");
+                "Movie media type can only be configured for a Mikan or U2 source profile.");
         }
         return normalized;
     }

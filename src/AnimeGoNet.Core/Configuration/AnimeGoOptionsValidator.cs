@@ -129,9 +129,9 @@ public static partial class AnimeGoOptionsValidator
                 errors.Add($"Source profile '{profile.Id}' media type must be tv or movie.");
             }
             else if (mediaType == MediaTypes.Movie
-                && !string.Equals(profile.Adapter, "mikan", StringComparison.Ordinal))
+                && profile.Adapter is not ("mikan" or "u2"))
             {
-                errors.Add($"Source profile '{profile.Id}' can only use movie media type when adapter is mikan.");
+                errors.Add($"Source profile '{profile.Id}' can only use movie media type when adapter is mikan or u2.");
             }
 
             if (!profile.DownloaderId.Equals(profile.DownloaderId.ToLowerInvariant(), StringComparison.Ordinal)

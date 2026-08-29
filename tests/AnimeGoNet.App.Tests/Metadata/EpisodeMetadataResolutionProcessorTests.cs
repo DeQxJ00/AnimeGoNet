@@ -1021,6 +1021,43 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task U2AniDbCompleteParsedSeasonSetTreatsRemainingVideosAsExtrasWithoutAi()
+    {
+        var tmdb = new FakeTmdbClient
+        {
+            SeasonValue = U2Season(1, 2, 3),
+            EpisodeFactory = number => new TmdbEpisode(
+                9000 + number, 72517, 2, number, $"Episode {number}", null),
+        };
+        var ai = new FakeAiMetadataMatcher();
+        await using var app = await StartSeasonResolvedTaskAsync(
+            tmdb,
+            episodeOffset: null,
+            aiMatcher: ai,
+            enableEpisodeAi: true);
+        var taskId = await PrepareFilesAsync(
+            app,
+            ("Show 01.mkv", "1", "1"),
+            ("Show 02.mkv", "2", "2"),
+            ("Show 03.mkv", "3", "3"),
+            ("Show bonus feature.mkv", null, null));
+        await SetSourceAdapterAsync(app, taskId, "u2");
+        await ResolveSeasonAsync(app);
+
+        Assert.True(await app.App.Services
+            .GetRequiredService<EpisodeMetadataResolutionProcessor>().RunOnceAsync());
+
+        Assert.Empty(ai.Requests);
+        Assert.Equal("metadata_resolved", await ReadTaskStatusAsync(app, taskId));
+        var files = await ReadFilesAsync(app, taskId);
+        Assert.Equal([1, 2, 3], files.Where(file => file.Disposition == "episode")
+            .Select(file => file.EpisodeNumber).ToArray());
+        var extra = files.Single(file => file.Path == "Show bonus feature.mkv");
+        Assert.Equal("extras", extra.Disposition);
+        Assert.Null(extra.EpisodeNumber);
+    }
+
+    [Fact]
     public async Task U2IncompleteTorrentInvokesUnifiedAiExactlyOnce()
     {
         var tmdb = new FakeTmdbClient

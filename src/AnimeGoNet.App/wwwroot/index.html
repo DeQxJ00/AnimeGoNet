@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>AnimeGoNet</title>
-  <link rel="stylesheet" href="/styles.css?v=20260828-movie-library-admin">
+  <link rel="stylesheet" href="/styles.css?v=20260829-manual-metadata-assignment">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -2218,7 +2218,7 @@
     <article class="movie-file-dialog-panel">
       <div class="delete-heading">
         <div>
-          <p class="eyebrow">Movie files and orphan cleanup</p>
+          <p class="eyebrow">Movie file roles and orphan cleanup</p>
           <h2 id="movie-file-dialog-title">电影文件清单</h2>
         </div>
         <button id="movie-file-dialog-close" type="button" class="icon-button" aria-label="关闭">×</button>
@@ -2227,8 +2227,11 @@
       <div id="movie-file-dialog-list" class="movie-file-dialog-list"></div>
       <p id="movie-file-dialog-message" class="delete-message" aria-live="polite"></p>
       <div class="delete-actions">
-        <span class="muted">强制删除仅允许无关联任务的孤立 Movie，并严格限制在 Movie 库根目录。</span>
+        <span class="muted">一个视频必须指定为 Movie 主文件，其余视频归入 Extras；附属文件不参与切换。</span>
         <button id="movie-file-dialog-cancel" type="button" class="secondary-button">关闭</button>
+        <button id="movie-file-save" type="button" class="primary-button" hidden>
+          保存主文件 / Extras
+        </button>
         <button id="movie-file-force-delete" type="button" class="danger-button" hidden>
           强制删除孤立记录和文件…
         </button>
@@ -2321,6 +2324,33 @@
     </article>
   </dialog>
 
+  <dialog id="manual-metadata-assignment-dialog" aria-labelledby="manual-metadata-assignment-title">
+    <article class="manual-metadata-assignment-panel">
+      <div class="delete-heading">
+        <div>
+          <p class="eyebrow">Manual metadata assignment</p>
+          <h2 id="manual-metadata-assignment-title">手动指定 TMDB 与文件归类</h2>
+        </div>
+        <button id="manual-metadata-assignment-close" type="button" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <p id="manual-metadata-assignment-summary" class="muted"></p>
+      <div class="manual-metadata-identity">
+        <label>媒体类型
+          <select id="manual-metadata-media-type"><option value="tv">TV</option><option value="movie">Movie</option></select>
+        </label>
+        <label>TMDB ID<input id="manual-metadata-tmdb-id" type="number" min="1" step="1" inputmode="numeric"></label>
+        <label id="manual-metadata-season-field">Season<input id="manual-metadata-season" type="number" min="1" step="1" inputmode="numeric"></label>
+      </div>
+      <p class="muted">提交时会在线验证 TMDB 身份。TV 的每个视频可指定 EP 或 Extras；Movie 必须且只能选择一个主文件，其余文件归入 Movie Extras。</p>
+      <div id="manual-metadata-assignment-files" class="manual-metadata-file-list"></div>
+      <p id="manual-metadata-assignment-message" class="delete-message" aria-live="polite"></p>
+      <div class="delete-actions">
+        <button id="manual-metadata-assignment-cancel" type="button" class="secondary-button">取消</button>
+        <button id="manual-metadata-assignment-confirm" type="button" class="primary-button">验证并应用</button>
+      </div>
+    </article>
+  </dialog>
+
   <dialog id="downloader-config-dialog" aria-labelledby="downloader-config-title">
     <form id="downloader-config-form" class="downloader-config-panel">
       <div class="delete-heading">
@@ -2371,6 +2401,6 @@
     </form>
   </dialog>
 
-    <script type="module" src="/app.js?v=20260828-movie-symbolic-size"></script>
+    <script type="module" src="/app.js?v=20260829-manual-metadata-assignment"></script>
 </body>
 </html>

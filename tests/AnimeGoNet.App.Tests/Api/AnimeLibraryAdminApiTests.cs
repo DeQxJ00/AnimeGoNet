@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using AnimeGoNet.Core.Configuration;
@@ -134,7 +135,8 @@ public sealed class AnimeLibraryAdminApiTests
             && item.GetProperty("relative_path").GetString() == Path.Combine(
                 "Old Movie (2024)", "Extras", Path.GetFileName(extraPath)));
         Assert.Contains(fileItems, item => item.GetProperty("role").GetString() == "sidecar"
-            && item.GetProperty("file_name").GetString() == Path.GetFileName(nfoPath));
+            && item.GetProperty("file_name").GetString() == Path.GetFileName(nfoPath)
+            && !item.GetProperty("is_video").GetBoolean());
 
         using var deleted = await app.Client.PostAsync(
             $"/api/v1/library/movies/{tmdb.Movie.Id}/force-delete",
@@ -150,6 +152,141 @@ public sealed class AnimeLibraryAdminApiTests
         Assert.False(File.Exists(extraPath));
         Assert.False(File.Exists(nfoPath));
         Assert.Equal(0, missingJson.RootElement.GetProperty("total_items").GetInt32());
+    }
+
+    [Fact]
+    public async Task MovieFilesCanPromoteExtraAndMoveFormerMainIntoExtras()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
+        var movieDirectory = Path.Combine(options.Paths.EffectiveMovieSavePath, "Editable Movie (2024)");
+        var originalMain = Path.Combine(movieDirectory, "Original Main.mkv");
+        var candidateSource = Path.Combine(movieDirectory, "Extras", "Director Cut.mkv");
+        var promotedMain = Path.Combine(movieDirectory, "Director Cut.mkv");
+        var demotedMain = Path.Combine(movieDirectory, "Extras", "Original Main.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(candidateSource)!);
+        await File.WriteAllBytesAsync(originalMain, new byte[] { 1, 2, 3 });
+        await File.WriteAllBytesAsync(candidateSource, new byte[] { 4, 5, 6, 7 });
+        await SeedMovieAsync(
+            database,
+            tmdb.Movie.Id,
+            includeCompletion: true,
+            mediaPath: originalMain);
+
+        using var before = await app.Client.GetAsync($"/api/v1/library/movies/{tmdb.Movie.Id}/files");
+        using var beforeJson = JsonDocument.Parse(await before.Content.ReadAsStreamAsync());
+        var revision = beforeJson.RootElement.GetProperty("resource_revision").GetString()!;
+        var candidateRelativePath = Path.GetRelativePath(
+            options.Paths.EffectiveMovieSavePath,
+            candidateSource);
+
+        using var updated = await app.Client.PutAsJsonAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}/files/main",
+            new
+            {
+                expected_revision = revision,
+                main_relative_path = candidateRelativePath,
+            });
+        var updatedBody = await updated.Content.ReadAsStringAsync();
+        Assert.True(updated.IsSuccessStatusCode, $"{updated.StatusCode}: {updatedBody}");
+        using var updatedJson = JsonDocument.Parse(updatedBody);
+        using var after = await app.Client.GetAsync($"/api/v1/library/movies/{tmdb.Movie.Id}/files");
+        using var afterJson = JsonDocument.Parse(await after.Content.ReadAsStreamAsync());
+        var afterFiles = afterJson.RootElement.GetProperty("files").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+        Assert.Equal("updated", updatedJson.RootElement.GetProperty("result").GetString());
+        Assert.NotEqual(revision, updatedJson.RootElement.GetProperty("resource_revision").GetString());
+        Assert.True(File.Exists(promotedMain));
+        Assert.Equal(new byte[] { 4, 5, 6, 7 }, await File.ReadAllBytesAsync(promotedMain));
+        Assert.True(File.Exists(demotedMain));
+        Assert.Equal(new byte[] { 1, 2, 3 }, await File.ReadAllBytesAsync(demotedMain));
+        Assert.False(File.Exists(originalMain));
+        Assert.False(File.Exists(candidateSource));
+        Assert.Contains(afterFiles, file => file.GetProperty("role").GetString() == "movie"
+            && file.GetProperty("file_name").GetString() == "Director Cut.mkv");
+        Assert.Contains(afterFiles, file => file.GetProperty("role").GetString() == "extras"
+            && file.GetProperty("file_name").GetString() == "Original Main.mkv");
+
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT media_path FROM movie_completion_records WHERE tmdb_movie_id = $id;";
+        command.Parameters.AddWithValue("$id", tmdb.Movie.Id);
+        Assert.Equal(promotedMain, await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task MovieMainFileUpdateRejectsStaleRevisionBeforeMovingFiles()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
+        var movieDirectory = Path.Combine(options.Paths.EffectiveMovieSavePath, "Stable Movie (2024)");
+        var originalMain = Path.Combine(movieDirectory, "Main.mkv");
+        var candidate = Path.Combine(movieDirectory, "Extras", "Candidate.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(candidate)!);
+        await File.WriteAllBytesAsync(originalMain, new byte[] { 1 });
+        await File.WriteAllBytesAsync(candidate, new byte[] { 2 });
+        await SeedMovieAsync(database, tmdb.Movie.Id, includeCompletion: true, mediaPath: originalMain);
+        var relative = Path.GetRelativePath(options.Paths.EffectiveMovieSavePath, candidate);
+
+        using var response = await app.Client.PutAsJsonAsync(
+            $"/api/v1/library/movies/{tmdb.Movie.Id}/files/main",
+            new
+            {
+                expected_revision = new string('0', 64),
+                main_relative_path = relative,
+            });
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        Assert.False(string.IsNullOrWhiteSpace(responseBody));
+        using var json = JsonDocument.Parse(responseBody);
+        Assert.Equal("library_revision_conflict", json.RootElement.GetProperty("code").GetString());
+        Assert.True(File.Exists(originalMain));
+        Assert.True(File.Exists(candidate));
+        Assert.False(File.Exists(Path.Combine(movieDirectory, "Candidate.mkv")));
+    }
+
+    [Fact]
+    public async Task MovieFilesReportSymbolicLinkTargetSize()
+    {
+        var tmdb = new MutableTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
+        var sourcePath = Path.Combine(app.RootPath, "pt", "source-movie.mkv");
+        var movieDirectory = Path.Combine(options.Paths.EffectiveMovieSavePath, "Linked Movie (2024)");
+        var mainPath = Path.Combine(movieDirectory, "Linked Movie (2024).mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        Directory.CreateDirectory(movieDirectory);
+        await File.WriteAllBytesAsync(sourcePath, new byte[] { 1, 2, 3, 4, 5 });
+        try
+        {
+            File.CreateSymbolicLink(mainPath, sourcePath);
+        }
+        catch (Exception exception) when (OperatingSystem.IsWindows()
+                                          && exception is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        await SeedMovieAsync(
+            database,
+            tmdb.Movie.Id,
+            includeCompletion: true,
+            mediaPath: mainPath);
+
+        using var response = await app.Client.GetAsync($"/api/v1/library/movies/{tmdb.Movie.Id}/files");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+        var mainFile = Assert.Single(json.RootElement.GetProperty("files").EnumerateArray(),
+            item => item.GetProperty("role").GetString() == "movie");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("symbolic", mainFile.GetProperty("link_type").GetString());
+        Assert.Equal(5, mainFile.GetProperty("size_bytes").GetInt64());
     }
 
     [Fact]

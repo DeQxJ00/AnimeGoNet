@@ -293,6 +293,146 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             references);
     }
 
+    public async Task<AnimeMovieMutationResult> UpdateMovieMainFileAsync(
+        int tmdbMovieId,
+        string expectedRevision,
+        string currentMainPath,
+        string formerMainPath,
+        string selectedSourcePath,
+        string selectedMainPath,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(tmdbMovieId, 1);
+        var revision = NormalizeRevision(expectedRevision);
+        var now = utcNow.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var current = await FindMovieAsync(connection, transaction, tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (current is null)
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.NotFound,
+                tmdbMovieId,
+                null);
+        }
+
+        if (!string.Equals(MovieRevision(current), revision, StringComparison.OrdinalIgnoreCase))
+        {
+            return new AnimeMovieMutationResult(
+                AnimeLibraryMutationStatus.RevisionConflict,
+                tmdbMovieId,
+                MovieRevision(current));
+        }
+
+        string? selectedTaskFileId = null;
+        await using (var selected = connection.CreateCommand())
+        {
+            selected.Transaction = transaction;
+            selected.CommandText = """
+                SELECT file.id
+                FROM task_files AS file
+                JOIN file_operations AS operation ON operation.task_file_id = file.id
+                WHERE file.tmdb_movie_id = $tmdb_movie_id
+                  AND operation.target_path = $selected_source_path
+                ORDER BY operation.updated_at_utc DESC, file.id
+                LIMIT 1;
+                """;
+            selected.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            selected.Parameters.AddWithValue("$selected_source_path", selectedSourcePath);
+            selectedTaskFileId = await selected.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+                as string;
+        }
+
+        await using (var completion = connection.CreateCommand())
+        {
+            completion.Transaction = transaction;
+            completion.CommandText = """
+                UPDATE movie_completion_records
+                SET media_path = $selected_main_path,
+                    completed_at_utc = $now
+                WHERE tmdb_movie_id = $tmdb_movie_id
+                  AND media_path = $current_main_path;
+                """;
+            completion.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            completion.Parameters.AddWithValue("$current_main_path", currentMainPath);
+            completion.Parameters.AddWithValue("$selected_main_path", selectedMainPath);
+            completion.Parameters.AddWithValue("$now", now);
+            if (await completion.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return new AnimeMovieMutationResult(
+                    AnimeLibraryMutationStatus.RevisionConflict,
+                    tmdbMovieId,
+                    MovieRevision(current));
+            }
+        }
+
+        await using (var operations = connection.CreateCommand())
+        {
+            operations.Transaction = transaction;
+            operations.CommandText = """
+                UPDATE file_operations
+                SET target_path = CASE
+                        WHEN target_path = $current_main_path THEN $former_main_path
+                        WHEN target_path = $selected_source_path THEN $selected_main_path
+                        ELSE target_path
+                    END,
+                    updated_at_utc = $now
+                WHERE target_path = $current_main_path
+                   OR target_path = $selected_source_path;
+                """;
+            operations.Parameters.AddWithValue("$current_main_path", currentMainPath);
+            operations.Parameters.AddWithValue("$former_main_path", formerMainPath);
+            operations.Parameters.AddWithValue("$selected_source_path", selectedSourcePath);
+            operations.Parameters.AddWithValue("$selected_main_path", selectedMainPath);
+            operations.Parameters.AddWithValue("$now", now);
+            await operations.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (selectedTaskFileId is not null)
+        {
+            await using var ownership = connection.CreateCommand();
+            ownership.Transaction = transaction;
+            ownership.CommandText = """
+                UPDATE movie_claims
+                SET task_file_id = $selected_file_id
+                WHERE tmdb_movie_id = $tmdb_movie_id;
+
+                UPDATE task_files
+                SET associated_task_file_id = CASE
+                        WHEN id = $selected_file_id THEN NULL
+                        WHEN disposition = 'movie' THEN $selected_file_id
+                        ELSE associated_task_file_id
+                    END
+                WHERE tmdb_movie_id = $tmdb_movie_id;
+                """;
+            ownership.Parameters.AddWithValue("$selected_file_id", selectedTaskFileId);
+            ownership.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
+            await ownership.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var touch = connection.CreateCommand())
+        {
+            touch.Transaction = transaction;
+            touch.CommandText = """
+                UPDATE anime_movies
+                SET updated_at_utc = $now
+                WHERE id = $id;
+                """;
+            touch.Parameters.AddWithValue("$now", now);
+            touch.Parameters.AddWithValue("$id", current.MovieRowId);
+            await touch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new AnimeMovieMutationResult(
+            AnimeLibraryMutationStatus.Updated,
+            tmdbMovieId,
+            MovieRevision(current with { UpdatedAtUtc = now }));
+    }
+
     public async Task<AnimeMovieMutationResult> ForceDeleteOrphanMovieAsync(
         int tmdbMovieId,
         string expectedRevision,

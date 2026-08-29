@@ -68,6 +68,42 @@ public sealed class U2WholeTorrentEpisodeGateTests
     }
 
     [Fact]
+    public void AniDbMappedCompleteEpisodeSetPassesAndTreatsUnparsedVideosAsExtras()
+    {
+        var claim = Claim("u2", [
+            Video("e1", "Show 01.mkv", 1),
+            Video("e2", "Show 02.mkv", 2),
+            Video("e3", "Show 03.mkv", 3),
+            Video("pv", "Show store PV.mkv", null),
+            Video("special", "Show bonus feature.mkv", null)],
+            aniDbAnimeId: 180);
+
+        var result = U2WholeTorrentEpisodeGate.Evaluate(claim, Season(1, 2, 3));
+
+        Assert.True(result.IsApplicable);
+        Assert.False(result.RequiresAi);
+        Assert.Null(result.Reason);
+        Assert.Equal(["pv", "special"], result.ExplicitExtraFileIds.Order().ToArray());
+        Assert.Equal(["e1", "e2", "e3"], result.TmdbValidatedCandidateFileIds.Order().ToArray());
+    }
+
+    [Fact]
+    public void AniDbMappedPartialEpisodeSetStillRequiresAiWhenOtherVideosAreUnparsed()
+    {
+        var claim = Claim("u2", [
+            Video("e1", "Show 01.mkv", 1),
+            Video("e2", "Show 02.mkv", 2),
+            Video("unknown", "Show unknown.mkv", null)],
+            aniDbAnimeId: 180);
+
+        var result = U2WholeTorrentEpisodeGate.Evaluate(claim, Season(1, 2, 3));
+
+        Assert.True(result.RequiresAi);
+        Assert.Equal("u2_main_video_episode_not_parsed", result.Reason);
+        Assert.Equal(["unknown"], result.BlockingFileIds);
+    }
+
+    [Fact]
     public void CandidateAbsentFromTmdbIsTheOnlyBlockingFile()
     {
         var claim = Claim("u2", [
@@ -159,10 +195,12 @@ public sealed class U2WholeTorrentEpisodeGateTests
 
     private static MetadataEpisodeTaskClaim Claim(
         string adapter,
-        IReadOnlyList<MetadataTaskFileProjection> files) =>
+        IReadOnlyList<MetadataTaskFileProjection> files,
+        int? aniDbAnimeId = null) =>
         new(
             new MetadataTaskClaim(
                 "run", "task", "title", null, null, null, 1, "lease",
+                AniDbAnimeId: aniDbAnimeId,
                 Files: files, SourceAdapter: adapter, TorrentFileCount: files.Count),
             100,
             1,

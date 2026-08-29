@@ -154,6 +154,80 @@ public sealed class SchemaMigrationTests
         Assert.Equal(0, reader.GetInt32(1));
     }
 
+    [Theory]
+    [InlineData("u2_anidb_mapping")]
+    [InlineData("u2_anidb_title_cache")]
+    [InlineData("u2_anitomy_title")]
+    public async Task U2TmdbResolutionEvidenceMigrationBackfillsSuccessfulRuns(string strategy)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations.Where(item => item.Version <= 72).ToArray(),
+            CancellationToken.None);
+
+        const string now = "2026-08-28T12:00:00.0000000+00:00";
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'u2', 'U2', 'u2', 'bt', 'link', 0, 0, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES (
+                    'u2-task', 'u2', 1, 'u2', 'U2 complete season',
+                    'fingerprint', 'bt', '{}', 'metadata_resolved', $now, $now);
+
+                INSERT INTO metadata_resolution_runs (
+                    id, task_id, status, tmdb_access_confirmed,
+                    fallback_eligible, started_at_utc, completed_at_utc,
+                    attempt_number, tmdb_series_id, tmdb_season_number)
+                VALUES (
+                    'u2-run', 'u2-task', 'resolved', 1, 0, $now, $now,
+                    1, 35544, 1);
+
+                INSERT INTO metadata_resolution_attempts (
+                    id, run_id, stage, strategy, priority, result,
+                    retryable, attempt_number, duration_ms, created_at_utc)
+                VALUES
+                    ('u2-series-attempt', 'u2-run', 'series', $strategy,
+                     NULL, 'matched', 0, 1, 10, $now),
+                    ('u2-season-attempt', 'u2-run', 'season', $strategy,
+                     NULL, 'matched', 0, 1, 10, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", now);
+            seed.Parameters.AddWithValue("$strategy", strategy);
+            Assert.Equal(5, await seed.ExecuteNonQueryAsync());
+        }
+
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations,
+            CancellationToken.None);
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT series_resolution_source, series_resolution_attempt_id,
+                   season_resolution_source, season_resolution_attempt_id
+            FROM metadata_resolution_runs
+            WHERE id = 'u2-run';
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(strategy, reader.GetString(0));
+        Assert.Equal("u2-series-attempt", reader.GetString(1));
+        Assert.Equal(strategy, reader.GetString(2));
+        Assert.Equal("u2-season-attempt", reader.GetString(3));
+    }
+
     [Fact]
     public async Task AiInvocationTriggerReasonMigrationAddsAuditableColumn()
     {

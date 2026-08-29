@@ -68,6 +68,75 @@ public sealed class U2AniDbMetadataResolverTests
     }
 
     [Fact]
+    public async Task MovieMappingUsesTmdbMovieIdDirectlyWithoutTitleSearch()
+    {
+        await using var fixture = await ResolverFixture.CreateAsync(
+            """{"tmdbid":"129"}""");
+
+        var result = await fixture.Resolver.ResolveMovieAsync(
+            99,
+            "[Group] Release title [BDRip]",
+            useTmdbMapping: true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(129, result.Movie!.Id);
+        Assert.Equal("u2_anidb_movie_mapping", result.Strategy);
+        Assert.Equal([129], fixture.Tmdb.MovieDetailRequests);
+        Assert.Empty(fixture.Tmdb.MovieSearchTitles);
+    }
+
+    [Fact]
+    public async Task MovieWithoutMappingUsesAnitomyTitleSearch()
+    {
+        await using var fixture = await ResolverFixture.CreateAsync("{}");
+
+        var result = await fixture.Resolver.ResolveMovieAsync(
+            99,
+            "[Group] Spirited Away [BDRip 1080p].mkv",
+            useTmdbMapping: true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("u2_anitomy_movie_title", result.Strategy);
+        Assert.Equal("Spirited Away", Assert.Single(fixture.Tmdb.MovieSearchTitles));
+    }
+
+    [Fact]
+    public async Task EnabledMovieMappingWithoutTmdbIdUsesMappingNameBeforeAnitomyTitle()
+    {
+        await using var fixture = await ResolverFixture.CreateAsync(
+            """{"name":"Eiga Doraemon: Shin Nobita no Kaitei Kiganjou"}""");
+
+        var result = await fixture.Resolver.ResolveMovieAsync(
+            19711,
+            "[Group] unrelated release title [BDRip 1080p].mkv",
+            useTmdbMapping: true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("u2_anidb_movie_mapping_title", result.Strategy);
+        Assert.Equal(
+            "Eiga Doraemon: Shin Nobita no Kaitei Kiganjou",
+            Assert.Single(fixture.Tmdb.MovieSearchTitles));
+    }
+
+    [Fact]
+    public async Task DisabledMovieMappingUsesOfficialCachedTitle()
+    {
+        await using var fixture = await ResolverFixture.CreateAsync(
+            """{"tmdbid":"999"}""",
+            importTitles: true);
+
+        var result = await fixture.Resolver.ResolveMovieAsync(
+            99,
+            "release title must not be searched",
+            useTmdbMapping: false);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("u2_anidb_movie_title_cache", result.Strategy);
+        Assert.Equal("Official Title", fixture.Tmdb.MovieSearchTitles[0]);
+        Assert.DoesNotContain("release title must not be searched", fixture.Tmdb.MovieSearchTitles);
+    }
+
+    [Fact]
     public void SingleRegularSeasonIsSelectedAndSeasonZeroIsExcluded()
     {
         var details = new TmdbSeriesDetails(
@@ -141,7 +210,9 @@ public sealed class U2AniDbMetadataResolverTests
                 new HttpClient(new JsonHandler(mappingJson)),
                 cache,
                 new TmdbSeriesResolver(tmdb),
-                tmdb);
+                tmdb,
+                tmdb,
+                new TmdbMovieResolver(tmdb));
             return new ResolverFixture(root, resolver, tmdb);
         }
 
@@ -175,9 +246,13 @@ public sealed class U2AniDbMetadataResolverTests
             });
     }
 
-    public sealed class FakeTmdbClient(IReadOnlyList<TmdbSeason> seasons) : ITmdbClient
+    public sealed class FakeTmdbClient(IReadOnlyList<TmdbSeason> seasons) : ITmdbClient, ITmdbMovieClient
     {
         public List<string> SearchTitles { get; } = [];
+
+        public List<string> MovieSearchTitles { get; } = [];
+
+        public List<int> MovieDetailRequests { get; } = [];
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(
             string title,
@@ -214,5 +289,23 @@ public sealed class U2AniDbMetadataResolverTests
                 .SingleOrDefault(value => value.SeriesId == seriesId && value.SeasonNumber == seasonNumber)
                 ?.Episodes
                 ?.SingleOrDefault(value => value.EpisodeNumber == episodeNumber));
+
+        public Task<IReadOnlyList<TmdbMovie>> SearchMoviesAsync(
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            MovieSearchTitles.Add(title);
+            return Task.FromResult<IReadOnlyList<TmdbMovie>>(
+                [new TmdbMovie(129, title, title, new DateOnly(2001, 7, 20))]);
+        }
+
+        public Task<TmdbMovie?> GetMovieAsync(
+            int movieId,
+            CancellationToken cancellationToken = default)
+        {
+            MovieDetailRequests.Add(movieId);
+            return Task.FromResult<TmdbMovie?>(
+                new TmdbMovie(movieId, "Spirited Away", "Spirited Away", new DateOnly(2001, 7, 20)));
+        }
     }
 }

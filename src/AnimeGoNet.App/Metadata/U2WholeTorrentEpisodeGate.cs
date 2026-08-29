@@ -128,6 +128,28 @@ internal static class U2WholeTorrentEpisodeGate
             .Where(value => value.Episode is null)
             .Select(value => value.File.FileId)
             .ToArray();
+        var parsedTorrentEpisodes = mainVideos
+            .Where(value => value.Episode is > 0)
+            .Select(value => value.Episode!.Value)
+            .ToArray();
+        var parsedSetExactlyMatchesTmdb = parsedTorrentEpisodes.Length == tmdbEpisodes.Length
+            && parsedTorrentEpisodes.Distinct().Count() == parsedTorrentEpisodes.Length
+            && parsedTorrentEpisodes.OrderBy(value => value).SequenceEqual(tmdbEpisodes);
+        // An explicit AniDB identity plus a verified TMDB Series/Season makes the
+        // complete numbered set authoritative. Remaining unnumbered videos cannot
+        // be regular episodes in that season, so downstream classification may
+        // keep them as Extras (or expose Movie hints) without invoking AI.
+        if (claim.Resolution.AniDbAnimeId is > 0 && parsedSetExactlyMatchesTmdb)
+        {
+            return new U2WholeTorrentEpisodeDecision(
+                true,
+                false,
+                null,
+                extras.Concat(unparsedFileIds).ToHashSet(StringComparer.Ordinal),
+                EmptyFileIds(),
+                validatedCandidateFileIds);
+        }
+
         if (unparsedFileIds.Length > 0)
         {
             return RequiresAi(
@@ -146,12 +168,7 @@ internal static class U2WholeTorrentEpisodeGate
                 validatedCandidateFileIds);
         }
 
-        var torrentEpisodes = mainVideos.Select(value => value.Episode!.Value).ToArray();
-
-        var exact = torrentEpisodes.Length == tmdbEpisodes.Length
-            && torrentEpisodes.Distinct().Count() == torrentEpisodes.Length
-            && torrentEpisodes.OrderBy(value => value).SequenceEqual(tmdbEpisodes);
-        return exact
+        return parsedSetExactlyMatchesTmdb
             ? new U2WholeTorrentEpisodeDecision(
                 true,
                 false,

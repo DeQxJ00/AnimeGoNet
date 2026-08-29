@@ -674,6 +674,7 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
     public async Task CompleteMovieAsync(
         MetadataTaskClaim claim,
         TmdbMovie movie,
+        string mainFileId,
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default)
     {
@@ -685,17 +686,19 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             throw new ArgumentException("Movie completion identity is invalid.", nameof(movie));
         }
 
-        var videos = claim.Files
-            .Where(file => SubtitleAssociationResolver.IsVideo(file.RelativePath))
-            .ToArray();
-        if (videos.Length != 1)
+        ArgumentException.ThrowIfNullOrWhiteSpace(mainFileId);
+        var mainFile = claim.Files.SingleOrDefault(file =>
+            file.FileId == mainFileId
+            && SubtitleAssociationResolver.IsVideo(file.RelativePath));
+        if (mainFile is null)
         {
-            throw new ArgumentException("Movie completion requires exactly one video file.", nameof(claim));
+            throw new ArgumentException(
+                "Movie completion main file must identify one video in the task.",
+                nameof(mainFileId));
         }
 
         var associations = SubtitleAssociationResolver.Resolve(claim.Files.Select(file =>
             new TorrentMediaFile(file.FileId, file.RelativePath, null)).ToArray());
-        var mainFile = videos[0];
         var now = Format(utcNow);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection
@@ -1358,7 +1361,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                           AND attempt.strategy IN (
                               'manual_mikan_override', 'tmdb_title',
                               'backtrace', 'ai_metadata',
-                              'trusted_mikan_offset')
+                              'trusted_mikan_offset', 'u2_anidb_mapping',
+                              'u2_anidb_title_cache', 'u2_anitomy_title')
                         ORDER BY attempt.created_at_utc DESC,
                                  attempt.id DESC
                         LIMIT 1),
@@ -1371,7 +1375,8 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                           AND attempt.strategy IN (
                               'manual_mikan_override', 'tmdb_title',
                               'backtrace', 'ai_metadata',
-                              'trusted_mikan_offset')
+                              'trusted_mikan_offset', 'u2_anidb_mapping',
+                              'u2_anidb_title_cache', 'u2_anitomy_title')
                         ORDER BY attempt.created_at_utc DESC,
                                  attempt.id DESC
                         LIMIT 1),
@@ -1384,7 +1389,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                           AND attempt.strategy IN (
                               'manual_mikan_override', 'tmdb_air_date',
                               'backtrace', 'ai_metadata', 'title_season',
-                              'first_season', 'trusted_mikan_offset')
+                              'first_season', 'trusted_mikan_offset',
+                              'u2_anidb_mapping', 'u2_anidb_title_cache',
+                              'u2_anitomy_title')
                         ORDER BY attempt.created_at_utc DESC,
                                  attempt.id DESC
                         LIMIT 1),
@@ -1397,7 +1404,9 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                           AND attempt.strategy IN (
                               'manual_mikan_override', 'tmdb_air_date',
                               'backtrace', 'ai_metadata', 'title_season',
-                              'first_season', 'trusted_mikan_offset')
+                              'first_season', 'trusted_mikan_offset',
+                              'u2_anidb_mapping', 'u2_anidb_title_cache',
+                              'u2_anitomy_title')
                         ORDER BY attempt.created_at_utc DESC,
                                  attempt.id DESC
                         LIMIT 1)

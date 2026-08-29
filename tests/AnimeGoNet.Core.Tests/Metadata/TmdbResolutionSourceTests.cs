@@ -19,6 +19,9 @@ public sealed class TmdbResolutionSourceTests
         { TmdbResolutionSource.TmdbEpisodeBangumiDate, "tmdb_episode_bangumi_date" },
         { TmdbResolutionSource.TmdbEpisodeBangumiNearestDate, "tmdb_episode_bangumi_nearest_date" },
         { TmdbResolutionSource.SubtitleAssociation, "subtitle_association" },
+        { TmdbResolutionSource.U2AniDbMapping, "u2_anidb_mapping" },
+        { TmdbResolutionSource.U2AniDbTitleCache, "u2_anidb_title_cache" },
+        { TmdbResolutionSource.U2AnitomyTitle, "u2_anitomy_title" },
     };
 
     [Theory]

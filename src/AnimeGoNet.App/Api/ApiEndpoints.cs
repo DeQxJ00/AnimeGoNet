@@ -146,6 +146,8 @@ public static class ApiEndpoints
         app.MapPost("/api/v1/mikan/legacy-filter/rollback", RollbackLegacyMikanFilter);
         app.MapPost("/api/v1/mikan/legacy-filter/preview", PreviewLegacyMikanFilter);
         app.MapPost("/api/v1/metadata/tasks/{taskId}/retry", RetryMetadataTask);
+        app.MapGet("/api/v1/metadata/tasks/{taskId}/manual-assignment", PreviewManualMetadataAssignment);
+        app.MapPost("/api/v1/metadata/tasks/{taskId}/manual-assignment", ApplyManualMetadataAssignment);
         app.MapGet(
             "/api/v1/metadata/tasks/{taskId}/other-readaptation/preview",
             PreviewOtherFileReadaptation);
@@ -195,6 +197,9 @@ public static class ApiEndpoints
         app.MapGet("/api/v1/library/seasons", LibrarySeasons);
         app.MapGet("/api/v1/library/movies", LibraryMovies);
         app.MapGet("/api/v1/library/movies/{tmdbMovieId:int}/files", LibraryMovieFiles);
+        app.MapPut(
+            "/api/v1/library/movies/{tmdbMovieId:int}/files/main",
+            UpdateLibraryMovieMainFile);
         app.MapPut("/api/v1/library/movies/{tmdbMovieId:int}", RefreshLibraryMovie);
         app.MapDelete("/api/v1/library/movies/{tmdbMovieId:int}", DeleteLibraryMovie);
         app.MapPost(
@@ -5746,6 +5751,163 @@ public static class ApiEndpoints
         };
     }
 
+    private static async Task<IResult> PreviewManualMetadataAssignment(
+        string taskId,
+        ManualMetadataAssignmentStore assignments,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return TypedResults.BadRequest(Error("task_id_required", "taskId is required."));
+        }
+        var preview = await assignments.PreviewAsync(taskId, cancellationToken).ConfigureAwait(false);
+        if (preview is null)
+        {
+            return TypedResults.NotFound(Error("metadata_task_not_found", "Metadata task was not found."));
+        }
+        return TypedResults.Ok(new ManualMetadataAssignmentPreviewResponse(
+            preview.TaskId,
+            preview.Title,
+            preview.Status,
+            preview.MediaType,
+            preview.Eligible,
+            preview.Reason,
+            preview.Files.Select(file => new ManualMetadataAssignmentFileResponse(
+                file.TaskFileId,
+                file.RelativePath,
+                file.SizeBytes,
+                file.IsVideo,
+                file.Disposition,
+                file.TmdbSeriesId,
+                file.TmdbSeasonNumber,
+                file.TmdbEpisodeNumber,
+                file.TmdbMovieId,
+                file.FileEpisodeCandidate)).ToArray()));
+    }
+
+    private static async Task<IResult> ApplyManualMetadataAssignment(
+        string taskId,
+        ManualMetadataAssignmentRequest request,
+        ManualMetadataAssignmentStore assignments,
+        ITmdbClient tmdb,
+        ITmdbMovieClient tmdbMovies,
+        CancellationToken cancellationToken)
+    {
+        if (!MediaTypes.TryNormalize(request.MediaType, out var mediaType)
+            || request.TmdbId <= 0
+            || request.Files is null || request.Files.Count == 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "manual_assignment_request_invalid",
+                "media_type、正数 tmdb_id 和完整文件归类均为必填项。"));
+        }
+        if (request.Files.Any(file => string.IsNullOrWhiteSpace(file.TaskFileId))
+            || request.Files.Select(file => file.TaskFileId).Distinct(StringComparer.Ordinal).Count()
+                != request.Files.Count)
+        {
+            return TypedResults.BadRequest(Error(
+                "manual_assignment_files_invalid", "每个 task_file_id 必须且只能出现一次。"));
+        }
+
+        try
+        {
+            if (mediaType == MediaTypes.Tv)
+            {
+                if (request.SeasonNumber is null or <= 0
+                    || request.Files.Any(file => file.Role is not ("episode" or "extras"))
+                    || request.Files.Any(file => file.Role == "episode" && file.EpisodeNumber is null or <= 0)
+                    || request.Files.Any(file => file.Role == "extras" && file.EpisodeNumber is not null))
+                {
+                    return TypedResults.BadRequest(Error(
+                        "manual_tv_assignment_invalid",
+                        "TV 需要正数 Season；每个文件只能指定 Episode（含正数 EP）或 Extras。"));
+                }
+
+                var details = await tmdb.GetSeriesDetailsAsync(request.TmdbId, cancellationToken)
+                    .ConfigureAwait(false);
+                if ((details is null || details.Series.Id != request.TmdbId)
+                    && tmdb is ITmdbRefreshClient refreshDetails)
+                {
+                    details = await refreshDetails.RefreshSeriesDetailsAsync(request.TmdbId, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                if (details is null || details.Series.Id != request.TmdbId)
+                {
+                    return TypedResults.UnprocessableEntity(Error(
+                        "tmdb_series_not_found", "TMDB TV Series 无法验证。"));
+                }
+
+                var season = await tmdb.GetSeasonAsync(request.TmdbId, request.SeasonNumber.Value, cancellationToken)
+                    .ConfigureAwait(false);
+                if ((season is null || season.SeriesId != request.TmdbId
+                    || season.SeasonNumber != request.SeasonNumber.Value
+                    || season.Episodes is null || season.Episodes.Count != season.EpisodeCount)
+                    && tmdb is ITmdbRefreshClient refreshSeason)
+                {
+                    season = await refreshSeason.RefreshSeasonAsync(
+                        request.TmdbId, request.SeasonNumber.Value, cancellationToken).ConfigureAwait(false);
+                }
+                if (season is null || season.SeriesId != request.TmdbId
+                    || season.SeasonNumber != request.SeasonNumber.Value
+                    || season.Episodes is null || season.Episodes.Count != season.EpisodeCount)
+                {
+                    return TypedResults.UnprocessableEntity(Error(
+                        "tmdb_season_not_found", "TMDB TV Season 或其完整 Episode 列表无法验证。"));
+                }
+
+                await assignments.ApplyTvAsync(
+                    taskId,
+                    details.Series,
+                    season,
+                    request.Files.Select(file => new ManualTvFileAssignment(
+                        file.TaskFileId.Trim(),
+                        file.Role == "episode" ? file.EpisodeNumber : null)).ToArray(),
+                    DateTimeOffset.UtcNow,
+                    cancellationToken).ConfigureAwait(false);
+                return TypedResults.Ok(new ManualMetadataAssignmentResponse(
+                    taskId, mediaType, request.TmdbId, request.SeasonNumber, "accepted"));
+            }
+
+            if (request.SeasonNumber is not null
+                || request.Files.Any(file => file.Role is not ("main" or "extras"))
+                || request.Files.Count(file => file.Role == "main") != 1
+                || request.Files.Any(file => file.EpisodeNumber is not null))
+            {
+                return TypedResults.BadRequest(Error(
+                    "manual_movie_assignment_invalid",
+                    "Movie 必须且只能指定一个主文件，其余为 Extras，且不能填写 Season/EP。"));
+            }
+            var movie = await tmdbMovies.GetMovieAsync(request.TmdbId, cancellationToken)
+                .ConfigureAwait(false);
+            if (movie is null || movie.Id != request.TmdbId)
+            {
+                return TypedResults.UnprocessableEntity(Error(
+                    "tmdb_movie_not_found", "TMDB Movie 无法验证。"));
+            }
+            await assignments.ApplyMovieAsync(
+                taskId,
+                movie,
+                request.Files.Single(file => file.Role == "main").TaskFileId.Trim(),
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(new ManualMetadataAssignmentResponse(
+                taskId, mediaType, request.TmdbId, null, "accepted"));
+        }
+        catch (ManualMetadataAssignmentException exception)
+        {
+            return exception.Code == "metadata_task_not_found"
+                ? TypedResults.NotFound(Error(exception.Code, exception.Message))
+                : TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+        catch (TmdbClientException exception)
+        {
+            return TypedResults.Problem(
+                statusCode: exception.Kind is MetadataFailureKind.Network or MetadataFailureKind.RemoteService ? 503 : 422,
+                title: "TMDB manual assignment validation failed",
+                detail: exception.SafeCode);
+        }
+    }
+
     private static async Task<IResult> PreviewMixedMediaPostprocess(
         string taskId,
         MixedMediaPostprocessStore postprocess,
@@ -7161,6 +7323,168 @@ public static class ApiEndpoints
         return TypedResults.Ok(BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath));
     }
 
+    private static async Task<IResult> UpdateLibraryMovieMainFile(
+        int tmdbMovieId,
+        AnimeMovieMainFileUpdateRequest request,
+        AnimeLibraryAdminStore admin,
+        MovieFileRoleEditor roleEditor,
+        AnimeGoOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (tmdbMovieId <= 0)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_movie_id_invalid",
+                "TMDB Movie ID must be a positive integer."));
+        }
+
+        if (!IsLibraryRevision(request.ExpectedRevision))
+        {
+            return TypedResults.BadRequest(Error(
+                "library_revision_invalid",
+                "A 64-character resource revision is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.MainRelativePath)
+            || Path.IsPathRooted(request.MainRelativePath)
+            || request.MainRelativePath.Length > 1024)
+        {
+            return TypedResults.BadRequest(Error(
+                "library_movie_main_relative_path_invalid",
+                "A Movie-root-relative main file path is required."));
+        }
+
+        var context = await admin.GetMovieFileContextAsync(tmdbMovieId, cancellationToken)
+            .ConfigureAwait(false);
+        if (context is null)
+        {
+            return TypedResults.NotFound(Error(
+                "library_movie_not_found",
+                "The requested TMDB Movie was not found in the local library."));
+        }
+
+        if (!string.Equals(
+                context.ResourceRevision,
+                request.ExpectedRevision,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return TypedResults.Conflict(Error(
+                "library_revision_conflict",
+                "The library Movie changed; reload its files before changing the main file."));
+        }
+
+        if (string.IsNullOrWhiteSpace(context.MainMediaPath))
+        {
+            return TypedResults.Conflict(Error(
+                "library_movie_media_path_unknown",
+                "The Movie completion record does not contain a main media path."));
+        }
+
+        var inventory = BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath);
+        var selected = inventory.Files.SingleOrDefault(file =>
+            file.RelativePath is not null
+            && string.Equals(
+                file.RelativePath,
+                request.MainRelativePath.Trim(),
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal));
+        if (selected is null
+            || !selected.WithinMovieRoot
+            || !selected.Exists
+            || !IsVideoFile(selected.FullPath))
+        {
+            return TypedResults.Conflict(Error(
+                "library_movie_main_file_not_eligible",
+                "The selected main file is missing, is not a video, or is outside this Movie directory."));
+        }
+
+        MovieFileRoleChangePlan plan;
+        try
+        {
+            plan = roleEditor.Plan(
+                options.Paths.EffectiveMovieSavePath,
+                context.MainMediaPath,
+                selected.FullPath);
+        }
+        catch (MovieFileRoleEditException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+
+        if (SameMoviePath(plan.CurrentMainPath, plan.SelectedSourcePath))
+        {
+            return TypedResults.Ok(new AnimeMovieMainFileUpdateResponse(
+                "unchanged",
+                tmdbMovieId,
+                context.ResourceRevision,
+                selected.RelativePath!,
+                null));
+        }
+
+        try
+        {
+            await roleEditor.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MovieFileRoleEditException exception)
+        {
+            return TypedResults.Conflict(Error(exception.Code, exception.Message));
+        }
+
+        AnimeMovieMutationResult result;
+        try
+        {
+            result = await admin.UpdateMovieMainFileAsync(
+                tmdbMovieId,
+                request.ExpectedRevision!,
+                plan.CurrentMainPath,
+                plan.FormerMainPath,
+                plan.SelectedSourcePath,
+                plan.SelectedMainPath,
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await roleEditor.RollbackAsync(plan, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
+        if (result.Status != AnimeLibraryMutationStatus.Updated)
+        {
+            try
+            {
+                await roleEditor.RollbackAsync(plan, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (MovieFileRoleEditException exception)
+            {
+                return TypedResults.Conflict(Error(exception.Code, exception.Message));
+            }
+
+            return result.Status switch
+            {
+                AnimeLibraryMutationStatus.NotFound => TypedResults.NotFound(Error(
+                    "library_movie_not_found",
+                    "The requested TMDB Movie was removed while its files were being updated.")),
+                AnimeLibraryMutationStatus.RevisionConflict => TypedResults.Conflict(Error(
+                    "library_revision_conflict",
+                    "The library Movie changed while its files were being updated; the file move was rolled back.")),
+                _ => throw new InvalidOperationException("Unexpected Movie file role update result."),
+            };
+        }
+
+        return TypedResults.Ok(new AnimeMovieMainFileUpdateResponse(
+            "updated",
+            tmdbMovieId,
+            result.ResourceRevision!,
+            Path.GetRelativePath(
+                Path.GetFullPath(options.Paths.EffectiveMovieSavePath),
+                plan.SelectedMainPath),
+            Path.GetRelativePath(
+                Path.GetFullPath(options.Paths.EffectiveMovieSavePath),
+                plan.FormerMainPath)));
+    }
+
     private static async Task<IResult> ForceDeleteLibraryMovie(
         int tmdbMovieId,
         AnimeMovieForceDeleteRequest request,
@@ -7344,18 +7668,7 @@ public static class ApiEndpoints
         var withinRoot = PathBoundary.IsWithin(movieRoot, fullPath);
         var info = new FileInfo(fullPath);
         var exists = info.Exists || info.LinkTarget is not null;
-        long? size = null;
-        if (info.Exists)
-        {
-            try
-            {
-                size = info.Length;
-            }
-            catch (IOException)
-            {
-                size = null;
-            }
-        }
+        var size = MovieFileSize(info);
 
         return new AnimeMovieFileItemResponse(
             role,
@@ -7365,7 +7678,41 @@ public static class ApiEndpoints
             size,
             exists,
             withinRoot,
+            IsVideoFile(fullPath),
             info.LinkTarget is null ? null : "symbolic");
+    }
+
+    private static long? MovieFileSize(FileInfo info)
+    {
+        if (info.LinkTarget is not null)
+        {
+            try
+            {
+                return info.ResolveLinkTarget(returnFinalTarget: true) is FileInfo target && target.Exists
+                    ? target.Length
+                    : null;
+            }
+            catch (Exception exception) when (exception is IOException
+                                               or UnauthorizedAccessException
+                                               or NotSupportedException)
+            {
+                return null;
+            }
+        }
+
+        if (!info.Exists)
+        {
+            return null;
+        }
+
+        try
+        {
+            return info.Length;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static bool IsVideoFile(string path) =>
@@ -9748,10 +10095,11 @@ public static class ApiEndpoints
         {
             throw new ArgumentException("media_type must be tv or movie.");
         }
-        if (normalizedMediaType == MediaTypes.Movie && normalizedAdapter != "mikan")
+        if (normalizedMediaType == MediaTypes.Movie
+            && normalizedAdapter is not ("mikan" or "u2"))
         {
             throw new ArgumentException(
-                "media_type movie can only be configured for a Mikan adapter.");
+                "media_type movie can only be configured for a Mikan or U2 adapter.");
         }
         var preferMapping = normalizedAdapter == "u2"
             && (preferAniDbTmdbMapping ?? current?.PreferAniDbTmdbMapping ?? true);

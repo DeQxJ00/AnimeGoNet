@@ -15,6 +15,9 @@ public enum TmdbResolutionSource
     TmdbEpisodeBangumiDate,
     TmdbEpisodeBangumiNearestDate,
     SubtitleAssociation,
+    U2AniDbMapping,
+    U2AniDbTitleCache,
+    U2AnitomyTitle,
 }
 
 public sealed record TmdbResolutionEvidence(
@@ -50,6 +53,12 @@ public static class TmdbResolutionSourceExtensions
                 "tmdb_episode_bangumi_nearest_date",
             TmdbResolutionSource.SubtitleAssociation =>
                 "subtitle_association",
+            TmdbResolutionSource.U2AniDbMapping =>
+                "u2_anidb_mapping",
+            TmdbResolutionSource.U2AniDbTitleCache =>
+                "u2_anidb_title_cache",
+            TmdbResolutionSource.U2AnitomyTitle =>
+                "u2_anitomy_title",
             _ => throw new ArgumentOutOfRangeException(nameof(source)),
         };
 
@@ -77,6 +86,12 @@ public static class TmdbResolutionSourceExtensions
                 TmdbResolutionSource.TmdbEpisodeBangumiNearestDate,
             "subtitle_association" =>
                 TmdbResolutionSource.SubtitleAssociation,
+            "u2_anidb_mapping" =>
+                TmdbResolutionSource.U2AniDbMapping,
+            "u2_anidb_title_cache" =>
+                TmdbResolutionSource.U2AniDbTitleCache,
+            "u2_anitomy_title" =>
+                TmdbResolutionSource.U2AnitomyTitle,
             _ => throw new ArgumentException(
                 "TMDB resolution source is not recognized.",
                 nameof(value)),

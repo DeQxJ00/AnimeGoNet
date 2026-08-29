@@ -94,7 +94,7 @@ public sealed class SourceProfileApiTests
     }
 
     [Fact]
-    public async Task MikanMovieSourcePersistsTypeAndPreviewsMovieLibraryRoute()
+    public async Task MikanAndU2MovieSourcesPersistMovieMediaType()
     {
         await using var app = await RunningApp.StartAsync();
         using var create = await app.Client.PostAsync("/api/v1/sources", Json(new
@@ -123,7 +123,7 @@ public sealed class SourceProfileApiTests
             route.RootElement.GetProperty("save_path").GetString(),
             StringComparison.OrdinalIgnoreCase);
 
-        using var invalid = await app.Client.PostAsync("/api/v1/sources", Json(new
+        using var u2Create = await app.Client.PostAsync("/api/v1/sources", Json(new
         {
             id = "u2-movie",
             display_name = "U2 movie",
@@ -134,7 +134,10 @@ public sealed class SourceProfileApiTests
             enabled = true,
             media_type = "movie",
         }));
-        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, u2Create.StatusCode);
+        using var u2Created = JsonDocument.Parse(await u2Create.Content.ReadAsStreamAsync());
+        Assert.Equal("u2", u2Created.RootElement.GetProperty("adapter").GetString());
+        Assert.Equal("movie", u2Created.RootElement.GetProperty("media_type").GetString());
     }
 
     [Fact]

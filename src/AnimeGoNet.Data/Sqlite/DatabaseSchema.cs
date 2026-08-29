@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 72;
+    public const int CurrentVersion = 73;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -176,7 +176,156 @@ public static class DatabaseSchema
             72,
             "source_profile_link_type",
             SourceProfileLinkType),
+        new SchemaMigration(
+            73,
+            "u2_tmdb_resolution_evidence",
+            U2TmdbResolutionEvidence),
     ];
+
+    private const string U2TmdbResolutionEvidence = """
+        DROP TRIGGER IF EXISTS tr_metadata_runs_resolution_evidence_insert;
+        DROP TRIGGER IF EXISTS tr_metadata_runs_resolution_evidence_update;
+
+        UPDATE metadata_resolution_runs AS target
+        SET series_resolution_source = COALESCE(
+                target.series_resolution_source,
+                (SELECT attempt.strategy
+                 FROM metadata_resolution_attempts AS attempt
+                 WHERE attempt.run_id = target.id
+                   AND attempt.stage = 'series'
+                   AND attempt.result = 'matched'
+                   AND attempt.strategy IN (
+                       'u2_anidb_mapping', 'u2_anidb_title_cache',
+                       'u2_anitomy_title')
+                 ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                 LIMIT 1)),
+            series_resolution_attempt_id = COALESCE(
+                target.series_resolution_attempt_id,
+                (SELECT attempt.id
+                 FROM metadata_resolution_attempts AS attempt
+                 WHERE attempt.run_id = target.id
+                   AND attempt.stage = 'series'
+                   AND attempt.result = 'matched'
+                   AND attempt.strategy IN (
+                       'u2_anidb_mapping', 'u2_anidb_title_cache',
+                       'u2_anitomy_title')
+                 ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                 LIMIT 1)),
+            season_resolution_source = COALESCE(
+                target.season_resolution_source,
+                (SELECT attempt.strategy
+                 FROM metadata_resolution_attempts AS attempt
+                 WHERE attempt.run_id = target.id
+                   AND attempt.stage = 'season'
+                   AND attempt.result = 'matched'
+                   AND attempt.strategy IN (
+                       'u2_anidb_mapping', 'u2_anidb_title_cache',
+                       'u2_anitomy_title')
+                 ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                 LIMIT 1)),
+            season_resolution_attempt_id = COALESCE(
+                target.season_resolution_attempt_id,
+                (SELECT attempt.id
+                 FROM metadata_resolution_attempts AS attempt
+                 WHERE attempt.run_id = target.id
+                   AND attempt.stage = 'season'
+                   AND attempt.result = 'matched'
+                   AND attempt.strategy IN (
+                       'u2_anidb_mapping', 'u2_anidb_title_cache',
+                       'u2_anitomy_title')
+                 ORDER BY attempt.created_at_utc DESC, attempt.id DESC
+                 LIMIT 1))
+        WHERE target.tmdb_series_id IS NOT NULL
+          AND (target.series_resolution_source IS NULL
+               OR target.season_resolution_source IS NULL);
+
+        CREATE TRIGGER tr_metadata_runs_resolution_evidence_insert
+        BEFORE INSERT ON metadata_resolution_runs
+        WHEN NOT (
+            (NEW.series_resolution_source IS NULL
+             AND NEW.series_resolution_attempt_id IS NULL)
+            OR (
+                NEW.series_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_title', 'backtrace',
+                    'ai_metadata', 'trusted_mikan_offset',
+                    'u2_anidb_mapping', 'u2_anidb_title_cache',
+                    'u2_anitomy_title')
+                AND NEW.series_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.series_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'series'
+                      AND attempt.strategy = NEW.series_resolution_source
+                      AND attempt.result = 'matched')))
+        OR NOT (
+            (NEW.season_resolution_source IS NULL
+             AND NEW.season_resolution_attempt_id IS NULL)
+            OR (
+                NEW.season_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_air_date', 'backtrace',
+                    'ai_metadata', 'title_season', 'first_season',
+                    'trusted_mikan_offset', 'u2_anidb_mapping',
+                    'u2_anidb_title_cache', 'u2_anitomy_title')
+                AND NEW.season_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.season_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'season'
+                      AND attempt.strategy = NEW.season_resolution_source
+                      AND attempt.result = 'matched')))
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB run resolution evidence');
+        END;
+
+        CREATE TRIGGER tr_metadata_runs_resolution_evidence_update
+        BEFORE UPDATE OF
+            series_resolution_source, series_resolution_attempt_id,
+            season_resolution_source, season_resolution_attempt_id
+        ON metadata_resolution_runs
+        WHEN NOT (
+            (NEW.series_resolution_source IS NULL
+             AND NEW.series_resolution_attempt_id IS NULL)
+            OR (
+                NEW.series_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_title', 'backtrace',
+                    'ai_metadata', 'trusted_mikan_offset',
+                    'u2_anidb_mapping', 'u2_anidb_title_cache',
+                    'u2_anitomy_title')
+                AND NEW.series_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.series_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'series'
+                      AND attempt.strategy = NEW.series_resolution_source
+                      AND attempt.result = 'matched')))
+        OR NOT (
+            (NEW.season_resolution_source IS NULL
+             AND NEW.season_resolution_attempt_id IS NULL)
+            OR (
+                NEW.season_resolution_source IN (
+                    'manual_mikan_override', 'tmdb_air_date', 'backtrace',
+                    'ai_metadata', 'title_season', 'first_season',
+                    'trusted_mikan_offset', 'u2_anidb_mapping',
+                    'u2_anidb_title_cache', 'u2_anitomy_title')
+                AND NEW.season_resolution_attempt_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM metadata_resolution_attempts AS attempt
+                    WHERE attempt.id = NEW.season_resolution_attempt_id
+                      AND attempt.run_id = NEW.id
+                      AND attempt.stage = 'season'
+                      AND attempt.strategy = NEW.season_resolution_source
+                      AND attempt.result = 'matched')))
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid TMDB run resolution evidence');
+        END;
+        """;
 
     private const string SourceProfileLinkType = """
         ALTER TABLE source_profiles
