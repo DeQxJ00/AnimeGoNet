@@ -578,7 +578,7 @@ test("Other readaptation review confirms a server-provided before and after comp
   assert.match(app, /document\.createElement\("mark"\)/);
   assert.match(app, /className = "mixed-media-keyword-highlight"/);
   assert.match(app, /sourceName\.matchAll\(pattern\)/);
-  assert.match(app, /replace\(\/劇場版\|剧场版\/gu, " "\)/);
+  assert.match(app, /replace\(\/劇場版\|剧场版\|gekijouban\/giu, " "\)/);
   assert.match(app, /movie\(\?=\$\|\[\^a-z0-9\]\)\/giu/);
   assert.match(mixedDialog.textContent, /自动填入搜索框时会移除/);
   assert.match(app, /movie_task_file_id: assignments\.movieTaskFileId/);

@@ -10644,7 +10644,7 @@ function mixedMediaRoleLabel(role: MixedMediaFileRole): string {
 }
 
 function appendMovieKeywordHighlight(target: HTMLElement, sourceName: string): void {
-  const pattern = /劇場版|剧场版|movie/giu;
+  const pattern = /劇場版|剧场版|gekijouban|movie/giu;
   let cursor = 0;
   for (const match of sourceName.matchAll(pattern)) {
     const index = match.index;
@@ -10772,7 +10772,7 @@ function renderAnitomyMovieTitle(result: AnitomyTitleParseResult | null, message
 
 function normalizeMixedMediaMovieSearchTitle(title: string): string {
   return title
-    .replace(/劇場版|剧场版/gu, " ")
+    .replace(/劇場版|剧场版|gekijouban/giu, " ")
     .replace(/(^|[^a-z0-9])movie(?=$|[^a-z0-9])/giu, "$1 ")
     .replace(/\s+/gu, " ")
     .replace(/^[\s/|·:：,，;；\-–—_]+|[\s/|·:：,，;；\-–—_]+$/gu, "")

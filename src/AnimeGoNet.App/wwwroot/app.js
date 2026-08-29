@@ -7758,7 +7758,7 @@ function mixedMediaRoleLabel(role) {
     return role === "movie" ? "Movie 正片" : role === "extras" ? "Movie Extras" : "保留原内容";
 }
 function appendMovieKeywordHighlight(target, sourceName) {
-    const pattern = /劇場版|剧场版|movie/giu;
+    const pattern = /劇場版|剧场版|gekijouban|movie/giu;
     let cursor = 0;
     for (const match of sourceName.matchAll(pattern)) {
         const index = match.index;
@@ -7861,7 +7861,7 @@ function renderAnitomyMovieTitle(result, message = "") {
 }
 function normalizeMixedMediaMovieSearchTitle(title) {
     return title
-        .replace(/劇場版|剧场版/gu, " ")
+        .replace(/劇場版|剧场版|gekijouban/giu, " ")
         .replace(/(^|[^a-z0-9])movie(?=$|[^a-z0-9])/giu, "$1 ")
         .replace(/\s+/gu, " ")
         .replace(/^[\s/|·:：,，;；\-–—_]+|[\s/|·:：,，;；\-–—_]+$/gu, "")

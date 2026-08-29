@@ -1289,6 +1289,7 @@ public sealed class EpisodeMetadataResolutionProcessor(
     private static bool ContainsMovieHint(string relativePath) =>
         relativePath.Contains("劇場版", StringComparison.OrdinalIgnoreCase)
         || relativePath.Contains("剧场版", StringComparison.OrdinalIgnoreCase)
+        || relativePath.Contains("Gekijouban", StringComparison.OrdinalIgnoreCase)
         || relativePath.Contains("movie", StringComparison.OrdinalIgnoreCase);
 
     private static void ClassifyNonVideoExtras(

@@ -752,6 +752,7 @@ public sealed class EpisodeMetadataResolutionProcessorTests
     [Theory]
     [InlineData("Show 劇場版.mkv")]
     [InlineData("Show 剧场版.mkv")]
+    [InlineData("Show Gekijouban.mkv")]
     [InlineData("SHOW MOVIE.mkv")]
     public async Task MovieHintInsideTvTaskRemainsOtherForMixedMediaPostprocessing(
         string path)
