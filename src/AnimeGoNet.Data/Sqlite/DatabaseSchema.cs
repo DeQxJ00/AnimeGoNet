@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 73;
+    public const int CurrentVersion = 74;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -180,7 +180,20 @@ public static class DatabaseSchema
             73,
             "u2_tmdb_resolution_evidence",
             U2TmdbResolutionEvidence),
+        new SchemaMigration(
+            74,
+            "notification_delivery_history_limit",
+            NotificationDeliveryHistoryLimit),
     ];
+
+    private const string NotificationDeliveryHistoryLimit = """
+        DELETE FROM notification_deliveries
+        WHERE id NOT IN (
+            SELECT id
+            FROM notification_deliveries
+            ORDER BY created_at_utc DESC, id DESC
+            LIMIT 100);
+        """;
 
     private const string U2TmdbResolutionEvidence = """
         DROP TRIGGER IF EXISTS tr_metadata_runs_resolution_evidence_insert;

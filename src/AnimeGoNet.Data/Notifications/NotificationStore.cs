@@ -8,6 +8,8 @@ namespace AnimeGoNet.Data.Notifications;
 
 public sealed class NotificationStore(AnimeGoSqliteDatabase database)
 {
+    public const int DeliveryHistoryLimit = 100;
+
     public async Task<IReadOnlyList<NotificationChannel>> ListChannelsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -187,7 +189,10 @@ public sealed class NotificationStore(AnimeGoSqliteDatabase database)
         CancellationToken cancellationToken = default)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO notification_deliveries (
                 id, event_id, channel_id, channel_name, provider, event_type,
@@ -212,13 +217,27 @@ public sealed class NotificationStore(AnimeGoSqliteDatabase database)
         command.Parameters.AddWithValue("$duration", result.DurationMilliseconds);
         command.Parameters.AddWithValue("$now", Format(utcNow));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var prune = connection.CreateCommand();
+        prune.Transaction = transaction;
+        prune.CommandText = """
+            DELETE FROM notification_deliveries
+            WHERE id NOT IN (
+                SELECT id
+                FROM notification_deliveries
+                ORDER BY created_at_utc DESC, id DESC
+                LIMIT $limit);
+            """;
+        prune.Parameters.AddWithValue("$limit", DeliveryHistoryLimit);
+        await prune.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<NotificationDelivery>> ListDeliveriesAsync(
         int limit = 100,
         CancellationToken cancellationToken = default)
     {
-        limit = Math.Clamp(limit, 1, 500);
+        limit = Math.Clamp(limit, 1, DeliveryHistoryLimit);
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = """

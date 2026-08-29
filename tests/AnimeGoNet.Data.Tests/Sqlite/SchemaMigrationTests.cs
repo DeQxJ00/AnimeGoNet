@@ -229,6 +229,56 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task NotificationDeliveryHistoryMigrationKeepsNewestOneHundredRecords()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations.Where(item => item.Version <= 73).ToArray(),
+            CancellationToken.None);
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                WITH RECURSIVE sequence(value) AS (
+                    SELECT 0
+                    UNION ALL
+                    SELECT value + 1 FROM sequence WHERE value < 104)
+                INSERT INTO notification_deliveries (
+                    id, event_id, channel_id, channel_name, provider, event_type,
+                    task_id, title, state, http_status, failure_code,
+                    response_excerpt, duration_ms, created_at_utc)
+                SELECT printf('delivery-%03d', value), NULL, NULL, 'Bark', 'bark', 'test',
+                       NULL, printf('Notification %d', value), 'succeeded', 200, NULL,
+                       'ok', 10, printf('%03d', value)
+                FROM sequence;
+                """;
+            Assert.Equal(105, await seed.ExecuteNonQueryAsync());
+        }
+
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations,
+            CancellationToken.None);
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT COUNT(*),
+                   SUM(CASE WHEN title = 'Notification 104' THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN title = 'Notification 5' THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN title = 'Notification 4' THEN 1 ELSE 0 END)
+            FROM notification_deliveries;
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(100, reader.GetInt32(0));
+        Assert.Equal(1, reader.GetInt32(1));
+        Assert.Equal(1, reader.GetInt32(2));
+        Assert.Equal(0, reader.GetInt32(3));
+    }
+
+    [Fact]
     public async Task AiInvocationTriggerReasonMigrationAddsAuditableColumn()
     {
         await using var fixture = await SqliteDatabaseFixture.CreateAsync();

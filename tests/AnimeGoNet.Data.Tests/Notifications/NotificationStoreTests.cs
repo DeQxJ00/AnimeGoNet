@@ -65,4 +65,33 @@ public sealed class NotificationStoreTests
         Assert.Null(await store.ClaimNextEventAsync(
             DateTimeOffset.Parse("2026-08-20T00:04:00Z", CultureInfo.InvariantCulture), TimeSpan.FromMinutes(1)));
     }
+
+    [Fact]
+    public async Task DeliveryHistoryKeepsOnlyNewestOneHundredRecords()
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        var store = new NotificationStore(fixture.Database);
+        var channel = await store.SaveChannelAsync(null, new NotificationChannelWrite(
+            "Bark", "bark", true, "https://api.day.app", "key", null, "{}", ["test"]),
+            DateTimeOffset.UtcNow);
+        var result = new NotificationSendResult(true, 200, null, "ok", 10);
+        var start = DateTimeOffset.Parse("2026-08-20T00:00:00Z", CultureInfo.InvariantCulture);
+
+        for (var index = 0; index < 105; index++)
+        {
+            var value = await store.CreateTestEventAsync(
+                $"Notification {index}", "body", start.AddMinutes(index));
+            await store.RecordDeliveryAsync(value, channel, result, start.AddMinutes(index));
+        }
+
+        var deliveries = await store.ListDeliveriesAsync(500);
+
+        Assert.Equal(NotificationStore.DeliveryHistoryLimit, deliveries.Count);
+        Assert.Equal("Notification 104", deliveries[0].Title);
+        Assert.Equal("Notification 5", deliveries[^1].Title);
+        await using var connection = await fixture.Database.OpenConnectionAsync();
+        await using var count = connection.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM notification_deliveries;";
+        Assert.Equal(100L, await count.ExecuteScalarAsync());
+    }
 }
