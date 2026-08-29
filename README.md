@@ -69,7 +69,7 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 正式版本的 amd64/arm64 镜像发布在 GHCR：
 
 ```powershell
-docker pull ghcr.io/deqxj00/animegonet:1.0.0
+docker pull ghcr.io/deqxj00/animegonet:latest
 ```
 
 也可使用 `latest`、主次版本标签，或按 Actions 输出的不可变 `sha256` digest 固定部署；
@@ -81,7 +81,7 @@ WebUI 的“下载工具配置”中添加已有的本机、NAS 或远程 qBitto
 ```yaml
 services:
   animegonet:
-    image: ${ANIMEGONET_IMAGE:-ghcr.io/deqxj00/animegonet:1.0.0}
+    image: ${ANIMEGONET_IMAGE:-ghcr.io/deqxj00/animegonet:latest}
     container_name: animegonet
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
@@ -133,7 +133,7 @@ Compose 示例直接支持以下启动参数：
 
 | 参数 | 默认值 | 用途 |
 |---|---|---|
-| `ANIMEGONET_IMAGE` | `ghcr.io/deqxj00/animegonet:1.0.0` | 镜像标签或带 digest 的完整镜像地址 |
+| `ANIMEGONET_IMAGE` | `ghcr.io/deqxj00/animegonet:latest` | 镜像标签或带 digest 的完整镜像地址 |
 | `ANIMEGONET_BIND_ADDRESS` | `127.0.0.1` | 宿主监听地址；需要局域网访问时改为 `0.0.0.0` |
 | `ANIMEGONET_PORT` | `7991` | 宿主 WebUI 端口 |
 | `PUID` / `PGID` | `1000` / `1000` | 容器进程及挂载目录使用的 Unix UID/GID |

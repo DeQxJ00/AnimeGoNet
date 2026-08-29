@@ -43,7 +43,7 @@ public sealed partial class OperationsDocumentationContractTests
         var service = Assert.Single(services.Children);
         Assert.Equal("animegonet", Assert.IsType<YamlScalarNode>(service.Key).Value);
         Assert.DoesNotContain("qbittorrent:", compose, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ghcr.io/deqxj00/animegonet:1.0.0", compose, StringComparison.Ordinal);
+        Assert.Contains("ghcr.io/deqxj00/animegonet:latest", compose, StringComparison.Ordinal);
         Assert.Contains("target: /data", compose, StringComparison.Ordinal);
         Assert.Contains("target: /download/incomplete", compose, StringComparison.Ordinal);
         Assert.Contains("target: /download/anime", compose, StringComparison.Ordinal);
