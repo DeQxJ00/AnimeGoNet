@@ -4,7 +4,7 @@ param(
 
     [string]$FixtureProject = '',
 
-    [int]$ExpectedSchemaVersion = 73
+    [int]$ExpectedSchemaVersion = 74
 )
 
 $ErrorActionPreference = 'Stop'
@@ -189,6 +189,8 @@ try {
     $env:ai_base_url = "$fixtureBaseUrl/ai/"
     $env:ai_api_key = 'native-smoke-ai-key'
     $env:ai_model = 'native-smoke-model'
+    $env:ai_api_mode = 'chat-completions'
+    $env:ai_web_search_enabled = 'false'
     $env:ai_use_metadata_match = 'true'
     $env:ai_timeout_second = '30'
     $env:ai_retry_count = '0'

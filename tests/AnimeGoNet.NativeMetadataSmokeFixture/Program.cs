@@ -192,7 +192,7 @@ public static class Program
         }
 
         var content = """
-            {"matched":true,"tmdb_id":72517,"files":[{"name":"Native.AI.S02E07.mkv","matched":true,"season":2,"episode":7,"reason":null}],"reason":null}
+            {"matched":true,"tmdb_id":72517,"files":[{"file_id":"f0001","matched":true,"season":2,"episode":7,"reason":null}],"reason":null}
             """;
         return Json(JsonSerializer.Serialize(new
         {

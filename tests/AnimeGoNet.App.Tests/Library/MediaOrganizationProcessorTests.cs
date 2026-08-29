@@ -618,7 +618,8 @@ public sealed class MediaOrganizationProcessorTests
         {
             stuck.CommandText = """
                 UPDATE download_jobs
-                SET organization_state = 'cleanup', organization_phase = 'cleanup_downloader'
+                SET organization_state = 'cleanup', organization_phase = 'cleanup_downloader',
+                    organization_total_units = 1, organization_completed_units = 0
                 WHERE task_id = $task_id;
                 UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
                 """;

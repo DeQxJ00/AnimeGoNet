@@ -25,6 +25,8 @@ public sealed class NativeMetadataPublishedSmokeContractTests
         Assert.Contains("background_workers_enabled = 'false'", script, StringComparison.Ordinal);
         Assert.Contains("background_workers_enabled = 'true'", script, StringComparison.Ordinal);
         Assert.Contains("downloaders__bt__enabled = 'false'", script, StringComparison.Ordinal);
+        Assert.Contains("ai_api_mode = 'chat-completions'", script, StringComparison.Ordinal);
+        Assert.Contains("ai_web_search_enabled = 'false'", script, StringComparison.Ordinal);
         Assert.Contains("ai_tmdb_mcp_url", script, StringComparison.Ordinal);
         Assert.Contains("/api/v1/metadata/tasks/$($seed.task_id)", script, StringComparison.Ordinal);
         Assert.Contains("season_strategy -ne 'ai_metadata'", script, StringComparison.Ordinal);
@@ -59,6 +61,7 @@ public sealed class NativeMetadataPublishedSmokeContractTests
         Assert.Contains("/mcp", source, StringComparison.Ordinal);
         Assert.Contains("/tmdb/3/tv/72517/season/2/episode/7", source, StringComparison.Ordinal);
         Assert.Contains("\"tmdb_id\":72517", source, StringComparison.Ordinal);
+        Assert.Contains("\"file_id\":\"f0001\"", source, StringComparison.Ordinal);
         Assert.Contains("unsafe_absolute_paths", source, StringComparison.Ordinal);
         Assert.DoesNotContain("TestSpace", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("192.168.", source, StringComparison.OrdinalIgnoreCase);
