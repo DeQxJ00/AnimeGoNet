@@ -271,6 +271,12 @@ public sealed class MetadataTaskDetailApiTests
             "run-detail",
             root.GetProperty("summary").GetProperty("season_run_id").GetString());
         Assert.Equal(
+            JsonValueKind.Null,
+            root.GetProperty("summary").GetProperty("tmdb_movie_id").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            root.GetProperty("summary").GetProperty("movie_strategy").ValueKind);
+        Assert.Equal(
             "mixed",
             root.GetProperty("summary").GetProperty("episode_strategy").GetString());
         Assert.Equal(
@@ -320,6 +326,103 @@ public sealed class MetadataTaskDetailApiTests
             [3],
             listItem.GetProperty("episode_numbers").EnumerateArray()
                 .Select(value => value.GetInt32()).ToArray());
+        Assert.Equal(JsonValueKind.Null, listItem.GetProperty("tmdb_movie_id").ValueKind);
+        Assert.Equal(JsonValueKind.Null, listItem.GetProperty("movie_strategy").ValueKind);
+    }
+
+    [Fact]
+    public async Task MovieSummaryExposesActualMovieResolutionAttemptWithoutTvEvidence()
+    {
+        await using var app = await RunningApp.StartAsync();
+        const string payload = """
+            {
+              "source": "mikan",
+              "data": [{
+                "torrent": "https://mikanani.me/private-passkey/movie-detail.torrent",
+                "info": {
+                  "title": "Movie Task",
+                  "source_item_id": "movie-source-item",
+                  "source_work_id": "3951",
+                  "mikanid": 3951,
+                  "bgmid": 547888
+                }
+              }]
+            }
+            """;
+        using var ingest = await app.Client.PostAsync(
+            "/api/v1/ingest",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        using var ingestJson = JsonDocument.Parse(await ingest.Content.ReadAsStreamAsync());
+        var taskId = Assert.IsType<string>(ingestJson.RootElement
+            .GetProperty("items")[0]
+            .GetProperty("ingest_id")
+            .GetString());
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var now = DateTimeOffset.UtcNow.ToString("O");
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE ingest_tasks
+                SET media_type = 'movie', status = 'metadata_resolved', updated_at_utc = $now
+                WHERE id = $task_id;
+
+                INSERT INTO anime_movies (
+                    id, tmdb_movie_id, canonical_title, original_title,
+                    created_at_utc, updated_at_utc)
+                VALUES (
+                    'movie-17165', 17165, 'Movie Task', 'Movie Task', $now, $now);
+
+                UPDATE task_files
+                SET disposition = 'movie', tmdb_movie_id = 17165
+                WHERE task_id = $task_id;
+
+                INSERT INTO metadata_resolution_runs (
+                    id, task_id, status, tmdb_access_confirmed, fallback_eligible,
+                    started_at_utc, completed_at_utc, attempt_number, tmdb_movie_id)
+                VALUES (
+                    'run-movie-detail', $task_id, 'resolved', 1, 0,
+                    $now, $now, 1, 17165);
+
+                INSERT INTO metadata_resolution_attempts (
+                    id, run_id, stage, strategy, result, retryable,
+                    attempt_number, duration_ms, created_at_utc, reason)
+                VALUES (
+                    'attempt-movie-detail', 'run-movie-detail', 'series',
+                    'u2_anidb_movie_mapping', 'matched', 0,
+                    1, 25, $now, 'validated by TMDB Movie');
+                """;
+            command.Parameters.AddWithValue("$task_id", taskId);
+            command.Parameters.AddWithValue("$now", now);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var detailResponse = await app.Client.GetAsync($"/api/v1/metadata/tasks/{taskId}");
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStreamAsync());
+        var summary = detailJson.RootElement.GetProperty("summary");
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        Assert.Equal(17165, summary.GetProperty("tmdb_movie_id").GetInt32());
+        Assert.Equal(
+            "u2_anidb_movie_mapping",
+            summary.GetProperty("movie_strategy").GetString());
+        Assert.Equal("run-movie-detail", summary.GetProperty("movie_run_id").GetString());
+        Assert.Equal(
+            "attempt-movie-detail",
+            summary.GetProperty("movie_attempt_id").GetString());
+        Assert.Equal(JsonValueKind.Null, summary.GetProperty("tmdb_series_id").ValueKind);
+        Assert.Equal(JsonValueKind.Null, summary.GetProperty("series_strategy").ValueKind);
+        Assert.Equal(JsonValueKind.Null, summary.GetProperty("season_strategy").ValueKind);
+
+        using var listResponse = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks?search={taskId}&page=1&page_size=10");
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStreamAsync());
+        var listItem = Assert.Single(listJson.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(17165, listItem.GetProperty("tmdb_movie_id").GetInt32());
+        Assert.Equal(
+            "u2_anidb_movie_mapping",
+            listItem.GetProperty("movie_strategy").GetString());
+        Assert.Equal(JsonValueKind.Null, listItem.GetProperty("tmdb_series_id").ValueKind);
     }
 
     [Fact]

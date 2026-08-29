@@ -1116,7 +1116,11 @@ public sealed record MetadataTaskListItem(
     [property: JsonPropertyName("pending_file_count")] int PendingFileCount,
     [property: JsonPropertyName("updated_at_utc")] DateTimeOffset UpdatedAtUtc,
     [property: JsonPropertyName("readaptation_review_state")] string ReadaptationReviewState,
-    [property: JsonPropertyName("review_kind")] string? ReviewKind);
+    [property: JsonPropertyName("review_kind")] string? ReviewKind,
+    [property: JsonPropertyName("tmdb_movie_id")] int? TmdbMovieId,
+    [property: JsonPropertyName("movie_strategy")] string? MovieStrategy,
+    [property: JsonPropertyName("movie_run_id")] string? MovieRunId,
+    [property: JsonPropertyName("movie_attempt_id")] string? MovieAttemptId);
 
 public sealed record OtherFileReadaptationFileResponse(
     [property: JsonPropertyName("task_file_id")] string TaskFileId,

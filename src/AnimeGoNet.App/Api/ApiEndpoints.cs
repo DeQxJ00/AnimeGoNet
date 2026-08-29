@@ -10294,7 +10294,11 @@ public static class ApiEndpoints
             item.PendingFileCount,
             item.UpdatedAtUtc,
             item.ReadaptationReviewState,
-            item.ReviewKind);
+            item.ReviewKind,
+            item.TmdbMovieId,
+            item.MovieStrategy,
+            item.MovieRunId,
+            item.MovieAttemptId);
 
     private static IOrderedEnumerable<MetadataTaskListProjection> OrderMetadataTasks(
         IEnumerable<MetadataTaskListProjection> items,

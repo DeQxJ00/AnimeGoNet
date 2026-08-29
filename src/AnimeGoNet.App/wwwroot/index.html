@@ -53,25 +53,6 @@
       </section>
 
   <main id="main-content" tabindex="-1">
-    <section class="hero" aria-labelledby="hero-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
-      <div>
-        <p class="eyebrow">主程序迁移状态</p>
-        <h2 id="hero-title">从统一导入到媒体库，每一步都可追踪。</h2>
-        <p class="muted">当前已启用配置/目录模型、SQLite schema、Minimal API 与静态 WebUI 骨架。</p>
-      </div>
-      <dl class="runtime">
-        <div><dt>数据库</dt><dd id="schema">—</dd></div>
-        <div><dt>运行模式</dt><dd id="runtime">—</dd></div>
-        <div><dt>数据目录</dt><dd id="data-path">—</dd></div>
-        <div>
-          <dt>目录数据库</dt>
-          <dd><span id="directory-database-status">读取中…</span>
-            <button id="directory-database-refresh" type="button" class="secondary-button">立即刷新</button>
-          </dd>
-        </div>
-      </dl>
-    </section>
-
     <section id="overview-statistics" aria-labelledby="overview-statistics-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
       <div class="section-heading">
         <div>
@@ -95,6 +76,27 @@
             </button>
             <button id="overview-data-path-size" type="button" class="overview-stat-card overview-resource-card storage">
               <span>animegonet_data</span><strong id="overview-data-path-size-value">—</strong><small id="overview-data-path-size-detail">当前 data_path 占用</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="overview-statistics-group" aria-labelledby="overview-metadata-statistics-title">
+          <div class="overview-statistics-heading">
+            <h3 id="overview-metadata-statistics-title">匹配与人工处理</h3>
+            <small>点击后自动套用任务筛选</small>
+          </div>
+          <div id="overview-metadata-attention-summary" class="overview-statistics-grid" aria-label="总览中的匹配与整理待处理统计">
+            <button id="overview-attention-other" type="button" class="overview-stat-card other">
+              <span>Other 待处理</span><strong id="overview-attention-other-count">—</strong><small>仍含 Other 文件的任务</small>
+            </button>
+            <button id="overview-attention-failed" type="button" class="overview-stat-card failed">
+              <span>匹配错误</span><strong id="overview-attention-failed-count">—</strong><small>当前匹配失败的任务</small>
+            </button>
+            <button id="overview-attention-review" type="button" class="overview-stat-card review">
+              <span>等待人工审核</span><strong id="overview-attention-review-count">—</strong><small>重新适配完成、等待确认</small>
+            </button>
+            <button id="overview-pending-tmdb" type="button" class="overview-stat-card warning">
+              <span>待补全 TMDB</span><strong id="overview-pending-tmdb-count">—</strong><small id="overview-pending-tmdb-detail">Bangumi 最终兜底作品</small>
             </button>
           </div>
         </section>
@@ -132,27 +134,6 @@
           </div>
         </section>
 
-        <section class="overview-statistics-group" aria-labelledby="overview-metadata-statistics-title">
-          <div class="overview-statistics-heading">
-            <h3 id="overview-metadata-statistics-title">匹配与人工处理</h3>
-            <small>点击后自动套用任务筛选</small>
-          </div>
-          <div id="overview-metadata-attention-summary" class="overview-statistics-grid" aria-label="总览中的匹配与整理待处理统计">
-            <button id="overview-attention-other" type="button" class="overview-stat-card other">
-              <span>Other 待处理</span><strong id="overview-attention-other-count">—</strong><small>仍含 Other 文件的任务</small>
-            </button>
-            <button id="overview-attention-failed" type="button" class="overview-stat-card failed">
-              <span>匹配错误</span><strong id="overview-attention-failed-count">—</strong><small>当前匹配失败的任务</small>
-            </button>
-            <button id="overview-attention-review" type="button" class="overview-stat-card review">
-              <span>等待人工审核</span><strong id="overview-attention-review-count">—</strong><small>重新适配完成、等待确认</small>
-            </button>
-            <button id="overview-pending-tmdb" type="button" class="overview-stat-card warning">
-              <span>待补全 TMDB</span><strong id="overview-pending-tmdb-count">—</strong><small id="overview-pending-tmdb-detail">Bangumi 最终兜底作品</small>
-            </button>
-          </div>
-        </section>
-
         <section class="overview-statistics-group" aria-labelledby="overview-scale-statistics-title">
           <div class="overview-statistics-heading">
             <h3 id="overview-scale-statistics-title">资产与运行规模</h3>
@@ -177,6 +158,25 @@
           </div>
         </section>
       </div>
+    </section>
+
+    <section class="hero" aria-labelledby="hero-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
+      <div>
+        <p class="eyebrow">主程序迁移状态</p>
+        <h2 id="hero-title">从统一导入到媒体库，每一步都可追踪。</h2>
+        <p class="muted">当前已启用配置/目录模型、SQLite schema、Minimal API 与静态 WebUI 骨架。</p>
+      </div>
+      <dl class="runtime">
+        <div><dt>数据库</dt><dd id="schema">—</dd></div>
+        <div><dt>运行模式</dt><dd id="runtime">—</dd></div>
+        <div><dt>数据目录</dt><dd id="data-path">—</dd></div>
+        <div>
+          <dt>目录数据库</dt>
+          <dd><span id="directory-database-status">读取中…</span>
+            <button id="directory-database-refresh" type="button" class="secondary-button">立即刷新</button>
+          </dd>
+        </div>
+      </dl>
     </section>
 
     <section id="module-status" aria-labelledby="modules-title" data-workspace="overview" data-subview="status" data-nav-label="运行状态">
@@ -355,6 +355,7 @@
           <button id="library-detail-mikan-completion" type="button" class="primary-button">下载全部 / 补全 EP</button>
           <button id="library-detail-external-import" type="button" class="secondary-button">扫描本季度外部媒体</button>
           <button id="library-detail-subtitle-import" type="button" class="secondary-button">导入字幕压缩包</button>
+          <button id="library-detail-manual-assignment" type="button" class="secondary-button">手动指定</button>
           <input id="library-subtitle-archive-file" type="file" accept=".zip,.rar,.7z,.tar,.gz,.bz2,.xz,.tgz,.tbz2,.txz,application/zip,application/x-rar-compressed,application/x-7z-compressed,application/x-tar,application/gzip,application/x-bzip2,application/x-xz,application/octet-stream" aria-label="选择字幕压缩包" hidden>
           <button id="library-detail-refresh" type="button" class="secondary-button">从 TMDB 刷新</button>
           <button id="library-detail-delete-content" type="button" class="danger-button">删除任务/文件…</button>

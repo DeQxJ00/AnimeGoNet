@@ -223,7 +223,11 @@ public sealed record MetadataTaskListProjection(
     TmdbResolutionEvidence? SeriesResolution = null,
     TmdbResolutionEvidence? SeasonResolution = null,
     TmdbResolutionEvidence? EpisodeResolution = null,
-    bool EpisodeResolutionMixed = false);
+    bool EpisodeResolutionMixed = false,
+    int? TmdbMovieId = null,
+    string? MovieStrategy = null,
+    string? MovieRunId = null,
+    string? MovieAttemptId = null);
 
 public sealed record MetadataTaskAttentionSummary(
     int OtherTaskCount,

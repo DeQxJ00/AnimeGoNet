@@ -326,6 +326,21 @@ test("anime library exposes auditable task and file deletion without merging pro
   assert.match(css, /\.library-audit-actions\s*\{/);
 });
 
+test("anime library season detail exposes task-aware manual metadata assignment", async () => {
+  const [document, app] = await Promise.all([
+    page(),
+    readFile(appPath, "utf8"),
+  ]);
+  const manual = document.querySelector("#library-detail-manual-assignment");
+  assert.ok(manual);
+  assert.match(manual.textContent, /手动指定/);
+  assert.match(app, /openLibraryManualAssignment/);
+  assert.match(app, /关联任务操作/);
+  assert.match(app, /dataset\.libraryManualTask/);
+  assert.match(app, /openManualMetadataAssignment\(task\.task_id\)/);
+  assert.match(app, /请选择需要修改的任务并点击“手动指定”/);
+});
+
 test("anime library card titles stay aligned and expose their complete name", async () => {
   const [app, css] = await Promise.all([
     readFile(appPath, "utf8"),

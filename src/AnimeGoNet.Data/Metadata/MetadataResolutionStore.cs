@@ -2768,7 +2768,44 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                        WHEN task.readaptation_review_state = 'pending'
                            THEN 'other_readaptation'
                        ELSE NULL
-                   END
+                   END,
+                   (SELECT run.tmdb_movie_id
+                    FROM metadata_resolution_runs AS run
+                    WHERE run.task_id = task.id
+                      AND run.status = 'resolved'
+                      AND run.tmdb_movie_id IS NOT NULL
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC LIMIT 1),
+                   (SELECT attempt.strategy
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id
+                      AND run.status = 'resolved'
+                      AND run.tmdb_movie_id IS NOT NULL
+                      AND attempt.stage = 'series'
+                      AND attempt.result = 'matched'
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC, attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT run.id
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id
+                      AND run.status = 'resolved'
+                      AND run.tmdb_movie_id IS NOT NULL
+                      AND attempt.stage = 'series'
+                      AND attempt.result = 'matched'
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC, attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                   (SELECT attempt.id
+                    FROM metadata_resolution_attempts AS attempt
+                    JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                    WHERE run.task_id = task.id
+                      AND run.status = 'resolved'
+                      AND run.tmdb_movie_id IS NOT NULL
+                      AND attempt.stage = 'series'
+                      AND attempt.result = 'matched'
+                    ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                             run.id DESC, attempt.created_at_utc DESC, attempt.id DESC LIMIT 1)
             FROM ingest_tasks AS task
             LEFT JOIN task_files AS file ON file.task_id = task.id
             GROUP BY task.id
@@ -2938,6 +2975,43 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
                                THEN 'other_readaptation'
                            ELSE NULL
                        END,
+                       (SELECT run.tmdb_movie_id
+                        FROM metadata_resolution_runs AS run
+                        WHERE run.task_id = task.id
+                          AND run.status = 'resolved'
+                          AND run.tmdb_movie_id IS NOT NULL
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC LIMIT 1),
+                       (SELECT attempt.strategy
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id
+                          AND run.status = 'resolved'
+                          AND run.tmdb_movie_id IS NOT NULL
+                          AND attempt.stage = 'series'
+                          AND attempt.result = 'matched'
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC, attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT run.id
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id
+                          AND run.status = 'resolved'
+                          AND run.tmdb_movie_id IS NOT NULL
+                          AND attempt.stage = 'series'
+                          AND attempt.result = 'matched'
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC, attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
+                       (SELECT attempt.id
+                        FROM metadata_resolution_attempts AS attempt
+                        JOIN metadata_resolution_runs AS run ON run.id = attempt.run_id
+                        WHERE run.task_id = task.id
+                          AND run.status = 'resolved'
+                          AND run.tmdb_movie_id IS NOT NULL
+                          AND attempt.stage = 'series'
+                          AND attempt.result = 'matched'
+                        ORDER BY COALESCE(run.completed_at_utc, run.started_at_utc) DESC,
+                                 run.id DESC, attempt.created_at_utc DESC, attempt.id DESC LIMIT 1),
                        task.source_profile_id, task.source_profile_revision,
                        task.source_item_id, task.source_work_id, task.groupid,
                        task.anidb_id, task.imdb_id,
@@ -2958,26 +3032,26 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             summary = ReadTaskListProjection(reader);
             var sourceId = summary.SourceId;
             source = new MetadataTaskSourceProjection(
-                reader.GetString(36),
-                reader.GetInt64(37),
+                reader.GetString(40),
+                reader.GetInt64(41),
                 sourceId,
                 summary.Title,
-                reader.IsDBNull(38)
+                reader.IsDBNull(42)
                     ? null
-                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(38)),
-                reader.IsDBNull(39)
+                    : FingerprintSourceIdentifier(sourceId, "item", reader.GetString(42)),
+                reader.IsDBNull(43)
                     ? null
-                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(39)),
+                    : FingerprintSourceIdentifier(sourceId, "work", reader.GetString(43)),
                 summary.MikanId,
-                reader.IsDBNull(40) ? null : reader.GetInt32(40),
+                reader.IsDBNull(44) ? null : reader.GetInt32(44),
                 summary.BangumiSubjectId,
-                reader.IsDBNull(41) ? null : reader.GetInt32(41),
-                reader.IsDBNull(42) ? null : reader.GetString(42),
-                reader.GetInt64(43) != 0,
-                reader.IsDBNull(44)
+                reader.IsDBNull(45) ? null : reader.GetInt32(45),
+                reader.IsDBNull(46) ? null : reader.GetString(46),
+                reader.GetInt64(47) != 0,
+                reader.IsDBNull(48)
                     ? null
                     : DateTimeOffset.Parse(
-                        reader.GetString(44),
+                        reader.GetString(48),
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind));
         }
@@ -3122,7 +3196,11 @@ public sealed class MetadataResolutionStore(AnimeGoSqliteDatabase database)
             seriesResolution,
             seasonResolution,
             episodeResolution,
-            episodeResolutionMixed);
+            episodeResolutionMixed,
+            reader.IsDBNull(36) ? null : reader.GetInt32(36),
+            reader.IsDBNull(37) ? null : reader.GetString(37),
+            reader.IsDBNull(38) ? null : reader.GetString(38),
+            reader.IsDBNull(39) ? null : reader.GetString(39));
     }
 
     private static int[] ParseEpisodeNumbers(string value) =>

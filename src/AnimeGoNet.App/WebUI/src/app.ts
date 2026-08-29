@@ -765,15 +765,19 @@ interface MetadataItem {
   bgmid: number | null;
   tmdb_series_id: number | null;
   tmdb_season_number: number | null;
+  tmdb_movie_id: number | null;
   series_strategy: string | null;
   season_strategy: string | null;
   episode_strategy: string | null;
+  movie_strategy: string | null;
   series_run_id: string | null;
   series_attempt_id: string | null;
   season_run_id: string | null;
   season_attempt_id: string | null;
   episode_run_id: string | null;
   episode_attempt_id: string | null;
+  movie_run_id: string | null;
+  movie_attempt_id: string | null;
   episode_resolution_mixed: boolean;
   failure_kind: string | null;
   failure_reason: string | null;
@@ -4984,6 +4988,13 @@ function libraryStrategy(value: string | null): string {
     u2_anidb_mapping: "U2 AniDB 映射 + TMDB 验证",
     u2_anidb_title_cache: "U2 AniDB 官方标题 + TMDB 搜索",
     u2_anitomy_title: "U2 AnitomySharp 标题 + TMDB 搜索",
+    u2_anidb_movie_mapping: "U2 AniDB Movie 映射 + TMDB 验证",
+    u2_anidb_movie_mapping_title: "U2 AniDB 映射标题 + TMDB Movie 搜索",
+    u2_anidb_movie_title_cache: "U2 AniDB 官方标题 + TMDB Movie 搜索",
+    u2_anitomy_movie_title: "U2 AnitomySharp 标题 + TMDB Movie 搜索",
+    tmdb_movie_title: "TMDB Movie 标题搜索",
+    u2_movie_file_layout: "U2 Movie 文件布局",
+    manual_assignment: "人工指定 TMDB",
     manual_review_override: "人工审核 TMDB 修正 + TMDB 验证",
   };
   return value ? labels[value] ?? value : "未记录";
@@ -5811,13 +5822,20 @@ function renderLibraryAudit(detail: AnimeSeasonDetail): void {
         + ` · 更新 ${libraryDate(task.updated_at_utc, true)}`;
     const actions = document.createElement("div");
     actions.className = "library-audit-actions";
+    const manual = document.createElement("button");
+    manual.type = "button";
+    manual.className = "secondary-button";
+    manual.dataset.libraryManualTask = task.task_id;
+    manual.textContent = "手动指定";
+    manual.title = `手动指定 ${task.title} 的 TMDB 与文件归类`;
+    manual.addEventListener("click", () => void openManualMetadataAssignment(task.task_id));
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "delete-button";
     remove.dataset.libraryDeleteTask = task.task_id;
     remove.textContent = "预览并删除…";
     remove.addEventListener("click", () => void openDeletePreview(task.task_id));
-    actions.append(remove);
+    actions.append(manual, remove);
     row.append(name, identity, run, actions);
     return row;
   });
@@ -5855,7 +5873,7 @@ function renderLibraryAudit(detail: AnimeSeasonDetail): void {
   });
 
   const relatedTasksGroup = libraryAuditGroup(
-    "关联任务与四类删除",
+    "关联任务操作",
     detail.related_task_total,
     detail.related_tasks_truncated,
     tasks,
@@ -5958,6 +5976,15 @@ function renderLibraryDetail(detail: AnimeSeasonDetail, focus: boolean): void {
   element<HTMLButtonElement>("#library-detail-refresh").disabled = false;
   element<HTMLButtonElement>("#library-detail-external-import").disabled = false;
   element<HTMLButtonElement>("#library-detail-subtitle-import").disabled = false;
+  const manualAssignmentButton = element<HTMLButtonElement>("#library-detail-manual-assignment");
+  manualAssignmentButton.disabled = detail.related_tasks.length === 0;
+  manualAssignmentButton.title = detail.related_tasks.length === 0
+    ? detail.related_task_total > 0
+      ? "关联任务列表未完整载入，请刷新详情或到任务中心手动指定"
+      : "该季度没有可手动指定的关联任务"
+    : detail.related_tasks.length === 1 && !detail.related_tasks_truncated
+      ? `手动指定关联任务：${detail.related_tasks[0].title}`
+      : `从 ${detail.related_tasks.length} 个已载入关联任务中选择一个进行手动指定`;
   element<HTMLButtonElement>("#library-detail-delete-content").disabled = false;
   element<HTMLButtonElement>("#library-detail-delete").disabled = false;
   element<HTMLElement>("#library-detail-action-status").textContent =
@@ -5995,6 +6022,7 @@ async function loadLibraryDetail(
   element<HTMLButtonElement>("#library-detail-refresh").disabled = true;
   element<HTMLButtonElement>("#library-detail-external-import").disabled = true;
   element<HTMLButtonElement>("#library-detail-subtitle-import").disabled = true;
+  element<HTMLButtonElement>("#library-detail-manual-assignment").disabled = true;
   element<HTMLButtonElement>("#library-detail-delete-content").disabled = true;
   element<HTMLButtonElement>("#library-detail-delete").disabled = true;
   element<HTMLElement>("#library-detail-action-status").textContent = "";
@@ -6810,6 +6838,39 @@ function openLibraryContentDeletion(): void {
   status.textContent = detail.related_tasks_truncated
     ? `该季度共有 ${detail.related_task_total} 个关联任务；当前显示最近 ${detail.related_tasks.length} 个，请逐条预览删除范围，其他任务到任务中心处理。`
     : `该季度有 ${detail.related_tasks.length} 个关联任务，请选择具体任务并预览四类删除范围。`;
+}
+
+function openLibraryManualAssignment(): void {
+  if (!activeLibraryDetail) return;
+  const detail = activeLibraryDetail;
+  const status = element<HTMLElement>("#library-detail-action-status");
+  if (detail.related_tasks.length === 0) {
+    status.textContent = detail.related_task_total > 0
+      ? "关联任务列表未完整载入，暂不能从动画库定位手动指定目标；请刷新详情或到任务中心处理。"
+      : "当前季度没有可手动指定的关联任务。";
+    return;
+  }
+
+  if (detail.related_tasks.length === 1 && !detail.related_tasks_truncated) {
+    void openManualMetadataAssignment(detail.related_tasks[0].task_id);
+    return;
+  }
+
+  const group = document.querySelector<HTMLDetailsElement>(
+    "#library-related-task-delete-group",
+  );
+  if (!group) {
+    status.textContent = "无法定位关联任务列表，请刷新季度详情后重试。";
+    return;
+  }
+
+  group.open = true;
+  group.scrollIntoView({ behavior: "smooth", block: "center" });
+  group.querySelector<HTMLButtonElement>("button[data-library-manual-task]")
+    ?.focus({ preventScroll: true });
+  status.textContent = detail.related_tasks_truncated
+    ? `该季度共有 ${detail.related_task_total} 个关联任务；当前显示最近 ${detail.related_tasks.length} 个，请选择其中一个手动指定，其他任务到任务中心处理。`
+    : `该季度有 ${detail.related_tasks.length} 个关联任务，请选择需要修改的任务并点击“手动指定”。`;
 }
 
 function closeLibraryDetail(): void {
@@ -12284,9 +12345,12 @@ async function loadMatchingLogs(): Promise<void> {
       const identity = document.createElement("p");
       identity.className = "matching-log-identity";
       const episodeIdentity = matchingLogEpisodeIdentity(item);
+      const movieOnly = item.movie_file_count > 0 && item.episode_file_count === 0;
       identity.textContent = `mikanid ${textOrDash(item.mikanid)} · bgmid ${textOrDash(item.bgmid)}`
-        + ` · TMDB ${textOrDash(item.tmdb_series_id)}`
-        + ` · S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`
+        + (movieOnly
+          ? ` · TMDB Movie ${textOrDash(item.tmdb_movie_id)}`
+          : ` · TMDB ${textOrDash(item.tmdb_series_id)}`
+            + ` · S${item.tmdb_season_number === null ? "—" : String(item.tmdb_season_number).padStart(2, "0")}`)
         + ` · 最终 EP ${matchingLogEpisodeLabel(item)}`
         + ` · 正片 ${item.episode_file_count}${item.movie_file_count > 0 ? ` / 电影 ${item.movie_file_count}` : ""} / 重复 ${item.duplicate_file_count} / Other ${item.other_file_count} / 待处理 ${item.pending_file_count}`;
 
@@ -12294,12 +12358,22 @@ async function loadMatchingLogs(): Promise<void> {
       flow.className = "matching-log-flow";
       flow.setAttribute("aria-label", "Series、Season、Episode 匹配流程");
       flow.append(
-        matchingLogStage(item, "Series", "series", item.series_strategy, item.series_run_id, item.series_attempt_id,
-          item.tmdb_series_id === null ? null : `TMDB ${item.tmdb_series_id}`),
-        matchingLogStage(item, "Season", "season", item.season_strategy, item.season_run_id, item.season_attempt_id,
-          item.tmdb_season_number === null ? null : `S${String(item.tmdb_season_number).padStart(2, "0")}`),
+        matchingLogStage(item, "Series", "series",
+          movieOnly ? item.movie_strategy : item.series_strategy,
+          movieOnly ? item.movie_run_id : item.series_run_id,
+          movieOnly ? item.movie_attempt_id : item.series_attempt_id,
+          movieOnly
+            ? item.tmdb_movie_id === null ? "Movie 身份未记录" : `TMDB Movie ${item.tmdb_movie_id}`
+            : item.tmdb_series_id === null ? null : `TMDB ${item.tmdb_series_id}`),
+        matchingLogStage(item, "Season", "season",
+          movieOnly ? null : item.season_strategy,
+          movieOnly ? null : item.season_run_id,
+          movieOnly ? null : item.season_attempt_id,
+          movieOnly
+            ? "不适用（电影任务没有 TV Season）"
+            : item.tmdb_season_number === null ? null : `S${String(item.tmdb_season_number).padStart(2, "0")}`),
         matchingLogStage(item, "Episode", "episode", item.episode_strategy, item.episode_run_id, item.episode_attempt_id,
-          item.movie_file_count > 0 && item.episode_file_count === 0 ? "不适用（电影）" : episodeIdentity),
+          movieOnly ? "不适用（电影）" : episodeIdentity),
       );
 
       if (item.failure_kind || item.failure_reason) {
@@ -15759,6 +15833,10 @@ element<HTMLButtonElement>("#library-detail-external-import").addEventListener(
 element<HTMLButtonElement>("#library-detail-subtitle-import").addEventListener(
   "click",
   () => element<HTMLInputElement>("#library-subtitle-archive-file").click(),
+);
+element<HTMLButtonElement>("#library-detail-manual-assignment").addEventListener(
+  "click",
+  openLibraryManualAssignment,
 );
 element<HTMLInputElement>("#library-subtitle-archive-file").addEventListener(
   "change",
