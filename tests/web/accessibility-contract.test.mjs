@@ -435,14 +435,17 @@ test("movie library remains distinct from TV seasons and exposes TMDB Movie iden
   assert.match(app, /没有结果，已通过任务内标题/);
 });
 
-test("TV plus Movie postprocess explains that it separates Movie content from TV collections", async () => {
-  const document = await page();
+test("TV plus Movie postprocess explains its scope and stays visible when unavailable", async () => {
+  const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
   const dialog = document.querySelector("#mixed-media-postprocess-dialog");
   assert.ok(dialog);
   assert.match(
     dialog.textContent,
     /把合集中的 Movie 正片及其 Extras 从 TV 内容中分离，并迁移为独立的 Movie 类型/,
   );
+  assert.match(app, /const mixedMediaApplicable = item\.status === "organized" && item\.tmdb_series_id !== null/);
+  assert.match(app, /mixed\.disabled = !mixedMediaApplicable/);
+  assert.match(app, /actions\.append\(mixed\)/);
 });
 
 test("manual assignment provides media-aware TMDB search and clickable multilingual title candidates", async () => {

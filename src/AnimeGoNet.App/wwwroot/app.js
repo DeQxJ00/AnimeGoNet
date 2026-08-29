@@ -9497,14 +9497,21 @@ async function loadMetadataTasks(background = false) {
                 ignore.addEventListener("click", () => void ignoreOtherAttention(item.task_id, ignore));
                 actions.append(ignore);
             }
-            if (item.status === "organized") {
-                const mixed = document.createElement("button");
-                mixed.type = "button";
-                mixed.className = "secondary-button";
-                mixed.textContent = "TV+Movie 后处理";
+            const mixed = document.createElement("button");
+            mixed.type = "button";
+            mixed.className = "secondary-button";
+            mixed.textContent = "TV+Movie 后处理";
+            const mixedMediaApplicable = item.status === "organized" && item.tmdb_series_id !== null;
+            mixed.disabled = !mixedMediaApplicable;
+            mixed.title = mixedMediaApplicable
+                ? "把已整理 TV 合集中的 Movie 正片及 Extras 迁移为独立 Movie"
+                : item.status !== "organized"
+                    ? "仅已整理入库的 TV 任务可使用 TV+Movie 后处理"
+                    : "该任务没有 TV Series 身份，不适用 TV+Movie 后处理";
+            if (mixedMediaApplicable) {
                 mixed.addEventListener("click", () => void openMixedMediaPostprocess(item.task_id));
-                actions.append(mixed);
             }
+            actions.append(mixed);
             if (item.status === "organized" && item.readaptation_review_state === "pending") {
                 const approve = document.createElement("button");
                 approve.type = "button";
