@@ -5922,21 +5922,28 @@ public static class ApiEndpoints
                 "metadata_task_not_found", "Metadata task was not found."));
         }
 
-        var eligible = preview.MediaType == "tv"
+        var eligible = preview.MediaType is "tv" or "movie"
             && preview.PostprocessMode is "create" or "edit_pending"
-            && preview.Files.Count > 0;
+            && preview.Files.Any(file => preview.PostprocessMode == "edit_pending"
+                ? file.PendingPostprocess
+                : preview.MediaType == "tv"
+                    ? file.MovieRole is null
+                    : file.MovieRole == "extras");
         var reason = eligible
             ? null
-            : preview.MediaType != "tv"
-                    ? "只有按 TV 处理的任务需要 TV+Movie 后处理。"
+            : preview.MediaType is not ("tv" or "movie")
+                    ? "当前媒体类型不支持合集后处理。"
                     : preview.PostprocessMode == "readonly"
                         ? preview.HasActivePostprocess
                             ? "后处理已经开始整理，当前方案已锁定。"
                             : "任务尚未整理完成。"
-                        : "没有可迁移的已整理视频文件。";
+                        : preview.MediaType == "movie"
+                            ? "没有可拆分为另一部 Movie 的已整理视频文件。"
+                            : "没有可迁移的已整理视频文件。";
         return TypedResults.Ok(new MixedMediaPostprocessPreviewResponse(
             preview.TaskId,
             preview.Title,
+            preview.MediaType,
             eligible,
             reason,
             preview.PostprocessMode,
@@ -5960,6 +5967,7 @@ public static class ApiEndpoints
                 file.TmdbMovieId,
                 file.MovieRole,
                 file.MovieHint,
+                file.PendingPostprocess,
                 FilePathInspector.HasExpectedFileLength(
                     file.SourceMediaPath, file.SizeBytes))).ToArray()));
     }
@@ -6116,7 +6124,7 @@ public static class ApiEndpoints
                 "movie_claimed_by_another_task", "This TMDB Movie is being handled by another task.")),
             _ => TypedResults.Conflict(Error(
                 "mixed_media_postprocess_not_eligible",
-                "The TV task is not currently eligible for mixed-media postprocessing.")),
+                "The task is not currently eligible for collection postprocessing.")),
         };
     }
 

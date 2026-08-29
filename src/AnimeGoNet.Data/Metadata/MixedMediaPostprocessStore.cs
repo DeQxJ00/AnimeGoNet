@@ -19,6 +19,7 @@ public sealed record MixedMediaPostprocessFile(
     string? MovieRole,
     string SourceMediaPath,
     bool MovieHint,
+    bool PendingPostprocess,
     int SharedPathReferenceCount);
 
 public sealed record MixedMediaPostprocessPreview(
@@ -90,10 +91,11 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                        file.disposition, file.other_reason,
                        file.tmdb_series_id, file.tmdb_season_number,
                        file.tmdb_episode_number, file.tmdb_movie_id,
-                       CASE WHEN file.disposition <> 'movie' THEN NULL
+                       CASE WHEN file.tmdb_movie_id IS NULL THEN NULL
                             WHEN file.associated_task_file_id IS NULL THEN 'movie'
                             ELSE 'extras' END,
                        COALESCE(active.source_media_path, operation.target_path),
+                       active.id IS NOT NULL,
                        (SELECT COUNT(*) FROM file_operations AS shared
                         WHERE shared.target_path = COALESCE(active.source_media_path, operation.target_path)
                           AND shared.state = 'completed')
@@ -103,7 +105,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                 LEFT JOIN file_operations AS operation
                   ON operation.task_file_id = file.id AND operation.state = 'completed'
                 WHERE file.task_id = $task_id
-                  AND (file.associated_task_file_id IS NULL OR file.disposition = 'movie')
+                  AND (file.associated_task_file_id IS NULL OR file.tmdb_movie_id IS NOT NULL)
                   AND file.disposition IN ('episode', 'movie', 'other', 'extras', 'ignored')
                   AND COALESCE(active.source_media_path, operation.target_path) IS NOT NULL
                   AND (
@@ -135,12 +137,16 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(9) ? null : reader.GetString(9),
                     reader.GetString(10),
                     ContainsMovieHint(path),
-                    reader.GetInt32(11)));
+                    reader.GetInt64(11) == 1,
+                    reader.GetInt32(12)));
             }
         }
 
         TmdbMovie? currentMovie = null;
-        var currentMovieId = files.Select(file => file.TmdbMovieId).FirstOrDefault(id => id is > 0);
+        var currentMovieId = files
+            .OrderByDescending(file => file.PendingPostprocess)
+            .Select(file => file.TmdbMovieId)
+            .FirstOrDefault(id => id is > 0);
         if (currentMovieId is > 0)
         {
             await using var movie = connection.CreateCommand();
@@ -229,7 +235,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
         {
             return MixedMediaPostprocessResult.NotFound;
         }
-        if (preview.MediaType != "tv" || preview.PostprocessMode == "readonly")
+        if (preview.MediaType is not ("tv" or "movie") || preview.PostprocessMode == "readonly")
         {
             return MixedMediaPostprocessResult.NotEligible;
         }
@@ -248,6 +254,12 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
         if (selected.Length != normalizedFileIds.Length
             || selected.Any(file => !FilePathInspector.HasExpectedFileLength(
                 file.SourceMediaPath, file.SizeBytes)))
+        {
+            return MixedMediaPostprocessResult.FileNotEligible;
+        }
+        if (preview.MediaType == "movie"
+            && (selected.Any(file => file.MovieRole == "movie")
+                || selected.Any(file => file.TmdbMovieId == movie.Id)))
         {
             return MixedMediaPostprocessResult.FileNotEligible;
         }
@@ -270,9 +282,15 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                   ON operation.task_file_id = file.id AND operation.state = 'completed'
                 WHERE task.id = $task_id
                   AND task.status = 'organized'
-                  AND task.media_type = 'tv'
+                  AND task.media_type IN ('tv', 'movie')
                   AND file.id = $file_id
-                  AND file.disposition IN ('episode', 'other', 'extras', 'ignored')
+                  AND (
+                    (task.media_type = 'tv'
+                      AND file.disposition IN ('episode', 'other', 'extras', 'ignored'))
+                    OR (task.media_type = 'movie'
+                      AND file.disposition IN ('movie', 'extras')
+                      AND file.associated_task_file_id IS NOT NULL)
+                  )
                   AND operation.target_path = $source_path
                   AND file.size_bytes = $size_bytes
                   AND NOT EXISTS (
@@ -452,7 +470,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
     {
         var selectedIds = new[] { mainFileId }.Concat(extraFileIds).ToHashSet(StringComparer.Ordinal);
         var pendingMovieFiles = preview.Files
-            .Where(file => file.MovieRole is not null)
+            .Where(file => file.PendingPostprocess)
             .ToArray();
         if (pendingMovieFiles.Length == 0
             || !selectedIds.SetEquals(pendingMovieFiles.Select(file => file.TaskFileId))
@@ -476,11 +494,9 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                 JOIN download_jobs AS download ON download.task_id = task.id
                 WHERE task.id = $task_id
                   AND task.status = 'downloaded'
-                  AND task.media_type = 'tv'
+                  AND task.media_type IN ('tv', 'movie')
                   AND download.organization_state = 'pending'
                   AND download.organization_lease_token IS NULL
-                  AND (SELECT COUNT(*) FROM task_files AS file
-                       WHERE file.task_id = task.id AND file.disposition = 'movie') = $file_count
                   AND (SELECT COUNT(*) FROM other_file_readaptation_jobs AS job
                        WHERE job.task_id = task.id AND job.state = 'pending') = $file_count;
                 """;
@@ -520,7 +536,8 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                 SET state = 'released', expires_at_utc = NULL
                 WHERE state = 'active'
                   AND task_file_id IN (
-                    SELECT id FROM task_files WHERE task_id = $task_id AND disposition = 'movie');
+                    SELECT task_file_id FROM other_file_readaptation_jobs
+                    WHERE task_id = $task_id AND state = 'pending');
                 """;
             release.Parameters.AddWithValue("$task_id", preview.TaskId);
             await release.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -562,7 +579,10 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                 UPDATE task_files
                 SET tmdb_movie_id = $tmdb_id,
                     associated_task_file_id = CASE WHEN id = $main_file_id THEN NULL ELSE $main_file_id END
-                WHERE task_id = $task_id AND disposition = 'movie';
+                WHERE task_id = $task_id
+                  AND id IN (
+                    SELECT task_file_id FROM other_file_readaptation_jobs
+                    WHERE task_id = $task_id AND state = 'pending');
                 UPDATE ingest_tasks SET updated_at_utc = $now WHERE id = $task_id;
                 UPDATE download_jobs SET updated_at_utc = $now, revision = revision + 1
                 WHERE task_id = $task_id AND organization_state = 'pending';

@@ -435,7 +435,7 @@ test("movie library remains distinct from TV seasons and exposes TMDB Movie iden
   assert.match(app, /没有结果，已通过任务内标题/);
 });
 
-test("TV plus Movie postprocess explains its scope and stays visible when unavailable", async () => {
+test("collection postprocess supports TV plus Movie and multi-Movie tasks while staying visible", async () => {
   const [document, app] = await Promise.all([page(), readFile(appPath, "utf8")]);
   const dialog = document.querySelector("#mixed-media-postprocess-dialog");
   assert.ok(dialog);
@@ -443,7 +443,8 @@ test("TV plus Movie postprocess explains its scope and stays visible when unavai
     dialog.textContent,
     /把合集中的 Movie 正片及其 Extras 从 TV 内容中分离，并迁移为独立的 Movie 类型/,
   );
-  assert.match(app, /const mixedMediaApplicable = item\.status === "organized" && item\.tmdb_series_id !== null/);
+  assert.match(app, /const mixedMediaApplicable = item\.status === "organized"\s+&& \(item\.tmdb_series_id !== null \|\| item\.movie_file_count > 0\)/);
+  assert.match(app, /把多 Movie 合集中的另一部 Movie 正片及 Extras 拆分为独立 Movie/);
   assert.match(app, /mixed\.disabled = !mixedMediaApplicable/);
   assert.match(app, /actions\.append\(mixed\)/);
 });

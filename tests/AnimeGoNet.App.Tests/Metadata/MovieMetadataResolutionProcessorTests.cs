@@ -234,6 +234,167 @@ public sealed class MovieMetadataResolutionProcessorTests
     }
 
     [Fact]
+    public async Task OrganizedMovieCollectionCanSplitExtraVideoIntoSecondMovie()
+    {
+        var tmdb = new FakeTmdbClient();
+        await using var app = await RunningApp.StartAsync(tmdbClient: tmdb);
+        var taskId = await SeedStagedMovieAsync(app, "Movie x2 Collection", secondVideo: true);
+        var tasks = app.App.Services.GetRequiredService<IngestTaskStore>();
+        var dispatch = Assert.IsType<ClaimedStagedTorrentRecord>(await tasks.TryClaimNextStagedAsync(
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1)));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        await tasks.CompleteDispatchAsync(
+            dispatch,
+            new DownloadTaskSnapshot(
+                new string('a', 40), "Movie x2 Collection", DownloadTaskState.Complete,
+                1, 1_500, 1_500, 0, null),
+            Path.Combine(paths.DownloadPath, "bt"),
+            paths.EffectiveMovieSavePath,
+            DateTimeOffset.UtcNow);
+
+        var originalDirectory = Path.Combine(paths.EffectiveMovieSavePath, "Original Movie (2001)");
+        var originalMain = Path.Combine(originalDirectory, "Original Movie (2001).mkv");
+        var secondMovieSource = Path.Combine(originalDirectory, "Extras", "bonus.mp4");
+        Directory.CreateDirectory(Path.GetDirectoryName(secondMovieSource)!);
+        await File.WriteAllBytesAsync(originalMain, new byte[1_000]);
+        await File.WriteAllBytesAsync(secondMovieSource, new byte[500]);
+
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var setup = connection.CreateCommand())
+        {
+            setup.CommandText = """
+                INSERT INTO anime_movies (
+                    id, tmdb_movie_id, canonical_title, original_title,
+                    release_date, poster_path, created_at_utc, updated_at_utc)
+                VALUES ('original-movie', 129, 'Original Movie', 'Original Movie',
+                        '2001-07-20', NULL, $now, $now);
+                UPDATE task_files
+                SET disposition = 'movie', tmdb_movie_id = 129,
+                    associated_task_file_id = NULL, other_reason = NULL,
+                    download_wanted = 1
+                WHERE task_id = $task_id AND relative_path = 'movie.mkv';
+                UPDATE task_files
+                SET disposition = 'extras', tmdb_movie_id = 129,
+                    associated_task_file_id = (
+                        SELECT id FROM task_files
+                        WHERE task_id = $task_id AND relative_path = 'movie.mkv'),
+                    other_reason = 'movie_video_extra', download_wanted = 1
+                WHERE task_id = $task_id AND relative_path = 'bonus.mp4';
+                INSERT INTO movie_claims (
+                    id, tmdb_movie_id, task_file_id, state, claimed_at_utc, expires_at_utc)
+                SELECT 'original-claim', 129, id, 'completed', $now, NULL
+                FROM task_files WHERE task_id = $task_id AND relative_path = 'movie.mkv';
+                INSERT INTO movie_completion_records (
+                    id, tmdb_movie_id, source_id, source_item_id, media_path, completed_at_utc)
+                VALUES ('original-completion', 129, 'mikan', 'movie-item', $main_path, $now);
+                INSERT INTO file_operations (
+                    id, task_file_id, strategy, source_path, target_path, state,
+                    bytes_verified, failure_reason, created_at_utc, updated_at_utc)
+                SELECT 'movie-operation-' || id, id, 'move',
+                       CASE relative_path WHEN 'movie.mkv' THEN $main_path ELSE $extra_path END,
+                       CASE relative_path WHEN 'movie.mkv' THEN $main_path ELSE $extra_path END,
+                       'completed', size_bytes, NULL, $now, $now
+                FROM task_files WHERE task_id = $task_id;
+                UPDATE download_jobs
+                SET preparation_state = 'completed', state = 'complete', progress = 1,
+                    organization_state = 'completed', organization_phase = 'completed',
+                    organization_total_units = 1, organization_completed_units = 1,
+                    seeding_state = 'not_required'
+                WHERE task_id = $task_id;
+                UPDATE ingest_tasks SET status = 'organized' WHERE id = $task_id;
+                """;
+            setup.Parameters.AddWithValue("$task_id", taskId);
+            setup.Parameters.AddWithValue("$main_path", originalMain);
+            setup.Parameters.AddWithValue("$extra_path", secondMovieSource);
+            setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            Assert.Equal(9, await setup.ExecuteNonQueryAsync());
+        }
+
+        using var preview = await app.Client.GetAsync(
+            $"/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess/preview");
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStreamAsync());
+        Assert.True(previewJson.RootElement.GetProperty("eligible").GetBoolean());
+        Assert.Equal("movie", previewJson.RootElement.GetProperty("media_type").GetString());
+        var files = previewJson.RootElement.GetProperty("files").EnumerateArray().ToArray();
+        var main = Assert.Single(files, file => file.GetProperty("movie_role").GetString() == "movie");
+        var extra = Assert.Single(files, file => file.GetProperty("movie_role").GetString() == "extras");
+        Assert.Equal("movie.mkv", main.GetProperty("source_name").GetString());
+
+        using var moveCurrentMain = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess",
+            new StringContent(
+                $$"""{"movie_task_file_id":"{{main.GetProperty("task_file_id").GetString()}}","movie_extra_task_file_ids":[],"tmdb_movie_id":200}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.Conflict, moveCurrentMain.StatusCode);
+
+        using var reuseCurrentMovie = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess",
+            new StringContent(
+                $$"""{"movie_task_file_id":"{{extra.GetProperty("task_file_id").GetString()}}","movie_extra_task_file_ids":[],"tmdb_movie_id":129}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.Conflict, reuseCurrentMovie.StatusCode);
+
+        using var start = await app.Client.PostAsync(
+            $"/api/v1/metadata/tasks/{taskId}/mixed-media-postprocess",
+            new StringContent(
+                $$"""{"movie_task_file_id":"{{extra.GetProperty("task_file_id").GetString()}}","movie_extra_task_file_ids":[],"tmdb_movie_id":200}""",
+                Encoding.UTF8,
+                "application/json"));
+        Assert.Equal(HttpStatusCode.OK, start.StatusCode);
+
+        await using (var verify = await database.OpenConnectionAsync())
+        await using (var query = verify.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT relative_path, tmdb_movie_id, associated_task_file_id
+                FROM task_files WHERE task_id = $task_id ORDER BY relative_path;
+                """;
+            query.Parameters.AddWithValue("$task_id", taskId);
+            await using var reader = await query.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("bonus.mp4", reader.GetString(0));
+            Assert.Equal(200, reader.GetInt32(1));
+            Assert.True(reader.IsDBNull(2));
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("movie.mkv", reader.GetString(0));
+            Assert.Equal(129, reader.GetInt32(1));
+            Assert.True(reader.IsDBNull(2));
+            Assert.False(await reader.ReadAsync());
+        }
+        Assert.True(File.Exists(originalMain));
+        Assert.True(File.Exists(secondMovieSource));
+        Assert.Contains(200, tmdb.MovieDetailRequests);
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+        var secondMovieTarget = Path.Combine(
+            paths.EffectiveMovieSavePath,
+            "第二部电影 (2002)",
+            "第二部电影 (2002).mp4");
+        Assert.True(File.Exists(originalMain));
+        Assert.False(File.Exists(secondMovieSource));
+        Assert.True(File.Exists(secondMovieTarget));
+        Assert.Equal(new byte[500], await File.ReadAllBytesAsync(secondMovieTarget));
+
+        await using var completed = await database.OpenConnectionAsync();
+        await using var completedQuery = completed.CreateCommand();
+        completedQuery.CommandText = """
+            SELECT COUNT(*), COUNT(DISTINCT tmdb_movie_id)
+            FROM movie_completion_records WHERE tmdb_movie_id IN (129, 200);
+            """;
+        await using var completedReader = await completedQuery.ExecuteReaderAsync();
+        Assert.True(await completedReader.ReadAsync());
+        Assert.Equal(2, completedReader.GetInt32(0));
+        Assert.Equal(2, completedReader.GetInt32(1));
+    }
+
+    [Fact]
     public async Task SingleVideoMovieIsVerifiedAndNeverProjectedAsTvEpisode()
     {
         var tmdb = new FakeTmdbClient();
@@ -581,7 +742,9 @@ public sealed class MovieMetadataResolutionProcessorTests
         {
             MovieDetailRequests.Add(movieId);
             return Task.FromResult<TmdbMovie?>(
-                new TmdbMovie(movieId, "千与千寻", "Spirited Away", new DateOnly(2001, 7, 20), "/movie.jpg"));
+                movieId == 200
+                    ? new TmdbMovie(200, "第二部电影", "Second Movie", new DateOnly(2002, 1, 1), "/second.jpg")
+                    : new TmdbMovie(movieId, "千与千寻", "Spirited Away", new DateOnly(2001, 7, 20), "/movie.jpg"));
         }
 
         public Task<IReadOnlyList<TmdbSeries>> SearchSeriesAsync(

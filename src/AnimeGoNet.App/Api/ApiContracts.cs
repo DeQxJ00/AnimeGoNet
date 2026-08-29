@@ -1157,6 +1157,7 @@ public sealed record MixedMediaPostprocessFileResponse(
     [property: JsonPropertyName("tmdb_movie_id")] int? TmdbMovieId,
     [property: JsonPropertyName("movie_role")] string? MovieRole,
     [property: JsonPropertyName("movie_hint")] bool MovieHint,
+    [property: JsonPropertyName("pending_postprocess")] bool PendingPostprocess,
     [property: JsonPropertyName("source_available")] bool SourceAvailable);
 
 public sealed record MixedMediaCurrentMovieResponse(
@@ -1169,6 +1170,7 @@ public sealed record MixedMediaCurrentMovieResponse(
 public sealed record MixedMediaPostprocessPreviewResponse(
     [property: JsonPropertyName("task_id")] string TaskId,
     [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("media_type")] string MediaType,
     [property: JsonPropertyName("eligible")] bool Eligible,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("mode")] string Mode,

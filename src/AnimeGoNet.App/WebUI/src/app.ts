@@ -830,6 +830,7 @@ interface OtherFileReadaptationPreview {
 interface MixedMediaPostprocessPreview {
   task_id: string;
   title: string;
+  media_type: "tv" | "movie";
   eligible: boolean;
   reason: string | null;
   mode: "create" | "edit_pending" | "readonly";
@@ -846,6 +847,7 @@ interface MixedMediaPostprocessPreview {
     tmdb_movie_id: number | null;
     movie_role: "movie" | "extras" | null;
     movie_hint: boolean;
+    pending_postprocess: boolean;
     source_available: boolean;
   }>;
 }
@@ -10638,7 +10640,7 @@ function updateMixedMediaConfirmState(): void {
 }
 
 function mixedMediaRoleLabel(role: MixedMediaFileRole): string {
-  return role === "movie" ? "Movie 正片" : role === "extras" ? "Movie Extras" : "保留 TV";
+  return role === "movie" ? "Movie 正片" : role === "extras" ? "Movie Extras" : "保留原内容";
 }
 
 function appendMovieKeywordHighlight(target: HTMLElement, sourceName: string): void {
@@ -10659,11 +10661,14 @@ function appendMovieKeywordHighlight(target: HTMLElement, sourceName: string): v
 }
 
 function recommendedMixedMediaMainId(
-  files: MixedMediaPostprocessPreview["files"],
+  preview: MixedMediaPostprocessPreview,
 ): string | null {
-  const hinted = files.filter(file =>
-    file.movie_hint && file.source_available && file.movie_role === null);
-  const largest = hinted.reduce<(typeof hinted)[number] | null>(
+  const candidates = preview.files.filter(file =>
+    file.source_available
+    && (preview.media_type === "movie"
+      ? file.movie_role === "extras"
+      : file.movie_hint && file.movie_role === null));
+  const largest = candidates.reduce<(typeof candidates)[number] | null>(
     (current, file) => current === null || file.size_bytes > current.size_bytes ? file : current,
     null,
   );
@@ -10878,12 +10883,20 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
     if (!response.ok) throw new Error(await responseError(response));
     const preview = await response.json() as MixedMediaPostprocessPreview;
     activeMixedMediaPreview = preview;
+    element<HTMLElement>("#mixed-media-postprocess-title").textContent = preview.media_type === "movie"
+      ? "多 Movie 合集后处理"
+      : "TV+Movie 后处理";
+    element<HTMLElement>("#mixed-media-postprocess-purpose").textContent = preview.media_type === "movie"
+      ? "此功能用于处理包含多部电影的 Movie 合集：保留当前 Movie，把选中的另一部 Movie 正片及其 Extras 分离并迁移为独立 Movie。"
+      : "此功能用于处理 TV+Movie 合集：把合集中的 Movie 正片及其 Extras 从 TV 内容中分离，并迁移为独立的 Movie 类型。";
     summary.textContent = preview.eligible
       ? preview.mode === "edit_pending"
         ? `${preview.title} · 后处理尚未开始整理，可再次指定哪一个是 Movie 正片、哪些属于 Movie Extras。`
-        : `${preview.title} · 请逐个指定保留 TV、Movie 正片或 Movie Extras，再确认独立的 TMDB Movie。`
+        : preview.media_type === "movie"
+          ? `${preview.title} · 当前 Movie 主文件保持不变；请选择另一部 Movie 正片及其 Extras，再确认新的 TMDB Movie。`
+          : `${preview.title} · 请逐个指定保留 TV、Movie 正片或 Movie Extras，再确认独立的 TMDB Movie。`
       : `${preview.title} · ${preview.reason ?? "当前不可执行后处理"}`;
-    const recommendedMainId = recommendedMixedMediaMainId(preview.files);
+    const recommendedMainId = recommendedMixedMediaMainId(preview);
     for (const file of preview.files) {
       const label = document.createElement("div");
       label.className = "mixed-media-file-option";
@@ -10892,7 +10905,7 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
       select.dataset.taskFileId = file.task_file_id;
       select.setAttribute("aria-label", `${file.source_name} 的后处理分类`);
       for (const [value, text] of [
-        ["keep", "保留 TV / 不迁移"],
+        ["keep", preview.media_type === "movie" ? "保留当前 Movie / 不迁移" : "保留 TV / 不迁移"],
         ["movie", "Movie 正片"],
         ["extras", "Movie Extras"],
       ] as Array<[MixedMediaFileRole, string]>) {
@@ -10901,13 +10914,18 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
         option.textContent = text;
         select.append(option);
       }
-      const pendingUnselected = preview.mode === "edit_pending" && file.movie_role === null;
-      const completedMovie = preview.mode === "create" && file.movie_role !== null;
-      select.disabled = !preview.eligible || !file.source_available || pendingUnselected || completedMovie;
-      select.value = completedMovie ? "keep" : file.movie_role
-        ?? (file.task_file_id === recommendedMainId
-          ? "movie"
-          : file.movie_hint ? "extras" : "keep");
+      const pendingUnselected = preview.mode === "edit_pending" && !file.pending_postprocess;
+      const protectedExistingMovie = preview.mode === "create"
+        && file.movie_role !== null
+        && (preview.media_type === "tv" || file.movie_role === "movie");
+      select.disabled = !preview.eligible || !file.source_available || pendingUnselected || protectedExistingMovie;
+      select.value = protectedExistingMovie
+        ? "keep"
+        : file.pending_postprocess
+          ? file.movie_role ?? "keep"
+          : file.task_file_id === recommendedMainId
+            ? "movie"
+            : file.movie_hint ? "extras" : "keep";
       select.addEventListener("change", showMixedMediaEditor);
       const body = document.createElement("span");
       const title = document.createElement("strong");
@@ -10919,7 +10937,7 @@ async function openMixedMediaPostprocess(taskId: string): Promise<void> {
         + `${file.tmdb_episode_number === null ? "" : ` · S${String(file.tmdb_season_number).padStart(2, "0")}E${String(file.tmdb_episode_number).padStart(3, "0")}`}`
         + `${file.movie_role === null ? "" : ` · 当前 ${mixedMediaRoleLabel(file.movie_role)}`}`
         + `${pendingUnselected ? " · 待整理方案编辑时不可新增文件" : ""}`
-        + `${completedMovie ? " · 已完成的 Movie 文件本次不可重复迁移" : ""}`
+        + `${protectedExistingMovie ? " · 当前 Movie 主文件必须保留" : ""}`
         + `${file.source_available ? "" : " · 源文件不可用"}`;
       body.append(title, document.createElement("br"), detail);
       label.append(select, body);
@@ -11095,7 +11113,7 @@ async function confirmMixedMediaPostprocess(): Promise<void> {
     await loadMetadataTasks();
     window.setTimeout(() => mixedMediaPostprocessDialog.close(), 1200);
   } catch (error) {
-    message.textContent = errorMessage(error, "TV+Movie 后处理失败");
+    message.textContent = errorMessage(error, "合集后处理失败");
     updateMixedMediaConfirmState();
   }
 }
@@ -12569,14 +12587,17 @@ async function loadMetadataTasks(background = false): Promise<void> {
       const mixed = document.createElement("button");
       mixed.type = "button";
       mixed.className = "secondary-button";
-      mixed.textContent = "TV+Movie 后处理";
-      const mixedMediaApplicable = item.status === "organized" && item.tmdb_series_id !== null;
+      mixed.textContent = "合集后处理";
+      const mixedMediaApplicable = item.status === "organized"
+        && (item.tmdb_series_id !== null || item.movie_file_count > 0);
       mixed.disabled = !mixedMediaApplicable;
       mixed.title = mixedMediaApplicable
-        ? "把已整理 TV 合集中的 Movie 正片及 Extras 迁移为独立 Movie"
+        ? item.tmdb_series_id !== null
+          ? "把已整理 TV 合集中的 Movie 正片及 Extras 迁移为独立 Movie"
+          : "把多 Movie 合集中的另一部 Movie 正片及 Extras 拆分为独立 Movie"
         : item.status !== "organized"
-          ? "仅已整理入库的 TV 任务可使用 TV+Movie 后处理"
-          : "该任务没有 TV Series 身份，不适用 TV+Movie 后处理";
+          ? "仅已整理入库的 TV 或 Movie 任务可使用合集后处理"
+          : "当前任务没有可用于合集后处理的媒体身份";
       if (mixedMediaApplicable) {
         mixed.addEventListener("click", () =>
           void openMixedMediaPostprocess(item.task_id));
