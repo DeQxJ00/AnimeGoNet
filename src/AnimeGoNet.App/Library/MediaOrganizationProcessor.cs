@@ -112,6 +112,7 @@ public sealed class MediaOrganizationProcessor(
             }
 
             var plans = new List<MediaOperationPlan>(claim.Files.Count);
+            var sharedSourceDirectory = FindSharedTopLevelDirectory(claim.Files);
             await store.UpdateProgressAsync(
                 claim,
                 MediaOrganizationPhases.RenamePlanning,
@@ -121,7 +122,11 @@ public sealed class MediaOrganizationProcessor(
                 cancellationToken).ConfigureAwait(false);
             foreach (var file in claim.Files)
             {
-                plans.Add(await PlanAsync(claim, file, cancellationToken).ConfigureAwait(false));
+                plans.Add(await PlanAsync(
+                    claim,
+                    file,
+                    sharedSourceDirectory,
+                    cancellationToken).ConfigureAwait(false));
                 await store.UpdateProgressAsync(
                     claim,
                     MediaOrganizationPhases.RenamePlanning,
@@ -423,6 +428,7 @@ public sealed class MediaOrganizationProcessor(
     private async ValueTask<MediaOperationPlan> PlanAsync(
         MediaOrganizationClaim claim,
         MediaOrganizationFile file,
+        string? sharedSourceDirectory,
         CancellationToken cancellationToken)
     {
         var sourceRelative = file.RelativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
@@ -440,14 +446,14 @@ public sealed class MediaOrganizationProcessor(
                 var movieDirectory = MoviePathPlanner.DirectoryName(
                     file.CanonicalSeriesName,
                     file.MovieReleaseDate);
-                var originalName = Path.GetFileName(file.RelativePath.Replace('\\', Path.DirectorySeparatorChar));
-                var extraName = MediaPathPlanner.SanitizeSegment(originalName);
+                var extrasRelativePath = MediaPathPlanner.PlanExtrasRelativePath(
+                    RemoveSharedTopLevelDirectory(file.RelativePath, sharedSourceDirectory));
                 return new MediaOperationPlan(
                     file.TaskFileId,
                     movieSource,
                     PathBoundary.Combine(
                         options.Paths.EffectiveMovieSavePath,
-                        Path.Combine(movieDirectory, "Extras", extraName)));
+                        Path.Combine(movieDirectory, "Extras", extrasRelativePath)));
             }
             var relativeTarget = MoviePathPlanner.PlanRelativePath(new MoviePathInput(
                 file.CanonicalSeriesName,
@@ -460,9 +466,12 @@ public sealed class MediaOrganizationProcessor(
                 PathBoundary.Combine(options.Paths.EffectiveMovieSavePath, relativeTarget));
         }
 
+        var renameSourcePath = file.Disposition is "other" or "extras"
+            ? RemoveSharedTopLevelDirectory(file.RelativePath, sharedSourceDirectory)
+            : file.RelativePath;
         var rename = await plugins.Require<IRenamePlugin>("anime-library").RenameAsync(
             new RenameContext(
-                file.RelativePath,
+                renameSourcePath,
                 file.CanonicalSeriesName,
                 file.SeasonNumber,
                 file.Disposition,
@@ -481,6 +490,49 @@ public sealed class MediaOrganizationProcessor(
             ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
         var target = PathBoundary.Combine(claim.SaveRootPath, rename.RelativeTargetPath);
         return new MediaOperationPlan(file.TaskFileId, source, target);
+    }
+
+    private static string? FindSharedTopLevelDirectory(IReadOnlyList<MediaOrganizationFile> files)
+    {
+        string? shared = null;
+        foreach (var file in files)
+        {
+            var normalized = PortablePathNormalizer.NormalizeRelativePathForComparison(file.RelativePath);
+            var separator = normalized.IndexOf('/');
+            if (separator <= 0)
+            {
+                return null;
+            }
+
+            var topLevel = normalized[..separator];
+            if (shared is null)
+            {
+                shared = topLevel;
+            }
+            else if (!string.Equals(shared, topLevel, StringComparison.Ordinal))
+            {
+                return null;
+            }
+        }
+
+        return shared;
+    }
+
+    private static string RemoveSharedTopLevelDirectory(
+        string relativePath,
+        string? sharedSourceDirectory)
+    {
+        var normalized = PortablePathNormalizer.NormalizeRelativePathForComparison(relativePath);
+        if (sharedSourceDirectory is null)
+        {
+            return normalized;
+        }
+
+        var separator = normalized.IndexOf('/');
+        return separator > 0
+               && string.Equals(normalized[..separator], sharedSourceDirectory, StringComparison.Ordinal)
+            ? normalized[(separator + 1)..]
+            : normalized;
     }
 
     private static readonly Dictionary<string, string> EmptyArguments =

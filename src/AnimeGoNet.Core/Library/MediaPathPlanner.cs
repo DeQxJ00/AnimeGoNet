@@ -21,22 +21,35 @@ public static class MediaPathPlanner
 
         var series = SanitizeSegment(input.CanonicalSeriesName);
         var season = $"S{input.SeasonNumber.ToString("00", CultureInfo.InvariantCulture)}";
-        var fileName = input.Disposition switch
+        var filePath = input.Disposition switch
         {
             "episode" => PlanEpisodeFileName(input),
-            "other" or "extras" => SanitizeSegment(GetFileName(input.OriginalRelativePath)),
+            "other" or "extras" => PlanExtrasRelativePath(input.OriginalRelativePath),
             _ => throw new ArgumentException(
                 "Only episode, other, and extras files can be organized.",
                 nameof(input)),
         };
 
         return input.Disposition is "other" or "extras"
-            ? Path.Combine(series, season, "Extras", fileName)
-            : Path.Combine(series, season, fileName);
+            ? Path.Combine(series, season, "Extras", filePath)
+            : Path.Combine(series, season, filePath);
     }
 
     public static string SanitizeSegment(string value) =>
         PortablePathNormalizer.SanitizeSegment(value);
+
+    public static string PlanExtrasRelativePath(string originalRelativePath)
+    {
+        var normalized = PortablePathNormalizer.NormalizeRelativePathForComparison(originalRelativePath);
+        var segments = normalized.Split('/');
+        if (segments.Length > 1
+            && string.Equals(segments[0], "Extras", StringComparison.OrdinalIgnoreCase))
+        {
+            segments = segments[1..];
+        }
+
+        return Path.Combine(segments);
+    }
 
     private static string PlanEpisodeFileName(MediaPathInput input)
     {

@@ -18,7 +18,7 @@ public sealed class MediaPathPlannerTests
     }
 
     [Fact]
-    public void OtherPreservesSanitizedOriginalNameBelowConfirmedSeason()
+    public void OtherPreservesSanitizedRelativeHierarchyBelowConfirmedSeason()
     {
         var result = MediaPathPlanner.PlanRelativePath(new MediaPathInput(
             "CON",
@@ -31,17 +31,17 @@ public sealed class MediaPathPlannerTests
     }
 
     [Fact]
-    public void ExtrasPreservesAttachmentNameBelowConfirmedSeason()
+    public void ExtrasPreservesAttachmentHierarchyBelowConfirmedSeason()
     {
         var result = MediaPathPlanner.PlanRelativePath(new MediaPathInput(
             "Medalist",
             2,
             "extras",
             null,
-            "Release/Medalist [Fonts].7z"));
+            "Scans(Vol.01)/Medalist [Fonts].7z"));
 
         Assert.Equal(
-            Path.Combine("Medalist", "S02", "Extras", "Medalist [Fonts].7z"),
+            Path.Combine("Medalist", "S02", "Extras", "Scans(Vol.01)", "Medalist [Fonts].7z"),
             result);
     }
 

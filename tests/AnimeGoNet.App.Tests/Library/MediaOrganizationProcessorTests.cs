@@ -321,6 +321,63 @@ public sealed class MediaOrganizationProcessorTests
     }
 
     [Fact]
+    public async Task ExtrasPreserveHierarchyBelowSharedTorrentRootAndAvoidBasenameConflicts()
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(
+            downloadClientRegistry: new FakeRegistry(client));
+        var paths = AnimeGoDefaults.CreateNative(app.RootPath).Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var downloadRoot = Path.Combine(paths.DownloadPath, "bt");
+        var firstRelative = Path.Combine("Release", "Scans(Vol.01)", "img330.jpg");
+        var secondRelative = Path.Combine("Release", "Scans(Vol.03)", "img330.jpg");
+        var firstSource = Path.Combine(downloadRoot, firstRelative);
+        var secondSource = Path.Combine(downloadRoot, secondRelative);
+        Directory.CreateDirectory(Path.GetDirectoryName(firstSource)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(secondSource)!);
+        File.Move(Path.Combine(downloadRoot, "episode.mkv"), firstSource);
+        await File.WriteAllBytesAsync(secondSource, [6, 7, 8, 9]);
+
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var update = connection.CreateCommand())
+        {
+            update.CommandText = """
+                UPDATE task_files
+                SET relative_path = $first_path, size_bytes = 5,
+                    disposition = 'extras', other_reason = 'non_video_attachment',
+                    tmdb_episode_number = NULL, tmdb_episode_id = NULL
+                WHERE task_id = $task_id;
+                INSERT INTO task_files (
+                    id, task_id, relative_path, size_bytes, source_episode,
+                    file_episode_candidate, tmdb_series_id, tmdb_season_number,
+                    tmdb_episode_number, tmdb_episode_id, disposition,
+                    other_reason, download_wanted)
+                VALUES (
+                    'second-extra', $task_id, $second_path, 4, NULL, NULL,
+                    100, 1, NULL, NULL, 'extras', 'non_video_attachment', 1);
+                """;
+            update.Parameters.AddWithValue("$task_id", taskId);
+            update.Parameters.AddWithValue("$first_path", firstRelative);
+            update.Parameters.AddWithValue("$second_path", secondRelative);
+            Assert.Equal(2, await update.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(
+            MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+
+        var extrasRoot = Path.Combine(paths.SavePath, "Series", "S01", "Extras");
+        Assert.Equal(
+            new byte[] { 1, 2, 3, 4, 5 },
+            await File.ReadAllBytesAsync(Path.Combine(extrasRoot, "Scans(Vol.01)", "img330.jpg")));
+        Assert.Equal(
+            new byte[] { 6, 7, 8, 9 },
+            await File.ReadAllBytesAsync(Path.Combine(extrasRoot, "Scans(Vol.03)", "img330.jpg")));
+        Assert.False(File.Exists(Path.Combine(extrasRoot, "img330.jpg")));
+    }
+
+    [Fact]
     public async Task BangumiFallbackMovesToOtherAndWritesTmdbZeroNfoWithoutCanonicalCompletion()
     {
         var client = new FakeDownloadClient();
