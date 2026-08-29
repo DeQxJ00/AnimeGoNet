@@ -47,7 +47,7 @@ public sealed class NativeReleaseDeliveryContractTests
     }
 
     [Fact]
-    public void ProjectVersionMatchesTheFirstStableReleaseTag()
+    public void ProjectVersionIsAStableSemanticVersion()
     {
         var root = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -59,7 +59,9 @@ public sealed class NativeReleaseDeliveryContractTests
         var props = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
         var version = Assert.Single(props.Descendants("Version")).Value;
 
-        Assert.Equal("1.0.0", version);
-        Assert.Equal("v1.0.0", $"v{version}");
+        Assert.Matches(@"^[0-9]+\.[0-9]+\.[0-9]+$", version);
+        Assert.True(Version.TryParse(version, out var parsed));
+        Assert.NotNull(parsed);
+        Assert.Equal(version, parsed.ToString(3));
     }
 }

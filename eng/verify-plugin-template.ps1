@@ -7,6 +7,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$directoryBuildProps = [xml](Get-Content -LiteralPath (Join-Path $repositoryRoot 'Directory.Build.props') -Raw)
+$projectVersion = [string]($directoryBuildProps.Project.PropertyGroup.Version | Select-Object -First 1)
+if ([string]::IsNullOrWhiteSpace($projectVersion)) {
+    throw 'Directory.Build.props must define a project Version.'
+}
 $temporaryRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $workingDirectory = [System.IO.Path]::GetFullPath((Join-Path $temporaryRoot (
     'AnimeGoPluginTemplate-' + [guid]::NewGuid().ToString('N'))))
@@ -61,7 +66,7 @@ try {
         Pop-Location
     }
 
-    $templatePackage = Get-Item (Join-Path $feed 'AnimeGo.Plugin.Templates.1.0.0.nupkg')
+    $templatePackage = Get-Item (Join-Path $feed "AnimeGo.Plugin.Templates.$projectVersion.nupkg")
     Invoke-DotNet new '--debug:custom-hive' $hive 'install' $templatePackage.FullName
 
     $nugetConfig = Join-Path $workingDirectory 'NuGet.config'
