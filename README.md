@@ -82,70 +82,33 @@ WebUI 的“下载工具配置”中添加已有的本机、NAS 或远程 qBitto
 services:
   animegonet:
     image: ${ANIMEGONET_IMAGE:-ghcr.io/deqxj00/animegonet:latest}
-    container_name: animegonet
     restart: unless-stopped
-    user: "${PUID:-1000}:${PGID:-1000}"
-    read_only: true
-    tmpfs:
-      - /tmp
-    environment:
-      ASPNETCORE_ENVIRONMENT: Container
-      DOTNET_RUNNING_IN_CONTAINER: "true"
-      TZ: ${TZ:-Asia/Shanghai}
-      inner_plugin_mikan__access_key: ${ANIMEGONET_ACCESS_KEY:-123456}
-      inner_plugin_u2__access_key: ${ANIMEGONET_U2_ACCESS_KEY:-123456}
-      webui_access_key: ${ANIMEGONET_WEBUI_ACCESS_KEY:-}
-      data_path: /data
-      download_path: /download/incomplete
-      save_path: /download/anime
-      movie_save_path: /download/movies
-      background_workers_enabled: ${ANIMEGONET_BACKGROUND_WORKERS_ENABLED:-true}
     ports:
       - "${ANIMEGONET_BIND_ADDRESS:-127.0.0.1}:${ANIMEGONET_PORT:-7991}:7991"
     volumes:
-      - type: bind
-        source: ${ANIMEGONET_DATA_ROOT:-./data}
-        target: /data
-      - type: bind
-        source: ${ANIMEGONET_DOWNLOAD_ROOT:-./download_temp}
-        target: /download/incomplete
-      - type: bind
-        source: ${ANIMEGONET_TV_ROOT:-./jellyfin_tv_data}
-        target: /download/anime
-      - type: bind
-        source: ${ANIMEGONET_MOVIE_ROOT:-./jellyfin_movie_data}
-        target: /download/movies
-    security_opt:
-      - no-new-privileges:true
+      - ${ANIMEGONET_DATA_ROOT:-./data}:/data
+      - ${ANIMEGONET_DOWNLOAD_ROOT:-./download}:/download
 ```
 
 ```powershell
 docker compose up -d
 ```
 
-请先创建四个宿主目录，并确保 `PUID:PGID` 对它们有读写权限。外部 qBittorrent 的
+请先创建 `data` 和 `download` 两个宿主目录，并确保容器用户对它们有读写权限。外部 qBittorrent 的
 完成目录必须与 `ANIMEGONET_DOWNLOAD_ROOT` 指向同一份共享存储；两边容器路径不同
 时，在下载器配置中填写对应的路径映射。
 
 ### Docker 参数
 
-Compose 示例直接支持以下启动参数：
+最小 Compose 示例直接支持以下启动参数；其余配置可在 WebUI 中完成：
 
 | 参数 | 默认值 | 用途 |
 |---|---|---|
 | `ANIMEGONET_IMAGE` | `ghcr.io/deqxj00/animegonet:latest` | 镜像标签或带 digest 的完整镜像地址 |
 | `ANIMEGONET_BIND_ADDRESS` | `127.0.0.1` | 宿主监听地址；需要局域网访问时改为 `0.0.0.0` |
 | `ANIMEGONET_PORT` | `7991` | 宿主 WebUI 端口 |
-| `PUID` / `PGID` | `1000` / `1000` | 容器进程及挂载目录使用的 Unix UID/GID |
-| `TZ` | `Asia/Shanghai` | 容器时区 |
 | `ANIMEGONET_DATA_ROOT` | `./data` | SQLite、配置、缓存、日志和备份目录 |
-| `ANIMEGONET_DOWNLOAD_ROOT` | `./download_temp` | qBittorrent 与 AnimeGoNet 共享的下载目录 |
-| `ANIMEGONET_TV_ROOT` | `./jellyfin_tv_data` | TV 整理目标目录 |
-| `ANIMEGONET_MOVIE_ROOT` | `./jellyfin_movie_data` | Movie 整理目标目录 |
-| `ANIMEGONET_ACCESS_KEY` | `123456` | AnimeGoHelper (Mikan) 内部插件 API 密钥；公网部署必须修改 |
-| `ANIMEGONET_U2_ACCESS_KEY` | `123456` | `inner_plugin_u2` 专用 API 密钥；公网部署必须修改 |
-| `ANIMEGONET_WEBUI_ACCESS_KEY` | 空 | 独立 WebUI 密钥；空值表示不启用 WebUI 鉴权 |
-| `ANIMEGONET_BACKGROUND_WORKERS_ENABLED` | `true` | 是否运行 RSS、下载、匹配和整理后台 Worker |
+| `ANIMEGONET_DOWNLOAD_ROOT` | `./download` | qBittorrent、媒体库与 AnimeGoNet 共享的下载及整理目录 |
 
 容器还接受以下常用应用配置。它们可加入 `environment`；嵌套配置统一使用 .NET
 双下划线格式，例如 `downloaders__bt__base_url`：

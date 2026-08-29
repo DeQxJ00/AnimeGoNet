@@ -44,10 +44,10 @@ public sealed partial class OperationsDocumentationContractTests
         Assert.Equal("animegonet", Assert.IsType<YamlScalarNode>(service.Key).Value);
         Assert.DoesNotContain("qbittorrent:", compose, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ghcr.io/deqxj00/animegonet:latest", compose, StringComparison.Ordinal);
-        Assert.Contains("target: /data", compose, StringComparison.Ordinal);
-        Assert.Contains("target: /download/incomplete", compose, StringComparison.Ordinal);
-        Assert.Contains("target: /download/anime", compose, StringComparison.Ordinal);
-        Assert.Contains("target: /download/movies", compose, StringComparison.Ordinal);
+        Assert.Contains(":/data", compose, StringComparison.Ordinal);
+        Assert.Contains(":/download", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("environment:", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("security_opt:", compose, StringComparison.Ordinal);
 
         foreach (var parameter in new[]
                  {
@@ -56,10 +56,6 @@ public sealed partial class OperationsDocumentationContractTests
                      "ANIMEGONET_PORT",
                      "ANIMEGONET_DATA_ROOT",
                      "ANIMEGONET_DOWNLOAD_ROOT",
-                     "ANIMEGONET_TV_ROOT",
-                     "ANIMEGONET_MOVIE_ROOT",
-                     "ANIMEGONET_ACCESS_KEY",
-                     "ANIMEGONET_WEBUI_ACCESS_KEY",
                      "downloaders__bt__base_url",
                      "outbound_proxy_hosts",
                  })
