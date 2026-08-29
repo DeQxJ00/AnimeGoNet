@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 74;
+    public const int CurrentVersion = 75;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -184,7 +184,30 @@ public static class DatabaseSchema
             74,
             "notification_delivery_history_limit",
             NotificationDeliveryHistoryLimit),
+        new SchemaMigration(
+            75,
+            "complete_cleaned_download_jobs",
+            CompleteCleanedDownloadJobs),
     ];
+
+    private const string CompleteCleanedDownloadJobs = """
+        UPDATE download_jobs
+        SET state = 'complete',
+            progress = 1,
+            speed_bytes_per_second = 0,
+            eta_seconds = NULL,
+            is_stale = 0,
+            revision = revision + 1
+        WHERE organization_state = 'completed'
+          AND state <> 'complete'
+          AND EXISTS (
+              SELECT 1
+              FROM ingest_tasks AS task
+              WHERE task.id = download_jobs.task_id
+                AND json_extract(task.route_snapshot_json, '$.file_strategy')
+                    IN ('move', 'wait_move', 'link_delete')
+          );
+        """;
 
     private const string NotificationDeliveryHistoryLimit = """
         DELETE FROM notification_deliveries

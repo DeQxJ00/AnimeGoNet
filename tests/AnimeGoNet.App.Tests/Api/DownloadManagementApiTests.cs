@@ -38,6 +38,15 @@ public sealed class DownloadManagementApiTests
             1,
             json.RootElement.GetProperty("summary").GetProperty("active_jobs").GetInt32());
         Assert.Equal(
+            1,
+            json.RootElement.GetProperty("summary").GetProperty("downloading_jobs").GetInt32());
+        Assert.Equal(
+            0,
+            json.RootElement.GetProperty("summary").GetProperty("seeding_jobs").GetInt32());
+        Assert.Equal(
+            0,
+            json.RootElement.GetProperty("summary").GetProperty("download_completed_jobs").GetInt32());
+        Assert.Equal(
             0,
             json.RootElement.GetProperty("summary")
                 .GetProperty("skipped_duplicate_jobs")

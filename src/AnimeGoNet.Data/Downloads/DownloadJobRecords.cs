@@ -76,6 +76,9 @@ public sealed record DownloadJobListPage(
 public sealed record DownloadJobDashboardSummary(
     int TotalJobs,
     int ActiveJobs,
+    int DownloadingJobs,
+    int SeedingJobs,
+    int DownloadCompletedJobs,
     int PausedJobs,
     int DeadJobs,
     int FailedJobs,

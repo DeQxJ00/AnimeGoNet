@@ -205,7 +205,8 @@ test("overview exposes operational statistics as direct navigation and filters",
   assert.equal(groups[0]?.querySelector("h3")?.textContent.trim(), "系统资源");
   assert.equal(groups[0]?.querySelectorAll(".overview-resource-card").length, 3);
   for (const id of [
-    "overview-download-active",
+    "overview-download-downloading",
+    "overview-download-seeding",
     "overview-download-paused",
     "overview-download-failed",
     "overview-download-waiting-organization",

@@ -760,12 +760,14 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            UPDATE download_jobs SET organization_state = $state, organization_lease_token = NULL,
+            UPDATE download_jobs SET state = 'complete', progress = 1,
+                speed_bytes_per_second = 0, eta_seconds = NULL,
+                organization_state = $state, organization_lease_token = NULL,
                 organization_lease_expires_at_utc = NULL, organization_next_attempt_at_utc = NULL,
                 organization_failure_code = NULL,
                 organization_phase = 'completed',
                 organization_completed_units = 1, organization_total_units = 1,
-                updated_at_utc = $now, revision = revision + 1
+                is_stale = 0, updated_at_utc = $now, revision = revision + 1
             WHERE id = $job_id AND task_id = $task_id AND organization_state = 'organizing'
               AND organization_lease_token = $token;
             UPDATE ingest_tasks SET status = $task_status, failure_kind = NULL,

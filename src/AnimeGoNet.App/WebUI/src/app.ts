@@ -661,6 +661,9 @@ interface DownloadListPage {
   summary: {
     total_jobs: number;
     active_jobs: number;
+    downloading_jobs: number;
+    seeding_jobs: number;
+    download_completed_jobs: number;
     paused_jobs: number;
     dead_jobs: number;
     failed_jobs: number;
@@ -680,6 +683,9 @@ interface DownloadListPage {
 
 type DownloadSummaryBucket =
   | "active"
+  | "downloading"
+  | "seeding"
+  | "download_completed"
   | "paused"
   | "dead"
   | "failed"
@@ -4863,6 +4869,9 @@ function readDownloadState(): DownloadUiState {
         ? stored.direction : defaults.direction,
       summary_bucket: [
         "active",
+        "downloading",
+        "seeding",
+        "download_completed",
         "paused",
         "dead",
         "failed",
@@ -8977,6 +8986,9 @@ function renderDownloadPage(body: DownloadListPage, background = false): void {
   const totalPages = Math.max(1, Math.ceil(body.total_items / body.page_size));
   const quickFilterLabel = ({
     active: "活动",
+    downloading: "下载",
+    seeding: "做种",
+    download_completed: "完成",
     paused: "暂停",
     dead: "死种",
     failed: "失败",
@@ -12121,20 +12133,22 @@ async function loadOverviewStatistics(): Promise<void> {
 
   if (downloads.status === "fulfilled") {
     const summary = downloads.value.summary;
-    setOverviewCount("overview-download-active-count", summary.active_jobs);
+    setOverviewCount("overview-download-downloading-count", summary.downloading_jobs);
+    setOverviewCount("overview-download-seeding-count", summary.seeding_jobs);
+    setOverviewCount("overview-download-completed-count", summary.download_completed_jobs);
     setOverviewCount("overview-download-paused-count", summary.paused_jobs);
     setOverviewCount("overview-download-dead-count", summary.dead_jobs);
     setOverviewCount("overview-download-failed-count", summary.failed_jobs);
     setOverviewCount("overview-download-waiting-organization-count", summary.waiting_organization_jobs);
     setOverviewCount("overview-download-skipped-duplicate-count", summary.skipped_duplicate_jobs);
-    setOverviewCount("overview-download-completed-count", summary.completed_jobs);
     setOverviewCount("overview-download-stale-count", summary.stale_jobs);
     setOverviewCount("overview-downloaders-offline-count", summary.offline_instance_count);
     element<HTMLElement>("#overview-download-failed-detail").textContent =
       summary.latest_failure_code ?? "当前无失败";
   } else {
     setOverviewFailure([
-      "overview-download-active-count",
+      "overview-download-downloading-count",
+      "overview-download-seeding-count",
       "overview-download-paused-count",
       "overview-download-dead-count",
       "overview-download-failed-count",
@@ -15618,13 +15632,14 @@ element<HTMLButtonElement>("#overview-attention-review").addEventListener(
   () => openMetadataAttentionFromOverview("review"),
 );
 for (const [id, bucket] of [
-  ["overview-download-active", "active"],
+  ["overview-download-downloading", "downloading"],
+  ["overview-download-seeding", "seeding"],
   ["overview-download-paused", "paused"],
   ["overview-download-dead", "dead"],
   ["overview-download-failed", "failed"],
   ["overview-download-waiting-organization", "waiting_organization"],
   ["overview-download-skipped-duplicate", "skipped_duplicate"],
-  ["overview-download-completed", "completed"],
+  ["overview-download-completed", "download_completed"],
   ["overview-download-stale", "stale"],
 ] as const) {
   element<HTMLButtonElement>(`#${id}`).addEventListener(

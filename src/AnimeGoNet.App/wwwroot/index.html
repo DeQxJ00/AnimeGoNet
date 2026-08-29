@@ -107,8 +107,14 @@
             <small>数据来自全局下载仪表盘</small>
           </div>
           <div class="overview-statistics-grid">
-            <button id="overview-download-active" type="button" class="overview-stat-card active">
-              <span>活动下载</span><strong id="overview-download-active-count">—</strong><small>等待、下载、移动或做种</small>
+            <button id="overview-download-downloading" type="button" class="overview-stat-card active">
+              <span>下载</span><strong id="overview-download-downloading-count">—</strong><small>等待、下载或整理移动</small>
+            </button>
+            <button id="overview-download-seeding" type="button" class="overview-stat-card active">
+              <span>做种</span><strong id="overview-download-seeding-count">—</strong><small>下载器中正在保种</small>
+            </button>
+            <button id="overview-download-completed" type="button" class="overview-stat-card success">
+              <span>完成</span><strong id="overview-download-completed-count">—</strong><small>下载器任务已完成</small>
             </button>
             <button id="overview-download-paused" type="button" class="overview-stat-card paused">
               <span>暂停</span><strong id="overview-download-paused-count">—</strong><small>进入暂停任务筛选</small>
@@ -124,9 +130,6 @@
             </button>
             <button id="overview-download-skipped-duplicate" type="button" class="overview-stat-card skipped">
               <span>重复跳过</span><strong id="overview-download-skipped-duplicate-count">—</strong><small>整批文件均已完成，无需整理</small>
-            </button>
-            <button id="overview-download-completed" type="button" class="overview-stat-card success">
-              <span>已完成</span><strong id="overview-download-completed-count">—</strong><small>已完成媒体入库</small>
             </button>
             <button id="overview-download-stale" type="button" class="overview-stat-card stale">
               <span>快照过期</span><strong id="overview-download-stale-count">—</strong><small>下载器状态需要复核</small>

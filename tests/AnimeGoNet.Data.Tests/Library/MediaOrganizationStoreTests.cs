@@ -40,11 +40,13 @@ public sealed class MediaOrganizationStoreTests
             now.AddSeconds(1), TimeSpan.FromMinutes(1)));
         Assert.Equal(MediaOrganizationStage.CleanupDownloader, cleanup.Stage);
         Assert.Empty(cleanup.Files);
+        await fixture.SetDownloadStateAsync("seeding");
         await fixture.Store.CompleteCleanupAsync(cleanup, now.AddSeconds(1));
 
         var completed = await fixture.ReadStateAsync();
         Assert.Equal("organized", completed.TaskStatus);
         Assert.Equal("completed", completed.OrganizationState);
+        Assert.Equal("complete", completed.DownloadState);
         Assert.Equal(MediaOrganizationPhases.Completed, completed.OrganizationPhase);
         Assert.Equal((1, 1), (completed.CompletedUnits, completed.TotalUnits));
     }
@@ -334,7 +336,7 @@ public sealed class MediaOrganizationStoreTests
             await using var connection = await _database.Database.OpenConnectionAsync();
             await using var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT task.status, job.organization_state,
+                SELECT task.status, job.organization_state, job.state,
                        (SELECT COUNT(*) FROM completion_records),
                        (SELECT media_path FROM completion_records LIMIT 1),
                        job.organization_phase, job.organization_completed_units,
@@ -347,9 +349,19 @@ public sealed class MediaOrganizationStoreTests
             await using var reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
             return new State(
-                reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3),
-                reader.GetString(4), reader.GetInt32(5), reader.GetInt32(6));
+                reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetString(5), reader.GetInt32(6), reader.GetInt32(7));
+        }
+
+        public async Task SetDownloadStateAsync(string state)
+        {
+            await using var connection = await _database.Database.OpenConnectionAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE download_jobs SET state = $state WHERE task_id = $task_id;";
+            command.Parameters.AddWithValue("$state", state);
+            command.Parameters.AddWithValue("$task_id", TaskId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
 
         public async Task SetFileStrategyAsync(string strategy)
@@ -433,6 +445,7 @@ public sealed class MediaOrganizationStoreTests
     private sealed record State(
         string TaskStatus,
         string OrganizationState,
+        string DownloadState,
         int CompletionCount,
         string? MediaPath,
         string OrganizationPhase,

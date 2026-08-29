@@ -237,6 +237,15 @@ public sealed class DownloadJobStoreTests
         await using var fixture = await DownloadJobFixture.CreateAsync();
 
         Assert.Single((await fixture.ListBucketAsync("active")).Items);
+        var downloading = await fixture.ListBucketAsync("downloading");
+        Assert.Single(downloading.Items);
+        Assert.Equal(1, downloading.Summary.DownloadingJobs);
+
+        await fixture.SetDashboardStateAsync("seeding", "downloading", "not_required");
+        var seeding = await fixture.ListBucketAsync("seeding");
+        Assert.Single(seeding.Items);
+        Assert.Equal(1, seeding.Summary.SeedingJobs);
+        Assert.Empty((await fixture.ListBucketAsync("downloading")).Items);
 
         await fixture.SetDashboardStateAsync("paused", "download_queued", "not_required");
         Assert.Single((await fixture.ListBucketAsync("paused")).Items);
@@ -260,6 +269,9 @@ public sealed class DownloadJobStoreTests
 
         await fixture.SetDashboardStateAsync("complete", "organized", "not_required");
         Assert.Single((await fixture.ListBucketAsync("completed")).Items);
+        var downloadCompleted = await fixture.ListBucketAsync("download_completed");
+        Assert.Single(downloadCompleted.Items);
+        Assert.Equal(1, downloadCompleted.Summary.DownloadCompletedJobs);
         Assert.Empty((await fixture.ListBucketAsync("waiting_organization")).Items);
 
         await fixture.SetDashboardStateAsync("downloading", "downloading", "not_required");

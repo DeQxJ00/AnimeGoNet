@@ -3438,6 +3438,9 @@ public static class ApiEndpoints
                 new DownloadDashboardSummary(
                     records.Summary.TotalJobs,
                     records.Summary.ActiveJobs,
+                    records.Summary.DownloadingJobs,
+                    records.Summary.SeedingJobs,
+                    records.Summary.DownloadCompletedJobs,
                     records.Summary.PausedJobs,
                     records.Summary.DeadJobs,
                     records.Summary.FailedJobs,

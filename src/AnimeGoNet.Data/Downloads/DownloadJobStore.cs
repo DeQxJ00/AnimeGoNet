@@ -971,6 +971,14 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
                    COALESCE(SUM(CASE
                        WHEN job.state IN ('waiting', 'downloading', 'moving', 'seeding') THEN 1
                        ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN job.is_stale = 0
+                         AND job.state IN ('waiting', 'downloading', 'moving') THEN 1
+                       ELSE 0 END), 0),
+                   COALESCE(SUM(CASE
+                       WHEN job.is_stale = 0 AND job.state = 'seeding' THEN 1
+                       ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN job.state = 'complete' THEN 1 ELSE 0 END), 0),
                    COALESCE(SUM(CASE WHEN job.state = 'paused' THEN 1 ELSE 0 END), 0),
                    COALESCE(SUM(CASE WHEN job.state = 'dead' THEN 1 ELSE 0 END), 0),
                    COALESCE(SUM(CASE
@@ -1039,10 +1047,13 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             reader.GetInt32(8),
             reader.GetInt32(9),
             reader.GetInt32(10),
-            reader.GetInt64(11),
+            reader.GetInt32(11),
             reader.GetInt32(12),
-            reader.IsDBNull(13) ? null : reader.GetString(13),
-            ReadDateTimeOffset(reader, 14));
+            reader.GetInt32(13),
+            reader.GetInt64(14),
+            reader.GetInt32(15),
+            reader.IsDBNull(16) ? null : reader.GetString(16),
+            ReadDateTimeOffset(reader, 17));
     }
 
     private static DownloadJobListItemRecord ReadListItem(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
@@ -1298,6 +1309,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
             : value.Trim().ToLowerInvariant() switch
             {
                 "active" => "active",
+                "downloading" => "downloading",
+                "seeding" => "seeding",
+                "download_completed" => "download_completed",
                 "paused" => "paused",
                 "dead" => "dead",
                 "failed" => "failed",
@@ -1313,6 +1327,9 @@ public sealed class DownloadJobStore(AnimeGoSqliteDatabase database)
     private static string SummaryBucketPredicate(string bucket) => bucket switch
     {
         "active" => "download_jobs.state IN ('waiting', 'downloading', 'moving', 'seeding')",
+        "downloading" => "download_jobs.is_stale = 0 AND download_jobs.state IN ('waiting', 'downloading', 'moving')",
+        "seeding" => "download_jobs.is_stale = 0 AND download_jobs.state = 'seeding'",
+        "download_completed" => "download_jobs.state = 'complete'",
         "paused" => "download_jobs.state = 'paused'",
         "dead" => "download_jobs.state = 'dead'",
         "failed" => """

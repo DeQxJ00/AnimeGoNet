@@ -112,6 +112,82 @@ public sealed class SchemaMigrationTests
     }
 
     [Fact]
+    public async Task CleanedMoveAndLinkDeleteJobsNoLongerRemainSeeding()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations.Take(74).ToArray(),
+            CancellationToken.None);
+
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO source_profiles (
+                    id, display_name, adapter, downloader_id, file_strategy,
+                    rss_filter_enabled, rss_priority_enabled, revision, enabled,
+                    created_at_utc, updated_at_utc)
+                VALUES ('mikan', 'Mikan', 'mikan', 'bt', 'move', 1, 1, 1, 1, $now, $now);
+
+                INSERT INTO ingest_tasks (
+                    id, source_profile_id, source_profile_revision, source_id,
+                    title, torrent_url_fingerprint, downloader_id,
+                    route_snapshot_json, status, created_at_utc, updated_at_utc)
+                VALUES
+                    ('move-task', 'mikan', 1, 'mikan', 'Move', 'move-75', 'bt',
+                     '{"file_strategy":"move"}', 'organized', $now, $now),
+                    ('link-task', 'mikan', 1, 'mikan', 'Link', 'link-75', 'bt',
+                     '{"file_strategy":"link"}', 'organized', $now, $now),
+                    ('link-delete-task', 'mikan', 1, 'mikan', 'Link delete', 'link-delete-75', 'bt',
+                     '{"file_strategy":"link_delete"}', 'organized', $now, $now);
+
+                INSERT INTO download_jobs (
+                    id, task_id, downloader_id, info_hash, state, progress,
+                    downloaded_bytes, total_bytes, speed_bytes_per_second,
+                    organization_state, organization_phase,
+                    organization_completed_units, organization_total_units,
+                    is_stale, created_at_utc, updated_at_utc)
+                VALUES
+                    ('move-job', 'move-task', 'bt', '1111111111111111111111111111111111111111',
+                     'seeding', 1, 1, 1, 10, 'completed', 'completed', 1, 1, 0, $now, $now),
+                    ('link-job', 'link-task', 'bt', '2222222222222222222222222222222222222222',
+                     'seeding', 1, 1, 1, 10, 'completed', 'completed', 1, 1, 0, $now, $now),
+                    ('link-delete-job', 'link-delete-task', 'bt', '3333333333333333333333333333333333333333',
+                     'seeding', 1, 1, 1, 10, 'completed', 'completed', 1, 1, 1, $now, $now);
+                """;
+            seed.Parameters.AddWithValue("$now", "2026-08-29T00:00:00Z");
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        await SchemaMigrationRunner.ApplyAsync(
+            connection,
+            DatabaseSchema.Migrations,
+            CancellationToken.None);
+
+        await using var verify = connection.CreateCommand();
+        verify.CommandText = """
+            SELECT id, state, is_stale
+            FROM download_jobs
+            ORDER BY id;
+            """;
+        await using var reader = await verify.ExecuteReaderAsync();
+        var rows = new List<(string Id, string State, bool IsStale)>();
+        while (await reader.ReadAsync())
+        {
+            rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0));
+        }
+
+        Assert.Equal(
+            [
+                ("link-delete-job", "complete", false),
+                ("link-job", "seeding", false),
+                ("move-job", "complete", false),
+            ],
+            rows);
+    }
+
+    [Fact]
     public async Task NonZeroTrustedOffsetMigrationPurgesLegacyZeroRows()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
