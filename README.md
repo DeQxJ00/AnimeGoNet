@@ -241,3 +241,8 @@ NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
 - [外部 qBittorrent 部署](docs/EXTERNAL_QBITTORRENT.md)
 - [CI / NativeAOT / Docker](docs/CI_CD.md)
 - [首版实现完成审计](docs/IMPLEMENTATION_COMPLETION_AUDIT.md)
+
+## 许可证
+
+AnimeGoNet 以 [GNU General Public License v3.0](LICENSE) 授权，采用
+`GPL-3.0-only` SPDX 标识。
