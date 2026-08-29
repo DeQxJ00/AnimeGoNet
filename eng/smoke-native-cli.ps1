@@ -34,6 +34,10 @@ function Invoke-BoundedProcess {
         [void]$child.WaitForExit(5000)
         throw "Published CLI did not exit within $TimeoutMilliseconds ms."
     }
+    # The timed overload only waits for the process handle. Complete the
+    # parameterless wait as well so redirected stdout/stderr are fully flushed
+    # before the smoke assertions read their files on Linux runners.
+    $child.WaitForExit()
     if ($child.ExitCode -ne 0) {
         throw "Published CLI returned exit code $($child.ExitCode)."
     }
