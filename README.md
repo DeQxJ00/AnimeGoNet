@@ -127,6 +127,17 @@ docker compose up -d
 完成目录必须与 `ANIMEGONET_DOWNLOAD_ROOT` 指向同一份共享存储；两边容器路径不同
 时，在下载器配置中填写对应的路径映射。
 
+### 独立运行 TMDB / Bangumi OpenAPI MCP
+
+AnimeGoNet 的 AI 匹配需要两个独立的 Streamable HTTP MCP：
+
+- 使用 [`@ivotoby/openapi-mcp-server`](https://www.npmjs.com/package/@ivotoby/openapi-mcp-server)
+  和 TMDB OpenAPI 建立 TMDB MCP，并配置对应的 TMDB API Token。
+- 使用 `@ivotoby/openapi-mcp-server` 和 Bangumi OpenAPI 建立 Bangumi MCP；需要访问鉴权接口时，
+  配置对应的 Bangumi Access Token。
+
+建立完成后，在“设置 → AI 与 MCP”中分别填写 TMDB MCP 和 Bangumi MCP 的 `/mcp` 地址。
+
 ### Docker 参数
 
 Compose 示例直接支持以下启动参数：
