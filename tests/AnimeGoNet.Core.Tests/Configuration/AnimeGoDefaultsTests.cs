@@ -64,13 +64,16 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal(TimeSpan.FromSeconds(5), options.Metadata.Tmdb.RetryDelay);
         Assert.Equal(TimeSpan.FromHours(144), options.Metadata.Tmdb.CacheTtl);
         Assert.Equal(new Uri("https://api.bgm.tv/"), options.Metadata.Bangumi.BaseUrl);
+        Assert.Equal(new Uri(MikanClientOptions.DefaultBaseUrl), options.Metadata.Mikan.BaseUrl);
         Assert.Equal(TimeSpan.FromSeconds(30), options.Metadata.Bangumi.HttpTimeout);
         Assert.Equal(3, options.Metadata.Bangumi.RetryCount);
         Assert.Equal(TimeSpan.FromSeconds(5), options.Metadata.Bangumi.RetryDelay);
         Assert.Equal("0 0 6 * * *", options.Schedule.RefreshDatabaseCron);
-        Assert.False(options.DataUpdate.Enabled);
+        Assert.True(options.DataUpdate.Enabled);
         Assert.Equal("0 0 4 * * ?", options.DataUpdate.Cron);
-        Assert.Null(options.DataUpdate.ManifestUrl);
+        Assert.Equal(
+            new Uri(DataUpdateOptions.DefaultManifestUrl),
+            options.DataUpdate.ManifestUrl);
         Assert.True(options.DataUpdate.AutoDownload);
         Assert.True(options.DataUpdate.AutoImport);
         Assert.Equal(2, options.DataUpdate.KeepVersions);
@@ -86,7 +89,9 @@ public sealed class AnimeGoDefaultsTests
         Assert.Equal("mikan", profile.Id);
         Assert.Equal("bt", profile.DownloaderId);
         Assert.Equal(FileStrategy.Move, profile.FileStrategy);
-        Assert.Contains("mikanani.me", profile.AllowedTorrentHosts);
+        Assert.Equal(
+            [MikanClientOptions.DefaultHost, "mikanani.me"],
+            profile.AllowedTorrentHosts);
         Assert.Equal("animegonet", profile.Category);
         Assert.Empty(profile.Tags);
         Assert.Equal(0, profile.SeedingTimeMinutes);

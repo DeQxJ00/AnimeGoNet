@@ -210,6 +210,7 @@ sources:
     file_strategy: move
     link_type: hard
     allowed_torrent_hosts:
+      - mikanime.tv
       - mikanani.me
     category: animegonet
     tags: []
@@ -221,7 +222,7 @@ sources:
 
 metadata:
   mikan:
-    base_url: https://mikanani.me/
+    base_url: https://mikanime.tv/
     episode_identity_cache_hours: 8760
     bangumi_identity_cache_hours: 8760
   tmdb:
@@ -268,9 +269,9 @@ schedule:
   refresh_database_cron: '0 0 6 * * *'
 
 data_update:
-  enabled: false
+  enabled: true
   cron: '0 0 4 * * ?'
-  manifest_url: ''
+  manifest_url: 'https://github.com/DeQxJ00/AnimeGoNetData/releases/latest/download/manifest.json'
   auto_download: true
   auto_import: true
   keep_versions: 2

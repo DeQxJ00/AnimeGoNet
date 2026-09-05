@@ -44,11 +44,14 @@ public sealed record ScheduleOptions
 
 public sealed record DataUpdateOptions
 {
-    public bool Enabled { get; init; }
+    public const string DefaultManifestUrl =
+        "https://github.com/DeQxJ00/AnimeGoNetData/releases/latest/download/manifest.json";
+
+    public bool Enabled { get; init; } = true;
 
     public string Cron { get; init; } = "0 0 4 * * ?";
 
-    public Uri? ManifestUrl { get; init; }
+    public Uri? ManifestUrl { get; init; } = new(DefaultManifestUrl);
 
     public bool AutoDownload { get; init; } = true;
 
@@ -123,7 +126,11 @@ public sealed record MetadataMatchingOptions
 
 public sealed record MikanClientOptions
 {
-    public Uri BaseUrl { get; init; } = new("https://mikanani.me/");
+    public const string DefaultBaseUrl = "https://mikanime.tv/";
+
+    public const string DefaultHost = "mikanime.tv";
+
+    public Uri BaseUrl { get; init; } = new(DefaultBaseUrl);
 
     public TimeSpan EpisodeIdentityCacheTtl { get; init; } = TimeSpan.FromDays(365);
 

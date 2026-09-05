@@ -10310,7 +10310,7 @@ function populateSourceForm(profile, templateAdapter = "mikan") {
         String(profile?.seeding_time_minutes ?? (isU2Template ? -1 : 0));
     element("#source-hosts").value =
         profile?.allowed_torrent_hosts.join("\n")
-            ?? (isU2Template ? "u2.dmhy.org" : "mikanani.me\nmikanime.tv");
+            ?? (isU2Template ? "u2.dmhy.org" : "mikanime.tv\nmikanani.me");
     element("#source-enabled").checked = profile?.enabled ?? true;
     element("#source-filter-enabled").checked = profile?.rss_filter_enabled ?? false;
     element("#source-priority-enabled").checked = profile?.rss_priority_enabled ?? false;

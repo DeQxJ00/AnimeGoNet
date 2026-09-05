@@ -579,6 +579,7 @@ public sealed class AnimeGoOptionsValidatorTests
             {
                 Enabled = true,
                 Cron = "invalid",
+                ManifestUrl = null,
                 KeepVersions = 1,
                 HttpTimeout = TimeSpan.FromHours(2),
             },

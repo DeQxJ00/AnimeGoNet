@@ -23,9 +23,9 @@ public sealed class DataUpdateApiTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var root = json.RootElement;
-        Assert.False(root.GetProperty("scheduled_enabled").GetBoolean());
+        Assert.True(root.GetProperty("scheduled_enabled").GetBoolean());
         Assert.Equal("0 0 4 * * ?", root.GetProperty("cron").GetString());
-        Assert.False(root.GetProperty("manifest_configured").GetBoolean());
+        Assert.True(root.GetProperty("manifest_configured").GetBoolean());
         Assert.Equal(JsonValueKind.Null, root.GetProperty("active_version").ValueKind);
         Assert.Empty(root.GetProperty("versions").EnumerateArray());
         Assert.Empty(root.GetProperty("downloads").EnumerateArray());
@@ -132,7 +132,15 @@ public sealed class DataUpdateApiTests
     [Fact]
     public async Task MissingManifestAndUnavailableRollbackReturnStableErrors()
     {
-        await using var app = await RunningApp.StartAsync();
+        await using var app = await RunningApp.StartAsync(
+            configure: defaults => defaults with
+            {
+                DataUpdate = defaults.DataUpdate with
+                {
+                    Enabled = false,
+                    ManifestUrl = null,
+                },
+            });
 
         using var check = await app.Client.PostAsync(
             "/api/v1/data-update/check",

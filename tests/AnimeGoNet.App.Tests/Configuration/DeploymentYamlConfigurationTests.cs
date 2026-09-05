@@ -56,6 +56,10 @@ public sealed class DeploymentYamlConfigurationTests
             Assert.Equal(
                 defaults.Metadata.Tmdb.ImageBaseUrl.AbsoluteUri,
                 snapshot.Values["metadata:tmdb:image_base_url"]);
+            Assert.Equal("true", snapshot.Values["data_update:enabled"]);
+            Assert.Equal(
+                DataUpdateOptions.DefaultManifestUrl,
+                snapshot.Values["data_update:manifest_url"]);
 
             var text = await File.ReadAllTextAsync(path);
             Assert.StartsWith("# AnimeGoNet 部署配置", text, StringComparison.Ordinal);

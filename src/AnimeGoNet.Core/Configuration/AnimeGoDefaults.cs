@@ -93,7 +93,7 @@ public static class AnimeGoDefaults
                     Adapter = "mikan",
                     DownloaderId = "bt",
                     FileStrategy = FileStrategy.Move,
-                    AllowedTorrentHosts = ["mikanani.me"],
+                    AllowedTorrentHosts = [MikanClientOptions.DefaultHost, "mikanani.me"],
                     Category = "animegonet",
                     Tags = [],
                     DynamicTagTemplate = "{year}年{quarter}月新番",

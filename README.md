@@ -64,6 +64,22 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 |---|---|
 | ![AnimeGoNet 匹配与整理任务](docs/images/webui-tasks.jpg) | ![AnimeGoNet 持久化匹配日志](docs/images/webui-matching-logs.jpg) |
 
+## AI 与 MCP 推荐设置
+
+如需使用 AI 元数据匹配，建议在“设置 → AI 与 MCP”中按下图配置：开启
+`TMDBFailBacktrace` 和“AI 元数据匹配”，其余季度失败链选项保持默认。
+
+![AnimeGoNet AI 与 MCP 推荐设置](docs/images/ai-mcp-recommended-settings.png)
+
+使用 Mikan 来源时，建议同时开启“可信 EP Offset 缓存”，并保留默认的 3 次可信阈值。
+该缓存仅适用于 Mikan，不参与 U2 的匹配流程。
+
+![AnimeGoNet Mikan 可信 EP Offset 推荐设置](docs/images/mikan-trusted-ep-offset-settings.png)
+
+AI 匹配依赖 TMDB MCP 与 Bangumi MCP。请分别填写两个可用的 `/mcp` 地址，并在对应
+MCP 服务中正确配置 TMDB Token 和 Bangumi Access Token；同时确认 AnimeGoNet 的
+TMDB API Key 或 Read Access Token 已配置。除上述项目外，其他设置建议先保持默认值。
+
 ## Docker
 
 正式版本的 amd64/arm64 镜像发布在 GHCR：
@@ -241,6 +257,16 @@ NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
 - [外部 qBittorrent 部署](docs/EXTERNAL_QBITTORRENT.md)
 - [CI / NativeAOT / Docker](docs/CI_CD.md)
 - [首版实现完成审计](docs/IMPLEMENTATION_COMPLETION_AUDIT.md)
+
+## 关联项目
+
+- [AnimeGoNetData](https://github.com/DeQxJ00/AnimeGoNetData)：将 Bangumi Archive
+  转换为带版本和校验信息的 `JSONL.gz` 数据包及 `manifest.json`，供 AnimeGoNet
+  定时下载、导入和本地缓存使用。
+- [Anime-Lists-Json](https://github.com/DeQxJ00/Anime-Lists-Json)：将 Anime-Lists
+  映射数据生成按 AniDB ID、IMDb ID 查询的静态 JSON，供 U2 等来源辅助映射 TMDB。
+- [AnimeGoHelper](https://github.com/DeQxJ00/AnimeGoHelper)：配合 AnimeGoNet 使用的
+  Mikan 与 U2 油猴脚本，可从站点页面快捷提交 TV、Movie 和 Torrent 任务。
 
 ## 许可证
 

@@ -1074,7 +1074,8 @@ public static class AnimeGoApplication
                         configuration,
                         "data_update_manifest_url",
                         "data_update:manifest_url"),
-                    "data_update_manifest_url"),
+                    "data_update_manifest_url")
+                    ?? defaults.DataUpdate.ManifestUrl,
                 AutoDownload = ParseOptionalBool(
                     FirstConfigurationValue(
                         configuration,

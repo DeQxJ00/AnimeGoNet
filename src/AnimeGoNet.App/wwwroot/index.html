@@ -1282,7 +1282,7 @@
               <small>-1 无限，0 不做种，正数为分钟</small>
             </label>
             <label class="source-hosts">允许的 Torrent Host
-              <textarea id="source-hosts" rows="3" required placeholder="mikanani.me&#10;*.example.invalid"></textarea>
+              <textarea id="source-hosts" rows="3" required placeholder="mikanime.tv&#10;mikanani.me"></textarea>
             </label>
             <label class="source-hosts" data-source-adapter-scope="mikan">Mikan 登录 Cookie 值
               <input id="source-mikan-cookie" autocomplete="off" spellcheck="false" placeholder="只粘贴等号后的内容">
@@ -1290,7 +1290,7 @@
             </label>
             <label class="configuration-clear" data-source-adapter-scope="mikan"><input id="source-mikan-cookie-clear" type="checkbox">明确清除 Mikan Cookie</label>
             <label class="source-hosts" data-source-adapter-scope="mikan">Mikan RSS URL（可能包含 passkey）
-              <input id="source-rss-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://mikanani.me/RSS/MyBangumi?token=...">
+              <input id="source-rss-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://mikanime.tv/RSS/MyBangumi?token=...">
               <small id="source-rss-url-state">仅 Mikan 适配器可配置；保存值会直接回填。</small>
             </label>
             <label>默认媒体类型
@@ -2148,7 +2148,7 @@
               <span><strong>启用定时更新</strong><small>按下方六字段 Cron 执行已配置的自动策略。</small></span>
             </label>
             <label class="wide">六字段 Cron（秒 分 时 日 月 周）<input id="configuration-data-update-cron" required maxlength="256" placeholder="0 0 4 * * *"></label>
-            <label class="wide">Manifest URL（启用时必填）<input id="configuration-data-update-manifest" type="url" maxlength="2048" placeholder="https://example.invalid/animegonet-data/manifest.json"></label>
+            <label class="wide">Manifest URL（启用时必填）<input id="configuration-data-update-manifest" type="url" maxlength="2048" placeholder="https://github.com/DeQxJ00/AnimeGoNetData/releases/latest/download/manifest.json"></label>
             <label><input id="configuration-data-update-auto-download" type="checkbox">检查后自动下载</label>
             <label><input id="configuration-data-update-auto-import" type="checkbox">下载后自动导入</label>
             <label>保留版本数<input id="configuration-data-update-keep" type="number" min="2" max="10" required></label>

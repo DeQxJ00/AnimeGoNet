@@ -196,9 +196,11 @@ public sealed class ConfigurationApiTests
             123456,
             json.RootElement.GetProperty("torrent_fetch").GetProperty("max_response_bytes").GetInt64());
         var dataUpdate = json.RootElement.GetProperty("data_update");
-        Assert.False(dataUpdate.GetProperty("enabled").GetBoolean());
+        Assert.True(dataUpdate.GetProperty("enabled").GetBoolean());
         Assert.Equal("0 0 4 * * ?", dataUpdate.GetProperty("cron").GetString());
-        Assert.Null(dataUpdate.GetProperty("manifest_url").GetString());
+        Assert.Equal(
+            DataUpdateOptions.DefaultManifestUrl,
+            dataUpdate.GetProperty("manifest_url").GetString());
         Assert.True(dataUpdate.GetProperty("auto_download").GetBoolean());
         Assert.True(dataUpdate.GetProperty("auto_import").GetBoolean());
         Assert.Equal(2, dataUpdate.GetProperty("keep_versions").GetInt32());
@@ -887,9 +889,9 @@ public sealed class ConfigurationApiTests
 
         using var statusResponse = await app.Client.GetAsync("/api/v1/data-update");
         using var status = JsonDocument.Parse(await statusResponse.Content.ReadAsStreamAsync());
-        Assert.False(status.RootElement.GetProperty("scheduled_enabled").GetBoolean());
+        Assert.True(status.RootElement.GetProperty("scheduled_enabled").GetBoolean());
         Assert.Equal("0 0 4 * * ?", status.RootElement.GetProperty("cron").GetString());
-        Assert.False(status.RootElement.GetProperty("manifest_configured").GetBoolean());
+        Assert.True(status.RootElement.GetProperty("manifest_configured").GetBoolean());
     }
 
     [Fact]

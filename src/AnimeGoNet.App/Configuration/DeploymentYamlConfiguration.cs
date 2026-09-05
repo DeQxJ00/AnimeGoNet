@@ -360,7 +360,7 @@ internal static class DeploymentYamlConfiguration
             "sources:mikan:file_strategy");
         Add(values, "sources:mikan:file_strategy", "move");
         Add(values, "sources:mikan:link_type", "hard");
-        Add(values, "sources:mikan:allowed_torrent_hosts:0", "mikanani.me");
+        Add(values, "sources:mikan:allowed_torrent_hosts:0", MikanClientOptions.DefaultHost);
         Alias(values, "setting:category", "sources:mikan:category");
         Add(values, "sources:mikan:category", "animegonet");
         Alias(values, "setting:tag", "sources:mikan:dynamic_tag_template");
@@ -631,7 +631,7 @@ internal static class DeploymentYamlConfiguration
                 file_strategy: {{LegacyFileStrategy(values)}}
                 link_type: {{LegacyLinkType(values)}}
                 allowed_torrent_hosts:
-                  - mikanani.me
+                  - {{MikanClientOptions.DefaultHost}}
             {{LegacyMikanAdditionalAllowedHost(values)}}
                 category: {{Scalar(Configured(values, "sources:mikan:category", "animegonet"))}}
                 tags: []
@@ -702,11 +702,11 @@ internal static class DeploymentYamlConfiguration
               refresh_database_cron: {{Scalar(Configured(values, "schedule:refresh_database_cron", defaults.Schedule.RefreshDatabaseCron))}}
 
             data_update:
-              enabled: false
-              cron: {{Scalar(defaults.DataUpdate.Cron)}}
-              manifest_url: ''
-              auto_download: true
-              auto_import: true
+              enabled: {{Boolean(values, "data_update:enabled", defaults.DataUpdate.Enabled)}}
+              cron: {{Scalar(Configured(values, "data_update:cron", defaults.DataUpdate.Cron))}}
+              manifest_url: {{Scalar(Configured(values, "data_update:manifest_url", defaults.DataUpdate.ManifestUrl?.AbsoluteUri ?? string.Empty))}}
+              auto_download: {{Boolean(values, "data_update:auto_download", defaults.DataUpdate.AutoDownload)}}
+              auto_import: {{Boolean(values, "data_update:auto_import", defaults.DataUpdate.AutoImport)}}
               keep_versions: {{defaults.DataUpdate.KeepVersions.ToString(CultureInfo.InvariantCulture)}}
               timeout_seconds: {{defaults.DataUpdate.HttpTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}
             """.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
@@ -880,6 +880,7 @@ internal static class DeploymentYamlConfiguration
                 file_strategy: move
                 link_type: hard
                 allowed_torrent_hosts:
+                  - mikanime.tv
                   - mikanani.me
                 category: animegonet
                 tags: []
@@ -950,13 +951,13 @@ internal static class DeploymentYamlConfiguration
               refresh_database_cron: '0 0 6 * * *'
 
             data_update:
-              enabled: false
-              cron: '0 0 4 * * ?'
-              manifest_url: ''
-              auto_download: true
-              auto_import: true
-              keep_versions: 2
-              timeout_seconds: 300
+              enabled: {{options.DataUpdate.Enabled.ToString().ToLowerInvariant()}}
+              cron: {{Scalar(options.DataUpdate.Cron)}}
+              manifest_url: {{Scalar(options.DataUpdate.ManifestUrl?.AbsoluteUri ?? string.Empty)}}
+              auto_download: {{options.DataUpdate.AutoDownload.ToString().ToLowerInvariant()}}
+              auto_import: {{options.DataUpdate.AutoImport.ToString().ToLowerInvariant()}}
+              keep_versions: {{options.DataUpdate.KeepVersions.ToString(CultureInfo.InvariantCulture)}}
+              timeout_seconds: {{options.DataUpdate.HttpTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}
             """.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
     }
 
@@ -1141,7 +1142,10 @@ internal static class DeploymentYamlConfiguration
             {
                 values["sources:mikan:rss_feed_url"] = normalizedUrl;
                 var host = new Uri(normalizedUrl, UriKind.Absolute).IdnHost;
-                if (!string.Equals(host, "mikanani.me", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(
+                    host,
+                    MikanClientOptions.DefaultHost,
+                    StringComparison.OrdinalIgnoreCase))
                 {
                     values["sources:mikan:allowed_torrent_hosts:1"] = host;
                 }
