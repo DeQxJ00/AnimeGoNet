@@ -56,7 +56,9 @@ public sealed class ManualSubmissionApiTests
         Assert.NotNull(batch);
         Assert.Equal("mikan-alt", batch.SourceProfileId);
         Assert.Single(transport.FeedRequests);
-        Assert.Equal(secretUrl, transport.FeedRequests[0].AbsoluteUri);
+        Assert.Equal(
+            "https://mikanime.tv/RSS?bangumiId=3951&token=private-passkey",
+            transport.FeedRequests[0].AbsoluteUri);
     }
 
     [Fact]
@@ -113,7 +115,9 @@ public sealed class ManualSubmissionApiTests
         Assert.Equal("staged", json.RootElement.GetProperty("items")[0]
             .GetProperty("status").GetString());
         Assert.Single(transport.FeedRequests);
-        Assert.Equal(secretUrl, transport.FeedRequests[0].AbsoluteUri);
+        Assert.Equal(
+            "https://mikanime.tv/RSS?bangumiId=3951&token=saved-private-passkey",
+            transport.FeedRequests[0].AbsoluteUri);
         using var source = JsonDocument.Parse(
             await app.Client.GetStreamAsync("/api/v1/sources/mikan-saved"));
         Assert.Equal("succeeded", source.RootElement.GetProperty("rss_last_run_state").GetString());

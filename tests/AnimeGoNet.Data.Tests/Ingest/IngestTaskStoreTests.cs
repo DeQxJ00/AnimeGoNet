@@ -17,7 +17,7 @@ public sealed class IngestTaskStoreTests
         await profileStore.EnsureSeedsAsync(options.InitialSourceProfiles);
         await profileStore.EnsureSeedsAsync(options.InitialSourceProfiles);
         var profile = Assert.IsType<SourceProfileRecord>(await profileStore.GetEnabledAsync("mikan"));
-        Assert.Equal(["mikanani.me"], profile.AllowedTorrentHosts);
+        Assert.Equal(["mikanime.tv", "mikanani.me"], profile.AllowedTorrentHosts);
         var normalized = Assert.IsType<NormalizedIngestItem>(IngestCommandNormalizer.Normalize(
             "mikan",
             new IngestItemCommand(
@@ -47,7 +47,10 @@ public sealed class IngestTaskStoreTests
                 route.RootElement.GetProperty("duplicate_notification_enabled").GetBoolean());
         }
         Assert.Contains("\"seeding_time_minutes\":0", reader.GetString(1), StringComparison.Ordinal);
-        Assert.Contains("\"allowed_torrent_hosts\":[\"mikanani.me\"]", reader.GetString(1), StringComparison.Ordinal);
+        Assert.Contains(
+            "\"allowed_torrent_hosts\":[\"mikanime.tv\",\"mikanani.me\"]",
+            reader.GetString(1),
+            StringComparison.Ordinal);
         Assert.Equal("tv", reader.GetString(2));
     }
 
