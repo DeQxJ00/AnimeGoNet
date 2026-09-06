@@ -1,7 +1,26 @@
+using System.Xml.Linq;
+
 namespace AnimeGoNet.App.Tests.Delivery;
 
 public sealed class ExternalPluginContainerDeliveryContractTests
 {
+    [Fact]
+    public void PluginTemplateReferencesTheCurrentSdkVersion()
+    {
+        var root = RepositoryRoot();
+        var props = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        var version = Assert.IsType<string>(
+            props.Root?.Element("PropertyGroup")?.Element("Version")?.Value);
+        var project = Read(
+            root,
+            "templates/AnimeGo.Plugin.Templates/content/AnimeGo.Plugin.Sample/AnimeGo.Plugin.Sample.csproj");
+
+        Assert.Contains(
+            $"<PackageReference Include=\"AnimeGo.Plugin.Sdk\" Version=\"{version}\" />",
+            project,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void NativeFixtureIsCompiledFromTheSdkAndAuditsItsContainerBoundary()
     {
