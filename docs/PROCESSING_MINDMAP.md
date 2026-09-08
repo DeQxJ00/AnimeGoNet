@@ -1,14 +1,24 @@
 # AnimeGoNet 交互式处理决策导图
 
-**[查看 / 下载决策导图](diagrams/animegonet-processing-mindmap.html)** · [返回 README](../README.md)
+**[在线查看决策导图](https://deqxj00.github.io/AnimeGoNet/)** ·
+[HTML 直达链接](https://deqxj00.github.io/AnimeGoNet/animegonet-processing-mindmap.html) ·
+[下载 HTML](diagrams/animegonet-processing-mindmap.html) · [返回 README](../README.md)
 
 ## 打开方式
 
+- 在线：打开上方 GitHub Pages 入口，无需下载或启动服务。
 - 本地仓库：用浏览器打开 `docs/diagrams/animegonet-processing-mindmap.html`。
 - GitHub：打开上方链接，在文件页下载原始 HTML，再用浏览器打开下载的文件。
   GitHub 的文件页面展示源码，不会直接运行交互导图。
 - 该 HTML 已内嵌样式、脚本和完整图数据，无需安装依赖或启动 AnimeGoNet，
   单独保存即可离线使用；只有点击「代码依据」才需要联网访问 GitHub。
+
+## 在线发布
+
+`main` 中的导图 HTML 或 Pages 工作流更新后，由
+`.github/workflows/decision-map-pages.yml` 自动部署，也可在 Actions 手动运行。
+仅发布导图 HTML：首页与 HTML 直达地址使用同一份内容，不发布应用配置、数据库或其他仓库文件。
+仓库 Settings → Pages → Source 使用 `GitHub Actions`。
 
 ## 从哪里开始
 

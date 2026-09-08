@@ -9,11 +9,15 @@ API 与 AnimeGoHelper 油猴脚本，不包含 U2 RSS 或站点自动抓取。Py
 
 ## 🧭 查看决策导图
 
-**[打开 / 下载 AnimeGoNet 交互式决策导图](docs/diagrams/animegonet-processing-mindmap.html)**
+**[🌐 在线查看 AnimeGoNet 决策导图](https://deqxj00.github.io/AnimeGoNet/)**
+
+[HTML 直达链接](https://deqxj00.github.io/AnimeGoNet/animegonet-processing-mindmap.html) ·
+[下载 / 查看 HTML 源文件](docs/diagrams/animegonet-processing-mindmap.html) ·
+[使用说明](docs/PROCESSING_MINDMAP.md)
 
 按「条件 → 分支 → 去向」查看 Mikan / U2 匹配、AI 上下游、下载做种和整理入库。
-支持逐层展开、搜索和跨阶段跳转。GitHub 文件页不会运行 HTML：请下载该单文件，
-再用浏览器打开；本地检出仓库后可直接打开。详见[使用说明](docs/PROCESSING_MINDMAP.md)。
+支持逐层展开、搜索和跨阶段跳转，在线入口无需下载即可使用。
+也可从 HTML 源文件页下载单文件，用浏览器打开并离线查看。
 导图依据 `v1.2.1`（`d16817f`）代码，是该版本的逻辑快照。
 
 当前开发基线和未完成项以 [TODO.md](TODO.md) 为准，上游逐项映射见
