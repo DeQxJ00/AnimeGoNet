@@ -7,6 +7,15 @@ Mikan 提供 RSS、手动导入和 AnimeGoHelper；U2 提供 `inner_plugin_u2` �
 API 与 AnimeGoHelper 油猴脚本，不包含 U2 RSS 或站点自动抓取。Python 插件已移除，
 官方插件均为编译期注册的 C# 实现。
 
+## 🧭 查看决策导图
+
+**[打开 / 下载 AnimeGoNet 交互式决策导图](docs/diagrams/animegonet-processing-mindmap.html)**
+
+按「条件 → 分支 → 去向」查看 Mikan / U2 匹配、AI 上下游、下载做种和整理入库。
+支持逐层展开、搜索和跨阶段跳转。GitHub 文件页不会运行 HTML：请下载该单文件，
+再用浏览器打开；本地检出仓库后可直接打开。详见[使用说明](docs/PROCESSING_MINDMAP.md)。
+导图依据 `v1.2.1`（`d16817f`）代码，是该版本的逻辑快照。
+
 当前开发基线和未完成项以 [TODO.md](TODO.md) 为准，上游逐项映射见
 [docs/PORTING_CHECKLIST.md](docs/PORTING_CHECKLIST.md)。
 本机私有 Mikan/qB 真实链路的显式验收方法见
@@ -245,6 +254,7 @@ NativeAOT 与容器 CI 覆盖 `win-x64`、`win-arm64`、`linux-x64`、
 
 ## 主要文档
 
+- [交互式处理决策导图与使用说明](docs/PROCESSING_MINDMAP.md)
 - [用户迁移手册](docs/USER_MIGRATION.md)
 - [运维、备份与恢复](docs/OPERATIONS.md)
 - [外部 C# 插件安装与回滚](docs/PLUGIN_OPERATIONS.md)
