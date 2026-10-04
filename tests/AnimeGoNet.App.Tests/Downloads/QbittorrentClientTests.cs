@@ -123,6 +123,7 @@ public sealed class QbittorrentClientTests
         Assert.Contains("name=torrents", request.Body, StringComparison.Ordinal);
         Assert.Contains("/download/incomplete/bt", request.Body, StringComparison.Ordinal);
         Assert.Contains("name=stopped", request.Body, StringComparison.Ordinal);
+        Assert.Contains("name=paused", request.Body, StringComparison.Ordinal);
         Assert.Contains("true", request.Body, StringComparison.Ordinal);
         Assert.Contains("name=seedingTimeLimit", request.Body, StringComparison.Ordinal);
         Assert.Contains("120", request.Body, StringComparison.Ordinal);
@@ -256,6 +257,89 @@ public sealed class QbittorrentClientTests
             request => Assert.Equal(("/api/v2/torrents/stop", "hashes=a%7Cb"), (request.Path, request.Body)),
             request => Assert.Equal(("/api/v2/torrents/start", "hashes=a"), (request.Path, request.Body)),
             request => Assert.Equal(("/api/v2/torrents/delete", "hashes=a&deleteFiles=false"), (request.Path, request.Body)));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Qb4FallsBackAndRemembersControlEndpoints(bool pauseFirst)
+    {
+        using var handler = new RecordingHandler(request =>
+            new HttpResponseMessage(request.RequestUri!.AbsolutePath is
+                "/api/v2/torrents/start" or "/api/v2/torrents/stop"
+                    ? HttpStatusCode.NotFound : HttpStatusCode.OK));
+        using var http = new HttpClient(handler);
+        var client = CreateClient(http);
+        if (pauseFirst) await client.PauseAsync(["a", "b"]);
+        else await client.ResumeAsync(["a", "b"]);
+        await client.PauseAsync(["a", "b"]);
+        await client.ResumeAsync(["a", "b"]);
+        Assert.Equal(new[]
+        {
+            pauseFirst ? "/api/v2/torrents/stop" : "/api/v2/torrents/start",
+            pauseFirst ? "/api/v2/torrents/pause" : "/api/v2/torrents/resume",
+            "/api/v2/torrents/pause", "/api/v2/torrents/resume",
+        }, handler.Requests.Select(r => r.Path));
+        Assert.All(handler.Requests, r =>
+        {
+            Assert.Equal(HttpMethod.Post, r.Method);
+            Assert.Equal("hashes=a%7Cb", r.Body);
+        });
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task ControlFailuresDoNotTriggerLegacyFallback(HttpStatusCode status)
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(status));
+        using var http = new HttpClient(handler);
+        var client = CreateClient(http);
+        Assert.Equal(status, (await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.PauseAsync(["a"]))).StatusCode);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task FailedLegacyEndpointDoesNotLatchLegacyMode()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        using var http = new HttpClient(handler);
+        var client = CreateClient(http);
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.PauseAsync(["a"]));
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.ResumeAsync(["a"]));
+        Assert.Equal(["/api/v2/torrents/stop", "/api/v2/torrents/pause",
+            "/api/v2/torrents/start", "/api/v2/torrents/resume"],
+            handler.Requests.Select(r => r.Path));
+    }
+
+    [Fact]
+    public async Task TransportFailureAndCancellationNeverReplayControl()
+    {
+        using var failed = new RecordingHandler(_ => throw new HttpRequestException("connection reset"));
+        using var canceled = new RecordingHandler(_ => throw new TaskCanceledException());
+        using var failedHttp = new HttpClient(failed);
+        using var canceledHttp = new HttpClient(canceled);
+        await Assert.ThrowsAsync<HttpRequestException>(() => CreateClient(failedHttp).PauseAsync(["a"]));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateClient(canceledHttp).ResumeAsync(["a"]));
+        Assert.Single(failed.Requests);
+        Assert.Single(canceled.Requests);
+    }
+
+    [Fact]
+    public async Task LegacyDetectionIsIsolatedBetweenInstances()
+    {
+        using var oldHandler = new RecordingHandler(r => new HttpResponseMessage(
+            r.RequestUri!.AbsolutePath.EndsWith("/stop", StringComparison.Ordinal)
+                ? HttpStatusCode.NotFound : HttpStatusCode.OK));
+        using var modernHandler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var oldHttp = new HttpClient(oldHandler);
+        using var modernHttp = new HttpClient(modernHandler);
+        await CreateClient(oldHttp).PauseAsync(["a"]);
+        await CreateClient(modernHttp).PauseAsync(["a"]);
+        Assert.Equal("/api/v2/torrents/stop", Assert.Single(modernHandler.Requests).Path);
     }
 
     private static QbittorrentClient CreateClient(HttpClient httpClient) => new(

@@ -10,6 +10,7 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
     : IDownloadClient, IDownloadClientDiagnostics
 {
     private readonly HttpClient _httpClient = Configure(httpClient, options);
+    private bool _useLegacyControlEndpoints;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -151,7 +152,7 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
     }
 
     public Task PauseAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
-        PostHashesAsync("api/v2/torrents/stop", hashes, null, cancellationToken);
+        PostControlAsync("stop", "pause", hashes, cancellationToken);
 
     public async Task AddTagsAsync(
         IReadOnlyList<string> hashes,
@@ -189,7 +190,29 @@ public sealed class QbittorrentClient(HttpClient httpClient, QbittorrentInstance
     }
 
     public Task ResumeAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
-        PostHashesAsync("api/v2/torrents/start", hashes, null, cancellationToken);
+        PostControlAsync("start", "resume", hashes, cancellationToken);
+
+    private async Task PostControlAsync(
+        string modern, string legacy, IReadOnlyList<string> hashes, CancellationToken cancellationToken)
+    {
+        if (_useLegacyControlEndpoints)
+        {
+            await PostHashesAsync("api/v2/torrents/" + legacy, hashes, null, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await PostHashesAsync("api/v2/torrents/" + modern, hashes, null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // qBittorrent 4.x uses pause/resume. Only an absent endpoint permits
+            // fallback; authentication, server and transport failures must surface.
+            await PostHashesAsync("api/v2/torrents/" + legacy, hashes, null, cancellationToken).ConfigureAwait(false);
+            _useLegacyControlEndpoints = true;
+        }
+    }
 
     public Task DeleteAsync(
         IReadOnlyList<string> hashes,
