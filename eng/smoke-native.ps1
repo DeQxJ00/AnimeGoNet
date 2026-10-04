@@ -4,7 +4,7 @@ param(
 
     [int]$Port = 0,
 
-    [int]$ExpectedSchemaVersion = 75,
+    [int]$ExpectedSchemaVersion = 76,
 
     [switch]$LegacyYamlUpgrade
 )
@@ -12,7 +12,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $Port = if ($Port -eq 0) { Get-Random -Minimum 20000 -Maximum 60000 } else { $Port }
 $resolvedExecutable = (Resolve-Path -LiteralPath $Executable).Path
-$smokeRoot = Join-Path ([IO.Path]::GetTempPath()) ("animegonet-smoke-" + [Guid]::NewGuid().ToString('N'))
+$temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$smokeRoot = [IO.Path]::GetFullPath((Join-Path $temporaryRoot ("animegonet-smoke-" + [Guid]::NewGuid().ToString('N'))))
+if ([IO.Path]::GetDirectoryName($smokeRoot) -ne $temporaryRoot.TrimEnd([IO.Path]::DirectorySeparatorChar)) {
+    throw 'Native smoke temporary path escaped the system temporary directory.'
+}
 $env:data_path = Join-Path $smokeRoot 'data'
 $env:download_path = Join-Path $smokeRoot 'download/incomplete'
 $env:save_path = Join-Path $smokeRoot 'download/anime'

@@ -18,7 +18,7 @@ public sealed class AnimeLibraryApiTests
     public async Task ListsCanonicalSeasonProjectionWithoutMediaPathsOrFallbackRows()
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync("/api/v1/library/seasons");
         var body = await response.Content.ReadAsStringAsync();
@@ -65,7 +65,7 @@ public sealed class AnimeLibraryApiTests
     public async Task ListsVerifiedMoviesWithIndependentCompletionState()
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync("/api/v1/library/movies?search=萤火");
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
@@ -91,7 +91,7 @@ public sealed class AnimeLibraryApiTests
     public async Task SortDirectionAndPaginationAreAppliedBeforeReturningItems()
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync(
             "/api/v1/library/seasons?sort=air_date&direction=asc&page=2&page_size=1");
@@ -109,7 +109,7 @@ public sealed class AnimeLibraryApiTests
     public async Task EpisodeChangedAtSortReturnsLatestEpisodeMutationTimestamp()
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync(
             "/api/v1/library/seasons?sort=episode_changed_at&direction=desc");
@@ -134,7 +134,7 @@ public sealed class AnimeLibraryApiTests
         int expectedSeriesId)
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync(
             "/api/v1/library/seasons?search=" + Uri.EscapeDataString(search));
@@ -163,7 +163,7 @@ public sealed class AnimeLibraryApiTests
     public async Task SeasonDetailReturnsOfficialEpisodeGridWithoutLocalMediaPaths()
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync("/api/v1/library/seasons/100/1");
         var body = await response.Content.ReadAsStringAsync();
@@ -220,7 +220,7 @@ public sealed class AnimeLibraryApiTests
             rssDnsResolver: new PublicDnsResolver(),
             rssHttpTransport: transport);
         var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
-        await SeedAsync(database);
+        await SeedAsync(app);
         using (var source = await PostJsonAsync(
             app,
             "/api/v1/sources",
@@ -373,7 +373,7 @@ public sealed class AnimeLibraryApiTests
     public async Task ExplicitExternalMediaImportUpdatesCanonicalProgressAndReturnsRelativeAudit()
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
         var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
         var seasonPath = Path.Combine(options.Paths.SavePath, "Alpha", "S01");
         Directory.CreateDirectory(seasonPath);
@@ -424,7 +424,7 @@ public sealed class AnimeLibraryApiTests
                 },
             },
             tmdbPosterTransport: transport);
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var listResponse = await app.Client.GetAsync("/api/v1/library/seasons");
         using var list = JsonDocument.Parse(await listResponse.Content.ReadAsStreamAsync());
@@ -466,7 +466,7 @@ public sealed class AnimeLibraryApiTests
         string expectedCode)
     {
         await using var app = await RunningApp.StartAsync();
-        await SeedAsync(app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>());
+        await SeedAsync(app);
 
         using var response = await app.Client.GetAsync(path);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
@@ -491,8 +491,10 @@ public sealed class AnimeLibraryApiTests
         Assert.Equal(expectedCode, json.RootElement.GetProperty("code").GetString());
     }
 
-    private static async Task SeedAsync(AnimeGoSqliteDatabase database)
+    private static async Task SeedAsync(RunningApp app)
     {
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        var options = app.App.Services.GetRequiredService<AnimeGoOptions>();
         await using var connection = await database.OpenConnectionAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -544,7 +546,7 @@ public sealed class AnimeLibraryApiTests
                 id, tmdb_series_id, tmdb_season_number, tmdb_episode_number,
                 source_id, media_path, completed_at_utc)
             VALUES (
-                'completion-alpha', 100, 1, 1, 'test', '/media/alpha.mkv',
+                'completion-alpha', 100, 1, 1, 'test', $tv_path,
                 '2026-01-02T00:00:00.0000000+00:00');
 
             INSERT INTO ingest_tasks (
@@ -617,10 +619,12 @@ public sealed class AnimeLibraryApiTests
                 media_path, completed_at_utc)
             VALUES (
                 'movie-completion-firefly', 10681, 'mikan', 'firefly-source',
-                '/movies/萤火之森 (2011)/萤火之森 (2011).mkv',
+                $movie_path,
                 '2026-01-05T00:00:00.0000000+00:00');
             """;
         command.Parameters.AddWithValue("$now", "2026-01-01T00:00:00.0000000+00:00");
+        command.Parameters.AddWithValue("$tv_path", Path.Combine(options.Paths.SavePath, "Alpha", "S01", "E001.mkv"));
+        command.Parameters.AddWithValue("$movie_path", Path.Combine(options.Paths.EffectiveMovieSavePath, "萤火之森 (2011)", "萤火之森 (2011).mkv"));
         await command.ExecuteNonQueryAsync();
     }
 

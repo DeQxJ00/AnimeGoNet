@@ -49,7 +49,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
             SELECT movie.id, movie.tmdb_movie_id, movie.canonical_title, movie.original_title,
                    movie.poster_path, movie.release_date, movie.created_at_utc,
                    movie.updated_at_utc, completion.id, completion.source_id,
-                   completion.completed_at_utc, completion.media_path,
+                   completion.completed_at_utc, app_path_optional(completion.media_path),
                    (SELECT COUNT(DISTINCT file.task_id)
                       FROM task_files AS file
                      WHERE file.tmdb_movie_id = movie.tmdb_movie_id),
@@ -87,7 +87,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 completed ? reader.GetString(9) : null,
                 completed ? ParseTimestamp(reader.GetString(10)) : null,
                 completed && !reader.IsDBNull(11),
-                AnimeLibraryResourceRevision.CreateMovie(reader.GetString(0), tmdbMovieId, updatedAtUtc),
+                AnimeLibraryResourceRevision.CreateMovie(reader.GetString(0), tmdbMovieId, updatedAtUtc, database.PathBindingRevision),
                 reader.GetInt32(12),
                 reader.IsDBNull(13) ? null : reader.GetString(13)));
         }
@@ -262,7 +262,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                    completion.id,
                    completion.source_id,
                    completion.completed_at_utc,
-                   CASE WHEN completion.media_path IS NOT NULL THEN 1 ELSE 0 END,
+                   CASE WHEN app_path_optional(completion.media_path) IS NOT NULL THEN 1 ELSE 0 END,
                    (SELECT task.groupid
                     FROM task_files AS file
                     JOIN ingest_tasks AS task ON task.id = file.task_id
@@ -418,7 +418,7 @@ public sealed class AnimeLibraryStore(AnimeGoSqliteDatabase database)
                 SELECT completion.tmdb_series_id, completion.tmdb_season_number,
                        COUNT(*) AS completion_count,
                        MAX(completion.completed_at_utc) AS last_completed_at,
-                       SUM(CASE WHEN completion.media_path IS NULL THEN 1 ELSE 0 END)
+                       SUM(CASE WHEN app_path_optional(completion.media_path) IS NULL THEN 1 ELSE 0 END)
                            AS missing_media_path_count
                 FROM completion_records AS completion
                 GROUP BY completion.tmdb_series_id, completion.tmdb_season_number

@@ -112,6 +112,27 @@ public sealed class DeleteExecutionStore(AnimeGoSqliteDatabase database)
         var token = Guid.NewGuid().ToString("N");
         await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        // A delete confirmation authorizes the captured physical location, not whatever a
+        // library root may point to after migration. Invalidate before deleting even the qB task.
+        await using (var invalidate = connection.CreateCommand())
+        {
+            invalidate.Transaction = transaction;
+            invalidate.CommandText = """
+                UPDATE delete_executions
+                SET state = 'failed', failure_reason = 'delete_path_mapping_changed',
+                    lease_token = NULL, lease_expires_at_utc = NULL, next_attempt_at_utc = NULL
+                WHERE state IN ('pending', 'executing')
+                  AND EXISTS (
+                    SELECT 1 FROM delete_execution_items item
+                    WHERE item.execution_id = delete_executions.id
+                      AND item.item_kind IN ('source_file', 'media_file')
+                      AND item.state IN ('pending', 'failed')
+                      AND (NOT app_same_path(item.target_key, app_path_optional(item.target_key))
+                        OR (item.root_path IS NOT NULL
+                            AND NOT app_same_path(item.root_path, app_path_optional(item.root_path)))));
+                """;
+            await invalidate.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
         await using (var recover = connection.CreateCommand())
         {
             recover.Transaction = transaction;

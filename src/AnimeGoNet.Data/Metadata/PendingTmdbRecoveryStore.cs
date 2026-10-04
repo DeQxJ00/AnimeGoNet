@@ -268,7 +268,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         {
             targets.Transaction = transaction;
             targets.CommandText = """
-                SELECT DISTINCT job.save_root_path
+                SELECT DISTINCT app_path(job.save_root_path)
                 FROM fallback_claims AS claim
                 JOIN task_files AS file ON file.id = claim.task_file_id
                 JOIN download_jobs AS job ON job.task_id = file.task_id
@@ -295,9 +295,14 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
                     id, bangumi_subject_id, tmdb_series_id, save_root_path,
                     series_directory_name, canonical_series_name, state,
                     created_at_utc, updated_at_utc)
-                VALUES (
+                SELECT
                     $id, $bgmid, $tmdb_id, $save_root,
-                    $directory_name, $canonical_name, 'pending', $now, $now)
+                    $directory_name, $canonical_name, 'pending', $now, $now
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM pending_tmdb_nfo_rewrite_jobs existing
+                    WHERE existing.bangumi_subject_id = $bgmid AND existing.tmdb_series_id = $tmdb_id
+                      AND existing.series_directory_name = $directory_name
+                      AND app_path_optional(existing.save_root_path) = $save_root)
                 ON CONFLICT(
                     bangumi_subject_id, tmdb_series_id, save_root_path, series_directory_name)
                 DO NOTHING;
@@ -330,7 +335,7 @@ public sealed class PendingTmdbRecoveryStore(AnimeGoSqliteDatabase database)
         command.Transaction = transaction;
         command.CommandText = """
             SELECT id, scope_kind, scope_key, source_id, source_episode,
-                   media_path, completed_at_utc
+                   app_path(media_path), completed_at_utc
             FROM fallback_completion_records
             WHERE id = $id
               AND anime_series_id = $series_id

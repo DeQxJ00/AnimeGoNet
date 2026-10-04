@@ -50,6 +50,10 @@ namespace AnimeGoNet.App;
 
 public static class AnimeGoApplication
 {
+    private static readonly Action<ILogger, long, Exception?> LogUnmappedPaths = LoggerMessage.Define<long>(
+        LogLevel.Warning, new EventId(7601, "PathMappingRequired"),
+        "path_mapping_required: {Count} stored paths have no unambiguous root mapping. Original records are retained; file operations cannot use these snapshots.");
+
     public static async Task<WebApplication> BuildAsync(
         string[] args,
         AnimeGoOptions? options = null,
@@ -288,8 +292,12 @@ public static class AnimeGoApplication
             ConfigureWebBinding(builder, options.Web);
         }
         var dataUpdateRuntime = new DataUpdateRuntimeState(options.DataUpdate);
-        var database = new AnimeGoSqliteDatabase(layout.DatabaseFile);
+        var database = new AnimeGoSqliteDatabase(layout.DatabaseFile, options);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (database.UnresolvedPathCount > 0)
+        {
+            LogUnmappedPaths(rollingFileLoggerProvider.CreateLogger("AnimeGoNet.Paths"), database.UnresolvedPathCount, null);
+        }
         var dataPackages = new DataPackageStore(database);
         var bangumiArchive = new BangumiArchiveStore(database);
         var anidbTitleCache = new AnidbTitleCacheStore(database);
@@ -690,6 +698,24 @@ public static class AnimeGoApplication
             }
 
             await next(context).ConfigureAwait(false);
+        });
+
+        app.Use(async (context, next) =>
+        {
+            try
+            {
+                await next(context).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (!context.Response.HasStarted
+                && PortablePathErrors.GetCode(exception) is { } code)
+            {
+                context.Response.StatusCode = StatusCodes.Status409Conflict;
+                await context.Response.WriteAsJsonAsync(
+                    new ApiErrorResponse(code, "文件路径无法安全映射到当前平台；请核对媒体库/下载根目录、旧路径映射及文件名，不会使用旧绝对路径执行操作。"),
+                    ApiJsonContext.Default.ApiErrorResponse,
+                    contentType: "application/json; charset=utf-8",
+                    context.RequestAborted).ConfigureAwait(false);
+            }
         });
 
         ApiEndpoints.Map(app);

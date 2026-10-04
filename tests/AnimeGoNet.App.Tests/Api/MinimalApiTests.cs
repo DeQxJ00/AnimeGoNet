@@ -310,11 +310,13 @@ public sealed class MinimalApiTests
                 VALUES (
                     'recover-record', 'recover-series', 547888,
                     'mikan_episode', '3951:source:1', 'mikan', '1',
-                    '/private/media/fallback.mkv', $now);
+                    $media_path, $now);
                 """;
             setup.Parameters.AddWithValue("$task_id", taskId);
-            setup.Parameters.AddWithValue("$download_root", Path.Combine(app.RootPath, "download"));
-            setup.Parameters.AddWithValue("$save_root", Path.Combine(app.RootPath, "save"));
+            var paths = app.App.Services.GetRequiredService<AnimeGoOptions>();
+            setup.Parameters.AddWithValue("$download_root", paths.Downloaders["bt"].DownloadPath);
+            setup.Parameters.AddWithValue("$save_root", paths.Paths.SavePath);
+            setup.Parameters.AddWithValue("$media_path", Path.Combine(paths.Paths.SavePath, "Fallback", "S02", "Extras", "fallback.mkv"));
             setup.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             Assert.True(await setup.ExecuteNonQueryAsync() >= 6);
         }

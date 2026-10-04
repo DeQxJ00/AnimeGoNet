@@ -243,9 +243,9 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                        file.tmdb_episode_number, after_episode.name,
                        COALESCE(job.resolution_source_override, file.episode_resolution_source),
                        job.preserve_source,
-                       job.completed_at_utc, job.source_media_path,
+                       job.completed_at_utc, app_path_optional(job.source_media_path),
                        (
-                           SELECT operation.target_path
+                           SELECT app_path_optional(operation.target_path)
                            FROM file_operations AS operation
                            WHERE operation.task_file_id = file.id
                              AND operation.state = 'completed'
@@ -310,7 +310,7 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(17) ? null : reader.GetString(17),
                     reader.IsDBNull(18) ? null : reader.GetString(18),
                     reader.GetInt64(19) == 1,
-                    reader.GetString(21),
+                    reader.IsDBNull(21) ? string.Empty : reader.GetString(21),
                     reader.IsDBNull(22) ? null : reader.GetString(22)));
             }
         }
@@ -327,7 +327,7 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                        review.proposed_tmdb_series_id, review.proposed_series_name,
                        review.proposed_tmdb_season_number, review.proposed_season_name,
                        review.proposed_tmdb_episode_number, review.proposed_episode_name,
-                       (SELECT operation.target_path FROM file_operations AS operation
+                       (SELECT app_path_optional(operation.target_path) FROM file_operations AS operation
                         WHERE operation.task_file_id = file.id AND operation.state = 'completed'
                         ORDER BY operation.updated_at_utc DESC, operation.id DESC LIMIT 1),
                        review.requested_at_utc
@@ -439,11 +439,11 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
         {
             query.CommandText = """
                 SELECT file.id, file.relative_path, file.size_bytes, file.other_reason,
-                       file.tmdb_series_id, file.tmdb_season_number, operation.target_path,
+                       file.tmdb_series_id, file.tmdb_season_number, app_path_optional(operation.target_path),
                        (
                            SELECT COUNT(*)
                            FROM file_operations AS shared
-                           WHERE shared.target_path = operation.target_path
+                           WHERE app_path_optional(shared.target_path) = app_path_optional(operation.target_path)
                              AND shared.state = 'completed')
                 FROM task_files AS file
                 JOIN file_operations AS operation
@@ -471,7 +471,7 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
                     reader.GetString(3),
                     reader.GetInt32(4),
                     reader.GetInt32(5),
-                    reader.GetString(6),
+                    reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
                     reader.GetInt32(7)));
             }
         }
@@ -771,10 +771,10 @@ public sealed class OtherFileReadaptationStore(AnimeGoSqliteDatabase database)
         {
             guard.Transaction = transaction;
             guard.CommandText = """
-                SELECT file.other_reason, operation.target_path,
+                SELECT file.other_reason, app_path(operation.target_path),
                        file.tmdb_series_id, file.tmdb_season_number, file.tmdb_episode_number,
                        (SELECT COUNT(*) FROM file_operations AS shared
-                        WHERE shared.target_path = operation.target_path
+                        WHERE app_path_optional(shared.target_path) = app_path(operation.target_path)
                           AND shared.state = 'completed')
                 FROM ingest_tasks AS task
                 JOIN download_jobs AS download ON download.task_id = task.id

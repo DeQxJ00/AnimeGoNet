@@ -7367,6 +7367,10 @@ public static class ApiEndpoints
                 "The requested TMDB Movie was not found in the local library."));
         }
 
+        if (context.PathMappingRequired)
+        {
+            return TypedResults.Conflict(Error("path_mapping_required", "Movie 的旧路径尚未映射到当前媒体库，不能把旧记录当作文件不存在。"));
+        }
         return TypedResults.Ok(BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath));
     }
 
@@ -7423,8 +7427,8 @@ public static class ApiEndpoints
         if (string.IsNullOrWhiteSpace(context.MainMediaPath))
         {
             return TypedResults.Conflict(Error(
-                "library_movie_media_path_unknown",
-                "The Movie completion record does not contain a main media path."));
+                context.PathMappingRequired ? "path_mapping_required" : "library_movie_media_path_unknown",
+                "The Movie completion record has no resolvable main media path."));
         }
 
         var inventory = BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath);
@@ -7580,6 +7584,10 @@ public static class ApiEndpoints
                 "Force delete is limited to orphan Movies without task files or active claims; use the related-task deletion workflow."));
         }
 
+        if (context.PathMappingRequired)
+        {
+            return TypedResults.Conflict(Error("path_mapping_required", "Movie 的旧路径尚未映射到当前媒体库，请先修复路径映射再删除。"));
+        }
         var inventory = BuildMovieFileList(context, options.Paths.EffectiveMovieSavePath);
         if (inventory.Files.Any(file => !file.WithinMovieRoot))
         {

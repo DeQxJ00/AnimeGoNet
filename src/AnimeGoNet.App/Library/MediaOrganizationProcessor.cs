@@ -4,6 +4,7 @@ using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Diagnostics;
 using AnimeGoNet.Core.Library;
 using AnimeGoNet.Data.Library;
+using AnimeGoNet.Data.Sqlite;
 
 namespace AnimeGoNet.App.Library;
 
@@ -112,6 +113,8 @@ public sealed class MediaOrganizationProcessor(
             }
 
             var plans = new List<MediaOperationPlan>(claim.Files.Count);
+            var persistedPlans = (await store.GetPersistedPlansAsync(claim, cancellationToken).ConfigureAwait(false))
+                .ToDictionary(operation => operation.TaskFileId, StringComparer.Ordinal);
             var sharedSourceDirectory = FindSharedTopLevelDirectory(claim.Files);
             await store.UpdateProgressAsync(
                 claim,
@@ -122,11 +125,13 @@ public sealed class MediaOrganizationProcessor(
                 cancellationToken).ConfigureAwait(false);
             foreach (var file in claim.Files)
             {
-                plans.Add(await PlanAsync(
-                    claim,
-                    file,
-                    sharedSourceDirectory,
-                    cancellationToken).ConfigureAwait(false));
+                var plan = await PlanAsync(claim, file, sharedSourceDirectory, cancellationToken).ConfigureAwait(false);
+                // The source may already have been moved on a previous attempt. Preserve its
+                // recorded, qB-normalized name. EnsureOperations still rejects a changed target
+                // plan rather than silently relocating files after a title/naming-rule change.
+                plans.Add(persistedPlans.TryGetValue(file.TaskFileId, out var persisted)
+                    ? plan with { SourcePath = persisted.SourcePath }
+                    : plan);
                 await store.UpdateProgressAsync(
                     claim,
                     MediaOrganizationPhases.RenamePlanning,
@@ -440,7 +445,7 @@ public sealed class MediaOrganizationProcessor(
             }
 
             var movieSource = file.SourceOverridePath
-                ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
+                ?? ResolvePortableDownloaderPath(claim.DownloadRootPath, PathBoundary.Combine(claim.DownloadRootPath, sourceRelative));
             if (file.Disposition != "movie" || file.AssociatedFileId is not null)
             {
                 var movieDirectory = MoviePathPlanner.DirectoryName(
@@ -487,7 +492,7 @@ public sealed class MediaOrganizationProcessor(
         }
 
         var source = file.SourceOverridePath
-            ?? PathBoundary.Combine(claim.DownloadRootPath, sourceRelative);
+            ?? ResolvePortableDownloaderPath(claim.DownloadRootPath, PathBoundary.Combine(claim.DownloadRootPath, sourceRelative));
         var target = PathBoundary.Combine(claim.SaveRootPath, rename.RelativeTargetPath);
         return new MediaOperationPlan(file.TaskFileId, source, target);
     }
@@ -560,7 +565,7 @@ public sealed class MediaOrganizationProcessor(
         }
     }
 
-    private static string Classify(Exception exception) => exception switch
+    private static string Classify(Exception exception) => PortablePathErrors.GetCode(exception) ?? (exception switch
     {
         SafeFileMoveException move => move.Code,
         KeyNotFoundException => "downloader_unavailable",
@@ -570,7 +575,7 @@ public sealed class MediaOrganizationProcessor(
         IOException => "file_move_io_error",
         MediaRenamePluginException rename => rename.Code,
         _ => "media_organization_error",
-    };
+    });
 }
 
 internal sealed class MediaRenamePluginException(string code) : Exception(code)

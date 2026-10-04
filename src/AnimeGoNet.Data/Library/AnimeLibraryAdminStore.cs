@@ -181,7 +181,7 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
         return new AnimeMovieMutationResult(
             AnimeLibraryMutationStatus.Updated,
             movie.Id,
-            AnimeLibraryResourceRevision.CreateMovie(current.MovieRowId, movie.Id, now));
+            AnimeLibraryResourceRevision.CreateMovie(current.MovieRowId, movie.Id, now, database.PathBindingRevision));
     }
 
     public async Task<AnimeMovieMutationResult> DeleteMovieAsync(
@@ -265,20 +265,21 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
         }
 
         string? mainMediaPath;
+        var pathMappingRequired = false;
         await using (var media = connection.CreateCommand())
         {
             media.Transaction = transaction;
             media.CommandText = """
-                SELECT media_path
+                SELECT app_path_optional(media_path), media_path IS NOT NULL
                 FROM movie_completion_records
                 WHERE tmdb_movie_id = $tmdb_movie_id
                 LIMIT 1;
                 """;
             media.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
-            var value = await media.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-            mainMediaPath = value is string path && !string.IsNullOrWhiteSpace(path)
-                ? path
-                : null;
+            await using var reader = await media.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            var found = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            mainMediaPath = found && !reader.IsDBNull(0) ? reader.GetString(0) : null;
+            pathMappingRequired = found && reader.GetInt64(1) != 0 && mainMediaPath is null;
         }
 
         var references = await ReadMovieReferencesAsync(
@@ -290,7 +291,8 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             tmdbMovieId,
             MovieRevision(current),
             mainMediaPath,
-            references);
+            references,
+            pathMappingRequired);
     }
 
     public async Task<AnimeMovieMutationResult> UpdateMovieMainFileAsync(
@@ -335,7 +337,7 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
                 FROM task_files AS file
                 JOIN file_operations AS operation ON operation.task_file_id = file.id
                 WHERE file.tmdb_movie_id = $tmdb_movie_id
-                  AND operation.target_path = $selected_source_path
+                  AND app_path(operation.target_path) = $selected_source_path
                 ORDER BY operation.updated_at_utc DESC, file.id
                 LIMIT 1;
                 """;
@@ -353,7 +355,7 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
                 SET media_path = $selected_main_path,
                     completed_at_utc = $now
                 WHERE tmdb_movie_id = $tmdb_movie_id
-                  AND media_path = $current_main_path;
+                  AND app_path(media_path) = $current_main_path;
                 """;
             completion.Parameters.AddWithValue("$tmdb_movie_id", tmdbMovieId);
             completion.Parameters.AddWithValue("$current_main_path", currentMainPath);
@@ -375,13 +377,13 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             operations.CommandText = """
                 UPDATE file_operations
                 SET target_path = CASE
-                        WHEN target_path = $current_main_path THEN $former_main_path
-                        WHEN target_path = $selected_source_path THEN $selected_main_path
+                        WHEN app_path(target_path) = $current_main_path THEN $former_main_path
+                        WHEN app_path(target_path) = $selected_source_path THEN $selected_main_path
                         ELSE target_path
                     END,
                     updated_at_utc = $now
-                WHERE target_path = $current_main_path
-                   OR target_path = $selected_source_path;
+                WHERE app_path_optional(target_path) = $current_main_path
+                   OR app_path_optional(target_path) = $selected_source_path;
                 """;
             operations.Parameters.AddWithValue("$current_main_path", currentMainPath);
             operations.Parameters.AddWithValue("$former_main_path", formerMainPath);
@@ -1016,11 +1018,12 @@ public sealed class AnimeLibraryAdminStore(AnimeGoSqliteDatabase database)
             value.SeasonRowId,
             value.SeasonUpdatedAtUtc);
 
-    private static string MovieRevision(CurrentMovie value) =>
+    private string MovieRevision(CurrentMovie value) =>
         AnimeLibraryResourceRevision.CreateMovie(
             value.MovieRowId,
             value.TmdbMovieId,
-            value.UpdatedAtUtc);
+            value.UpdatedAtUtc,
+            database.PathBindingRevision);
 
     private static string NormalizeRevision(string value)
     {

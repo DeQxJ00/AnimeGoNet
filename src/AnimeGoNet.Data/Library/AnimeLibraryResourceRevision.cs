@@ -8,7 +8,8 @@ internal static class AnimeLibraryResourceRevision
     public static string CreateMovie(
         string movieRowId,
         int tmdbMovieId,
-        string updatedAtUtc)
+        string updatedAtUtc,
+        string? pathBindingRevision = null)
     {
         var payload = string.Concat(
             movieRowId,
@@ -16,6 +17,7 @@ internal static class AnimeLibraryResourceRevision
             tmdbMovieId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "\n",
             updatedAtUtc);
+        if (pathBindingRevision is not null) payload += "\n" + pathBindingRevision;
         return Convert.ToHexStringLower(
             SHA256.HashData(Encoding.UTF8.GetBytes(payload)));
     }

@@ -19,6 +19,35 @@ Python/JavaScript 插件不会迁移或执行。内置功能已经由编译期 C
 
 ## 2. 停机与不可变备份
 
+### AnimeGoNet 路径记录升级及跨平台迁移（SQLite schema 76）
+
+首次升级时，程序会用 SQLite 在线备份生成数据库旁的
+`*.pre-portable-paths-<唯一标识>.db`，然后在事务中升级路径记录。备份可能包含敏感配置，
+不要上传或提交 Git。此备份不替代下面的完整停机备份。
+
+可执行的文件位置存入 SQLite `stored_path_locations`：`root_kind`、`root_id` 和
+`relative_path`（统一 `/` 分隔）。现有业务表的路径字段作为原始快照、关联键保留；
+程序读取时统一解析为当前平台的绝对路径，不再直接使用旧快照。路径映射包括 TV、Movie、
+兜底入库、正片/Extras/字幕的整理操作、重新匹配、TV+Movie 后处理、NFO 重写及文件删除记录。
+下载路径还带有下载器 `scope_id`，因此 BT/PT 即使原来共用一个目录，迁移后也能分别绑定
+各自的下载根；没有明确归属且解析结果不唯一的旧文件删除计划不会自动选择其中一个目录。
+
+根目录仍由 `animego.yaml` 和实际生效的部署参数提供：TV 使用 `save_path`，Movie 使用
+`movie_save_path`，下载根使用对应 `downloaders.<id>.download_path`。迁移时保留下载器 ID，
+将这些根目录改为新系统的真实目录，再重启。比如数据库存 `作品/S01/E001.mkv`，Windows
+根为 `D:\Media\TV` 时得到 `D:\Media\TV\作品\S01\E001.mkv`；Linux 根为 `/media/tv`
+时得到 `/media/tv/作品/S01/E001.mkv`。不按修改后的作品名重新生成文件名。
+
+旧路径优先利用历史下载任务保存的根目录及已有根映射提取相对路径。没有下载任务的外部
+导入记录，建议先在旧平台、旧根配置下升级一次，再搬迁数据库。无法确定归属的旧路径
+保留并提示 `path_mapping_required`，不会猜测目录或回退到旧绝对路径执行。Windows 下的
+大小写冲突、保留文件名和不兼容字符也会阻止访问，需要人工处理，不能靠扫描覆盖原记录。
+
+迁移不会移动媒体文件或重建已有符号链接。请自行搬迁/挂载媒体，保留库内层级；qBittorrent
+仍按其自身环境解释下载路径，本功能不会自动翻译另一台机器的 qB 挂载路径。配置变动后，
+旧文件删除计划会以 `delete_path_mapping_changed` 失效，须重新预览并确认，避免删除新根下
+未经确认的文件。历史日志和已完成删除记录仍保留执行时的路径供审计。
+
 1. 停止旧 AnimeGo、AnimeGoNet、RSS 定时调用方和会自动提交 Torrent 的浏览器脚本。
 2. 等待 qBittorrent 中正在写入的测试任务结束或保持暂停，记录每个来源绑定的实例。
 3. 复制旧部署 YAML、旧 `data/cache`、AnimeGoNet 的完整 `data_path`、qBittorrent profile

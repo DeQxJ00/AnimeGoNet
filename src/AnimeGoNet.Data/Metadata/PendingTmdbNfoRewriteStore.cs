@@ -46,7 +46,7 @@ public sealed class PendingTmdbNfoRewriteStore(AnimeGoSqliteDatabase database)
             JOIN pending_tmdb_nfo_rewrite_jobs AS rewrite
               ON rewrite.bangumi_subject_id = task.bangumi_subject_id
              AND rewrite.tmdb_series_id = file.tmdb_series_id
-             AND rewrite.save_root_path = download.save_root_path
+             AND app_path_optional(rewrite.save_root_path) = app_path_optional(download.save_root_path)
             WHERE task.id = $task_id
               AND task.bangumi_subject_id IS NOT NULL
               AND file.tmdb_series_id IS NOT NULL
@@ -99,6 +99,16 @@ public sealed class PendingTmdbNfoRewriteStore(AnimeGoSqliteDatabase database)
         }
 
         await using var claim = connection.CreateCommand();
+        if (database.PortablePathsEnabled)
+        {
+            await using var unmapped = connection.CreateCommand();
+            unmapped.Transaction = transaction;
+            unmapped.CommandText = """
+                UPDATE pending_tmdb_nfo_rewrite_jobs SET failure_code = 'path_mapping_required'
+                WHERE state IN ('pending', 'failed') AND app_path_optional(save_root_path) IS NULL;
+                """;
+            await unmapped.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
         claim.Transaction = transaction;
         claim.CommandText = """
             UPDATE pending_tmdb_nfo_rewrite_jobs
@@ -109,9 +119,10 @@ public sealed class PendingTmdbNfoRewriteStore(AnimeGoSqliteDatabase database)
                 SELECT id FROM pending_tmdb_nfo_rewrite_jobs
                 WHERE state IN ('pending', 'failed')
                   AND (next_attempt_at_utc IS NULL OR next_attempt_at_utc <= $now)
+                  AND app_path_optional(save_root_path) IS NOT NULL
                 ORDER BY updated_at_utc, id
                 LIMIT 1)
-            RETURNING id, bangumi_subject_id, tmdb_series_id, save_root_path,
+            RETURNING id, bangumi_subject_id, tmdb_series_id, app_path(save_root_path),
                       series_directory_name, canonical_series_name, attempt_count;
             """;
         claim.Parameters.AddWithValue("$token", token);

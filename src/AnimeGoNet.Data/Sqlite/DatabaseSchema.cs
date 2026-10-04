@@ -2,7 +2,7 @@ namespace AnimeGoNet.Data.Sqlite;
 
 public static class DatabaseSchema
 {
-    public const int CurrentVersion = 75;
+    public const int CurrentVersion = 76;
 
     internal static IReadOnlyList<SchemaMigration> Migrations { get; } =
     [
@@ -188,6 +188,7 @@ public static class DatabaseSchema
             75,
             "complete_cleaned_download_jobs",
             CompleteCleanedDownloadJobs),
+        new SchemaMigration(76, "portable_file_locations", PortablePathStorage.SchemaSql),
     ];
 
     private const string CompleteCleanedDownloadJobs = """

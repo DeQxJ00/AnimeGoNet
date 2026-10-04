@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AnimeGoNet.App.Torrents;
 using AnimeGoNet.Core.Downloads;
+using AnimeGoNet.Core.Configuration;
 using AnimeGoNet.Core.Metadata;
 using AnimeGoNet.Data.Ingest;
 using AnimeGoNet.Data.Sqlite;
@@ -58,12 +59,12 @@ public sealed class OtherFileReadaptationApiTests
                 5,
                 0,
                 null),
-            Path.Combine(app.RootPath, "download"),
-            Path.Combine(app.RootPath, "library"),
+            app.App.Services.GetRequiredService<AnimeGoOptions>().Downloaders["bt"].DownloadPath,
+            app.App.Services.GetRequiredService<AnimeGoOptions>().Paths.SavePath,
             DateTimeOffset.UtcNow);
 
         var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
-        var target = Path.Combine(app.RootPath, "library", "Series", "S01", "Other", "episode.mkv");
+        var target = Path.Combine(app.App.Services.GetRequiredService<AnimeGoOptions>().Paths.SavePath, "Series", "S01", "Other", "episode.mkv");
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         await File.WriteAllBytesAsync(target, [1, 2, 3, 4, 5]);
         await using (var connection = await database.OpenConnectionAsync())
@@ -94,7 +95,7 @@ public sealed class OtherFileReadaptationApiTests
                 """;
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             command.Parameters.AddWithValue("$task_id", taskId);
-            command.Parameters.AddWithValue("$source", Path.Combine(app.RootPath, "download", "episode.mkv"));
+            command.Parameters.AddWithValue("$source", Path.Combine(app.App.Services.GetRequiredService<AnimeGoOptions>().Downloaders["bt"].DownloadPath, "episode.mkv"));
             command.Parameters.AddWithValue("$target", target);
             Assert.Equal(5, await command.ExecuteNonQueryAsync());
         }

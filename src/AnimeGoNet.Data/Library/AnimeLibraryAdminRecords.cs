@@ -54,4 +54,5 @@ public sealed record AnimeMovieFileContext(
     int TmdbMovieId,
     string ResourceRevision,
     string? MainMediaPath,
-    AnimeMovieReferenceSummary References);
+    AnimeMovieReferenceSummary References,
+    bool PathMappingRequired = false);

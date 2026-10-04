@@ -171,22 +171,23 @@ public sealed class DeletePlanStore(
             ORDER BY downloader_id, lower(info_hash);
             """, taskId, cancellationToken).ConfigureAwait(false);
         var source = await ReadTargetsAsync(connection, transaction, """
-            SELECT DISTINCT 'source_file', operation.source_path, job.download_root_path, NULL,
-                   operation.source_path
+            SELECT DISTINCT 'source_file', app_path(operation.source_path, job.downloader_id),
+                   COALESCE(app_path_root(operation.source_path, job.downloader_id), app_path(job.download_root_path, job.downloader_id)), NULL,
+                   app_path(operation.source_path, job.downloader_id)
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
             JOIN download_jobs AS job ON job.task_id = file.task_id
             WHERE file.task_id = $task_id
-              AND operation.source_path <> operation.target_path
+              AND app_path(operation.source_path, job.downloader_id) <> app_path(operation.target_path)
             ORDER BY operation.source_path;
             """, taskId, cancellationToken).ConfigureAwait(false);
         var media = await ReadTargetsAsync(connection, transaction, """
-            SELECT DISTINCT 'media_file', operation.target_path,
-                   CASE WHEN file.disposition = 'movie'
-                        THEN COALESCE($movie_root, job.save_root_path)
-                        ELSE job.save_root_path END,
+            SELECT DISTINCT 'media_file', app_path(operation.target_path),
+                   COALESCE(app_path_root(operation.target_path), CASE WHEN file.disposition = 'movie'
+                        THEN COALESCE($movie_root, app_path(job.save_root_path))
+                        ELSE app_path(job.save_root_path) END),
                    NULL,
-                   operation.target_path
+                   app_path(operation.target_path)
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
             JOIN download_jobs AS job ON job.task_id = file.task_id

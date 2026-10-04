@@ -317,7 +317,7 @@ public sealed class AnimeLibraryAdminApiTests
 
         Assert.Equal(HttpStatusCode.Conflict, deleted.StatusCode);
         Assert.Equal(
-            "library_movie_media_outside_root",
+            "path_mapping_required",
             deletedJson.RootElement.GetProperty("code").GetString());
         Assert.True(File.Exists(outsidePath));
         Assert.Equal(1, stillListedJson.RootElement.GetProperty("total_items").GetInt32());

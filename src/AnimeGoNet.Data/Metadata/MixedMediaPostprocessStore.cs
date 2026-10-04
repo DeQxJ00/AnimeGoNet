@@ -94,10 +94,10 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                        CASE WHEN file.tmdb_movie_id IS NULL THEN NULL
                             WHEN file.associated_task_file_id IS NULL THEN 'movie'
                             ELSE 'extras' END,
-                       COALESCE(active.source_media_path, operation.target_path),
+                       app_path_optional(COALESCE(active.source_media_path, operation.target_path)),
                        active.id IS NOT NULL,
                        (SELECT COUNT(*) FROM file_operations AS shared
-                        WHERE shared.target_path = COALESCE(active.source_media_path, operation.target_path)
+                        WHERE app_path_optional(shared.target_path) = app_path_optional(COALESCE(active.source_media_path, operation.target_path))
                           AND shared.state = 'completed')
                 FROM task_files AS file
                 LEFT JOIN other_file_readaptation_jobs AS active
@@ -135,7 +135,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                     reader.IsDBNull(7) ? null : reader.GetInt32(7),
                     reader.IsDBNull(8) ? null : reader.GetInt32(8),
                     reader.IsDBNull(9) ? null : reader.GetString(9),
-                    reader.GetString(10),
+                    reader.IsDBNull(10) ? string.Empty : reader.GetString(10),
                     ContainsMovieHint(path),
                     reader.GetInt64(11) == 1,
                     reader.GetInt32(12)));
@@ -291,7 +291,7 @@ public sealed class MixedMediaPostprocessStore(AnimeGoSqliteDatabase database)
                       AND file.disposition IN ('movie', 'extras')
                       AND file.associated_task_file_id IS NOT NULL)
                   )
-                  AND operation.target_path = $source_path
+                  AND app_path(operation.target_path) = $source_path
                   AND file.size_bytes = $size_bytes
                   AND NOT EXISTS (
                     SELECT 1 FROM other_file_readaptation_jobs AS active

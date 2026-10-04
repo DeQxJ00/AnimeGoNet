@@ -93,6 +93,39 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             await promoteLinked.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (database.PortablePathsEnabled)
+        {
+            await using var paths = connection.CreateCommand();
+            paths.Transaction = transaction;
+            paths.CommandText = """
+                UPDATE download_jobs SET organization_failure_code = NULL
+                WHERE organization_state IN ('pending', 'cleanup')
+                  AND organization_failure_code = 'path_mapping_required';
+                UPDATE download_jobs
+                SET organization_failure_code = 'path_mapping_required'
+                WHERE organization_state IN ('pending', 'cleanup')
+                  AND (app_path_optional(download_root_path, downloader_id) IS NULL
+                    OR app_path_optional(save_root_path) IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM file_operations operation JOIN task_files file ON file.id = operation.task_file_id
+                        WHERE file.task_id = download_jobs.task_id
+                          AND (app_path_optional(operation.source_path, download_jobs.downloader_id) IS NULL OR app_path_optional(operation.target_path) IS NULL))
+                    OR EXISTS (
+                        SELECT 1 FROM other_file_readaptation_jobs adaptation
+                        WHERE adaptation.task_id = download_jobs.task_id AND adaptation.state = 'pending'
+                          AND app_path_optional(adaptation.source_media_path) IS NULL));
+                UPDATE ingest_tasks SET failure_kind = NULL, failure_reason = NULL
+                WHERE failure_reason = 'path_mapping_required'
+                  AND NOT EXISTS (SELECT 1 FROM download_jobs job WHERE job.task_id = ingest_tasks.id
+                    AND job.organization_failure_code = 'path_mapping_required');
+                UPDATE ingest_tasks
+                SET failure_kind = 'organization', failure_reason = 'path_mapping_required'
+                WHERE EXISTS (SELECT 1 FROM download_jobs job WHERE job.task_id = ingest_tasks.id
+                    AND job.organization_failure_code = 'path_mapping_required');
+                """;
+            await paths.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         string? jobId = null;
         string? taskId = null;
         string? priorState = null;
@@ -129,6 +162,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                 )
                   AND (job.organization_next_attempt_at_utc IS NULL
                        OR job.organization_next_attempt_at_utc <= $now)
+                  AND job.organization_failure_code IS NOT 'path_mapping_required'
                 ORDER BY job.updated_at_utc, job.id
                 LIMIT 1;
                 """;
@@ -198,7 +232,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         {
             details.Transaction = transaction;
             details.CommandText = """
-                SELECT job.downloader_id, job.info_hash, job.download_root_path, job.save_root_path,
+                SELECT job.downloader_id, job.info_hash, app_path(job.download_root_path, job.downloader_id), app_path(job.save_root_path),
                        task.source_id, task.source_item_id, task.bangumi_subject_id,
                        task.source_work_id, task.mikanid,
                        json_extract(task.route_snapshot_json, '$.file_strategy'),
@@ -260,7 +294,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                        COALESCE(file.tmdb_season_number, 0), file.tmdb_episode_number,
                        COALESCE(series.canonical_name, movie.canonical_title),
                        file.rename_suffix, file.associated_task_file_id
-                       , file.source_episode, readaptation.source_media_path,
+                       , file.source_episode, app_path(readaptation.source_media_path),
                        COALESCE(readaptation.preserve_source, 0),
                        CASE WHEN file.disposition = 'movie' THEN 'movie'
                             ELSE task.media_type END,
@@ -383,6 +417,22 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             }
         }
 
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return operations;
+    }
+
+    public async Task<IReadOnlyList<MediaOperationRecord>> GetPersistedPlansAsync(
+        MediaOrganizationClaim claim,
+        CancellationToken cancellationToken = default)
+    {
+        if (claim.Stage != MediaOrganizationStage.MoveFiles)
+            throw new ArgumentException("Persisted plans are read during file organization.", nameof(claim));
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        await GuardLeaseAsync(connection, transaction, claim, cancellationToken).ConfigureAwait(false);
+        var operations = await ReadOperationsAsync(connection, transaction, claim.TaskId, cancellationToken).ConfigureAwait(false);
+        if (operations.Any(operation => operation.Strategy != claim.FileStrategy))
+            throw new InvalidOperationException("Persisted media operation strategy differs from the immutable plan.");
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return operations;
     }
@@ -822,10 +872,11 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         query.Transaction = transaction;
         query.CommandText = """
             SELECT operation.id, operation.task_file_id, operation.strategy,
-                   operation.source_path, operation.target_path,
+                   app_path(operation.source_path, task.downloader_id), app_path(operation.target_path),
                    operation.state, operation.bytes_verified
             FROM file_operations AS operation
             JOIN task_files AS file ON file.id = operation.task_file_id
+            JOIN ingest_tasks AS task ON task.id = file.task_id
             WHERE file.task_id = $task_id
               AND (
                   NOT EXISTS (

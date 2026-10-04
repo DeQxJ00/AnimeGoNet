@@ -1447,8 +1447,8 @@ public sealed class AutomaticMetadataResolutionProcessorTests
         await tasks.CompleteDispatchAsync(
             claim,
             new DownloadTaskSnapshot(hash, title, DownloadTaskState.Waiting, 0, 0, 5, 0, null),
-            Path.Combine(app.RootPath, "download", "bt"),
-            Path.Combine(app.RootPath, "save"),
+            app.App.Services.GetRequiredService<AnimeGoOptions>().Downloaders["bt"].DownloadPath,
+            app.App.Services.GetRequiredService<AnimeGoOptions>().Paths.SavePath,
             DateTimeOffset.UtcNow);
         await app.App.Services.GetRequiredService<DownloadJobStore>().ApplyInstanceSnapshotAsync(
             "bt",
