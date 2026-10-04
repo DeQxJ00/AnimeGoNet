@@ -184,6 +184,8 @@ public sealed class DockerQbittorrentIntegrationContractTests
             smoke,
             StringComparison.Ordinal);
         Assert.Contains("bt_password=\"${bt_connection##*|}\"", smoke, StringComparison.Ordinal);
+        Assert.Contains("$integration_root/animegonet/data/animego.yaml", smoke, StringComparison.Ordinal);
+        Assert.DoesNotContain("downloaders.private.json", smoke, StringComparison.Ordinal);
         Assert.Contains("\"password\": \"$bt_password\"", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/add", smoke, StringComparison.Ordinal);
         Assert.Contains("/api/v2/torrents/info", smoke, StringComparison.Ordinal);

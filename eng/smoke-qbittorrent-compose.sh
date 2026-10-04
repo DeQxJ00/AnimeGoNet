@@ -379,36 +379,30 @@ stage "exercise isolated qBittorrent lifecycle"
 exercise_fixture bt "$bt_connection"
 exercise_fixture pt "$pt_connection"
 
-updated_at="$(date --utc '+%Y-%m-%dT%H:%M:%S.0000000+00:00')"
-cat >"$integration_root/animegonet/data/config/downloaders.private.json" <<JSON
+cat >"$integration_root/animegonet/data/animego.yaml" <<JSON
 {
-  "format_version": 1,
-  "revision": 1,
+  "version": "1.7.1",
   "downloaders": {
     "bt": {
       "base_url": "http://qbittorrent-bt:8080",
       "username": "admin",
       "password": "$bt_password",
       "download_path": "/download/incomplete/bt",
-      "enabled": true,
-      "revision": 1,
-      "updated_at_utc": "$updated_at"
+      "enabled": true
     },
     "pt": {
       "base_url": "http://qbittorrent-pt:8080",
       "username": "admin",
       "password": "$pt_password",
       "download_path": "/download/incomplete/pt",
-      "enabled": true,
-      "revision": 1,
-      "updated_at_utc": "$updated_at"
+      "enabled": true
     }
   }
 }
 JSON
-chmod 600 "$integration_root/animegonet/data/config/downloaders.private.json"
+chmod 600 "$integration_root/animegonet/data/animego.yaml"
 if [[ "$(id -u)" == "0" ]]; then
-  chown "$test_uid:$test_gid" "$integration_root/animegonet/data/config/downloaders.private.json"
+  chown "$test_uid:$test_gid" "$integration_root/animegonet/data/animego.yaml"
 fi
 
 stage "start AnimeGoNet NativeAOT container"
