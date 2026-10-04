@@ -28,13 +28,20 @@ public sealed class PendingTmdbNfoRewriteProcessor(
 
         try
         {
+            var mikanSeasons = await store.GetMikanSourceSeasonsAsync(claim, cancellationToken).ConfigureAwait(false);
             await writer.WriteAsync(
                 claim.SaveRootPath,
                 claim.SeriesDirectoryName,
                 claim.CanonicalSeriesName,
                 claim.TmdbSeriesId,
-                claim.BangumiSubjectId,
+                mikanSeasons.Count > 0 ? claim.BangumiSubjectId : null,
                 cancellationToken).ConfigureAwait(false);
+            foreach (var season in mikanSeasons)
+            {
+                await writer.WriteSeasonAsync(
+                    claim.SaveRootPath, claim.SeriesDirectoryName, claim.TmdbSeriesId,
+                    season, claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+            }
             await store.CompleteAsync(claim, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
             return PendingTmdbNfoRewriteResult.Completed;
         }

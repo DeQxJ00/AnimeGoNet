@@ -12,6 +12,22 @@ async function page() {
   return parseHTML(html).document;
 }
 
+test("Mikan Bangumi NFO settings expose independent work and season switches", async () => {
+  const document = await page();
+  const region = document.querySelector(".configuration-mikan-ai-region");
+  const work = region.querySelector("#configuration-write-bangumi-with-tmdb");
+  const season = region.querySelector("#configuration-write-season-bangumi-with-tmdb");
+  assert.equal(work.type, "checkbox");
+  assert.equal(season.type, "checkbox");
+  assert.match(work.closest("label").textContent, /tvshow\.nfo/);
+  assert.match(work.closest("label").textContent, /movie\.nfo/);
+  assert.match(season.closest("label").textContent, /Sxx\/season\.nfo/);
+  assert.match(season.closest("label").textContent, /Movie 不应用/);
+  const app = await readFile(appPath, "utf8");
+  assert.match(app, /write_season_bangumi_id_when_tmdb_matched: element\("#configuration-write-season-bangumi-with-tmdb"\)\.checked/);
+  assert.match(app, /setConfigurationChecked\("#configuration-write-season-bangumi-with-tmdb", editable\.write_season_bangumi_id_when_tmdb_matched\)/);
+});
+
 function accessibleName(element, document) {
   const label = element.getAttribute("aria-label")?.trim();
   if (label) return label;

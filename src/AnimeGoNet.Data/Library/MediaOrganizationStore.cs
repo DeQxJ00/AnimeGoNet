@@ -228,6 +228,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         var isOtherReadaptation = false;
         var mediaType = "tv";
         var linkType = "hard";
+        string? sourceAdapter = null;
         await using (var details = connection.CreateCommand())
         {
             details.Transaction = transaction;
@@ -241,9 +242,10 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
                            WHERE readaptation.task_id = task.id
                              AND readaptation.state = 'pending'),
                        task.media_type,
-                       COALESCE(json_extract(task.route_snapshot_json, '$.link_type'), 'hard')
+                       COALESCE(json_extract(task.route_snapshot_json, '$.link_type'), 'hard'), profile.adapter
                 FROM download_jobs AS job
                 JOIN ingest_tasks AS task ON task.id = job.task_id
+                JOIN source_profiles AS profile ON profile.id = task.source_profile_id
                 WHERE job.id = $job_id AND job.task_id = $task_id
                   AND job.organization_state = 'organizing'
                   AND job.organization_lease_token = $token;
@@ -270,6 +272,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
             isOtherReadaptation = reader.GetInt64(10) == 1;
             mediaType = reader.GetString(11);
             linkType = reader.GetString(12);
+            sourceAdapter = reader.GetString(13);
             if (fileStrategy is not ("link" or "link_delete" or "move" or "wait_move"))
             {
                 throw new InvalidOperationException("Captured file strategy is unsupported.");
@@ -364,7 +367,7 @@ public sealed class MediaOrganizationStore(AnimeGoSqliteDatabase database)
         return new MediaOrganizationClaim(
             jobId, taskId, downloaderId, infoHash, fileStrategy, downloadRoot, saveRoot,
             sourceId, sourceItemId, bangumiId, token, attempt, stage, files,
-            sourceWorkId, mikanId, isOtherReadaptation, mediaType, linkType);
+            sourceWorkId, mikanId, isOtherReadaptation, mediaType, linkType, sourceAdapter);
     }
 
     public async Task<IReadOnlyList<MediaOperationRecord>> EnsureOperationsAsync(

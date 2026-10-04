@@ -6,6 +6,49 @@ namespace AnimeGoNet.App.Tests.Library;
 
 public sealed class TvShowNfoWriterTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SeriesAndSeasonSwitchesAreIndependent(bool series, bool season)
+    {
+        await using var fixture = new NfoFixture(series, season);
+        await fixture.Writer.WriteAsync(fixture.SaveRoot, "Series", 100, 547888);
+        await fixture.Writer.WriteSeasonAsync(fixture.SaveRoot, "Series", 100, 2, 547888);
+        Assert.Equal(series ? "547888" : null, fixture.Read("Series").Root?.Element("bangumiid")?.Value);
+        var target = Path.Combine(fixture.SaveRoot, "Series", "S02", "season.nfo");
+        Assert.Equal(season, File.Exists(target));
+        Assert.False(File.Exists(Path.Combine(fixture.SaveRoot, "Series", "S01", "season.nfo")));
+        if (season)
+        {
+            var nfo = XDocument.Load(target);
+            Assert.Equal("547888", nfo.Root?.Element("bangumiid")?.Value);
+            Assert.Equal("2", nfo.Root?.Element("seasonnumber")?.Value);
+            Assert.Null(nfo.Root?.Element("tmdbid"));
+        }
+    }
+
+    [Fact]
+    public async Task SeasonUpdatePreservesOtherMetadataAndNeverWritesWithoutSourceId()
+    {
+        await using var fixture = new NfoFixture(false, true);
+        var directory = Path.Combine(fixture.SaveRoot, "Series", "S03");
+        Directory.CreateDirectory(directory);
+        var target = Path.Combine(directory, "season.nfo");
+        const string original = "<season><title>Existing title</title><plot>Keep</plot><uniqueid type=\"tmdb\">123</uniqueid><bangumiid>1</bangumiid></season>";
+        await File.WriteAllTextAsync(target, original);
+        await fixture.Writer.WriteSeasonAsync(fixture.SaveRoot, "Series", 100, 3, null);
+        Assert.Equal(original, await File.ReadAllTextAsync(target));
+        await fixture.Writer.WriteSeasonAsync(fixture.SaveRoot, "Series", 0, 3, 888);
+        Assert.Equal(original, await File.ReadAllTextAsync(target));
+        await fixture.Writer.WriteSeasonAsync(fixture.SaveRoot, "Series", 100, 3, 888);
+        var nfo = XDocument.Load(target);
+        Assert.Equal("Existing title", nfo.Root?.Element("title")?.Value);
+        Assert.Equal("Keep", nfo.Root?.Element("plot")?.Value);
+        Assert.Equal("123", nfo.Root?.Element("uniqueid")?.Value);
+        Assert.Equal("888", Assert.Single(nfo.Root!.Elements("bangumiid")).Value);
+    }
     [Fact]
     public async Task TmdbMatchOmitsBangumiIdByDefault()
     {
@@ -45,7 +88,7 @@ public sealed class TvShowNfoWriterTests
     {
         private readonly string _root;
 
-        public NfoFixture(bool writeBangumiIdWhenTmdbMatched)
+        public NfoFixture(bool writeBangumiIdWhenTmdbMatched, bool writeSeasonBangumiIdWhenTmdbMatched = false)
         {
             _root = Path.Combine(Path.GetTempPath(), "animegonet-nfo-tests", Guid.NewGuid().ToString("N"));
             SaveRoot = Path.Combine(_root, "library");
@@ -56,6 +99,7 @@ public sealed class TvShowNfoWriterTests
                 Metadata = defaults.Metadata with
                 {
                     WriteBangumiIdWhenTmdbMatched = writeBangumiIdWhenTmdbMatched,
+                    WriteSeasonBangumiIdWhenTmdbMatched = writeSeasonBangumiIdWhenTmdbMatched,
                 },
             };
             Writer = new TvShowNfoWriter(options);

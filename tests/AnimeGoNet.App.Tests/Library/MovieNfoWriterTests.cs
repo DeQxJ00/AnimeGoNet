@@ -1,10 +1,38 @@
 using AnimeGoNet.App.Library;
 using AnimeGoNet.Core.Metadata;
+using AnimeGoNet.Core.Configuration;
 
 namespace AnimeGoNet.App.Tests.Library;
 
 public sealed class MovieNfoWriterTests
 {
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task MovieOnlyUsesWorkLevelSwitch(bool work, bool season)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-movie-nfo", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var defaults = AnimeGoDefaults.CreateNative(root);
+            var options = defaults with
+            {
+                Metadata = defaults.Metadata with
+                {
+                    WriteBangumiIdWhenTmdbMatched = work,
+                    WriteSeasonBangumiIdWhenTmdbMatched = season,
+                },
+            };
+            await new MovieNfoWriter(options).WriteAsync(root, new TmdbMovie(129, "Movie", "Movie", null), 311);
+            var nfo = System.Xml.Linq.XDocument.Load(Path.Combine(root, "Movie", "movie.nfo"));
+            Assert.Equal(work ? "311" : null, nfo.Root?.Element("bangumiid")?.Value);
+            Assert.Empty(Directory.GetFiles(root, "season.nfo", SearchOption.AllDirectories));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task WritesMovieIdentityWithoutTvSeasonOrEpisodeFields()
     {

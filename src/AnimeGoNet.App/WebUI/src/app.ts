@@ -416,6 +416,7 @@ interface RuntimeConfiguration {
     };
     tmdb_failure_use_bangumi: boolean;
     write_bangumi_id_when_tmdb_matched: boolean;
+    write_season_bangumi_id_when_tmdb_matched: boolean;
     mikan_trusted_offset_cache_enabled: boolean;
     mikan_trusted_offset_required_episodes: number;
   };
@@ -482,6 +483,7 @@ interface RuntimeConfiguration {
     ai_http_timeout_seconds: number;
     tmdb_failure_use_bangumi: boolean;
     write_bangumi_id_when_tmdb_matched: boolean;
+    write_season_bangumi_id_when_tmdb_matched: boolean;
     mikan_trusted_offset_cache_enabled: boolean;
     mikan_trusted_offset_required_episodes: number;
     torrent_http_timeout_seconds: number;
@@ -566,6 +568,7 @@ interface ConfigurationUpdatePayload {
   ai_http_timeout_seconds: number;
   tmdb_failure_use_bangumi: boolean;
   write_bangumi_id_when_tmdb_matched: boolean;
+  write_season_bangumi_id_when_tmdb_matched: boolean;
   mikan_trusted_offset_cache_enabled: boolean;
   mikan_trusted_offset_required_episodes: number;
   torrent_http_timeout_seconds: number;
@@ -7072,9 +7075,14 @@ function metadataConfigurationCard(config: RuntimeConfiguration): HTMLElement {
       + "不输出有效 tmdbid（内部仍按现有逻辑写 0）",
     ],
     [
-      "TMDB 成功时写 Bangumi ID",
+      "TMDB 成功时写作品级 Bangumi ID",
       `${enabledLabel(config.metadata.write_bangumi_id_when_tmdb_matched)} · `
-      + "默认关闭；关闭时仅 tmdbid=0 的 Bangumi 完全兜底写入 bangumiid",
+      + "仅 Mikan 自带 ID；TV 写 tvshow.nfo，Movie 写 movie.nfo",
+    ],
+    [
+      "TMDB 成功时写季度 Bangumi ID",
+      `${enabledLabel(config.metadata.write_season_bangumi_id_when_tmdb_matched)} · `
+      + "仅 Mikan 自带 ID；写对应 Sxx/season.nfo，Movie 不适用",
     ],
   ]);
   card.append(seasonFailurePriority(config.metadata));
@@ -8163,6 +8171,10 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
     "#configuration-write-bangumi-with-tmdb",
     editable.write_bangumi_id_when_tmdb_matched,
   );
+  setConfigurationChecked(
+    "#configuration-write-season-bangumi-with-tmdb",
+    editable.write_season_bangumi_id_when_tmdb_matched,
+  );
   setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
   setConfigurationValue(
     "#configuration-offset-required-episodes",
@@ -8250,7 +8262,8 @@ const configurationFieldLabels: Record<string, string> = {
   ai_debug_mode: "AI Debug 完整链路",
   ai_http_timeout_seconds: "AI 超时（秒）",
   tmdb_failure_use_bangumi: "Bangumi 完全兜底",
-  write_bangumi_id_when_tmdb_matched: "TMDB 成功时写 Bangumi ID",
+  write_bangumi_id_when_tmdb_matched: "TMDB 成功时写作品级 Bangumi ID",
+  write_season_bangumi_id_when_tmdb_matched: "TMDB 成功时写季度 Bangumi ID",
   mikan_trusted_offset_cache_enabled: "可信 offset 缓存",
   mikan_trusted_offset_required_episodes: "可信 Offset 所需不同文件名 EP 次数",
   torrent_http_timeout_seconds: "Torrent HTTP 超时（秒）",
@@ -8368,6 +8381,8 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-bangumi-fallback").checked,
     write_bangumi_id_when_tmdb_matched:
       element<HTMLInputElement>("#configuration-write-bangumi-with-tmdb").checked,
+    write_season_bangumi_id_when_tmdb_matched:
+      element<HTMLInputElement>("#configuration-write-season-bangumi-with-tmdb").checked,
     mikan_trusted_offset_cache_enabled:
       element<HTMLInputElement>("#configuration-offset-cache").checked,
     mikan_trusted_offset_required_episodes:

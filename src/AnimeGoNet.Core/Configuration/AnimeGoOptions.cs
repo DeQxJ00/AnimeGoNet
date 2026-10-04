@@ -118,6 +118,7 @@ public sealed record MetadataMatchingOptions
     public bool TmdbFailureUseBangumi { get; init; }
 
     public bool WriteBangumiIdWhenTmdbMatched { get; init; }
+    public bool WriteSeasonBangumiIdWhenTmdbMatched { get; init; }
 
     public bool MikanTrustedOffsetCacheEnabled { get; init; }
 

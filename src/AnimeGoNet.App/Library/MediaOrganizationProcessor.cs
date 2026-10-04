@@ -185,7 +185,8 @@ public sealed class MediaOrganizationProcessor(
                             movie.Title,
                             movie.OriginalTitle,
                             movie.MovieReleaseDate),
-                        claim.BangumiSubjectId,
+                        string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase)
+                            ? claim.BangumiSubjectId : null,
                         cancellationToken).ConfigureAwait(false);
                     await store.UpdateProgressAsync(
                         claim,
@@ -214,7 +215,8 @@ public sealed class MediaOrganizationProcessor(
                     var series = seriesGroups[index];
                     await nfoWriter.WriteAsync(
                         claim.SaveRootPath, series.CanonicalSeriesName, series.TmdbSeriesId,
-                        claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+                        series.TmdbSeriesId == 0 || string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase)
+                            ? claim.BangumiSubjectId : null, cancellationToken).ConfigureAwait(false);
                     await store.UpdateProgressAsync(
                         claim,
                         MediaOrganizationPhases.NfoWrite,
@@ -237,6 +239,13 @@ public sealed class MediaOrganizationProcessor(
                 for (var index = 0; index < seasonGroups.Length; index++)
                 {
                     var seasonGroup = seasonGroups[index];
+                    if (string.Equals(claim.SourceAdapter, "mikan", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await nfoWriter.WriteSeasonAsync(
+                            claim.SaveRootPath, seasonGroup.Key.CanonicalSeriesName,
+                            seasonGroup.Key.TmdbSeriesId, seasonGroup.Key.SeasonNumber,
+                            claim.BangumiSubjectId, cancellationToken).ConfigureAwait(false);
+                    }
                     var episodeSidecars = seasonGroup
                         .Where(file => file.Disposition == "episode" && file.AssociatedFileId is null)
                         .Select(file =>

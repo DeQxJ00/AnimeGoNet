@@ -71,6 +71,9 @@ public sealed class DeploymentConfigurationLocks
         new(
             "write_bangumi_id_when_tmdb_matched",
             ["write_bangumi_id_when_tmdb_matched", "metadata:write_bangumi_id_when_tmdb_matched"]),
+        new(
+            "write_season_bangumi_id_when_tmdb_matched",
+            ["write_season_bangumi_id_when_tmdb_matched", "metadata:write_season_bangumi_id_when_tmdb_matched"]),
         new("mikan_trusted_offset_cache_enabled", ["mikan_trusted_offset_cache_enabled", "metadata:mikan_trusted_offset_cache_enabled"]),
         new("mikan_trusted_offset_required_episodes", ["mikan_trusted_offset_required_episodes", "metadata:mikan_trusted_offset_required_episodes"]),
         new("torrent_http_timeout_seconds", ["torrent_http_timeout_seconds", "torrent_fetch:timeout_seconds"]),
@@ -405,6 +408,10 @@ public sealed class DeploymentConfigurationLocks
                     "write_bangumi_id_when_tmdb_matched",
                     current.WriteBangumiIdWhenTmdbMatched,
                     candidate.WriteBangumiIdWhenTmdbMatched),
+                WriteSeasonBangumiIdWhenTmdbMatched = Preserve(
+                    "write_season_bangumi_id_when_tmdb_matched",
+                    current.WriteSeasonBangumiIdWhenTmdbMatched,
+                    candidate.WriteSeasonBangumiIdWhenTmdbMatched),
                 MikanTrustedOffsetCacheEnabled = Preserve(
                     "mikan_trusted_offset_cache_enabled",
                     current.MikanTrustedOffsetCacheEnabled,
@@ -704,6 +711,10 @@ public sealed class DeploymentConfigurationLocks
             "write_bangumi_id_when_tmdb_matched")
             ? deployment.Metadata.WriteBangumiIdWhenTmdbMatched
             : candidate.Metadata.WriteBangumiIdWhenTmdbMatched;
+        var writeSeasonBangumiIdWhenTmdbMatched = IsLocked(
+            "write_season_bangumi_id_when_tmdb_matched")
+            ? deployment.Metadata.WriteSeasonBangumiIdWhenTmdbMatched
+            : candidate.Metadata.WriteSeasonBangumiIdWhenTmdbMatched;
         var mikanTrustedOffsetCacheEnabled = IsLocked(
             "mikan_trusted_offset_cache_enabled")
             ? deployment.Metadata.MikanTrustedOffsetCacheEnabled
@@ -789,6 +800,7 @@ public sealed class DeploymentConfigurationLocks
                 Ai = ai,
                 TmdbFailureUseBangumi = tmdbFailureUseBangumi,
                 WriteBangumiIdWhenTmdbMatched = writeBangumiIdWhenTmdbMatched,
+                WriteSeasonBangumiIdWhenTmdbMatched = writeSeasonBangumiIdWhenTmdbMatched,
                 MikanTrustedOffsetCacheEnabled = mikanTrustedOffsetCacheEnabled,
                 MikanTrustedOffsetRequiredEpisodes = mikanTrustedOffsetRequiredEpisodes,
             },
@@ -960,6 +972,10 @@ public sealed class DeploymentConfigurationLocks
             "write_bangumi_id_when_tmdb_matched",
             deployment.Metadata.WriteBangumiIdWhenTmdbMatched,
             candidate.Metadata.WriteBangumiIdWhenTmdbMatched);
+        AddIfChanged(
+            "write_season_bangumi_id_when_tmdb_matched",
+            deployment.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
+            candidate.Metadata.WriteSeasonBangumiIdWhenTmdbMatched);
         AddIfChanged(
             "mikan_trusted_offset_cache_enabled",
             deployment.Metadata.MikanTrustedOffsetCacheEnabled,

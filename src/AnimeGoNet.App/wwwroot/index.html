@@ -2111,7 +2111,11 @@
           </label>
           <label class="configuration-guided-option">
             <input id="configuration-write-bangumi-with-tmdb" type="checkbox">
-            <span><strong>TMDB 成功时也写 Bangumi ID</strong><small>默认关闭。关闭时仅 tmdbid=0 的 Bangumi 完全兜底写入 bangumiid；开启后正常 TMDB 作品也写入。多个 bgmid 共用同一 TMDB 作品目录时，后续任务可能覆盖根目录 NFO 中的 bangumiid。</small></span>
+            <span><strong>TMDB 成功时写作品级 Bangumi ID（tvshow / movie）</strong><small>默认关闭。仅使用 Mikan 来源自带的 Bangumi ID，TV 写入 tvshow.nfo，Movie 写入 movie.nfo。多个 Bangumi 条目共用同一 TV 作品时，后续任务可能覆盖作品级 ID；与季度开关独立。Bangumi 完全兜底原有行为不变。</small></span>
+          </label>
+          <label class="configuration-guided-option">
+            <input id="configuration-write-season-bangumi-with-tmdb" type="checkbox">
+            <span><strong>TMDB 成功时写对应季度 Bangumi ID（season）</strong><small>默认关闭。仅使用 Mikan 来源自带的 Bangumi ID，写入识别出的对应季度 Sxx/season.nfo；不写到其他季度，不影响 tvshow.nfo。仅适用于 TV，Movie 不应用此项。</small></span>
           </label>
         </fieldset>
         <fieldset class="wide configuration-data-update-editor">

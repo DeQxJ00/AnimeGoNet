@@ -60,6 +60,7 @@ public sealed record ApplicationOverrideEntry(
     string? AiTmdbMcpUrl = null,
     string? AiBangumiMcpUrl = null,
     bool? WriteBangumiIdWhenTmdbMatched = null,
+    bool? WriteSeasonBangumiIdWhenTmdbMatched = null,
     string? AiPromptTemplate = null,
     double? MikanEpisodeIdentityCacheHours = null,
     double? MikanBangumiIdentityCacheHours = null,
@@ -452,6 +453,11 @@ public sealed class ApplicationOverrideStore : IDisposable
                     ? options.Metadata.WriteBangumiIdWhenTmdbMatched
                     : settings.WriteBangumiIdWhenTmdbMatched
                     ?? options.Metadata.WriteBangumiIdWhenTmdbMatched,
+                WriteSeasonBangumiIdWhenTmdbMatched = inheritedFields.Contains(
+                    "write_season_bangumi_id_when_tmdb_matched")
+                    ? options.Metadata.WriteSeasonBangumiIdWhenTmdbMatched
+                    : settings.WriteSeasonBangumiIdWhenTmdbMatched
+                    ?? options.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
                 MikanTrustedOffsetCacheEnabled = inheritedFields.Contains(
                     "mikan_trusted_offset_cache_enabled")
                     ? options.Metadata.MikanTrustedOffsetCacheEnabled

@@ -59,7 +59,8 @@ public sealed record MediaOrganizationClaim(
     int? MikanId = null,
     bool IsOtherReadaptation = false,
     string MediaType = "tv",
-    string LinkType = "hard");
+    string LinkType = "hard",
+    string? SourceAdapter = null);
 
 public sealed record MediaOperationPlan(
     string TaskFileId,

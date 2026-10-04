@@ -17,6 +17,52 @@ namespace AnimeGoNet.App.Tests.Library;
 
 public sealed class MediaOrganizationProcessorTests
 {
+    [Theory]
+    [InlineData("mikan", true, false, 547888)]
+    [InlineData("mikan", false, true, 547888)]
+    [InlineData("mikan", true, true, 547888)]
+    [InlineData("u2", true, true, 547888)]
+    [InlineData("rss", true, true, 547888)]
+    [InlineData("mikan", true, true, null)]
+    public async Task BangumiNfoOptionsOnlyUseMikanSourceId(string adapter, bool series, bool season, int? bgmid)
+    {
+        var client = new FakeDownloadClient();
+        await using var app = await RunningApp.StartAsync(
+            downloadClientRegistry: new FakeRegistry(client),
+            configure: options => options with
+            {
+                Metadata = options.Metadata with
+                {
+                    WriteBangumiIdWhenTmdbMatched = series,
+                    WriteSeasonBangumiIdWhenTmdbMatched = season,
+                },
+            });
+        var paths = app.App.Services.GetRequiredService<AnimeGoOptions>().Paths;
+        var taskId = await PrepareDownloadedTaskAsync(app, paths);
+        var database = app.App.Services.GetRequiredService<AnimeGoSqliteDatabase>();
+        await using (var connection = await database.OpenConnectionAsync())
+        await using (var update = connection.CreateCommand())
+        {
+            update.CommandText = """
+                UPDATE source_profiles SET adapter = $adapter WHERE id = 'mikan';
+                UPDATE ingest_tasks SET bangumi_subject_id = $bgmid WHERE id = $task;
+                UPDATE task_files SET tmdb_season_number = 2 WHERE task_id = $task;
+                """;
+            update.Parameters.AddWithValue("$adapter", adapter);
+            update.Parameters.AddWithValue("$bgmid", (object?)bgmid ?? DBNull.Value);
+            update.Parameters.AddWithValue("$task", taskId);
+            await update.ExecuteNonQueryAsync();
+        }
+        Assert.Equal(MediaOrganizationResult.FilesCompleted,
+            await app.App.Services.GetRequiredService<MediaOrganizationProcessor>().RunOnceAsync());
+        var allowed = adapter == "mikan" && bgmid is > 0;
+        var nfo = XDocument.Load(Path.Combine(paths.SavePath, "Series", "tvshow.nfo"));
+        Assert.Equal(allowed && series ? "547888" : null, nfo.Root?.Element("bangumiid")?.Value);
+        var seasonPath = Path.Combine(paths.SavePath, "Series", "S02", "season.nfo");
+        Assert.Equal(allowed && season, File.Exists(seasonPath));
+        Assert.False(File.Exists(Path.Combine(paths.SavePath, "Series", "S01", "season.nfo")));
+    }
+
     [Fact]
     public async Task MoveWritesNfoAndCompletionBeforeSafeDownloaderCleanup()
     {

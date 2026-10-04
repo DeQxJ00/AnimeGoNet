@@ -4451,9 +4451,14 @@ function metadataConfigurationCard(config) {
                 + "不输出有效 tmdbid（内部仍按现有逻辑写 0）",
         ],
         [
-            "TMDB 成功时写 Bangumi ID",
+            "TMDB 成功时写作品级 Bangumi ID",
             `${enabledLabel(config.metadata.write_bangumi_id_when_tmdb_matched)} · `
-                + "默认关闭；关闭时仅 tmdbid=0 的 Bangumi 完全兜底写入 bangumiid",
+                + "仅 Mikan 自带 ID；TV 写 tvshow.nfo，Movie 写 movie.nfo",
+        ],
+        [
+            "TMDB 成功时写季度 Bangumi ID",
+            `${enabledLabel(config.metadata.write_season_bangumi_id_when_tmdb_matched)} · `
+                + "仅 Mikan 自带 ID；写对应 Sxx/season.nfo，Movie 不适用",
         ],
     ]);
     card.append(seasonFailurePriority(config.metadata));
@@ -5489,6 +5494,7 @@ function openConfigurationEditor(section) {
     setConfigurationChecked("#configuration-ai-debug", editable.ai_debug_mode);
     setConfigurationChecked("#configuration-bangumi-fallback", editable.tmdb_failure_use_bangumi);
     setConfigurationChecked("#configuration-write-bangumi-with-tmdb", editable.write_bangumi_id_when_tmdb_matched);
+    setConfigurationChecked("#configuration-write-season-bangumi-with-tmdb", editable.write_season_bangumi_id_when_tmdb_matched);
     setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
     setConfigurationValue("#configuration-offset-required-episodes", editable.mikan_trusted_offset_required_episodes);
     setConfigurationValue("#configuration-ai-timeout", editable.ai_http_timeout_seconds);
@@ -5552,7 +5558,8 @@ const configurationFieldLabels = {
     ai_debug_mode: "AI Debug 完整链路",
     ai_http_timeout_seconds: "AI 超时（秒）",
     tmdb_failure_use_bangumi: "Bangumi 完全兜底",
-    write_bangumi_id_when_tmdb_matched: "TMDB 成功时写 Bangumi ID",
+    write_bangumi_id_when_tmdb_matched: "TMDB 成功时写作品级 Bangumi ID",
+    write_season_bangumi_id_when_tmdb_matched: "TMDB 成功时写季度 Bangumi ID",
     mikan_trusted_offset_cache_enabled: "可信 offset 缓存",
     mikan_trusted_offset_required_episodes: "可信 Offset 所需不同文件名 EP 次数",
     torrent_http_timeout_seconds: "Torrent HTTP 超时（秒）",
@@ -5619,6 +5626,7 @@ function configurationRequest() {
         ai_http_timeout_seconds: element("#configuration-ai-timeout").valueAsNumber,
         tmdb_failure_use_bangumi: element("#configuration-bangumi-fallback").checked,
         write_bangumi_id_when_tmdb_matched: element("#configuration-write-bangumi-with-tmdb").checked,
+        write_season_bangumi_id_when_tmdb_matched: element("#configuration-write-season-bangumi-with-tmdb").checked,
         mikan_trusted_offset_cache_enabled: element("#configuration-offset-cache").checked,
         mikan_trusted_offset_required_episodes: element("#configuration-offset-required-episodes").valueAsNumber,
         torrent_http_timeout_seconds: element("#configuration-torrent-timeout").valueAsNumber,

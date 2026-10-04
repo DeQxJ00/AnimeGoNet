@@ -2279,6 +2279,7 @@ public static class ApiEndpoints
                     ai.FileIdentityFuzzyMatchLimit),
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.WriteBangumiIdWhenTmdbMatched,
+                options.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
                 options.Metadata.MikanTrustedOffsetCacheEnabled,
                 options.Metadata.MikanTrustedOffsetRequiredEpisodes),
             new TorrentFetchConfigurationResponse(
@@ -2354,6 +2355,7 @@ public static class ApiEndpoints
             ai.HttpTimeout.TotalSeconds,
             desired.Metadata.TmdbFailureUseBangumi,
             desired.Metadata.WriteBangumiIdWhenTmdbMatched,
+            desired.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
             desired.Metadata.MikanTrustedOffsetCacheEnabled,
             fetch.Timeout.TotalSeconds,
             fetch.MaxResponseBytes,
@@ -2654,6 +2656,10 @@ public static class ApiEndpoints
             current.Metadata.WriteBangumiIdWhenTmdbMatched,
             candidate.Metadata.WriteBangumiIdWhenTmdbMatched);
         AddBool(
+            "write_season_bangumi_id_when_tmdb_matched",
+            current.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
+            candidate.Metadata.WriteSeasonBangumiIdWhenTmdbMatched);
+        AddBool(
             "mikan_trusted_offset_cache_enabled",
             current.Metadata.MikanTrustedOffsetCacheEnabled,
             candidate.Metadata.MikanTrustedOffsetCacheEnabled);
@@ -2817,6 +2823,8 @@ public static class ApiEndpoints
             TmdbFailureUseBangumi: current.Metadata.TmdbFailureUseBangumi,
             WriteBangumiIdWhenTmdbMatched:
                 current.Metadata.WriteBangumiIdWhenTmdbMatched,
+            WriteSeasonBangumiIdWhenTmdbMatched:
+                current.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
             MikanTrustedOffsetCacheEnabled:
                 current.Metadata.MikanTrustedOffsetCacheEnabled,
             TorrentHttpTimeoutSeconds: torrent.Timeout.TotalSeconds,
@@ -2923,6 +2931,8 @@ public static class ApiEndpoints
                 TmdbFailureUseBangumi = request.TmdbFailureUseBangumi,
                 WriteBangumiIdWhenTmdbMatched =
                     request.WriteBangumiIdWhenTmdbMatched,
+                WriteSeasonBangumiIdWhenTmdbMatched =
+                    request.WriteSeasonBangumiIdWhenTmdbMatched,
                 MikanTrustedOffsetCacheEnabled =
                     request.MikanTrustedOffsetCacheEnabled,
                 MikanTrustedOffsetRequiredEpisodes =
@@ -3245,6 +3255,8 @@ public static class ApiEndpoints
             AiBangumiMcpUrl: aiBangumiMcpUrl,
             WriteBangumiIdWhenTmdbMatched:
                 request.WriteBangumiIdWhenTmdbMatched,
+            WriteSeasonBangumiIdWhenTmdbMatched:
+                request.WriteSeasonBangumiIdWhenTmdbMatched,
             AiPromptTemplate: aiPromptTemplate,
             MikanEpisodeIdentityCacheHours: mikanEpisodeIdentityCacheHours,
             MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours,

@@ -4,6 +4,36 @@ namespace AnimeGoNet.Data.Tests.Metadata;
 
 public sealed class PendingTmdbNfoRewriteStoreTests
 {
+    [Theory]
+    [InlineData("mikan", "tv", 547888, true)]
+    [InlineData("u2", "tv", 547888, false)]
+    [InlineData("mikan", "movie", 547888, false)]
+    [InlineData("mikan", "tv", 123, false)]
+    public async Task RewriteOnlyUsesSeasonsIdentifiedForTheOriginalMikanSubject(
+        string adapter, string mediaType, int bgmid, bool expected)
+    {
+        await using var fixture = await SqliteDatabaseFixture.CreateAsync();
+        await SeedAsync(fixture);
+        await using (var connection = await fixture.Database.OpenConnectionAsync())
+        await using (var update = connection.CreateCommand())
+        {
+            update.CommandText = """
+                UPDATE source_profiles SET adapter = $adapter WHERE id = 'mikan';
+                UPDATE ingest_tasks SET media_type = $type, bangumi_subject_id = $bgmid WHERE id = 'nfo-task';
+                """;
+            update.Parameters.AddWithValue("$adapter", adapter);
+            update.Parameters.AddWithValue("$type", mediaType);
+            update.Parameters.AddWithValue("$bgmid", bgmid);
+            await update.ExecuteNonQueryAsync();
+        }
+        var store = new PendingTmdbNfoRewriteStore(fixture.Database);
+        var claim = Assert.IsType<PendingTmdbNfoRewriteClaim>(await store.TryClaimNextAsync(
+            DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5)));
+        var seasons = await store.GetMikanSourceSeasonsAsync(claim);
+        if (expected) Assert.Equal(2, Assert.Single(seasons));
+        else Assert.Empty(seasons);
+    }
+
     [Fact]
     public async Task ClaimFailureDelayAndRetryArePersistent()
     {

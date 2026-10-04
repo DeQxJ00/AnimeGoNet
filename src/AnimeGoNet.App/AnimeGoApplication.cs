@@ -1064,6 +1064,13 @@ public static class AnimeGoApplication
                         "metadata:write_bangumi_id_when_tmdb_matched"),
                     defaults.Metadata.WriteBangumiIdWhenTmdbMatched,
                     "write_bangumi_id_when_tmdb_matched"),
+                WriteSeasonBangumiIdWhenTmdbMatched = ParseOptionalBool(
+                    FirstConfigurationValue(
+                        configuration,
+                        "write_season_bangumi_id_when_tmdb_matched",
+                        "metadata:write_season_bangumi_id_when_tmdb_matched"),
+                    defaults.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
+                    "write_season_bangumi_id_when_tmdb_matched"),
                 MikanTrustedOffsetCacheEnabled = ParseOptionalBool(
                     FirstConfigurationValue(
                         configuration,

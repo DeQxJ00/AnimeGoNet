@@ -79,6 +79,17 @@ dotnet run --project src/AnimeGoNet.App -- `
 
 ## 4. 核对生成配置和来源路由
 
+### Mikan 的 Bangumi NFO 写入
+
+“设置 → AI 与 MCP → Mikan 源专用”中的两个开关独立保存到 `animego.yaml`：
+
+- `metadata.write_bangumi_id_when_tmdb_matched`：作品级写入；TV 写 `tvshow.nfo`，Movie 写 `movie.nfo`。沿用旧开关和值，默认关闭。
+- `metadata.write_season_bangumi_id_when_tmdb_matched`：季度级写入；只写识别出的对应 `Sxx/season.nfo`，默认关闭，与作品级开关无关，Movie 不适用。
+
+两者仅使用 Mikan 来源自带的 Bangumi ID，不对 U2 或其他来源补查/写入 ID。
+季度写入会保留现有 NFO 的其他字段；不同 Bangumi 条目对应同一 TMDB TV 时，可只开启季度级，避免覆盖作品级 ID。
+Bangumi 完全兜底原有的 `tmdbid=0` 作品级写入行为不变。配置保存后需要重启；不会主动批量改写已经整理完成的旧 NFO。
+
 迁移后的 YAML 至少应明确：
 
 - `data_path`、`download_path`、`save_path`；

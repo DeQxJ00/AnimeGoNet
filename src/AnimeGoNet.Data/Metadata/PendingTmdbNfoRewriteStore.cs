@@ -27,6 +27,33 @@ public sealed record PendingTmdbNfoRewriteProjection(
 
 public sealed class PendingTmdbNfoRewriteStore(AnimeGoSqliteDatabase database)
 {
+    public async Task<IReadOnlyList<int>> GetMikanSourceSeasonsAsync(
+        PendingTmdbNfoRewriteClaim claim,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT DISTINCT file.tmdb_season_number
+            FROM ingest_tasks task
+            JOIN source_profiles profile ON profile.id = task.source_profile_id
+            JOIN task_files file ON file.task_id = task.id
+            JOIN download_jobs job ON job.task_id = task.id
+            WHERE profile.adapter = 'mikan' AND task.media_type = 'tv'
+              AND task.bangumi_subject_id = $bgmid AND file.tmdb_series_id = $tmdbid
+              AND file.tmdb_season_number >= 0 AND file.disposition IN ('episode', 'extras', 'other')
+              AND app_path_optional(job.save_root_path) = $root
+            ORDER BY file.tmdb_season_number;
+            """;
+        query.Parameters.AddWithValue("$bgmid", claim.BangumiSubjectId);
+        query.Parameters.AddWithValue("$tmdbid", claim.TmdbSeriesId);
+        query.Parameters.AddWithValue("$root", claim.SaveRootPath);
+        var seasons = new List<int>();
+        await using var reader = await query.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) seasons.Add(reader.GetInt32(0));
+        return seasons;
+    }
+
     public async Task<IReadOnlyList<PendingTmdbNfoRewriteProjection>> ListForTaskAsync(
         string taskId,
         CancellationToken cancellationToken = default)
