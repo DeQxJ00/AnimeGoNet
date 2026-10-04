@@ -22,7 +22,7 @@ internal sealed class LegacyDeploymentConfigurationFile(
     private const int MaximumDepth = 32;
     private const int MaximumNodes = 4096;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate = DeploymentFileGate.ForPath(filePath);
     private readonly string _filePath = Path.GetFullPath(filePath);
 
     public async Task<byte[]> ReadRawAsync(
@@ -169,7 +169,7 @@ internal sealed class LegacyDeploymentConfigurationFile(
         return WriteRawAsync(yaml, backup, cancellationToken);
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose() { }
 
     private void ValidateTyped(IReadOnlyDictionary<string, string?> values)
     {

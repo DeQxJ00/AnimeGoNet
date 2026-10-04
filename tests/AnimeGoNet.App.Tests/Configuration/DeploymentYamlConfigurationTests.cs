@@ -871,7 +871,7 @@ public sealed class DeploymentYamlConfigurationTests
                     rss_priority_enabled: true
                 """);
             using (var store = new DownloaderOverrideStore(
-                       Path.Combine(data, "config")))
+                       Path.Combine(data, "config"), yamlPath))
             {
                 await store.UpsertAsync(
                     "bt",

@@ -54,6 +54,11 @@ secret 回显到浏览器。
 4. 部署 YAML
 5. 编译期安全默认值
 
+下载器配置不使用第 3 层：WebUI 直接修改部署 YAML 的 `downloaders` 节点，
+遵循 `--config` 指定路径（未指定时为 `data_path/animego.yaml`）。
+旧 `downloaders.private.json` 不读取、不迁移。用户名和密码保存在 YAML 中，
+请保护该文件及其备份，不要提交到公开仓库。
+
 同一逻辑字段存在旧扁平键与规范嵌套键时，先比较配置 Provider 层级，再比较同一
 Provider 内的兼容别名。因此更高层的 `--data_path`、
 `--downloaders:bt:base_url` 或 `--sources:mikan:category` 可以覆盖较低层的
@@ -89,7 +94,7 @@ WebUI 的“设置与备份 → 目录与路径”可直接修改全局 `downloa
 通过 `locked_fields` 返回字段、来源和控制键名；只返回环境变量/命令行参数名，
 绝不返回对应值。WebUI 会逐字段禁用编辑并显示这些来源。保存同一实例的其他未锁
 字段时，API 不会把环境变量或命令行中的用户名、密码复制到
-`data_path/config/downloaders.private.json`。若请求确实改变锁字段，则返回
+当前 YAML 的 `downloaders` 节点；不使用独立 JSON，保存后重启生效。若请求确实改变锁字段，则返回
 `400 downloader_field_locked`，并保持全局配置 revision 不变。
 
 规范控制键示例：

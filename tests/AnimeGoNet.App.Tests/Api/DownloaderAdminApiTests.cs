@@ -293,7 +293,7 @@ public sealed class DownloaderAdminApiTests
         var archive = Assert.Single(
             listed.RootElement.GetProperty("items").EnumerateArray(),
             item => item.GetProperty("id").GetString() == "archive");
-        Assert.Equal("private_override", archive.GetProperty("configuration_source").GetString());
+        Assert.Equal("yaml", archive.GetProperty("configuration_source").GetString());
         Assert.True(archive.GetProperty("credentials_configured").GetBoolean());
         Assert.Equal("archive-user", archive.GetProperty("username").GetString());
         Assert.Equal("archive-private-password", archive.GetProperty("password").GetString());

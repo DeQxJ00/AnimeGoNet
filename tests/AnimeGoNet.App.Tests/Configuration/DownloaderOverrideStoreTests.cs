@@ -7,6 +7,40 @@ namespace AnimeGoNet.App.Tests.Configuration;
 public sealed class DownloaderOverrideStoreTests
 {
     [Fact]
+    public async Task WritesSelectedYamlPreservingOtherSectionsAndIgnoresLegacyJson()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "animegonet-yaml", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var yaml = Path.Combine(root, "custom.yaml");
+            await File.WriteAllTextAsync(yaml, """
+                version: "1.7.1"
+                web:
+                  port: 6180
+                downloaders:
+                  bt:
+                    type: qbittorrent
+                    base_url: http://localhost:8080/
+                    download_path: /downloads
+                    custom_field: keep-me
+                """);
+            var legacy = Path.Combine(root, "downloaders.private.json");
+            await File.WriteAllTextAsync(legacy, "not-read-or-migrated");
+            using var store = new DownloaderOverrideStore(root, yaml);
+            await store.UpsertAsync("bt", Entry("http://localhost:9090/", "admin", "a: #b\nquoted", "/downloads"), 0);
+            using var reloaded = new DownloaderOverrideStore(root, yaml);
+            Assert.Equal("a: #b\nquoted", (await reloaded.LoadAsync()).Downloaders["bt"].Password);
+            var content = await File.ReadAllTextAsync(yaml);
+            Assert.Contains("port: 6180", content);
+            Assert.Contains("custom_field: keep-me", content);
+            Assert.Equal("not-read-or-migrated", await File.ReadAllTextAsync(legacy));
+            Assert.False(File.Exists(Path.Combine(root, "animego.yaml")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task UpsertReloadAndDeleteUseAtomicVersionedPrivateFile()
     {
         var root = Path.Combine(Path.GetTempPath(), "animegonet-downloader-overrides", Guid.NewGuid().ToString("N"));
@@ -27,7 +61,8 @@ public sealed class DownloaderOverrideStoreTests
             Assert.Equal(1, saved.Revision);
             Assert.Equal(1, entry.Revision);
             Assert.Equal("private-password", entry.Password);
-            Assert.Single(Directory.GetFiles(root, "downloaders.private.json"));
+            Assert.Single(Directory.GetFiles(root, "animego.yaml"));
+            Assert.Empty(Directory.GetFiles(root, "*.json"));
             Assert.Empty(Directory.GetFiles(root, "*.tmp"));
             await Assert.ThrowsAsync<DownloaderOverrideRevisionException>(() =>
                 store.UpsertAsync("pt-main", entry, expectedRevision: 0));
@@ -76,7 +111,7 @@ public sealed class DownloaderOverrideStoreTests
         layout.CreateDataDirectories();
         try
         {
-            using (var store = new DownloaderOverrideStore(layout.ConfigurationPath))
+            using (var store = new DownloaderOverrideStore(layout.ConfigurationPath, Path.Combine(options.Paths.DataPath, "animego.yaml")))
             {
                 _ = await store.UpsertAsync(
                     "archive",

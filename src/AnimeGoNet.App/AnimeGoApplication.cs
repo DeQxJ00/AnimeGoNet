@@ -215,7 +215,10 @@ public static class AnimeGoApplication
         options = configurationLocks.Reapply(
             deploymentOptions,
             ApplicationOverrideStore.Apply(options, applicationOverrideSnapshot));
-        var downloaderOverrides = new DownloaderOverrideStore(layout.ConfigurationPath);
+        var downloaderOverrides = new DownloaderOverrideStore(
+            layout.ConfigurationPath,
+            deploymentYaml?.FilePath ?? Path.Combine(options.Paths.DataPath, "animego.yaml"),
+            downloaderLocks, options.Downloaders);
         var downloaderOverrideSnapshot = await downloaderOverrides.LoadAsync(cancellationToken).ConfigureAwait(false);
         options = ApplyDownloaderOverrides(options, downloaderOverrideSnapshot);
         options = downloaderLocks.Reapply(deploymentOptions, options);

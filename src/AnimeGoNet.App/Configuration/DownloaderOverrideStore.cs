@@ -1,6 +1,7 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using AnimeGoNet.Core.Configuration;
+using System.Globalization;
+using System.Text;
+using YamlDotNet.Core;
+using YamlDotNet.RepresentationModel;
 
 namespace AnimeGoNet.App.Configuration;
 
@@ -24,35 +25,41 @@ public sealed record DownloaderConfigurationRuntimeState(long AppliedRevision);
 
 public sealed class DownloaderOverrideStore : IDisposable
 {
-    private const int CurrentFormatVersion = 1;
     private readonly string _path;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate;
+    private readonly DownloaderDeploymentLocks _locks;
+    private readonly IReadOnlyDictionary<string, AnimeGoNet.Core.Configuration.QbittorrentInstanceOptions>? _defaults;
+    private static readonly UTF8Encoding Utf8 = new(false, true);
 
-    public DownloaderOverrideStore(string configurationPath)
+    public DownloaderOverrideStore(
+        string configurationPath,
+        string? yamlFilePath = null,
+        DownloaderDeploymentLocks? locks = null,
+        IReadOnlyDictionary<string, AnimeGoNet.Core.Configuration.QbittorrentInstanceOptions>? defaults = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationPath);
-        _path = Path.Combine(configurationPath, "downloaders.private.json");
+        _path = Path.GetFullPath(yamlFilePath ?? Path.Combine(configurationPath, "animego.yaml"));
+        _gate = DeploymentFileGate.ForPath(_path);
+        _locks = locks ?? DownloaderDeploymentLocks.Empty;
+        _defaults = defaults;
     }
 
-    public void Dispose() => _gate.Dispose();
+    // The per-path gate is shared with the raw YAML editor and other store instances.
+    public void Dispose() { }
 
     public async Task<DownloaderOverrideSnapshot> LoadAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await LoadCoreAsync(cancellationToken).ConfigureAwait(false);
+            var root = await ReadAsync(cancellationToken).ConfigureAwait(false);
+            return Snapshot(root);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        finally { _gate.Release(); }
     }
 
     public async Task<DownloaderOverrideSnapshot> UpsertAsync(
-        string id,
-        DownloaderOverrideEntry definition,
-        long expectedRevision,
+        string id, DownloaderOverrideEntry definition, long expectedRevision,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -60,115 +67,135 @@ public sealed class DownloaderOverrideStore : IDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var current = await LoadCoreAsync(cancellationToken).ConfigureAwait(false);
+            var root = await ReadAsync(cancellationToken).ConfigureAwait(false);
+            var current = Snapshot(root);
             if (current.Revision != expectedRevision) throw new DownloaderOverrideRevisionException();
-            var entries = new Dictionary<string, DownloaderOverrideEntry>(
-                current.Downloaders, StringComparer.OrdinalIgnoreCase)
+            WriteEntry(root, id, definition with
             {
-                [id] = definition with
-                {
-                    Revision = current.Downloaders.TryGetValue(id, out var existing)
-                        ? existing.Revision + 1
-                        : 1,
-                },
-            };
-            var saved = new DownloaderOverrideSnapshot(
-                CurrentFormatVersion, current.Revision + 1, entries);
-            await SaveCoreAsync(saved, cancellationToken).ConfigureAwait(false);
-            return saved;
+                Revision = current.Downloaders.TryGetValue(id, out var old) ? old.Revision + 1 : 1,
+            }, preserveLockedFields: true);
+            Set(root, "webui_downloader_revision", (current.Revision + 1).ToString(CultureInfo.InvariantCulture));
+            await SaveAsync(root, cancellationToken).ConfigureAwait(false);
+            return Snapshot(root);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        finally { _gate.Release(); }
     }
 
     public async Task<DownloaderOverrideSnapshot> DeleteAsync(
-        string id,
-        long expectedRevision,
-        CancellationToken cancellationToken = default)
+        string id, long expectedRevision, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var current = await LoadCoreAsync(cancellationToken).ConfigureAwait(false);
+            var root = await ReadAsync(cancellationToken).ConfigureAwait(false);
+            var current = Snapshot(root);
             if (current.Revision != expectedRevision) throw new DownloaderOverrideRevisionException();
-            var entries = new Dictionary<string, DownloaderOverrideEntry>(
-                current.Downloaders, StringComparer.OrdinalIgnoreCase);
-            if (!entries.Remove(id)) throw new KeyNotFoundException("Downloader override was not found.");
-            var saved = new DownloaderOverrideSnapshot(
-                CurrentFormatVersion, current.Revision + 1, entries);
-            await SaveCoreAsync(saved, cancellationToken).ConfigureAwait(false);
-            return saved;
+            var entries = Map(root, "downloaders");
+            var key = entries.Children.Keys.OfType<YamlScalarNode>()
+                .SingleOrDefault(k => string.Equals(k.Value, id, StringComparison.OrdinalIgnoreCase));
+            if (key is null) throw new KeyNotFoundException("Downloader YAML entry was not found.");
+            if (_locks.ForDownloader(id).Count > 0)
+                throw new ArgumentException("Deployment-locked downloader cannot be deleted.");
+            entries.Children.Remove(key);
+            Set(root, "webui_downloader_revision", (current.Revision + 1).ToString(CultureInfo.InvariantCulture));
+            await SaveAsync(root, cancellationToken).ConfigureAwait(false);
+            return Snapshot(root);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        finally { _gate.Release(); }
     }
 
-    private async Task<DownloaderOverrideSnapshot> LoadCoreAsync(CancellationToken cancellationToken)
+    private async Task<YamlMappingNode> ReadAsync(CancellationToken token)
     {
         if (!File.Exists(_path))
-        {
-            return new DownloaderOverrideSnapshot(
-                CurrentFormatVersion,
-                0,
-                new Dictionary<string, DownloaderOverrideEntry>(StringComparer.OrdinalIgnoreCase));
-        }
-        await using var stream = new FileStream(
-            _path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var snapshot = await JsonSerializer.DeserializeAsync(
-            stream, DownloaderOverrideJsonContext.Default.DownloaderOverrideSnapshot, cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Downloader private configuration is empty.");
-        if (snapshot.FormatVersion != CurrentFormatVersion)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported downloader private configuration format {snapshot.FormatVersion}.");
-        }
-        return snapshot with
-        {
-            Downloaders = new Dictionary<string, DownloaderOverrideEntry>(
-                snapshot.Downloaders, StringComparer.OrdinalIgnoreCase),
-        };
+            return new YamlMappingNode { { "version", DeploymentYamlConfiguration.CurrentVersion } };
+        var info = new FileInfo(_path);
+        if (info.Length is <= 0 or > 1024 * 1024)
+            throw new DeploymentYamlException("Deployment YAML size is invalid.");
+        var content = Utf8.GetString(await File.ReadAllBytesAsync(_path, token).ConfigureAwait(false));
+        var stream = new YamlStream();
+        stream.Load(new StringReader(content));
+        if (stream.Documents.Count != 1 || stream.Documents[0].RootNode is not YamlMappingNode root)
+            throw new DeploymentYamlException("Deployment YAML must contain one mapping.");
+        return root;
     }
 
-    private async Task SaveCoreAsync(
-        DownloaderOverrideSnapshot snapshot,
-        CancellationToken cancellationToken)
+    private void WriteEntry(YamlMappingNode root, string id, DownloaderOverrideEntry entry, bool preserveLockedFields)
     {
-        var directory = Path.GetDirectoryName(_path)!;
-        Directory.CreateDirectory(directory);
-        var temporary = Path.Combine(directory, $".downloaders.{Guid.NewGuid():N}.tmp");
-        try
+        var all = Map(root, "downloaders");
+        var key = all.Children.Keys.OfType<YamlScalarNode>()
+            .SingleOrDefault(k => string.Equals(k.Value, id, StringComparison.OrdinalIgnoreCase))
+            ?? new YamlScalarNode(id);
+        if (!all.Children.TryGetValue(key, out var raw))
         {
-            await using (var stream = new FileStream(
-                temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096,
-                FileOptions.Asynchronous | FileOptions.WriteThrough))
-            {
-                await JsonSerializer.SerializeAsync(
-                    stream, snapshot, DownloaderOverrideJsonContext.Default.DownloaderOverrideSnapshot,
-                    cancellationToken).ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-            File.Move(temporary, _path, overwrite: true);
+            raw = new YamlMappingNode();
+            all.Add(key, raw);
         }
-        finally
+        var item = raw as YamlMappingNode ?? throw new DeploymentYamlException("Downloader must be a mapping.");
+        void Field(string name, string value)
         {
-            File.Delete(temporary);
+            if (!preserveLockedFields || !_locks.IsLocked(id, name)) Set(item, name, value);
         }
+        if (!item.Children.ContainsKey(new YamlScalarNode("type"))) Field("type", "qbittorrent");
+        Field("base_url", entry.BaseUrl);
+        Field("username", entry.Username ?? "");
+        Field("password", entry.Password ?? "");
+        Field("download_path", entry.DownloadPath);
+        Field("enabled", entry.Enabled ? "true" : "false");
+        Set(item, "webui_revision", entry.Revision.ToString(CultureInfo.InvariantCulture));
+        Set(item, "webui_updated_at", entry.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture));
     }
-}
 
-[JsonSourceGenerationOptions(
-    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
-    WriteIndented = true,
-    GenerationMode = JsonSourceGenerationMode.Default)]
-[JsonSerializable(typeof(DownloaderOverrideSnapshot))]
-internal sealed partial class DownloaderOverrideJsonContext : JsonSerializerContext;
+    private DownloaderOverrideSnapshot Snapshot(YamlMappingNode root)
+    {
+        var entries = new Dictionary<string, DownloaderOverrideEntry>(StringComparer.OrdinalIgnoreCase);
+        if (root.Children.TryGetValue(new YamlScalarNode("downloaders"), out var raw))
+        {
+            var map = raw as YamlMappingNode ?? throw new DeploymentYamlException("Downloaders must be a mapping.");
+            foreach (var pair in map.Children)
+            {
+                var id = (pair.Key as YamlScalarNode)?.Value
+                    ?? throw new DeploymentYamlException("Downloader ID is invalid.");
+                var item = pair.Value as YamlMappingNode
+                    ?? throw new DeploymentYamlException("Downloader must be a mapping.");
+                // Incomplete environment-only entries remain owned by deployment configuration.
+                var fallback = _defaults?.GetValueOrDefault(id);
+                var url = Text(item, "base_url") ?? fallback?.BaseUrl.AbsoluteUri;
+                var path = Text(item, "download_path") ?? fallback?.DownloadPath;
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(path)) continue;
+                entries.Add(id, new DownloaderOverrideEntry(
+                    url, Text(item, "username"), Text(item, "password"), path,
+                    !string.Equals(Text(item, "enabled"), "false", StringComparison.OrdinalIgnoreCase),
+                    Number(item, "webui_revision"),
+                    DateTimeOffset.TryParse(Text(item, "webui_updated_at"), CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind, out var date) ? date : DateTimeOffset.MinValue));
+            }
+        }
+        return new DownloaderOverrideSnapshot(1, Number(root, "webui_downloader_revision"), entries);
+    }
+
+    private async Task SaveAsync(YamlMappingNode root, CancellationToken token)
+    {
+        using var writer = new StringWriter(CultureInfo.InvariantCulture);
+        new YamlStream(new YamlDocument(root)).Save(writer, assignAnchors: false);
+        if (File.Exists(_path))
+            await DeploymentYamlConfiguration.WriteBackupAsync(
+                _path, "downloaders", await File.ReadAllBytesAsync(_path, token).ConfigureAwait(false), token)
+                .ConfigureAwait(false);
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await DeploymentYamlConfiguration.ReplaceAtomicallyAsync(_path, writer.ToString(), token).ConfigureAwait(false);
+    }
+
+    private static string? Text(YamlMappingNode map, string key) =>
+        map.Children.TryGetValue(new YamlScalarNode(key), out var value)
+            ? (value as YamlScalarNode)?.Value : null;
+    private static long Number(YamlMappingNode map, string key) =>
+        long.TryParse(Text(map, key), NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    private static YamlMappingNode Map(YamlMappingNode root, string key)
+    {
+        var node = new YamlScalarNode(key);
+        if (!root.Children.TryGetValue(node, out var value)) { value = new YamlMappingNode(); root.Add(node, value); }
+        return value as YamlMappingNode ?? throw new DeploymentYamlException(key + " must be a mapping.");
+    }
+    private static void Set(YamlMappingNode map, string key, string value) =>
+        map.Children[new YamlScalarNode(key)] = new YamlScalarNode(value) { Style = ScalarStyle.DoubleQuoted };
+}

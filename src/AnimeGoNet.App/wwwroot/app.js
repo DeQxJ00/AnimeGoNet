@@ -9989,12 +9989,12 @@ function openDownloaderConfig(instance) {
     element("#downloader-config-clear-password").checked = false;
     applyDownloaderFieldLocks(instance);
     element("#downloader-config-delete").disabled =
-        instance?.configuration_source !== "private_override";
+        instance?.configuration_source !== "yaml";
     const credentialState = instance?.credentials_configured
         ? "已有凭据已配置并已回填；可直接查看或修改。"
         : "当前没有已配置凭据。";
     const lockState = instance && instance.locked_fields.length > 0
-        ? ` 部署锁：${instance.locked_fields.map((lock) => `${lock.field}（${lock.controlling_keys.join(" / ")}）`).join("、")}；锁定字段只读且不会写入私有覆盖。`
+        ? ` 部署锁：${instance.locked_fields.map((lock) => `${lock.field}（${lock.controlling_keys.join(" / ")}）`).join("、")}；锁定字段只读且不会写入YAML 配置。`
         : "";
     element("#downloader-config-message").textContent =
         credentialState + lockState;
@@ -10007,7 +10007,7 @@ async function saveDownloaderConfig(event) {
     const save = element("#downloader-config-save");
     const message = element("#downloader-config-message");
     save.disabled = true;
-    message.textContent = "正在原子写入私有配置…";
+    message.textContent = "正在原子写入 YAML 配置…";
     try {
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
@@ -10046,9 +10046,9 @@ async function saveDownloaderConfig(event) {
 }
 async function deleteDownloaderOverride() {
     const instance = downloaderInstances.find((item) => item.id === activeDownloaderId);
-    if (!instance || instance.configuration_source !== "private_override")
+    if (!instance || instance.configuration_source !== "yaml")
         return;
-    if (!window.confirm(`移除 ${instance.id} 的私有覆盖？服务端会拒绝仍有引用的实例。`))
+    if (!window.confirm(`移除 ${instance.id} 的YAML 配置？服务端会拒绝仍有引用的实例。`))
         return;
     const message = element("#downloader-config-message");
     try {
@@ -10137,7 +10137,7 @@ async function loadDownloaders() {
         status.textContent = body.downloads_blocked
             ? `下载已被 ${body.migration_diagnostics.map((item) => item.code).join("、")} 阻断；不会连接或启动任何下载器任务`
             : body.restart_required
-                ? `${body.items.length} 个实例 · 私有配置 revision ${body.configuration_revision} 尚未应用，请重启`
+                ? `${body.items.length} 个实例 · YAML 配置 revision ${body.configuration_revision} 尚未应用，请重启`
                 : `${body.items.length} 个 qBittorrent 实例 · 用户名和密码可在配置中直接查看`;
     }
     catch (error) {

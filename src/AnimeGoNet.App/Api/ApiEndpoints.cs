@@ -3875,7 +3875,7 @@ public static class ApiEndpoints
                 id, downloader, usage,
                 legacyMigration.BlocksDownloads
                     ? "blocked_by_legacy_migration"
-                    : pending is null ? "deployment" : "private_override",
+                    : pending is null ? "deployment" : "yaml",
                 locks.ForDownloader(id),
                 pending?.Revision,
                 restartRequired,
@@ -4055,7 +4055,7 @@ public static class ApiEndpoints
             var saved = await overrides.DeleteAsync(
                 id, expectedConfigurationRevision, cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new DownloaderConfigurationWriteResponse(
-                id, saved.Revision, null, true, options.Downloaders.ContainsKey(id)));
+                id, saved.Revision, null, true, false));
         }
         catch (DownloaderOverrideRevisionException)
         {
@@ -4066,7 +4066,7 @@ public static class ApiEndpoints
         catch (KeyNotFoundException)
         {
             return TypedResults.NotFound(Error(
-                "downloader_override_not_found", "Downloader private override was not found."));
+                "downloader_override_not_found", "Downloader YAML entry was not found."));
         }
         catch (ArgumentException exception)
         {
