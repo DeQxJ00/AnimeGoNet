@@ -5,9 +5,10 @@ AnimeGoNet 的部署配置真相源是 YAML，默认位于
 `version: 1.7.1` 配置；不会覆盖已存在文件。Unix 新文件权限为 `0600`，编码为无
 BOM UTF-8。
 
-业务状态、规则、动画、下载和整理记录保存在 SQLite。WebUI 写入
-`data_path/config/*.private.json`，不会展示或改写原始 YAML，避免丢失注释或把
-secret 回显到浏览器。
+业务状态、规则、动画、下载和整理记录保存在 SQLite。WebUI 应用设置、下载器和
+自动备份策略直接保存到当前部署 YAML。外部插件仍独立使用
+`data_path/config/external-plugins.private.json`，不强制放进部署 YAML。
+保存会保留其他 YAML 字段，但 YAML 注释和排版可能重新格式化；修改前保留原字节备份。
 
 ## 选择配置文件
 
@@ -50,13 +51,16 @@ secret 回显到浏览器。
 
 1. 命令行参数
 2. 环境变量
-3. WebUI 私有覆盖文件
-4. 部署 YAML
-5. 编译期安全默认值
+3. 部署 YAML（包括 WebUI 保存的设置）
+4. 编译期安全默认值
 
-下载器配置不使用第 3 层：WebUI 直接修改部署 YAML 的 `downloaders` 节点，
+WebUI 应用设置直接修改 `paths`、`metadata`、`outbound_proxy`、`torrent_fetch`、
+`data_update`；下载器修改 `downloaders`；自动备份策略修改
+`configuration_backup.enabled` 和 `configuration_backup.retention_count`。所有写入
 遵循 `--config` 指定路径（未指定时为 `data_path/animego.yaml`）。
-旧 `downloaders.private.json` 不读取、不迁移。用户名和密码保存在 YAML 中，
+旧 `application.private.json`、`downloaders.private.json` 和
+`configuration-backup-automation.json` 不再读取或写入，也不会自动删除或迁移。
+用户名、密码、API Token 和自定义提示词保存在 YAML 中，
 请保护该文件及其备份，不要提交到公开仓库。
 
 同一逻辑字段存在旧扁平键与规范嵌套键时，先比较配置 Provider 层级，再比较同一
@@ -66,7 +70,11 @@ Provider 内的兼容别名。因此更高层的 `--data_path`、
 代码中的排列顺序越过命令行层。显式空的可空字段也只屏蔽更低层值，不会意外回落。
 
 命令行和环境变量锁定的应用字段在 WebUI 中显示为只读；下载器命令行或环境变量
-字段也会在私有下载器覆盖应用后重新生效，私有文件不能盖过部署锁。
+字段也保持只读。命令行/环境变量的运行时值不会因保存其他字段而写入 YAML。
+
+“恢复本次启动时配置”仅还原本进程启动时读取的应用设置，保留下载器、插件和其他
+配置节点；不等同于恢复出厂设置。重启后，新 YAML 就是新的启动基线。
+历史 YAML 备份和配置导出是归档，不是额外的活动配置覆盖层。
 
 应用配置的 `editable.locked_fields` 同时保留 `environment_variables` 兼容字段，
 并返回 `command_line_arguments`、统一的 `controlling_keys` 以及
@@ -74,12 +82,11 @@ Provider 内的兼容别名。因此更高层的 `--data_path`、
 投影参数名，不投影 `=` 后的 URL 或 secret。当前全部可编辑字段均参与部署锁：
 全局 `download_path` / `save_path`、Mikan 地址、TMDB API/图片地址、TMDB/Bangumi 连接与重试、四档季度失败链、统一 AI 开关/超时/推理程度/正式 Prompt、Bangumi 完全兜底、
 可信 offset 缓存、Torrent HTTP/容量/redirect/staging 以及数据更新设置。锁定值
-在读取 `application.private.json` 后重新应用；保存其他字段不会把部署值固化到
-私有文件。
+在读取 YAML 后重新应用；保存其他字段不会把外置参数值固化到 YAML。
 
 WebUI 的“设置与备份 → 目录与路径”可直接修改全局 `download_path` 和
-`save_path`，保存前按候选配置执行绝对路径和目录边界校验，写入私有 revision 并
-备份旧 revision，重启后生效。每个下载器实例的 `download_path` 仍必须落在新的
+`save_path`，保存前按候选配置执行绝对路径和目录边界校验，直接写入 YAML 并
+备份旧 YAML，重启后生效。每个下载器实例的 `download_path` 仍必须落在新的
 全局下载根目录内。`data_path` 决定当前 SQLite、私有配置和备份文件所在位置；同页
 可单独修改部署 YAML 的 `paths.data_path` 并创建部署配置备份，但不会自动复制或
 删除旧目录中的任何内容，必须在停机迁移完整数据目录后再重启。
@@ -108,8 +115,8 @@ downloaders__bt__download_path
 ```
 
 兼容的旧 `ANIMEGO_CLIENT*` 控制键只锁定 `bt` 实例的对应字段。命令行和值同时
-存在时，`locked_fields.source` 为 `environment_and_command_line`；WebUI 私有
-覆盖始终低于两者。
+存在时，`locked_fields.source` 为 `environment_and_command_line`；WebUI 保存
+不会改写这些锁定字段，两者始终高于 YAML。
 
 来源部署锁按 SourceProfile ID 和字段独立计算，当前支持 `category`、
 `dynamic_tag_template`、`mikan_identity_cookie`。规范键示例：
@@ -166,7 +173,7 @@ downloaders__bt__download_path=E:\AnimeGoNet\download
 `0.0.0.0:7991`，并继续强制要求非空 Access Key。host 只接受 DNS 名或 IP 地址，
 port 必须在 0～65535；`0` 只用于由操作系统分配临时测试端口。
 
-`data_path` 与 Web 监听通过部署 YAML 编辑，不属于应用私有覆盖字段，因此不产生
+`data_path` 与 Web 监听通过部署 YAML 编辑，不属于应用设置表单字段，因此不产生
 应用表单锁；`download_path` / `save_path` 继续参与应用部署锁。`/api/v1/status`
 始终显示最终生效的路径；命令行和环境变量仍高于 YAML，页面保存 YAML 不会伪装成
 已经覆盖更高优先级的运行参数。

@@ -1,6 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
+using System.Globalization;
 using AnimeGoNet.Core.Configuration;
+using YamlDotNet.RepresentationModel;
 
 namespace AnimeGoNet.App.Configuration;
 
@@ -97,17 +100,22 @@ public sealed class ApplicationOverrideStore : IDisposable
     private const int CurrentFormatVersion = 1;
     private readonly string _path;
     private readonly string _backupsPath;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate;
+    private readonly DeploymentConfigurationLocks _locks;
+    private YamlMappingNode? _startup;
 
-    public ApplicationOverrideStore(string configurationPath, string backupsPath)
+    public ApplicationOverrideStore(string configurationPath, string backupsPath,
+        string? yamlFilePath = null, DeploymentConfigurationLocks? locks = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(backupsPath);
-        _path = Path.Combine(configurationPath, "application.private.json");
+        _path = Path.GetFullPath(yamlFilePath ?? Path.Combine(configurationPath, "animego.yaml"));
         _backupsPath = backupsPath;
+        _gate = DeploymentFileGate.ForPath(_path);
+        _locks = locks ?? DeploymentConfigurationLocks.Empty;
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose() { }
 
     public async Task<ApplicationOverrideSnapshot> LoadAsync(
         CancellationToken cancellationToken = default)
@@ -492,142 +500,141 @@ public sealed class ApplicationOverrideStore : IDisposable
                 "Application private configuration trusted offset threshold must be between 1 and 100.");
     }
 
-    private async Task<ApplicationOverrideSnapshot> LoadCoreAsync(
-        CancellationToken cancellationToken)
+    private async Task<ApplicationOverrideSnapshot> LoadCoreAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_path))
+        var root = await ConfigurationYamlDocument.ReadAsync(_path, cancellationToken).ConfigureAwait(false);
+        // This is a process-start baseline, not a second persistent source of configuration.
+        _startup ??= root;
+        var revisionText = (ConfigurationYamlDocument.Get(root, "webui_application_revision") as YamlScalarNode)?.Value;
+        var revision = revisionText is null ? 0
+            : long.TryParse(revisionText, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed : throw new DeploymentYamlException("Application YAML revision is invalid.");
+        var values = new JsonObject();
+        var inherited = new JsonArray();
+        var found = false;
+        foreach (var (field, paths) in DeploymentConfigurationLocks.YamlFields)
         {
-            return new ApplicationOverrideSnapshot(CurrentFormatVersion, 0, null);
+            if (_locks.IsLocked(field))
+            {
+                inherited.Add((JsonNode?)JsonValue.Create(field));
+                continue;
+            }
+            var node = paths.Reverse().Select(path => ConfigurationYamlDocument.Get(root, path)).FirstOrDefault(value => value is not null);
+            if (node is null)
+            {
+                inherited.Add((JsonNode?)JsonValue.Create(field));
+                continue;
+            }
+            found = true;
+            var property = PropertyName(field);
+            var value = ReadValue(node, property);
+            if (value is null && !HasOverrideFlag(property))
+            {
+                inherited.Add((JsonNode?)JsonValue.Create(field));
+                continue;
+            }
+            values[property] = value;
+            if (HasOverrideFlag(property)) values[property + "_overridden"] = true;
         }
-
-        await using var stream = new FileStream(
-            _path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            4096,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var snapshot = await JsonSerializer.DeserializeAsync(
-            stream,
-            ApplicationOverrideJsonContext.Default.ApplicationOverrideSnapshot,
-            cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Application private configuration is empty.");
-        if (snapshot.FormatVersion != CurrentFormatVersion)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported application private configuration format {snapshot.FormatVersion}.");
-        }
-
-        if (snapshot.Revision < 0)
-        {
-            throw new InvalidOperationException("Application private configuration revision is invalid.");
-        }
-
-        return snapshot;
+        if (!found) return new ApplicationOverrideSnapshot(CurrentFormatVersion, revision, null);
+        values["ai_use_season_match"] = values["ai_use_metadata_match"]?.DeepClone() ?? JsonValue.Create(false);
+        values["ai_use_episode_match"] = values["ai_use_metadata_match"]?.DeepClone() ?? JsonValue.Create(false);
+        values["inherited_fields"] = inherited;
+        values["updated_at_utc"] =
+            (ConfigurationYamlDocument.Get(root, "webui_application_updated_at") as YamlScalarNode)?.Value
+            ?? DateTimeOffset.MinValue.ToString("O", CultureInfo.InvariantCulture);
+        var settings = values.Deserialize(ApplicationOverrideJsonContext.Default.ApplicationOverrideEntry)
+            ?? throw new DeploymentYamlException("Application YAML settings are invalid.");
+        return new ApplicationOverrideSnapshot(CurrentFormatVersion, revision, settings);
     }
 
-    private async Task SaveCoreAsync(
-        ApplicationOverrideSnapshot snapshot,
-        CancellationToken cancellationToken)
+    private static string PropertyName(string field) =>
+        field == "ai_use_bangumi_pubdate_first" ? "ai_use_bangumi_pub_date_first" : field;
+
+    private static bool HasOverrideFlag(string property) =>
+        ApplicationOverrideJsonContext.Default.ApplicationOverrideEntry.Properties
+            .Any(item => item.Name == property + "_overridden");
+
+    private static JsonNode? ReadValue(YamlNode node, string property)
     {
-        var directory = Path.GetDirectoryName(_path)!;
-        Directory.CreateDirectory(directory);
-        var temporary = Path.Combine(directory, $".application.{Guid.NewGuid():N}.tmp");
-        try
+        if (property == "outbound_proxy_hosts")
         {
-            await using (var stream = new FileStream(
-                temporary,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.Asynchronous | FileOptions.WriteThrough))
-            {
-                await JsonSerializer.SerializeAsync(
-                    stream,
-                    snapshot,
-                    ApplicationOverrideJsonContext.Default.ApplicationOverrideSnapshot,
-                    cancellationToken).ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-
-            File.Move(temporary, _path, overwrite: true);
+            if (node is YamlScalarNode hosts)
+                return new JsonArray((hosts.Value ?? "").Split([',', ';', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(host => (JsonNode?)JsonValue.Create(host)).ToArray());
+            if (node is not YamlSequenceNode sequence)
+                throw new DeploymentYamlException("Proxy hosts must be a YAML sequence.");
+            return new JsonArray(sequence.Children.Select(item =>
+                (JsonNode?)JsonValue.Create((item as YamlScalarNode)?.Value
+                    ?? throw new DeploymentYamlException("Proxy host must be a scalar."))).ToArray());
         }
-        finally
+        var text = (node as YamlScalarNode)?.Value
+            ?? throw new DeploymentYamlException(property + " must be a scalar.");
+        if (string.IsNullOrEmpty(text)) return null;
+        if (property == "ai_reasoning_effort" && string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)) return null;
+        var metadata = ApplicationOverrideJsonContext.Default.ApplicationOverrideEntry.Properties.Single(item => item.Name == property);
+        var type = Nullable.GetUnderlyingType(metadata.PropertyType) ?? metadata.PropertyType;
+        if (type == typeof(string)) return string.IsNullOrEmpty(text) ? null : JsonValue.Create(text);
+        if (type == typeof(bool) && bool.TryParse(text, out var boolean)) return JsonValue.Create(boolean);
+        if (type == typeof(int) && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer)) return JsonValue.Create(integer);
+        if (type == typeof(long) && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var wide)) return JsonValue.Create(wide);
+        if (type == typeof(double) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && double.IsFinite(number)) return JsonValue.Create(number);
+        if (type == typeof(AiApiMode))
         {
-            File.Delete(temporary);
+            var mode = text.Replace("_", "", StringComparison.Ordinal).Replace("-", "", StringComparison.Ordinal);
+            if (Enum.TryParse<AiApiMode>(mode, true, out var parsed) && Enum.IsDefined(parsed))
+                return JsonValue.Create((int)parsed);
         }
+        throw new DeploymentYamlException(property + " has an invalid YAML value.");
     }
 
-    private async Task BackupCoreAsync(
-        long revision,
-        CancellationToken cancellationToken)
+    private async Task SaveCoreAsync(ApplicationOverrideSnapshot snapshot, CancellationToken cancellationToken)
     {
-        if (!File.Exists(_path))
+        var root = await ConfigurationYamlDocument.ReadAsync(_path, cancellationToken).ConfigureAwait(false);
+        var values = snapshot.Settings is null ? null
+            : JsonSerializer.SerializeToNode(snapshot.Settings, ApplicationOverrideJsonContext.Default.ApplicationOverrideEntry)!.AsObject();
+        var inherited = snapshot.Settings?.InheritedFields?.ToHashSet(StringComparer.Ordinal) ?? [];
+        foreach (var (field, paths) in DeploymentConfigurationLocks.YamlFields)
         {
-            throw new InvalidOperationException(
-                "Application private configuration disappeared before backup.");
+            if (_locks.IsLocked(field)) continue;
+            if (values is null || inherited.Contains(field))
+            {
+                foreach (var path in paths)
+                    ConfigurationYamlDocument.Set(root, path, _startup is null ? null : ConfigurationYamlDocument.Get(_startup, path));
+                continue;
+            }
+            var property = PropertyName(field);
+            if (HasOverrideFlag(property) && values[property + "_overridden"]?.GetValue<bool>() != true) continue;
+            var value = values[property];
+            if (property == "ai_use_metadata_match" && value is null)
+                value = JsonValue.Create(snapshot.Settings!.AiUseSeasonMatch || snapshot.Settings.AiUseEpisodeMatch);
+            // Optional absent fields preserve existing YAML, including credentials not submitted by the form.
+            if (value is null && !HasOverrideFlag(property)) continue;
+            foreach (var path in paths) ConfigurationYamlDocument.Set(root, path, null);
+            YamlNode yaml = value is JsonArray array
+                ? new YamlSequenceNode(array.Select(item => ConfigurationYamlDocument.Scalar(item!.GetValue<string>())))
+                : ConfigurationYamlDocument.Scalar(value is null ? ""
+                    : property == "ai_api_mode" ? (value.GetValue<int>() == (int)AiApiMode.Responses ? "responses" : "chat_completions")
+                    : value is JsonValue scalar && scalar.TryGetValue<string>(out var text) ? text
+                    : value.ToJsonString());
+            ConfigurationYamlDocument.Set(root, paths[^1], yaml);
         }
+        ConfigurationYamlDocument.Set(root, "webui_application_revision",
+            ConfigurationYamlDocument.Scalar(snapshot.Revision.ToString(CultureInfo.InvariantCulture)));
+        ConfigurationYamlDocument.Set(root, "webui_application_updated_at",
+            ConfigurationYamlDocument.Scalar((snapshot.Settings?.UpdatedAtUtc ?? DateTimeOffset.UtcNow).ToString("O", CultureInfo.InvariantCulture)));
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await DeploymentYamlConfiguration.ReplaceAtomicallyAsync(_path, ConfigurationYamlDocument.Render(root), cancellationToken).ConfigureAwait(false);
+    }
 
+    private async Task BackupCoreAsync(long revision, CancellationToken cancellationToken)
+    {
+        // Full YAML backups get unique names: other YAML writers may change the document without changing this revision.
         Directory.CreateDirectory(_backupsPath);
-        var backup = Path.Combine(
-            _backupsPath,
-            $"application.private.revision-{revision:D20}.json");
-        if (File.Exists(backup))
-        {
-            var sourceBytes = await File.ReadAllBytesAsync(_path, cancellationToken)
-                .ConfigureAwait(false);
-            var backupBytes = await File.ReadAllBytesAsync(backup, cancellationToken)
-                .ConfigureAwait(false);
-            if (!sourceBytes.AsSpan().SequenceEqual(backupBytes))
-            {
-                throw new InvalidOperationException(
-                    $"Application private configuration backup revision {revision} conflicts with existing content.");
-            }
-            return;
-        }
-
-        var temporary = Path.Combine(
-            _backupsPath,
-            $".application.private.backup.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            await using (var source = new FileStream(
-                _path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                4096,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            await using (var target = new FileStream(
-                temporary,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.Asynchronous | FileOptions.WriteThrough))
-            {
-                await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
-                await target.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(
-                    temporary,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-            File.Move(temporary, backup);
-        }
-        finally
-        {
-            File.Delete(temporary);
-        }
+        var name = Path.Combine(_backupsPath, Path.GetFileName(_path));
+        await DeploymentYamlConfiguration.WriteBackupAsync(name, $"application-r{revision}",
+            await File.ReadAllBytesAsync(_path, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
     }
 }
 

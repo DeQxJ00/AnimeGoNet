@@ -709,17 +709,8 @@ public sealed class ConfigurationApiTests
         Assert.Equal(1, secondJson.RootElement.GetProperty("backup_revision").GetInt64());
 
         var backups = Path.Combine(app.RootPath, "data", "backups");
-        var revisionOne = Assert.Single(Directory.GetFiles(
-            backups,
-            "application.private.revision-00000000000000000001.json"));
-        using (var backup = JsonDocument.Parse(await File.ReadAllTextAsync(revisionOne)))
-        {
-            Assert.Equal(1, backup.RootElement.GetProperty("revision").GetInt64());
-            Assert.Equal(
-                "0 15 4 * * ?",
-                backup.RootElement.GetProperty("settings")
-                    .GetProperty("data_update_cron").GetString());
-        }
+        var revisionOne = Assert.Single(Directory.GetFiles(backups, "animego-application-r1-*.yaml"));
+        Assert.Contains("0 15 4 * * ?", await File.ReadAllTextAsync(revisionOne), StringComparison.Ordinal);
 
         using var reset = await app.Client.DeleteAsync(
             "/api/v1/config?expected_revision=2");
@@ -728,7 +719,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal(2, resetJson.RootElement.GetProperty("backup_revision").GetInt64());
         Assert.Single(Directory.GetFiles(
             backups,
-            "application.private.revision-00000000000000000002.json"));
+            "animego-application-r2-*.yaml"));
         Assert.Null((await app.App.Services
             .GetRequiredService<ApplicationOverrideStore>()
             .LoadAsync()).Settings);
@@ -1310,7 +1301,7 @@ public sealed class ConfigurationApiTests
         Assert.Equal(HttpStatusCode.OK, allowedWrite.StatusCode);
         var store = app.App.Services.GetRequiredService<ApplicationOverrideStore>();
         var stored = await store.LoadAsync();
-        Assert.Equal(environmentBaseUrl.AbsoluteUri, stored.Settings?.TmdbBaseUrl);
+        Assert.Null(stored.Settings?.TmdbBaseUrl);
         Assert.Null(stored.Settings?.TmdbApiKey);
         Assert.True(stored.Settings?.SeasonFailureBacktrace);
         Assert.Contains("tmdb_base_url", stored.Settings?.InheritedFields ?? []);
@@ -1361,10 +1352,8 @@ public sealed class ConfigurationApiTests
                 aiMetadata: true));
         Assert.Equal(HttpStatusCode.OK, saveAlongsideLegacyOverride.StatusCode);
         var preserved = await store.LoadAsync();
-        Assert.Equal(
-            "https://legacy-private.invalid/tmdb/",
-            preserved.Settings?.TmdbBaseUrl);
-        Assert.DoesNotContain(
+        Assert.Null(preserved.Settings?.TmdbBaseUrl);
+        Assert.Contains(
             "tmdb_base_url",
             preserved.Settings?.InheritedFields ?? []);
     }

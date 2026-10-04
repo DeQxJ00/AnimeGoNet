@@ -208,13 +208,18 @@ public static class AnimeGoApplication
             .ConfigureAwait(false);
         var applicationOverrides = new ApplicationOverrideStore(
             layout.ConfigurationPath,
-            layout.BackupsPath);
+            layout.BackupsPath,
+            deploymentYaml?.FilePath ?? Path.Combine(options.Paths.DataPath, "animego.yaml"),
+            configurationLocks);
         var applicationOverrideSnapshot = await applicationOverrides
             .LoadAsync(cancellationToken)
             .ConfigureAwait(false);
         options = configurationLocks.Reapply(
             deploymentOptions,
             ApplicationOverrideStore.Apply(options, applicationOverrideSnapshot));
+        // WebUI now edits the deployment YAML itself. Reset targets these startup values,
+        // including explicit empty nullable fields, rather than a former JSON-free layer.
+        deploymentOptions = options;
         var downloaderOverrides = new DownloaderOverrideStore(
             layout.ConfigurationPath,
             deploymentYaml?.FilePath ?? Path.Combine(options.Paths.DataPath, "animego.yaml"),
@@ -404,7 +409,8 @@ public static class AnimeGoApplication
         builder.Services.AddSingleton(downloaderOverrides);
         builder.Services.AddSingleton(
             new DownloaderConfigurationRuntimeState(downloaderOverrideSnapshot.Revision));
-        builder.Services.AddSingleton<ConfigurationBackupAutomationStore>();
+        builder.Services.AddSingleton(new ConfigurationBackupAutomationStore(layout,
+            deploymentYaml?.FilePath ?? Path.Combine(options.Paths.DataPath, "animego.yaml")));
         builder.Services.AddSingleton<ConfigurationArchiveService>();
         builder.Services.AddSingleton<ConfigurationBackupAutomationRunner>();
         builder.Services.AddSingleton(database);

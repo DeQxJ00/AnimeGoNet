@@ -958,6 +958,9 @@ internal static class DeploymentYamlConfiguration
               auto_import: {{options.DataUpdate.AutoImport.ToString().ToLowerInvariant()}}
               keep_versions: {{options.DataUpdate.KeepVersions.ToString(CultureInfo.InvariantCulture)}}
               timeout_seconds: {{options.DataUpdate.HttpTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}
+            configuration_backup:
+              enabled: false
+              retention_count: 10
             """.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
     }
 

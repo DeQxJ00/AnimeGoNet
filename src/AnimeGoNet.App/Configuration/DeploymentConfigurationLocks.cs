@@ -88,6 +88,9 @@ public sealed class DeploymentConfigurationLocks
 
     private readonly HashSet<string> _fields;
 
+    internal static IReadOnlyDictionary<string, string[]> YamlFields { get; } =
+        Definitions.ToDictionary(item => item.Field, item => item.ConfigurationKeys.ToArray(), StringComparer.Ordinal);
+
     private DeploymentConfigurationLocks(IReadOnlyList<DeploymentConfigurationLock> items)
     {
         Items = items;

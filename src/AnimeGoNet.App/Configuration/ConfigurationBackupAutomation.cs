@@ -29,100 +29,51 @@ public sealed record ConfigurationBackupAutomationPolicy(
 public sealed class ConfigurationBackupAutomationStore : IDisposable
 {
     private readonly string _path;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate;
 
-    public ConfigurationBackupAutomationStore(DirectoryLayout layout)
+    public ConfigurationBackupAutomationStore(DirectoryLayout layout, string? yamlFilePath = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
-        _path = Path.Combine(layout.ConfigurationPath, "configuration-backup-automation.json");
+        _path = Path.GetFullPath(yamlFilePath ?? Path.Combine(layout.DataPath, "animego.yaml"));
+        _gate = DeploymentFileGate.ForPath(_path);
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose() { }
 
-    public async Task<ConfigurationBackupAutomationPolicy> LoadAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<ConfigurationBackupAutomationPolicy> LoadAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await LoadCoreAsync(cancellationToken).ConfigureAwait(false);
+            var root = await ConfigurationYamlDocument.ReadAsync(_path, cancellationToken).ConfigureAwait(false);
+            var enabledText = (ConfigurationYamlDocument.Get(root, "configuration_backup:enabled") as YamlDotNet.RepresentationModel.YamlScalarNode)?.Value;
+            var retentionText = (ConfigurationYamlDocument.Get(root, "configuration_backup:retention_count") as YamlDotNet.RepresentationModel.YamlScalarNode)?.Value;
+            var enabled = enabledText is null ? false : bool.Parse(enabledText);
+            var retention = retentionText is null ? ConfigurationBackupAutomationPolicy.DefaultRetentionCount
+                : int.Parse(retentionText, System.Globalization.CultureInfo.InvariantCulture);
+            var policy = new ConfigurationBackupAutomationPolicy(enabled, retention);
+            ConfigurationBackupAutomationPolicy.Validate(policy);
+            return policy;
         }
-        finally
-        {
-            _gate.Release();
-        }
+        finally { _gate.Release(); }
     }
 
     public async Task<ConfigurationBackupAutomationPolicy> SaveAsync(
-        ConfigurationBackupAutomationPolicy policy,
-        CancellationToken cancellationToken = default)
+        ConfigurationBackupAutomationPolicy policy, CancellationToken cancellationToken = default)
     {
         ConfigurationBackupAutomationPolicy.Validate(policy);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temporary = Path.Combine(
-                Path.GetDirectoryName(_path)!,
-                $".configuration-backup-automation.{Guid.NewGuid():N}.tmp");
-            try
-            {
-                await using (var stream = new FileStream(
-                    temporary,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
-                    FileShare.None,
-                    4096,
-                    FileOptions.Asynchronous | FileOptions.WriteThrough))
-                {
-                    await JsonSerializer.SerializeAsync(
-                        stream,
-                        policy,
-                        ConfigurationBackupAutomationJsonContext.Default.ConfigurationBackupAutomationPolicy,
-                        cancellationToken).ConfigureAwait(false);
-                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                }
-
-                if (!OperatingSystem.IsWindows())
-                {
-                    File.SetUnixFileMode(
-                        temporary,
-                        UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                }
-
-                File.Move(temporary, _path, overwrite: true);
-            }
-            finally
-            {
-                File.Delete(temporary);
-            }
-
+            var root = await ConfigurationYamlDocument.ReadAsync(_path, cancellationToken).ConfigureAwait(false);
+            ConfigurationYamlDocument.Set(root, "configuration_backup:enabled",
+                ConfigurationYamlDocument.Scalar(policy.Enabled ? "true" : "false"));
+            ConfigurationYamlDocument.Set(root, "configuration_backup:retention_count",
+                ConfigurationYamlDocument.Scalar(policy.RetentionCount.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            await ConfigurationYamlDocument.SaveAsync(_path, root, "backup-policy", cancellationToken).ConfigureAwait(false);
             return policy;
         }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    private async Task<ConfigurationBackupAutomationPolicy> LoadCoreAsync(
-        CancellationToken cancellationToken)
-    {
-        if (!File.Exists(_path)) return ConfigurationBackupAutomationPolicy.Default;
-        await using var stream = new FileStream(
-            _path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            4096,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var policy = await JsonSerializer.DeserializeAsync(
-            stream,
-            ConfigurationBackupAutomationJsonContext.Default.ConfigurationBackupAutomationPolicy,
-            cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Automatic configuration backup policy is empty.");
-        ConfigurationBackupAutomationPolicy.Validate(policy);
-        return policy;
+        finally { _gate.Release(); }
     }
 }
 

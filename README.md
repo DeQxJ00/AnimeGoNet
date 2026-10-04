@@ -49,8 +49,9 @@ dotnet run --project src/AnimeGoNet.App -- `
 dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 ```
 
-配置优先级为命令行/环境变量高于部署 YAML；WebUI 的安全私有覆盖低于被标记为
-环境锁的字段。旧 `1.1.0`–`1.7.1` qBittorrent YAML 默认先保存原字节备份，再
+配置优先级为命令行/环境变量高于部署 YAML。WebUI 的应用设置、下载器及自动备份
+设置直接写入当前 YAML（遵循 `--config` / `ANIMEGO_CONFIG`）；外部插件配置仍独立保存。
+被外置参数锁定的字段不会回写 YAML。旧 `1.1.0`–`1.7.1` qBittorrent YAML 默认先保存原字节备份，再
 原子升级为规范 1.7.1；旧 Transmission 配置保持原文件并 fail closed，必须先
 人工迁移到 qBittorrent，绝不会静默改成默认实例。
 
@@ -64,6 +65,7 @@ dotnet run --project src/AnimeGoNet.App -- --config E:\AnimeGoNet\animego.yaml
 - `metadata`：TMDB/Bangumi API 地址与代理、P4–P1 季度失败链、Bangumi 最终
   兜底、可信 offset、统一 AI 配置
 - `torrent_fetch`、`schedule`、`data_update`
+- `configuration_backup`：自动备份 `enabled`、保留数量 `retention_count`
 
 部署配置的详细边界见
 [docs/DEPLOYMENT_CONFIGURATION.md](docs/DEPLOYMENT_CONFIGURATION.md)。

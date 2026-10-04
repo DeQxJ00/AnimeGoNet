@@ -405,7 +405,7 @@
         <div class="configuration-actions">
           <button id="configuration-reload" type="button" class="secondary-button">刷新配置</button>
           <button id="configuration-edit-paths" type="button" class="primary-button">编辑下载与媒体目录</button>
-          <button id="configuration-reset" type="button" class="danger-button">恢复部署默认</button>
+          <button id="configuration-reset" type="button" class="danger-button">恢复启动时配置</button>
         </div>
       </div>
       <p id="configuration-status" class="muted">正在读取目录配置…</p>
@@ -1977,7 +1977,7 @@
         </div>
         <button id="configuration-close" type="button" class="icon-button" aria-label="关闭">×</button>
       </div>
-      <p class="muted">保存到 data_path/config/application.private.json，密钥留空表示保留；AnimeGoNetData 更新策略与 Cron 即时生效，目录及其他修改仍需重启。</p>
+      <p class="muted">直接保存到当前部署 YAML（遵循 --config / ANIMEGO_CONFIG），密钥留空表示保留；外置参数锁定字段不回写，外部插件仍独立保存。AnimeGoNetData 更新策略与 Cron 即时生效，目录及其他修改仍需重启。</p>
       <p id="configuration-lock-summary" class="configuration-lock-summary muted" aria-live="polite">正在读取部署环境锁定状态…</p>
       <div id="configuration-section-banner" class="configuration-section-banner" role="status" aria-live="polite">
         <strong id="configuration-section-banner-title">当前分区</strong>

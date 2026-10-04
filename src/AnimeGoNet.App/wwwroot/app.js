@@ -5665,7 +5665,7 @@ function renderConfigurationPreview(preview) {
     summary.textContent = preview.changes.length === 0
         ? "没有检测到配置差异，无需保存。"
         : `共 ${preview.changes.length} 项：${hotChanges} 项保存后即时生效，`
-            + `${restartChanges} 项需要重启；写入前会备份当前私有 revision。`;
+            + `${restartChanges} 项需要重启；写入前会备份当前 YAML。`;
     if (preview.changes.length === 0) {
         list.replaceChildren();
         return;
@@ -5744,7 +5744,7 @@ async function confirmConfiguration() {
     const message = element("#configuration-message");
     previewButton.disabled = true;
     confirm.disabled = true;
-    message.textContent = "正在备份当前 revision 并写入私密配置覆盖…";
+    message.textContent = "正在备份并更新当前 YAML 配置…";
     try {
         const requestHeaders = new Headers(headers);
         requestHeaders.set("Content-Type", "application/json");
@@ -5760,7 +5760,7 @@ async function confirmConfiguration() {
         configurationDialog.close();
         await loadConfiguration();
         const backup = saved.backup_revision === null
-            ? "这是首个私有 revision，无旧版本需要备份"
+            ? "首次保存；已有 YAML 会先备份"
             : `已备份 revision ${saved.backup_revision}`;
         element("#configuration-status").textContent = saved.restart_required
             ? `已保存 revision ${saved.configuration_revision}；${backup}；非热更新字段需重启。`
@@ -5778,10 +5778,10 @@ async function confirmConfiguration() {
 async function resetConfiguration() {
     if (!currentConfiguration || currentConfiguration.configuration_revision === 0)
         return;
-    if (!window.confirm("恢复部署默认配置？当前私有 revision 会先备份；数据更新策略会立即恢复，其他修改仍需重启。"))
+    if (!window.confirm("恢复本次启动时配置并写入 YAML？当前 YAML 会先备份；数据更新策略会立即恢复，其他修改仍需重启。"))
         return;
     const status = element("#configuration-status");
-    status.textContent = "正在移除私密配置覆盖…";
+    status.textContent = "正在恢复启动时 YAML 配置…";
     try {
         const response = await authenticatedFetch(`/api/v1/config?expected_revision=${currentConfiguration.configuration_revision}`, { method: "DELETE", headers });
         if (!response.ok)
@@ -5789,11 +5789,11 @@ async function resetConfiguration() {
         const saved = await response.json();
         await loadConfiguration();
         const backup = saved.backup_revision === null
-            ? "没有需要备份的私有 revision"
+            ? "没有需要恢复的配置修改"
             : `已备份 revision ${saved.backup_revision}`;
         status.textContent = saved.restart_required
-            ? `已恢复部署默认；${backup}；非热更新字段需重启。`
-            : `已恢复部署默认；${backup}；修改已即时生效。`;
+            ? `已恢复本次启动时配置；${backup}；非热更新字段需重启。`
+            : `已恢复本次启动时配置；${backup}；修改已即时生效。`;
     }
     catch (error) {
         status.textContent = `恢复失败：${errorMessage(error, "未知错误")}`;
