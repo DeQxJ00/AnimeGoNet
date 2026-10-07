@@ -7,6 +7,28 @@ namespace AnimeGoNet.App.Tests.Library;
 public sealed class TvShowNfoWriterTests
 {
     [Theory]
+    [InlineData("<bangumiid>123</bangumiid>", false, "123")]
+    [InlineData("<bangumiid>123</bangumiid>", true, "888")]
+    [InlineData("<bangumiid />", false, "888")]
+    [InlineData("<bangumiid> </bangumiid>", false, "888")]
+    [InlineData("", false, "888")]
+    public async Task SeasonExistingIdPolicy(string existing, bool overwrite, string expected)
+    {
+        await using var fixture = new NfoFixture(false, true, overwrite);
+        var directory = Path.Combine(fixture.SaveRoot, "Series", "S02");
+        Directory.CreateDirectory(directory);
+        var target = Path.Combine(directory, "season.nfo");
+        var original = "<season><title>Keep</title>" + existing + "</season>";
+        await File.WriteAllTextAsync(target, original);
+        await fixture.Writer.WriteSeasonAsync(fixture.SaveRoot, "Series", 100, 2, 888);
+        var actual = await File.ReadAllTextAsync(target);
+        var document = XDocument.Parse(actual);
+        Assert.Equal(expected, Assert.Single(document.Root!.Elements("bangumiid")).Value);
+        Assert.Equal("Keep", document.Root.Element("title")!.Value);
+        if (!overwrite && expected == "123") Assert.Equal(original, actual);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -32,7 +54,7 @@ public sealed class TvShowNfoWriterTests
     [Fact]
     public async Task SeasonUpdatePreservesOtherMetadataAndNeverWritesWithoutSourceId()
     {
-        await using var fixture = new NfoFixture(false, true);
+        await using var fixture = new NfoFixture(false, true, overwrite: true);
         var directory = Path.Combine(fixture.SaveRoot, "Series", "S03");
         Directory.CreateDirectory(directory);
         var target = Path.Combine(directory, "season.nfo");
@@ -88,7 +110,7 @@ public sealed class TvShowNfoWriterTests
     {
         private readonly string _root;
 
-        public NfoFixture(bool writeBangumiIdWhenTmdbMatched, bool writeSeasonBangumiIdWhenTmdbMatched = false)
+        public NfoFixture(bool writeBangumiIdWhenTmdbMatched, bool writeSeasonBangumiIdWhenTmdbMatched = false, bool overwrite = false)
         {
             _root = Path.Combine(Path.GetTempPath(), "animegonet-nfo-tests", Guid.NewGuid().ToString("N"));
             SaveRoot = Path.Combine(_root, "library");
@@ -100,6 +122,7 @@ public sealed class TvShowNfoWriterTests
                 {
                     WriteBangumiIdWhenTmdbMatched = writeBangumiIdWhenTmdbMatched,
                     WriteSeasonBangumiIdWhenTmdbMatched = writeSeasonBangumiIdWhenTmdbMatched,
+                    OverwriteSeasonBangumiId = overwrite,
                 },
             };
             Writer = new TvShowNfoWriter(options);

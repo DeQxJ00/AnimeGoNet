@@ -417,6 +417,7 @@ interface RuntimeConfiguration {
     tmdb_failure_use_bangumi: boolean;
     write_bangumi_id_when_tmdb_matched: boolean;
     write_season_bangumi_id_when_tmdb_matched: boolean;
+    overwrite_season_bangumi_id: boolean;
     mikan_trusted_offset_cache_enabled: boolean;
     mikan_trusted_offset_required_episodes: number;
   };
@@ -484,6 +485,7 @@ interface RuntimeConfiguration {
     tmdb_failure_use_bangumi: boolean;
     write_bangumi_id_when_tmdb_matched: boolean;
     write_season_bangumi_id_when_tmdb_matched: boolean;
+    overwrite_season_bangumi_id: boolean;
     mikan_trusted_offset_cache_enabled: boolean;
     mikan_trusted_offset_required_episodes: number;
     torrent_http_timeout_seconds: number;
@@ -569,6 +571,7 @@ interface ConfigurationUpdatePayload {
   tmdb_failure_use_bangumi: boolean;
   write_bangumi_id_when_tmdb_matched: boolean;
   write_season_bangumi_id_when_tmdb_matched: boolean;
+  overwrite_season_bangumi_id: boolean;
   mikan_trusted_offset_cache_enabled: boolean;
   mikan_trusted_offset_required_episodes: number;
   torrent_http_timeout_seconds: number;
@@ -7084,6 +7087,7 @@ function metadataConfigurationCard(config: RuntimeConfiguration): HTMLElement {
       `${enabledLabel(config.metadata.write_season_bangumi_id_when_tmdb_matched)} · `
       + "仅 Mikan 自带 ID；写对应 Sxx/season.nfo，Movie 不适用",
     ],
+    ["季度已有 Bangumi ID", config.metadata.overwrite_season_bangumi_id ? "覆盖写入" : "不覆盖写入（默认）"],
   ]);
   card.append(seasonFailurePriority(config.metadata));
   return card;
@@ -8175,6 +8179,7 @@ function openConfigurationEditor(section: EditableConfigurationSection): void {
     "#configuration-write-season-bangumi-with-tmdb",
     editable.write_season_bangumi_id_when_tmdb_matched,
   );
+  setConfigurationValue("#configuration-overwrite-season-bangumi-id", String(editable.overwrite_season_bangumi_id));
   setConfigurationChecked("#configuration-offset-cache", editable.mikan_trusted_offset_cache_enabled);
   setConfigurationValue(
     "#configuration-offset-required-episodes",
@@ -8264,6 +8269,7 @@ const configurationFieldLabels: Record<string, string> = {
   tmdb_failure_use_bangumi: "Bangumi 完全兜底",
   write_bangumi_id_when_tmdb_matched: "TMDB 成功时写作品级 Bangumi ID",
   write_season_bangumi_id_when_tmdb_matched: "TMDB 成功时写季度 Bangumi ID",
+  overwrite_season_bangumi_id: "覆盖季度已有 Bangumi ID",
   mikan_trusted_offset_cache_enabled: "可信 offset 缓存",
   mikan_trusted_offset_required_episodes: "可信 Offset 所需不同文件名 EP 次数",
   torrent_http_timeout_seconds: "Torrent HTTP 超时（秒）",
@@ -8383,6 +8389,8 @@ function configurationRequest(): ConfigurationUpdatePayload {
       element<HTMLInputElement>("#configuration-write-bangumi-with-tmdb").checked,
     write_season_bangumi_id_when_tmdb_matched:
       element<HTMLInputElement>("#configuration-write-season-bangumi-with-tmdb").checked,
+    overwrite_season_bangumi_id:
+      element<HTMLSelectElement>("#configuration-overwrite-season-bangumi-id").value === "true",
     mikan_trusted_offset_cache_enabled:
       element<HTMLInputElement>("#configuration-offset-cache").checked,
     mikan_trusted_offset_required_episodes:

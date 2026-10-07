@@ -2280,6 +2280,7 @@ public static class ApiEndpoints
                 options.Metadata.TmdbFailureUseBangumi,
                 options.Metadata.WriteBangumiIdWhenTmdbMatched,
                 options.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
+                options.Metadata.OverwriteSeasonBangumiId,
                 options.Metadata.MikanTrustedOffsetCacheEnabled,
                 options.Metadata.MikanTrustedOffsetRequiredEpisodes),
             new TorrentFetchConfigurationResponse(
@@ -2356,6 +2357,7 @@ public static class ApiEndpoints
             desired.Metadata.TmdbFailureUseBangumi,
             desired.Metadata.WriteBangumiIdWhenTmdbMatched,
             desired.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
+            desired.Metadata.OverwriteSeasonBangumiId,
             desired.Metadata.MikanTrustedOffsetCacheEnabled,
             fetch.Timeout.TotalSeconds,
             fetch.MaxResponseBytes,
@@ -2660,6 +2662,10 @@ public static class ApiEndpoints
             current.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
             candidate.Metadata.WriteSeasonBangumiIdWhenTmdbMatched);
         AddBool(
+            "overwrite_season_bangumi_id",
+            current.Metadata.OverwriteSeasonBangumiId,
+            candidate.Metadata.OverwriteSeasonBangumiId);
+        AddBool(
             "mikan_trusted_offset_cache_enabled",
             current.Metadata.MikanTrustedOffsetCacheEnabled,
             candidate.Metadata.MikanTrustedOffsetCacheEnabled);
@@ -2825,6 +2831,8 @@ public static class ApiEndpoints
                 current.Metadata.WriteBangumiIdWhenTmdbMatched,
             WriteSeasonBangumiIdWhenTmdbMatched:
                 current.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
+            OverwriteSeasonBangumiId:
+                current.Metadata.OverwriteSeasonBangumiId,
             MikanTrustedOffsetCacheEnabled:
                 current.Metadata.MikanTrustedOffsetCacheEnabled,
             TorrentHttpTimeoutSeconds: torrent.Timeout.TotalSeconds,
@@ -2933,6 +2941,8 @@ public static class ApiEndpoints
                     request.WriteBangumiIdWhenTmdbMatched,
                 WriteSeasonBangumiIdWhenTmdbMatched =
                     request.WriteSeasonBangumiIdWhenTmdbMatched,
+                OverwriteSeasonBangumiId =
+                    request.OverwriteSeasonBangumiId,
                 MikanTrustedOffsetCacheEnabled =
                     request.MikanTrustedOffsetCacheEnabled,
                 MikanTrustedOffsetRequiredEpisodes =
@@ -3257,6 +3267,8 @@ public static class ApiEndpoints
                 request.WriteBangumiIdWhenTmdbMatched,
             WriteSeasonBangumiIdWhenTmdbMatched:
                 request.WriteSeasonBangumiIdWhenTmdbMatched,
+            OverwriteSeasonBangumiId:
+                request.OverwriteSeasonBangumiId,
             AiPromptTemplate: aiPromptTemplate,
             MikanEpisodeIdentityCacheHours: mikanEpisodeIdentityCacheHours,
             MikanBangumiIdentityCacheHours: mikanBangumiIdentityCacheHours,

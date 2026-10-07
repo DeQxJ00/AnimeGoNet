@@ -22,6 +22,7 @@ public sealed class ConfigurationApiTests
         var payload = System.Text.Json.Nodes.JsonNode.Parse(await template.ReadAsStringAsync())!.AsObject();
         payload["write_bangumi_id_when_tmdb_matched"] = series;
         payload["write_season_bangumi_id_when_tmdb_matched"] = season;
+        payload["overwrite_season_bangumi_id"] = series;
         using var request = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await app.Client.PutAsync("/api/v1/config", request);
         response.EnsureSuccessStatusCode();
@@ -29,10 +30,12 @@ public sealed class ConfigurationApiTests
         var editable = config.RootElement.GetProperty("editable");
         Assert.Equal(series, editable.GetProperty("write_bangumi_id_when_tmdb_matched").GetBoolean());
         Assert.Equal(season, editable.GetProperty("write_season_bangumi_id_when_tmdb_matched").GetBoolean());
+        Assert.Equal(series, editable.GetProperty("overwrite_season_bangumi_id").GetBoolean());
         var yaml = await DeploymentYamlConfiguration.LoadOrCreateAsync(
             Path.Combine(app.RootPath, "data", "animego.yaml"), AnimeGoDefaults.CreateNative(app.RootPath));
         Assert.Equal(series, bool.Parse(yaml.Values["metadata:write_bangumi_id_when_tmdb_matched"]!));
         Assert.Equal(season, bool.Parse(yaml.Values["metadata:write_season_bangumi_id_when_tmdb_matched"]!));
+        Assert.Equal(series, bool.Parse(yaml.Values["metadata:overwrite_season_bangumi_id"]!));
         var saved = await app.App.Services.GetRequiredService<ApplicationOverrideStore>().LoadAsync();
         Assert.Equal(series, saved.Settings!.WriteBangumiIdWhenTmdbMatched);
         Assert.Equal(season, saved.Settings.WriteSeasonBangumiIdWhenTmdbMatched);

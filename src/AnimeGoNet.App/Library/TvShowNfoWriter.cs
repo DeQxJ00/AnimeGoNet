@@ -14,6 +14,7 @@ public sealed class TvShowNfoWriter(AnimeGoOptions? options = null)
         options?.Metadata.WriteBangumiIdWhenTmdbMatched ?? false;
     private readonly bool _writeSeasonBangumiIdWhenTmdbMatched =
         options?.Metadata.WriteSeasonBangumiIdWhenTmdbMatched ?? false;
+    private readonly bool _overwriteSeasonBangumiId = options?.Metadata.OverwriteSeasonBangumiId ?? false;
 
     // Callers only supply IDs carried by a Mikan source, not IDs discovered for other sources.
     public async Task WriteSeasonAsync(
@@ -59,6 +60,9 @@ public sealed class TvShowNfoWriter(AnimeGoOptions? options = null)
         {
             document = new XDocument(new XElement("season", new XElement("seasonnumber", seasonNumber)));
         }
+        if (!_overwriteSeasonBangumiId && document.Root!.Elements("bangumiid")
+            .Any(element => !string.IsNullOrWhiteSpace(element.Value)))
+            return;
         // Do not put the TV Series ID in the season's TMDB uniqueid: those identify different entities.
         document.Root!.Elements("bangumiid").Remove();
         document.Root.Add(new XElement("bangumiid", bangumiSubjectId.Value));

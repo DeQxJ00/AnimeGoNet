@@ -549,6 +549,7 @@ public sealed class ApplicationOverrideStoreTests
         OutboundProxyHosts: ["tmdb.test.invalid", "*.mikanime.tv"],
         WriteBangumiIdWhenTmdbMatched: true,
         WriteSeasonBangumiIdWhenTmdbMatched: true,
+        OverwriteSeasonBangumiId: true,
         AiPromptTemplate: AiMetadataPromptRenderer.LoadTemplate()
             .Replace("你是一个动画", "PRIVATE-PROMPT 你是一个动画", StringComparison.Ordinal),
         AiReasoningEffortOverridden: true,

@@ -674,6 +674,7 @@ internal static class DeploymentYamlConfiguration
               tmdb_failure_use_bangumi: {{Boolean(values, "metadata:tmdb_failure_use_bangumi", false)}}
               write_bangumi_id_when_tmdb_matched: {{Boolean(values, "metadata:write_bangumi_id_when_tmdb_matched", false)}}
               write_season_bangumi_id_when_tmdb_matched: {{Boolean(values, "metadata:write_season_bangumi_id_when_tmdb_matched", false)}}
+              overwrite_season_bangumi_id: {{Boolean(values, "metadata:overwrite_season_bangumi_id", false)}}
               mikan_trusted_offset_cache_enabled: {{Boolean(values, "metadata:mikan_trusted_offset_cache_enabled", false)}}
               mikan_trusted_offset_required_episodes: {{Integer(values, "metadata:mikan_trusted_offset_required_episodes", 3)}}
               ai:
@@ -924,6 +925,7 @@ internal static class DeploymentYamlConfiguration
               tmdb_failure_use_bangumi: false
               write_bangumi_id_when_tmdb_matched: false
               write_season_bangumi_id_when_tmdb_matched: false
+              overwrite_season_bangumi_id: false
               mikan_trusted_offset_cache_enabled: false
               mikan_trusted_offset_required_episodes: 3
               ai:

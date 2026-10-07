@@ -85,6 +85,7 @@ dotnet run --project src/AnimeGoNet.App -- `
 
 - `metadata.write_bangumi_id_when_tmdb_matched`：作品级写入；TV 写 `tvshow.nfo`，Movie 写 `movie.nfo`。沿用旧开关和值，默认关闭。
 - `metadata.write_season_bangumi_id_when_tmdb_matched`：季度级写入；只写识别出的对应 `Sxx/season.nfo`，默认关闭，与作品级开关无关，Movie 不适用。
+- `metadata.overwrite_season_bangumi_id`：季度已有 Bangumi ID 时是否覆盖，默认 `false`（不覆盖）。已有非空 `<bangumiid>` 时保留原文件；缺少或为空时写入。设为 `true` 才替换已有 ID，保留其他 NFO 字段；不影响作品级 NFO。
 
 两者仅使用 Mikan 来源自带的 Bangumi ID，不对 U2 或其他来源补查/写入 ID。
 季度写入会保留现有 NFO 的其他字段；不同 Bangumi 条目对应同一 TMDB TV 时，可只开启季度级，避免覆盖作品级 ID。

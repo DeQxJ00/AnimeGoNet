@@ -74,6 +74,9 @@ public sealed class DeploymentConfigurationLocks
         new(
             "write_season_bangumi_id_when_tmdb_matched",
             ["write_season_bangumi_id_when_tmdb_matched", "metadata:write_season_bangumi_id_when_tmdb_matched"]),
+        new(
+            "overwrite_season_bangumi_id",
+            ["overwrite_season_bangumi_id", "metadata:overwrite_season_bangumi_id"]),
         new("mikan_trusted_offset_cache_enabled", ["mikan_trusted_offset_cache_enabled", "metadata:mikan_trusted_offset_cache_enabled"]),
         new("mikan_trusted_offset_required_episodes", ["mikan_trusted_offset_required_episodes", "metadata:mikan_trusted_offset_required_episodes"]),
         new("torrent_http_timeout_seconds", ["torrent_http_timeout_seconds", "torrent_fetch:timeout_seconds"]),
@@ -412,6 +415,10 @@ public sealed class DeploymentConfigurationLocks
                     "write_season_bangumi_id_when_tmdb_matched",
                     current.WriteSeasonBangumiIdWhenTmdbMatched,
                     candidate.WriteSeasonBangumiIdWhenTmdbMatched),
+                OverwriteSeasonBangumiId = Preserve(
+                    "overwrite_season_bangumi_id",
+                    current.OverwriteSeasonBangumiId,
+                    candidate.OverwriteSeasonBangumiId),
                 MikanTrustedOffsetCacheEnabled = Preserve(
                     "mikan_trusted_offset_cache_enabled",
                     current.MikanTrustedOffsetCacheEnabled,
@@ -715,6 +722,10 @@ public sealed class DeploymentConfigurationLocks
             "write_season_bangumi_id_when_tmdb_matched")
             ? deployment.Metadata.WriteSeasonBangumiIdWhenTmdbMatched
             : candidate.Metadata.WriteSeasonBangumiIdWhenTmdbMatched;
+        var overwriteSeasonBangumiId = IsLocked(
+            "overwrite_season_bangumi_id")
+            ? deployment.Metadata.OverwriteSeasonBangumiId
+            : candidate.Metadata.OverwriteSeasonBangumiId;
         var mikanTrustedOffsetCacheEnabled = IsLocked(
             "mikan_trusted_offset_cache_enabled")
             ? deployment.Metadata.MikanTrustedOffsetCacheEnabled
@@ -801,6 +812,7 @@ public sealed class DeploymentConfigurationLocks
                 TmdbFailureUseBangumi = tmdbFailureUseBangumi,
                 WriteBangumiIdWhenTmdbMatched = writeBangumiIdWhenTmdbMatched,
                 WriteSeasonBangumiIdWhenTmdbMatched = writeSeasonBangumiIdWhenTmdbMatched,
+                OverwriteSeasonBangumiId = overwriteSeasonBangumiId,
                 MikanTrustedOffsetCacheEnabled = mikanTrustedOffsetCacheEnabled,
                 MikanTrustedOffsetRequiredEpisodes = mikanTrustedOffsetRequiredEpisodes,
             },
@@ -976,6 +988,10 @@ public sealed class DeploymentConfigurationLocks
             "write_season_bangumi_id_when_tmdb_matched",
             deployment.Metadata.WriteSeasonBangumiIdWhenTmdbMatched,
             candidate.Metadata.WriteSeasonBangumiIdWhenTmdbMatched);
+        AddIfChanged(
+            "overwrite_season_bangumi_id",
+            deployment.Metadata.OverwriteSeasonBangumiId,
+            candidate.Metadata.OverwriteSeasonBangumiId);
         AddIfChanged(
             "mikan_trusted_offset_cache_enabled",
             deployment.Metadata.MikanTrustedOffsetCacheEnabled,

@@ -393,6 +393,8 @@ public sealed record EditableConfigurationResponse(
     bool WriteBangumiIdWhenTmdbMatched,
     [property: JsonPropertyName("write_season_bangumi_id_when_tmdb_matched")]
     bool WriteSeasonBangumiIdWhenTmdbMatched,
+    [property: JsonPropertyName("overwrite_season_bangumi_id")]
+    bool OverwriteSeasonBangumiId,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
     [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
@@ -455,6 +457,8 @@ public sealed record ConfigurationUpdateRequest(
     bool WriteBangumiIdWhenTmdbMatched,
     [property: JsonPropertyName("write_season_bangumi_id_when_tmdb_matched")]
     bool WriteSeasonBangumiIdWhenTmdbMatched,
+    [property: JsonPropertyName("overwrite_season_bangumi_id")]
+    bool OverwriteSeasonBangumiId,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
     [property: JsonPropertyName("torrent_http_timeout_seconds")] double TorrentHttpTimeoutSeconds,
     [property: JsonPropertyName("torrent_max_response_bytes")] long TorrentMaxResponseBytes,
@@ -543,6 +547,8 @@ public sealed record MetadataConfigurationResponse(
     bool WriteBangumiIdWhenTmdbMatched,
     [property: JsonPropertyName("write_season_bangumi_id_when_tmdb_matched")]
     bool WriteSeasonBangumiIdWhenTmdbMatched,
+    [property: JsonPropertyName("overwrite_season_bangumi_id")]
+    bool OverwriteSeasonBangumiId,
     [property: JsonPropertyName("mikan_trusted_offset_cache_enabled")] bool MikanTrustedOffsetCacheEnabled,
     [property: JsonPropertyName("mikan_trusted_offset_required_episodes")]
     int MikanTrustedOffsetRequiredEpisodes);

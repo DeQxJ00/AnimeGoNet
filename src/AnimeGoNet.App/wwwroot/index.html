@@ -2117,6 +2117,13 @@
             <input id="configuration-write-season-bangumi-with-tmdb" type="checkbox">
             <span><strong>TMDB 成功时写对应季度 Bangumi ID（season）</strong><small>默认关闭。仅使用 Mikan 来源自带的 Bangumi ID，写入识别出的对应季度 Sxx/season.nfo；不写到其他季度，不影响 tvshow.nfo。仅适用于 TV，Movie 不应用此项。</small></span>
           </label>
+          <label>季度 NFO 已有 Bangumi ID 时
+            <select id="configuration-overwrite-season-bangumi-id">
+              <option value="false">不覆盖写入（默认）</option>
+              <option value="true">覆盖写入</option>
+            </select>
+            <small>仅在启用季度 Bangumi ID 写入时生效。默认保留 season.nfo 中已有的非空 bangumiid；没有 ID 或 ID 为空时仍会写入。不影响 tvshow.nfo 或 movie.nfo。</small>
+          </label>
         </fieldset>
         <fieldset class="wide configuration-data-update-editor">
           <legend>Mikan 可信 EP Offset</legend>
